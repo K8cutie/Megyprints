@@ -144,8 +144,6 @@ function renderTemplateSlots(
     const sw = (slot.width / 100) * canvasW;
     const sh = (slot.height / 100) * canvasH;
 
-    const userScale = slotScales[i] ?? 1;
-
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
       // ── Filled slot: render photo ──
       fab.Image.fromURL(uploadedPhotos[photoIndex].previewUrl, (img: any) => {
