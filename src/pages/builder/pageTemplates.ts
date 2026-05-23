@@ -15,23 +15,23 @@ let slotCounter = 0;
 /** Create a template slot. For rectangle/rounded shapes, the height is
  *  auto-computed from width × aspectRatio to preserve photo proportions.
  *
- *  aspectRatio values:
- *    portrait ratios:  '4:5' (0.80)  | '3:4' (0.75)  | '2:3' (~0.67)
- *    landscape ratios: '5:4' (1.25)  | '4:3' (~1.33) | '3:2' (1.50)
+ *  aspectRatio = height / width  (so portrait > 1, landscape < 1)
+ *    portrait ratios:  '4:5' (1.25) | '3:4' (1.33) | '2:3' (1.50)
+ *    landscape ratios: '5:4' (0.80) | '4:3' (0.75) | '3:2' (0.67)
  *    square:           '1:1' (1.00)
- *    panorama:         '16:9' (~1.78) | '2:1' (2.00)
+ *    panorama:         '16:9' (0.56) | '2:1' (0.50)
  *    free:             'free' (use raw height, no constraint)
  */
 const RATIOS: Record<string, number> = {
-  '4:5': 4 / 5,   // portrait
-  '3:4': 3 / 4,   // portrait
-  '2:3': 2 / 3,   // portrait
-  '1:1': 1,       // square
-  '3:2': 3 / 2,   // landscape
-  '4:3': 4 / 3,   // landscape
-  '5:4': 5 / 4,   // landscape
-  '16:9': 16 / 9, // wide
-  '2:1': 2,       // very wide
+  '4:5': 5 / 4,   // portrait  (1.25)
+  '3:4': 4 / 3,   // portrait  (1.33)
+  '2:3': 3 / 2,   // portrait  (1.50)
+  '1:1': 1,       // square    (1.00)
+  '3:2': 2 / 3,   // landscape (0.67)
+  '4:3': 3 / 4,   // landscape (0.75)
+  '5:4': 4 / 5,   // landscape (0.80)
+  '16:9': 9 / 16, // wide      (0.56)
+  '2:1': 1 / 2,   // very wide (0.50)
 };
 
 function s(
