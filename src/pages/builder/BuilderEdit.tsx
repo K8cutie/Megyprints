@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { ZoomIn, ZoomOut, Grid3X3, RotateCcw, Loader2, Magnet, Image as ImageIcon } from 'lucide-react';
-import type { AlbumPage, CanvasPhoto, TextElement, PhotoFilters, AlbumBackground } from './types';
+import type { AlbumPage, TextElement, PhotoFilters, AlbumBackground } from './types';
 import { DEFAULT_BG_FILTERS } from './types';
 import EditSidebar from './EditSidebar';
 import PropertiesPanel from './PropertiesPanel';
 import type { BuilderActions } from './useBuilderState';
 import fabric from './fabric-loader';
 import { getCanvasDimensions } from './layouts';
-import { getTemplateById } from './pageTemplates';
+import { getTemplateById, PAGE_TEMPLATES } from './pageTemplates';
 import type { PageTemplate } from './types';
 
 interface BuilderEditProps { actions: BuilderActions; }
@@ -284,40 +284,12 @@ function renderScene(
   // ── 2. Create background FIRST so it sits behind everything ──
   createBackgroundObject(fab, canvas, page.background, canvasW, canvasH);
 
-  // ── 3. Render template slots (or freeform photos) ──
-  if (page.templateId) {
-    const template = getTemplateById(page.templateId);
-    if (template && page.slotFills) {
-      renderTemplateSlots(fab, canvas, template, page.slotFills, uploadedPhotos, canvasW, canvasH, onSlotClick);
-    }
-  } else {
-    // Legacy: freeform photos
-    page.photos.forEach((photo: CanvasPhoto) => {
-      const uploaded = uploadedPhotos[photo.photoIndex];
-      if (!uploaded) return;
-      fab.Image.fromURL(uploaded.previewUrl, (img: any) => {
-        if (!page.photos.find((p) => p.id === photo.id)) return;
-        const filters = buildFabricFilters(fab, photo.filters);
-        if (filters.length > 0) { img.filters = filters; img.applyFilters(); }
-        if (photo.borderWidth > 0) { img.set('stroke', photo.borderColor); img.set('strokeWidth', photo.borderWidth); }
-        if (photo.shadowBlur > 0) {
-          img.set('shadow', new fab.Shadow({ color: photo.shadowColor, blur: photo.shadowBlur, offsetX: photo.shadowOffsetX, offsetY: photo.shadowOffsetY }));
-        }
-        const scale = photo.width / (img.width || photo.width);
-        img.set({
-          left: photo.x, top: photo.y,
-          scaleX: scale, scaleY: scale,
-          angle: photo.rotation, opacity: photo.filters.opacity / 100,
-          selectable: true, evented: true,
-          cornerColor: '#F4C2A1', cornerStrokeColor: '#E8A598', cornerSize: 8,
-          transparentCorners: false, borderColor: '#F4C2A1', borderDashArray: [4, 2],
-        });
-        img.photoId = photo.id;
-        canvas.add(img);
-        canvas.bringToFront(img);
-        canvas.renderAll();
-      });
-    });
+  // ── 3. Render template slots ONLY ──
+  const templateId = page.templateId ?? PAGE_TEMPLATES[0].id;
+  const template = getTemplateById(templateId);
+  const slotFills = page.slotFills ?? template?.slots.map(() => null) ?? [];
+  if (template) {
+    renderTemplateSlots(fab, canvas, template, slotFills, uploadedPhotos, canvasW, canvasH, onSlotClick);
   }
 
   // ── 4. Add text on top ──
@@ -841,7 +813,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       )}
 
     <div className="flex h-full bg-[#F5F5F5]">
-      <EditSidebar activeTab={sidebarTab} onTabChange={setSidebarTab} uploadedPhotos={uploadedPhotos} albumPages={actions.albumPages} currentPageIndex={actions.currentPageIndex} photos={currentPage.photos} textElements={currentPage.textElements} selectedPhotoId={selectedPhotoId} selectedTextId={selectedTextId} onSelectPhoto={setSelectedPhotoId} onSelectText={setSelectedTextId} onGoToPage={actions.goToPage} onAddPage={actions.addPage} onDeletePage={actions.deletePage} onDuplicatePage={actions.duplicatePage} onAddText={actions.addTextElement} currentTemplateId={currentPage.templateId} onSetTemplate={actions.setPageTemplate} onAutoFill={actions.autoFillSlots} onClearAllSlots={actions.clearAllSlots} />
+      <EditSidebar activeTab={sidebarTab} onTabChange={setSidebarTab} uploadedPhotos={uploadedPhotos} albumPages={actions.albumPages} currentPageIndex={actions.currentPageIndex} photos={currentPage.photos} textElements={currentPage.textElements} selectedPhotoId={selectedPhotoId} selectedTextId={selectedTextId} onSelectPhoto={setSelectedPhotoId} onSelectText={setSelectedTextId} onGoToPage={actions.goToPage} onAddPage={actions.addPage} onDeletePage={actions.deletePage} onDuplicatePage={actions.duplicatePage} onAddText={actions.addTextElement} currentTemplateId={currentPage.templateId} onSetTemplate={actions.setPageTemplate} onAutoFill={actions.autoFillSlots} onClearAllSlots={actions.clearAllSlots} onAddPhotos={actions.addPhotos} />
 
       <div className="flex-1 flex flex-col relative overflow-hidden">
         {/* Toolbar */}

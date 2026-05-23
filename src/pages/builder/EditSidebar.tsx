@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Images, FileText, Plus, Trash2, Copy, ChevronRight,
-  ChevronLeft, Layers, GripVertical, LayoutGrid,
+  ChevronLeft, Layers, GripVertical, LayoutGrid, Upload,
 } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, CanvasPhoto, TextElement } from './types';
 import { PAGE_TEMPLATES, TEMPLATE_CATEGORIES } from './pageTemplates';
@@ -28,6 +28,7 @@ interface EditSidebarProps {
   onSetTemplate?: (id: string) => void;
   onAutoFill?: () => void;
   onClearAllSlots?: () => void;
+  onAddPhotos?: (files: FileList) => void;
 }
 
 export default function EditSidebar(props: EditSidebarProps) {
@@ -38,8 +39,10 @@ export default function EditSidebar(props: EditSidebarProps) {
     onSelectPhoto, onSelectText,
     onGoToPage, onAddPage, onDeletePage, onDuplicatePage, onAddText,
     currentTemplateId, onSetTemplate,
-    onAutoFill, onClearAllSlots,
+    onAutoFill, onClearAllSlots, onAddPhotos,
   } = props;
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [templateCategory, setTemplateCategory] = useState<string>('all');
 
@@ -92,21 +95,39 @@ export default function EditSidebar(props: EditSidebarProps) {
         <AnimatePresence mode="wait">
           {activeTab === 'photos' && (
             <motion.div key="photos" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-3">
-              {uploadedPhotos.length === 0 ? (
-                <p className="text-xs text-[#9B9B9B] text-center py-8">No photos uploaded yet</p>
-              ) : (
-                <>
-                  <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider">Your Photos ({uploadedPhotos.length})</p>
-                  <p className="text-[10px] text-[#9B9B9B] mb-3">Go to Templates tab to place photos in layouts</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {uploadedPhotos.map((photo) => (
-                      <div key={photo.id} className="relative aspect-square rounded-lg overflow-hidden border border-[#E8E8E8]">
-                        <img src={photo.previewUrl} alt={photo.name} className="w-full h-full object-cover" />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
+              <>
+                {/* Upload button */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => { if (e.target.files) onAddPhotos?.(e.target.files); }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full mb-3 py-2.5 border-2 border-dashed border-[#F4C2A1] rounded-lg text-[#E8A598] text-xs font-medium hover:bg-[#FFF5F0] transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Upload size={14} /> Upload Photos
+                </button>
+
+                {uploadedPhotos.length === 0 ? (
+                  <p className="text-xs text-[#9B9B9B] text-center py-4">Upload photos to start filling templates</p>
+                ) : (
+                  <>
+                    <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider">Your Photos ({uploadedPhotos.length})</p>
+                    <p className="text-[10px] text-[#9B9B9B] mb-3">Go to Templates tab to place photos in layouts</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {uploadedPhotos.map((photo) => (
+                        <div key={photo.id} className="relative aspect-square rounded-lg overflow-hidden border border-[#E8E8E8]">
+                          <img src={photo.previewUrl} alt={photo.name} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
             </motion.div>
           )}
 

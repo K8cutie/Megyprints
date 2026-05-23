@@ -2,11 +2,10 @@ import { useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Settings, Upload, LayoutTemplate, PenTool, Eye, ChevronRight,
+  Settings, LayoutTemplate, PenTool, Eye, ChevronRight,
 } from 'lucide-react';
 import { useBuilderState } from './builder/useBuilderState';
 import BuilderSetup from './builder/BuilderSetup';
-import BuilderUpload from './builder/BuilderUpload';
 import BuilderTemplate from './builder/BuilderTemplate';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
@@ -15,7 +14,6 @@ import { useNavigate } from 'react-router-dom';
 
 const phases = [
   { id: 'setup' as const, label: 'Setup', icon: Settings },
-  { id: 'upload' as const, label: 'Upload', icon: Upload },
   { id: 'template' as const, label: 'Template', icon: LayoutTemplate },
   { id: 'edit' as const, label: 'Design', icon: PenTool },
   { id: 'preview' as const, label: 'Preview', icon: Eye },
@@ -85,19 +83,6 @@ export default function Builder() {
                   selectedType={actions.albumType}
                   onSizeChange={actions.setAlbumSize}
                   onTypeChange={actions.setAlbumType}
-                  onNext={() => actions.setPhase('upload')}
-                />
-              </motion.div>
-            )}
-
-            {actions.phase === 'upload' && (
-              <motion.div key="upload" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.2 }} className="h-full">
-                <BuilderUpload
-                  photos={actions.uploadedPhotos}
-                  onAddPhotos={actions.addPhotos}
-                  onRemovePhoto={actions.removePhoto}
-                  onReplacePhoto={actions.replacePhoto}
                   onNext={() => actions.setPhase('template')}
                 />
               </motion.div>
@@ -109,7 +94,7 @@ export default function Builder() {
                 <BuilderTemplate
                   selected={actions.selectedTemplate}
                   onSelect={actions.selectTemplate}
-                  onBack={() => actions.setPhase('upload')}
+                  onBack={() => actions.setPhase('setup')}
                   onGenerate={handleGenerate}
                 />
               </motion.div>
