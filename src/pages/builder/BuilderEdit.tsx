@@ -187,21 +187,54 @@ function renderTemplateSlots(
         img.photoId = `slot-photo-${i}`; // ← for selection system compatibility
 
         // Apply shape clipPath — ALL shapes including rectangle
+        // absolutePositioned: true = clipPath stays at slot position on canvas
+        // even when the photo object is dragged (panned) around
+        const clipCx = sx + sw / 2;
+        const clipCy = sy + sh / 2;
         if (slot.shape === 'circle') {
-          img.set('clipPath', new fab.Circle({ radius: Math.min(sw, sh) / 2, originX: 'center', originY: 'center' }));
+          const clip = new fab.Circle({
+            radius: Math.min(sw, sh) / 2,
+            left: clipCx, top: clipCy,
+            originX: 'center', originY: 'center',
+          });
+          (clip as any).absolutePositioned = true;
+          img.set('clipPath', clip);
         } else if (slot.shape === 'rounded' && slot.borderRadius) {
           const r = Math.min(slot.borderRadius, Math.min(sw, sh) / 2);
-          img.set('clipPath', new fab.Rect({ width: sw, height: sh, rx: r, ry: r, originX: 'center', originY: 'center' }));
+          const clip = new fab.Rect({
+            width: sw, height: sh, rx: r, ry: r,
+            left: clipCx, top: clipCy,
+            originX: 'center', originY: 'center',
+          });
+          (clip as any).absolutePositioned = true;
+          img.set('clipPath', clip);
         } else if (slot.shape === 'oval') {
-          img.set('clipPath', new fab.Ellipse({ rx: sw / 2, ry: sh / 2, originX: 'center', originY: 'center' }));
+          const clip = new fab.Ellipse({
+            rx: sw / 2, ry: sh / 2,
+            left: clipCx, top: clipCy,
+            originX: 'center', originY: 'center',
+          });
+          (clip as any).absolutePositioned = true;
+          img.set('clipPath', clip);
         } else if (slot.shape === 'heart') {
           // Heart via custom path clip
           const hr = Math.min(sw, sh) / 2;
           const heartPath = `M 0 ${-hr * 0.3} C ${-hr} ${-hr * 1.2} ${-hr * 1.5} ${hr * 0.3} 0 ${hr} C ${hr * 1.5} ${hr * 0.3} ${hr} ${-hr * 1.2} 0 ${-hr * 0.3} Z`;
-          img.set('clipPath', new fab.Path(heartPath, { originX: 'center', originY: 'center' }));
+          const clip = new fab.Path(heartPath, {
+            left: clipCx, top: clipCy,
+            originX: 'center', originY: 'center',
+          });
+          (clip as any).absolutePositioned = true;
+          img.set('clipPath', clip);
         } else {
           // Rectangle (default) — clip to slot bounds so photo doesn't overflow
-          img.set('clipPath', new fab.Rect({ width: sw, height: sh, originX: 'center', originY: 'center' }));
+          const clip = new fab.Rect({
+            width: sw, height: sh,
+            left: clipCx, top: clipCy,
+            originX: 'center', originY: 'center',
+          });
+          (clip as any).absolutePositioned = true;
+          img.set('clipPath', clip);
         }
 
         canvas.add(img);
