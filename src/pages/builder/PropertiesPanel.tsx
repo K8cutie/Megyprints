@@ -223,7 +223,7 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
         <Section id="slotZoom" title="Zoom" icon={<ZoomIn size={14} />}>
           <div className="flex items-center gap-2 mb-2">
             <input
-              type="range" min={0.5} max={3} step={0.05}
+              type="range" min={0.1} max={10} step={0.05}
               value={currentScale}
               onChange={(e) => onSetSlotScale(selectedSlotIndex, Number(e.target.value))}
               className="flex-1 h-1 accent-[#F4C2A1]"

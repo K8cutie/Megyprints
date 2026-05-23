@@ -125,6 +125,8 @@ function renderTemplateSlots(
   template: PageTemplate,
   slotFills: (number | null)[],
   slotScales: number[],
+  slotOffsetsX: number[],
+  slotOffsetsY: number[],
   uploadedPhotos: any[],
   canvasW: number,
   canvasH: number,
@@ -152,26 +154,41 @@ function renderTemplateSlots(
         // Cover-crop: uniform scale to fill slot
         const coverScale = Math.max(sw / imgW, sh / imgH);
         // Use user-adjusted scale if available
+        const userScale = slotScales[i] ?? 1;
         const finalScale = (userScale !== 1 && userScale > 0) ? userScale : coverScale;
 
+        // Apply user pan offsets
+        const offsetX = slotOffsetsX[i] ?? 0;
+        const offsetY = slotOffsetsY[i] ?? 0;
+
         img.set({
-          left: sx + sw / 2, top: sy + sh / 2,
-          originX: 'center', originY: 'center',
-          scaleX: finalScale, scaleY: finalScale,
+          left: sx + sw / 2 + offsetX,
+          top: sy + sh / 2 + offsetY,
+          originX: 'center',
+          originY: 'center',
+          scaleX: finalScale,
+          scaleY: finalScale,
           angle: slot.rotation ?? 0,
-          selectable: true, evented: true,
-          cornerColor: '#F4C2A1', cornerSize: 8,
-          transparentCorners: false, borderColor: '#F4C2A1',
-          hasControls: true, hasBorders: true,
-          lockMovementX: true, lockMovementY: true, // keep centered in slot
-          lockScalingX: false, lockScalingY: false, lockRotation: true,
+          selectable: true,
+          evented: true,
+          cornerColor: '#F4C2A1',
+          cornerSize: 8,
+          transparentCorners: false,
+          borderColor: '#F4C2A1',
+          hasControls: true,
+          hasBorders: true,
+          lockMovementX: false,
+          lockMovementY: false,
+          lockScalingX: false,
+          lockScalingY: false,
+          lockRotation: true,
         });
         img.slotId = `${SLOT_ID}-photo-${i}`;
         img.photoIndex = photoIndex;
         img.slotIndex = i;
         img.photoId = `slot-photo-${i}`; // ← for selection system compatibility
 
-        // Apply shape clipPath
+        // Apply shape clipPath — ALL shapes including rectangle
         if (slot.shape === 'circle') {
           img.set('clipPath', new fab.Circle({ radius: Math.min(sw, sh) / 2, originX: 'center', originY: 'center' }));
         } else if (slot.shape === 'rounded' && slot.borderRadius) {
@@ -184,6 +201,9 @@ function renderTemplateSlots(
           const hr = Math.min(sw, sh) / 2;
           const heartPath = `M 0 ${-hr * 0.3} C ${-hr} ${-hr * 1.2} ${-hr * 1.5} ${hr * 0.3} 0 ${hr} C ${hr * 1.5} ${hr * 0.3} ${hr} ${-hr * 1.2} 0 ${-hr * 0.3} Z`;
           img.set('clipPath', new fab.Path(heartPath, { originX: 'center', originY: 'center' }));
+        } else {
+          // Rectangle (default) — clip to slot bounds so photo doesn't overflow
+          img.set('clipPath', new fab.Rect({ width: sw, height: sh, originX: 'center', originY: 'center' }));
         }
 
         canvas.add(img);
@@ -300,8 +320,10 @@ function renderScene(
   const template = getTemplateById(templateId);
   const slotFills = page.slotFills ?? template?.slots.map(() => null) ?? [];
   const slotScales = page.slotScales ?? template?.slots.map(() => 1) ?? [];
+  const slotOffsetsX = page.slotOffsetsX ?? template?.slots.map(() => 0) ?? [];
+  const slotOffsetsY = page.slotOffsetsY ?? template?.slots.map(() => 0) ?? [];
   if (template) {
-    renderTemplateSlots(fab, canvas, template, slotFills, slotScales, uploadedPhotos, canvasW, canvasH, onSlotClick);
+    renderTemplateSlots(fab, canvas, template, slotFills, slotScales, slotOffsetsX, slotOffsetsY, uploadedPhotos, canvasW, canvasH, onSlotClick);
   }
 
   // ── 4. Add text on top ──
@@ -370,6 +392,10 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
   const snapGuidesRef = useRef<any[]>([]);
 
   const currentPage = actions.currentPage;
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
+  const canvasDimsRef = useRef({ w: CANVAS_W, h: CANVAS_H });
+  canvasDimsRef.current = { w: CANVAS_W, h: CANVAS_H };
   const uploadedPhotos = actions.uploadedPhotos;
   const fab = fabric as any;
   const fabricValid = fab && (fab.Canvas || fab.fabric);
@@ -437,6 +463,8 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     canvas.on('object:moving', (e: any) => {
       const obj = e.target;
       if (!obj || !snapEnabled) return;
+      // Don't snap slot photos during pan — let them move freely
+      if (obj.slotIndex !== undefined) return;
 
       clearSnapGuides(canvas);
 
@@ -563,12 +591,40 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       }
     });
 
-    // ── Track scale changes on slot photos ──
+    // ── Enforce uniform scaling on slot photos (no deformation) ──
+    canvas.on('object:scaling', (e: any) => {
+      const obj = e.target;
+      if (obj && obj.slotIndex !== undefined) {
+        const scale = Math.max(obj.scaleX, obj.scaleY);
+        obj.set({ scaleX: scale, scaleY: scale });
+        canvas.requestRenderAll();
+      }
+    });
+
+    // ── Track scale + position changes on slot photos ──
     canvas.on('object:modified', (e: any) => {
       const obj = e.target;
-      if (obj && obj.slotIndex !== undefined && actions.setSlotScale) {
-        // Always save the current fabric scale (cover-crop base may not be 1)
-        actions.setSlotScale(obj.slotIndex, Math.max(0.5, obj.scaleX ?? 1));
+      if (obj && obj.slotIndex !== undefined && actions.setSlotScale && actions.setSlotOffset) {
+        const page = currentPageRef.current;
+        const template = getTemplateById(page.templateId ?? PAGE_TEMPLATES[0].id);
+        const slot = template?.slots?.[obj.slotIndex];
+        if (slot) {
+          const { w: canvasW, h: canvasH } = canvasDimsRef.current;
+          const sx = (slot.x / 100) * canvasW;
+          const sy = (slot.y / 100) * canvasH;
+          const sw = (slot.width / 100) * canvasW;
+          const sh = (slot.height / 100) * canvasH;
+
+          // Save scale (absolute fabric scale)
+          actions.setSlotScale(obj.slotIndex, Math.max(0.1, obj.scaleX ?? 1));
+
+          // Save position offset from slot center
+          const offsetX = (obj.left ?? 0) - (sx + sw / 2);
+          const offsetY = (obj.top ?? 0) - (sy + sh / 2);
+          const currentOffsetX = page.slotOffsetsX?.[obj.slotIndex] ?? 0;
+          const currentOffsetY = page.slotOffsetsY?.[obj.slotIndex] ?? 0;
+          actions.setSlotOffset(obj.slotIndex, offsetX - currentOffsetX, offsetY - currentOffsetY);
+        }
       }
     });
 
