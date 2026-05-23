@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 30 100% 97%;
+    --foreground: 0 0% 18%;
+    --card: 30 100% 98.5%;
+    --card-foreground: 0 0% 18%;
+    --popover: 30 100% 98.5%;
+    --popover-foreground: 0 0% 18%;
+    --primary: 25 80% 76%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 75% 94%;
+    --secondary-foreground: 0 0% 18%;
+    --muted: 30 20% 95%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 260 35% 82%;
+    --accent-foreground: 0 0% 18%;
+    --destructive: 6 65% 73%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 10% 88%;
+    --input: 30 10% 88%;
+    --ring: 25 80% 76%;
+    --radius: 0.625rem;
+    --sidebar-background: 30 100% 97%;
+    --sidebar-foreground: 0 0% 18%;
+    --sidebar-primary: 25 80% 76%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 75% 94%;
+    --sidebar-accent-foreground: 0 0% 18%;
+    --sidebar-border: 30 10% 88%;
+    --sidebar-ring: 25 80% 76%;
+
+    --cream: #FFF8F0;
+    --warm-white: #FFFBF7;
+    --blush: #FDE8E4;
+    --lavender: #E8E0F0;
+    --mist: #E0E8F0;
+    --pale-peach: #FBE5D8;
+    --soft-sage: #E4F0E0;
+    --deep-charcoal: #2D2D2D;
+    --charcoal: #4A4A4A;
+    --dark: #2D2D2D;
+    --medium: #6B6B6B;
+    --light: #9B9B9B;
+    --white: #FFFFFF;
+    --blush-text: #D4A08C;
+    --lavender-text: #9B8EC4;
+    --peach: #F4C2A1;
+    --blush-pink: #E8A598;
+    --soft-lavender: #B8A9D9;
+    --mint: #9BCFB8;
+    --sky-blue: #8FBFE0;
+    --pale-coral: #E8958C;
+    --cream-gold: #D4B896;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-[#FFF8F0] text-[#2D2D2D] font-body antialiased;
+    font-family: "DM Sans", sans-serif;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Playfair Display", serif;
+  }
+}
