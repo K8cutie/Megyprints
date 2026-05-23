@@ -238,7 +238,7 @@ function renderTemplateSlots(
         }
 
         canvas.add(img);
-        canvas.bringToFront(img);
+        img.bringToFront(); // Fabric.js 6.x: object-level method
         canvas.requestRenderAll();
       });
     } else {
