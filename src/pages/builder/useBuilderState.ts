@@ -48,18 +48,6 @@ function loadState(): { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[]
       return null;
     }
 
-    // Validate uploadedPhotos
-    const uploadedPhotos: UploadedPhoto[] = Array.isArray(parsed.uploadedPhotos)
-      ? parsed.uploadedPhotos
-          .filter((p: any) => p && typeof p.id === 'string' && typeof p.previewUrl === 'string')
-          .map((p: any) => ({
-            id: p.id,
-            file: null as any,
-            previewUrl: p.previewUrl || '',
-            name: p.name || 'unnamed',
-          }))
-      : [];
-
     // Validate albumPages — photos[] AND slotFills wiped (always start fresh)
     const albumPages: AlbumPage[] = Array.isArray(parsed.albumPages)
       ? parsed.albumPages.filter(isValidAlbumPage).map((page: any) => {
