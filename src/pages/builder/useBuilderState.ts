@@ -20,7 +20,7 @@ import {
 import { getTemplateById, PAGE_TEMPLATES } from './pageTemplates';
 
 const STORAGE_KEY = 'megy_builder_state';
-const STORAGE_VERSION = 'v2';
+const STORAGE_VERSION = 'v3'; // bumped — clears old freeform photo data
 
 /* ── Safe localStorage with validation ── */
 
@@ -60,14 +60,20 @@ function loadState(): { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[]
           }))
       : [];
 
-    // Validate albumPages
+    // Validate albumPages — photos[] AND slotFills wiped (always start fresh)
     const albumPages: AlbumPage[] = Array.isArray(parsed.albumPages)
-      ? parsed.albumPages.filter(isValidAlbumPage).map((page: any) => ({
-          ...page,
-          photos: Array.isArray(page.photos) ? page.photos : [],
-          textElements: Array.isArray(page.textElements) ? page.textElements : [],
-          background: page.background || { type: 'solid' as const, solid: '#FFFBF7' },
-        }))
+      ? parsed.albumPages.filter(isValidAlbumPage).map((page: any) => {
+          const templateId = page.templateId || PAGE_TEMPLATES[0].id;
+          const template = PAGE_TEMPLATES.find((t) => t.id === templateId) || PAGE_TEMPLATES[0];
+          return {
+            ...page,
+            templateId,
+            slotFills: template.slots.map(() => null), // <-- ALWAYS EMPTY ON LOAD
+            photos: [], // <-- FREEFORM PHOTOS PURGED
+            textElements: Array.isArray(page.textElements) ? page.textElements : [],
+            background: page.background || { type: 'solid' as const, solid: '#FFFBF7' },
+          };
+        })
       : [];
 
     return { uploadedPhotos, albumPages };

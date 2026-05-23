@@ -267,7 +267,7 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const bg = page.background;
   const bgTransform = `${bg.x ?? 0},${bg.y ?? 0},${bg.width ?? 0},${bg.height ?? 0},${bg.rotation ?? 0},${bg.opacity ?? 100}`;
   const slotFills = page.slotFills ? page.slotFills.join(',') : '';
-  return `${pageIndex}|${page.photos.map(p => p.id).join(',')}|${page.textElements.map(t => t.id).join(',')}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}`;
+  return `${pageIndex}|${page.textElements.map(t => t.id).join(',')}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}`;
 }
 
 /* ── Render scene ── */
@@ -624,7 +624,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       }, 120);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fabricValid, actions.currentPageIndex, currentPage.photos.map((p) => p.id).join(','), currentPage.textElements.map((t) => t.id).join(','), JSON.stringify(currentPage.background), uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H, currentPage.templateId, currentPage.slotFills?.join(',')]);
+  }, [fabricValid, actions.currentPageIndex, currentPage.textElements.map((t) => t.id).join(','), JSON.stringify(currentPage.background), uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H, currentPage.templateId, currentPage.slotFills?.join(',')]);
 
   /* ── Update filter in-place ── */
   useEffect(() => {
