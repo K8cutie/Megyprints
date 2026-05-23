@@ -403,7 +403,8 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     canvas.on('selection:created', (e: any) => {
       const obj = e.selected?.[0];
       if (obj) {
-        if (obj.photoId) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(obj.slotIndex ?? null); }
+        if (obj.photoId && obj.slotIndex === undefined) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
+        if (obj.slotIndex !== undefined) { setSelectedSlotIndex(obj.slotIndex); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedBg(false); }
         if (obj.textId) { setSelectedTextId(obj.textId); setSelectedPhotoId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
         if (obj.bgId === BG_ID) { setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedSlotIndex(null); }
       }
@@ -411,7 +412,8 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     canvas.on('selection:updated', (e: any) => {
       const obj = e.selected?.[0];
       if (obj) {
-        if (obj.photoId) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(obj.slotIndex ?? null); }
+        if (obj.photoId && obj.slotIndex === undefined) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
+        if (obj.slotIndex !== undefined) { setSelectedSlotIndex(obj.slotIndex); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedBg(false); }
         if (obj.textId) { setSelectedTextId(obj.textId); setSelectedPhotoId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
         if (obj.bgId === BG_ID) { setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedSlotIndex(null); }
       }
@@ -426,7 +428,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
         if (bgObj) {
           canvas.setActiveObject(bgObj);
           canvas.requestRenderAll();
-          setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null);
+          setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedSlotIndex(null);
         }
       }
     });
@@ -625,7 +627,8 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
 
     const canvas = fabricRef.current;
     const active = canvas.getActiveObject?.();
-    const savedPhotoId = active?.photoId ?? null;
+    const savedPhotoId = (active?.photoId && active?.slotIndex === undefined) ? active.photoId : null;
+    const savedSlotIndex = active?.slotIndex ?? null;
     const savedTextId = active?.textId ?? null;
 
     renderScene(fab, canvas, currentPage, uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H, (slotIndex) => {
@@ -633,13 +636,24 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       setShowPhotoPicker(true);
     });
 
-    if (savedPhotoId || savedTextId) {
+    if (savedPhotoId || savedTextId || savedSlotIndex !== null) {
       setTimeout(() => {
         const obj = canvas.getObjects().find((o: any) =>
           (savedPhotoId && o.photoId === savedPhotoId) ||
+          (savedSlotIndex !== null && o.slotIndex === savedSlotIndex) ||
           (savedTextId && o.textId === savedTextId)
         );
-        if (obj) { canvas.setActiveObject(obj); canvas.requestRenderAll(); }
+        if (obj) {
+          canvas.setActiveObject(obj);
+          canvas.requestRenderAll();
+          if (savedSlotIndex !== null && savedSlotIndex !== undefined) {
+            setSelectedSlotIndex(savedSlotIndex);
+          } else if (savedPhotoId) {
+            setSelectedPhotoId(savedPhotoId);
+          } else if (savedTextId) {
+            setSelectedTextId(savedTextId);
+          }
+        }
       }, 120);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
