@@ -17,9 +17,6 @@ import {
 
 
 } from './types';
-/* DEPRECATED: autoLayout — use template slots instead
-import { generateAlbum, regenerateAlbum } from './autoLayout';
-*/
 import { getTemplateById, PAGE_TEMPLATES } from './pageTemplates';
 
 const STORAGE_KEY = 'megy_builder_state';
