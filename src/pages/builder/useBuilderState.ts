@@ -17,7 +17,9 @@ import {
 
 
 } from './types';
+/* DEPRECATED: autoLayout — use template slots instead
 import { generateAlbum, regenerateAlbum } from './autoLayout';
+*/
 import { getTemplateById, PAGE_TEMPLATES } from './pageTemplates';
 
 const STORAGE_KEY = 'megy_builder_state';
@@ -310,42 +312,10 @@ export function useBuilderState() {
     });
   }, [currentPageIndex]);
 
-  // ── Canvas Photo Operations ──
-  const addPhotoToCanvas = useCallback((photoIndex: number, x?: number, y?: number) => {
-    if (!uploadedPhotos[photoIndex]) return;
-    const canvasPhoto: CanvasPhoto = {
-      id: uid(),
-      photoIndex,
-      x: x ?? 50 + Math.random() * 200,
-      y: y ?? 50 + Math.random() * 200,
-      width: 300,
-      height: 300,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-      filters: { ...DEFAULT_FILTERS },
-      offsetX: 0,
-      offsetY: 0,
-      zIndex: 0,
-      borderWidth: 0,
-      borderColor: '#000000',
-      borderRadius: 0,
-      shadowBlur: 0,
-      shadowColor: 'rgba(0,0,0,0.3)',
-      shadowOffsetX: 0,
-      shadowOffsetY: 0,
-    };
-    setAlbumPages((prev) => {
-      const next = [...prev];
-      const page = next[currentPageIndex];
-      if (page) {
-        const maxZ = page.photos.reduce((m, p) => Math.max(m, p.zIndex), -1);
-        canvasPhoto.zIndex = maxZ + 1;
-        next[currentPageIndex] = { ...page, photos: [...page.photos, canvasPhoto] };
-      }
-      return next;
-    });
-  }, [currentPageIndex, uploadedPhotos]);
+  // ── Canvas Photo Operations (legacy freeform — deprecated, use template slots) ──
+  /*
+  const addPhotoToCanvas = useCallback((photoIndex: number, x?: number, y?: number) => { ... });
+  */
 
   const updatePhotoTransform = useCallback((photoId: string, updates: Partial<CanvasPhoto>) => {
     setAlbumPages((prev) => {
@@ -518,20 +488,11 @@ export function useBuilderState() {
     });
   }, [currentPageIndex, uploadedPhotos]);
 
-  // ── Auto-Generate (legacy freeform) ──
-  const generateAlbumPages = useCallback(() => {
-    if (uploadedPhotos.length === 0) return;
-    const pages = generateAlbum(uploadedPhotos, selectedTemplate, albumSize);
-    setAlbumPages(pages);
-    setCurrentPageIndex(0);
-  }, [uploadedPhotos, selectedTemplate, albumSize]);
-
-  const regenerateAlbumPages = useCallback(() => {
-    if (uploadedPhotos.length === 0) return;
-    const pages = regenerateAlbum(uploadedPhotos, selectedTemplate, albumSize);
-    setAlbumPages(pages);
-    setCurrentPageIndex(0);
-  }, [uploadedPhotos, selectedTemplate, albumSize]);
+  // ── Auto-Generate (legacy freeform — deprecated, use template slots) ──
+  /*
+  const generateAlbumPages = useCallback(() => { ... }, [uploadedPhotos, selectedTemplate, albumSize]);
+  const regenerateAlbumPages = useCallback(() => { ... }, [uploadedPhotos, selectedTemplate, albumSize]);
+  */
 
   // ── Reset ──
   const reset = useCallback(() => {
@@ -557,12 +518,13 @@ export function useBuilderState() {
     setPageBackground, updateBackgroundTransform, updateBackgroundFilters,
     setPageTemplate, fillSlot, clearSlot, clearAllSlots, autoFillSlots,
 
-    addPhotoToCanvas, updatePhotoTransform, updatePhotoFilters,
+    /* DEPRECATED: addPhotoToCanvas — use template slots instead */
+    updatePhotoTransform, updatePhotoFilters,
     deletePhotoFromCanvas, bringToFront, sendToBack, duplicateCanvasPhoto,
 
     addTextElement, updateTextElement, deleteTextElement,
 
-    generateAlbumPages, regenerateAlbumPages,
+    /* DEPRECATED: generateAlbumPages, regenerateAlbumPages — use template slots instead */
 
     reset,
   };

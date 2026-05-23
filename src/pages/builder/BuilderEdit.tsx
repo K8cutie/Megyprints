@@ -841,7 +841,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       )}
 
     <div className="flex h-full bg-[#F5F5F5]">
-      <EditSidebar activeTab={sidebarTab} onTabChange={setSidebarTab} uploadedPhotos={uploadedPhotos} albumPages={actions.albumPages} currentPageIndex={actions.currentPageIndex} photos={currentPage.photos} textElements={currentPage.textElements} selectedPhotoId={selectedPhotoId} selectedTextId={selectedTextId} onSelectPhoto={setSelectedPhotoId} onSelectText={setSelectedTextId} onAddPhotoToCanvas={actions.addPhotoToCanvas} onGoToPage={actions.goToPage} onAddPage={actions.addPage} onDeletePage={actions.deletePage} onDuplicatePage={actions.duplicatePage} onAddText={actions.addTextElement} currentTemplateId={currentPage.templateId} onSetTemplate={actions.setPageTemplate} onAutoFill={actions.autoFillSlots} onClearAllSlots={actions.clearAllSlots} />
+      <EditSidebar activeTab={sidebarTab} onTabChange={setSidebarTab} uploadedPhotos={uploadedPhotos} albumPages={actions.albumPages} currentPageIndex={actions.currentPageIndex} photos={currentPage.photos} textElements={currentPage.textElements} selectedPhotoId={selectedPhotoId} selectedTextId={selectedTextId} onSelectPhoto={setSelectedPhotoId} onSelectText={setSelectedTextId} onGoToPage={actions.goToPage} onAddPage={actions.addPage} onDeletePage={actions.deletePage} onDuplicatePage={actions.duplicatePage} onAddText={actions.addTextElement} currentTemplateId={currentPage.templateId} onSetTemplate={actions.setPageTemplate} onAutoFill={actions.autoFillSlots} onClearAllSlots={actions.clearAllSlots} />
 
       <div className="flex-1 flex flex-col relative overflow-hidden">
         {/* Toolbar */}

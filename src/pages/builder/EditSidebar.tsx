@@ -19,7 +19,6 @@ interface EditSidebarProps {
   selectedTextId: string | null;
   onSelectPhoto: (id: string | null) => void;
   onSelectText: (id: string | null) => void;
-  onAddPhotoToCanvas: (photoIndex: number) => void;
   onGoToPage: (index: number) => void;
   onAddPage: () => void;
   onDeletePage: (index: number) => void;
@@ -36,7 +35,7 @@ export default function EditSidebar(props: EditSidebarProps) {
   const {
     activeTab, onTabChange, uploadedPhotos, albumPages, currentPageIndex,
     photos, textElements, selectedPhotoId, selectedTextId,
-    onSelectPhoto, onSelectText, onAddPhotoToCanvas,
+    onSelectPhoto, onSelectText,
     onGoToPage, onAddPage, onDeletePage, onDuplicatePage, onAddText,
     currentTemplateId, onSetTemplate,
     onAutoFill, onClearAllSlots,
@@ -97,16 +96,13 @@ export default function EditSidebar(props: EditSidebarProps) {
                 <p className="text-xs text-[#9B9B9B] text-center py-8">No photos uploaded yet</p>
               ) : (
                 <>
-                  <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider">Click to add to canvas</p>
+                  <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider">Your Photos ({uploadedPhotos.length})</p>
+                  <p className="text-[10px] text-[#9B9B9B] mb-3">Go to Templates tab to place photos in layouts</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {uploadedPhotos.map((photo, i) => (
-                      <button key={photo.id} onClick={() => onAddPhotoToCanvas(i)}
-                        className="group relative aspect-square rounded-lg overflow-hidden border border-[#E8E8E8] hover:border-[#F4C2A1] transition-colors">
+                    {uploadedPhotos.map((photo) => (
+                      <div key={photo.id} className="relative aspect-square rounded-lg overflow-hidden border border-[#E8E8E8]">
                         <img src={photo.previewUrl} alt={photo.name} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                          <Plus size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </>

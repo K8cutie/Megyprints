@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Check, RefreshCw, ChevronLeft, Sparkles } from 'lucide-react';
+import { Check, ChevronLeft, Sparkles } from 'lucide-react';
 import type { TemplateType } from './types';
 import { THEMES } from './types';
 
@@ -9,11 +9,9 @@ interface BuilderTemplateProps {
   onSelect: (t: TemplateType) => void;
   onBack: () => void;
   onGenerate: () => void;
-  onRegenerate?: () => void;
-  hasPages?: boolean;
 }
 
-export default function BuilderTemplate({ selected, onSelect, onBack, onGenerate, onRegenerate, hasPages = false }: BuilderTemplateProps) {
+export default function BuilderTemplate({ selected, onSelect, onBack, onGenerate }: BuilderTemplateProps) {
   const [hovered, setHovered] = useState<string | null>(null);
   const themes = Object.values(THEMES);
 
@@ -29,16 +27,9 @@ export default function BuilderTemplate({ selected, onSelect, onBack, onGenerate
             <p className="text-xs text-[#9B9B9B]">Pick a starting point — customize everything later</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          {hasPages && onRegenerate && (
-            <button onClick={onRegenerate} className="px-4 py-2 border border-[#D4D4D4] text-[#6B6B6B] font-body text-sm font-medium rounded-lg hover:bg-[#FDE8E4] hover:text-[#E8A598] flex items-center gap-1.5 transition-all">
-              <RefreshCw size={14} /> Shuffle
-            </button>
-          )}
-          <button onClick={onGenerate} className="px-6 py-2 bg-[#F4C2A1] text-white font-body text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5 transition-all">
-            <Sparkles size={14} /> {hasPages ? 'Regenerate' : 'Generate Album'}
-          </button>
-        </div>
+        <button onClick={onGenerate} className="px-6 py-2 bg-[#F4C2A1] text-white font-body text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5 transition-all">
+          <Sparkles size={14} /> Continue to Editor
+        </button>
       </div>
 
       <div className="flex-1 overflow-auto p-6">
