@@ -264,7 +264,8 @@ function getSnapLines(canvasW: number, canvasH: number, margin: number) {
 function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const bg = page.background;
   const bgTransform = `${bg.x ?? 0},${bg.y ?? 0},${bg.width ?? 0},${bg.height ?? 0},${bg.rotation ?? 0},${bg.opacity ?? 100}`;
-  return `${pageIndex}|${page.photos.map(p => p.id).join(',')}|${page.textElements.map(t => t.id).join(',')}|${JSON.stringify(page.background)}|${bgTransform}`;
+  const slotFills = page.slotFills ? page.slotFills.join(',') : '';
+  return `${pageIndex}|${page.photos.map(p => p.id).join(',')}|${page.textElements.map(t => t.id).join(',')}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}`;
 }
 
 /* ── Render scene ── */
@@ -649,7 +650,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       }, 120);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fabricValid, actions.currentPageIndex, currentPage.photos.map((p) => p.id).join(','), currentPage.textElements.map((t) => t.id).join(','), JSON.stringify(currentPage.background), uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H]);
+  }, [fabricValid, actions.currentPageIndex, currentPage.photos.map((p) => p.id).join(','), currentPage.textElements.map((t) => t.id).join(','), JSON.stringify(currentPage.background), uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H, currentPage.templateId, currentPage.slotFills?.join(',')]);
 
   /* ── Update filter in-place ── */
   useEffect(() => {
@@ -840,7 +841,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       )}
 
     <div className="flex h-full bg-[#F5F5F5]">
-      <EditSidebar activeTab={sidebarTab} onTabChange={setSidebarTab} uploadedPhotos={uploadedPhotos} albumPages={actions.albumPages} currentPageIndex={actions.currentPageIndex} photos={currentPage.photos} textElements={currentPage.textElements} selectedPhotoId={selectedPhotoId} selectedTextId={selectedTextId} onSelectPhoto={setSelectedPhotoId} onSelectText={setSelectedTextId} onAddPhotoToCanvas={actions.addPhotoToCanvas} onGoToPage={actions.goToPage} onAddPage={actions.addPage} onDeletePage={actions.deletePage} onDuplicatePage={actions.duplicatePage} onAddText={actions.addTextElement} currentTemplateId={currentPage.templateId} onSetTemplate={actions.setPageTemplate} />
+      <EditSidebar activeTab={sidebarTab} onTabChange={setSidebarTab} uploadedPhotos={uploadedPhotos} albumPages={actions.albumPages} currentPageIndex={actions.currentPageIndex} photos={currentPage.photos} textElements={currentPage.textElements} selectedPhotoId={selectedPhotoId} selectedTextId={selectedTextId} onSelectPhoto={setSelectedPhotoId} onSelectText={setSelectedTextId} onAddPhotoToCanvas={actions.addPhotoToCanvas} onGoToPage={actions.goToPage} onAddPage={actions.addPage} onDeletePage={actions.deletePage} onDuplicatePage={actions.duplicatePage} onAddText={actions.addTextElement} currentTemplateId={currentPage.templateId} onSetTemplate={actions.setPageTemplate} onAutoFill={actions.autoFillSlots} onClearAllSlots={actions.clearAllSlots} />
 
       <div className="flex-1 flex flex-col relative overflow-hidden">
         {/* Toolbar */}

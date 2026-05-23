@@ -27,6 +27,8 @@ interface EditSidebarProps {
   onAddText: () => void;
   currentTemplateId?: string;
   onSetTemplate?: (id: string) => void;
+  onAutoFill?: () => void;
+  onClearAllSlots?: () => void;
 }
 
 export default function EditSidebar(props: EditSidebarProps) {
@@ -37,6 +39,7 @@ export default function EditSidebar(props: EditSidebarProps) {
     onSelectPhoto, onSelectText, onAddPhotoToCanvas,
     onGoToPage, onAddPage, onDeletePage, onDuplicatePage, onAddText,
     currentTemplateId, onSetTemplate,
+    onAutoFill, onClearAllSlots,
   } = props;
 
   const [templateCategory, setTemplateCategory] = useState<string>('all');
@@ -190,6 +193,17 @@ export default function EditSidebar(props: EditSidebarProps) {
                     {cat.label}
                   </button>
                 ))}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 mb-3">
+                <button onClick={onAutoFill} className="flex-1 py-1.5 bg-[#F4C2A1] text-white text-[10px] font-medium rounded-lg hover:brightness-105 transition-all flex items-center justify-center gap-1">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+                  Auto-Fill Slots
+                </button>
+                <button onClick={onClearAllSlots} className="px-3 py-1.5 border border-[#E8E8E8] text-[#6B6B6B] text-[10px] font-medium rounded-lg hover:bg-[#FDE8E4] hover:text-[#E8A598] hover:border-[#E8A598] transition-all">
+                  Clear
+                </button>
               </div>
 
               {/* Template grid */}

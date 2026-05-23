@@ -275,6 +275,16 @@ export function useBuilderState() {
     });
   }, [currentPageIndex]);
 
+  const clearAllSlots = useCallback(() => {
+    setAlbumPages((prev) => {
+      const next = [...prev];
+      const page = next[currentPageIndex];
+      if (!page || !page.slotFills) return prev;
+      next[currentPageIndex] = { ...page, slotFills: page.slotFills.map(() => null) };
+      return next;
+    });
+  }, [currentPageIndex]);
+
   const updateBackgroundTransform = useCallback((updates: Partial<Pick<AlbumBackground, 'x' | 'y' | 'width' | 'height' | 'rotation'>>) => {
     setAlbumPages((prev) => {
       const next = [...prev];
@@ -475,7 +485,40 @@ export function useBuilderState() {
     });
   }, [currentPageIndex]);
 
-  // ── Auto-Generate ──
+  // ── Auto-Fill: shuffle photos into template slots ──
+  const autoFillSlots = useCallback(() => {
+    if (uploadedPhotos.length === 0) return;
+    setAlbumPages((prev) => {
+      const next = [...prev];
+      const page = next[currentPageIndex];
+      if (!page || !page.templateId || !page.slotFills) return prev;
+
+      // Get empty slot indices
+      const emptySlotIndices = page.slotFills
+        .map((fill, idx) => (fill === null ? idx : -1))
+        .filter((idx) => idx !== -1);
+
+      if (emptySlotIndices.length === 0) return prev; // All filled
+
+      // Shuffle available photos
+      const availablePhotoIndices = Array.from({ length: uploadedPhotos.length }, (_, i) => i);
+      for (let i = availablePhotoIndices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [availablePhotoIndices[i], availablePhotoIndices[j]] = [availablePhotoIndices[j], availablePhotoIndices[i]];
+      }
+
+      // Fill empty slots with shuffled photos
+      const newFills = [...page.slotFills];
+      for (let i = 0; i < Math.min(emptySlotIndices.length, availablePhotoIndices.length); i++) {
+        newFills[emptySlotIndices[i]] = availablePhotoIndices[i];
+      }
+
+      next[currentPageIndex] = { ...page, slotFills: newFills };
+      return next;
+    });
+  }, [currentPageIndex, uploadedPhotos]);
+
+  // ── Auto-Generate (legacy freeform) ──
   const generateAlbumPages = useCallback(() => {
     if (uploadedPhotos.length === 0) return;
     const pages = generateAlbum(uploadedPhotos, selectedTemplate, albumSize);
@@ -512,7 +555,7 @@ export function useBuilderState() {
     addPage, deletePage, duplicatePage, goToPage,
 
     setPageBackground, updateBackgroundTransform, updateBackgroundFilters,
-    setPageTemplate, fillSlot, clearSlot,
+    setPageTemplate, fillSlot, clearSlot, clearAllSlots, autoFillSlots,
 
     addPhotoToCanvas, updatePhotoTransform, updatePhotoFilters,
     deletePhotoFromCanvas, bringToFront, sendToBack, duplicateCanvasPhoto,
