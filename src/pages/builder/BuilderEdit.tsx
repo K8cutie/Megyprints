@@ -565,9 +565,8 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     canvas.on('object:modified', (e: any) => {
       const obj = e.target;
       if (obj && obj.slotIndex !== undefined && actions.setSlotScale) {
-        if (obj.scaleX !== 1) {
-          actions.setSlotScale(obj.slotIndex, Math.max(0.5, obj.scaleX));
-        }
+        // Always save the current fabric scale (cover-crop base may not be 1)
+        actions.setSlotScale(obj.slotIndex, Math.max(0.5, obj.scaleX ?? 1));
       }
     });
 
@@ -898,6 +897,12 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
           selectedText={selectedText}
           selectedBackground={bgForPanel}
           background={currentPage.background}
+          selectedSlotIndex={selectedSlotIndex}
+          slotFills={currentPage.slotFills ?? []}
+          slotScales={currentPage.slotScales ?? []}
+          slotOffsetsX={currentPage.slotOffsetsX ?? []}
+          slotOffsetsY={currentPage.slotOffsetsY ?? []}
+          uploadedPhotos={uploadedPhotos}
           onUpdatePhoto={actions.updatePhotoTransform}
           onUpdateFilters={actions.updatePhotoFilters}
           onUpdateText={actions.updateTextElement}
@@ -909,6 +914,10 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
           onUpdateBackground={actions.setPageBackground}
           onUpdateBackgroundTransform={actions.updateBackgroundTransform}
           onUpdateBackgroundFilters={actions.updateBackgroundFilters}
+          onClearSlot={actions.clearSlot}
+          onSetSlotScale={actions.setSlotScale}
+          onSetSlotOffset={actions.setSlotOffset}
+          onReplaceSlotPhoto={() => { setShowPhotoPicker(true); }}
         />
       </div>
     </div>

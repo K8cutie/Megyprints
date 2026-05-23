@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Type, Trash2, Copy, ArrowUp, ArrowDown,
   Sun, Moon, Contrast, Droplets, Sparkles, RotateCcw,
-  ChevronDown, Palette, Frame,
+  ChevronDown, Palette, Frame, ZoomIn, Move, Replace,
 } from 'lucide-react';
-import type { CanvasPhoto, TextElement, PhotoFilters, AlbumBackground } from './types';
+import type { CanvasPhoto, TextElement, PhotoFilters, AlbumBackground, UploadedPhoto } from './types';
 import { FILTER_PRESETS, DEFAULT_FILTERS, DEFAULT_BG_FILTERS } from './types';
 import BackgroundDesigner from './BackgroundDesigner';
 
@@ -60,6 +60,12 @@ interface PropertiesPanelProps {
   selectedText: TextElement | null;
   selectedBackground: EditableBackground | null;
   background: AlbumBackground;
+  selectedSlotIndex: number | null;
+  slotFills: (number | null)[];
+  slotScales: number[];
+  slotOffsetsX: number[];
+  slotOffsetsY: number[];
+  uploadedPhotos: UploadedPhoto[];
   onUpdatePhoto: (id: string, updates: Partial<CanvasPhoto>) => void;
   onUpdateFilters: (id: string, filters: Partial<PhotoFilters>) => void;
   onUpdateText: (id: string, updates: Partial<TextElement>) => void;
@@ -71,6 +77,10 @@ interface PropertiesPanelProps {
   onUpdateBackground: (bg: AlbumBackground) => void;
   onUpdateBackgroundTransform: (updates: Partial<Pick<AlbumBackground, 'x' | 'y' | 'width' | 'height' | 'rotation'>>) => void;
   onUpdateBackgroundFilters: (filters: Partial<PhotoFilters>) => void;
+  onClearSlot: (slotIndex: number) => void;
+  onSetSlotScale: (slotIndex: number, scale: number) => void;
+  onSetSlotOffset: (slotIndex: number, dx: number, dy: number) => void;
+  onReplaceSlotPhoto: () => void;
 }
 
 /* ── Main ── */
@@ -80,9 +90,11 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
 
   const {
     selectedPhoto, selectedText, selectedBackground, background,
+    selectedSlotIndex, slotFills, slotScales, slotOffsetsX, slotOffsetsY, uploadedPhotos,
     onUpdatePhoto, onUpdateFilters, onUpdateText,
     onDeletePhoto, onDeleteText, onDuplicatePhoto, onBringToFront, onSendToBack,
     onUpdateBackground, onUpdateBackgroundTransform, onUpdateBackgroundFilters,
+    onClearSlot, onSetSlotScale, onSetSlotOffset, onReplaceSlotPhoto,
   } = props;
 
   /* ── Section wrapper ── */
@@ -167,11 +179,89 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
   }
 
   /* ── No selection: page properties ── */
-  if (!selectedPhoto && !selectedText) {
+  if (!selectedPhoto && !selectedText && selectedSlotIndex === null) {
     return (
       <div className="w-full h-full overflow-y-auto px-3 py-4">
         <h3 className="font-display text-sm font-semibold text-[#2D2D2D] mb-3">Page Properties</h3>
         <BackgroundDesigner background={background} onChange={onUpdateBackground} />
+      </div>
+    );
+  }
+
+  /* ── Slot photo selected ── */
+  if (selectedSlotIndex !== null && slotFills[selectedSlotIndex] !== null && uploadedPhotos) {
+    const photoIndex = slotFills[selectedSlotIndex];
+    const photo = photoIndex !== null ? uploadedPhotos[photoIndex] : null;
+    const currentScale = slotScales[selectedSlotIndex] ?? 1;
+    const currentOffsetX = slotOffsetsX[selectedSlotIndex] ?? 0;
+    const currentOffsetY = slotOffsetsY[selectedSlotIndex] ?? 0;
+
+    if (!photo) {
+      return (
+        <div className="w-full h-full overflow-y-auto px-3 py-4">
+          <h3 className="font-display text-sm font-semibold text-[#2D2D2D] mb-3">Slot {selectedSlotIndex + 1}</h3>
+          <p className="text-xs text-[#9B9B9B]">Photo not found.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full h-full overflow-y-auto px-3 py-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-display text-sm font-semibold text-[#2D2D2D]">Slot {selectedSlotIndex + 1}</h3>
+          <div className="flex gap-1">
+            <button onClick={onReplaceSlotPhoto} title="Replace photo" className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"><Replace size={14} /></button>
+            <button onClick={() => onClearSlot(selectedSlotIndex)} title="Clear slot" className="p-1.5 rounded-md hover:bg-[#FDE8E4] text-[#E8A598]"><Trash2 size={14} /></button>
+          </div>
+        </div>
+
+        <div className="mb-3 rounded-lg overflow-hidden border border-[#E8E8E8]">
+          <img src={photo.previewUrl} alt={photo.name} className="w-full aspect-square object-cover" />
+          <p className="text-[10px] text-[#9B9B9B] px-2 py-1 truncate bg-white">{photo.name}</p>
+        </div>
+
+        <Section id="slotZoom" title="Zoom" icon={<ZoomIn size={14} />}>
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              type="range" min={0.5} max={3} step={0.05}
+              value={currentScale}
+              onChange={(e) => onSetSlotScale(selectedSlotIndex, Number(e.target.value))}
+              className="flex-1 h-1 accent-[#F4C2A1]"
+            />
+            <span className="text-[10px] text-[#9B9B9B] w-10 text-right">{Math.round(currentScale * 100)}%</span>
+          </div>
+          <p className="text-[10px] text-[#9B9B9B]">Drag corner handles on the canvas to zoom in or out.</p>
+        </Section>
+
+        <Section id="slotPan" title="Pan" icon={<Move size={14} />}>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div>
+              <label className="text-[10px] text-[#9B9B9B]">Offset X</label>
+              <input
+                type="number" value={Math.round(currentOffsetX)}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  const delta = val - currentOffsetX;
+                  onSetSlotOffset(selectedSlotIndex, delta, 0);
+                }}
+                className="w-full text-xs border border-[#E8E8E8] rounded-md px-2 py-1"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-[#9B9B9B]">Offset Y</label>
+              <input
+                type="number" value={Math.round(currentOffsetY)}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  const delta = val - currentOffsetY;
+                  onSetSlotOffset(selectedSlotIndex, 0, delta);
+                }}
+                className="w-full text-xs border border-[#E8E8E8] rounded-md px-2 py-1"
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-[#9B9B9B]">Shift the photo within its slot frame.</p>
+        </Section>
       </div>
     );
   }
