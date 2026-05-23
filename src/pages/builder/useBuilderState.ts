@@ -79,7 +79,7 @@ function loadState(): { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[]
         })
       : [];
 
-    return { uploadedPhotos, albumPages };
+    return { uploadedPhotos: [], albumPages };
   } catch {
     // Corrupted data — clear it
     localStorage.removeItem(STORAGE_KEY);
@@ -89,7 +89,6 @@ function loadState(): { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[]
 
 function saveState(state: {
   phase: BuilderPhase;
-  uploadedPhotos: UploadedPhoto[];
   selectedTemplate: TemplateType;
   albumPages: AlbumPage[];
   currentPageIndex: number;
@@ -101,11 +100,6 @@ function saveState(state: {
     const serializable = {
       ...state,
       _version: STORAGE_VERSION,
-      uploadedPhotos: state.uploadedPhotos.map((p) => ({
-        id: p.id,
-        name: p.name,
-        previewUrl: p.previewUrl,
-      })),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
   } catch {
@@ -143,7 +137,7 @@ export function useBuilderState() {
   const [albumType, setAlbumType] = useState<'standard' | 'layflat'>('standard');
   const [albumSize, setAlbumSize] = useState<AlbumSizePreset>(DEFAULT_ALBUM_SIZE);
   const [phase, setPhase] = useState<BuilderPhase>('setup');
-  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>(saved?.uploadedPhotos ?? []);
+  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateType>('wedding');
   const [albumPages, setAlbumPages] = useState<AlbumPage[]>(
     saved?.albumPages && saved.albumPages.length > 0 ? saved.albumPages : [defaultPage()]
@@ -153,12 +147,14 @@ export function useBuilderState() {
   const currentPage = albumPages[currentPageIndex] ?? albumPages[0] ?? defaultPage();
 
   // ── Persist ──
+  // Note: uploadedPhotos are NOT persisted — blob URLs expire and File objects
+  // can't be serialized. Photos are re-uploaded fresh each session.
   useEffect(() => {
     saveState({
-      phase, uploadedPhotos, selectedTemplate, albumPages,
+      phase, selectedTemplate, albumPages,
       currentPageIndex, material: 'matte', cover: 'softcover', size: '8x10',
     });
-  }, [phase, uploadedPhotos, selectedTemplate, albumPages, currentPageIndex]);
+  }, [phase, selectedTemplate, albumPages, currentPageIndex]);
 
   // ── Phase ──
   const goToPhase = useCallback((p: BuilderPhase) => setPhase(p), []);
