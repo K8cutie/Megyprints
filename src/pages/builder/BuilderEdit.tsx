@@ -633,8 +633,10 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     if (!photo) return;
     const obj = fabricRef.current.getObjects().find((o: any) => o.photoId === selectedPhotoId);
     if (!obj) return;
-    obj.filters = buildFabricFilters(fab, photo.filters);
-    obj.applyFilters();
+    if (typeof obj.applyFilters === 'function') {
+      obj.filters = buildFabricFilters(fab, photo.filters);
+      obj.applyFilters();
+    }
     obj.set('opacity', photo.filters.opacity / 100);
     fabricRef.current.renderAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -663,8 +665,10 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     const obj = fabricRef.current.getObjects().find((o: any) => o.bgId === BG_ID);
     if (!obj) return;
     const filters = bg.filters ?? DEFAULT_BG_FILTERS;
-    obj.filters = buildFabricFilters(fab, filters);
-    obj.applyFilters();
+    if (typeof obj.applyFilters === 'function') {
+      obj.filters = buildFabricFilters(fab, filters);
+      obj.applyFilters();
+    }
     obj.set('opacity', (bg.opacity ?? 100) / 100);
     fabricRef.current.renderAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
