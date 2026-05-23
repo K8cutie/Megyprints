@@ -69,6 +69,9 @@ function loadState(): { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[]
             ...page,
             templateId,
             slotFills: template.slots.map(() => null), // <-- ALWAYS EMPTY ON LOAD
+            slotScales: template.slots.map(() => 1),   // default zoom = 1x
+            slotOffsetsX: template.slots.map(() => 0), // default no pan
+            slotOffsetsY: template.slots.map(() => 0),
             photos: [], // <-- FREEFORM PHOTOS PURGED
             textElements: Array.isArray(page.textElements) ? page.textElements : [],
             background: page.background || { type: 'solid' as const, solid: '#FFFBF7' },
@@ -118,11 +121,15 @@ function uid(): string {
 
 const defaultPage = (): AlbumPage => {
   const defaultTemplate = PAGE_TEMPLATES[0]; // Full page single
+  const slotCount = defaultTemplate.slots.length;
   return {
     id: uid(),
     layout: 'freeform',
     templateId: defaultTemplate.id,
-    slotFills: defaultTemplate.slots.map(() => null),
+    slotFills: new Array(slotCount).fill(null),
+    slotScales: new Array(slotCount).fill(1),
+    slotOffsetsX: new Array(slotCount).fill(0),
+    slotOffsetsY: new Array(slotCount).fill(0),
     background: { ...DEFAULT_BACKGROUND },
     photos: [],
     textElements: [],
@@ -241,16 +248,11 @@ export function useBuilderState() {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (page) {
-        // Preserve existing fills where possible
-        const newFills = template.slots.map((_, i) => {
-          if (page.slotFills && i < page.slotFills.length) return page.slotFills[i];
-          return null;
-        });
-        next[currentPageIndex] = {
-          ...page,
-          templateId,
-          slotFills: newFills,
-        };
+        const newFills = template.slots.map((_, i) => (page.slotFills && i < page.slotFills.length ? page.slotFills[i] : null));
+        const newScales = template.slots.map((_, i) => (page.slotScales && i < page.slotScales.length ? page.slotScales[i] : 1));
+        const newOffX = template.slots.map((_, i) => (page.slotOffsetsX && i < page.slotOffsetsX.length ? page.slotOffsetsX[i] : 0));
+        const newOffY = template.slots.map((_, i) => (page.slotOffsetsY && i < page.slotOffsetsY.length ? page.slotOffsetsY[i] : 0));
+        next[currentPageIndex] = { ...page, templateId, slotFills: newFills, slotScales: newScales, slotOffsetsX: newOffX, slotOffsetsY: newOffY };
       }
       return next;
     });
@@ -286,6 +288,32 @@ export function useBuilderState() {
       const page = next[currentPageIndex];
       if (!page || !page.slotFills) return prev;
       next[currentPageIndex] = { ...page, slotFills: page.slotFills.map(() => null) };
+      return next;
+    });
+  }, [currentPageIndex]);
+
+  const setSlotScale = useCallback((slotIndex: number, scale: number) => {
+    setAlbumPages((prev) => {
+      const next = [...prev];
+      const page = next[currentPageIndex];
+      if (!page || !page.slotScales) return prev;
+      const newScales = [...page.slotScales];
+      newScales[slotIndex] = scale;
+      next[currentPageIndex] = { ...page, slotScales: newScales };
+      return next;
+    });
+  }, [currentPageIndex]);
+
+  const setSlotOffset = useCallback((slotIndex: number, dx: number, dy: number) => {
+    setAlbumPages((prev) => {
+      const next = [...prev];
+      const page = next[currentPageIndex];
+      if (!page) return prev;
+      const newX = [...(page.slotOffsetsX ?? [])];
+      const newY = [...(page.slotOffsetsY ?? [])];
+      newX[slotIndex] = (newX[slotIndex] ?? 0) + dx;
+      newY[slotIndex] = (newY[slotIndex] ?? 0) + dy;
+      next[currentPageIndex] = { ...page, slotOffsetsX: newX, slotOffsetsY: newY };
       return next;
     });
   }, [currentPageIndex]);
@@ -519,7 +547,7 @@ export function useBuilderState() {
     addPage, deletePage, duplicatePage, goToPage,
 
     setPageBackground, updateBackgroundTransform, updateBackgroundFilters,
-    setPageTemplate, fillSlot, clearSlot, clearAllSlots, autoFillSlots,
+    setPageTemplate, fillSlot, clearSlot, clearAllSlots, autoFillSlots, setSlotScale, setSlotOffset,
 
     /* DEPRECATED: addPhotoToCanvas — use template slots instead */
     updatePhotoTransform, updatePhotoFilters,

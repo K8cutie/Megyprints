@@ -176,6 +176,11 @@ export interface AlbumPage {
   templateId?: string;
   /** Which photo index fills each slot (null = empty) */
   slotFills?: (number | null)[];
+  /** Scale factor for each slot photo (1.0 = fit, >1 = zoomed in) */
+  slotScales?: number[];
+  /** Offset X/Y for panning within each slot */
+  slotOffsetsX?: number[];
+  slotOffsetsY?: number[];
   background: AlbumBackground;
   photos: CanvasPhoto[];
   textElements: TextElement[];

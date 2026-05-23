@@ -124,6 +124,9 @@ function renderTemplateSlots(
   canvas: any,
   template: PageTemplate,
   slotFills: (number | null)[],
+  slotScales: number[],
+  slotOffsetsX: number[],
+  slotOffsetsY: number[],
   uploadedPhotos: any[],
   canvasW: number,
   canvasH: number,
@@ -141,21 +144,33 @@ function renderTemplateSlots(
     const sw = (slot.width / 100) * canvasW;
     const sh = (slot.height / 100) * canvasH;
 
+    const userScale = slotScales[i] ?? 1;
+    const userOffX = slotOffsetsX[i] ?? 0;
+    const userOffY = slotOffsetsY[i] ?? 0;
+
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
       // ── Filled slot: render photo ──
       fab.Image.fromURL(uploadedPhotos[photoIndex].previewUrl, (img: any) => {
         const imgW = img.width || sw;
         const imgH = img.height || sh;
-        // Cover-crop: uniform scale
-        const scale = Math.max(sw / imgW, sh / imgH);
+        // Cover-crop: uniform scale, then apply user zoom
+        const coverScale = Math.max(sw / imgW, sh / imgH);
+        const finalScale = coverScale * userScale;
+        // Compute pan offset so slot center stays center
+        const panX = userOffX * sw;
+        const panY = userOffY * sh;
+
         img.set({
-          left: sx + sw / 2, top: sy + sh / 2,
+          left: sx + sw / 2 + panX, top: sy + sh / 2 + panY,
           originX: 'center', originY: 'center',
-          scaleX: scale, scaleY: scale,
+          scaleX: finalScale, scaleY: finalScale,
           angle: slot.rotation ?? 0,
           selectable: true, evented: true,
-          cornerColor: '#F4C2A1', cornerSize: 6,
+          cornerColor: '#F4C2A1', cornerSize: 8,
           transparentCorners: false, borderColor: '#F4C2A1',
+          hasControls: true, hasBorders: true,
+          lockMovementX: false, lockMovementY: false,
+          lockScalingX: false, lockScalingY: false, lockRotation: true,
         });
         img.slotId = `${SLOT_ID}-photo-${i}`;
         img.photoIndex = photoIndex;
@@ -290,8 +305,11 @@ function renderScene(
   const templateId = page.templateId ?? PAGE_TEMPLATES[0].id;
   const template = getTemplateById(templateId);
   const slotFills = page.slotFills ?? template?.slots.map(() => null) ?? [];
+  const slotScales = page.slotScales ?? template?.slots.map(() => 1) ?? [];
+  const slotOffsetsX = page.slotOffsetsX ?? template?.slots.map(() => 0) ?? [];
+  const slotOffsetsY = page.slotOffsetsY ?? template?.slots.map(() => 0) ?? [];
   if (template) {
-    renderTemplateSlots(fab, canvas, template, slotFills, uploadedPhotos, canvasW, canvasH, onSlotClick);
+    renderTemplateSlots(fab, canvas, template, slotFills, slotScales, slotOffsetsX, slotOffsetsY, uploadedPhotos, canvasW, canvasH, onSlotClick);
   }
 
   // ── 4. Add text on top ──
@@ -551,12 +569,21 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       }
     });
 
+    // ── Track scale changes on slot photos ──
+    canvas.on('object:scaled', (e: any) => {
+      const obj = e.target;
+      if (obj && obj.slotIndex !== undefined && actions.setSlotScale) {
+        // Store new scale — render effect will re-render with it
+        actions.setSlotScale(obj.slotIndex, Math.max(0.5, obj.scaleX));
+      }
+    });
+
     // Clear snap guides when drag ends
     canvas.on('object:modified', (e: any) => {
       clearSnapGuides(canvas);
       const obj = e.target;
       if (!obj) return;
-      if (obj.photoId) {
+      if (obj.photoId && obj.slotIndex === undefined) {
         actions.updatePhotoTransform(obj.photoId, {
           x: obj.left ?? 0, y: obj.top ?? 0,
           width: obj.getScaledWidth(), height: obj.getScaledHeight(),
@@ -624,7 +651,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       }, 120);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fabricValid, actions.currentPageIndex, currentPage.textElements.map((t) => t.id).join(','), JSON.stringify(currentPage.background), uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H, currentPage.templateId, currentPage.slotFills?.join(',')]);
+  }, [fabricValid, actions.currentPageIndex, currentPage.textElements.map((t) => t.id).join(','), JSON.stringify(currentPage.background), uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H, currentPage.templateId, currentPage.slotFills?.join(','), currentPage.slotScales?.join(','), currentPage.slotOffsetsX?.join(','), currentPage.slotOffsetsY?.join(',')]);
 
   /* ── Update filter in-place ── */
   useEffect(() => {
