@@ -160,6 +160,7 @@ function renderTemplateSlots(
         img.slotId = `${SLOT_ID}-photo-${i}`;
         img.photoIndex = photoIndex;
         img.slotIndex = i;
+        img.photoId = `slot-photo-${i}`; // ← for selection system compatibility
 
         // Apply shape clipPath
         if (slot.shape === 'circle') {
@@ -188,21 +189,21 @@ function renderTemplateSlots(
         slotRect = new fab.Circle({
           left: sx + sw / 2, top: sy + sh / 2, radius: r,
           originX: 'center', originY: 'center',
-          fill: 'rgba(200,200,200,0.1)', stroke: '#C0C0C0', strokeWidth: 1.5, strokeDashArray: [5, 3],
+          fill: 'rgba(244,194,161,0.08)', stroke: '#F4C2A1', strokeWidth: 2, strokeDashArray: [8, 4],
           selectable: false, evented: true, hoverCursor: 'pointer',
         });
       } else if (slot.shape === 'rounded' && slot.borderRadius) {
         const r = Math.min(slot.borderRadius, Math.min(sw, sh) / 2);
         slotRect = new fab.Rect({
           left: sx, top: sy, width: sw, height: sh, rx: r, ry: r,
-          fill: 'rgba(200,200,200,0.1)', stroke: '#C0C0C0', strokeWidth: 1.5, strokeDashArray: [5, 3],
+          fill: 'rgba(244,194,161,0.08)', stroke: '#F4C2A1', strokeWidth: 2, strokeDashArray: [8, 4],
           selectable: false, evented: true, hoverCursor: 'pointer',
         });
       } else if (slot.shape === 'oval') {
         slotRect = new fab.Ellipse({
           left: sx + sw / 2, top: sy + sh / 2, rx: sw / 2, ry: sh / 2,
           originX: 'center', originY: 'center',
-          fill: 'rgba(200,200,200,0.1)', stroke: '#C0C0C0', strokeWidth: 1.5, strokeDashArray: [5, 3],
+          fill: 'rgba(244,194,161,0.08)', stroke: '#F4C2A1', strokeWidth: 2, strokeDashArray: [8, 4],
           selectable: false, evented: true, hoverCursor: 'pointer',
         });
       } else if (slot.shape === 'heart') {
@@ -211,13 +212,13 @@ function renderTemplateSlots(
         slotRect = new fab.Path(heartPath, {
           left: sx + sw / 2, top: sy + sh / 2,
           originX: 'center', originY: 'center',
-          fill: 'rgba(200,200,200,0.1)', stroke: '#C0C0C0', strokeWidth: 1.5, strokeDashArray: [5, 3],
+          fill: 'rgba(244,194,161,0.08)', stroke: '#F4C2A1', strokeWidth: 2, strokeDashArray: [8, 4],
           selectable: false, evented: true, hoverCursor: 'pointer',
         });
       } else {
         slotRect = new fab.Rect({
           left: sx, top: sy, width: sw, height: sh,
-          fill: 'rgba(200,200,200,0.05)', stroke: '#C0C0C0', strokeWidth: 1.5, strokeDashArray: [5, 3],
+          fill: 'rgba(244,194,161,0.06)', stroke: '#F4C2A1', strokeWidth: 2, strokeDashArray: [8, 4],
           selectable: false, evented: true, hoverCursor: 'pointer',
         });
       }
@@ -230,9 +231,10 @@ function renderTemplateSlots(
       const plusText = new fab.Text('+', {
         left: sx + sw / 2, top: sy + sh / 2,
         originX: 'center', originY: 'center',
-        fontSize: Math.min(sw, sh) * 0.25,
+        fontSize: Math.max(24, Math.min(sw, sh) * 0.3),
         fontFamily: '"DM Sans", sans-serif',
-        fill: '#C0C0C0', selectable: false, evented: false,
+        fontWeight: 'bold',
+        fill: '#E8A598', selectable: false, evented: false,
       });
       plusText.slotId = `${SLOT_ID}-plus-${i}`;
       canvas.add(plusText);
@@ -391,20 +393,20 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     canvas.on('selection:created', (e: any) => {
       const obj = e.selected?.[0];
       if (obj) {
-        if (obj.photoId) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); }
-        if (obj.textId) { setSelectedTextId(obj.textId); setSelectedPhotoId(null); setSelectedBg(false); }
-        if (obj.bgId === BG_ID) { setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); }
+        if (obj.photoId) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(obj.slotIndex ?? null); }
+        if (obj.textId) { setSelectedTextId(obj.textId); setSelectedPhotoId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
+        if (obj.bgId === BG_ID) { setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedSlotIndex(null); }
       }
     });
     canvas.on('selection:updated', (e: any) => {
       const obj = e.selected?.[0];
       if (obj) {
-        if (obj.photoId) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); }
-        if (obj.textId) { setSelectedTextId(obj.textId); setSelectedPhotoId(null); setSelectedBg(false); }
-        if (obj.bgId === BG_ID) { setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); }
+        if (obj.photoId) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(obj.slotIndex ?? null); }
+        if (obj.textId) { setSelectedTextId(obj.textId); setSelectedPhotoId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
+        if (obj.bgId === BG_ID) { setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedSlotIndex(null); }
       }
     });
-    canvas.on('selection:cleared', () => { setSelectedPhotoId(null); setSelectedTextId(null); setSelectedBg(false); });
+    canvas.on('selection:cleared', () => { setSelectedPhotoId(null); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(null); });
 
     // ── Click on empty canvas area → select background ──
     canvas.on('mouse:down', (e: any) => {
@@ -693,13 +695,14 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const tag = (e.target as HTMLElement)?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-        if (selectedPhotoId) { actions.deletePhotoFromCanvas(selectedPhotoId); }
+        if (selectedSlotIndex !== null) { actions.clearSlot(selectedSlotIndex); setSelectedSlotIndex(null); fabricRef.current?.discardActiveObject(); fabricRef.current?.requestRenderAll(); }
+        else if (selectedPhotoId) { actions.deletePhotoFromCanvas(selectedPhotoId); }
         else if (selectedTextId) { actions.deleteTextElement(selectedTextId); }
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [selectedPhotoId, selectedTextId, actions]);
+  }, [selectedPhotoId, selectedTextId, selectedSlotIndex, actions]);
 
   /* ── Mouse wheel page navigation ── */
   useEffect(() => {
