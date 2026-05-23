@@ -428,6 +428,8 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
   const canvasDimsRef = useRef({ w: CANVAS_W, h: CANVAS_H });
   canvasDimsRef.current = { w: CANVAS_W, h: CANVAS_H };
   const uploadedPhotos = actions.uploadedPhotos;
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
   const fab = fabric as any;
   const fabricValid = fab && (fab.Canvas || fab.fabric);
 
@@ -635,7 +637,8 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     // ── Track scale + position changes on slot photos ──
     canvas.on('object:modified', (e: any) => {
       const obj = e.target;
-      if (obj && obj.slotIndex !== undefined && actions.setSlotScale && actions.setSlotOffset) {
+      const latestActions = actionsRef.current;
+      if (obj && obj.slotIndex !== undefined && latestActions.setSlotScale && latestActions.setSlotOffset) {
         const page = currentPageRef.current;
         const template = getTemplateById(page.templateId ?? PAGE_TEMPLATES[0].id);
         const slot = template?.slots?.[obj.slotIndex];
@@ -647,14 +650,14 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
           const sh = (slot.height / 100) * canvasH;
 
           // Save scale (absolute fabric scale)
-          actions.setSlotScale(obj.slotIndex, Math.max(0.1, obj.scaleX ?? 1));
+          latestActions.setSlotScale(obj.slotIndex, Math.max(0.1, obj.scaleX ?? 1));
 
           // Save position offset from slot center
           const offsetX = (obj.left ?? 0) - (sx + sw / 2);
           const offsetY = (obj.top ?? 0) - (sy + sh / 2);
           const currentOffsetX = page.slotOffsetsX?.[obj.slotIndex] ?? 0;
           const currentOffsetY = page.slotOffsetsY?.[obj.slotIndex] ?? 0;
-          actions.setSlotOffset(obj.slotIndex, offsetX - currentOffsetX, offsetY - currentOffsetY);
+          latestActions.setSlotOffset(obj.slotIndex, offsetX - currentOffsetX, offsetY - currentOffsetY);
         }
       }
     });
@@ -664,20 +667,21 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       clearSnapGuides(canvas);
       const obj = e.target;
       if (!obj) return;
+      const latestActions = actionsRef.current;
       if (obj.photoId && obj.slotIndex === undefined) {
-        actions.updatePhotoTransform(obj.photoId, {
+        latestActions.updatePhotoTransform(obj.photoId, {
           x: obj.left ?? 0, y: obj.top ?? 0,
           width: obj.getScaledWidth(), height: obj.getScaledHeight(),
           rotation: obj.angle ?? 0, scaleX: 1, scaleY: 1,
         });
       }
       if (obj.textId) {
-        actions.updateTextElement(obj.textId, {
+        latestActions.updateTextElement(obj.textId, {
           x: obj.left ?? 0, y: obj.top ?? 0, rotation: obj.angle ?? 0,
         });
       }
       if (obj.bgId === BG_ID) {
-        actions.updateBackgroundTransform({
+        latestActions.updateBackgroundTransform({
           x: obj.left ?? 0, y: obj.top ?? 0,
           width: obj.getScaledWidth(), height: obj.getScaledHeight(),
           rotation: obj.angle ?? 0,
