@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Download, ShoppingCart, Edit3 } from 'lucide-react';
-import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
+import type { AlbumPage, UploadedPhoto, AlbumSizePreset, TemplateSlot } from './types';
 import { getCanvasDimensions } from './layouts';
+import { getTemplateById } from './pageTemplates';
 
 interface BuilderPreviewProps {
   pages: AlbumPage[];
@@ -59,6 +60,92 @@ const PREVIEW_DIMS: Record<string, { w: number; h: number }> = {
   'custom': { w: 400, h: 500 },
 };
 
+/** Compute CSS shape + sizing for a slot in the preview.
+ *  Key fix: circle uses the *smaller* dimension as diameter so it stays
+ *  a perfect circle, and is centred inside the slot bounds.  */
+function slotShapeStyle(
+  slot: TemplateSlot,
+  rawWidth: number,
+  rawHeight: number,
+): {
+  style: React.CSSProperties;
+  width: number;
+  height: number;
+  leftOffset: number;
+  topOffset: number;
+} {
+  const shape = slot.shape || 'rectangle';
+
+  // Circle: make it a perfect square using the smaller dimension
+  if (shape === 'circle') {
+    const diameter = Math.min(rawWidth, rawHeight);
+    return {
+      style: { borderRadius: '50%', overflow: 'hidden' },
+      width: diameter,
+      height: diameter,
+      leftOffset: (rawWidth - diameter) / 2,
+      topOffset: (rawHeight - diameter) / 2,
+    };
+  }
+
+  // Oval: ellipse (keep raw proportions, borderRadius 50% gives ellipse)
+  if (shape === 'oval') {
+    return {
+      style: { borderRadius: '50%', overflow: 'hidden' },
+      width: rawWidth,
+      height: rawHeight,
+      leftOffset: 0,
+      topOffset: 0,
+    };
+  }
+
+  // Rounded rectangle
+  if (shape === 'rounded') {
+    return {
+      style: {
+        borderRadius: slot.borderRadius ? `${slot.borderRadius}px` : '6px',
+        overflow: 'hidden',
+      },
+      width: rawWidth,
+      height: rawHeight,
+      leftOffset: 0,
+      topOffset: 0,
+    };
+  }
+
+  // Heart
+  if (shape === 'heart') {
+    const size = Math.min(rawWidth, rawHeight);
+    return {
+      style: {
+        clipPath:
+          'path("M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z")',
+        overflow: 'hidden',
+      },
+      width: size,
+      height: size,
+      leftOffset: (rawWidth - size) / 2,
+      topOffset: (rawHeight - size) / 2,
+    };
+  }
+
+  // Plain rectangle
+  return {
+    style: { overflow: 'hidden' },
+    width: rawWidth,
+    height: rawHeight,
+    leftOffset: 0,
+    topOffset: 0,
+  };
+}
+
+interface SlotPhotoInfo {
+  slotIndex: number;
+  slot: TemplateSlot;
+  photoIndex: number;
+  photo: UploadedPhoto;
+}
+
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
   const [spreadView, setSpreadView] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -81,6 +168,25 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const canvasDims = getCanvasDimensions(albumSize);
   const sx = singleW / canvasDims.width;
   const sy = H / canvasDims.height;
+
+  // ─── Resolve slot-based photos ───
+  const slotPhotos: SlotPhotoInfo[] = useMemo(() => {
+    const result: SlotPhotoInfo[] = [];
+    if (!page.templateId || !page.slotFills) return result;
+
+    const template = getTemplateById(page.templateId);
+    if (!template) return result;
+
+    template.slots.forEach((slot, slotIndex) => {
+      const photoIndex = page.slotFills?.[slotIndex];
+      if (photoIndex == null) return;
+      const uploaded = photos[photoIndex];
+      if (!uploaded) return;
+      result.push({ slotIndex, slot, photoIndex, photo: uploaded });
+    });
+
+    return result;
+  }, [page.templateId, page.slotFills, photos]);
 
   return (
     <div className="flex flex-col h-full bg-[#F5F5F5]">
@@ -127,7 +233,44 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             style={{ width: singleW, height: H, perspective: 1000, ...bgToStyle(page.background) }}
             ref={canvasRef}
           >
-            {/* Render photos */}
+            {/* ─── SLOT-BASED PHOTOS ─── */}
+            {slotPhotos.map(({ slot, photo }) => {
+              // Slot coordinates are percentages (0-100) of the page
+              const rawLeft = (slot.x / 100) * singleW;
+              const rawTop = (slot.y / 100) * H;
+              const rawWidth = (slot.width / 100) * singleW;
+              const rawHeight = (slot.height / 100) * H;
+              const rotation = slot.rotation || 0;
+
+              // Compute shape-corrected sizing (circle → square, etc.)
+              const { style: shapeStyle, width, height, leftOffset, topOffset } =
+                slotShapeStyle(slot, rawWidth, rawHeight);
+
+              return (
+                <div
+                  key={`slot-${slot.id}`}
+                  className="absolute"
+                  style={{
+                    left: rawLeft + leftOffset,
+                    top: rawTop + topOffset,
+                    width,
+                    height,
+                    transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+                    transformOrigin: 'center center',
+                    ...shapeStyle,
+                  }}
+                >
+                  <img
+                    src={photo.previewUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    draggable={false}
+                  />
+                </div>
+              );
+            })}
+
+            {/* ─── FREEFORM PHOTOS ─── */}
             {page.photos.map((photo) => {
               const uploaded = photos[photo.photoIndex];
               if (!uploaded) return null;
@@ -159,31 +302,38 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               );
             })}
 
-            {/* Render text — SCALED to preview dimensions */}
-            {page.textElements.map((text) => (
-              <div
-                key={text.id}
-                className="absolute"
-                style={{
-                  left: text.x * sx,
-                  top: text.y * sy,
-                  fontSize: text.fontSize * sx,
-                  fontFamily: text.fontFamily,
-                  color: text.color,
-                  fontWeight: text.bold ? 'bold' : 'normal',
-                  fontStyle: text.italic ? 'italic' : 'normal',
-                  textDecoration: text.underline ? 'underline' : 'none',
-                  textAlign: text.alignment,
-                  transform: `rotate(${text.rotation}deg)`,
-                  transformOrigin: 'left top',
-                  opacity: text.opacity / 100,
-                  pointerEvents: 'none',
-                  overflow: 'visible',
-                }}
-              >
-                {text.text}
-              </div>
-            ))}
+            {/* ─── TEXT ELEMENTS ─── */}
+            {page.textElements.map((text) => {
+              const scaleX = text.scaleX ?? 1;
+              const scaleY = text.scaleY ?? 1;
+              const width = text.width && text.width > 0 ? text.width * sx : undefined;
+
+              return (
+                <div
+                  key={text.id}
+                  className="absolute"
+                  style={{
+                    left: text.x * sx,
+                    top: text.y * sy,
+                    fontSize: text.fontSize * sx,
+                    fontFamily: text.fontFamily,
+                    color: text.color,
+                    fontWeight: text.bold ? 'bold' : 'normal',
+                    fontStyle: text.italic ? 'italic' : 'normal',
+                    textDecoration: text.underline ? 'underline' : 'none',
+                    textAlign: text.alignment,
+                    transform: `rotate(${text.rotation}deg) scaleX(${scaleX}) scaleY(${scaleY})`,
+                    transformOrigin: 'left top',
+                    opacity: text.opacity / 100,
+                    pointerEvents: 'none',
+                    overflow: 'visible',
+                    width,
+                  }}
+                >
+                  {text.text}
+                </div>
+              );
+            })}
           </motion.div>
 
           <button
@@ -209,7 +359,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               ...bgToStyle(p.background),
             }}
           >
-            {p.photos.length === 0 && (
+            {p.photos.length === 0 && !p.slotFills?.some((sf) => sf != null) && (
               <span className="text-[6px] text-[#C4C4C4] flex items-center justify-center h-full">Empty</span>
             )}
           </button>
