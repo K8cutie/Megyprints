@@ -92,9 +92,8 @@ function createBackgroundObject(
     htmlImg.src = bg.image;
   } else if (bg.type === 'gradient' && bg.gradient) {
     const { type, angle, stops } = bg.gradient;
-    const fabricStops = stops.reduce((acc: Record<number, string>, s: { offset: number; color: string }) => {
-      acc[s.offset] = s.color; return acc;
-    }, {});
+    // Fabric.js expects colorStops as array of {offset, color}
+    const colorStops = stops.map((s: { offset: number; color: string }) => ({ offset: s.offset, color: s.color }));
 
     let gradFill;
     if (type === 'linear') {
@@ -102,13 +101,13 @@ function createBackgroundObject(
       gradFill = new fab.Gradient({
         type: 'linear',
         coords: { x1: 0, y1: 0, x2: Math.cos(rad) * w, y2: Math.sin(rad) * h },
-        colorStops: fabricStops,
+        colorStops,
       });
     } else {
       gradFill = new fab.Gradient({
         type: 'radial',
         coords: { x1: w / 2, y1: h / 2, r1: 0, x2: w / 2, y2: h / 2, r2: Math.max(w, h) / 2 },
-        colorStops: fabricStops,
+        colorStops,
       });
     }
     addBg(new fab.Rect({ ...baseProps, width: w, height: h, fill: gradFill }));
@@ -125,8 +124,6 @@ function renderTemplateSlots(
   template: PageTemplate,
   slotFills: (number | null)[],
   slotScales: number[],
-  slotOffsetsX: number[],
-  slotOffsetsY: number[],
   uploadedPhotos: any[],
   canvasW: number,
   canvasH: number,
@@ -144,6 +141,8 @@ function renderTemplateSlots(
     const sw = (slot.width / 100) * canvasW;
     const sh = (slot.height / 100) * canvasH;
 
+    const userScale = slotScales[i] ?? 1;
+
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
       // ── Filled slot: render photo ──
       fab.Image.fromURL(uploadedPhotos[photoIndex].previewUrl, (img: any) => {
@@ -152,93 +151,42 @@ function renderTemplateSlots(
         // Cover-crop: uniform scale to fill slot
         const coverScale = Math.max(sw / imgW, sh / imgH);
         // Use user-adjusted scale if available
-        const userScale = slotScales[i] ?? 1;
         const finalScale = (userScale !== 1 && userScale > 0) ? userScale : coverScale;
 
-        // Apply user pan offsets
-        const offsetX = slotOffsetsX[i] ?? 0;
-        const offsetY = slotOffsetsY[i] ?? 0;
-
         img.set({
-          left: sx + sw / 2 + offsetX,
-          top: sy + sh / 2 + offsetY,
-          originX: 'center',
-          originY: 'center',
-          scaleX: finalScale,
-          scaleY: finalScale,
+          left: sx + sw / 2, top: sy + sh / 2,
+          originX: 'center', originY: 'center',
+          scaleX: finalScale, scaleY: finalScale,
           angle: slot.rotation ?? 0,
-          selectable: true,
-          evented: true,
-          cornerColor: '#F4C2A1',
-          cornerSize: 8,
-          transparentCorners: false,
-          borderColor: '#F4C2A1',
-          hasControls: true,
-          hasBorders: true,
-          lockMovementX: false,
-          lockMovementY: false,
-          lockScalingX: false,
-          lockScalingY: false,
-          lockRotation: true,
+          selectable: true, evented: true,
+          cornerColor: '#F4C2A1', cornerSize: 8,
+          transparentCorners: false, borderColor: '#F4C2A1',
+          hasControls: true, hasBorders: true,
+          lockMovementX: true, lockMovementY: true, // keep centered in slot
+          lockScalingX: false, lockScalingY: false, lockRotation: true,
         });
         img.slotId = `${SLOT_ID}-photo-${i}`;
         img.photoIndex = photoIndex;
         img.slotIndex = i;
         img.photoId = `slot-photo-${i}`; // ← for selection system compatibility
 
-        // Apply shape clipPath — ALL shapes including rectangle
-        // absolutePositioned: true = clipPath stays at slot position on canvas
-        // even when the photo object is dragged (panned) around
-        const clipCx = sx + sw / 2;
-        const clipCy = sy + sh / 2;
+        // Apply shape clipPath
         if (slot.shape === 'circle') {
-          const clip = new fab.Circle({
-            radius: Math.min(sw, sh) / 2,
-            left: clipCx, top: clipCy,
-            originX: 'center', originY: 'center',
-          });
-          (clip as any).absolutePositioned = true;
-          img.set('clipPath', clip);
+          img.set('clipPath', new fab.Circle({ radius: Math.min(sw, sh) / 2, originX: 'center', originY: 'center' }));
         } else if (slot.shape === 'rounded' && slot.borderRadius) {
           const r = Math.min(slot.borderRadius, Math.min(sw, sh) / 2);
-          const clip = new fab.Rect({
-            width: sw, height: sh, rx: r, ry: r,
-            left: clipCx, top: clipCy,
-            originX: 'center', originY: 'center',
-          });
-          (clip as any).absolutePositioned = true;
-          img.set('clipPath', clip);
+          img.set('clipPath', new fab.Rect({ width: sw, height: sh, rx: r, ry: r, originX: 'center', originY: 'center' }));
         } else if (slot.shape === 'oval') {
-          const clip = new fab.Ellipse({
-            rx: sw / 2, ry: sh / 2,
-            left: clipCx, top: clipCy,
-            originX: 'center', originY: 'center',
-          });
-          (clip as any).absolutePositioned = true;
-          img.set('clipPath', clip);
+          img.set('clipPath', new fab.Ellipse({ rx: sw / 2, ry: sh / 2, originX: 'center', originY: 'center' }));
         } else if (slot.shape === 'heart') {
           // Heart via custom path clip
           const hr = Math.min(sw, sh) / 2;
           const heartPath = `M 0 ${-hr * 0.3} C ${-hr} ${-hr * 1.2} ${-hr * 1.5} ${hr * 0.3} 0 ${hr} C ${hr * 1.5} ${hr * 0.3} ${hr} ${-hr * 1.2} 0 ${-hr * 0.3} Z`;
-          const clip = new fab.Path(heartPath, {
-            left: clipCx, top: clipCy,
-            originX: 'center', originY: 'center',
-          });
-          (clip as any).absolutePositioned = true;
-          img.set('clipPath', clip);
-        } else {
-          // Rectangle (default) — clip to slot bounds so photo doesn't overflow
-          const clip = new fab.Rect({
-            width: sw, height: sh,
-            left: clipCx, top: clipCy,
-            originX: 'center', originY: 'center',
-          });
-          (clip as any).absolutePositioned = true;
-          img.set('clipPath', clip);
+          img.set('clipPath', new fab.Path(heartPath, { originX: 'center', originY: 'center' }));
         }
 
         canvas.add(img);
-        img.bringToFront(); // Fabric.js 6.x: object-level method
+        canvas.bringToFront(img);
         canvas.requestRenderAll();
       });
     } else {
@@ -351,10 +299,8 @@ function renderScene(
   const template = getTemplateById(templateId);
   const slotFills = page.slotFills ?? template?.slots.map(() => null) ?? [];
   const slotScales = page.slotScales ?? template?.slots.map(() => 1) ?? [];
-  const slotOffsetsX = page.slotOffsetsX ?? template?.slots.map(() => 0) ?? [];
-  const slotOffsetsY = page.slotOffsetsY ?? template?.slots.map(() => 0) ?? [];
   if (template) {
-    renderTemplateSlots(fab, canvas, template, slotFills, slotScales, slotOffsetsX, slotOffsetsY, uploadedPhotos, canvasW, canvasH, onSlotClick);
+    renderTemplateSlots(fab, canvas, template, slotFills, slotScales, uploadedPhotos, canvasW, canvasH, onSlotClick);
   }
 
   // ── 4. Add text on top ──
@@ -423,13 +369,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
   const snapGuidesRef = useRef<any[]>([]);
 
   const currentPage = actions.currentPage;
-  const currentPageRef = useRef(currentPage);
-  currentPageRef.current = currentPage;
-  const canvasDimsRef = useRef({ w: CANVAS_W, h: CANVAS_H });
-  canvasDimsRef.current = { w: CANVAS_W, h: CANVAS_H };
   const uploadedPhotos = actions.uploadedPhotos;
-  const actionsRef = useRef(actions);
-  actionsRef.current = actions;
   const fab = fabric as any;
   const fabricValid = fab && (fab.Canvas || fab.fabric);
 
@@ -462,8 +402,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     canvas.on('selection:created', (e: any) => {
       const obj = e.selected?.[0];
       if (obj) {
-        if (obj.photoId && obj.slotIndex === undefined) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
-        if (obj.slotIndex !== undefined) { setSelectedSlotIndex(obj.slotIndex); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedBg(false); }
+        if (obj.photoId) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(obj.slotIndex ?? null); }
         if (obj.textId) { setSelectedTextId(obj.textId); setSelectedPhotoId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
         if (obj.bgId === BG_ID) { setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedSlotIndex(null); }
       }
@@ -471,8 +410,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     canvas.on('selection:updated', (e: any) => {
       const obj = e.selected?.[0];
       if (obj) {
-        if (obj.photoId && obj.slotIndex === undefined) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
-        if (obj.slotIndex !== undefined) { setSelectedSlotIndex(obj.slotIndex); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedBg(false); }
+        if (obj.photoId) { setSelectedPhotoId(obj.photoId); setSelectedTextId(null); setSelectedBg(false); setSelectedSlotIndex(obj.slotIndex ?? null); }
         if (obj.textId) { setSelectedTextId(obj.textId); setSelectedPhotoId(null); setSelectedBg(false); setSelectedSlotIndex(null); }
         if (obj.bgId === BG_ID) { setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedSlotIndex(null); }
       }
@@ -487,7 +425,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
         if (bgObj) {
           canvas.setActiveObject(bgObj);
           canvas.requestRenderAll();
-          setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null); setSelectedSlotIndex(null);
+          setSelectedBg(true); setSelectedPhotoId(null); setSelectedTextId(null);
         }
       }
     });
@@ -496,8 +434,6 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
     canvas.on('object:moving', (e: any) => {
       const obj = e.target;
       if (!obj || !snapEnabled) return;
-      // Don't snap slot photos during pan — let them move freely
-      if (obj.slotIndex !== undefined) return;
 
       clearSnapGuides(canvas);
 
@@ -624,40 +560,12 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       }
     });
 
-    // ── Enforce uniform scaling on slot photos (no deformation) ──
-    canvas.on('object:scaling', (e: any) => {
-      const obj = e.target;
-      if (obj && obj.slotIndex !== undefined) {
-        const scale = Math.max(obj.scaleX, obj.scaleY);
-        obj.set({ scaleX: scale, scaleY: scale });
-        canvas.requestRenderAll();
-      }
-    });
-
-    // ── Track scale + position changes on slot photos ──
+    // ── Track scale changes on slot photos ──
     canvas.on('object:modified', (e: any) => {
       const obj = e.target;
-      const latestActions = actionsRef.current;
-      if (obj && obj.slotIndex !== undefined && latestActions.setSlotScale && latestActions.setSlotOffset) {
-        const page = currentPageRef.current;
-        const template = getTemplateById(page.templateId ?? PAGE_TEMPLATES[0].id);
-        const slot = template?.slots?.[obj.slotIndex];
-        if (slot) {
-          const { w: canvasW, h: canvasH } = canvasDimsRef.current;
-          const sx = (slot.x / 100) * canvasW;
-          const sy = (slot.y / 100) * canvasH;
-          const sw = (slot.width / 100) * canvasW;
-          const sh = (slot.height / 100) * canvasH;
-
-          // Save scale (absolute fabric scale)
-          latestActions.setSlotScale(obj.slotIndex, Math.max(0.1, obj.scaleX ?? 1));
-
-          // Save position offset from slot center
-          const offsetX = (obj.left ?? 0) - (sx + sw / 2);
-          const offsetY = (obj.top ?? 0) - (sy + sh / 2);
-          const currentOffsetX = page.slotOffsetsX?.[obj.slotIndex] ?? 0;
-          const currentOffsetY = page.slotOffsetsY?.[obj.slotIndex] ?? 0;
-          latestActions.setSlotOffset(obj.slotIndex, offsetX - currentOffsetX, offsetY - currentOffsetY);
+      if (obj && obj.slotIndex !== undefined && actions.setSlotScale) {
+        if (obj.scaleX !== 1) {
+          actions.setSlotScale(obj.slotIndex, Math.max(0.5, obj.scaleX));
         }
       }
     });
@@ -667,21 +575,20 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       clearSnapGuides(canvas);
       const obj = e.target;
       if (!obj) return;
-      const latestActions = actionsRef.current;
       if (obj.photoId && obj.slotIndex === undefined) {
-        latestActions.updatePhotoTransform(obj.photoId, {
+        actions.updatePhotoTransform(obj.photoId, {
           x: obj.left ?? 0, y: obj.top ?? 0,
           width: obj.getScaledWidth(), height: obj.getScaledHeight(),
           rotation: obj.angle ?? 0, scaleX: 1, scaleY: 1,
         });
       }
       if (obj.textId) {
-        latestActions.updateTextElement(obj.textId, {
+        actions.updateTextElement(obj.textId, {
           x: obj.left ?? 0, y: obj.top ?? 0, rotation: obj.angle ?? 0,
         });
       }
       if (obj.bgId === BG_ID) {
-        latestActions.updateBackgroundTransform({
+        actions.updateBackgroundTransform({
           x: obj.left ?? 0, y: obj.top ?? 0,
           width: obj.getScaledWidth(), height: obj.getScaledHeight(),
           rotation: obj.angle ?? 0,
@@ -718,8 +625,7 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
 
     const canvas = fabricRef.current;
     const active = canvas.getActiveObject?.();
-    const savedPhotoId = (active?.photoId && active?.slotIndex === undefined) ? active.photoId : null;
-    const savedSlotIndex = active?.slotIndex ?? null;
+    const savedPhotoId = active?.photoId ?? null;
     const savedTextId = active?.textId ?? null;
 
     renderScene(fab, canvas, currentPage, uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H, (slotIndex) => {
@@ -727,24 +633,13 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
       setShowPhotoPicker(true);
     });
 
-    if (savedPhotoId || savedTextId || savedSlotIndex !== null) {
+    if (savedPhotoId || savedTextId) {
       setTimeout(() => {
         const obj = canvas.getObjects().find((o: any) =>
           (savedPhotoId && o.photoId === savedPhotoId) ||
-          (savedSlotIndex !== null && o.slotIndex === savedSlotIndex) ||
           (savedTextId && o.textId === savedTextId)
         );
-        if (obj) {
-          canvas.setActiveObject(obj);
-          canvas.requestRenderAll();
-          if (savedSlotIndex !== null && savedSlotIndex !== undefined) {
-            setSelectedSlotIndex(savedSlotIndex);
-          } else if (savedPhotoId) {
-            setSelectedPhotoId(savedPhotoId);
-          } else if (savedTextId) {
-            setSelectedTextId(savedTextId);
-          }
-        }
+        if (obj) { canvas.setActiveObject(obj); canvas.requestRenderAll(); }
       }, 120);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1002,12 +897,6 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
           selectedText={selectedText}
           selectedBackground={bgForPanel}
           background={currentPage.background}
-          selectedSlotIndex={selectedSlotIndex}
-          slotFills={currentPage.slotFills ?? []}
-          slotScales={currentPage.slotScales ?? []}
-          slotOffsetsX={currentPage.slotOffsetsX ?? []}
-          slotOffsetsY={currentPage.slotOffsetsY ?? []}
-          uploadedPhotos={uploadedPhotos}
           onUpdatePhoto={actions.updatePhotoTransform}
           onUpdateFilters={actions.updatePhotoFilters}
           onUpdateText={actions.updateTextElement}
@@ -1019,10 +908,6 @@ export default function BuilderEdit({ actions }: BuilderEditProps) {
           onUpdateBackground={actions.setPageBackground}
           onUpdateBackgroundTransform={actions.updateBackgroundTransform}
           onUpdateBackgroundFilters={actions.updateBackgroundFilters}
-          onClearSlot={actions.clearSlot}
-          onSetSlotScale={actions.setSlotScale}
-          onSetSlotOffset={actions.setSlotOffset}
-          onReplaceSlotPhoto={() => { setShowPhotoPicker(true); }}
         />
       </div>
     </div>
