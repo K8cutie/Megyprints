@@ -248,6 +248,51 @@ export default function BuilderEdit({ actions }: BuilderEditProps): React.ReactE
     selectedBg,
   ]);
 
+  /* ── TEXT: immediate in-place update when panel changes properties ──
+     renderScene recreates text from scratch (correct but slow). This effect
+     provides instant visual feedback for panel edits by updating the Fabric
+     object directly. Both paths converge on the same state — no fighting. */
+  useEffect(() => {
+    if (!selectedText || !fabricCanvasRef.current) return;
+    const canvas = fabricCanvasRef.current;
+    // Always find fresh — renderScene may have recreated the object
+    const fabObj = canvas.getObjects().find((o: any) => o.textId === selectedText.id) as any;
+    if (!fabObj) return;
+
+    const t = selectedText;
+    const isEditing = fabObj.isEditing ?? false;
+    /* During inline editing, the canvas text:changed event handles text sync.
+       Setting fabObj.text here would kick the user out of edit mode. */
+    if (!isEditing && fabObj.text !== t.text) fabObj.set('text', t.text);
+    if (fabObj.fontFamily !== t.fontFamily) fabObj.set('fontFamily', t.fontFamily);
+    if (fabObj.fontSize !== t.fontSize) fabObj.set('fontSize', t.fontSize);
+    if (fabObj.fill !== t.color) fabObj.set('fill', t.color);
+    if (fabObj.fontWeight !== (t.bold ? 'bold' : 'normal')) fabObj.set('fontWeight', t.bold ? 'bold' : 'normal');
+    if (fabObj.fontStyle !== (t.italic ? 'italic' : 'normal')) fabObj.set('fontStyle', t.italic ? 'italic' : 'normal');
+    if (fabObj.underline !== t.underline) fabObj.set('underline', t.underline);
+    if (fabObj.textAlign !== t.alignment) fabObj.set('textAlign', t.alignment);
+    if (fabObj.angle !== t.rotation) fabObj.set('angle', t.rotation);
+    if (fabObj.opacity !== t.opacity / 100) fabObj.set('opacity', t.opacity / 100);
+    if (fabObj.left !== t.x) fabObj.set('left', t.x);
+    if (fabObj.top !== t.y) fabObj.set('top', t.y);
+    if (fabObj.width !== (t.width ?? Math.max(t.text.length * t.fontSize * 0.6, 100))) {
+      fabObj.set('width', t.width ?? Math.max(t.text.length * t.fontSize * 0.6, 100));
+    }
+    if (fabObj.scaleX !== (t.scaleX ?? 1)) fabObj.set('scaleX', t.scaleX ?? 1);
+    if (fabObj.scaleY !== (t.scaleY ?? 1)) fabObj.set('scaleY', t.scaleY ?? 1);
+
+    fabObj.setCoords();
+    canvas.requestRenderAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selectedText?.text, selectedText?.fontFamily, selectedText?.fontSize,
+    selectedText?.color, selectedText?.bold, selectedText?.italic,
+    selectedText?.underline, selectedText?.alignment, selectedText?.rotation,
+    selectedText?.opacity, selectedText?.x, selectedText?.y,
+    selectedText?.width, selectedText?.scaleX, selectedText?.scaleY,
+    selectedTextId,
+  ]);
+
   /* ── Handler callbacks ── */
 
   const handleSelectPhoto = useCallback((id: string | null) => {

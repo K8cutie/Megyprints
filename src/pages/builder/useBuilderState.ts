@@ -14,13 +14,11 @@ import {
   DEFAULT_FILTERS,
   DEFAULT_BACKGROUND,
   DEFAULT_ALBUM_SIZE,
-
-
 } from './types';
 import { getTemplateById, PAGE_TEMPLATES } from './pageTemplates';
 
 const STORAGE_KEY = 'megy_builder_state';
-const STORAGE_VERSION = 'v3'; // bumped — clears old freeform photo data
+const STORAGE_VERSION = 'v4'; // bumped — clears textElements from old sessions
 
 /* ── Safe localStorage with validation ── */
 
@@ -48,7 +46,7 @@ function loadState(): { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[]
       return null;
     }
 
-    // Validate albumPages — photos[] AND slotFills wiped (always start fresh)
+    // Validate albumPages — photos, slots, AND textElements wiped (always start fresh)
     const albumPages: AlbumPage[] = Array.isArray(parsed.albumPages)
       ? parsed.albumPages.filter(isValidAlbumPage).map((page: any) => {
           const templateId = page.templateId || PAGE_TEMPLATES[0].id;
@@ -56,12 +54,13 @@ function loadState(): { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[]
           return {
             ...page,
             templateId,
-            slotFills: template.slots.map(() => null), // <-- ALWAYS EMPTY ON LOAD
-            slotScales: template.slots.map(() => 1),   // default zoom = 1x
-            slotOffsetsX: template.slots.map(() => 0), // default no pan
+            slotFills: template.slots.map(() => null),
+            slotScales: template.slots.map(() => 1),
+            slotOffsetsX: template.slots.map(() => 0),
             slotOffsetsY: template.slots.map(() => 0),
-            photos: [], // <-- FREEFORM PHOTOS PURGED
-            textElements: Array.isArray(page.textElements) ? page.textElements : [],
+            photos: [],
+            /* BUG FIX: textElements from previous sessions are NOT carried over */
+            textElements: [],
             background: page.background || { type: 'solid' as const, solid: '#FFFBF7' },
           };
         })
@@ -69,7 +68,6 @@ function loadState(): { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[]
 
     return { uploadedPhotos: [], albumPages };
   } catch {
-    // Corrupted data — clear it
     localStorage.removeItem(STORAGE_KEY);
     return null;
   }
@@ -102,7 +100,7 @@ function uid(): string {
 }
 
 const defaultPage = (): AlbumPage => {
-  const defaultTemplate = PAGE_TEMPLATES[0]; // Full page single
+  const defaultTemplate = PAGE_TEMPLATES[0];
   const slotCount = defaultTemplate.slots.length;
   return {
     id: uid(),
@@ -135,8 +133,6 @@ export function useBuilderState() {
   const currentPage = albumPages[currentPageIndex] ?? albumPages[0] ?? defaultPage();
 
   // ── Persist ──
-  // Note: uploadedPhotos are NOT persisted — blob URLs expire and File objects
-  // can't be serialized. Photos are re-uploaded fresh each session.
   useEffect(() => {
     saveState({
       phase, selectedTemplate, albumPages,
@@ -181,9 +177,27 @@ export function useBuilderState() {
 
   // ── Page Management ──
   const addPage = useCallback(() => {
-    setAlbumPages((prev) => [...prev, defaultPage()]);
+    setAlbumPages((prev) => {
+      const current = prev[currentPageIndex];
+      const templateId = current?.templateId || PAGE_TEMPLATES[0].id;
+      const template = PAGE_TEMPLATES.find((t) => t.id === templateId) || PAGE_TEMPLATES[0];
+      const newPage: AlbumPage = {
+        id: uid(),
+        layout: 'freeform',
+        templateId,
+        slotFills: template.slots.map(() => null),
+        slotScales: template.slots.map(() => 1),
+        slotOffsetsX: template.slots.map(() => 0),
+        slotOffsetsY: template.slots.map(() => 0),
+        background: { ...DEFAULT_BACKGROUND },
+        photos: [],
+        textElements: [],
+        size: albumSize,
+      };
+      return [...prev, newPage];
+    });
     setCurrentPageIndex((prev) => prev + 1);
-  }, []);
+  }, [currentPageIndex, albumSize]);
 
   const deletePage = useCallback((index: number) => {
     setAlbumPages((prev) => {
@@ -191,7 +205,7 @@ export function useBuilderState() {
       return prev.filter((_, i) => i !== index);
     });
     setCurrentPageIndex((_) => Math.min(currentPageIndex, Math.max(0, albumPages.length - 2)));
-  }, [albumPages.length]);
+  }, [currentPageIndex, albumPages.length]);
 
   const duplicatePage = useCallback((index: number) => {
     setAlbumPages((prev) => {
@@ -327,11 +341,7 @@ export function useBuilderState() {
     });
   }, [currentPageIndex]);
 
-  // ── Canvas Photo Operations (legacy freeform — deprecated, use template slots) ──
-  /*
-  const addPhotoToCanvas = useCallback((photoIndex: number, x?: number, y?: number) => { ... });
-  */
-
+  // ── Canvas Photo Operations ──
   const updatePhotoTransform = useCallback((photoId: string, updates: Partial<CanvasPhoto>) => {
     setAlbumPages((prev) => {
       const next = [...prev];
@@ -470,44 +480,30 @@ export function useBuilderState() {
     });
   }, [currentPageIndex]);
 
-  // ── Auto-Fill: shuffle photos into template slots ──
+  // ── Auto-Fill ──
   const autoFillSlots = useCallback(() => {
     if (uploadedPhotos.length === 0) return;
     setAlbumPages((prev) => {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page || !page.templateId || !page.slotFills) return prev;
-
-      // Get empty slot indices
       const emptySlotIndices = page.slotFills
         .map((fill, idx) => (fill === null ? idx : -1))
         .filter((idx) => idx !== -1);
-
-      if (emptySlotIndices.length === 0) return prev; // All filled
-
-      // Shuffle available photos
+      if (emptySlotIndices.length === 0) return prev;
       const availablePhotoIndices = Array.from({ length: uploadedPhotos.length }, (_, i) => i);
       for (let i = availablePhotoIndices.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [availablePhotoIndices[i], availablePhotoIndices[j]] = [availablePhotoIndices[j], availablePhotoIndices[i]];
       }
-
-      // Fill empty slots with shuffled photos
       const newFills = [...page.slotFills];
       for (let i = 0; i < Math.min(emptySlotIndices.length, availablePhotoIndices.length); i++) {
         newFills[emptySlotIndices[i]] = availablePhotoIndices[i];
       }
-
       next[currentPageIndex] = { ...page, slotFills: newFills };
       return next;
     });
   }, [currentPageIndex, uploadedPhotos]);
-
-  // ── Auto-Generate (legacy freeform — deprecated, use template slots) ──
-  /*
-  const generateAlbumPages = useCallback(() => { ... }, [uploadedPhotos, selectedTemplate, albumSize]);
-  const regenerateAlbumPages = useCallback(() => { ... }, [uploadedPhotos, selectedTemplate, albumSize]);
-  */
 
   // ── Reset ──
   const reset = useCallback(() => {
@@ -533,13 +529,10 @@ export function useBuilderState() {
     setPageBackground, updateBackgroundTransform, updateBackgroundFilters,
     setPageTemplate, fillSlot, clearSlot, clearAllSlots, autoFillSlots, setSlotScale, setSlotOffset,
 
-    /* DEPRECATED: addPhotoToCanvas — use template slots instead */
     updatePhotoTransform, updatePhotoFilters,
     deletePhotoFromCanvas, bringToFront, sendToBack, duplicateCanvasPhoto,
 
     addTextElement, updateTextElement, deleteTextElement,
-
-    /* DEPRECATED: generateAlbumPages, regenerateAlbumPages — use template slots instead */
 
     reset,
   };

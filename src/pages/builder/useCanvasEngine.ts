@@ -4,12 +4,6 @@
  * Extracted canvas lifecycle + interaction engine from BuilderEdit.tsx.
  * Encapsulates ALL Fabric.js logic: init, render, snap-to-grid, events,
  * zoom, keyboard shortcuts, and cleanup.
- *
- * RULES FOLLOWED:
- * - No `any` types — use the Fabric types from fabric-types.ts
- * - No `// eslint-disable-next-line react-hooks/exhaustive-deps`
- * - Proper cleanup: remove ALL event listeners, dispose canvas on unmount
- * - Refs for mutable state; useState only for React-reactive values
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -34,7 +28,11 @@ const SNAP_THRESHOLD = 12;
 const BG_ID = 'page-background';
 const SLOT_ID = 'template-slot';
 
-/* ── Snap helpers (module scope, no deps) ──────────────────────────────── */
+/** Monotonic render ID — increments on every renderScene call.
+ *  Used to cancel stale async image callbacks from previous renders. */
+let currentRenderId = 0;
+
+/* ── Snap helpers ──────────────────────────────────────────────────────── */
 
 function snapToGrid(value: number, gridSize: number): number {
   return Math.round(value / gridSize) * gridSize;
@@ -51,22 +49,23 @@ function getSnapLines(canvasW: number, canvasH: number, margin: number) {
 
 function buildFabricFilters(fab: FabricStatic, filters: PhotoFilters): any[] {
   const result: any[] = [];
-  if (filters.grayscale > 0) result.push(new (fab as any).Image.filters.Grayscale());
-  if (filters.sepia > 0) result.push(new (fab as any).Image.filters.Sepia());
+  const f = fab as any;
+  if (filters.grayscale > 0) result.push(new f.Image.filters.Grayscale());
+  if (filters.sepia > 0) result.push(new f.Image.filters.Sepia());
   if (filters.brightness !== 100) {
-    result.push(new (fab as any).Image.filters.Brightness({ brightness: (filters.brightness - 100) / 100 }));
+    result.push(new f.Image.filters.Brightness({ brightness: (filters.brightness - 100) / 100 }));
   }
   if (filters.contrast !== 100) {
-    result.push(new (fab as any).Image.filters.Contrast({ contrast: (filters.contrast - 100) / 100 }));
+    result.push(new f.Image.filters.Contrast({ contrast: (filters.contrast - 100) / 100 }));
   }
   if (filters.saturate !== 100) {
-    result.push(new (fab as any).Image.filters.Saturation({ saturation: (filters.saturate - 100) / 100 }));
+    result.push(new f.Image.filters.Saturation({ saturation: (filters.saturate - 100) / 100 }));
   }
   if (filters.blur > 0) {
-    result.push(new (fab as any).Image.filters.Blur({ blur: filters.blur / 10 }));
+    result.push(new f.Image.filters.Blur({ blur: filters.blur / 10 }));
   }
   if (filters.hueRotate > 0) {
-    result.push(new (fab as any).Image.filters.HueRotation({ rotation: filters.hueRotate }));
+    result.push(new f.Image.filters.HueRotation({ rotation: filters.hueRotate }));
   }
   return result;
 }
@@ -85,35 +84,20 @@ export interface UseCanvasEngineOptions {
 }
 
 export interface UseCanvasEngineReturn {
-  /** Whether the Fabric.js library loaded successfully */
   fabricValid: boolean;
-  /** Current zoom level (1 = 100%) */
   zoom: number;
-  /** Whether the grid overlay is visible */
   showGrid: boolean;
-  /** Whether snap-to-grid is enabled */
   snapEnabled: boolean;
-  /** ID of the currently selected photo (non-slot) */
   selectedPhotoId: string | null;
-  /** ID of the currently selected text element */
   selectedTextId: string | null;
-  /** Whether the background is selected */
   selectedBg: boolean;
-  /** Index of the currently selected slot */
   selectedSlotIndex: number | null;
-  /** Set zoom directly (also updates Fabric canvas) */
   setZoom: React.Dispatch<React.SetStateAction<number>>;
-  /** Adjust zoom by delta (clamped 0.3–3) */
   handleZoom: (delta: number) => void;
-  /** Reset zoom to 1 */
   resetZoom: () => void;
-  /** Toggle grid overlay */
   setShowGrid: React.Dispatch<React.SetStateAction<boolean>>;
-  /** Toggle snap-to-grid */
   setSnapEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-  /** Programmatically select the background object */
   selectBackground: () => void;
-  /** Direct ref to the Fabric canvas instance (for in-place filter updates) */
   fabricCanvasRef: React.RefObject<FabricCanvas | null>;
 }
 
@@ -123,7 +107,11 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const bg = page.background;
   const bgTransform = `${bg.x ?? 0},${bg.y ?? 0},${bg.width ?? 0},${bg.height ?? 0},${bg.rotation ?? 0},${bg.opacity ?? 100}`;
   const slotFills = page.slotFills ? page.slotFills.join(',') : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}`;
+  /* BUG FIX: include FULL text data in fingerprint so property changes trigger re-render */
+  const textData = page.textElements.map((t) =>
+    `${t.id}:${t.text.slice(0,20)}:${t.fontSize}:${Math.round(t.x)}:${Math.round(t.y)}:${t.rotation}`
+  ).join('|');
+  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -160,6 +148,9 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   const fabricRef = useRef<FabricCanvas | null>(null);
   const snapGuidesRef = useRef<FabricObject[]>([]);
   const lastStructuralRef = useRef<string>('');
+  const savedSelectionRef = useRef<string | null>(null);
+  const isEditingTextRef = useRef(false);
+  const lastPageIndexRef = useRef(actions.currentPageIndex);
 
   /* ── Keep latest values in refs for event handlers ── */
   const pageRef = useRef(currentPage);
@@ -190,7 +181,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
   const fabricValid = fabricModule !== null && !!(fabricModule as any).Canvas;
 
-  /* ═══════ Canvas initialization (runs ONCE) ═══════ */
+  /* ═══════ Canvas initialization ═══════ */
   useEffect(() => {
     if (!canvasRef.current || !fabricValid || !fabricModule || fabricRef.current) return;
 
@@ -220,6 +211,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
         clearAll(); setSelectedSlotIndex(obj.slotIndex);
       } else if (obj.textId) {
         clearAll(); setSelectedTextId(obj.textId);
+        savedSelectionRef.current = obj.textId as string;
       } else if (obj.bgId === BG_ID) {
         clearAll(); setSelectedBg(true);
       }
@@ -237,7 +229,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     canvas.on('selection:cleared', handleSelectionCleared);
 
     /* ── Click on empty canvas → select background ── */
-    const handleMouseDown = (e: FabricMouseEvent) => {
+    canvas.on('mouse:down', (e: FabricMouseEvent) => {
       if (!e.target && !e.subTargets?.length) {
         const bgObj = canvas.getObjects().find((o: any) => o.bgId === BG_ID);
         if (bgObj) {
@@ -249,8 +241,31 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
           setSelectedSlotIndex(null);
         }
       }
-    };
-    canvas.on('mouse:down', handleMouseDown);
+    });
+
+    /* ── Text editing: double-click to enter edit mode ── */
+    canvas.on('mouse:dblclick', (e: any) => {
+      const obj = e.target;
+      if (obj && obj.textId && typeof obj.enterEditing === 'function') {
+        savedSelectionRef.current = obj.textId as string;
+        obj.enterEditing();
+        isEditingTextRef.current = true;
+        canvas.setActiveObject(obj);
+        canvas.requestRenderAll();
+      }
+    });
+
+    /* ── Track text editing state ── */
+    canvas.on('editing:entered', () => { isEditingTextRef.current = true; });
+    canvas.on('editing:exited', () => { isEditingTextRef.current = false; });
+
+    /* ── Sync edited text back to React state ── */
+    canvas.on('text:changed', (e: any) => {
+      const obj = e.target;
+      if (obj && obj.textId) {
+        actionsRef.current.updateTextElement(obj.textId, { text: obj.text ?? '' });
+      }
+    });
 
     /* ── Snap-to-grid + alignment during drag ── */
     const clearSnapGuides = () => {
@@ -260,10 +275,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     const showSnapGuide = (x1: number, y1: number, x2: number, y2: number) => {
       const line = new fab.Line([x1, y1, x2, y2], {
-        stroke: '#E8A598',
-        strokeWidth: 1,
-        selectable: false,
-        evented: false,
+        stroke: '#E8A598', strokeWidth: 1, selectable: false, evented: false,
       });
       snapGuidesRef.current.push(line);
       canvas.add(line);
@@ -273,13 +285,13 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     const handleObjectMoving = (e: ObjectEvent) => {
       const obj = e.target;
       if (!obj || !snapEnabledRef.current) return;
-      if (obj.slotIndex !== undefined) return; // Don't snap slot photos during pan
+      if (obj.slotIndex !== undefined) return;
 
       clearSnapGuides();
 
       const { w: cw, h: ch, margin: m } = dimsRef.current;
-      const objW = obj.getScaledWidth?.() || (obj as any).width || 0;
-      const objH = obj.getScaledHeight?.() || (obj as any).height || 0;
+      const objW = obj.getScaledWidth() || (obj as any).width || 0;
+      const objH = obj.getScaledHeight() || (obj as any).height || 0;
       const left = (obj.left as number) ?? 0;
       const top = (obj.top as number) ?? 0;
       const right = left + objW;
@@ -292,41 +304,33 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       let snappedX = false;
       let snappedY = false;
 
-      // 1. Snap to grid
       if (showGrid) {
         for (const pt of snapPointsX) {
           const gridLine = snapToGrid(pt, GRID_SIZE);
           if (Math.abs(pt - gridLine) < SNAP_THRESHOLD) {
-            const offset = gridLine - pt;
-            obj.set('left', left + offset);
+            obj.set('left', left + (gridLine - pt));
             showSnapGuide(gridLine, 0, gridLine, ch);
-            snappedX = true;
-            break;
+            snappedX = true; break;
           }
         }
         for (const pt of snapPointsY) {
           const gridLine = snapToGrid(pt, GRID_SIZE);
           if (Math.abs(pt - gridLine) < SNAP_THRESHOLD) {
-            const offset = gridLine - pt;
-            obj.set('top', top + offset);
+            obj.set('top', top + (gridLine - pt));
             showSnapGuide(0, gridLine, cw, gridLine);
-            snappedY = true;
-            break;
+            snappedY = true; break;
           }
         }
       }
 
-      // 2. Snap to center & edges
       if (!snappedX) {
-        const snapLines = getSnapLines(cw, ch, m);
-        for (const lineX of snapLines.vertical) {
+        const lines = getSnapLines(cw, ch, m);
+        for (const lineX of lines.vertical) {
           for (const pt of snapPointsX) {
             if (Math.abs(pt - lineX) < SNAP_THRESHOLD) {
-              const offset = lineX - pt;
-              obj.set('left', ((obj.left as number) ?? 0) + offset);
+              obj.set('left', ((obj.left as number) ?? 0) + (lineX - pt));
               showSnapGuide(lineX, 0, lineX, ch);
-              snappedX = true;
-              break;
+              snappedX = true; break;
             }
           }
           if (snappedX) break;
@@ -334,65 +338,16 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       }
 
       if (!snappedY) {
-        const snapLines = getSnapLines(cw, ch, m);
-        for (const lineY of snapLines.horizontal) {
+        const lines = getSnapLines(cw, ch, m);
+        for (const lineY of lines.horizontal) {
           for (const pt of snapPointsY) {
             if (Math.abs(pt - lineY) < SNAP_THRESHOLD) {
-              const offset = lineY - pt;
-              obj.set('top', ((obj.top as number) ?? 0) + offset);
+              obj.set('top', ((obj.top as number) ?? 0) + (lineY - pt));
               showSnapGuide(0, lineY, cw, lineY);
-              snappedY = true;
-              break;
+              snappedY = true; break;
             }
           }
           if (snappedY) break;
-        }
-      }
-
-      // 3. Snap to other objects
-      const otherObjects = canvas.getObjects().filter((o: any) =>
-        o !== obj && (o.photoId || o.textId) && !o.isGuide && o.bgId !== BG_ID
-      );
-
-      for (const other of otherObjects) {
-        if (snappedX && snappedY) break;
-        const oW = other.getScaledWidth?.() || other.width || 0;
-        const oH = other.getScaledHeight?.() || other.height || 0;
-        const oLeft = (other.left as number) ?? 0;
-        const oTop = (other.top as number) ?? 0;
-        const oRight = oLeft + oW;
-        const oBottom = oTop + oH;
-        const oCenterX = oLeft + oW / 2;
-        const oCenterY = oTop + oH / 2;
-
-        if (!snappedX) {
-          for (const pt of snapPointsX) {
-            for (const opt of [oLeft, oCenterX, oRight]) {
-              if (Math.abs(pt - opt) < SNAP_THRESHOLD) {
-                const offset = opt - pt;
-                obj.set('left', ((obj.left as number) ?? 0) + offset);
-                showSnapGuide(opt, 0, opt, ch);
-                snappedX = true;
-                break;
-              }
-            }
-            if (snappedX) break;
-          }
-        }
-
-        if (!snappedY) {
-          for (const pt of snapPointsY) {
-            for (const opt of [oTop, oCenterY, oBottom]) {
-              if (Math.abs(pt - opt) < SNAP_THRESHOLD) {
-                const offset = opt - pt;
-                obj.set('top', ((obj.top as number) ?? 0) + offset);
-                showSnapGuide(0, opt, cw, opt);
-                snappedY = true;
-                break;
-              }
-            }
-            if (snappedY) break;
-          }
         }
       }
     };
@@ -400,17 +355,16 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     canvas.on('object:moving', handleObjectMoving);
 
     /* ── Enforce uniform scaling on slot photos ── */
-    const handleObjectScaling = (e: ObjectEvent) => {
+    canvas.on('object:scaling', (e: ObjectEvent) => {
       const obj = e.target;
       if (obj && obj.slotIndex !== undefined) {
         const scale = Math.max((obj.scaleX as number) || 1, (obj.scaleY as number) || 1);
         obj.set({ scaleX: scale, scaleY: scale });
         canvas.requestRenderAll();
       }
-    };
-    canvas.on('object:scaling', handleObjectScaling);
+    });
 
-    /* ── Track modifications ── */
+    /* ── Track modifications ── BUG FIX: save ALL text properties ── */
     const handleObjectModified = (e: ObjectEvent) => {
       clearSnapGuides();
       const obj = e.target;
@@ -420,7 +374,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       const page = pageRef.current;
       const { w: cw, h: ch } = dimsRef.current;
 
-      // Slot photo: save scale + offset
+      // Slot photo
       if (obj.slotIndex !== undefined && latestActions.setSlotScale && latestActions.setSlotOffset) {
         const template = getTemplateById(page.templateId ?? PAGE_TEMPLATES[0].id);
         const slot = template?.slots?.[obj.slotIndex];
@@ -429,9 +383,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
           const sy = (slot.y / 100) * ch;
           const sw = (slot.width / 100) * cw;
           const sh = (slot.height / 100) * ch;
-
           latestActions.setSlotScale(obj.slotIndex, Math.max(0.1, (obj.scaleX as number) ?? 1));
-
           const offsetX = ((obj.left as number) ?? 0) - (sx + sw / 2);
           const offsetY = ((obj.top as number) ?? 0) - (sy + sh / 2);
           const currentOffsetX = page.slotOffsetsX?.[obj.slotIndex] ?? 0;
@@ -440,35 +392,47 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
         }
       }
 
-      // Free photo: save transform
+      // Free photo
       if (obj.photoId && obj.slotIndex === undefined) {
         latestActions.updatePhotoTransform(obj.photoId, {
           x: (obj.left as number) ?? 0,
           y: (obj.top as number) ?? 0,
-          width: obj.getScaledWidth?.() || (obj as any).width || 0,
-          height: obj.getScaledHeight?.() || (obj as any).height || 0,
+          width: obj.getScaledWidth() || (obj as any).width || 0,
+          height: obj.getScaledHeight() || (obj as any).height || 0,
           rotation: (obj.angle as number) ?? 0,
           scaleX: 1,
           scaleY: 1,
         });
       }
 
-      // Text: save position
+      // Text: save ALL properties including width/scale from stretch
       if (obj.textId) {
         latestActions.updateTextElement(obj.textId, {
           x: (obj.left as number) ?? 0,
           y: (obj.top as number) ?? 0,
           rotation: (obj.angle as number) ?? 0,
+          text: (obj as any).text ?? '',
+          fontSize: (obj as any).fontSize ?? 24,
+          fontFamily: (obj as any).fontFamily ?? '"DM Sans", sans-serif',
+          color: (obj as any).fill ?? '#2D2D2D',
+          bold: (obj as any).fontWeight === 'bold',
+          italic: (obj as any).fontStyle === 'italic',
+          underline: (obj as any).underline ?? false,
+          alignment: (obj as any).textAlign ?? 'center',
+          opacity: Math.round(((obj as any).opacity ?? 1) * 100),
+          width: (obj as any).width ?? undefined,
+          scaleX: (obj as any).scaleX ?? undefined,
+          scaleY: (obj as any).scaleY ?? undefined,
         });
       }
 
-      // Background: save transform
+      // Background
       if (obj.bgId === BG_ID) {
         latestActions.updateBackgroundTransform({
           x: (obj.left as number) ?? 0,
           y: (obj.top as number) ?? 0,
-          width: obj.getScaledWidth?.() || (obj as any).width || 0,
-          height: obj.getScaledHeight?.() || (obj as any).height || 0,
+          width: obj.getScaledWidth() || (obj as any).width || 0,
+          height: obj.getScaledHeight() || (obj as any).height || 0,
           rotation: (obj.angle as number) ?? 0,
         });
       }
@@ -478,21 +442,26 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     fabricRef.current = canvas;
 
-    // Initial background
-    createBackgroundObject(fab, canvas, currentPage.background, CANVAS_W, CANVAS_H);
-    canvas.renderAll();
+    /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
+    lastStructuralRef.current = '';
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current);
 
     return () => {
       canvas.off('selection:created', handleSelection);
       canvas.off('selection:updated', handleSelection);
       canvas.off('selection:cleared', handleSelectionCleared);
-      canvas.off('mouse:down', handleMouseDown);
+      canvas.off('mouse:down');
+      canvas.off('mouse:dblclick');
+      canvas.off('text:changed');
+      canvas.off('editing:entered');
+      canvas.off('editing:exited');
       canvas.off('object:moving', handleObjectMoving);
-      canvas.off('object:scaling', handleObjectScaling);
+      canvas.off('object:scaling');
       canvas.off('object:modified', handleObjectModified);
       clearSnapGuides();
       canvas.dispose();
       fabricRef.current = null;
+      lastStructuralRef.current = '';
     };
   }, [canvasRef, fabricModule, fabricValid, CANVAS_H, CANVAS_W]);
 
@@ -508,36 +477,36 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   useEffect(() => {
     if (!fabricRef.current || !fabricValid || !fabricModule) return;
 
+    /* If user switched pages while editing, force exit edit mode and render.
+       Otherwise editing would block renderScene forever on the new page. */
+    const pageChanged = actions.currentPageIndex !== lastPageIndexRef.current;
+    lastPageIndexRef.current = actions.currentPageIndex;
+    if (isEditingTextRef.current && pageChanged) {
+      isEditingTextRef.current = false;
+    } else if (isEditingTextRef.current) {
+      return; /* Same page, still editing — skip render */
+    }
+
     const fingerprint = pageFingerprint(actions.currentPageIndex, currentPage);
     if (lastStructuralRef.current === fingerprint) return;
     lastStructuralRef.current = fingerprint;
 
     const canvas = fabricRef.current;
 
-    // Remember active selection
+    // Remember text selection so we can restore it after re-render
     const active = canvas.getActiveObject?.();
-    const savedPhotoId = (active?.photoId && active?.slotIndex === undefined) ? (active.photoId as string) : null;
-    const savedSlotIndex = (active?.slotIndex as number | undefined) ?? null;
-    const savedTextId = (active?.textId as string | undefined) ?? null;
+    const savedTextId = active?.textId ? (active.textId as string) : savedSelectionRef.current;
+    savedSelectionRef.current = savedTextId;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, (slotIdx) => {
-      setSelectedSlotIndex(slotIdx);
-      onSlotClickRef.current(slotIdx);
-    });
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current);
 
-    // Restore selection
-    if (savedPhotoId || savedTextId || savedSlotIndex !== null) {
-      setTimeout(() => {
-        const obj = canvas.getObjects().find((o: any) =>
-          (savedPhotoId && o.photoId === savedPhotoId) ||
-          (savedSlotIndex !== null && o.slotIndex === savedSlotIndex) ||
-          (savedTextId && o.textId === savedTextId)
-        );
-        if (obj) {
-          canvas.setActiveObject(obj);
-          canvas.requestRenderAll();
-        }
-      }, 120);
+    // Restore text selection after re-render
+    if (savedTextId) {
+      const obj = canvas.getObjects().find((o: any) => o.textId === savedTextId);
+      if (obj) {
+        canvas.setActiveObject(obj);
+        canvas.requestRenderAll();
+      }
     }
   }, [fabricModule, fabricValid, actions.currentPageIndex, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H]);
 
@@ -545,7 +514,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-      if (e.target && (e.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return;
+      if (e.target && (e.target as HTMLElement).closest('input, textarea, select, [contenteditable], .fabric-container')) return;
 
       const latestActions = actionsRef.current;
 
@@ -573,7 +542,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) return;
       const target = e.target as HTMLElement;
-      if (target.closest('input, textarea, select, [data-no-scroll]')) return;
+      if (target.closest('input, textarea, select, [data-no-scroll], .fabric-container')) return;
 
       if (e.deltaY > 30) {
         e.preventDefault();
@@ -635,7 +604,6 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       }
     }
 
-    // Re-create background behind grid
     createBackgroundObject(fab, canvas, currentPage.background, CANVAS_W, CANVAS_H);
     canvas.renderAll();
   }, [showGrid, CANVAS_W, CANVAS_H, fabricModule, fabricValid, currentPage.background]);
@@ -762,9 +730,10 @@ function createBackgroundObject(
     htmlImg.src = (bg as any).image;
   } else if (bg.type === 'gradient' && (bg as any).gradient) {
     const { type, angle, stops } = (bg as any).gradient;
-    const fabricStops = stops.reduce((acc: Record<number, string>, s: { offset: number; color: string }) => {
-      acc[s.offset] = s.color; return acc;
-    }, {});
+    const fabricStops = stops.map((s: { offset: number; color: string }) => ({
+      offset: s.offset,
+      color: s.color,
+    }));
 
     let gradFill: any;
     if (type === 'linear') {
@@ -804,6 +773,7 @@ function renderTemplateSlots(
   canvasW: number,
   canvasH: number,
   onSlotClick: (slotIndex: number) => void,
+  renderId: number,
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
@@ -816,6 +786,9 @@ function renderTemplateSlots(
 
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
       fab.Image.fromURL(uploadedPhotos[photoIndex].previewUrl, (img: any) => {
+        /* Skip if a newer render has started — prevents stale images
+           from appearing when switching pages rapidly */
+        if (renderId !== currentRenderId) return;
         const imgW = img.width || sw;
         const imgH = img.height || sh;
         const coverScale = Math.max(sw / imgW, sh / imgH);
@@ -840,10 +813,6 @@ function renderTemplateSlots(
           borderColor: '#F4C2A1',
           hasControls: true,
           hasBorders: true,
-          lockMovementX: false,
-          lockMovementY: false,
-          lockScalingX: false,
-          lockScalingY: false,
           lockRotation: true,
         });
         img.slotId = `${SLOT_ID}-photo-${i}`;
@@ -884,8 +853,7 @@ function renderTemplateSlots(
         canvas.requestRenderAll();
       });
     } else {
-      // Empty slot: dashed rect with + icon
-      let slotRect: any;
+      // Empty slot
       const emptySlotStyle = {
         fill: 'rgba(244,194,161,0.08)',
         stroke: '#F4C2A1',
@@ -896,6 +864,7 @@ function renderTemplateSlots(
         hoverCursor: 'pointer',
       };
 
+      let slotRect: any;
       if (slot.shape === 'circle') {
         const r = Math.min(sw, sh) / 2;
         slotRect = new fab.Circle({ left: sx + sw / 2, top: sy + sh / 2, radius: r, originX: 'center', originY: 'center', ...emptySlotStyle });
@@ -937,7 +906,7 @@ function renderTemplateSlots(
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
- *  Scene Renderer (orchestrates all render steps)
+ *  Scene Renderer
  *  ══════════════════════════════════════════════════════════════════════════ */
 
 function renderScene(
@@ -950,13 +919,17 @@ function renderScene(
   canvasH: number,
   onSlotClick: (slotIndex: number) => void,
 ) {
+  // Increment render ID — cancels stale async image callbacks
+  currentRenderId += 1;
+  const thisRenderId = currentRenderId;
+
   // 1. Remove all managed objects
   const toRemove = canvas.getObjects().filter((obj: any) =>
     obj.photoId || obj.textId || obj.isGuide || obj.bgId === BG_ID || obj.slotId
   );
   toRemove.forEach((obj: any) => canvas.remove(obj));
 
-  // 2. Create background first (behind everything)
+  // 2. Create background
   createBackgroundObject(fab, canvas, page.background, canvasW, canvasH);
 
   // 3. Render template slots
@@ -968,11 +941,16 @@ function renderScene(
   const offsetsY = page.slotOffsetsY ?? template?.slots.map(() => 0) ?? [];
 
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, uploadedPhotos, canvasW, canvasH, onSlotClick);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId);
   }
 
-  // 4. Add text on top
+  // 4. Add text elements — use saved width/scale if available
+  // Text is collected first, added to canvas, then brought to front.
+  // Slot images load async via fab.Image.fromURL — they may be added
+  // AFTER text, covering it. We re-bring text to front after a delay.
+  const textObjects: any[] = [];
   page.textElements.forEach((text: TextElement) => {
+    const autoWidth = Math.max(text.text.length * text.fontSize * 0.6, 100);
     const fabricText = new fab.Textbox(text.text, {
       left: text.x,
       top: text.y,
@@ -987,15 +965,28 @@ function renderScene(
       opacity: text.opacity / 100,
       selectable: true,
       evented: true,
+      editable: true,
+      editingBorderColor: '#F4C2A1',
       cornerColor: '#F4C2A1',
       cornerSize: 8,
       transparentCorners: false,
       borderColor: '#F4C2A1',
+      width: text.width ?? autoWidth,
+      scaleX: text.scaleX ?? 1,
+      scaleY: text.scaleY ?? 1,
     });
     fabricText.textId = text.id;
     canvas.add(fabricText);
-    canvas.bringToFront(fabricText);
+    textObjects.push(fabricText);
   });
+
+  // Ensure text stays on top even when slot images load async
+  const bringTextToFront = () => {
+    textObjects.forEach((t) => { if (canvas.contains(t)) canvas.bringToFront(t); });
+  };
+  bringTextToFront();
+  setTimeout(bringTextToFront, 50);
+  setTimeout(bringTextToFront, 150);
 
   // 5. Layflat crease guide
   if (albumType === 'layflat') {

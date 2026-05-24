@@ -9,29 +9,19 @@ export type LayoutStyle =
   | 'heroSupporting' | 'portraitSingle' | 'collage' | 'collage3'
   | 'trio' | 'asymDuo' | 'panorama' | 'freeform';
 
-/** Shape of a photo slot */
 export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart';
 
-/** A single photo slot within a page template */
 export interface TemplateSlot {
   id: string;
-  /** X position as percentage 0-100 */
   x: number;
-  /** Y position as percentage 0-100 */
   y: number;
-  /** Width as percentage 0-100 */
   width: number;
-  /** Height as percentage 0-100 */
   height: number;
-  /** Rotation in degrees */
   rotation?: number;
-  /** Slot shape for clip/mask */
   shape?: SlotShape;
-  /** Corner radius for rounded rectangles */
   borderRadius?: number;
 }
 
-/** A page template defines the layout of photo slots */
 export interface PageTemplate {
   id: string;
   name: string;
@@ -40,7 +30,6 @@ export interface PageTemplate {
   slots: TemplateSlot[];
 }
 
-/** A filled slot holds either a photo index or is empty */
 export interface FilledSlot {
   slotId: string;
   photoIndex: number | null;
@@ -98,7 +87,6 @@ export interface AlbumBackground {
   };
   pattern?: string;
   image?: string;
-  /** Transform properties — make background editable like photos */
   x?: number;
   y?: number;
   width?: number;
@@ -129,7 +117,6 @@ export interface CanvasPhoto {
   rotation: number;
   filters: PhotoFilters;
   crop?: CropData;
-  /** Pan offset: how much the photo is shifted within the crop frame */
   offsetX: number;
   offsetY: number;
   zIndex: number;
@@ -167,18 +154,17 @@ export interface TextElement {
   rotation: number;
   opacity: number;
   backgroundColor?: string;
+  width?: number;
+  scaleX?: number;
+  scaleY?: number;
 }
 
 export interface AlbumPage {
   id: string;
   layout: LayoutStyle;
-  /** Template ID for slot-based pages */
   templateId?: string;
-  /** Which photo index fills each slot (null = empty) */
   slotFills?: (number | null)[];
-  /** Scale factor for each slot photo (1.0 = fit, >1 = zoomed in) */
   slotScales?: number[];
-  /** Offset X/Y for panning within each slot */
   slotOffsetsX?: number[];
   slotOffsetsY?: number[];
   background: AlbumBackground;
@@ -196,27 +182,18 @@ export interface UploadedPhoto {
   name: string;
 }
 
-/** A complete visual theme that flows through every page of the album */
 export interface ThemeConfig {
   type: TemplateType;
   name: string;
   description: string;
   coverImage: string;
-  /** Themed background image for all pages */
   backgroundImage?: string;
-  /** Color palette for backgrounds throughout the album (fallback) */
   backgroundPalette: string[];
-  /** Accent color used for highlights, borders, decorative elements */
   accentColor: string;
-  /** Default photo border color for this theme */
   photoBorderColor: string;
-  /** Default photo border width */
   photoBorderWidth: number;
-  /** Font pairing for text elements */
   fontFamily: string;
-  /** Text color */
   textColor: string;
-  /** Layout style preferences - which layouts this theme favors */
   layoutPreferences: LayoutStyle[];
 }
 
@@ -242,23 +219,19 @@ export interface AlbumSizeConfig {
 }
 
 export const ALBUM_SIZES: AlbumSizeConfig[] = [
-  // Square
   { preset: '6x6', name: '6×6" Square', width: 1800, height: 1800, category: 'square' },
   { preset: '8x8', name: '8×8" Square', width: 2400, height: 2400, category: 'square' },
   { preset: '10x10', name: '10×10" Square', width: 3000, height: 3000, category: 'square' },
   { preset: '12x12', name: '12×12" Square', width: 3600, height: 3600, category: 'square' },
-  // Portrait
   { preset: 'a5', name: 'A5 Portrait', width: 1748, height: 2480, category: 'portrait' },
   { preset: '8x10', name: '8×10" Portrait', width: 2400, height: 3000, category: 'portrait' },
   { preset: '8x11', name: '8.5×11" Portrait', width: 2550, height: 3300, category: 'portrait' },
   { preset: 'a4', name: 'A4 Portrait', width: 2480, height: 3508, category: 'portrait' },
   { preset: '11x14', name: '11×14" Portrait', width: 3300, height: 4200, category: 'portrait' },
-  // Landscape
   { preset: '10x8', name: '10×8" Landscape', width: 3000, height: 2400, category: 'landscape' },
   { preset: '11x8', name: '11×8.5" Landscape', width: 3300, height: 2550, category: 'landscape' },
   { preset: 'a4l', name: 'A4 Landscape', width: 3508, height: 2480, category: 'landscape' },
   { preset: '14x11', name: '14×11" Landscape', width: 4200, height: 3300, category: 'landscape' },
-  // Custom
   { preset: 'custom', name: 'Custom Size', width: 2400, height: 3000, category: 'portrait' },
 ];
 
@@ -309,13 +282,9 @@ export const GRADIENT_PRESETS = [
   { name: 'Midnight', stops: [{ offset: 0, color: '#2D2D2D' }, { offset: 1, color: '#6B6B6B' }] },
 ];
 
-// ───────── 10 Real Album Themes ─────────
-// Each theme defines a cohesive visual identity that flows through EVERY page.
-// When a user picks "Wedding", every page feels like a wedding album.
-
 export const THEMES: Record<TemplateType, ThemeConfig> = {
   wedding: {
-    type: 'wedding', name: 'Wedding', description: 'Romantic elegance — soft ivory roses and delicate greenery on every page.',
+    type: 'wedding', name: 'Wedding', description: 'Romantic elegance',
     coverImage: './album-wedding.jpg',
     backgroundPalette: ['#F8F3ED', '#F0E8D8', '#FAF5EF', '#E8DDD0', '#F5EDE0'],
     backgroundImage: './bg-wedding.jpg',
@@ -326,9 +295,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#5C4A3A',
     layoutPreferences: ['fullBleed', 'portraitSingle', 'duoPortrait', 'heroSupporting', 'panorama'],
   },
-
   baby: {
-    type: 'baby', name: 'Baby', description: 'Soft pastels — mint dots and pink stars, sweet milestone layouts.',
+    type: 'baby', name: 'Baby', description: 'Soft pastels',
     coverImage: './album-baby.jpg',
     backgroundPalette: ['#E8F0E8', '#F0E8E8', '#E8E8F0', '#F0F0E8', '#E0ECE0'],
     backgroundImage: './bg-baby.jpg',
@@ -339,9 +307,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#5A6B5A',
     layoutPreferences: ['portraitSingle', 'duoPortrait', 'fourGrid', 'collage3', 'trio'],
   },
-
   birthday: {
-    type: 'birthday', name: 'Birthday', description: 'Festive warmth — golden confetti, balloons, and joyful celebration layouts.',
+    type: 'birthday', name: 'Birthday', description: 'Festive warmth',
     coverImage: './album-birthday.jpg',
     backgroundPalette: ['#FFF3D8', '#FFE8C8', '#FFF0D0', '#FFECD0', '#FFF5D8'],
     backgroundImage: './bg-birthday.jpg',
@@ -352,9 +319,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#6B5A3A',
     layoutPreferences: ['collage3', 'fourGrid', 'trio', 'heroSupporting', 'fullBleed'],
   },
-
   family: {
-    type: 'family', name: 'Family', description: 'Warm and timeless — cozy knit texture, homey layouts for generations.',
+    type: 'family', name: 'Family', description: 'Warm and timeless',
     coverImage: './album-family.jpg',
     backgroundPalette: ['#F0E5D0', '#E8DCC0', '#F5E8D0', '#EDE0C8', '#F8F0E0'],
     backgroundImage: './bg-family.jpg',
@@ -365,9 +331,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#5C4A32',
     layoutPreferences: ['duoPortrait', 'portraitSingle', 'heroSupporting', 'asymDuo', 'collage3'],
   },
-
   graduation: {
-    type: 'graduation', name: 'Graduation', description: 'Academic achievement — navy laurel wreaths and gold stars for proud moments.',
+    type: 'graduation', name: 'Graduation', description: 'Academic achievement',
     coverImage: './album-graduation.jpg',
     backgroundPalette: ['#E0E0E8', '#D8D8E0', '#E8E8F0', '#D0D0E0', '#E5E5F0'],
     backgroundImage: './bg-graduation.jpg',
@@ -378,9 +343,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#2B3A5A',
     layoutPreferences: ['portraitSingle', 'duoPortrait', 'trio', 'heroSupporting', 'panorama'],
   },
-
   travel: {
-    type: 'travel', name: 'Travel', description: 'Adventure — vintage world map, compasses, and wanderlust layouts.',
+    type: 'travel', name: 'Travel', description: 'Adventure',
     coverImage: './album-travel.jpg',
     backgroundPalette: ['#E8DFC8', '#DDD0B8', '#E5D8C0', '#F0E8D8', '#D8C8A8'],
     backgroundImage: './bg-travel.jpg',
@@ -391,9 +355,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#4A4030',
     layoutPreferences: ['panorama', 'fullBleed', 'heroSupporting', 'duoLandscape', 'asymDuo'],
   },
-
   minimalist: {
-    type: 'minimalist', name: 'Minimalist', description: 'Clean and quiet — subtle gray hexagons, pure breathing room on every page.',
+    type: 'minimalist', name: 'Minimalist', description: 'Clean and quiet',
     coverImage: './album-minimalist.jpg',
     backgroundPalette: ['#F0F0F0', '#E8E8E8', '#F5F5F5', '#E0E0E0', '#F8F8F8'],
     backgroundImage: './bg-minimalist.jpg',
@@ -404,9 +367,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#2D2D2D',
     layoutPreferences: ['portraitSingle', 'duoPortrait', 'panorama', 'asymDuo'],
   },
-
   kids: {
-    type: 'kids', name: 'Kids', description: 'Playful and bright — rainbow stripes and cute animals, cheerful layouts.',
+    type: 'kids', name: 'Kids', description: 'Playful and bright',
     coverImage: './album-kids.jpg',
     backgroundPalette: ['#FFF0E8', '#E8F0FF', '#FFF0F0', '#F0FFF5', '#F8F0FF'],
     backgroundImage: './bg-kids.jpg',
@@ -417,9 +379,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#5A4A3A',
     layoutPreferences: ['fourGrid', 'collage3', 'trio', 'duoPortrait', 'fullBleed'],
   },
-
   vintage: {
-    type: 'vintage', name: 'Vintage', description: 'Old-world charm — aged tea-stained paper with ornamental swirls, nostalgic layouts.',
+    type: 'vintage', name: 'Vintage', description: 'Old-world charm',
     coverImage: './album-vintage.jpg',
     backgroundPalette: ['#E8D8B8', '#DDD0A8', '#F0E0C0', '#E5D8B8', '#D8C8A0'],
     backgroundImage: './bg-vintage.jpg',
@@ -430,9 +391,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#4A3A28',
     layoutPreferences: ['portraitSingle', 'duoPortrait', 'portraitSingle', 'asymDuo', 'panorama'],
   },
-
   classic: {
-    type: 'classic', name: 'Classic', description: 'Timeless sophistication — gold filigree borders on cream, elegant layouts.',
+    type: 'classic', name: 'Classic', description: 'Timeless sophistication',
     coverImage: './album-elegant.jpg',
     backgroundPalette: ['#F0E8D8', '#E8DCC8', '#F5F0E0', '#F8F0E0', '#E8DFD0'],
     backgroundImage: './bg-classic.jpg',
@@ -445,7 +405,6 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
   },
 };
 
-/** Get a themed background for a page — uses image if available, falls back to palette */
 export function getThemedBackground(theme: TemplateType, pageIndex: number): AlbumBackground {
   const config = THEMES[theme];
   if (config.backgroundImage) {
@@ -455,7 +414,6 @@ export function getThemedBackground(theme: TemplateType, pageIndex: number): Alb
   return { type: 'solid', solid: color };
 }
 
-/** Get themed photo border settings */
 export function getThemedPhotoBorder(theme: TemplateType): { color: string; width: number } {
   const config = THEMES[theme];
   return { color: config.photoBorderColor, width: config.photoBorderWidth };

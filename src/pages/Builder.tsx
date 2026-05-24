@@ -1,9 +1,7 @@
 import { useState, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Settings, LayoutTemplate, PenTool, Eye, ChevronRight,
-} from 'lucide-react';
+import { Settings, LayoutTemplate, PenTool, Eye, ChevronRight } from 'lucide-react';
 import { useBuilderState } from './builder/useBuilderState';
 import BuilderSetup from './builder/BuilderSetup';
 import BuilderTemplate from './builder/BuilderTemplate';
@@ -19,7 +17,6 @@ const phases = [
   { id: 'preview' as const, label: 'Preview', icon: Eye },
 ];
 
-/** Memoized phase content components to prevent unnecessary re-renders */
 const SetupPhase = memo(function SetupPhase({ actions }: { actions: ReturnType<typeof useBuilderState> }) {
   return (
     <BuilderSetup
