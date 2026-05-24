@@ -6,36 +6,66 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { THEMES, type TemplateType, type LayoutStyle } from './builder/types';
 import { LAYOUT_DEFINITIONS } from './builder/layouts';
 
+/** Theme category for grouping templates in the UI */
+type ThemeCategory = 'Romantic' | 'Family' | 'Modern' | 'Festive' | 'Adventure' | 'All';
+
+/** Map each TemplateType to a display category */
+const THEME_CATEGORIES: Record<TemplateType, ThemeCategory> = {
+  wedding: 'Romantic',
+  baby: 'Family',
+  birthday: 'Festive',
+  family: 'Family',
+  graduation: 'Festive',
+  travel: 'Adventure',
+  minimalist: 'Modern',
+  kids: 'Family',
+  vintage: 'Romantic',
+  classic: 'Modern',
+};
+
 interface TemplateDisplay {
-  id: TemplateType; name: string; description: string;
-  image: string; accentColor: string;
-  layoutNames: string[]; specLayout: string;
+  id: TemplateType;
+  name: string;
+  description: string;
+  image: string;
+  accentColor: string;
+  layoutNames: string[];
+  specLayout: string;
+  category: ThemeCategory;
 }
 
 function buildTemplateList(): TemplateDisplay[] {
-  return Object.values(THEMES).map((t: any) => {
+  return Object.values(THEMES).map((t) => {
     const uniqueLayouts: LayoutStyle[] = [...new Set<LayoutStyle>(t.layoutPreferences)];
     const layoutNames = uniqueLayouts.map((l: LayoutStyle) => LAYOUT_DEFINITIONS[l]?.name ?? l);
     return {
-      id: t.type, name: t.name, description: t.description,
-      image: t.coverImage, accentColor: t.accentColor,
-      layoutNames, specLayout: layoutNames.slice(0, 4).join(', '),
+      id: t.type,
+      name: t.name,
+      description: t.description,
+      image: t.coverImage,
+      accentColor: t.accentColor,
+      layoutNames,
+      specLayout: layoutNames.slice(0, 4).join(', '),
+      category: THEME_CATEGORIES[t.type],
     };
   });
 }
 
 const ALL_TEMPLATES = buildTemplateList();
-const allCategories = ['All', ...Array.from(new Set(ALL_TEMPLATES.map((t) => t.name)))];
+
+/** BUG FIX: categories are now derived from THEME_CATEGORIES, not template names */
+const allCategories: ThemeCategory[] = ['All', ...Array.from(new Set(ALL_TEMPLATES.map((t) => t.category)))];
 
 export default function Templates() {
-  const [activeTab, setActiveTab] = useState('All');
+  const [activeTab, setActiveTab] = useState<ThemeCategory>('All');
   const [modalTemplate, setModalTemplate] = useState<TemplateDisplay | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const navigate = useNavigate();
 
+  /** BUG FIX: filter by category, not by template name */
   const filtered = useMemo(() => {
     if (activeTab === 'All') return ALL_TEMPLATES;
-    return ALL_TEMPLATES.filter((t) => t.name === activeTab);
+    return ALL_TEMPLATES.filter((t) => t.category === activeTab);
   }, [activeTab]);
 
   return (
@@ -63,7 +93,7 @@ export default function Templates() {
                 exit={{ opacity: 0, y: 20 }} transition={{ duration: 0.4, delay: Math.min(i * 0.04, 0.4) }}
                 className="group bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="relative aspect-[3/4] overflow-hidden">
-                  <img src={t.image} alt={t.name} className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-400" />
+                  <img src={t.image} alt={t.name} className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-400" loading="lazy" />
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2"
                     style={{ backgroundColor: `${t.accentColor}CC` }}>
                     <button onClick={() => { setModalTemplate(t); setModalOpen(true); }}

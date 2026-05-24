@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -19,6 +19,48 @@ const phases = [
   { id: 'preview' as const, label: 'Preview', icon: Eye },
 ];
 
+/** Memoized phase content components to prevent unnecessary re-renders */
+const SetupPhase = memo(function SetupPhase({ actions }: { actions: ReturnType<typeof useBuilderState> }) {
+  return (
+    <BuilderSetup
+      selectedSize={actions.albumSize}
+      selectedType={actions.albumType}
+      onSizeChange={actions.setAlbumSize}
+      onTypeChange={actions.setAlbumType}
+      onNext={() => actions.setPhase('template')}
+    />
+  );
+});
+
+const TemplatePhase = memo(function TemplatePhase({ actions, onGenerate }: { actions: ReturnType<typeof useBuilderState>; onGenerate: () => void }) {
+  return (
+    <BuilderTemplate
+      selected={actions.selectedTemplate}
+      onSelect={actions.selectTemplate}
+      onBack={() => actions.setPhase('setup')}
+      onGenerate={onGenerate}
+    />
+  );
+});
+
+const EditPhase = memo(function EditPhase({ actions }: { actions: ReturnType<typeof useBuilderState> }) {
+  return <BuilderEdit actions={actions} />;
+});
+
+const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions: ReturnType<typeof useBuilderState>; onOrder: () => void }) {
+  return (
+    <BuilderPreview
+      pages={actions.albumPages}
+      currentIndex={actions.currentPageIndex}
+      photos={actions.uploadedPhotos}
+      albumSize={actions.albumSize}
+      onGoToPage={actions.goToPage}
+      onBack={() => actions.setPhase('edit')}
+      onOrder={onOrder}
+    />
+  );
+});
+
 export default function Builder() {
   const actions = useBuilderState();
   const navigate = useNavigate();
@@ -32,6 +74,10 @@ export default function Builder() {
     actions.reset();
     setErrorKey((k) => k + 1);
   }, [actions]);
+
+  const handleOrder = useCallback(() => {
+    navigate('/order');
+  }, [navigate]);
 
   const phaseIndex = phases.findIndex((p) => p.id === actions.phase);
 
@@ -68,8 +114,6 @@ export default function Builder() {
           })}
 
           <div className="flex-1" />
-
-
         </div>
 
         {/* Phase Content */}
@@ -78,46 +122,28 @@ export default function Builder() {
             {actions.phase === 'setup' && (
               <motion.div key="setup" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.2 }} className="h-full">
-                <BuilderSetup
-                  selectedSize={actions.albumSize}
-                  selectedType={actions.albumType}
-                  onSizeChange={actions.setAlbumSize}
-                  onTypeChange={actions.setAlbumType}
-                  onNext={() => actions.setPhase('template')}
-                />
+                <SetupPhase actions={actions} />
               </motion.div>
             )}
 
             {actions.phase === 'template' && (
               <motion.div key="template" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.2 }} className="h-full">
-                <BuilderTemplate
-                  selected={actions.selectedTemplate}
-                  onSelect={actions.selectTemplate}
-                  onBack={() => actions.setPhase('setup')}
-                  onGenerate={handleGenerate}
-                />
+                <TemplatePhase actions={actions} onGenerate={handleGenerate} />
               </motion.div>
             )}
 
             {actions.phase === 'edit' && (
               <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="h-full">
-                <BuilderEdit actions={actions} />
+                <EditPhase actions={actions} />
               </motion.div>
             )}
 
             {actions.phase === 'preview' && (
               <motion.div key="preview" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="h-full">
-                <BuilderPreview
-                  pages={actions.albumPages}
-                  currentIndex={actions.currentPageIndex}
-                  photos={actions.uploadedPhotos}
-                  onGoToPage={actions.goToPage}
-                  onBack={() => actions.setPhase('edit')}
-                  onOrder={() => navigate('/order')}
-                />
+                <PreviewPhase actions={actions} onOrder={handleOrder} />
               </motion.div>
             )}
           </AnimatePresence>

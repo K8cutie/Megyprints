@@ -7,12 +7,36 @@ interface BuilderPreviewProps {
   pages: AlbumPage[];
   currentIndex: number;
   photos: UploadedPhoto[];
+  /** Album size preset (e.g. '8x10') — drives preview dimensions */
+  albumSize: string;
   onGoToPage: (i: number) => void;
   onBack: () => void;
   onOrder: () => void;
 }
 
-function filtersToCSS(f: { grayscale: number; sepia: number; brightness: number; contrast: number; saturate: number; blur: number; hueRotate: number; opacity: number }) {
+/** Preview dimensions keyed by album size preset.
+ *  Values are display pixels — independent of print resolution. */
+const PREVIEW_DIMS: Record<string, { w: number; h: number }> = {
+  '6x6': { w: 480, h: 480 },
+  '8x8': { w: 480, h: 480 },
+  '10x10': { w: 500, h: 500 },
+  '12x12': { w: 520, h: 520 },
+  '8x10': { w: 400, h: 500 },
+  '10x8': { w: 500, h: 400 },
+  '8x12': { w: 360, h: 540 },
+  '12x8': { w: 540, h: 360 },
+  '10x12': { w: 420, h: 504 },
+  '12x10': { w: 504, h: 420 },
+};
+
+/** Convert photo filters to a CSS filter string.
+ *  BUG FIX (original): opacity() filter takes a 0–1 decimal, not a percentage.
+ *  `opacity(80%)` is invalid CSS — must be `opacity(0.8)`. */
+function filtersToCSS(f: {
+  grayscale: number; sepia: number; brightness: number;
+  contrast: number; saturate: number; blur: number;
+  hueRotate: number; opacity: number;
+}) {
   const parts: string[] = [];
   if (f.grayscale > 0) parts.push(`grayscale(${f.grayscale}%)`);
   if (f.sepia > 0) parts.push(`sepia(${f.sepia}%)`);
@@ -21,7 +45,7 @@ function filtersToCSS(f: { grayscale: number; sepia: number; brightness: number;
   if (f.saturate !== 100) parts.push(`saturate(${f.saturate}%)`);
   if (f.blur > 0) parts.push(`blur(${f.blur}px)`);
   if (f.hueRotate > 0) parts.push(`hue-rotate(${f.hueRotate}deg)`);
-  if (f.opacity < 100) parts.push(`opacity(${f.opacity}%)`);
+  if (f.opacity < 100) parts.push(`opacity(${f.opacity / 100})`);
   return parts.join(' ') || 'none';
 }
 
@@ -38,11 +62,14 @@ function bgToStyle(bg: AlbumPage['background']): React.CSSProperties {
   return { backgroundColor: '#FFFBF7' };
 }
 
-export default function BuilderPreview({ pages, currentIndex, photos, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
+export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
   const [spreadView, setSpreadView] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const page = pages[currentIndex];
+
+  /** BUG FIX: derive preview dimensions from albumSize instead of hard-coding 500×625 */
+  const { w: W, h: H } = PREVIEW_DIMS[albumSize] || { w: 500, h: 625 };
 
   // Export as image
   const handleExport = async () => {
@@ -55,30 +82,42 @@ export default function BuilderPreview({ pages, currentIndex, photos, onGoToPage
     link.click();
   };
 
-  const W = 500;
-  const H = 625;
-
   return (
     <div className="flex flex-col h-full bg-[#F5F5F5]">
       {/* Header */}
       <div className="h-14 bg-white border-b border-[#E8E8E8] flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 rounded-lg hover:bg-[#F0F0F0] text-[#6B6B6B]">
-            <Edit3 size={16} />
+          <button
+            onClick={onBack}
+            aria-label="Back to editor"
+            className="p-2 rounded-lg hover:bg-[#F0F0F0] text-[#6B6B6B]"
+          >
+            <Edit3 size={16} aria-hidden="true" />
           </button>
           <span className="text-sm font-medium text-[#2D2D2D]">
             Page {currentIndex + 1} of {pages.length}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setSpreadView(!spreadView)} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#E8E8E8] hover:bg-[#F0F0F0] text-[#6B6B6B]">
+          <button
+            onClick={() => setSpreadView(!spreadView)}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#E8E8E8] hover:bg-[#F0F0F0] text-[#6B6B6B]"
+          >
             {spreadView ? 'Single' : 'Spread'}
           </button>
-          <button onClick={handleExport} className="p-2 rounded-lg hover:bg-[#F0F0F0] text-[#6B6B6B]" title="Export page">
-            <Download size={16} />
+          <button
+            onClick={handleExport}
+            aria-label="Export page as image"
+            className="p-2 rounded-lg hover:bg-[#F0F0F0] text-[#6B6B6B]"
+            title="Export page"
+          >
+            <Download size={16} aria-hidden="true" />
           </button>
-          <button onClick={onOrder} className="px-4 py-2 bg-[#F4C2A1] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5">
-            <ShoppingCart size={14} /> Order Now
+          <button
+            onClick={onOrder}
+            className="px-4 py-2 bg-[#F4C2A1] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5"
+          >
+            <ShoppingCart size={14} aria-hidden="true" /> Order Now
           </button>
         </div>
       </div>
@@ -89,6 +128,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, onGoToPage
           <button
             onClick={() => onGoToPage(Math.max(0, currentIndex - 1))}
             disabled={currentIndex === 0}
+            aria-label="Previous page"
             className="p-2 rounded-full bg-white shadow-md hover:shadow-lg disabled:opacity-30 transition-all"
           >
             <ChevronLeft size={20} className="text-[#2D2D2D]" />
@@ -106,7 +146,24 @@ export default function BuilderPreview({ pages, currentIndex, photos, onGoToPage
             {/* Render photos */}
             {page.photos.map((photo) => {
               const uploaded = photos[photo.photoIndex];
-              if (!uploaded) return null;
+              /* BUG FIX: show placeholder when photo index is out of bounds */
+              if (!uploaded) {
+                return (
+                  <div
+                    key={photo.id}
+                    className="absolute flex items-center justify-center bg-[#E8E8E8] border-2 border-dashed border-[#C4C4C4] rounded"
+                    style={{
+                      left: photo.x,
+                      top: photo.y,
+                      width: photo.width * photo.scaleX,
+                      height: photo.height * photo.scaleY,
+                      transform: `rotate(${photo.rotation}deg)`,
+                    }}
+                  >
+                    <span className="text-[10px] text-[#9B9B9B]">No photo</span>
+                  </div>
+                );
+              }
               return (
                 <div
                   key={photo.id}
@@ -130,6 +187,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, onGoToPage
                     alt=""
                     className="w-full h-full object-cover"
                     draggable={false}
+                    loading="lazy"
                   />
                 </div>
               );
@@ -162,6 +220,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, onGoToPage
           <button
             onClick={() => onGoToPage(Math.min(pages.length - 1, currentIndex + 1))}
             disabled={currentIndex === pages.length - 1}
+            aria-label="Next page"
             className="p-2 rounded-full bg-white shadow-md hover:shadow-lg disabled:opacity-30 transition-all"
           >
             <ChevronRight size={20} className="text-[#2D2D2D]" />
@@ -175,6 +234,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, onGoToPage
           <button
             key={p.id}
             onClick={() => onGoToPage(i)}
+            aria-label={`Go to page ${i + 1}`}
             className="flex-shrink-0 w-12 h-14 rounded-md overflow-hidden border transition-all"
             style={{
               borderColor: i === currentIndex ? '#F4C2A1' : '#E8E8E8',
