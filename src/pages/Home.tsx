@@ -12,6 +12,7 @@ import {
   Quote,
   Star,
 } from 'lucide-react';
+import BuilderDemoSection from './BuilderDemoSection';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -617,6 +618,7 @@ export default function Home() {
       <TrustBarSection />
       <HowItWorksSection />
       <TemplatePreviewSection />
+      <BuilderDemoSection />
       <TestimonialsSection />
       <CTASection />
     </>
