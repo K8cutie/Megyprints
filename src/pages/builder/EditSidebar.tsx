@@ -142,47 +142,85 @@ export default function EditSidebar(props: EditSidebarProps) {
                 </button>
               </div>
               <div className="space-y-2">
-                {albumPages.map((page, i) => (
-                  <div key={page.id} onClick={() => onGoToPage(i)}
-                    className="flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors"
-                    style={{ backgroundColor: i === currentPageIndex ? '#FDE8E4' : 'transparent', border: i === currentPageIndex ? '1px solid #F4C2A1' : '1px solid transparent' }}>
-                    <span className="text-[10px] text-[#9B9B9B] w-5">{i + 1}</span>
-                    <div className="flex-1 h-12 rounded-md overflow-hidden bg-white border border-[#E8E8E8] flex items-center justify-center text-[8px] text-[#C4C4C4]">
-                      {page.photos.length} photos
+                {albumPages.map((page, i) => {
+                  /* BUG FIX: count filled slots, not freeform photos */
+                  const slotPhotoCount = page.slotFills?.filter((f) => f !== null).length ?? 0;
+                  const freeformCount = page.photos.length;
+                  const totalPhotos = slotPhotoCount + freeformCount;
+                  return (
+                    <div key={page.id} onClick={() => onGoToPage(i)}
+                      className="flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors"
+                      style={{ backgroundColor: i === currentPageIndex ? '#FDE8E4' : 'transparent', border: i === currentPageIndex ? '1px solid #F4C2A1' : '1px solid transparent' }}>
+                      <span className="text-[10px] text-[#9B9B9B] w-5">{i + 1}</span>
+                      <div className="flex-1 h-12 rounded-md overflow-hidden bg-white border border-[#E8E8E8] flex items-center justify-center text-[8px] text-[#C4C4C4]">
+                        {totalPhotos > 0 ? `${totalPhotos} photo${totalPhotos !== 1 ? 's' : ''}` : 'Empty'}
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <button onClick={(e) => { e.stopPropagation(); onDuplicatePage(i); }} className="p-1 rounded hover:bg-[#F0F0F0] text-[#9B9B9B]"><Copy size={10} /></button>
+                        {albumPages.length > 1 && (
+                          <button onClick={(e) => { e.stopPropagation(); onDeletePage(i); }} className="p-1 rounded hover:bg-[#FDE8E4] text-[#E8A598]"><Trash2 size={10} /></button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <button onClick={(e) => { e.stopPropagation(); onDuplicatePage(i); }} className="p-1 rounded hover:bg-[#F0F0F0] text-[#9B9B9B]"><Copy size={10} /></button>
-                      {albumPages.length > 1 && (
-                        <button onClick={(e) => { e.stopPropagation(); onDeletePage(i); }} className="p-1 rounded hover:bg-[#FDE8E4] text-[#E8A598]"><Trash2 size={10} /></button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </motion.div>
           )}
 
           {activeTab === 'layers' && (
             <motion.div key="layers" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-3">
-              {[...photos].sort((a, b) => b.zIndex - a.zIndex).map((photo, i, arr) => (
-                <div key={photo.id} onClick={() => onSelectPhoto(photo.id)}
-                  className="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-[#F0F0F0] transition-colors"
-                  style={{ backgroundColor: selectedPhotoId === photo.id ? '#FDE8E4' : 'transparent' }}>
-                  <GripVertical size={12} className="text-[#C4C4C4]" />
-                  <div className="w-8 h-8 rounded bg-[#E8E8E8] flex items-center justify-center"><Images size={12} className="text-[#9B9B9B]" /></div>
-                  <span className="text-xs text-[#6B6B6B] flex-1 truncate">Photo {photo.photoIndex + 1}</span>
-                  <span className="text-[9px] text-[#C4C4C4]">{arr.length - i}</span>
-                </div>
-              ))}
-              {textElements.map((text) => (
-                <div key={text.id} onClick={() => onSelectText(text.id)}
-                  className="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-[#F0F0F0] transition-colors"
-                  style={{ backgroundColor: selectedTextId === text.id ? '#FDE8E4' : 'transparent' }}>
-                  <GripVertical size={12} className="text-[#C4C4C4]" />
-                  <div className="w-8 h-8 rounded bg-[#E8E8E8] flex items-center justify-center"><FileText size={12} className="text-[#9B9B9B]" /></div>
-                  <span className="text-xs text-[#6B6B6B] flex-1 truncate">{text.text.slice(0, 20)}</span>
-                </div>
-              ))}
+              {/* BUG FIX: show slot-filled photos in addition to freeform photos */}
+              {(() => {
+                const currentPage = albumPages[currentPageIndex];
+                const slotPhotos: { id: string; label: string; photoIndex: number }[] = [];
+                if (currentPage?.slotFills) {
+                  currentPage.slotFills.forEach((fillIdx, slotIdx) => {
+                    if (fillIdx !== null) {
+                      slotPhotos.push({
+                        id: `slot-${slotIdx}`,
+                        label: `Slot ${slotIdx + 1}`,
+                        photoIndex: fillIdx,
+                      });
+                    }
+                  });
+                }
+                return (
+                  <>
+                    {slotPhotos.map((sp) => (
+                      <div key={sp.id}
+                        className="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-[#F0F0F0] transition-colors">
+                        <GripVertical size={12} className="text-[#C4C4C4]" />
+                        <div className="w-8 h-8 rounded bg-[#E8E8E8] flex items-center justify-center"><Images size={12} className="text-[#9B9B9B]" /></div>
+                        <span className="text-xs text-[#6B6B6B] flex-1 truncate">{sp.label}</span>
+                        <span className="text-[9px] text-[#C4C4C4]">#{sp.photoIndex + 1}</span>
+                      </div>
+                    ))}
+                    {[...photos].sort((a, b) => b.zIndex - a.zIndex).map((photo, i, arr) => (
+                      <div key={photo.id} onClick={() => onSelectPhoto(photo.id)}
+                        className="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-[#F0F0F0] transition-colors"
+                        style={{ backgroundColor: selectedPhotoId === photo.id ? '#FDE8E4' : 'transparent' }}>
+                        <GripVertical size={12} className="text-[#C4C4C4]" />
+                        <div className="w-8 h-8 rounded bg-[#E8E8E8] flex items-center justify-center"><Images size={12} className="text-[#9B9B9B]" /></div>
+                        <span className="text-xs text-[#6B6B6B] flex-1 truncate">Photo {photo.photoIndex + 1}</span>
+                        <span className="text-[9px] text-[#C4C4C4]">{arr.length - i}</span>
+                      </div>
+                    ))}
+                    {textElements.map((text) => (
+                      <div key={text.id} onClick={() => onSelectText(text.id)}
+                        className="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-[#F0F0F0] transition-colors"
+                        style={{ backgroundColor: selectedTextId === text.id ? '#FDE8E4' : 'transparent' }}>
+                        <GripVertical size={12} className="text-[#C4C4C4]" />
+                        <div className="w-8 h-8 rounded bg-[#E8E8E8] flex items-center justify-center"><FileText size={12} className="text-[#9B9B9B]" /></div>
+                        <span className="text-xs text-[#6B6B6B] flex-1 truncate">{text.text.slice(0, 20)}</span>
+                      </div>
+                    ))}
+                    {slotPhotos.length === 0 && photos.length === 0 && textElements.length === 0 && (
+                      <p className="text-xs text-[#9B9B9B] text-center py-4">No elements on this page yet</p>
+                    )}
+                  </>
+                );
+              })()}
             </motion.div>
           )}
 
