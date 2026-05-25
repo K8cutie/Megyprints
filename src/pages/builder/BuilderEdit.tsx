@@ -12,7 +12,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Eye,
+  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Eye, Sparkles,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -45,11 +45,12 @@ interface BorderShadowValues {
 
 interface BuilderEditProps {
   actions: BuilderActions;
+  onRegenerate?: () => void;
 }
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
 
-export default function BuilderEdit({ actions }: BuilderEditProps): React.ReactElement {
+export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps): React.ReactElement {
   const canvasElRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -570,6 +571,15 @@ export default function BuilderEdit({ actions }: BuilderEditProps): React.ReactE
               <span className="text-xs text-[#9B9B9B]">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
+              {onRegenerate && (
+                <button
+                  onClick={onRegenerate}
+                  title="Regenerate album with new random layouts"
+                  className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                >
+                  <Sparkles size={12} /> Regenerate
+                </button>
+              )}
               <button
                 onClick={() => actions.setPhase('preview')}
                 className="px-3 py-1.5 bg-[#F4C2A1] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1"

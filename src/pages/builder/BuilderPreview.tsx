@@ -257,6 +257,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                     height,
                     transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
                     transformOrigin: 'center center',
+                    border: slot.borderWidth
+                      ? `${slot.borderWidth}px solid ${slot.borderColor || '#FFFFFF'}`
+                      : undefined,
+                    boxSizing: 'border-box',
                     ...shapeStyle,
                   }}
                 >

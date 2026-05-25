@@ -16,8 +16,10 @@ import {
   DEFAULT_ALBUM_SIZE,
 } from './types';
 import { getTemplateById, PAGE_TEMPLATES } from './pageTemplates';
+import { generateAlbum, regenerateAlbum } from './generateAlbum';
 
 const STORAGE_KEY = 'megy_builder_state';
+const REJECTED_TEMPLATES_KEY = 'megy_rejected_templates';
 const STORAGE_VERSION = 'v4'; // bumped — clears textElements from old sessions
 
 /* ── Safe localStorage with validation ── */
@@ -31,6 +33,27 @@ function isValidAlbumPage(page: any): page is AlbumPage {
     Array.isArray(page.photos) &&
     Array.isArray(page.textElements)
   );
+}
+
+/* ── Rejected templates (user-hidden) ── */
+
+function loadRejectedTemplates(): string[] {
+  try {
+    const raw = localStorage.getItem(REJECTED_TEMPLATES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRejectedTemplates(ids: string[]) {
+  try {
+    localStorage.setItem(REJECTED_TEMPLATES_KEY, JSON.stringify(ids));
+  } catch {
+    // silently fail
+  }
 }
 
 function loadState(): { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[] } | null {
@@ -129,6 +152,7 @@ export function useBuilderState() {
     saved?.albumPages && saved.albumPages.length > 0 ? saved.albumPages : [defaultPage()]
   );
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(loadRejectedTemplates);
 
   const currentPage = albumPages[currentPageIndex] ?? albumPages[0] ?? defaultPage();
 
@@ -505,6 +529,41 @@ export function useBuilderState() {
     });
   }, [currentPageIndex, uploadedPhotos]);
 
+  // ── Generate Album ──
+  const generateAlbumAction = useCallback(() => {
+    const newPages = generateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds);
+    setAlbumPages(newPages);
+    setCurrentPageIndex(0);
+  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds]);
+
+  const regenerateAlbumAction = useCallback(() => {
+    const newPages = regenerateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds);
+    setAlbumPages(newPages);
+    setCurrentPageIndex(0);
+  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds]);
+
+  // ── Template Rejection ──
+  const hideTemplate = useCallback((templateId: string) => {
+    setRejectedTemplateIds((prev) => {
+      const next = prev.includes(templateId) ? prev : [...prev, templateId];
+      saveRejectedTemplates(next);
+      return next;
+    });
+  }, []);
+
+  const unhideTemplate = useCallback((templateId: string) => {
+    setRejectedTemplateIds((prev) => {
+      const next = prev.filter((id) => id !== templateId);
+      saveRejectedTemplates(next);
+      return next;
+    });
+  }, []);
+
+  const unhideAllTemplates = useCallback(() => {
+    setRejectedTemplateIds([]);
+    saveRejectedTemplates([]);
+  }, []);
+
   // ── Reset ──
   const reset = useCallback(() => {
     setAlbumType('standard');
@@ -533,6 +592,9 @@ export function useBuilderState() {
     deletePhotoFromCanvas, bringToFront, sendToBack, duplicateCanvasPhoto,
 
     addTextElement, updateTextElement, deleteTextElement,
+
+    generateAlbum: generateAlbumAction, regenerateAlbum: regenerateAlbumAction,
+    hideTemplate, unhideTemplate, unhideAllTemplates, rejectedTemplateIds,
 
     reset,
   };

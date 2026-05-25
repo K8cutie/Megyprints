@@ -9,7 +9,7 @@ export type LayoutStyle =
   | 'heroSupporting' | 'portraitSingle' | 'collage' | 'collage3'
   | 'trio' | 'asymDuo' | 'panorama' | 'freeform';
 
-export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart';
+export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star';
 
 export interface TemplateSlot {
   id: string;
@@ -20,6 +20,10 @@ export interface TemplateSlot {
   rotation?: number;
   shape?: SlotShape;
   borderRadius?: number;
+  /** Border width in px for overlapping templates */
+  borderWidth?: number;
+  /** Border color for overlapping templates */
+  borderColor?: string;
 }
 
 export interface PageTemplate {

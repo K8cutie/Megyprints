@@ -36,12 +36,15 @@ const TemplatePhase = memo(function TemplatePhase({ actions, onGenerate }: { act
       onSelect={actions.selectTemplate}
       onBack={() => actions.setPhase('setup')}
       onGenerate={onGenerate}
+      rejectedIds={actions.rejectedTemplateIds}
+      onHideTemplate={actions.hideTemplate}
+      onUnhideAll={actions.unhideAllTemplates}
     />
   );
 });
 
-const EditPhase = memo(function EditPhase({ actions }: { actions: ReturnType<typeof useBuilderState> }) {
-  return <BuilderEdit actions={actions} />;
+const EditPhase = memo(function EditPhase({ actions, onRegenerate }: { actions: ReturnType<typeof useBuilderState>; onRegenerate: () => void }) {
+  return <BuilderEdit actions={actions} onRegenerate={onRegenerate} />;
 });
 
 const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions: ReturnType<typeof useBuilderState>; onOrder: () => void }) {
@@ -64,7 +67,12 @@ export default function Builder() {
   const [errorKey, setErrorKey] = useState(0);
 
   const handleGenerate = useCallback(() => {
+    actions.generateAlbum();
     actions.setPhase('edit');
+  }, [actions]);
+
+  const handleRegenerate = useCallback(() => {
+    actions.regenerateAlbum();
   }, [actions]);
 
   const handleReset = useCallback(() => {
@@ -133,7 +141,7 @@ export default function Builder() {
             {actions.phase === 'edit' && (
               <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="h-full">
-                <EditPhase actions={actions} />
+                <EditPhase actions={actions} onRegenerate={handleRegenerate} />
               </motion.div>
             )}
 

@@ -1,495 +1,197 @@
 import type { PageTemplate, TemplateSlot } from './types';
 
 /** ═══════════════════════════════════════════════════════════
- *  ASPECT-RATIO-CONSTRAINED TEMPLATES
+ *  20 PREMIUM TEMPLATES — max 5 slots each
  *
- *  Box-shaped slots use standard photo ratios so photos fit
- *  without stretching. Round slots ignore aspect ratio.
- *
- *  Portrait pages → portrait-oriented photo slots
- *  Landscape pages → landscape-oriented photo slots
+ *  Overlapping templates use borderWidth + borderColor so
+ *  each photo shows a crisp edge where it overlaps another.
  *  ═══════════════════════════════════════════════════════════ */
 
 let slotCounter = 0;
 
-/** Create a template slot. For rectangle/rounded shapes, the height is
- *  auto-computed from width × aspectRatio to preserve photo proportions.
- *
- *  aspectRatio = height / width  (so portrait > 1, landscape < 1)
- *    portrait ratios:  '4:5' (1.25) | '3:4' (1.33) | '2:3' (1.50)
- *    landscape ratios: '5:4' (0.80) | '4:3' (0.75) | '3:2' (0.67)
- *    square:           '1:1' (1.00)
- *    panorama:         '16:9' (0.56) | '2:1' (0.50)
- *    free:             'free' (use raw height, no constraint)
- */
-const RATIOS: Record<string, number> = {
-  '4:5': 5 / 4,   // portrait  (1.25)
-  '3:4': 4 / 3,   // portrait  (1.33)
-  '2:3': 3 / 2,   // portrait  (1.50)
-  '1:1': 1,       // square    (1.00)
-  '3:2': 2 / 3,   // landscape (0.67)
-  '4:3': 3 / 4,   // landscape (0.75)
-  '5:4': 4 / 5,   // landscape (0.80)
-  '16:9': 9 / 16, // wide      (0.56)
-  '2:1': 1 / 2,   // very wide (0.50)
-};
-
+/** Helper: create a slot. */
 function s(
   x: number, y: number,
-  w: number, hOrRatio: number | string,
+  w: number, h: number,
   opts: Partial<Omit<TemplateSlot, 'id' | 'x' | 'y' | 'width' | 'height'>> = {},
 ): TemplateSlot {
   slotCounter += 1;
-  const { aspectRatio: ar, ...restOpts } = opts as any;
-
-  let height: number;
-
-  if (typeof hOrRatio === 'string' && RATIOS[hOrRatio]) {
-    // hOrRatio is an aspect-ratio label, height = width × ratio
-    const ratio = RATIOS[hOrRatio];
-    height = w * ratio;
-  } else if (typeof hOrRatio === 'number') {
-    height = hOrRatio;
-  } else {
-    height = w; // default square
-  }
-
-  return { id: `s${slotCounter}`, x, y, width: w, height, shape: 'rectangle', ...restOpts };
+  return { id: `s${slotCounter}`, x, y, width: w, height: h, ...opts };
 }
 
+/** Helper: create a template. */
 function t(id: string, name: string, category: PageTemplate['category'], slots: TemplateSlot[]): PageTemplate {
   return { id, name, category, slotCount: slots.length, slots };
 }
 
-const P = 3;    // padding
-const G = 2.5;  // gap
+/** White overlap border — used on all intentionally overlapping templates */
+const OB = { borderWidth: 4, borderColor: '#FFFFFF' };
 
-/* ── SINGLE (1 photo) — aspect ratio adapts to page orientation ── */
-const SINGLE: PageTemplate[] = [
-  t('s1',  'Full Page',        'single', [s(0, 0, 100, 'free')]),
-  t('s2',  'Centered Square',  'single', [s(20, 5, 60, '1:1', { shape: 'rounded', borderRadius: 8 })]),
-  t('s3',  'Portrait Frame',   'single', [s(15, 5, 70, '3:4', { shape: 'rounded', borderRadius: 6 })]),
-  t('s4',  'Landscape Wide',   'single', [s(5, 15, 90, '4:3')]),
-  t('s5',  'Circle Hero',      'single', [s(10, 5, 80, '1:1', { shape: 'circle' })]),
-];
+/* ── 01: FULL PAGE (1) ────────────────────────────────────── */
+const T01 = t('t01', 'Full Page', 'single', [
+  s(0, 0, 100, 100),
+]);
 
-/* ── DUO (2 photos) ── */
-const DUO: PageTemplate[] = [
-  t('d1',  'Side by Side',     'duo', [
-    s(P, P, 50-G/2-P, '3:4'),
-    s(50+G/2, P, 50-G/2-P, '3:4'),
-  ]),
-  t('d2',  'Stacked',          'duo', [
-    s(P, P, 100-P*2, '4:3'),
-    s(P, 50+G/2, 100-P*2, '4:3'),
-  ]),
-  t('d3',  'Left Tall + Right','duo', [
-    s(P, P, 45, '2:3'),
-    s(50, P, 50-P, '2:3'),
-  ]),
-  t('d4',  'Right Tall + Left','duo', [
-    s(P, P, 50-P, '2:3'),
-    s(55, P, 45, '2:3'),
-  ]),
-  t('d5',  'Top Wide + Bottom','duo', [
-    s(P, P, 100-P*2, '16:9'),
-    s(P, 52, 100-P*2, '4:3'),
-  ]),
-  t('d6',  'Left Wide + Tall', 'duo', [
-    s(P, P, 55, '3:2'),
-    s(60, P, 40-P, '3:4'),
-  ]),
-  t('d7',  'Overlapping Duo',  'duo', [
-    s(5, 5, 55, '3:4', { shape: 'rounded', borderRadius: 6 }),
-    s(35, 10, 60, '3:4', { shape: 'rounded', borderRadius: 6 }),
-  ]),
-  t('d8',  'Circle + Square',  'duo', [
-    s(5, 10, 45, '1:1', { shape: 'circle' }),
-    s(55, 10, 40, '4:3'),
-  ]),
-  t('d9',  'Oval Pair',        'duo', [
-    s(5, 15, 42, '3:4', { shape: 'oval' }),
-    s(53, 15, 42, '3:4', { shape: 'oval' }),
-  ]),
-  t('d10', 'Wide + Square',    'duo', [
-    s(P, P, 60, '16:9'),
-    s(65, P, 35-P, '1:1'),
-  ]),
-];
+/* ── 02: POLAROID DUO (2) ───────────────────────────────────
+   Two polaroid-style frames, slightly angled, with white borders */
+const T02 = t('t02', 'Polaroid Duo', 'duo', [
+  s(5, 8, 42, 52, { rotation: -4, ...OB }),
+  s(35, 22, 42, 52, { rotation: 5, ...OB }),
+]);
 
-/* ── GRID (3–12 photos) ── */
-const GRID: PageTemplate[] = [
-  // 3-photo grids
-  t('g3a', '3 — Row of Portraits', 'grid', [
-    s(P, P, 33.3-G, '3:4'),
-    s(33.3+G/2, P, 33.3-G, '3:4'),
-    s(66.6+G/2, P, 33.4-G, '3:4'),
-  ]),
-  t('g3b', '3 — L-Shape',      'grid', [
-    s(P, P, 60, '4:3'),
-    s(65, P, 35-P, '3:4'),
-    s(P, 65, 100-P*2, '16:9'),
-  ]),
-  t('g3c', '3 — Two Top One Bottom','grid', [
-    s(P, P, 50-G/2-P, '1:1'),
-    s(50+G/2, P, 50-G/2-P, '1:1'),
-    s(P, 52, 100-P*2, '16:9'),
-  ]),
+/* ── 03: POLAROID TRIO (3) ──────────────────────────────────
+   Three polaroids overlapping scrapbook-style */
+const T03 = t('t03', 'Polaroid Trio', 'duo', [
+  s(5, 5, 38, 48, { rotation: -6, ...OB }),
+  s(30, 18, 38, 48, { rotation: 3, ...OB }),
+  s(18, 48, 38, 48, { rotation: -2, ...OB }),
+]);
 
-  // 4-photo grids
-  t('g4a', '4 — 2x2 Portraits', 'grid', [
-    s(P, P, 50-G/2-P, '3:4'),
-    s(50+G/2, P, 50-G/2-P, '3:4'),
-    s(P, 50+G/2, 50-G/2-P, '3:4'),
-    s(50+G/2, 50+G/2, 50-G/2-P, '3:4'),
-  ]),
-  t('g4b', '4 — 2x2 Squares',  'grid', [
-    s(P, P, 50-G/2-P, '1:1'),
-    s(50+G/2, P, 50-G/2-P, '1:1'),
-    s(P, 50+G/2, 50-G/2-P, '1:1'),
-    s(50+G/2, 50+G/2, 50-G/2-P, '1:1'),
-  ]),
-  t('g4c', '4 — 2x2 Circles',  'grid', [
-    s(P, P, 50-G/2-P, '1:1', { shape: 'circle' }),
-    s(50+G/2, P, 50-G/2-P, '1:1', { shape: 'circle' }),
-    s(P, 50+G/2, 50-G/2-P, '1:1', { shape: 'circle' }),
-    s(50+G/2, 50+G/2, 50-G/2-P, '1:1', { shape: 'circle' }),
-  ]),
-  t('g4d', '4 — Left Portrait + 3 Right','grid', [
-    s(P, P, 48, '2:3'),
-    s(52, P, 48-P, '4:3'),
-    s(52, 34, 48-P, '4:3'),
-    s(52, 68, 48-P, '4:3'),
-  ]),
-  t('g4e', '4 — Top Landscape + 3 Bottom','grid', [
-    s(P, P, 100-P*2, '16:9'),
-    s(P, 52, 31.5, '1:1'),
-    s(34, 52, 31.5, '1:1'),
-    s(68, 52, 31.5, '1:1'),
-  ]),
+/* ── 04: OVERLAPPING DUO (2) ────────────────────────────────
+   Two large photos with dramatic diagonal overlap */
+const T04 = t('t04', 'Overlapping Duo', 'duo', [
+  s(3, 3, 65, 70, { rotation: -2, ...OB }),
+  s(32, 28, 65, 70, { rotation: 3, ...OB }),
+]);
 
-  // 6-photo grids
-  t('g6a', '6 — 2x3 Portraits', 'grid', [
-    s(P, P, 33.3-G, '3:4'),
-    s(33.3+G/2, P, 33.3-G, '3:4'),
-    s(66.6+G/2, P, 33.4-G, '3:4'),
-    s(P, 50+G/2, 33.3-G, '3:4'),
-    s(33.3+G/2, 50+G/2, 33.3-G, '3:4'),
-    s(66.6+G/2, 50+G/2, 33.4-G, '3:4'),
-  ]),
-  t('g6b', '6 — 3x2 Squares',  'grid', [
-    s(P, P, 33.3-G, '1:1'),
-    s(33.3+G/2, P, 33.3-G, '1:1'),
-    s(66.6+G/2, P, 33.4-G, '1:1'),
-    s(P, 50+G/2, 33.3-G, '1:1'),
-    s(33.3+G/2, 50+G/2, 33.3-G, '1:1'),
-    s(66.6+G/2, 50+G/2, 33.4-G, '1:1'),
-  ]),
-  t('g6c', '6 — Left Portrait + 5 Small','grid', [
-    s(P, P, 48, '2:3'),
-    s(52, P, 48-P, '4:3'),
-    s(52, 34, 48-P, '4:3'),
-    s(52, 52, 48-P, '4:3'),
-    s(52, 70, 48-P, '4:3'),
-    s(52, 88, 48-P, '4:3'),
-  ]),
+/* ── 05: CASCADE TRIO (3) ───────────────────────────────────
+   Three photos cascading down-right with visible borders */
+const T05 = t('t05', 'Cascade Trio', 'collage', [
+  s(3, 3, 55, 38, { ...OB }),
+  s(30, 32, 55, 38, { ...OB }),
+  s(8, 60, 55, 38, { ...OB }),
+]);
 
-  // 9-photo grid
-  t('g9a', '9 — 3x3 Squares',  'grid', [
-    s(P, P, 33.3-G, '1:1'),
-    s(33.3+G/2, P, 33.3-G, '1:1'),
-    s(66.6+G/2, P, 33.4-G, '1:1'),
-    s(P, 33.3+G/2, 33.3-G, '1:1'),
-    s(33.3+G/2, 33.3+G/2, 33.3-G, '1:1'),
-    s(66.6+G/2, 33.3+G/2, 33.4-G, '1:1'),
-    s(P, 66.6+G/2, 33.3-G, '1:1'),
-    s(33.3+G/2, 66.6+G/2, 33.3-G, '1:1'),
-    s(66.6+G/2, 66.6+G/2, 33.4-G, '1:1'),
-  ]),
+/* ── 06: HERO + 2 ACCENT (3) ────────────────────────────────
+   One large hero + two small overlapping accents */
+const T06 = t('t06', 'Hero + Accents', 'hero', [
+  s(3, 3, 94, 60),
+  s(55, 55, 40, 30, { ...OB }),
+  s(3, 68, 35, 28, { ...OB }),
+]);
 
-  // 12-photo grid
-  t('g12', '12 — 3x4 Squares',  'grid', [
-    s(P, P, 33.3-G, '1:1'),
-    s(33.3+G/2, P, 33.3-G, '1:1'),
-    s(66.6+G/2, P, 33.4-G, '1:1'),
-    s(P, 25+G/2, 33.3-G, '1:1'),
-    s(33.3+G/2, 25+G/2, 33.3-G, '1:1'),
-    s(66.6+G/2, 25+G/2, 33.4-G, '1:1'),
-    s(P, 50+G/2, 33.3-G, '1:1'),
-    s(33.3+G/2, 50+G/2, 33.3-G, '1:1'),
-    s(66.6+G/2, 50+G/2, 33.4-G, '1:1'),
-    s(P, 75+G/2, 33.3-G, '1:1'),
-    s(33.3+G/2, 75+G/2, 33.3-G, '1:1'),
-    s(66.6+G/2, 75+G/2, 33.4-G, '1:1'),
-  ]),
-];
+/* ── 07: CIRCLE HERO (3) ────────────────────────────────────
+   Large centered circle + two side rectangles */
+const T07 = t('t07', 'Circle Hero', 'special', [
+  s(15, 5, 70, 70, { shape: 'circle' }),
+  s(3, 78, 45, 20),
+  s(52, 78, 45, 20),
+]);
 
-/* ── HERO (1 large + supporting) ── */
-const HERO: PageTemplate[] = [
-  t('h1',  'Hero Left + 2 Right',  'hero', [
-    s(P, P, 55, '3:4'),
-    s(60, P, 40-P, '1:1'),
-    s(60, 50+G/2, 40-P, '1:1'),
-  ]),
-  t('h2',  'Hero Right + 2 Left',  'hero', [
-    s(P, P, 40-P, '1:1'),
-    s(P, 50+G/2, 40-P, '1:1'),
-    s(45, P, 55, '3:4'),
-  ]),
-  t('h3',  'Hero Top + 3 Bottom',   'hero', [
-    s(P, P, 100-P*2, '16:9'),
-    s(P, 52, 33.3-G, '1:1'),
-    s(33.3+G/2, 52, 33.3-G, '1:1'),
-    s(66.6+G/2, 52, 33.4-G, '1:1'),
-  ]),
-  t('h4',  'Hero Bottom + 3 Top',   'hero', [
-    s(P, P, 33.3-G, '1:1'),
-    s(33.3+G/2, P, 33.3-G, '1:1'),
-    s(66.6+G/2, P, 33.4-G, '1:1'),
-    s(P, 45, 100-P*2, '16:9'),
-  ]),
-  t('h5',  'Hero Left + 4 Right',   'hero', [
-    s(P, P, 45, '3:4'),
-    s(50, P, 50-G/2, '1:1'),
-    s(75+G/2, P, 25-G, '1:1'),
-    s(50, 50+G/2, 50-G/2, '1:1'),
-    s(75+G/2, 50+G/2, 25-G, '1:1'),
-  ]),
-  t('h6',  'Hero Top Wide + 4',     'hero', [
-    s(P, P, 100-P*2, '16:9'),
-    s(P, 52, 25-G, '4:3'),
-    s(25+G/2, 52, 25-G, '4:3'),
-    s(50+G/2, 52, 25-G, '4:3'),
-    s(75+G/2, 52, 25-G, '4:3'),
-  ]),
-  t('h7',  'Hero Top + 2 Bottom Wide','hero', [
-    s(P, P, 100-P*2, '16:9'),
-    s(P, 52, 50-G/2-P, '3:2'),
-    s(50+G/2, 52, 50-G/2-P, '3:2'),
-  ]),
-];
+/* ── 08: HEART FRAME (3) ────────────────────────────────────
+   Heart-shaped center photo + two side portraits */
+const T08 = t('t08', 'Heart Frame', 'special', [
+  s(20, 8, 60, 55, { shape: 'heart', ...OB }),
+  s(3, 68, 45, 28),
+  s(52, 68, 45, 28),
+]);
 
-/* ── MASONRY (uneven, artistic) ── */
-const MASONRY: PageTemplate[] = [
-  t('m1',  'Masonry 2-Column',       'masonry', [
-    s(P, P, 50-G/2-P, '4:3'),
-    s(50+G/2, P, 50-G/2-P, '3:4'),
-    s(P, 50+G/2, 50-G/2-P, '3:4'),
-    s(50+G/2, 50+G/2, 50-G/2-P, '4:3'),
-  ]),
-  t('m2',  'Masonry 3-Column',       'masonry', [
-    s(P, P, 33.3-G, '3:4'),
-    s(33.3+G/2, P, 33.3-G, '4:3'),
-    s(66.6+G/2, P, 33.4-G, '3:4'),
-    s(P, 50+G/2, 33.3-G, '4:3'),
-    s(33.3+G/2, 50+G/2, 33.3-G, '3:4'),
-    s(66.6+G/2, 50+G/2, 33.4-G, '4:3'),
-  ]),
-  t('m3',  'Masonry Big Small',      'masonry', [
-    s(P, P, 65, '4:3'),
-    s(68, P, 32-P, '1:1'),
-    s(68, 34, 32-P, '1:1'),
-    s(P, 68, 32, '1:1'),
-    s(34, 68, 32, '1:1'),
-    s(68, 68, 32-P, '1:1'),
-  ]),
-  t('m4',  'Masonry Cascade',        'masonry', [
-    s(P, P, 30, '3:4'),
-    s(33, P, 34, '4:3'),
-    s(68, P, 32-P, '3:4'),
-    s(P, 34, 30, '4:3'),
-    s(33, 47, 34, '3:4'),
-    s(68, 34, 32-P, '4:3'),
-    s(P, 68, 30, '3:4'),
-    s(33, 68, 34, '4:3'),
-    s(68, 68, 32-P, '3:4'),
-  ]),
-];
+/* ── 09: STAR BURST (5) ─────────────────────────────────────
+   Central star + 4 tiny corner accents */
+const T09 = t('t09', 'Star Burst', 'special', [
+  s(25, 20, 50, 50, { shape: 'star', ...OB }),
+  s(3, 3, 18, 18),
+  s(79, 3, 18, 18),
+  s(3, 79, 18, 18),
+  s(79, 79, 18, 18),
+]);
 
-/* ── STRIP (horizontal/vertical) ── */
-const STRIP: PageTemplate[] = [
-  t('st1', '2 Panoramas',            'strip', [
-    s(P, P, 100-P*2, '2:1'),
-    s(P, 50+G/2, 100-P*2, '2:1'),
-  ]),
-  t('st2', '3 Panoramas',            'strip', [
-    s(P, P, 100-P*2, '16:9'),
-    s(P, 33.3+G/2, 100-P*2, '16:9'),
-    s(P, 66.6+G/2, 100-P*2, '16:9'),
-  ]),
-  t('st3', '3 Landscapes',           'strip', [
-    s(P, P, 100-P*2, '3:2'),
-    s(P, 33.3+G/2, 100-P*2, '3:2'),
-    s(P, 66.6+G/2, 100-P*2, '3:2'),
-  ]),
-  t('st4', '2 Vertical Strips',      'strip', [
-    s(P, P, 50-G/2-P, '3:4'),
-    s(50+G/2, P, 50-G/2-P, '3:4'),
-  ]),
-  t('st5', 'Filmstrip 5',            'strip', [
-    s(P, P, 100-P*2, '3:2'),
-    s(P, 34, 20-G, '4:3'),
-    s(20+G/2, 34, 20-G, '4:3'),
-    s(40+G/2, 34, 20-G, '4:3'),
-    s(60+G/2, 34, 20-G, '4:3'),
-    s(80+G/2, 34, 20-G, '4:3'),
-  ]),
-];
+/* ── 10: EDITORIAL SPLIT (2) ────────────────────────────────
+   Tall + short editorial columns */
+const T10 = t('t10', 'Editorial Split', 'duo', [
+  s(3, 3, 46, 94),
+  s(51, 3, 46, 94),
+]);
 
-/* ── SPECIAL (shapes, creative) ── */
-const SPECIAL: PageTemplate[] = [
-  t('sp1', 'Circle Grid',            'special', [
-    s(P, P, 33.3-G, '1:1', { shape: 'circle' }),
-    s(33.3+G/2, P, 33.3-G, '1:1', { shape: 'circle' }),
-    s(66.6+G/2, P, 33.4-G, '1:1', { shape: 'circle' }),
-    s(P, 33.3+G/2, 33.3-G, '1:1', { shape: 'circle' }),
-    s(33.3+G/2, 33.3+G/2, 33.3-G, '1:1', { shape: 'circle' }),
-    s(66.6+G/2, 33.3+G/2, 33.4-G, '1:1', { shape: 'circle' }),
-    s(P, 66.6+G/2, 33.3-G, '1:1', { shape: 'circle' }),
-    s(33.3+G/2, 66.6+G/2, 33.3-G, '1:1', { shape: 'circle' }),
-    s(66.6+G/2, 66.6+G/2, 33.4-G, '1:1', { shape: 'circle' }),
-  ]),
-  t('sp2', 'Oval Duo',               'special', [
-    s(5, 10, 42, '3:4', { shape: 'oval' }),
-    s(53, 10, 42, '3:4', { shape: 'oval' }),
-  ]),
-  t('sp3', 'Rounded 2x3',            'special', [
-    s(P, P, 33.3-G, '1:1', { shape: 'rounded', borderRadius: 12 }),
-    s(33.3+G/2, P, 33.3-G, '1:1', { shape: 'rounded', borderRadius: 12 }),
-    s(66.6+G/2, P, 33.4-G, '1:1', { shape: 'rounded', borderRadius: 12 }),
-    s(P, 33.3+G/2, 33.3-G, '1:1', { shape: 'rounded', borderRadius: 12 }),
-    s(33.3+G/2, 33.3+G/2, 33.3-G, '1:1', { shape: 'rounded', borderRadius: 12 }),
-    s(66.6+G/2, 33.3+G/2, 33.4-G, '1:1', { shape: 'rounded', borderRadius: 12 }),
-  ]),
-  t('sp4', 'Circle Hero + Grid',     'special', [
-    s(5, 5, 50, '1:1', { shape: 'circle' }),
-    s(55, P, 45-P, '1:1'),
-    s(55, 33, 45-P, '1:1'),
-    s(55, 61, 45-P, '1:1'),
-  ]),
-  t('sp5', 'Overlapping Rounded',    'special', [
-    s(5, 5, 50, '4:3', { shape: 'rounded', borderRadius: 15 }),
-    s(35, 25, 60, '4:3', { shape: 'rounded', borderRadius: 15 }),
-    s(15, 55, 50, '4:3', { shape: 'rounded', borderRadius: 15 }),
-  ]),
-  t('sp6', 'Polaroid Grid',          'special', [
-    s(P, P, 30, '1:1', { shape: 'rounded', borderRadius: 4 }),
-    s(35, P, 30, '1:1', { shape: 'rounded', borderRadius: 4 }),
-    s(68, P, 32-P, '1:1', { shape: 'rounded', borderRadius: 4 }),
-    s(P, 35, 30, '1:1', { shape: 'rounded', borderRadius: 4 }),
-    s(35, 35, 30, '1:1', { shape: 'rounded', borderRadius: 4 }),
-    s(68, 35, 32-P, '1:1', { shape: 'rounded', borderRadius: 4 }),
-    s(P, 68, 30, '1:1', { shape: 'rounded', borderRadius: 4 }),
-    s(35, 68, 30, '1:1', { shape: 'rounded', borderRadius: 4 }),
-    s(68, 68, 32-P, '1:1', { shape: 'rounded', borderRadius: 4 }),
-  ]),
-];
+/* ── 11: SCRAPBOOK CLUSTER (4) ──────────────────────────────
+   4 photos clustered with slight rotations & borders */
+const T11 = t('t11', 'Scrapbook Cluster', 'collage', [
+  s(3, 3, 48, 45, { rotation: -2, ...OB }),
+  s(49, 5, 48, 45, { rotation: 3, ...OB }),
+  s(5, 50, 48, 45, { rotation: 2, ...OB }),
+  s(49, 50, 48, 45, { rotation: -3, ...OB }),
+]);
 
-/* ── COLLAGE (overlapping, artistic) ── */
-const COLLAGE: PageTemplate[] = [
-  t('c1',  'Collage Overlap 3',      'collage', [
-    s(5, 5, 55, '4:3', { rotation: -3 }),
-    s(40, 15, 55, '4:3', { rotation: 4 }),
-    s(20, 45, 55, '4:3', { rotation: -2 }),
-  ]),
-  t('c2',  'Collage Scatter',        'collage', [
-    s(5, 5, 35, '1:1', { rotation: -8 }),
-    s(40, 10, 30, '1:1', { rotation: 12 }),
-    s(70, 5, 28, '1:1', { rotation: -5 }),
-    s(15, 45, 40, '3:4', { rotation: 6 }),
-    s(55, 50, 40, '3:4', { rotation: -10 }),
-  ]),
-  t('c3',  'Collage Polaroids',      'collage', [
-    s(5, 5, 40, '1:1', { rotation: -8, shape: 'rounded', borderRadius: 3 }),
-    s(40, 10, 40, '1:1', { rotation: 5, shape: 'rounded', borderRadius: 3 }),
-    s(20, 50, 40, '1:1', { rotation: 3, shape: 'rounded', borderRadius: 3 }),
-    s(55, 45, 40, '1:1', { rotation: -4, shape: 'rounded', borderRadius: 3 }),
-  ]),
-  t('c4',  'Collage Mosaic',         'collage', [
-    s(P, P, 40, '1:1'),
-    s(42, P, 30, '1:1'),
-    s(73, P, 27-P, '1:1'),
-    s(P, 42, 30, '1:1'),
-    s(32, 42, 35, '4:3'),
-    s(67, 33, 33-P, '3:4'),
-    s(P, 74, 40, '3:4'),
-    s(42, 79, 30, '3:4'),
-    s(73, 69, 27-P, '4:3'),
-  ]),
-  t('c5',  'Collage Scrapbook',      'collage', [
-    s(5, 5, 50, '4:3', { rotation: -3 }),
-    s(45, 5, 50, '4:3', { rotation: 2 }),
-    s(5, 40, 33, '3:4', { rotation: 4 }),
-    s(38, 45, 33, '3:4', { rotation: -5 }),
-    s(71, 42, 29, '3:4', { rotation: 3 }),
-    s(5, 70, 95, '3:4'),
-  ]),
-];
+/* ── 12: FILM STRIP (3) ─────────────────────────────────────
+   3 horizontal panoramic slots with gaps */
+const T12 = t('t12', 'Film Strip', 'strip', [
+  s(3, 5, 94, 28),
+  s(3, 36, 94, 28),
+  s(3, 67, 94, 28),
+]);
 
-/* ── MIXED ── */
-const MIXED: PageTemplate[] = [
-  t('x1',  'Grid + Hero Bottom',     'mixed', [
-    s(P, P, 33.3-G, '3:4'),
-    s(33.3+G/2, P, 33.3-G, '3:4'),
-    s(66.6+G/2, P, 33.4-G, '3:4'),
-    s(P, 52, 33.3-G, '3:4'),
-    s(33.3+G/2, 52, 33.3-G, '3:4'),
-    s(66.6+G/2, 52, 33.4-G, '3:4'),
-    s(P, 72, 100-P*2, '16:9'),
-  ]),
-  t('x2',  'Hero + Grid',            'mixed', [
-    s(P, P, 100-P*2, '16:9'),
-    s(P, 52, 33.3-G, '1:1'),
-    s(33.3+G/2, 52, 33.3-G, '1:1'),
-    s(66.6+G/2, 52, 33.4-G, '1:1'),
-  ]),
-  t('x3',  '4 Top + Hero Bottom',    'mixed', [
-    s(P, P, 25-G, '4:3'),
-    s(25+G/2, P, 25-G, '4:3'),
-    s(50+G/2, P, 25-G, '4:3'),
-    s(75+G/2, P, 25-G, '4:3'),
-    s(P, 48, 100-P*2, '16:9'),
-  ]),
-  t('x4',  'Big + Grid Right',       'mixed', [
-    s(P, P, 48, '4:3'),
-    s(52, P, 48-P, '1:1'),
-    s(52, 33, 48-P, '1:1'),
-    s(52, 66, 48-P, '1:1'),
-  ]),
-  t('x5',  'Magazine Spread',        'mixed', [
-    s(P, P, 60, '4:3'),
-    s(65, P, 35-P, '3:4'),
-    s(65, 48, 35-P, '3:4'),
-    s(P, 68, 48, '3:4'),
-    s(52, 68, 48-P, '4:3'),
-  ]),
-  t('x6',  'Photo Wall',             'mixed', [
-    s(5, 5, 30, '1:1', { rotation: -3 }),
-    s(35, 8, 25, '1:1', { rotation: 2 }),
-    s(60, 3, 38, '1:1', { rotation: -2 }),
-    s(5, 35, 35, '1:1', { rotation: 3 }),
-    s(40, 38, 30, '1:1', { rotation: -4 }),
-    s(70, 33, 30, '1:1', { rotation: 2 }),
-    s(5, 65, 28, '1:1', { rotation: -2 }),
-    s(33, 63, 35, '1:1', { rotation: 3 }),
-    s(68, 65, 32, '1:1', { rotation: -3 }),
-  ]),
-];
+/* ── 13: ASYMMETRIC TRIO (3) ────────────────────────────────
+   3 photos of different sizes — artistic magazine layout */
+const T13 = t('t13', 'Asymmetric Trio', 'mixed', [
+  s(3, 3, 55, 55, { ...OB }),
+  s(60, 3, 37, 40, { ...OB }),
+  s(60, 46, 37, 51, { ...OB }),
+]);
+
+/* ── 14: DIAMOND CENTER (3) ─────────────────────────────────
+   Rotated square (diamond) center + 2 side rectangles */
+const T14 = t('t14', 'Diamond Center', 'special', [
+  s(25, 10, 50, 50, { rotation: 45, ...OB }),
+  s(3, 65, 45, 30),
+  s(52, 65, 45, 30),
+]);
+
+/* ── 15: DUO VERTICAL + CIRCLE (3) ──────────────────────────
+   2 vertical photos + 1 circle accent overlapping */
+const T15 = t('t15', 'Duo + Circle Accent', 'mixed', [
+  s(3, 3, 46, 94),
+  s(51, 3, 46, 94),
+  s(35, 38, 30, 30, { shape: 'circle', ...OB }),
+]);
+
+/* ── 16: OVERLAPPING WIDE (2) ───────────────────────────────
+   2 wide landscape photos with dramatic overlap */
+const T16 = t('t16', 'Overlapping Wide', 'duo', [
+  s(3, 10, 94, 38, { ...OB }),
+  s(3, 48, 94, 38, { ...OB }),
+]);
+
+/* ── 17: CIRCLE CLUSTER (3) ─────────────────────────────────
+   3 circles arranged in a triangle with slight overlap */
+const T17 = t('t17', 'Circle Cluster', 'special', [
+  s(25, 3, 50, 50, { shape: 'circle', ...OB }),
+  s(3, 48, 50, 50, { shape: 'circle', ...OB }),
+  s(47, 48, 50, 50, { shape: 'circle', ...OB }),
+]);
+
+/* ── 18: HEART DUO (3) ──────────────────────────────────────
+   2 hearts side by side + 1 base rectangle */
+const T18 = t('t18', 'Heart Duo', 'special', [
+  s(5, 5, 44, 48, { shape: 'heart', ...OB }),
+  s(51, 5, 44, 48, { shape: 'heart', ...OB }),
+  s(15, 58, 70, 38),
+]);
+
+/* ── 19: CARD STACK (3) ─────────────────────────────────────
+   3 photos stacked like a deck of cards with rotation */
+const T19 = t('t19', 'Card Stack', 'collage', [
+  s(10, 8, 80, 50, { rotation: -3, ...OB }),
+  s(13, 18, 80, 50, { rotation: 1, ...OB }),
+  s(7, 28, 80, 50, { rotation: 4, ...OB }),
+]);
+
+/* ── 20: MAGAZINE COVER (3) ─────────────────────────────────
+   1 large + 2 small — asymmetric editorial layout */
+const T20 = t('t20', 'Magazine Cover', 'hero', [
+  s(3, 3, 62, 70, { ...OB }),
+  s(67, 3, 30, 33),
+  s(67, 40, 30, 33, { ...OB }),
+]);
 
 /* ═══════════════════════════════════════════════════════════
-   ASSEMBLE FULL LIBRARY
+   ASSEMBLE
    ═══════════════════════════════════════════════════════════ */
 
 export const PAGE_TEMPLATES: PageTemplate[] = [
-  ...SINGLE,  // 5
-  ...DUO,     // 10
-  ...GRID,    // 16
-  ...HERO,    // 7
-  ...MASONRY, // 4
-  ...STRIP,   // 5
-  ...SPECIAL, // 6
-  ...COLLAGE, // 5
-  ...MIXED,   // 6
+  T01, T02, T03, T04, T05,
+  T06, T07, T08, T09, T10,
+  T11, T12, T13, T14, T15,
+  T16, T17, T18, T19, T20,
 ];
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
@@ -505,13 +207,11 @@ export function getTemplateById(id: string): PageTemplate | undefined {
 export const TEMPLATE_CATEGORIES: { id: PageTemplate['category']; label: string }[] = [
   { id: 'single', label: 'Single' },
   { id: 'duo', label: 'Duo' },
-  { id: 'grid', label: 'Grid' },
   { id: 'hero', label: 'Hero' },
-  { id: 'masonry', label: 'Masonry' },
-  { id: 'strip', label: 'Strip' },
   { id: 'collage', label: 'Collage' },
-  { id: 'special', label: 'Shapes' },
+  { id: 'strip', label: 'Strip' },
   { id: 'mixed', label: 'Mixed' },
+  { id: 'special', label: 'Shapes' },
 ];
 
-console.log(`[Megy Prints] Loaded ${TEMPLATE_COUNT} aspect-ratio templates`);
+console.log(`[Megy Prints] Loaded ${TEMPLATE_COUNT} premium templates`);
