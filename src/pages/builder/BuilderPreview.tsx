@@ -78,22 +78,17 @@ export default function BuilderPreview({
 
   // Load image dimensions for slot photos so we can match editor scaling
   useEffect(() => {
-    console.log('[Preview] imgDims effect triggered, slotPhotos count:', slotPhotos.length);
     slotPhotos.forEach(({ photoIndex, photo }) => {
-      if (imgDims[photoIndex]) {
-        console.log('[Preview] imgDims already cached for photo', photoIndex, ':', imgDims[photoIndex]);
-        return;
-      }
+      if (imgDims[photoIndex]) return;
       const image = new Image();
       image.onload = () => {
-        console.log('[Preview] Image loaded for photo', photoIndex, ':', image.naturalWidth, 'x', image.naturalHeight);
         setImgDims(prev => {
           if (prev[photoIndex]) return prev;
           return { ...prev, [photoIndex]: { w: image.naturalWidth, h: image.naturalHeight } };
         });
       };
       image.onerror = () => {
-        console.log('[Preview] Image FAILED to load for photo', photoIndex);
+        console.log(`[Preview] Failed to load image dims for photo ${photoIndex}`);
       };
       image.src = photo.previewUrl;
     });
@@ -184,16 +179,6 @@ export default function BuilderPreview({
             const dims = imgDims[photoIndex];
             const hasCustomTransform = slotScale !== 1 || slotOffsetX !== 0 || slotOffsetY !== 0;
 
-            console.log('[Preview] RENDER slot', slotIndex, {
-              photoIndex,
-              slotScale,
-              slotOffsetX,
-              slotOffsetY,
-              hasCustomTransform,
-              dims: dims ? `${dims.w}x${dims.h}` : 'undefined',
-              willUseCustom: !!(dims && hasCustomTransform),
-            });
-
             // If we know image dims and user has zoomed/panned,
             // replicate Fabric.js exact positioning.
             if (dims && hasCustomTransform) {
@@ -205,19 +190,6 @@ export default function BuilderPreview({
               const imgH = dims.h * finalScale * sy;
               const imgLeft = width / 2 + slotOffsetX * sx - imgW / 2;
               const imgTop = height / 2 + slotOffsetY * sy - imgH / 2;
-
-              console.log('[Preview] CUSTOM slot', slotIndex, {
-                slotCanvasW: slotCanvasW.toFixed(1),
-                slotCanvasH: slotCanvasH.toFixed(1),
-                coverScale: coverScale.toFixed(4),
-                finalScale: finalScale.toFixed(4),
-                imgW: imgW.toFixed(1),
-                imgH: imgH.toFixed(1),
-                imgLeft: imgLeft.toFixed(1),
-                imgTop: imgTop.toFixed(1),
-                containerW: width,
-                containerH: height,
-              });
 
               return (
                 <div
@@ -255,7 +227,6 @@ export default function BuilderPreview({
             }
 
             // Fallback: default centered crop
-            console.log('[Preview] FALLBACK slot', slotIndex, '- using object-cover');
             return (
               <div
                 key={`slot-${slot.id}`}
