@@ -1,7 +1,7 @@
 import type { PageTemplate, TemplateSlot } from './types';
 
 /** ═══════════════════════════════════════════════════════════
- *  33 PREMIUM TEMPLATES — max 5 slots each
+ *  20 PREMIUM TEMPLATES — max 5 slots each
  *
  *  Overlapping templates use borderWidth + borderColor so
  *  each photo shows a crisp edge where it overlaps another.
@@ -183,119 +183,6 @@ const T20 = t('t20', 'Magazine Cover', 'hero', [
   s(67, 40, 30, 33, { ...OB }),
 ]);
 
-/* ── 21: BRICK WALL (4) ─────────────────────────────────────
-   Masonry-style 2x2 with different heights — Pinterest feel */
-const T21 = t('t21', 'Brick Wall', 'masonry', [
-  s(3, 3, 46, 42, { ...OB }),
-  s(51, 3, 46, 55, { ...OB }),
-  s(3, 49, 46, 48, { ...OB }),
-  s(51, 61, 46, 36),
-]);
-
-/* ── 22: POLAROID WALL (4) ──────────────────────────────────
-   4 polaroids arranged with rotations, scrapbook wall feel */
-const T22 = t('t22', 'Polaroid Wall', 'collage', [
-  s(5, 5, 40, 40, { rotation: -3, ...OB }),
-  s(50, 8, 40, 40, { rotation: 4, ...OB }),
-  s(8, 52, 40, 40, { rotation: 2, ...OB }),
-  s(48, 50, 40, 40, { rotation: -5, ...OB }),
-]);
-
-/* ── 23: HERO + L-SUPPORT (4) ───────────────────────────────
-   One large hero photo with 3 smaller ones forming an L */
-const T23 = t('t23', 'Hero L-Support', 'hero', [
-  s(3, 3, 60, 70, { ...OB }),
-  s(65, 3, 32, 30, { ...OB }),
-  s(65, 36, 32, 30),
-  s(65, 69, 32, 28),
-]);
-
-/* ── 24: DIAGONAL CASCADE (4) ───────────────────────────────
-   4 photos zig-zagging diagonally down the page */
-const T24 = t('t24', 'Diagonal Cascade', 'collage', [
-  s(3, 3, 55, 30, { ...OB }),
-  s(42, 22, 55, 30, { ...OB }),
-  s(3, 48, 55, 30, { ...OB }),
-  s(42, 67, 55, 30, { ...OB }),
-]);
-
-/* ── 25: MAGAZINE SPREAD (4) ────────────────────────────────
-   Editorial layout — tall portrait left + 3 stacked right */
-const T25 = t('t25', 'Magazine Spread', 'mixed', [
-  s(3, 3, 45, 94),
-  s(51, 3, 46, 28, { ...OB }),
-  s(51, 34, 46, 28, { ...OB }),
-  s(51, 65, 46, 32),
-]);
-
-/* ── 26: HERO + QUARTET (5) ─────────────────────────────────
-   Large hero top-left + 4 supporting photos right and bottom */
-const T26 = t('t26', 'Hero Quartet', 'hero', [
-  s(3, 3, 55, 55, { ...OB }),
-  s(60, 3, 37, 25, { ...OB }),
-  s(60, 31, 37, 25, { ...OB }),
-  s(3, 61, 45, 36, { ...OB }),
-  s(51, 61, 46, 36),
-]);
-
-/* ── 27: WATERFALL 5 (5) ────────────────────────────────────
-   5 photos cascading diagonally like a waterfall */
-const T27 = t('t27', 'Waterfall', 'masonry', [
-  s(3, 3, 45, 26, { ...OB }),
-  s(30, 16, 45, 26, { ...OB }),
-  s(3, 35, 45, 26, { ...OB }),
-  s(30, 50, 45, 26, { ...OB }),
-  s(15, 68, 45, 28, { ...OB }),
-]);
-
-/* ── 28: PINWHEEL (5) ───────────────────────────────────────
-   Center circle + 4 corner accents */
-const T28 = t('t28', 'Pinwheel', 'special', [
-  s(30, 30, 40, 40, { shape: 'circle', ...OB }),
-  s(3, 3, 24, 24),
-  s(73, 3, 24, 24),
-  s(3, 73, 24, 24),
-  s(73, 73, 24, 24),
-]);
-
-/* ── 29: SCRAPBOOK 5 (5) ────────────────────────────────────
-   5 polaroid-style frames with varied rotations */
-const T29 = t('t29', 'Scrapbook Five', 'collage', [
-  s(5, 5, 30, 35, { rotation: -4, ...OB }),
-  s(40, 3, 30, 35, { rotation: 3, ...OB }),
-  s(68, 12, 30, 35, { rotation: -2, ...OB }),
-  s(10, 48, 30, 35, { rotation: 2, ...OB }),
-  s(48, 50, 30, 35, { rotation: -3, ...OB }),
-]);
-
-/* ── 30: EDITORIAL 5 (5) ────────────────────────────────────
-   Tall portrait left + hero top-right + 3 small bottom-right */
-const T30 = t('t30', 'Editorial Five', 'mixed', [
-  s(3, 3, 35, 94),
-  s(41, 3, 56, 45, { ...OB }),
-  s(41, 51, 18, 22, { ...OB }),
-  s(62, 51, 18, 22),
-  s(41, 76, 56, 21),
-]);
-
-/* ── 31: CINEMATIC WIDE (1) ─────────────────────────────────
-   Full-bleed ultra-wide cinematic single photo */
-const T31 = t('t31', 'Cinematic Wide', 'single', [
-  s(0, 15, 100, 70),
-]);
-
-/* ── 32: PORTRAIT TALL (1) ──────────────────────────────────
-   Dramatic tall portrait centered with breathing room */
-const T32 = t('t32', 'Portrait Tall', 'single', [
-  s(20, 3, 60, 94),
-]);
-
-/* ── 33: CIRCLE HERO (1) ────────────────────────────────────
-   Single large circle photo centered on page */
-const T33 = t('t33', 'Circle Hero', 'special', [
-  s(10, 10, 80, 80, { shape: 'circle', ...OB }),
-]);
-
 /* ═══════════════════════════════════════════════════════════
    ASSEMBLE
    ═══════════════════════════════════════════════════════════ */
@@ -305,12 +192,9 @@ export const PAGE_TEMPLATES: PageTemplate[] = [
   T06, T07, T08, T09, T10,
   T11, T12, T13, T14, T15,
   T16, T17, T18, T19, T20,
-  T21, T22, T23, T24, T25,
-  T26, T27, T28, T29, T30,
-  T31, T32, T33,
 ];
 
-export const TEMPLATE_COUNT = PAGE_TEMPLATES.length; // 33 templates total
+export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 
 export function getTemplatesByCategory(category: PageTemplate['category']): PageTemplate[] {
   return PAGE_TEMPLATES.filter((t) => t.category === category);
@@ -327,7 +211,6 @@ export const TEMPLATE_CATEGORIES: { id: PageTemplate['category']; label: string 
   { id: 'collage', label: 'Collage' },
   { id: 'strip', label: 'Strip' },
   { id: 'mixed', label: 'Mixed' },
-  { id: 'masonry', label: 'Masonry' },
   { id: 'special', label: 'Shapes' },
 ];
 

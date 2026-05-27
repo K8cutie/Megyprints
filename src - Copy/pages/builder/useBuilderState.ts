@@ -16,7 +16,7 @@ import {
   DEFAULT_ALBUM_SIZE,
 } from './types';
 import { getTemplateById, PAGE_TEMPLATES } from './pageTemplates';
-import { generateAlbum, regenerateAlbum, generateSinglePage } from './generateAlbum';
+import { generateAlbum, regenerateAlbum } from './generateAlbum';
 
 const STORAGE_KEY = 'megy_builder_state';
 const REJECTED_TEMPLATES_KEY = 'megy_rejected_templates';
@@ -153,7 +153,6 @@ export function useBuilderState() {
   );
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(loadRejectedTemplates);
-  const [preferredSlotCount, setPreferredSlotCount] = useState<number | null>(null);
 
   const currentPage = albumPages[currentPageIndex] ?? albumPages[0] ?? defaultPage();
 
@@ -548,26 +547,16 @@ export function useBuilderState() {
 
   // ── Generate Album ──
   const generateAlbumAction = useCallback(() => {
-    const newPages = generateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, preferredSlotCount ?? undefined);
+    const newPages = generateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds);
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
-  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, preferredSlotCount]);
+  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds]);
 
   const regenerateAlbumAction = useCallback(() => {
-    const newPages = regenerateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, preferredSlotCount ?? undefined);
+    const newPages = regenerateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds);
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
-  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, preferredSlotCount]);
-
-  // ── Generate Current Page Only ──
-  const generateCurrentPage = useCallback(() => {
-    const newPage = generateSinglePage(currentPage, uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, preferredSlotCount ?? undefined);
-    setAlbumPages((prev) => {
-      const next = [...prev];
-      next[currentPageIndex] = newPage;
-      return next;
-    });
-  }, [currentPage, currentPageIndex, uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, preferredSlotCount]);
+  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds]);
 
   // ── Template Rejection ──
   const hideTemplate = useCallback((templateId: string) => {
@@ -605,10 +594,10 @@ export function useBuilderState() {
 
   return {
     phase, albumType, albumSize, uploadedPhotos, selectedTemplate, albumPages,
-    currentPageIndex, currentPage, preferredSlotCount,
+    currentPageIndex, currentPage,
 
     setPhase: goToPhase, setAlbumType, setAlbumSize, addPhotos, removePhoto, replacePhoto,
-    selectTemplate, setPreferredSlotCount,
+    selectTemplate,
 
     addPage, deletePage, duplicatePage, goToPage,
 
@@ -621,7 +610,6 @@ export function useBuilderState() {
     addTextElement, updateTextElement, deleteTextElement,
 
     generateAlbum: generateAlbumAction, regenerateAlbum: regenerateAlbumAction,
-    generateCurrentPage,
     hideTemplate, unhideTemplate, unhideAllTemplates, rejectedTemplateIds,
 
     reset,

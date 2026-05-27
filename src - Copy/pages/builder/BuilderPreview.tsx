@@ -236,7 +236,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             ref={canvasRef}
           >
             {/* ─── SLOT-BASED PHOTOS ─── */}
-            {slotPhotos.map(({ slotIndex, slot, photoIndex, photo }) => {
+            {slotPhotos.map(({ slot, photo }) => {
               // Slot coordinates are percentages (0-100) of the page
               const rawLeft = (slot.x / 100) * singleW;
               const rawTop = (slot.y / 100) * H;

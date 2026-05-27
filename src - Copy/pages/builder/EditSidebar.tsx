@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Images, FileText, Plus, Trash2, Copy, ChevronRight,
-  ChevronLeft, Layers, GripVertical, LayoutGrid, Upload, Sparkles,
+  ChevronLeft, Layers, GripVertical, LayoutGrid, Upload,
 } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, CanvasPhoto, TextElement } from './types';
 import { PAGE_TEMPLATES, TEMPLATE_CATEGORIES } from './pageTemplates';
@@ -29,9 +29,6 @@ interface EditSidebarProps {
   onAutoFill?: () => void;
   onClearAllSlots?: () => void;
   onAddPhotos?: (files: FileList) => void;
-  preferredSlotCount?: number | null;
-  onPreferredSlotCountChange?: (count: number | null) => void;
-  onShuffleLayout?: () => void;
 }
 
 export default function EditSidebar(props: EditSidebarProps) {
@@ -43,14 +40,11 @@ export default function EditSidebar(props: EditSidebarProps) {
     onGoToPage, onAddPage, onDeletePage, onDuplicatePage, onAddText,
     currentTemplateId, onSetTemplate,
     onAutoFill, onClearAllSlots, onAddPhotos,
-    preferredSlotCount, onPreferredSlotCountChange, onShuffleLayout,
   } = props;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [templateCategory, setTemplateCategory] = useState<string>('all');
-
-  const slotOptions = [1, 2, 3, 4, 5];
 
   const tabs = [
     { id: 'photos' as const, label: 'Photos', icon: <Images size={16} /> },
@@ -59,15 +53,9 @@ export default function EditSidebar(props: EditSidebarProps) {
     { id: 'layers' as const, label: 'Layers', icon: <Layers size={16} /> },
   ];
 
-  const filteredTemplates = (() => {
-    let result = templateCategory === 'all'
-      ? PAGE_TEMPLATES
-      : PAGE_TEMPLATES.filter((t) => t.category === templateCategory);
-    if (preferredSlotCount !== undefined && preferredSlotCount !== null) {
-      result = result.filter((t) => t.slotCount === preferredSlotCount);
-    }
-    return result;
-  })();
+  const filteredTemplates = templateCategory === 'all'
+    ? PAGE_TEMPLATES
+    : PAGE_TEMPLATES.filter((t) => t.category === templateCategory);
 
   if (collapsed) {
     return (
@@ -153,46 +141,6 @@ export default function EditSidebar(props: EditSidebarProps) {
                   <FileText size={12} /> Add Text
                 </button>
               </div>
-
-              {/* Slot count filter + Shuffle */}
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <h4 className="text-[10px] font-semibold text-[#2D2D2D] uppercase tracking-wider">Slot Count</h4>
-                  <span className="text-[9px] text-[#9B9B9B]">{PAGE_TEMPLATES.filter(t => preferredSlotCount === undefined || preferredSlotCount === null ? true : t.slotCount === preferredSlotCount).length} match</span>
-                </div>
-                <div className="flex flex-wrap gap-1 mb-2">
-                  <button
-                    onClick={() => onPreferredSlotCountChange?.(null)}
-                    className="px-2 py-0.5 text-[10px] rounded-full font-medium transition-colors"
-                    style={{
-                      backgroundColor: preferredSlotCount === undefined || preferredSlotCount === null ? '#F4C2A1' : '#F0F0F0',
-                      color: preferredSlotCount === undefined || preferredSlotCount === null ? '#fff' : '#6B6B6B',
-                    }}
-                  >
-                    All
-                  </button>
-                  {slotOptions.map((count) => (
-                    <button
-                      key={count}
-                      onClick={() => onPreferredSlotCountChange?.(count)}
-                      className="px-2 py-0.5 text-[10px] rounded-full font-medium transition-colors"
-                      style={{
-                        backgroundColor: preferredSlotCount === count ? '#F4C2A1' : '#F0F0F0',
-                        color: preferredSlotCount === count ? '#fff' : '#6B6B6B',
-                      }}
-                    >
-                      {count} slot{count > 1 ? 's' : ''}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={onShuffleLayout}
-                  className="w-full py-1.5 bg-white border border-[#F4C2A1] text-[#F4C2A1] text-[10px] font-medium rounded-lg hover:bg-[#F4C2A1] hover:text-white flex items-center justify-center gap-1 transition-all"
-                >
-                  <Sparkles size={10} /> Shuffle Layout
-                </button>
-              </div>
-
               <div className="space-y-2">
                 {albumPages.map((page, i) => {
                   /* BUG FIX: count filled slots, not freeform photos */

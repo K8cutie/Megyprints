@@ -29,25 +29,22 @@ const SetupPhase = memo(function SetupPhase({ actions }: { actions: ReturnType<t
   );
 });
 
-const TemplatePhase = memo(function TemplatePhase({ actions, onGenerate, onGenerateFull }: { actions: ReturnType<typeof useBuilderState>; onGenerate: () => void; onGenerateFull?: () => void }) {
+const TemplatePhase = memo(function TemplatePhase({ actions, onGenerate }: { actions: ReturnType<typeof useBuilderState>; onGenerate: () => void }) {
   return (
     <BuilderTemplate
       selected={actions.selectedTemplate}
       onSelect={actions.selectTemplate}
       onBack={() => actions.setPhase('setup')}
       onGenerate={onGenerate}
-      onGenerateFull={onGenerateFull}
       rejectedIds={actions.rejectedTemplateIds}
       onHideTemplate={actions.hideTemplate}
       onUnhideAll={actions.unhideAllTemplates}
-      preferredSlotCount={actions.preferredSlotCount}
-      onPreferredSlotCountChange={actions.setPreferredSlotCount}
     />
   );
 });
 
-const EditPhase = memo(function EditPhase({ actions, onRegenerate, onShuffleLayout }: { actions: ReturnType<typeof useBuilderState>; onRegenerate: () => void; onShuffleLayout?: () => void }) {
-  return <BuilderEdit actions={actions} onRegenerate={onRegenerate} onShuffleLayout={onShuffleLayout} />;
+const EditPhase = memo(function EditPhase({ actions, onRegenerate }: { actions: ReturnType<typeof useBuilderState>; onRegenerate: () => void }) {
+  return <BuilderEdit actions={actions} onRegenerate={onRegenerate} />;
 });
 
 const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions: ReturnType<typeof useBuilderState>; onOrder: () => void }) {
@@ -70,17 +67,8 @@ export default function Builder() {
   const [errorKey, setErrorKey] = useState(0);
 
   const handleGenerate = useCallback(() => {
-    actions.generateCurrentPage();
-    actions.setPhase('edit');
-  }, [actions]);
-
-  const handleGenerateFull = useCallback(() => {
     actions.generateAlbum();
     actions.setPhase('edit');
-  }, [actions]);
-
-  const handleShuffleLayout = useCallback(() => {
-    actions.generateCurrentPage();
   }, [actions]);
 
   const handleRegenerate = useCallback(() => {
@@ -146,14 +134,14 @@ export default function Builder() {
             {actions.phase === 'template' && (
               <motion.div key="template" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.2 }} className="h-full">
-                <TemplatePhase actions={actions} onGenerate={handleGenerate} onGenerateFull={handleGenerateFull} />
+                <TemplatePhase actions={actions} onGenerate={handleGenerate} />
               </motion.div>
             )}
 
             {actions.phase === 'edit' && (
               <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="h-full">
-                <EditPhase actions={actions} onRegenerate={handleRegenerate} onShuffleLayout={handleShuffleLayout} />
+                <EditPhase actions={actions} onRegenerate={handleRegenerate} />
               </motion.div>
             )}
 

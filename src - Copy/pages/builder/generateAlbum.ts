@@ -20,17 +20,12 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 /** Pick templates with dedup — same template won't appear within `window` pages.
- *  Filters out rejected template IDs and optionally by slot count. */
-function pickTemplates(count: number, rejectedIds: Set<string> = new Set(), window = 3, slotCount?: number): typeof PAGE_TEMPLATES {
+ *  Filters out rejected template IDs. */
+function pickTemplates(count: number, rejectedIds: Set<string> = new Set(), window = 3): typeof PAGE_TEMPLATES {
   // Filter out rejected templates
-  let available = PAGE_TEMPLATES.filter((t) => !rejectedIds.has(t.id));
+  const available = PAGE_TEMPLATES.filter((t) => !rejectedIds.has(t.id));
 
-  // Filter by slot count if specified
-  if (slotCount !== undefined) {
-    available = available.filter((t) => t.slotCount === slotCount);
-  }
-
-  // If all templates are rejected or no slot-match, fall back to full set
+  // If all templates are rejected, fall back to full set
   const poolSource = available.length > 0 ? available : PAGE_TEMPLATES;
   const pool = shuffle(poolSource);
   const picked: typeof PAGE_TEMPLATES = [];
@@ -49,14 +44,13 @@ function pickTemplates(count: number, rejectedIds: Set<string> = new Set(), wind
   return picked;
 }
 
-/** Calculate how many pages we need based on photo count.
- *  Ensures we don't create more slots than we have photos. */
+/** Calculate how many pages we need based on photo count */
 function calculatePageCount(photoCount: number): number {
   const avgSlotsPerPage = 3; // rough average across all templates
-  const minPages = 1;
+  const minPages = 5;
   const maxPages = 24;
   const estimated = Math.ceil(photoCount / avgSlotsPerPage);
-  return Math.max(minPages, Math.min(maxPages, estimated));
+  return Math.max(minPages, Math.min(maxPages, estimated + 2));
 }
 
 /** Build a single AlbumPage from a template + slot fills */
@@ -92,8 +86,8 @@ function buildPage(
  *
  *  1. Calculates optimal page count from photo count
  *  2. Picks random templates (deduped — no repeats within 3 pages)
- *  3. Filters out rejected template IDs and slot count preference
- *  4. Distributes photos across template slots — each photo used ONCE max
+ *  3. Filters out rejected template IDs
+ *  4. Distributes photos round-robin across template slots
  *  5. Applies themed backgrounds per page
  */
 export function generateAlbum(
@@ -101,13 +95,12 @@ export function generateAlbum(
   theme: TemplateType,
   albumSize: typeof DEFAULT_ALBUM_SIZE = DEFAULT_ALBUM_SIZE,
   rejectedIds: string[] = [],
-  preferredSlotCount?: number,
 ): AlbumPage[] {
   if (photos.length === 0) return [];
 
   const pageCount = calculatePageCount(photos.length);
   const rejectedSet = new Set(rejectedIds);
-  const templates = pickTemplates(pageCount, rejectedSet, 3, preferredSlotCount);
+  const templates = pickTemplates(pageCount, rejectedSet);
 
   // Shuffle photo indices so distribution is random
   const photoIndices = shuffle(photos.map((_, i) => i));
@@ -118,13 +111,15 @@ export function generateAlbum(
   for (let pageIndex = 0; pageIndex < templates.length; pageIndex++) {
     const template = templates[pageIndex];
 
-    // Fill slots from shuffled photos — NO wrap-around, each photo used once max
+    // Fill slots from shuffled photos (wrap around if we run out)
     const slotFills: (number | null)[] = template.slots.map(() => {
       if (photoIdx < photoIndices.length) {
         return photoIndices[photoIdx++];
       }
-      // Out of photos — leave slot empty
-      return null;
+      // Wrap around: reuse photos from the start
+      const wrappedIdx = photoIdx % photoIndices.length;
+      photoIdx++;
+      return photoIndices[wrappedIdx];
     });
 
     pages.push(buildPage(template, slotFills, theme, pageIndex, albumSize));
@@ -139,70 +134,8 @@ export function regenerateAlbum(
   theme: TemplateType,
   albumSize: typeof DEFAULT_ALBUM_SIZE = DEFAULT_ALBUM_SIZE,
   rejectedIds: string[] = [],
-  preferredSlotCount?: number,
 ): AlbumPage[] {
-  return generateAlbum(photos, theme, albumSize, rejectedIds, preferredSlotCount);
-}
-
-/** Regenerate a SINGLE page with a random matching template.
- *  Preserves existing slot fills when the new template has the same slot count.
- *  Re-fills from uploaded photos when slot count changes. */
-export function generateSinglePage(
-  currentPage: AlbumPage,
-  photos: UploadedPhoto[],
-  theme: TemplateType,
-  albumSize: typeof DEFAULT_ALBUM_SIZE = DEFAULT_ALBUM_SIZE,
-  rejectedIds: string[] = [],
-  preferredSlotCount?: number,
-): AlbumPage {
-  const rejectedSet = new Set(rejectedIds);
-
-  // Find templates matching the preference
-  let available = PAGE_TEMPLATES.filter((t) => !rejectedSet.has(t.id));
-  if (preferredSlotCount !== undefined && preferredSlotCount !== null) {
-    available = available.filter((t) => t.slotCount === preferredSlotCount);
-  }
-
-  // Fallback if nothing matches
-  const pool = available.length > 0 ? available : PAGE_TEMPLATES;
-  const template = pool[Math.floor(Math.random() * pool.length)];
-
-  // Build new page with this template — use themed background
-  const newBg = getThemedBackground(theme, Math.floor(Math.random() * 100));
-
-  // Preserve slot fills if same slot count, otherwise re-fill
-  let slotFills: (number | null)[];
-  const existingFills = currentPage.slotFills ?? [];
-
-  if (template.slotCount === existingFills.length) {
-    // Same count — preserve what we can
-    slotFills = [...existingFills];
-  } else {
-    // Different count — re-fill from photos, NO wrap-around
-    const photoIndices = shuffle(photos.map((_, i) => i));
-    let photoIdx = 0;
-    slotFills = template.slots.map(() => {
-      if (photoIdx < photoIndices.length) {
-        return photoIndices[photoIdx++];
-      }
-      // Out of photos — leave slot empty
-      return null;
-    });
-  }
-
-  return {
-    id: currentPage.id, // keep same page ID
-    layout: 'freeform',
-    templateId: template.id,
-    slotFills,
-    slotScales: template.slots.map(() => 1),
-    slotOffsetsX: template.slots.map(() => 0),
-    slotOffsetsY: template.slots.map(() => 0),
-    background: currentPage.background ?? newBg, // preserve or use new
-    photos: currentPage.photos, // preserve canvas photos
-    textElements: currentPage.textElements, // preserve text
-    size: albumSize,
-  };
+  return generateAlbum(photos, theme, albumSize, rejectedIds);
 }
 
 /** Get a count estimate for the UI: "~X pages from Y photos" */

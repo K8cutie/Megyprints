@@ -1,0 +1,220 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Inter:wght@100..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Poppins:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Lato:ital,wght@0,100..900;1,100..900&family=Nunito:ital,wght@0,200..1000;1,200..1000&family=Raleway:ital,wght@0,100..900;1,100..900&family=Work+Sans:ital,wght@0,100..900;1,100..900&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&family=Outfit:wght@100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,wght@0,300..900;1,300..900&family=Libre+Baskerville:ital,wght@0,400..700;1,400..700&family=Crimson+Text:ital,wght@0,400..700;1,400..700&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Dancing+Script:wght@400..700&family=Great+Vibes&family=Pacifico&family=Caveat:wght@400..700&family=Satisfy&family=Amatic+SC:wght@400..700&family=Bebas+Neue&family=Abril+Fatface&family=Righteous&family=Fredoka:wght@300..700&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 30 100% 97%;
+    --foreground: 0 0% 18%;
+    --card: 30 100% 98.5%;
+    --card-foreground: 0 0% 18%;
+    --popover: 30 100% 98.5%;
+    --popover-foreground: 0 0% 18%;
+    --primary: 25 80% 76%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 75% 94%;
+    --secondary-foreground: 0 0% 18%;
+    --muted: 30 20% 95%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 260 35% 82%;
+    --accent-foreground: 0 0% 18%;
+    --destructive: 6 65% 73%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 10% 88%;
+    --input: 30 10% 88%;
+    --ring: 25 80% 76%;
+    --radius: 0.625rem;
+    --sidebar-background: 30 100% 97%;
+    --sidebar-foreground: 0 0% 18%;
+    --sidebar-primary: 25 80% 76%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 75% 94%;
+    --sidebar-accent-foreground: 0 0% 18%;
+    --sidebar-border: 30 10% 88%;
+    --sidebar-ring: 25 80% 76%;
+
+    --cream: #FFF8F0;
+    --warm-white: #FFFBF7;
+    --blush: #FDE8E4;
+    --lavender: #E8E0F0;
+    --mist: #E0E8F0;
+    --pale-peach: #FBE5D8;
+    --soft-sage: #E4F0E0;
+    --deep-charcoal: #2D2D2D;
+    --charcoal: #4A4A4A;
+    --dark: #2D2D2D;
+    --medium: #6B6B6B;
+    --light: #9B9B9B;
+    --white: #FFFFFF;
+    --blush-text: #D4A08C;
+    --lavender-text: #9B8EC4;
+    --peach: #F4C2A1;
+    --blush-pink: #E8A598;
+    --soft-lavender: #B8A9D9;
+    --mint: #9BCFB8;
+    --sky-blue: #8FBFE0;
+    --pale-coral: #E8958C;
+    --cream-gold: #D4B896;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-[#FFF8F0] text-[#2D2D2D] font-body antialiased;
+    font-family: "DM Sans", sans-serif;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Playfair Display", serif;
+  }
+
+  /* Keyboard focus ring styles for accessibility */
+  *:focus-visible {
+    outline: 2px solid #F4C2A1;
+    outline-offset: 2px;
+  }
+
+  /* Custom scrollbar styles for the builder sidebar (thin, peach-themed) */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(244, 194, 161, 0.4);
+    border-radius: 9999px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(244, 194, 161, 0.6);
+  }
+
+  /* Firefox scrollbar */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(244, 194, 161, 0.4) transparent;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Keyframes
+   ─────────────────────────────────────────────────────────────── */
+
+@keyframes ken-burns {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes bounce-gentle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Animation utilities
+   ─────────────────────────────────────────────────────────────── */
+
+@layer utilities {
+  .animate-ken-burns {
+    animation: ken-burns 20s ease-in-out infinite alternate;
+    transform-origin: center;
+  }
+
+  .animate-bounce-gentle {
+    animation: bounce-gentle 2s ease-in-out infinite;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  /* Visually hidden but focusable — useful for skip links & a11y */
+  .sr-only-focusable {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .sr-only-focusable:focus-visible {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: inherit;
+    margin: inherit;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Component-level shadow utilities
+   ─────────────────────────────────────────────────────────────── */
+
+@layer components {
+  .shadow-button {
+    box-shadow: 0 4px 14px rgba(244, 194, 161, 0.35);
+  }
+
+  .shadow-button-hover {
+    box-shadow: 0 6px 20px rgba(244, 194, 161, 0.45);
+  }
+
+  .shadow-card {
+    box-shadow: 0 2px 12px rgba(45, 45, 45, 0.06);
+  }
+
+  .shadow-card-hover {
+    box-shadow: 0 8px 24px rgba(45, 45, 45, 0.1);
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Reduced motion support
+   ─────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-ken-burns,
+  .animate-bounce-gentle,
+  .animate-float {
+    animation: none;
+  }
+}
