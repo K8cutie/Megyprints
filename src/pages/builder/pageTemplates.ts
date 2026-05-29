@@ -1,7 +1,7 @@
 import type { PageTemplate, TemplateSlot } from './types';
 
 /** ═══════════════════════════════════════════════════════════
- *  33 PREMIUM TEMPLATES — max 5 slots each
+ *  20 PREMIUM TEMPLATES — max 5 slots each
  *
  *  Overlapping templates use borderWidth + borderColor so
  *  each photo shows a crisp edge where it overlaps another.
@@ -327,7 +327,6 @@ export const TEMPLATE_CATEGORIES: { id: PageTemplate['category']; label: string 
   { id: 'collage', label: 'Collage' },
   { id: 'strip', label: 'Strip' },
   { id: 'mixed', label: 'Mixed' },
-  { id: 'masonry', label: 'Masonry' },
   { id: 'special', label: 'Shapes' },
 ];
 

@@ -85,6 +85,8 @@ export interface UseCanvasEngineOptions {
   containerMode?: boolean;
   /** Called when a container is resized or moved */
   onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void;
+  /** Called after renderScene completes — for canvas snapshot capture */
+  onRenderComplete?: (canvas: FabricCanvas) => void;
 }
 
 export interface UseCanvasEngineReturn {
@@ -133,6 +135,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     actions,
     containerMode = false,
     onContainerModified,
+    onRenderComplete,
   } = options;
 
   const dims = getCanvasDimensions((albumSize || '8x10') as AlbumSizePreset);
@@ -461,6 +464,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
     renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, onContainerModifiedRef.current);
+    // Capture preview snapshot after async images settle
+    setTimeout(() => onRenderComplete?.(canvas), 200);
 
     return () => {
       canvas.off('selection:created', handleSelection);
@@ -515,6 +520,9 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     savedSelectionRef.current = savedTextId;
 
     renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, onContainerModifiedRef.current);
+
+    // Capture preview snapshot after async images settle
+    setTimeout(() => onRenderComplete?.(canvas), 200);
 
     // Restore text selection after re-render
     if (savedTextId) {
@@ -1125,6 +1133,7 @@ function renderScene(
     rightLabel.isGuide = true;
     canvas.add(rightLabel);
 
+    canvas.sendToBac
     canvas.sendToBack(creaseLine);
     canvas.sendToBack(leftLabel);
     canvas.sendToBack(rightLabel);

@@ -46,12 +46,11 @@ interface BorderShadowValues {
 interface BuilderEditProps {
   actions: BuilderActions;
   onRegenerate?: () => void;
-  onShuffleLayout?: () => void;
 }
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
 
-export default function BuilderEdit({ actions, onRegenerate, onShuffleLayout }: BuilderEditProps): React.ReactElement {
+export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps): React.ReactElement {
   const canvasElRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -98,6 +97,14 @@ export default function BuilderEdit({ actions, onRegenerate, onShuffleLayout }: 
     containerMode,
     onContainerModified: (slotIndex, geometry) => {
       actions.updateSlotGeometry(slotIndex, geometry);
+    },
+    onRenderComplete: (canvas) => {
+      try {
+        const dataUrl = (canvas as any).toDataURL({ format: 'png', multiplier: 2 });
+        actions.setPageSnapshot(actions.currentPage.id, dataUrl);
+      } catch {
+        // silently fail if canvas isn't ready for export
+      }
     },
   });
 
@@ -515,9 +522,6 @@ export default function BuilderEdit({ actions, onRegenerate, onShuffleLayout }: 
           onAutoFill={actions.autoFillSlots}
           onClearAllSlots={actions.clearAllSlots}
           onAddPhotos={actions.addPhotos}
-          preferredSlotCount={actions.preferredSlotCount}
-          onPreferredSlotCountChange={actions.setPreferredSlotCount}
-          onShuffleLayout={onShuffleLayout}
         />
 
         {/* ── Canvas Area ── */}
@@ -595,22 +599,13 @@ export default function BuilderEdit({ actions, onRegenerate, onShuffleLayout }: 
                 <BoxSelect size={12} /> {containerMode ? 'Container On' : 'Containers'}
               </button>
 
-              {onShuffleLayout && (
-                <button
-                  onClick={onShuffleLayout}
-                  title="Shuffle layout for current page only"
-                  className="px-3 py-1.5 bg-white border border-[#F4C2A1] text-[#F4C2A1] text-xs font-semibold rounded-lg hover:bg-[#F4C2A1] hover:text-white flex items-center gap-1 transition-all"
-                >
-                  <Sparkles size={12} /> Shuffle Layout
-                </button>
-              )}
               {onRegenerate && (
                 <button
                   onClick={onRegenerate}
-                  title="Regenerate full album with new random layouts"
+                  title="Regenerate album with new random layouts"
                   className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
                 >
-                  <Sparkles size={12} /> Regenerate All
+                  <Sparkles size={12} /> Regenerate
                 </button>
               )}
               <button
