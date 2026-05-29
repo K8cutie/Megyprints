@@ -328,7 +328,7 @@ function renderTextElement(
   ctx: CanvasRenderingContext2D,
   text: any,
   W: number,
-  H: number,
+  _H: number,
 ) {
   const fontSize = (text.fontSize || 24) * (W / 576); // Scale relative to 8x10 reference
   const fontFamily = text.fontFamily || 'serif';

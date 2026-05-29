@@ -558,16 +558,32 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     return () => window.removeEventListener('keydown', handleKey);
   }, [selectedPhotoId, selectedTextId, selectedSlotIndex]);
 
-  /* ═══════ Mouse wheel page navigation ═══════ */
+  /* ═══════ Mouse wheel: zoom on canvas, page nav everywhere ═══════ */
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) return;
       const target = e.target as HTMLElement;
-      if (target.closest('input, textarea, select, [data-no-scroll], .fabric-container')) return;
 
+      // Never interfere with text inputs or scrollable panels
+      if (target.closest('input, textarea, select, [data-no-scroll]')) return;
+
+      // Over the canvas area → ZOOM (always, no threshold)
+      if (target.closest('.fabric-container, canvas')) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.08 : 0.08;
+        const newZoom = Math.max(0.2, Math.min(4.0, zoomRef.current + delta));
+        if (newZoom !== zoomRef.current) {
+          canvasRef.current?.setZoom(newZoom);
+          canvasRef.current?.requestRenderAll();
+          setZoomState(newZoom);
+        }
+        return;
+      }
+
+      // Everywhere else → PAGE NAVIGATION (scroll up/down = prev/next page)
+      if (e.ctrlKey || e.metaKey) return;
       if (e.deltaY > 30) {
         e.preventDefault();
         const next = Math.min(actionsRef.current.currentPageIndex + 1, actionsRef.current.albumPages.length - 1);
@@ -579,8 +595,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
   }, [containerRef]);
 
   /* ═══════ Zoom helpers ═══════ */
@@ -1133,7 +1149,6 @@ function renderScene(
     rightLabel.isGuide = true;
     canvas.add(rightLabel);
 
-    canvas.sendToBac
     canvas.sendToBack(creaseLine);
     canvas.sendToBack(leftLabel);
     canvas.sendToBack(rightLabel);
