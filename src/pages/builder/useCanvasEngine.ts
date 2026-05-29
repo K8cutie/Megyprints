@@ -575,8 +575,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
         const delta = e.deltaY > 0 ? -0.08 : 0.08;
         const newZoom = Math.max(0.2, Math.min(4.0, zoomRef.current + delta));
         if (newZoom !== zoomRef.current) {
-          canvasRef.current?.setZoom(newZoom);
-          canvasRef.current?.requestRenderAll();
+          const c = canvasRef.current as any;
+          if (c?.setZoom) { c.setZoom(newZoom); c.requestRenderAll(); }
           setZoomState(newZoom);
         }
         return;
