@@ -81,6 +81,12 @@ export interface UseCanvasEngineOptions {
   albumSize: string;
   onSlotClick: (slotIndex: number) => void;
   actions: BuilderActions;
+  /** When true, slot containers become selectable and resizable */
+  containerMode?: boolean;
+  /** Called when a container is resized or moved */
+  onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void;
+  /** Called after renderScene completes — for canvas snapshot capture */
+  onRenderComplete?: (canvas: FabricCanvas) => void;
 }
 
 export interface UseCanvasEngineReturn {
@@ -111,7 +117,8 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const textData = page.textElements.map((t) =>
     `${t.id}:${t.text.slice(0,20)}:${t.fontSize}:${Math.round(t.x)}:${Math.round(t.y)}:${t.rotation}`
   ).join('|');
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}`;
+  const slotGeoms = page.slotGeometries ? page.slotGeometries.map((g) => `${g?.x ?? ''}:${g?.y ?? ''}:${g?.width ?? ''}:${g?.height ?? ''}`).join('|') : '';
+  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -126,6 +133,9 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     albumSize,
     onSlotClick,
     actions,
+    containerMode = false,
+    onContainerModified,
+    onRenderComplete,
   } = options;
 
   const dims = getCanvasDimensions((albumSize || '8x10') as AlbumSizePreset);
@@ -165,6 +175,10 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   snapEnabledRef.current = snapEnabled;
   const onSlotClickRef = useRef(onSlotClick);
   onSlotClickRef.current = onSlotClick;
+  const containerModeRef = useRef(containerMode);
+  containerModeRef.current = containerMode;
+  const onContainerModifiedRef = useRef(onContainerModified);
+  onContainerModifiedRef.current = onContainerModified;
   const dimsRef = useRef({ w: CANVAS_W, h: CANVAS_H, margin: MARGIN });
   dimsRef.current = { w: CANVAS_W, h: CANVAS_H, margin: MARGIN };
 
@@ -389,6 +403,11 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
           const currentOffsetX = page.slotOffsetsX?.[obj.slotIndex] ?? 0;
           const currentOffsetY = page.slotOffsetsY?.[obj.slotIndex] ?? 0;
           latestActions.setSlotOffset(obj.slotIndex, offsetX - currentOffsetX, offsetY - currentOffsetY);
+          // Save rotation if changed
+          const newAngle = Math.round((obj.angle as number) ?? 0);
+          if (newAngle !== (slot.rotation ?? 0) && latestActions.updateSlotGeometry) {
+            latestActions.updateSlotGeometry(obj.slotIndex, { rotation: newAngle });
+          }
         }
       }
 
@@ -444,7 +463,9 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, onContainerModifiedRef.current);
+    // Capture preview snapshot after async images settle
+    setTimeout(() => onRenderComplete?.(canvas), 200);
 
     return () => {
       canvas.off('selection:created', handleSelection);
@@ -487,7 +508,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       return; /* Same page, still editing — skip render */
     }
 
-    const fingerprint = pageFingerprint(actions.currentPageIndex, currentPage);
+    const fingerprint = pageFingerprint(actions.currentPageIndex, currentPage) + '|cm:' + (containerModeRef.current ? '1' : '0');
     if (lastStructuralRef.current === fingerprint) return;
     lastStructuralRef.current = fingerprint;
 
@@ -498,7 +519,10 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     const savedTextId = active?.textId ? (active.textId as string) : savedSelectionRef.current;
     savedSelectionRef.current = savedTextId;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, onContainerModifiedRef.current);
+
+    // Capture preview snapshot after async images settle
+    setTimeout(() => onRenderComplete?.(canvas), 200);
 
     // Restore text selection after re-render
     if (savedTextId) {
@@ -508,7 +532,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
         canvas.requestRenderAll();
       }
     }
-  }, [fabricModule, fabricValid, actions.currentPageIndex, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H]);
+  }, [fabricModule, fabricValid, actions.currentPageIndex, currentPage, uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H, containerMode]);
 
   /* ═══════ Keyboard shortcuts ═══════ */
   useEffect(() => {
@@ -534,16 +558,32 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     return () => window.removeEventListener('keydown', handleKey);
   }, [selectedPhotoId, selectedTextId, selectedSlotIndex]);
 
-  /* ═══════ Mouse wheel page navigation ═══════ */
+  /* ═══════ Mouse wheel: zoom on canvas, page nav everywhere ═══════ */
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) return;
       const target = e.target as HTMLElement;
-      if (target.closest('input, textarea, select, [data-no-scroll], .fabric-container')) return;
 
+      // Never interfere with text inputs or scrollable panels
+      if (target.closest('input, textarea, select, [data-no-scroll]')) return;
+
+      // Over the canvas area → ZOOM (always, no threshold)
+      if (target.closest('.fabric-container, canvas')) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.08 : 0.08;
+        const newZoom = Math.max(0.2, Math.min(4.0, zoomRef.current + delta));
+        if (newZoom !== zoomRef.current) {
+          const c = canvasRef.current as any;
+          if (c?.setZoom) { c.setZoom(newZoom); c.requestRenderAll(); }
+          setZoomState(newZoom);
+        }
+        return;
+      }
+
+      // Everywhere else → PAGE NAVIGATION (scroll up/down = prev/next page)
+      if (e.ctrlKey || e.metaKey) return;
       if (e.deltaY > 30) {
         e.preventDefault();
         const next = Math.min(actionsRef.current.currentPageIndex + 1, actionsRef.current.albumPages.length - 1);
@@ -555,8 +595,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
   }, [containerRef]);
 
   /* ═══════ Zoom helpers ═══════ */
@@ -769,15 +809,21 @@ function renderTemplateSlots(
   slotScales: number[],
   slotOffsetsX: number[],
   slotOffsetsY: number[],
+  slotGeometries: import('./types').SlotGeometryOverride[] | undefined,
   uploadedPhotos: UploadedPhoto[],
   canvasW: number,
   canvasH: number,
   onSlotClick: (slotIndex: number) => void,
   renderId: number,
+  containerMode: boolean,
+  onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void,
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
-  template.slots.forEach((slot: any, i: number) => {
+  template.slots.forEach((rawSlot: any, i: number) => {
+    // Merge template slot with user geometry overrides
+    const geom = slotGeometries?.[i] ?? {};
+    const slot = { ...rawSlot, ...geom };
     const photoIndex = slotFills[i];
     const sx = (slot.x / 100) * canvasW;
     const sy = (slot.y / 100) * canvasH;
@@ -810,10 +856,14 @@ function renderTemplateSlots(
           cornerColor: '#F4C2A1',
           cornerSize: 8,
           transparentCorners: false,
-          borderColor: '#F4C2A1',
+          borderColor: '#EF4444',
+          borderScaleFactor: 2,
           hasControls: true,
           hasBorders: true,
-          lockRotation: true,
+          lockRotation: false,
+          /* Only register clicks on visible (clipped) pixels —
+             prevents bounding box overlap from blocking adjacent slots */
+          perPixelTargetFind: true,
         });
         img.slotId = `${SLOT_ID}-photo-${i}`;
         img.photoIndex = photoIndex;
@@ -849,7 +899,90 @@ function renderTemplateSlots(
         }
 
         canvas.add(img);
-        img.bringToFront();
+
+        // Slot border frame — THE CONTAINER. White outline normally,
+        // becomes thick blue+selectable in container mode for resize/move.
+        const borderStroke = containerMode ? '#3B82F6' : '#FFFFFF';
+        const borderWidth = containerMode ? 3 : 2;
+        const borderBase = {
+          fill: 'transparent' as const,
+          stroke: borderStroke,
+          strokeWidth: borderWidth,
+          selectable: containerMode,
+          evented: containerMode,
+          hasControls: containerMode,
+          hasBorders: containerMode,
+          cornerColor: containerMode ? '#3B82F6' : undefined,
+          cornerSize: containerMode ? 10 : undefined,
+          transparentCorners: false,
+          lockRotation: false,
+          hoverCursor: containerMode ? 'move' : 'default',
+        };
+        let borderObj: any;
+        if (slot.shape === 'circle') {
+          const r = Math.min(sw, sh) / 2;
+          borderObj = new fab.Circle({ left: sx + sw / 2, top: sy + sh / 2, radius: r, originX: 'center', originY: 'center', ...borderBase });
+        } else if (slot.shape === 'rounded' && slot.borderRadius) {
+          const r = Math.min(slot.borderRadius, Math.min(sw, sh) / 2);
+          borderObj = new fab.Rect({ left: sx, top: sy, width: sw, height: sh, ...borderBase, rx: r, ry: r });
+        } else if (slot.shape === 'oval') {
+          borderObj = new fab.Ellipse({ left: sx + sw / 2, top: sy + sh / 2, rx: sw / 2, ry: sh / 2, originX: 'center', originY: 'center', ...borderBase });
+        } else if (slot.shape === 'heart') {
+          const hr = Math.min(sw, sh) / 2;
+          const heartPath = `M 0 ${-hr * 0.3} C ${-hr} ${-hr * 1.2} ${-hr * 1.5} ${hr * 0.3} 0 ${hr} C ${hr * 1.5} ${hr * 0.3} ${hr} ${-hr * 1.2} 0 ${-hr * 0.3} Z`;
+          borderObj = new fab.Path(heartPath, { left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center', ...borderBase });
+        } else {
+          borderObj = new fab.Rect({ left: sx, top: sy, width: sw, height: sh, ...borderBase });
+        }
+        borderObj.slotId = `${SLOT_ID}-border-${i}`;
+        canvas.add(borderObj);
+        borderObj.bringToFront();
+
+        // Container mode: save geometry when border is moved/resized
+        if (containerMode && onContainerModified) {
+          borderObj.on('modified', () => {
+            // Compute new geometry from border position/size
+            const newLeft = borderObj.left ?? sx;
+            const newTop = borderObj.top ?? sy;
+            let newW: number;
+            let newH: number;
+            if (borderObj.getScaledWidth) {
+              newW = borderObj.getScaledWidth();
+              newH = borderObj.getScaledHeight();
+            } else {
+              newW = (borderObj.width || sw) * (borderObj.scaleX || 1);
+              newH = (borderObj.height || sh) * (borderObj.scaleY || 1);
+            }
+            // For circle/oval/heart centered objects, adjust left/top
+            const isCentered = slot.shape === 'circle' || slot.shape === 'oval' || slot.shape === 'heart';
+            const finalLeft = isCentered ? newLeft - newW / 2 : newLeft;
+            const finalTop = isCentered ? newTop - newH / 2 : newTop;
+            onContainerModified(i, {
+              x: Math.round((finalLeft / canvasW) * 100 * 10) / 10,
+              y: Math.round((finalTop / canvasH) * 100 * 10) / 10,
+              width: Math.round((newW / canvasW) * 100 * 10) / 10,
+              height: Math.round((newH / canvasH) * 100 * 10) / 10,
+              rotation: Math.round((borderObj.angle as number) ?? 0),
+            });
+          });
+
+          // Moving: sync photo position to follow container
+          borderObj.on('moving', () => {
+            const dx = (borderObj.left ?? sx) - sx;
+            const dy = (borderObj.top ?? sy) - sy;
+            // For centered shapes, left/top is center — adjust
+            const isCentered = slot.shape === 'circle' || slot.shape === 'oval' || slot.shape === 'heart';
+            const offsetX = isCentered ? dx : dx;
+            const offsetY = isCentered ? dy : dy;
+            // Move the image to follow the border
+            img.set({
+              left: (sx + sw / 2) + offsetX + (slotOffsetsX[i] ?? 0),
+              top: (sy + sh / 2) + offsetY + (slotOffsetsY[i] ?? 0),
+            });
+            canvas.requestRenderAll();
+          });
+        }
+
         canvas.requestRenderAll();
       });
     } else {
@@ -858,7 +991,7 @@ function renderTemplateSlots(
         fill: 'rgba(244,194,161,0.08)',
         stroke: '#F4C2A1',
         strokeWidth: 2,
-        strokeDashArray: [8, 4],
+        strokeDashArray: [6, 3],
         selectable: false,
         evented: true,
         hoverCursor: 'pointer',
@@ -902,6 +1035,7 @@ function renderTemplateSlots(
 
       slotRect.on('mousedown', () => onSlotClick(i));
     }
+
   });
 }
 
@@ -918,6 +1052,8 @@ function renderScene(
   canvasW: number,
   canvasH: number,
   onSlotClick: (slotIndex: number) => void,
+  containerMode: boolean = false,
+  onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void,
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -940,8 +1076,9 @@ function renderScene(
   const offsetsX = page.slotOffsetsX ?? template?.slots.map(() => 0) ?? [];
   const offsetsY = page.slotOffsetsY ?? template?.slots.map(() => 0) ?? [];
 
+  const geoms = page.slotGeometries;
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, onContainerModified);
   }
 
   // 4. Add text elements — use saved width/scale if available

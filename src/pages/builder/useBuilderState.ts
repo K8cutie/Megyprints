@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type {
   UploadedPhoto,
   AlbumPage,
@@ -9,11 +9,15 @@ import type {
   PhotoFilters,
   AlbumBackground,
   AlbumSizePreset,
+  MaterialType,
+  CoverType,
 } from './types';
 import {
   DEFAULT_FILTERS,
   DEFAULT_BACKGROUND,
   DEFAULT_ALBUM_SIZE,
+  DEFAULT_MATERIAL,
+  DEFAULT_COVER,
 } from './types';
 import { getTemplateById, PAGE_TEMPLATES } from './pageTemplates';
 import { generateAlbum, regenerateAlbum } from './generateAlbum';
@@ -153,6 +157,12 @@ export function useBuilderState() {
   );
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(loadRejectedTemplates);
+  const [material, setMaterial] = useState<MaterialType>(DEFAULT_MATERIAL);
+  const [cover, setCover] = useState<CoverType>(DEFAULT_COVER);
+  const [photosPerPage, setPhotosPerPage] = useState<number>(3);
+
+  /* ── Page snapshots (Design → Preview sync) ── */
+  const pageSnapshotsRef = useRef<Map<string, string>>(new Map());
 
   const currentPage = albumPages[currentPageIndex] ?? albumPages[0] ?? defaultPage();
 
@@ -160,9 +170,9 @@ export function useBuilderState() {
   useEffect(() => {
     saveState({
       phase, selectedTemplate, albumPages,
-      currentPageIndex, material: 'matte', cover: 'softcover', size: '8x10',
+      currentPageIndex, material, cover, size: albumSize,
     });
-  }, [phase, selectedTemplate, albumPages, currentPageIndex]);
+  }, [phase, selectedTemplate, albumPages, currentPageIndex, material, cover, albumSize]);
 
   // ── Phase ──
   const goToPhase = useCallback((p: BuilderPhase) => setPhase(p), []);
@@ -300,6 +310,22 @@ export function useBuilderState() {
       const newFills = [...page.slotFills];
       newFills[slotIndex] = null;
       next[currentPageIndex] = { ...page, slotFills: newFills };
+      return next;
+    });
+  }, [currentPageIndex]);
+
+  const updateSlotGeometry = useCallback((slotIndex: number, geometry: import('./types').SlotGeometryOverride) => {
+    setAlbumPages((prev) => {
+      const next = [...prev];
+      const page = next[currentPageIndex];
+      if (!page) return prev;
+      const currentGeometries = page.slotGeometries ? [...page.slotGeometries] : [];
+      // Ensure array is long enough
+      while (currentGeometries.length <= slotIndex) {
+        currentGeometries.push({});
+      }
+      currentGeometries[slotIndex] = { ...currentGeometries[slotIndex], ...geometry };
+      next[currentPageIndex] = { ...page, slotGeometries: currentGeometries };
       return next;
     });
   }, [currentPageIndex]);
@@ -531,16 +557,87 @@ export function useBuilderState() {
 
   // ── Generate Album ──
   const generateAlbumAction = useCallback(() => {
-    const newPages = generateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds);
+    pageSnapshotsRef.current.clear();
+    const newPages = generateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, photosPerPage);
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
-  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds]);
+  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, photosPerPage]);
 
   const regenerateAlbumAction = useCallback(() => {
-    const newPages = regenerateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds);
+    pageSnapshotsRef.current.clear();
+    const newPages = regenerateAlbum(uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, photosPerPage);
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
-  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds]);
+  }, [uploadedPhotos, selectedTemplate, albumSize, rejectedTemplateIds, photosPerPage]);
+
+  /** Regenerate ONLY the current page — keeps other pages intact.
+   *  Does NOT reuse photos already assigned to other pages. */
+  const regeneratePage = useCallback(() => {
+    setAlbumPages((prev) => {
+      const next = [...prev];
+      const page = next[currentPageIndex];
+      if (!page) return prev;
+
+      // Pick a random template matching photosPerPage, different from current
+      const currentTemplateId = page.templateId;
+      const matching = PAGE_TEMPLATES.filter(
+        (t) => t.id !== currentTemplateId && t.slotCount === photosPerPage,
+      );
+      const pool = matching.length > 0
+        ? matching
+        : PAGE_TEMPLATES.filter((t) => t.id !== currentTemplateId);
+      if (pool.length === 0) return prev;
+
+      const randomTemplate = pool[Math.floor(Math.random() * pool.length)];
+
+      // Collect photo indices already used on OTHER pages
+      const usedOnOtherPages = new Set<number>();
+      next.forEach((p, idx) => {
+        if (idx === currentPageIndex) return;
+        p.slotFills?.forEach((fill) => {
+          if (fill !== null) usedOnOtherPages.add(fill);
+        });
+      });
+
+      // Only use photos NOT already on other pages
+      const available = [...Array(uploadedPhotos.length).keys()]
+        .filter((i) => !usedOnOtherPages.has(i))
+        .sort(() => Math.random() - 0.5);
+
+      // Fill slots from available only — leave empty if not enough
+      const fills = randomTemplate.slots.map((_, i) => {
+        return i < available.length ? available[i] : null;
+      });
+
+      next[currentPageIndex] = {
+        ...page,
+        templateId: randomTemplate.id,
+        slotFills: fills,
+        slotScales: randomTemplate.slots.map(() => 1),
+        slotOffsetsX: randomTemplate.slots.map(() => 0),
+        slotOffsetsY: randomTemplate.slots.map(() => 0),
+        slotGeometries: randomTemplate.slots.map(() => ({})),
+      };
+      return next;
+    });
+
+    // Clear snapshot for current page only
+    const currentPageId = albumPages[currentPageIndex]?.id;
+    if (currentPageId) pageSnapshotsRef.current.delete(currentPageId);
+  }, [currentPageIndex, uploadedPhotos, photosPerPage, albumPages]);
+
+  // ── Page Snapshots ──
+  const setPageSnapshot = useCallback((pageId: string, dataUrl: string) => {
+    pageSnapshotsRef.current.set(pageId, dataUrl);
+  }, []);
+
+  const getPageSnapshot = useCallback((pageId: string): string | undefined => {
+    return pageSnapshotsRef.current.get(pageId);
+  }, []);
+
+  const clearAllSnapshots = useCallback(() => {
+    pageSnapshotsRef.current.clear();
+  }, []);
 
   // ── Template Rejection ──
   const hideTemplate = useCallback((templateId: string) => {
@@ -573,20 +670,23 @@ export function useBuilderState() {
     setSelectedTemplate('wedding');
     setAlbumPages([defaultPage()]);
     setCurrentPageIndex(0);
+    setMaterial(DEFAULT_MATERIAL);
+    setCover(DEFAULT_COVER);
+    setPhotosPerPage(3);
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   return {
     phase, albumType, albumSize, uploadedPhotos, selectedTemplate, albumPages,
-    currentPageIndex, currentPage,
+    currentPageIndex, currentPage, material, cover, photosPerPage,
 
     setPhase: goToPhase, setAlbumType, setAlbumSize, addPhotos, removePhoto, replacePhoto,
-    selectTemplate,
+    selectTemplate, setMaterial, setCover, setPhotosPerPage,
 
     addPage, deletePage, duplicatePage, goToPage,
 
     setPageBackground, updateBackgroundTransform, updateBackgroundFilters,
-    setPageTemplate, fillSlot, clearSlot, clearAllSlots, autoFillSlots, setSlotScale, setSlotOffset,
+    setPageTemplate, fillSlot, clearSlot, clearAllSlots, autoFillSlots, setSlotScale, setSlotOffset, updateSlotGeometry,
 
     updatePhotoTransform, updatePhotoFilters,
     deletePhotoFromCanvas, bringToFront, sendToBack, duplicateCanvasPhoto,
@@ -594,6 +694,8 @@ export function useBuilderState() {
     addTextElement, updateTextElement, deleteTextElement,
 
     generateAlbum: generateAlbumAction, regenerateAlbum: regenerateAlbumAction,
+    regeneratePage,
+    setPageSnapshot, getPageSnapshot, clearAllSnapshots,
     hideTemplate, unhideTemplate, unhideAllTemplates, rejectedTemplateIds,
 
     reset,

@@ -12,7 +12,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Eye, Sparkles,
+  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Eye, Sparkles, BoxSelect,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -57,6 +57,7 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<'photos' | 'pages' | 'layers' | 'templates'>('photos');
+  const [containerMode, setContainerMode] = useState(false);
 
   /* ── Canvas dimensions ── */
   const { width: CANVAS_W, height: CANVAS_H } = useMemo(
@@ -88,10 +89,23 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
     albumType: actions.albumType,
     albumSize: actions.albumSize,
     onSlotClick: (slotIndex) => {
+      if (containerMode) return; // In container mode, slot click fills photo
       setSelectedSlotForPicker(slotIndex);
       setShowPhotoPicker(true);
     },
     actions,
+    containerMode,
+    onContainerModified: (slotIndex, geometry) => {
+      actions.updateSlotGeometry(slotIndex, geometry);
+    },
+    onRenderComplete: (canvas) => {
+      try {
+        const dataUrl = (canvas as any).toDataURL({ format: 'png', multiplier: 2 });
+        actions.setPageSnapshot(actions.currentPage.id, dataUrl);
+      } catch {
+        // silently fail if canvas isn't ready for export
+      }
+    },
   });
 
   const [selectedSlotForPicker, setSelectedSlotForPicker] = useState<number | null>(null);
@@ -571,6 +585,20 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
               <span className="text-xs text-[#9B9B9B]">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
+              {/* Container Mode Toggle */}
+              <button
+                onClick={() => setContainerMode((prev) => !prev)}
+                title={containerMode ? 'Exit container editing mode' : 'Edit slot containers (resize & move boxes)'}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all"
+                style={{
+                  backgroundColor: containerMode ? '#3B82F6' : '#FFFFFF',
+                  color: containerMode ? '#FFFFFF' : '#3B82F6',
+                  border: containerMode ? '1px solid #3B82F6' : '1px solid #93C5FD',
+                }}
+              >
+                <BoxSelect size={12} /> {containerMode ? 'Container On' : 'Containers'}
+              </button>
+
               {onRegenerate && (
                 <button
                   onClick={onRegenerate}

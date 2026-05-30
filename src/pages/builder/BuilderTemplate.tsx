@@ -9,9 +9,12 @@ interface BuilderTemplateProps {
   onSelect: (t: TemplateType) => void;
   onBack: () => void;
   onGenerate: () => void;
+  onGenerateFull?: () => void;
   rejectedIds?: string[];
   onHideTemplate?: (id: string) => void;
   onUnhideAll?: () => void;
+  preferredSlotCount?: number | null;
+  onPreferredSlotCountChange?: (count: number | null) => void;
 }
 
 /** Grid column class */
@@ -164,12 +167,24 @@ export default function BuilderTemplate({
   onSelect,
   onBack,
   onGenerate,
+  onGenerateFull,
   rejectedIds = [],
   onHideTemplate,
   onUnhideAll,
+  preferredSlotCount,
+  onPreferredSlotCountChange,
 }: BuilderTemplateProps) {
   const themes = useMemo(() => Object.values(THEMES), []);
   const hiddenCount = rejectedIds.length;
+
+  // Filter templates by slot count preference
+  const filteredTemplates = useMemo(() => {
+    if (preferredSlotCount === undefined || preferredSlotCount === null) return PAGE_TEMPLATES;
+    return PAGE_TEMPLATES.filter((t) => t.slotCount === preferredSlotCount);
+  }, [preferredSlotCount]);
+
+  // Slot count options
+  const slotOptions = [1, 2, 3, 4, 5];
 
   return (
     <div className="flex flex-col h-full bg-[#FFF8F0]">
@@ -205,8 +220,16 @@ export default function BuilderTemplate({
             onClick={onGenerate}
             className="px-6 py-2 bg-[#F4C2A1] text-white font-body text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5 transition-all"
           >
-            <Sparkles size={14} aria-hidden="true" /> Generate Album
+            <Sparkles size={14} aria-hidden="true" /> Apply to Current Page
           </button>
+          {onGenerateFull && (
+            <button
+              onClick={onGenerateFull}
+              className="px-4 py-2 bg-white border border-[#E8E8E8] text-[#6B6B6B] font-body text-xs font-semibold rounded-lg hover:bg-[#F5F5F5] flex items-center gap-1.5 transition-all"
+            >
+              <Sparkles size={12} aria-hidden="true" /> Generate Full Album
+            </button>
+          )}
         </div>
       </div>
 
@@ -226,19 +249,55 @@ export default function BuilderTemplate({
           </div>
         </div>
 
+        {/* Slot count preference */}
+        <div className="p-6 border-b border-[#F0F0F0] bg-white">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-[#2D2D2D]">Slot Count</h3>
+            <p className="text-xs text-[#9B9B9B]">
+              {filteredTemplates.length} layout{filteredTemplates.length !== 1 ? 's' : ''} match
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* All option */}
+            <button
+              onClick={() => onPreferredSlotCountChange?.(null)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                preferredSlotCount === undefined || preferredSlotCount === null
+                  ? 'bg-[#F4C2A1] text-white shadow-sm'
+                  : 'bg-[#F5F5F5] text-[#6B6B6B] hover:bg-[#E8E8E8]'
+              }`}
+            >
+              All
+            </button>
+            {slotOptions.map((count) => (
+              <button
+                key={count}
+                onClick={() => onPreferredSlotCountChange?.(count)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  preferredSlotCount === count
+                    ? 'bg-[#F4C2A1] text-white shadow-sm'
+                    : 'bg-[#F5F5F5] text-[#6B6B6B] hover:bg-[#E8E8E8]'
+                }`}
+              >
+                {count} slot{count > 1 ? 's' : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Page template preview — with hide buttons */}
         {onHideTemplate && (
           <div className="p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-[#2D2D2D]">
-                Layouts ({PAGE_TEMPLATES.length - hiddenCount} active)
+                Layouts ({filteredTemplates.length - hiddenCount} active)
               </h3>
               <p className="text-xs text-[#9B9B9B]">
                 Hover and click the eye icon to hide a layout from generation
               </p>
             </div>
             <div className={`${GRID_COLUMNS} max-w-[1400px] mx-auto`}>
-              {PAGE_TEMPLATES.map((template) => (
+              {filteredTemplates.map((template) => (
                 <PageTemplatePreview
                   key={template.id}
                   template={template}

@@ -1,374 +1,340 @@
-import { useState, useRef, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Download, ShoppingCart, Edit3 } from 'lucide-react';
-import type { AlbumPage, UploadedPhoto, AlbumSizePreset, TemplateSlot } from './types';
-import { getCanvasDimensions } from './layouts';
-import { getTemplateById } from './pageTemplates';
+import { useState, useRef, useMemo, useEffect } from 'react';
 
+/* ─── Types ─── */
+import type { UploadedPhoto, AlbumPage, AlbumBackground } from './types';
+
+/* ─── Helpers ─── */
+import { PREVIEW_DIMS } from './PreviewSizeConstants';
+import { slotShapeStyle } from './slotShapeStyle';
+import { getTemplateById } from './pageTemplates';
+import { getCanvasDimensions } from './layouts';
+import BuilderToolbar from './BuilderToolbar';
+
+/* ─── Interfaces ─── */
 interface BuilderPreviewProps {
   pages: AlbumPage[];
   currentIndex: number;
   photos: UploadedPhoto[];
-  /** Album size preset — drives preview dimensions */
-  albumSize: AlbumSizePreset;
-  onGoToPage: (i: number) => void;
+  albumSize: string;
+  onGoToPage: (index: number) => void;
   onBack: () => void;
   onOrder: () => void;
-}
-
-function filtersToCSS(f: { grayscale: number; sepia: number; brightness: number; contrast: number; saturate: number; blur: number; hueRotate: number; opacity: number }) {
-  const parts: string[] = [];
-  if (f.grayscale > 0) parts.push(`grayscale(${f.grayscale}%)`);
-  if (f.sepia > 0) parts.push(`sepia(${f.sepia}%)`);
-  if (f.brightness !== 100) parts.push(`brightness(${f.brightness}%)`);
-  if (f.contrast !== 100) parts.push(`contrast(${f.contrast}%)`);
-  if (f.saturate !== 100) parts.push(`saturate(${f.saturate}%)`);
-  if (f.blur > 0) parts.push(`blur(${f.blur}px)`);
-  if (f.hueRotate > 0) parts.push(`hue-rotate(${f.hueRotate}deg)`);
-  if (f.opacity < 100) parts.push(`opacity(${f.opacity / 100})`);
-  return parts.join(' ') || 'none';
-}
-
-function bgToStyle(bg: AlbumPage['background']): React.CSSProperties {
-  if (bg.type === 'solid' && bg.solid) return { backgroundColor: bg.solid };
-  if (bg.type === 'gradient' && bg.gradient) {
-    const { type, angle, stops } = bg.gradient;
-    const gradient = type === 'linear'
-      ? `linear-gradient(${angle}deg, ${stops.map((s) => `${s.color} ${s.offset * 100}%`).join(', ')})`
-      : `radial-gradient(circle, ${stops.map((s) => `${s.color} ${s.offset * 100}%`).join(', ')})`;
-    return { background: gradient };
-  }
-  if (bg.type === 'image' && bg.image) return { backgroundImage: `url(${bg.image})`, backgroundSize: 'cover' };
-  return { backgroundColor: '#FFFBF7' };
-}
-
-/** Preview dimensions keyed by album size preset */
-const PREVIEW_DIMS: Record<string, { w: number; h: number }> = {
-  '6x6': { w: 420, h: 420 },
-  '8x8': { w: 440, h: 440 },
-  '10x10': { w: 480, h: 480 },
-  '12x12': { w: 500, h: 500 },
-  'a5': { w: 340, h: 480 },
-  '8x10': { w: 400, h: 500 },
-  '8x11': { w: 360, h: 460 },
-  'a4': { w: 380, h: 536 },
-  '11x14': { w: 400, h: 510 },
-  '10x8': { w: 500, h: 400 },
-  '11x8': { w: 460, h: 360 },
-  'a4l': { w: 536, h: 380 },
-  '14x11': { w: 510, h: 400 },
-  'custom': { w: 400, h: 500 },
-};
-
-/** Compute CSS shape + sizing for a slot in the preview.
- *  Key fix: circle uses the *smaller* dimension as diameter so it stays
- *  a perfect circle, and is centred inside the slot bounds.  */
-function slotShapeStyle(
-  slot: TemplateSlot,
-  rawWidth: number,
-  rawHeight: number,
-): {
-  style: React.CSSProperties;
-  width: number;
-  height: number;
-  leftOffset: number;
-  topOffset: number;
-} {
-  const shape = slot.shape || 'rectangle';
-
-  // Circle: make it a perfect square using the smaller dimension
-  if (shape === 'circle') {
-    const diameter = Math.min(rawWidth, rawHeight);
-    return {
-      style: { borderRadius: '50%', overflow: 'hidden' },
-      width: diameter,
-      height: diameter,
-      leftOffset: (rawWidth - diameter) / 2,
-      topOffset: (rawHeight - diameter) / 2,
-    };
-  }
-
-  // Oval: ellipse (keep raw proportions, borderRadius 50% gives ellipse)
-  if (shape === 'oval') {
-    return {
-      style: { borderRadius: '50%', overflow: 'hidden' },
-      width: rawWidth,
-      height: rawHeight,
-      leftOffset: 0,
-      topOffset: 0,
-    };
-  }
-
-  // Rounded rectangle
-  if (shape === 'rounded') {
-    return {
-      style: {
-        borderRadius: slot.borderRadius ? `${slot.borderRadius}px` : '6px',
-        overflow: 'hidden',
-      },
-      width: rawWidth,
-      height: rawHeight,
-      leftOffset: 0,
-      topOffset: 0,
-    };
-  }
-
-  // Heart
-  if (shape === 'heart') {
-    const size = Math.min(rawWidth, rawHeight);
-    return {
-      style: {
-        clipPath:
-          'path("M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z")',
-        overflow: 'hidden',
-      },
-      width: size,
-      height: size,
-      leftOffset: (rawWidth - size) / 2,
-      topOffset: (rawHeight - size) / 2,
-    };
-  }
-
-  // Plain rectangle
-  return {
-    style: { overflow: 'hidden' },
-    width: rawWidth,
-    height: rawHeight,
-    leftOffset: 0,
-    topOffset: 0,
-  };
+  getPageSnapshot?: (pageId: string) => string | undefined;
 }
 
 interface SlotPhotoInfo {
   slotIndex: number;
-  slot: TemplateSlot;
+  slot: any;
   photoIndex: number;
   photo: UploadedPhoto;
 }
 
-export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
+interface ImgDim { w: number; h: number }
+
+export default function BuilderPreview({
+  pages,
+  currentIndex,
+  photos,
+  albumSize,
+  onGoToPage,
+  onBack,
+  onOrder,
+  getPageSnapshot,
+}: BuilderPreviewProps) {
   const [spreadView, setSpreadView] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [imgDims, setImgDims] = useState<Record<number, ImgDim>>({});
 
   const page = pages[currentIndex];
   const { w: singleW, h: H } = PREVIEW_DIMS[albumSize] || { w: 500, h: 625 };
 
-  // Export as image
-  const handleExport = async () => {
-    if (!canvasRef.current) return;
-    const html2canvas = (await import('html2canvas')).default;
-    const canvas = await html2canvas(canvasRef.current, { scale: 2, backgroundColor: null });
-    const link = document.createElement('a');
-    link.download = `megy-prints-page-${currentIndex + 1}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  };
-
   // Scale factor: preview pixels per canvas pixel
-  const canvasDims = getCanvasDimensions(albumSize);
+  const canvasDims = getCanvasDimensions(albumSize as any);
   const sx = singleW / canvasDims.width;
   const sy = H / canvasDims.height;
 
   // ─── Resolve slot-based photos ───
   const slotPhotos: SlotPhotoInfo[] = useMemo(() => {
     const result: SlotPhotoInfo[] = [];
-    if (!page.templateId || !page.slotFills) return result;
-
+    if (!page?.templateId || !page.slotFills) return result;
     const template = getTemplateById(page.templateId);
     if (!template) return result;
 
-    template.slots.forEach((slot, slotIndex) => {
+    template.slots.forEach((rawSlot, slotIndex) => {
+      const geom = page.slotGeometries?.[slotIndex] ?? {};
+      const slot = { ...rawSlot, ...geom };
       const photoIndex = page.slotFills?.[slotIndex];
       if (photoIndex == null) return;
       const uploaded = photos[photoIndex];
       if (!uploaded) return;
       result.push({ slotIndex, slot, photoIndex, photo: uploaded });
     });
-
     return result;
-  }, [page.templateId, page.slotFills, photos]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page?.templateId, (page?.slotFills ?? []).join(','), photos.length]);
+
+  // Clear imgDims when switching pages
+  useEffect(() => { setImgDims({}); }, [currentIndex]);
+
+  // Load image dimensions for slot photos
+  useEffect(() => {
+    slotPhotos.forEach(({ photoIndex, photo }) => {
+      if (imgDims[photoIndex]) return;
+      const image = new Image();
+      image.onload = () => {
+        setImgDims(prev => {
+          if (prev[photoIndex]) return prev;
+          return { ...prev, [photoIndex]: { w: image.naturalWidth, h: image.naturalHeight } };
+        });
+      };
+      image.onerror = () => {};
+      image.src = photo.previewUrl;
+    });
+  }, [slotPhotos, imgDims]);
+
+  const textElements = useMemo(() => page?.textElements ?? [], [page]);
+
+  if (!page) {
+    return (
+      <div className="flex flex-col h-screen w-screen bg-white items-center justify-center">
+        <p className="text-[#9B9B9B]">No pages to preview</p>
+        <button onClick={onBack} className="mt-4 px-4 py-2 bg-[#F4C2A1] text-white rounded-lg">Go Back</button>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full bg-[#F5F5F5]">
-      {/* Header */}
-      <div className="h-14 bg-white border-b border-[#E8E8E8] flex items-center justify-between px-4">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 rounded-lg hover:bg-[#F0F0F0] text-[#6B6B6B]">
-            <Edit3 size={16} />
-          </button>
-          <span className="text-sm font-medium text-[#2D2D2D]">
-            Page {currentIndex + 1} of {pages.length}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setSpreadView(!spreadView)} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#E8E8E8] hover:bg-[#F0F0F0] text-[#6B6B6B]">
-            {spreadView ? 'Single' : 'Spread'}
-          </button>
-          <button onClick={handleExport} className="p-2 rounded-lg hover:bg-[#F0F0F0] text-[#6B6B6B]" title="Export page">
-            <Download size={16} />
-          </button>
-          <button onClick={onOrder} className="px-4 py-2 bg-[#F4C2A1] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5">
-            <ShoppingCart size={14} /> Order Now
-          </button>
-        </div>
-      </div>
+    <div className="flex flex-col h-screen w-screen bg-white">
+      <BuilderToolbar
+        currentIndex={currentIndex}
+        totalPages={pages.length}
+        onGoToPage={onGoToPage}
+        onBack={onBack}
+        backLabel="Edit"
+        onOrder={onOrder}
+        spreadView={spreadView}
+        onToggleSpreadView={() => setSpreadView(!spreadView)}
+      />
 
-      {/* Preview Canvas */}
-      <div className="flex-1 flex items-center justify-center overflow-auto p-8">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => onGoToPage(Math.max(0, currentIndex - 1))}
-            disabled={currentIndex === 0}
-            className="p-2 rounded-full bg-white shadow-md hover:shadow-lg disabled:opacity-30 transition-all"
-          >
-            <ChevronLeft size={20} className="text-[#2D2D2D]" />
-          </button>
-
-          <motion.div
-            key={page.id}
-            initial={{ opacity: 0, rotateY: spreadView ? -15 : 0 }}
-            animate={{ opacity: 1, rotateY: 0 }}
-            transition={{ duration: 0.3 }}
-            className="relative shadow-2xl rounded-sm overflow-hidden"
-            style={{ width: singleW, height: H, perspective: 1000, ...bgToStyle(page.background) }}
-            ref={canvasRef}
-          >
-            {/* ─── SLOT-BASED PHOTOS ─── */}
-            {slotPhotos.map(({ slot, photo }) => {
-              // Slot coordinates are percentages (0-100) of the page
-              const rawLeft = (slot.x / 100) * singleW;
-              const rawTop = (slot.y / 100) * H;
-              const rawWidth = (slot.width / 100) * singleW;
-              const rawHeight = (slot.height / 100) * H;
-              const rotation = slot.rotation || 0;
-
-              // Compute shape-corrected sizing (circle → square, etc.)
-              const { style: shapeStyle, width, height, leftOffset, topOffset } =
-                slotShapeStyle(slot, rawWidth, rawHeight);
-
+      <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
+        <div
+          ref={canvasRef}
+          className="relative bg-white shadow-xl"
+          style={{
+            width: spreadView ? singleW * 2 + 20 : singleW,
+            height: H,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+          }}
+        >
+          {/* ─── CANVAS SNAPSHOT (pixel-perfect from Design) ─── */}
+          {(() => {
+            const snapshot = getPageSnapshot?.(page.id);
+            if (snapshot) {
               return (
-                <div
-                  key={`slot-${slot.id}`}
-                  className="absolute"
-                  style={{
-                    left: rawLeft + leftOffset,
-                    top: rawTop + topOffset,
-                    width,
-                    height,
-                    transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
-                    transformOrigin: 'center center',
-                    border: slot.borderWidth
-                      ? `${slot.borderWidth}px solid ${slot.borderColor || '#FFFFFF'}`
-                      : undefined,
-                    boxSizing: 'border-box',
-                    ...shapeStyle,
-                  }}
-                >
-                  <img
-                    src={photo.previewUrl}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
-                </div>
+                <img
+                  src={snapshot}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-contain"
+                />
               );
-            })}
+            }
+            /* ─── FALLBACK: DOM render ─── */
+            return (
+              <>
+                <PageBackground bg={page?.background} width={singleW} height={H} />
 
-            {/* ─── FREEFORM PHOTOS ─── */}
-            {page.photos.map((photo) => {
-              const uploaded = photos[photo.photoIndex];
-              if (!uploaded) return null;
-              return (
-                <div
-                  key={photo.id}
-                  className="absolute overflow-hidden"
-                  style={{
-                    left: photo.x * sx,
-                    top: photo.y * sy,
-                    width: photo.width * photo.scaleX * sx,
-                    height: photo.height * photo.scaleY * sy,
-                    transform: `rotate(${photo.rotation}deg)`,
-                    borderWidth: photo.borderWidth,
-                    borderColor: photo.borderColor,
-                    borderStyle: 'solid',
-                    borderRadius: photo.borderRadius,
-                    boxShadow: photo.shadowBlur > 0 ? `${photo.shadowOffsetX}px ${photo.shadowOffsetY}px ${photo.shadowBlur}px ${photo.shadowColor}` : 'none',
-                    filter: filtersToCSS(photo.filters),
-                  }}
-                >
-                  <img
-                    src={uploaded.previewUrl}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
-                </div>
-              );
-            })}
+                {slotPhotos.map(({ slotIndex, slot, photoIndex, photo }) => {
+                  const rawLeft = (slot.x / 100) * singleW;
+                  const rawTop = (slot.y / 100) * H;
+                  const rawWidth = (slot.width / 100) * singleW;
+                  const rawHeight = (slot.height / 100) * H;
+                  const rotation = slot.rotation || 0;
+                  const { style: shapeStyle, width, height, leftOffset, topOffset } =
+                    slotShapeStyle(slot, rawWidth, rawHeight);
+                  const slotScale = page.slotScales?.[slotIndex] ?? 1;
+                  const slotOffsetX = page.slotOffsetsX?.[slotIndex] ?? 0;
+                  const slotOffsetY = page.slotOffsetsY?.[slotIndex] ?? 0;
+                  const dims = imgDims[photoIndex];
+                  const hasCustomTransform = slotScale !== 1 || slotOffsetX !== 0 || slotOffsetY !== 0;
 
-            {/* ─── TEXT ELEMENTS ─── */}
-            {page.textElements.map((text) => {
-              const scaleX = text.scaleX ?? 1;
-              const scaleY = text.scaleY ?? 1;
-              const width = text.width && text.width > 0 ? text.width * sx : undefined;
+                  if (dims && hasCustomTransform) {
+                    const slotCanvasW = (slot.width / 100) * canvasDims.width;
+                    const slotCanvasH = (slot.height / 100) * canvasDims.height;
+                    const coverScale = Math.max(slotCanvasW / dims.w, slotCanvasH / dims.h);
+                    const finalScale = slotScale !== 1 ? slotScale : coverScale;
+                    const imgW = dims.w * finalScale * sx;
+                    const imgH = dims.h * finalScale * sy;
+                    const imgLeft = width / 2 + slotOffsetX * sx - imgW / 2;
+                    const imgTop = height / 2 + slotOffsetY * sy - imgH / 2;
+                    return (
+                      <div
+                        key={`slot-${slot.id}`}
+                        className="absolute"
+                        style={{
+                          zIndex: 1, left: rawLeft + leftOffset, top: rawTop + topOffset,
+                          width, height,
+                          transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+                          transformOrigin: 'center center',
+                          border: slot.borderWidth ? `${slot.borderWidth}px solid ${slot.borderColor || '#FFFFFF'}` : undefined,
+                          boxSizing: 'border-box', overflow: 'hidden', ...shapeStyle,
+                        }}
+                      >
+                        <img src={photo.previewUrl} alt="" draggable={false}
+                          style={{ position: 'absolute', left: imgLeft, top: imgTop, width: imgW, height: imgH }} />
+                      </div>
+                    );
+                  }
 
-              return (
-                <div
-                  key={text.id}
-                  className="absolute"
-                  style={{
-                    left: text.x * sx,
-                    top: text.y * sy,
-                    fontSize: text.fontSize * sx,
-                    fontFamily: text.fontFamily,
-                    color: text.color,
-                    fontWeight: text.bold ? 'bold' : 'normal',
-                    fontStyle: text.italic ? 'italic' : 'normal',
-                    textDecoration: text.underline ? 'underline' : 'none',
-                    textAlign: text.alignment,
-                    transform: `rotate(${text.rotation}deg) scaleX(${scaleX}) scaleY(${scaleY})`,
-                    transformOrigin: 'left top',
-                    opacity: text.opacity / 100,
-                    pointerEvents: 'none',
-                    overflow: 'visible',
-                    width,
-                  }}
-                >
-                  {text.text}
-                </div>
-              );
-            })}
-          </motion.div>
+                  return (
+                    <div
+                      key={`slot-${slot.id}`}
+                      className="absolute"
+                      style={{
+                        zIndex: 1, left: rawLeft + leftOffset, top: rawTop + topOffset,
+                        width, height,
+                        transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+                        transformOrigin: 'center center',
+                        border: slot.borderWidth ? `${slot.borderWidth}px solid ${slot.borderColor || '#FFFFFF'}` : undefined,
+                        boxSizing: 'border-box', overflow: 'hidden', ...shapeStyle,
+                      }}
+                    >
+                      <img src={photo.previewUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+                    </div>
+                  );
+                })}
 
-          <button
-            onClick={() => onGoToPage(Math.min(pages.length - 1, currentIndex + 1))}
-            disabled={currentIndex === pages.length - 1}
-            className="p-2 rounded-full bg-white shadow-md hover:shadow-lg disabled:opacity-30 transition-all"
-          >
-            <ChevronRight size={20} className="text-[#2D2D2D]" />
-          </button>
+                {textElements.map((t, i) => (
+                  <div
+                    key={`txt-${i}`}
+                    className="absolute pointer-events-none"
+                    style={{
+                      zIndex: 2,
+                      left: t.x * sx, top: t.y * sy,
+                      width: (t.width || t.text.length * (t.fontSize || 24) * 0.6) * sx,
+                      transform: `rotate(${t.rotation || 0}deg) scale(${t.scaleX ?? 1}, ${t.scaleY ?? 1})`,
+                      transformOrigin: 'top left',
+                      fontFamily: t.fontFamily || 'serif',
+                      fontSize: (t.fontSize || 24) * sx,
+                      fontWeight: t.bold ? 'bold' : 'normal',
+                      fontStyle: t.italic ? 'italic' : 'normal',
+                      textDecoration: t.underline ? 'underline' : 'none',
+                      color: t.color || '#2D2D2D',
+                      backgroundColor: t.backgroundColor || 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: t.alignment || 'center',
+                      textAlign: (t.alignment || 'center') as any,
+                      whiteSpace: 'normal', wordBreak: 'break-word',
+                      overflow: 'visible', lineHeight: 1.2,
+                      opacity: (t.opacity ?? 100) / 100,
+                    }}
+                  >
+                    {t.text}
+                  </div>
+                ))}
+              </>
+            );
+          })()}
+
+          {/* ─── SPREAD VIEW: show next page ─── */}
+          {spreadView && currentIndex + 1 < pages.length && (
+            <>
+              <div className="absolute left-0 top-0 bottom-0 w-[2px] z-20"
+                style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0.08) 100%)' }} />
+              <SpreadPage page={pages[currentIndex + 1]} photos={photos} singleW={singleW} H={H} />
+            </>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Page thumbnails */}
-      <div className="h-20 bg-white border-t border-[#E8E8E8] flex items-center gap-2 px-4 overflow-x-auto">
-        {pages.map((p, i) => (
-          <button
-            key={p.id}
-            onClick={() => onGoToPage(i)}
-            className="flex-shrink-0 w-12 h-14 rounded-md overflow-hidden border transition-all"
+/* ═════════════════════════════════════════════════════════════════
+   PAGE BACKGROUND
+   ═════════════════════════════════════════════════════════════════ */
+
+function PageBackground({ bg, width, height }: { bg: AlbumBackground | undefined; width: number; height: number }) {
+  const css = backgroundToCss(bg);
+  return (
+    <div className="absolute inset-0" style={{ width, height, ...css, zIndex: 0 }} />
+  );
+}
+
+function backgroundToCss(bg: AlbumBackground | undefined): React.CSSProperties {
+  if (!bg) return { backgroundColor: '#FFFBF7' };
+
+  switch (bg.type) {
+    case 'solid':
+      return { backgroundColor: bg.solid || '#FFFBF7' };
+    case 'gradient': {
+      const grad = bg.gradient;
+      if (!grad) return { backgroundColor: '#FFFBF7' };
+      const angle = grad.angle ?? 135;
+      const stops = grad.stops.map((s) => `${s.color} ${s.offset * 100}%`).join(', ');
+      if (grad.type === 'radial') return { background: `radial-gradient(circle, ${stops})` };
+      return { background: `linear-gradient(${angle}deg, ${stops})` };
+    }
+    case 'image':
+      return bg.image ? { backgroundImage: `url(${bg.image})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {};
+    default:
+      return { backgroundColor: '#FFFBF7' };
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   SPREAD VIEW: Second page rendering
+   ═════════════════════════════════════════════════════════════════ */
+
+function SpreadPage({ page, photos, singleW, H }: { page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number }) {
+  const template = page.templateId ? getTemplateById(page.templateId) : null;
+
+  return (
+    <div className="absolute bg-white shadow-lg" style={{ left: singleW + 20, top: 0, width: singleW, height: H }}>
+      {/* Background */}
+      <div className="absolute inset-0" style={backgroundToCss(page.background)} />
+
+      {/* Slot Photos */}
+      {template && page.slotFills?.map((photoIdx, idx) => {
+        if (photoIdx == null) return null;
+        const uploaded = photos[photoIdx];
+        if (!uploaded) return null;
+        const slot = template.slots[idx];
+        return (
+          <div
+            key={`spread-slot-${idx}`}
+            className="absolute"
             style={{
-              borderColor: i === currentIndex ? '#F4C2A1' : '#E8E8E8',
-              borderWidth: i === currentIndex ? '2px' : '1px',
-              ...bgToStyle(p.background),
+              left: (slot.x / 100) * singleW,
+              top: (slot.y / 100) * H,
+              width: (slot.width / 100) * singleW,
+              height: (slot.height / 100) * H,
+              overflow: 'hidden',
+              borderRadius: slot.shape === 'circle' ? '50%' : slot.shape === 'rounded' ? '12px' : undefined,
             }}
           >
-            {p.photos.length === 0 && !p.slotFills?.some((sf) => sf != null) && (
-              <span className="text-[6px] text-[#C4C4C4] flex items-center justify-center h-full">Empty</span>
-            )}
-          </button>
-        ))}
-      </div>
+            <img src={uploaded.previewUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+          </div>
+        );
+      })}
+
+      {/* Text */}
+      {page.textElements?.map((t, i) => (
+        <div
+          key={`spread-txt-${i}`}
+          className="absolute pointer-events-none"
+          style={{
+            left: t.x * (singleW / 576),
+            top: t.y * (singleW / 576),
+            fontFamily: t.fontFamily || 'serif',
+            fontSize: (t.fontSize || 24) * (singleW / 576),
+            color: t.color || '#2D2D2D',
+            fontWeight: t.bold ? 'bold' : 'normal',
+            fontStyle: t.italic ? 'italic' : 'normal',
+            transform: t.rotation ? `rotate(${t.rotation}deg)` : undefined,
+          }}
+        >
+          {t.text}
+        </div>
+      ))}
     </div>
   );
 }

@@ -57,6 +57,7 @@ const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions:
       onGoToPage={actions.goToPage}
       onBack={() => actions.setPhase('edit')}
       onOrder={onOrder}
+      getPageSnapshot={actions.getPageSnapshot}
     />
   );
 });
@@ -72,7 +73,7 @@ export default function Builder() {
   }, [actions]);
 
   const handleRegenerate = useCallback(() => {
-    actions.regenerateAlbum();
+    actions.regeneratePage();
   }, [actions]);
 
   const handleReset = useCallback(() => {
@@ -122,7 +123,7 @@ export default function Builder() {
         </div>
 
         {/* Phase Content */}
-        <div className="flex-1 overflow-hidden min-h-0">
+        <div className="flex-1 overflow-auto min-h-0">
           <AnimatePresence mode="wait">
             {actions.phase === 'setup' && (
               <motion.div key="setup" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
