@@ -1,6 +1,6 @@
 # Megy Prints — Current State Document
 
-**Last updated:** 2026-05-31 Session 3 — Dynamic Photo Distribution
+**Last updated:** 2026-05-31 Session 3 — Properties merged into Background tab
 **Project phase:** Pre-Sprint 1 (polish phase before Auth + Database)
 **Tech stack:** React 19 + TypeScript + Vite + Tailwind CSS + Fabric.js + shadcn/ui + Framer Motion
 
@@ -41,8 +41,8 @@ Megy Prints is a React-based photo album builder web app. Users upload photos, c
 | `BackgroundDesigner.tsx` | ✅ **PATCHED** | Background editor with custom image upload, fixed layout, CSS gradient presets | **Session 3** |
 | `TemplatePicker.tsx` | ✅ Working | Template selection grid | Session 2 |
 | `EditSidebar.tsx` | ✅ **PATCHED** | Template thumbnail CSS fix for 0-1 slot proportions | **Session 3** |
-| `PropertiesPanel.tsx` | ✅ **PATCHED** | Photo properties panel (now rendered inside UnifiedPanel) | **Session 3** |
-| `UnifiedPanel.tsx` | ✅ **NEW** | Single right panel (320px) — 4 tabs in single row (Photos/Pages/Templates/Properties). Background merged into Properties. No Layers tab. Replaces dual-panel layout. | **Session 3** |
+| `PropertiesPanel.tsx` | ✅ **PATCHED** | Photo properties panel (renders as subsection inside Background tab) | **Session 3** |
+| `UnifiedPanel.tsx` | ✅ **PATCHED** | Single right panel (320px) — 4 tabs in single row (Photos/Pages/Templates/Background). Properties merged INTO Background tab. No separate Props tab. | **Session 3** |
 | `LayersPanel.tsx` | ✅ Working | Page layers panel | Session 2 |
 | `BuilderUpload.tsx` | ✅ Working | Upload phase component (drag & drop, photo grid, replace/remove) | Session 2 |
 
@@ -263,6 +263,41 @@ Megy Prints is a React-based photo album builder web app. Users upload photos, c
 
 ---
 
+### 4.10 Properties Merged into Background Tab (APPLIED)
+**Problem:** User feedback: "No, you should make properties part of background." Having separate Background and Props tabs was confusing — Background was for page background, Props was for object properties, but the mental model is: everything editable on the current page lives under one tab.
+
+**Solution:** Properties (photo filters, text editor, slot controls, position/size) is now a SUBSECTION inside the Background tab. Single row of 4 tabs.
+
+| Before | After |
+|---|---|
+| 5 tabs in 2-row grid (Photos/Pages/Templates + Background/Props) | 4 tabs in single row (Photos/Pages/Templates/Background) |
+| Background tab = page background only | Background tab = page background controls + PropertiesPanel |
+| Props tab = object properties | Props tab = **removed** — content lives inside Background |
+| Auto-switch to "Props" on selection | Auto-switch to "Background" on selection |
+
+**Background tab layout (top to bottom):**
+1. **Background controls** (shrink-0, always visible):
+   - Type selector (Solid/Gradient/Pattern/Image)
+   - Type-specific controls (color swatches, gradient presets, pattern buttons, URL input)
+   - Opacity slider
+   - "Apply to All Pages" button
+2. **Properties subsection** (flex-1, scrollable):
+   - Text selected → Full TextEditor
+   - Background object selected → Background transform + filters
+   - Slot selected → Zoom + Pan controls
+   - Photo selected → Filters + Position/Size
+   - Nothing selected → BackgroundDesigner + "Apply to All"
+
+**BuilderEdit.tsx fixes (stale phase references):**
+- `setPhase('template')` → `setPhase('setup')` — 'template' phase was removed
+- `setPhase('upload')` → `setPhase('setup')` — 'upload' phase was removed
+
+**Files changed:**
+- `UnifiedPanel.tsx` — Single row of 4 tabs. Background tab wraps background controls + PropertiesPanel. Removed 'properties' from tab state. Removed `Settings2` import.
+- `BuilderEdit.tsx` — Fixed stale phase references (`template` → `setup`, `upload` → `setup`).
+
+---
+
 ## 5. Known Issues & Limitations
 
 ### 5.1 Current Limitations
@@ -292,12 +327,11 @@ Megy Prints is a React-based photo album builder web app. Users upload photos, c
 
 ## 6. Features Working
 
-### 6.1 Builder Flow (4 phases)
+### 6.1 Builder Flow (3 phases)
 | Phase | Status | Key Capabilities |
 |-------|--------|------------------|
-| **Setup** | ✅ | Album type (standard/layflat), size selection, live PHP price calculator |
-| **Template** | ✅ | 54 templates, horizontal scroll, rejection system, slot count filter |
-| **Design/Edit** | ✅ | Fabric.js canvas, slots, text (30+ fonts), zoom, backgrounds, container mode, **empty state overlay**, **Generate button** |
+| **Setup** | ✅ | Album size selection, live PHP price calculator (Layflat deprecated) |
+| **Design/Edit** | ✅ | Fabric.js canvas, slots, text (30+ fonts), zoom, backgrounds, container mode, **empty state overlay**, **Generate/Generate All buttons**, **unified right panel** |
 | **Preview** | ✅ | Canvas snapshot sync, spread view, backgrounds |
 
 ### 6.2 Editor Features

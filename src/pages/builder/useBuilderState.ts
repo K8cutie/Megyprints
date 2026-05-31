@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type {
   AlbumSizePreset,
-  AlbumType,
   AlbumPage,
   UploadedPhoto,
   CanvasPhoto,
@@ -9,7 +8,9 @@ import type {
   TemplateType,
   AlbumBackground,
   PhotoFilters,
+  SlotGeometryOverride,
 } from './types';
+import { PAGE_TEMPLATES } from './pageTemplates';
 import { getCanvasDimensions } from './layouts';
 import { generateAlbum } from './generateAlbum';
 
@@ -20,18 +21,22 @@ import { generateAlbum } from './generateAlbum';
 const MIN_PAGES = 40;
 const STORAGE_KEY = 'megy-album-v5';
 
-function createEmptyPage(index: number): AlbumPage {
+// AlbumType is not exported from types.ts — define locally
+type AlbumType = 'standard';
+
+function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
   return {
     id: `page-${Date.now()}-${index}`,
-    templateId: '',
+    layout: 'freeform',
+    size,
+    background: { type: 'solid', solid: '#FFFBF7' },
+    photos: [],
+    textElements: [],
     slotFills: [],
     slotScales: [],
     slotOffsetsX: [],
     slotOffsetsY: [],
     slotGeometries: [],
-    photos: [],
-    textElements: [],
-    background: { type: 'solid', solid: '#FFFBF7' },
   };
 }
 
@@ -67,14 +72,15 @@ function saveState(state: SerializedState) {
 /* ── Initial state factory ── */
 function getInitialState(): SerializedState {
   const saved = loadState();
+  const defaultSize: AlbumSizePreset = '8x8';
 
   return {
     albumType: saved?.albumType ?? 'standard',
-    albumSize: saved?.albumSize ?? '8x8',
+    albumSize: saved?.albumSize ?? defaultSize,
     selectedTemplate: saved?.selectedTemplate ?? 'classic',
     uploadedPhotos: saved?.uploadedPhotos ?? [],
     // Always start with MIN_PAGES empty pages
-    albumPages: saved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i)),
+    albumPages: saved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, defaultSize)),
     currentPageIndex: saved?.currentPageIndex ?? 0,
     rejectedTemplateIds: saved?.rejectedTemplateIds ?? [],
     photosPerPage: saved?.photosPerPage ?? undefined,
@@ -117,7 +123,7 @@ export interface BuilderActions {
   clearSlot: (slotIndex: number) => void;
   setSlotScale: (slotIndex: number, scale: number) => void;
   setSlotOffset: (slotIndex: number, dx: number, dy: number) => void;
-  updateSlotGeometry: (slotIndex: number, geometry: Record<string, number>) => void;
+  updateSlotGeometry: (slotIndex: number, geometry: SlotGeometryOverride) => void;
 
   // Canvas photos (freeform)
   addPhotoToCanvas: (photoIndex: number, x: number, y: number) => void;
@@ -157,7 +163,7 @@ export interface BuilderActions {
   setPhase: (phase: string) => void;
 
   // Reset
-  resetAll: () => void;
+  reset: () => void;
 }
 
 export function useBuilderState(): BuilderActions {
@@ -173,7 +179,7 @@ export function useBuilderState(): BuilderActions {
 
   const pageSnapshotsRef = useRef<Record<string, string>>({});
 
-  const currentPage = albumPages[currentPageIndex] ?? createEmptyPage(0);
+  const currentPage = albumPages[currentPageIndex] ?? createEmptyPage(0, albumSize);
 
   /* ── Persist to localStorage ── */
   useEffect(() => {
@@ -232,27 +238,25 @@ export function useBuilderState(): BuilderActions {
 
   /* ── Page navigation ── */
   const goToPage = useCallback((index: number) => {
-    setCurrentPageIndex((prev) => Math.max(0, Math.min(index, albumPages.length - 1)));
+    setCurrentPageIndex(Math.max(0, Math.min(index, albumPages.length - 1)));
   }, [albumPages.length]);
 
   const addPage = useCallback(() => {
     setAlbumPages((prev) => {
-      const newPage = createEmptyPage(prev.length);
+      const newPage = createEmptyPage(prev.length, albumSize);
       const insertIndex = currentPageIndex + 1;
-      const next = [...prev.slice(0, insertIndex), newPage, ...prev.slice(insertIndex)];
-      return next;
+      return [...prev.slice(0, insertIndex), newPage, ...prev.slice(insertIndex)];
     });
     setCurrentPageIndex((prev) => prev + 1);
-  }, [currentPageIndex]);
+  }, [currentPageIndex, albumSize]);
 
   const deletePage = useCallback((index: number) => {
     setAlbumPages((prev) => {
       // Hard block: cannot delete below MIN_PAGES
       if (prev.length <= MIN_PAGES) return prev;
-      const next = prev.filter((_, i) => i !== index);
-      return next;
+      return prev.filter((_, i) => i !== index);
     });
-    setCurrentPageIndex((prev) => Math.min(prev, albumPages.length - 2));
+    setCurrentPageIndex((prev) => Math.min(prev, Math.max(0, albumPages.length - 2)));
   }, [albumPages.length]);
 
   const duplicatePage = useCallback((index: number) => {
@@ -262,24 +266,23 @@ export function useBuilderState(): BuilderActions {
       const dup: AlbumPage = {
         ...page,
         id: `page-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        slotFills: [...page.slotFills],
-        slotScales: [...page.slotScales],
-        slotOffsetsX: [...page.slotOffsetsX],
-        slotOffsetsY: [...page.slotOffsetsY],
+        slotFills: [...(page.slotFills ?? [])],
+        slotScales: [...(page.slotScales ?? [])],
+        slotOffsetsX: [...(page.slotOffsetsX ?? [])],
+        slotOffsetsY: [...(page.slotOffsetsY ?? [])],
         photos: page.photos.map((p) => ({ ...p, id: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
         textElements: page.textElements.map((t) => ({ ...t, id: `text-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
       };
-      const next = [...prev.slice(0, index + 1), dup, ...prev.slice(index + 1)];
-      return next;
+      return [...prev.slice(0, index + 1), dup, ...prev.slice(index + 1)];
     });
   }, []);
 
   /* ── Generation ── */
   const generateAlbumAction = useCallback(() => {
-    const newPages = generateAlbum(uploadedPhotos, photosPerPage);
+    const newPages = generateAlbum(uploadedPhotos, albumSize, photosPerPage);
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
-  }, [uploadedPhotos, photosPerPage]);
+  }, [uploadedPhotos, albumSize, photosPerPage]);
 
   const regeneratePage = useCallback(() => {
     setAlbumPages((prev) => {
@@ -302,7 +305,7 @@ export function useBuilderState(): BuilderActions {
       const slotCount = template.slots.length;
 
       const newPage: AlbumPage = {
-        ...createEmptyPage(Date.now()),
+        ...createEmptyPage(Date.now(), albumSize),
         id: page.id,
         templateId: template.id,
         background: page.background,
@@ -333,7 +336,7 @@ export function useBuilderState(): BuilderActions {
       next[currentPageIndex] = newPage;
       return next;
     });
-  }, [currentPageIndex, uploadedPhotos]);
+  }, [currentPageIndex, albumSize, uploadedPhotos]);
 
   const shuffleLayout = useCallback(() => {
     setAlbumPages((prev) => {
@@ -363,7 +366,7 @@ export function useBuilderState(): BuilderActions {
   /* ── Slot management ── */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
     updateCurrentPage((page) => {
-      const fills = [...page.slotFills];
+      const fills = [...(page.slotFills ?? [])];
       fills[slotIndex] = photoIndex;
       return { ...page, slotFills: fills };
     });
@@ -371,7 +374,7 @@ export function useBuilderState(): BuilderActions {
 
   const clearSlot = useCallback((slotIndex: number) => {
     updateCurrentPage((page) => {
-      const fills = [...page.slotFills];
+      const fills = [...(page.slotFills ?? [])];
       fills[slotIndex] = null;
       return { ...page, slotFills: fills };
     });
@@ -379,7 +382,7 @@ export function useBuilderState(): BuilderActions {
 
   const setSlotScale = useCallback((slotIndex: number, scale: number) => {
     updateCurrentPage((page) => {
-      const scales = [...page.slotScales];
+      const scales = [...(page.slotScales ?? [])];
       scales[slotIndex] = scale;
       return { ...page, slotScales: scales };
     });
@@ -387,15 +390,15 @@ export function useBuilderState(): BuilderActions {
 
   const setSlotOffset = useCallback((slotIndex: number, dx: number, dy: number) => {
     updateCurrentPage((page) => {
-      const offsetsX = [...page.slotOffsetsX];
-      const offsetsY = [...page.slotOffsetsY];
+      const offsetsX = [...(page.slotOffsetsX ?? [])];
+      const offsetsY = [...(page.slotOffsetsY ?? [])];
       offsetsX[slotIndex] = (offsetsX[slotIndex] ?? 0) + dx;
       offsetsY[slotIndex] = (offsetsY[slotIndex] ?? 0) + dy;
       return { ...page, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
     });
   }, [updateCurrentPage]);
 
-  const updateSlotGeometry = useCallback((slotIndex: number, geometry: Record<string, number>) => {
+  const updateSlotGeometry = useCallback((slotIndex: number, geometry: SlotGeometryOverride) => {
     updateCurrentPage((page) => {
       const geoms = [...(page.slotGeometries ?? [])];
       geoms[slotIndex] = { ...(geoms[slotIndex] ?? {}), ...geometry };
@@ -412,7 +415,6 @@ export function useBuilderState(): BuilderActions {
       let photoIdx = 0;
       for (let i = 0; i < slotCount; i++) {
         if (fills[i] === null && photoIdx < uploadedPhotos.length) {
-          // Find next unused photo
           while (photoIdx < uploadedPhotos.length && fills.includes(photoIdx)) {
             photoIdx++;
           }
@@ -436,9 +438,6 @@ export function useBuilderState(): BuilderActions {
   /* ── Freeform photos ── */
   const addPhotoToCanvas = useCallback((photoIndex: number, x: number, y: number) => {
     updateCurrentPage((page) => {
-      const photo = uploadedPhotos[photoIndex];
-      if (!photo) return page;
-      const { width: cw, height: ch } = getCanvasDimensions(albumSize);
       const newPhoto: CanvasPhoto = {
         id: `canvas-photo-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         photoIndex,
@@ -450,10 +449,26 @@ export function useBuilderState(): BuilderActions {
         scaleX: 1,
         scaleY: 1,
         zIndex: (page.photos.length > 0 ? Math.max(...page.photos.map((p) => p.zIndex)) : 0) + 1,
+        // Required fields from types.ts
+        filters: {
+          grayscale: 0, sepia: 0, brightness: 100, contrast: 100,
+          saturate: 100, blur: 0, hueRotate: 0, opacity: 100,
+          vintage: false, cool: false, warm: false,
+          bwHighContrast: false, fade: false, vivid: false,
+        },
+        offsetX: 0,
+        offsetY: 0,
+        borderWidth: 0,
+        borderColor: '#FFFFFF',
+        borderRadius: 0,
+        shadowBlur: 0,
+        shadowColor: '',
+        shadowOffsetX: 0,
+        shadowOffsetY: 0,
       };
       return { ...page, photos: [...page.photos, newPhoto] };
     });
-  }, [updateCurrentPage, uploadedPhotos, albumSize]);
+  }, [updateCurrentPage]);
 
   const updatePhotoTransform = useCallback((id: string, updates: Partial<CanvasPhoto>) => {
     updateCurrentPage((page) => ({
@@ -466,7 +481,7 @@ export function useBuilderState(): BuilderActions {
     updateCurrentPage((page) => ({
       ...page,
       photos: page.photos.map((p) =>
-        p.id === id ? { ...p, filters: { ...(p.filters ?? {}), ...filters } } : p
+        p.id === id ? { ...p, filters: { ...p.filters, ...filters } } : p
       ),
     }));
   }, [updateCurrentPage]);
@@ -608,12 +623,12 @@ export function useBuilderState(): BuilderActions {
   }, []);
 
   /* ── Reset ── */
-  const resetAll = useCallback(() => {
+  const reset = useCallback(() => {
     setAlbumTypeState('standard');
     setAlbumSizeState('8x8');
     setSelectedTemplateState('classic');
     setUploadedPhotos([]);
-    setAlbumPages(Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i)));
+    setAlbumPages(Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, '8x8')));
     setCurrentPageIndex(0);
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
@@ -672,6 +687,6 @@ export function useBuilderState(): BuilderActions {
     getPageSnapshot,
     phase,
     setPhase,
-    resetAll,
+    reset,
   };
 }

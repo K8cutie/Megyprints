@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Images, FileText, Plus, Trash2, Copy, Layers, LayoutGrid, Upload, Sparkles,
-  Settings2, Palette,
+  Palette,
 } from 'lucide-react';
 import type {
   UploadedPhoto, AlbumPage, CanvasPhoto, TextElement, AlbumBackground, PhotoFilters,
@@ -37,7 +37,7 @@ export interface UnifiedPanelProps {
   photosPerPage?: number;
   onSetPhotosPerPage?: (count: number | undefined) => void;
   onShuffleLayout?: () => void;
-  /* ── Properties tab (auto-activated on selection) ── */
+  /* ── Background tab (contains Properties as subsection) ── */
   selectedPhoto: CanvasPhoto | null;
   selectedText: TextElement | null;
   selectedBackground: (AlbumBackground & { x: number; y: number; width: number; height: number; rotation: number; filters: PhotoFilters; opacity: number }) | null;
@@ -82,16 +82,16 @@ export default function UnifiedPanel(props: UnifiedPanelProps) {
     onClearSlot, onSetSlotScale, onSetSlotOffset, onReplaceSlotPhoto,
   } = props;
 
-  /* ── Tab state: 5 tabs in 2-row grid (3+2) ── */
-  const [activeTab, setActiveTab] = useState<'photos' | 'pages' | 'templates' | 'background' | 'properties'>('photos');
+  /* ── Tab state: 4 tabs in single row ── */
+  const [activeTab, setActiveTab] = useState<'photos' | 'pages' | 'templates' | 'background'>('photos');
 
-  /* ── Auto-switch to Properties when something is selected on canvas ── */
+  /* ── Auto-switch to Background when something is selected on canvas ── */
   const hasSelection = selectedPhoto !== null || selectedText !== null || selectedBackground !== null || selectedSlotIndex !== null;
   useEffect(() => {
-    /* Auto-switch to Props on canvas selection, but NEVER kick user out of
-       Pages or Background tabs — they stay where they chose to be. */
-    if (hasSelection && activeTab !== 'pages' && activeTab !== 'background') {
-      setActiveTab('properties');
+    /* Auto-switch to Background tab on canvas selection, but NEVER kick user
+       out of Photos or Pages tabs — they stay where they chose to be. */
+    if (hasSelection && activeTab !== 'photos' && activeTab !== 'pages') {
+      setActiveTab('background');
     }
   }, [selectedPhotoId, selectedTextId, selectedBackground !== null, selectedSlotIndex, activeTab]);
 
@@ -110,18 +110,15 @@ export default function UnifiedPanel(props: UnifiedPanelProps) {
     return result;
   })();
 
-  /* ── Tabs: 2-row grid (3 top + 2 bottom) ── */
-  const tabRow1: { id: typeof activeTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+  /* ── Tabs: single row of 4 ── */
+  const tabs: { id: typeof activeTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'photos', label: 'Photos', icon: <Images size={13} />, badge: uploadedPhotos.length || undefined },
-    { id: 'pages', label: 'Pages', icon: <FileText size={13} />, badge: albumPages.length || undefined }, // shows count in tab
+    { id: 'pages', label: 'Pages', icon: <FileText size={13} />, badge: albumPages.length || undefined },
     { id: 'templates', label: 'Templates', icon: <LayoutGrid size={13} /> },
-  ];
-  const tabRow2: { id: typeof activeTab; label: string; icon: React.ReactNode }[] = [
     { id: 'background', label: 'Background', icon: <Palette size={13} /> },
-    { id: 'properties', label: 'Props', icon: <Settings2 size={13} /> },
   ];
 
-  const TabButton = ({ t }: { t: typeof tabRow1[0] }) => (
+  const TabButton = ({ t }: { t: typeof tabs[0] }) => (
     <button
       key={t.id}
       onClick={() => setActiveTab(t.id)}
@@ -144,13 +141,10 @@ export default function UnifiedPanel(props: UnifiedPanelProps) {
 
   return (
     <div className="w-80 bg-white border-l border-[#E8E8E8] flex flex-col h-full">
-      {/* ── Tab Bar: 2-row grid ── */}
+      {/* ── Tab Bar: single row of 4 tabs ── */}
       <div className="shrink-0 bg-[#FAFAFA] border-b border-[#E8E8E8] p-1.5">
-        <div className="flex items-center gap-0.5 mb-1">
-          {tabRow1.map((t) => <TabButton key={t.id} t={t} />)}
-        </div>
         <div className="flex items-center gap-0.5">
-          {tabRow2.map((t) => <TabButton key={t.id} t={t} />)}
+          {tabs.map((t) => <TabButton key={t.id} t={t} />)}
         </div>
       </div>
 
@@ -333,145 +327,146 @@ export default function UnifiedPanel(props: UnifiedPanelProps) {
             </motion.div>
           )}
 
-          {/* ═══════ BACKGROUND TAB ═══════ */}
+          {/* ═══════ BACKGROUND TAB (contains Properties as subsection) ═══════ */}
           {activeTab === 'background' && (
-            <motion.div key="background" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-4 space-y-4">
-              {/* Background type selector */}
-              <div>
-                <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider font-medium">Type</p>
-                <div className="flex gap-1">
-                  {(['solid', 'gradient', 'pattern', 'image'] as const).map((type) => (
-                    <button key={type} onClick={() => onUpdateBackground?.({ ...background, type })}
-                      className="flex-1 py-1.5 text-[10px] rounded-full font-medium capitalize transition-colors"
-                      style={{ backgroundColor: background.type === type ? '#F4C2A1' : '#F0F0F0', color: background.type === type ? '#fff' : '#6B6B6B' }}>
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Solid color */}
-              {background.type === 'solid' && (
+            <motion.div key="background" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col">
+              {/* ── Background Controls (always visible) ── */}
+              <div className="shrink-0 p-4 space-y-3 border-b border-[#F0F0F0]">
+                {/* Background type selector */}
                 <div>
-                  <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider font-medium">Color</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['#FFFBF7', '#F8F3ED', '#E8F0E8', '#FFF3D8', '#E0E0E8', '#F0F0F0', '#E8D8B8', '#2D2D2D', '#FFFFFF', '#FDE8E4', '#E8A598', '#B8A9D9'].map((c) => (
-                      <button key={c} onClick={() => onUpdateBackground?.({ ...background, type: 'solid', solid: c })}
-                        className="w-7 h-7 rounded-full border border-[#E8E8E8] transition-transform hover:scale-110"
-                        style={{ backgroundColor: c, boxShadow: background.solid === c ? '0 0 0 2px #F4C2A1' : 'none' }} />
-                    ))}
-                  </div>
-                  <input type="color" value={background.solid || '#FFFBF7'}
-                    onChange={(e) => onUpdateBackground?.({ ...background, type: 'solid', solid: e.target.value })}
-                    className="mt-2 w-full h-8 rounded-lg cursor-pointer" />
-                </div>
-              )}
-
-              {/* Gradient presets */}
-              {background.type === 'gradient' && (
-                <div>
-                  <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider font-medium">Presets</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { name: 'Sunset', stops: [{ offset: 0, color: '#FF6B6B' }, { offset: 0.5, color: '#FFE66D' }, { offset: 1, color: '#FF8E53' }] },
-                      { name: 'Ocean', stops: [{ offset: 0, color: '#2193B0' }, { offset: 1, color: '#6DD5ED' }] },
-                      { name: 'Pastel', stops: [{ offset: 0, color: '#F4C2A1' }, { offset: 0.5, color: '#B8A9D9' }, { offset: 1, color: '#9BCFB8' }] },
-                      { name: 'Rose Gold', stops: [{ offset: 0, color: '#E8A598' }, { offset: 1, color: '#F4C2A1' }] },
-                      { name: 'Mint', stops: [{ offset: 0, color: '#9BCFB8' }, { offset: 1, color: '#E4F0E0' }] },
-                      { name: 'Lavender', stops: [{ offset: 0, color: '#B8A9D9' }, { offset: 1, color: '#E8E0F0' }] },
-                      { name: 'Peach', stops: [{ offset: 0, color: '#F4C2A1' }, { offset: 1, color: '#FDE8E4' }] },
-                      { name: 'Midnight', stops: [{ offset: 0, color: '#2D2D2D' }, { offset: 1, color: '#6B6B6B' }] },
-                    ].map((g) => (
-                      <button key={g.name} onClick={() => onUpdateBackground?.({ ...background, type: 'gradient', gradient: { type: 'linear', angle: 135, stops: g.stops } })}
-                        className="h-10 rounded-lg text-[9px] font-medium text-white flex items-center justify-center transition-transform hover:scale-[1.03]"
-                        style={{ background: `linear-gradient(135deg, ${g.stops.map((s) => s.color).join(', ')})` }}>
-                        {g.name}
+                  <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Type</p>
+                  <div className="flex gap-1">
+                    {(['solid', 'gradient', 'pattern', 'image'] as const).map((type) => (
+                      <button key={type} onClick={() => onUpdateBackground?.({ ...background, type })}
+                        className="flex-1 py-1.5 text-[10px] rounded-full font-medium capitalize transition-colors"
+                        style={{ backgroundColor: background.type === type ? '#F4C2A1' : '#F0F0F0', color: background.type === type ? '#fff' : '#6B6B6B' }}>
+                        {type}
                       </button>
                     ))}
                   </div>
                 </div>
-              )}
 
-              {/* Pattern presets */}
-              {background.type === 'pattern' && (
-                <div>
-                  <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider font-medium">Patterns</p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {['dots', 'stripes', 'diagonal', 'chevron', 'grid', 'floral', 'geometric', 'watercolor', 'marble', 'wood', 'confetti', 'stars', 'hearts', 'polka', 'waves'].map((p) => (
-                      <button key={p} onClick={() => onUpdateBackground?.({ ...background, type: 'pattern', pattern: p })}
-                        className="py-2 rounded-lg text-[9px] font-medium capitalize transition-colors border"
-                        style={{
-                          backgroundColor: background.pattern === p ? '#FDE8E4' : '#fff',
-                          borderColor: background.pattern === p ? '#F4C2A1' : '#E8E8E8',
-                          color: background.pattern === p ? '#E8A598' : '#6B6B6B',
-                        }}>
-                        {p}
-                      </button>
-                    ))}
+                {/* Solid color */}
+                {background.type === 'solid' && (
+                  <div>
+                    <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Color</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['#FFFBF7', '#F8F3ED', '#E8F0E8', '#FFF3D8', '#E0E0E8', '#F0F0F0', '#E8D8B8', '#2D2D2D', '#FFFFFF', '#FDE8E4', '#E8A598', '#B8A9D9'].map((c) => (
+                        <button key={c} onClick={() => onUpdateBackground?.({ ...background, type: 'solid', solid: c })}
+                          className="w-7 h-7 rounded-full border border-[#E8E8E8] transition-transform hover:scale-110"
+                          style={{ backgroundColor: c, boxShadow: background.solid === c ? '0 0 0 2px #F4C2A1' : 'none' }} />
+                      ))}
+                    </div>
+                    <input type="color" value={background.solid || '#FFFBF7'}
+                      onChange={(e) => onUpdateBackground?.({ ...background, type: 'solid', solid: e.target.value })}
+                      className="mt-2 w-full h-8 rounded-lg cursor-pointer" />
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Image background */}
-              {background.type === 'image' && (
+                {/* Gradient presets */}
+                {background.type === 'gradient' && (
+                  <div>
+                    <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Presets</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { name: 'Sunset', stops: [{ offset: 0, color: '#FF6B6B' }, { offset: 0.5, color: '#FFE66D' }, { offset: 1, color: '#FF8E53' }] },
+                        { name: 'Ocean', stops: [{ offset: 0, color: '#2193B0' }, { offset: 1, color: '#6DD5ED' }] },
+                        { name: 'Pastel', stops: [{ offset: 0, color: '#F4C2A1' }, { offset: 0.5, color: '#B8A9D9' }, { offset: 1, color: '#9BCFB8' }] },
+                        { name: 'Rose Gold', stops: [{ offset: 0, color: '#E8A598' }, { offset: 1, color: '#F4C2A1' }] },
+                        { name: 'Mint', stops: [{ offset: 0, color: '#9BCFB8' }, { offset: 1, color: '#E4F0E0' }] },
+                        { name: 'Lavender', stops: [{ offset: 0, color: '#B8A9D9' }, { offset: 1, color: '#E8E0F0' }] },
+                        { name: 'Peach', stops: [{ offset: 0, color: '#F4C2A1' }, { offset: 1, color: '#FDE8E4' }] },
+                        { name: 'Midnight', stops: [{ offset: 0, color: '#2D2D2D' }, { offset: 1, color: '#6B6B6B' }] },
+                      ].map((g) => (
+                        <button key={g.name} onClick={() => onUpdateBackground?.({ ...background, type: 'gradient', gradient: { type: 'linear', angle: 135, stops: g.stops } })}
+                          className="h-10 rounded-lg text-[9px] font-medium text-white flex items-center justify-center transition-transform hover:scale-[1.03]"
+                          style={{ background: `linear-gradient(135deg, ${g.stops.map((s) => s.color).join(', ')})` }}>
+                          {g.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Pattern presets */}
+                {background.type === 'pattern' && (
+                  <div>
+                    <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Patterns</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {['dots', 'stripes', 'diagonal', 'chevron', 'grid', 'floral', 'geometric', 'watercolor', 'marble', 'wood', 'confetti', 'stars', 'hearts', 'polka', 'waves'].map((p) => (
+                        <button key={p} onClick={() => onUpdateBackground?.({ ...background, type: 'pattern', pattern: p })}
+                          className="py-2 rounded-lg text-[9px] font-medium capitalize transition-colors border"
+                          style={{
+                            backgroundColor: background.pattern === p ? '#FDE8E4' : '#fff',
+                            borderColor: background.pattern === p ? '#F4C2A1' : '#E8E8E8',
+                            color: background.pattern === p ? '#E8A598' : '#6B6B6B',
+                          }}>
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Image background */}
+                {background.type === 'image' && (
+                  <div>
+                    <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Image URL</p>
+                    <input type="text" placeholder="Enter image URL..."
+                      value={background.image || ''}
+                      onChange={(e) => onUpdateBackground?.({ ...background, type: 'image', image: e.target.value })}
+                      className="w-full px-3 py-2 text-xs border border-[#E8E8E8] rounded-lg focus:outline-none focus:border-[#F4C2A1]" />
+                  </div>
+                )}
+
+                {/* Opacity */}
                 <div>
-                  <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider font-medium">Image URL</p>
-                  <input type="text" placeholder="Enter image URL..."
-                    value={background.image || ''}
-                    onChange={(e) => onUpdateBackground?.({ ...background, type: 'image', image: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-[#E8E8E8] rounded-lg focus:outline-none focus:border-[#F4C2A1]" />
+                  <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Opacity</p>
+                  <input type="range" min="0" max="100" value={background.opacity ?? 100}
+                    onChange={(e) => onUpdateBackground?.({ ...background, opacity: Number(e.target.value) })}
+                    className="w-full" />
+                  <p className="text-[10px] text-[#9B9B9B] text-right">{background.opacity ?? 100}%</p>
                 </div>
-              )}
 
-              {/* Opacity */}
-              <div>
-                <p className="text-[10px] text-[#9B9B9B] mb-2 uppercase tracking-wider font-medium">Opacity</p>
-                <input type="range" min="0" max="100" value={background.opacity ?? 100}
-                  onChange={(e) => onUpdateBackground?.({ ...background, opacity: Number(e.target.value) })}
-                  className="w-full" />
-                <p className="text-[10px] text-[#9B9B9B] text-right">{background.opacity ?? 100}%</p>
+                {/* Apply to All */}
+                <button
+                  onClick={onApplyBackgroundToAll}
+                  className="w-full py-2 bg-white border border-[#F4C2A1] text-[#F4C2A1] text-[11px] font-medium rounded-xl hover:bg-[#F4C2A1] hover:text-white flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <Layers size={12} /> Apply to All Pages
+                </button>
               </div>
 
-              {/* Apply to All */}
-              <button
-                onClick={onApplyBackgroundToAll}
-                className="w-full py-2 bg-white border border-[#F4C2A1] text-[#F4C2A1] text-[11px] font-medium rounded-xl hover:bg-[#F4C2A1] hover:text-white flex items-center justify-center gap-1.5 transition-all"
-              >
-                <Layers size={12} /> Apply to All Pages
-              </button>
-            </motion.div>
-          )}
-
-          {/* ═══════ PROPERTIES TAB ═══════ */}
-          {activeTab === 'properties' && (
-            <motion.div key="properties" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-              <PropertiesPanel
-                selectedPhoto={selectedPhoto}
-                selectedText={selectedText}
-                selectedBackground={selectedBackground}
-                background={background}
-                selectedSlotIndex={selectedSlotIndex}
-                slotFills={slotFills}
-                slotScales={slotScales}
-                slotOffsetsX={slotOffsetsX}
-                slotOffsetsY={slotOffsetsY}
-                uploadedPhotos={uploadedPhotos}
-                onUpdatePhoto={onUpdatePhoto}
-                onUpdateFilters={onUpdateFilters}
-                onUpdateText={onUpdateText}
-                onDeletePhoto={onDeletePhoto}
-                onDeleteText={onDeleteText}
-                onDuplicatePhoto={onDuplicatePhoto}
-                onBringToFront={onBringToFront}
-                onSendToBack={onSendToBack}
-                onUpdateBackground={onUpdateBackground}
-                onUpdateBackgroundTransform={onUpdateBackgroundTransform}
-                onUpdateBackgroundFilters={onUpdateBackgroundFilters}
-                onClearSlot={onClearSlot}
-                onSetSlotScale={onSetSlotScale}
-                onSetSlotOffset={onSetSlotOffset}
-                onReplaceSlotPhoto={onReplaceSlotPhoto}
-              />
+              {/* ── Properties Subsection (selection-based content) ── */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <PropertiesPanel
+                  selectedPhoto={selectedPhoto}
+                  selectedText={selectedText}
+                  selectedBackground={selectedBackground}
+                  background={background}
+                  selectedSlotIndex={selectedSlotIndex}
+                  slotFills={slotFills}
+                  slotScales={slotScales}
+                  slotOffsetsX={slotOffsetsX}
+                  slotOffsetsY={slotOffsetsY}
+                  uploadedPhotos={uploadedPhotos}
+                  onUpdatePhoto={onUpdatePhoto}
+                  onUpdateFilters={onUpdateFilters}
+                  onUpdateText={onUpdateText}
+                  onDeletePhoto={onDeletePhoto}
+                  onDeleteText={onDeleteText}
+                  onDuplicatePhoto={onDuplicatePhoto}
+                  onBringToFront={onBringToFront}
+                  onSendToBack={onSendToBack}
+                  onUpdateBackground={onUpdateBackground}
+                  onUpdateBackgroundTransform={onUpdateBackgroundTransform}
+                  onUpdateBackgroundFilters={onUpdateBackgroundFilters}
+                  onClearSlot={onClearSlot}
+                  onSetSlotScale={onSetSlotScale}
+                  onSetSlotOffset={onSetSlotOffset}
+                  onReplaceSlotPhoto={onReplaceSlotPhoto}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

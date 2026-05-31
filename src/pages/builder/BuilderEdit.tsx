@@ -517,7 +517,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           <div className="h-10 bg-white border-b border-[#E8E8E8] flex items-center justify-between px-3 shrink-0">
             <div className="flex items-center gap-1">
               <button
-                onClick={() => actions.setPhase('template')}
+                onClick={() => actions.setPhase('setup')}
                 className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"
                 title="Back to template"
               >
@@ -684,7 +684,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                         )}
                         {actions.uploadedPhotos.length === 0 && (
                           <button
-                            onClick={() => actions.setPhase('upload')}
+                            onClick={() => actions.setPhase('setup')}
                             className="px-5 py-2 bg-[#F4C2A1] text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
                           >
                             <Upload size={14} /> Upload Photos

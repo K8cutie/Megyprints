@@ -1,4 +1,4 @@
-import type { AlbumPage, UploadedPhoto } from './types';
+import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle } from './types';
 import { PAGE_TEMPLATES } from './pageTemplates';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -7,10 +7,12 @@ import { PAGE_TEMPLATES } from './pageTemplates';
 
 const MIN_PAGES = 40;
 
-function createEmptyPage(index: number): AlbumPage {
+function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
   return {
     id: `page-${Date.now()}-${index}`,
-    templateId: '',
+    layout: 'freeform' as LayoutStyle,
+    size,
+    templateId: undefined,
     slotFills: [],
     slotScales: [],
     slotOffsetsX: [],
@@ -32,16 +34,17 @@ function createEmptyPage(index: number): AlbumPage {
  */
 export function generateAlbum(
   photos: UploadedPhoto[],
+  albumSize: AlbumSizePreset,
   _preferredSlotCount?: number | undefined,
 ): AlbumPage[] {
   const totalPhotos = photos.length;
 
   // If no photos, still create the minimum 40 empty pages
   if (totalPhotos === 0) {
-    return Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i));
+    return Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, albumSize));
   }
 
-  // Target photos per page (rounded). This drives PAGE COUNT only — not template selection.
+  // Target photos per page (rounded). This drives PAGE COUNT only.
   const photosPerPageTarget = Math.max(1, Math.round(totalPhotos / MIN_PAGES));
 
   // Pages needed = enough to fit all photos at the target density, but never below 40
@@ -55,7 +58,7 @@ export function generateAlbum(
     const template = PAGE_TEMPLATES[Math.floor(Math.random() * PAGE_TEMPLATES.length)];
     const slotCount = template.slots.length;
 
-    const page = createEmptyPage(pageIdx);
+    const page = createEmptyPage(pageIdx, albumSize);
     page.templateId = template.id;
 
     // Initialise slot arrays
@@ -79,49 +82,12 @@ export function generateAlbum(
 }
 
 /**
- * Regenerate a single page with a random template and fresh photo assignment.
- * Used when the user clicks "Regenerate" on the current page.
- */
-export function regeneratePage(
-  page: AlbumPage,
-  photos: UploadedPhoto[],
-  usedPhotoIndices: Set<number>,
-): AlbumPage {
-  // Pick a random template
-  const template = PAGE_TEMPLATES[Math.floor(Math.random() * PAGE_TEMPLATES.length)];
-  const slotCount = template.slots.length;
-
-  const newPage = createEmptyPage(Date.now());
-  newPage.id = page.id; // Preserve page ID
-  newPage.templateId = template.id;
-  newPage.background = page.background; // Preserve background
-  newPage.textElements = page.textElements; // Preserve text
-
-  newPage.slotFills = new Array(slotCount).fill(null);
-  newPage.slotScales = new Array(slotCount).fill(1);
-  newPage.slotOffsetsX = new Array(slotCount).fill(0);
-  newPage.slotOffsetsY = new Array(slotCount).fill(0);
-
-  // Fill slots, avoiding already-used photos when possible
-  let slotIdx = 0;
-  for (let i = 0; i < photos.length && slotIdx < slotCount; i++) {
-    if (!usedPhotoIndices.has(i)) {
-      newPage.slotFills[slotIdx] = i;
-      usedPhotoIndices.add(i);
-      slotIdx++;
-    }
-  }
-
-  return newPage;
-}
-
-/**
  * Shuffle layout: pick a new random template for the current page
- * (different from current one) and re-fill slots.
+ * (different from current one) and preserve existing slot fills.
  */
 export function shufflePageLayout(
   page: AlbumPage,
-  photos: UploadedPhoto[],
+  _photos: UploadedPhoto[],
 ): AlbumPage {
   // Exclude the current template
   const otherTemplates = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
@@ -130,22 +96,16 @@ export function shufflePageLayout(
   const template = pool[Math.floor(Math.random() * pool.length)];
   const slotCount = template.slots.length;
 
-  const newPage = createEmptyPage(Date.now());
-  newPage.id = page.id;
-  newPage.templateId = template.id;
-  newPage.background = page.background;
-  newPage.textElements = page.textElements;
-
-  newPage.slotFills = new Array(slotCount).fill(null);
-  newPage.slotScales = new Array(slotCount).fill(1);
-  newPage.slotOffsetsX = new Array(slotCount).fill(0);
-  newPage.slotOffsetsY = new Array(slotCount).fill(0);
-
-  // Re-fill with existing slot-fill photos (same indices, new slots)
   const existingFills = (page.slotFills ?? []).filter((f): f is number => f !== null);
-  for (let i = 0; i < Math.min(existingFills.length, slotCount); i++) {
-    newPage.slotFills[i] = existingFills[i];
-  }
+
+  const newPage: AlbumPage = {
+    ...page,
+    templateId: template.id,
+    slotFills: new Array(slotCount).fill(null).map((_, i) => existingFills[i] ?? null),
+    slotScales: new Array(slotCount).fill(1),
+    slotOffsetsX: new Array(slotCount).fill(0),
+    slotOffsetsY: new Array(slotCount).fill(0),
+  };
 
   return newPage;
 }
