@@ -18,7 +18,7 @@ import type {
 import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset } from './types';
 import { DEFAULT_BG_FILTERS } from './types';
 import { getCanvasDimensions } from './layouts';
-import { getTemplateById, PAGE_TEMPLATES } from './pageTemplates';
+import { getTemplateById, PAGE_TEMPLATES, computeSlotPixels, adaptTemplateToOrientation } from './pageTemplates';
 import type { BuilderActions } from './useBuilderState';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
@@ -158,7 +158,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   const fabricRef = useRef<FabricCanvas | null>(null);
   const snapGuidesRef = useRef<FabricObject[]>([]);
   const lastStructuralRef = useRef<string>('');
-  const savedSelectionRef = useRef<string | null>(null);
+  const savedSelectionRef = useRef<{ type: 'photo' | 'text' | 'slot' | 'bg' | null; id: string | null; slotIndex: number | null }>({ type: null, id: null, slotIndex: null });
   const isEditingTextRef = useRef(false);
   const lastPageIndexRef = useRef(actions.currentPageIndex);
 
@@ -221,13 +221,16 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       };
       if (obj.photoId && obj.slotIndex === undefined) {
         clearAll(); setSelectedPhotoId(obj.photoId);
+        savedSelectionRef.current = { type: 'photo', id: obj.photoId as string, slotIndex: null };
       } else if (obj.slotIndex !== undefined) {
         clearAll(); setSelectedSlotIndex(obj.slotIndex);
+        savedSelectionRef.current = { type: 'slot', id: null, slotIndex: obj.slotIndex as number };
       } else if (obj.textId) {
         clearAll(); setSelectedTextId(obj.textId);
-        savedSelectionRef.current = obj.textId as string;
+        savedSelectionRef.current = { type: 'text', id: obj.textId as string, slotIndex: null };
       } else if (obj.bgId === BG_ID) {
         clearAll(); setSelectedBg(true);
+        savedSelectionRef.current = { type: 'bg', id: BG_ID, slotIndex: null };
       }
     };
 
@@ -253,6 +256,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
           setSelectedTextId(null);
           setSelectedBg(true);
           setSelectedSlotIndex(null);
+          savedSelectionRef.current = { type: 'bg', id: BG_ID, slotIndex: null };
         }
       }
     });
@@ -261,7 +265,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     canvas.on('mouse:dblclick', (e: any) => {
       const obj = e.target;
       if (obj && obj.textId && typeof obj.enterEditing === 'function') {
-        savedSelectionRef.current = obj.textId as string;
+        savedSelectionRef.current = { type: 'text', id: obj.textId as string, slotIndex: null };
         obj.enterEditing();
         isEditingTextRef.current = true;
         canvas.setActiveObject(obj);
@@ -391,22 +395,30 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       // Slot photo
       if (obj.slotIndex !== undefined && latestActions.setSlotScale && latestActions.setSlotOffset) {
         const template = getTemplateById(page.templateId ?? PAGE_TEMPLATES[0].id);
-        const slot = template?.slots?.[obj.slotIndex];
-        if (slot) {
-          const sx = (slot.x / 100) * cw;
-          const sy = (slot.y / 100) * ch;
-          const sw = (slot.width / 100) * cw;
-          const sh = (slot.height / 100) * ch;
-          latestActions.setSlotScale(obj.slotIndex, Math.max(0.1, (obj.scaleX as number) ?? 1));
-          const offsetX = ((obj.left as number) ?? 0) - (sx + sw / 2);
-          const offsetY = ((obj.top as number) ?? 0) - (sy + sh / 2);
-          const currentOffsetX = page.slotOffsetsX?.[obj.slotIndex] ?? 0;
-          const currentOffsetY = page.slotOffsetsY?.[obj.slotIndex] ?? 0;
-          latestActions.setSlotOffset(obj.slotIndex, offsetX - currentOffsetX, offsetY - currentOffsetY);
-          // Save rotation if changed
-          const newAngle = Math.round((obj.angle as number) ?? 0);
-          if (newAngle !== (slot.rotation ?? 0) && latestActions.updateSlotGeometry) {
-            latestActions.updateSlotGeometry(obj.slotIndex, { rotation: newAngle });
+        if (template) {
+          const adapted = adaptTemplateToOrientation(template, cw, ch);
+          const slot = adapted.slots[obj.slotIndex];
+          if (slot) {
+            // Two-phase: safe area → slot pixels
+            const safeX = cw * adapted.margin.left;
+            const safeY = ch * adapted.margin.top;
+            const safeW = cw * (1 - adapted.margin.left - adapted.margin.right);
+            const safeH = ch * (1 - adapted.margin.top - adapted.margin.bottom);
+            const sx = safeX + slot.x * safeW;
+            const sy = safeY + slot.y * safeH;
+            const sw = slot.width * safeW;
+            const sh = slot.height * safeH;
+            latestActions.setSlotScale(obj.slotIndex, Math.max(0.1, (obj.scaleX as number) ?? 1));
+            const offsetX = ((obj.left as number) ?? 0) - (sx + sw / 2);
+            const offsetY = ((obj.top as number) ?? 0) - (sy + sh / 2);
+            const currentOffsetX = page.slotOffsetsX?.[obj.slotIndex] ?? 0;
+            const currentOffsetY = page.slotOffsetsY?.[obj.slotIndex] ?? 0;
+            latestActions.setSlotOffset(obj.slotIndex, offsetX - currentOffsetX, offsetY - currentOffsetY);
+            // Save rotation if changed
+            const newAngle = Math.round((obj.angle as number) ?? 0);
+            if (newAngle !== (slot.rotation ?? 0) && latestActions.updateSlotGeometry) {
+              latestActions.updateSlotGeometry(obj.slotIndex, { rotation: newAngle });
+            }
           }
         }
       }
@@ -514,24 +526,53 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     const canvas = fabricRef.current;
 
-    // Remember text selection so we can restore it after re-render
+    // Remember current selection so we can restore it after re-render
     const active = canvas.getActiveObject?.();
-    const savedTextId = active?.textId ? (active.textId as string) : savedSelectionRef.current;
-    savedSelectionRef.current = savedTextId;
+    if (active) {
+      if (active.photoId && active.slotIndex === undefined) {
+        savedSelectionRef.current = { type: 'photo', id: active.photoId as string, slotIndex: null };
+      } else if (active.slotIndex !== undefined) {
+        savedSelectionRef.current = { type: 'slot', id: null, slotIndex: active.slotIndex as number };
+      } else if (active.textId) {
+        savedSelectionRef.current = { type: 'text', id: active.textId as string, slotIndex: null };
+      } else if (active.bgId === BG_ID) {
+        savedSelectionRef.current = { type: 'bg', id: BG_ID, slotIndex: null };
+      }
+    }
+    const savedSel = savedSelectionRef.current;
 
     renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, onContainerModifiedRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
-    // Restore text selection after re-render
-    if (savedTextId) {
-      const obj = canvas.getObjects().find((o: any) => o.textId === savedTextId);
-      if (obj) {
-        canvas.setActiveObject(obj);
-        canvas.requestRenderAll();
+    // Restore selection after re-render (deferred for async slot images)
+    const restoreSelection = () => {
+      if (savedSel.type && savedSel.id !== null) {
+        let obj: any;
+        if (savedSel.type === 'photo') {
+          obj = canvas.getObjects().find((o: any) => o.photoId === savedSel.id && o.slotIndex === undefined);
+          if (obj) { canvas.setActiveObject(obj); setSelectedPhotoId(savedSel.id); }
+        } else if (savedSel.type === 'text') {
+          obj = canvas.getObjects().find((o: any) => o.textId === savedSel.id);
+          if (obj) { canvas.setActiveObject(obj); setSelectedTextId(savedSel.id); }
+        } else if (savedSel.type === 'bg') {
+          obj = canvas.getObjects().find((o: any) => o.bgId === BG_ID);
+          if (obj) { canvas.setActiveObject(obj); setSelectedBg(true); }
+        }
+        if (obj) canvas.requestRenderAll();
+      } else if (savedSel.type === 'slot' && savedSel.slotIndex !== null) {
+        const obj = canvas.getObjects().find((o: any) => o.slotIndex === savedSel.slotIndex && o.photoId);
+        if (obj) {
+          canvas.setActiveObject(obj);
+          setSelectedSlotIndex(savedSel.slotIndex);
+          canvas.requestRenderAll();
+        }
       }
-    }
+    };
+    restoreSelection();
+    setTimeout(restoreSelection, 100);
+    setTimeout(restoreSelection, 250);
   }, [fabricModule, fabricValid, actions.currentPageIndex, currentPage, uploadedPhotos, actions.albumType, CANVAS_W, CANVAS_H, containerMode]);
 
   /* ═══════ Keyboard shortcuts ═══════ */
@@ -558,46 +599,51 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     return () => window.removeEventListener('keydown', handleKey);
   }, [selectedPhotoId, selectedTextId, selectedSlotIndex]);
 
-  /* ═══════ Mouse wheel: zoom on canvas, page nav everywhere ═══════ */
+  /* ═══════ Mouse wheel: attached to canvas container div ═══════
+     The container has overflow-auto which captures wheel events before
+     they bubble to window. We must attach directly to the container. */
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const attach = () => {
+      const container = containerRef.current;
+      if (!container) return null;
 
-    const handleWheel = (e: WheelEvent) => {
-      const target = e.target as HTMLElement;
+      const handleWheel = (e: WheelEvent) => {
+        // Never interfere with inputs or the unified panel
+        const target = e.target as HTMLElement;
+        if (target.closest('input, textarea, select, .w-80')) return;
 
-      // Never interfere with text inputs or scrollable panels
-      if (target.closest('input, textarea, select, [data-no-scroll]')) return;
-
-      // Over the canvas area → ZOOM (always, no threshold)
-      if (target.closest('.fabric-container, canvas')) {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? -0.08 : 0.08;
-        const newZoom = Math.max(0.2, Math.min(4.0, zoomRef.current + delta));
-        if (newZoom !== zoomRef.current) {
-          const c = canvasRef.current as any;
-          if (c?.setZoom) { c.setZoom(newZoom); c.requestRenderAll(); }
-          setZoomState(newZoom);
+        // Ctrl/Cmd + scroll → ZOOM
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? -0.08 : 0.08;
+          const newZoom = Math.max(0.2, Math.min(4.0, zoomRef.current + delta));
+          if (newZoom !== zoomRef.current) {
+            const c = canvasRef.current as any;
+            if (c?.setZoom) { c.setZoom(newZoom); c.requestRenderAll(); }
+            setZoomState(newZoom);
+          }
+          return;
         }
-        return;
-      }
 
-      // Everywhere else → PAGE NAVIGATION (scroll up/down = prev/next page)
-      if (e.ctrlKey || e.metaKey) return;
-      if (e.deltaY > 30) {
+        // Regular scroll on canvas area → PAGE NAVIGATION
         e.preventDefault();
-        const next = Math.min(actionsRef.current.currentPageIndex + 1, actionsRef.current.albumPages.length - 1);
-        if (next !== actionsRef.current.currentPageIndex) actionsRef.current.goToPage(next);
-      } else if (e.deltaY < -30) {
-        e.preventDefault();
-        const prev = Math.max(actionsRef.current.currentPageIndex - 1, 0);
-        if (prev !== actionsRef.current.currentPageIndex) actionsRef.current.goToPage(prev);
-      }
+        if (e.deltaY > 0) {
+          const next = Math.min(actionsRef.current.currentPageIndex + 1, actionsRef.current.albumPages.length - 1);
+          if (next !== actionsRef.current.currentPageIndex) actionsRef.current.goToPage(next);
+        } else if (e.deltaY < 0) {
+          const prev = Math.max(actionsRef.current.currentPageIndex - 1, 0);
+          if (prev !== actionsRef.current.currentPageIndex) actionsRef.current.goToPage(prev);
+        }
+      };
+
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => container.removeEventListener('wheel', handleWheel);
     };
 
-    window.addEventListener('wheel', handleWheel, { passive: false });
-    return () => window.removeEventListener('wheel', handleWheel);
-  }, [containerRef]);
+    // Delay to ensure DOM is ready
+    const timer = setTimeout(attach, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   /* ═══════ Zoom helpers ═══════ */
   const setZoom = useCallback((value: React.SetStateAction<number>) => {
@@ -665,6 +711,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       setSelectedBg(true);
       setSelectedPhotoId(null);
       setSelectedTextId(null);
+      savedSelectionRef.current = { type: 'bg', id: BG_ID, slotIndex: null };
     }
   }, [fabricModule, CANVAS_W, CANVAS_H]);
 
@@ -820,15 +867,25 @@ function renderTemplateSlots(
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
-  template.slots.forEach((rawSlot: any, i: number) => {
+  // Adapt template to canvas orientation (rotate 90° if needed)
+  const adaptedTemplate = adaptTemplateToOrientation(template, canvasW, canvasH);
+
+  // Phase 1: compute safe area from template margins
+  const safeX = canvasW * adaptedTemplate.margin.left;
+  const safeY = canvasH * adaptedTemplate.margin.top;
+  const safeW = canvasW * (1 - adaptedTemplate.margin.left - adaptedTemplate.margin.right);
+  const safeH = canvasH * (1 - adaptedTemplate.margin.top - adaptedTemplate.margin.bottom);
+
+  adaptedTemplate.slots.forEach((rawSlot: any, i: number) => {
     // Merge template slot with user geometry overrides
     const geom = slotGeometries?.[i] ?? {};
     const slot = { ...rawSlot, ...geom };
     const photoIndex = slotFills[i];
-    const sx = (slot.x / 100) * canvasW;
-    const sy = (slot.y / 100) * canvasH;
-    const sw = (slot.width / 100) * canvasW;
-    const sh = (slot.height / 100) * canvasH;
+    // Phase 2: map slot proportions (0–1 of safe area) → pixels
+    const sx = safeX + slot.x * safeW;
+    const sy = safeY + slot.y * safeH;
+    const sw = slot.width * safeW;
+    const sh = slot.height * safeH;
 
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
       fab.Image.fromURL(uploadedPhotos[photoIndex].previewUrl, (img: any) => {
@@ -899,6 +956,30 @@ function renderTemplateSlots(
         }
 
         canvas.add(img);
+
+        // Fake shadow — dark semi-transparent rect behind photo.
+        // NOT using Fabric.js shadow (unreliable with clipPath).
+        // This is a plain visible shape that looks like a drop shadow.
+        const shadowOff = 4;
+        const shadowBlur = 8;
+        const fakeShadow = new fab.Rect({
+          left: sx + shadowOff - shadowBlur / 2,
+          top: sy + shadowOff - shadowBlur / 2,
+          width: sw + shadowBlur,
+          height: sh + shadowBlur,
+          rx: slot.shape === 'rounded' && slot.borderRadius ? Math.min(slot.borderRadius + 2, Math.min(sw, sh) / 2) : 0,
+          ry: slot.shape === 'rounded' && slot.borderRadius ? Math.min(slot.borderRadius + 2, Math.min(sw, sh) / 2) : 0,
+          fill: 'rgba(0,0,0,0.10)',
+          stroke: 'transparent',
+          strokeWidth: 0,
+          selectable: false,
+          evented: false,
+          hasControls: false,
+          hasBorders: false,
+        });
+        fakeShadow.slotId = `${SLOT_ID}-shadow-${i}`;
+        canvas.add(fakeShadow);
+        fakeShadow.sendToBack();
 
         // Slot border frame — THE CONTAINER. White outline normally,
         // becomes thick blue+selectable in container mode for resize/move.

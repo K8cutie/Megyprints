@@ -1,10 +1,9 @@
 import { useState, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, LayoutTemplate, PenTool, Eye, ChevronRight } from 'lucide-react';
-import { useBuilderState } from './builder/useBuilderState';
+import { Settings, PenTool, Eye, ChevronRight, RotateCcw } from 'lucide-react';
+import { useBuilderContext, type BuilderContextValue } from './builder/BuilderContext';
 import BuilderSetup from './builder/BuilderSetup';
-import BuilderTemplate from './builder/BuilderTemplate';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
@@ -12,42 +11,44 @@ import { useNavigate } from 'react-router-dom';
 
 const phases = [
   { id: 'setup' as const, label: 'Setup', icon: Settings },
-  { id: 'template' as const, label: 'Template', icon: LayoutTemplate },
   { id: 'edit' as const, label: 'Design', icon: PenTool },
   { id: 'preview' as const, label: 'Preview', icon: Eye },
 ];
 
-const SetupPhase = memo(function SetupPhase({ actions }: { actions: ReturnType<typeof useBuilderState> }) {
+const SetupPhase = memo(function SetupPhase({ actions }: { actions: BuilderContextValue }) {
   return (
     <BuilderSetup
       selectedSize={actions.albumSize}
-      selectedType={actions.albumType}
       onSizeChange={actions.setAlbumSize}
-      onTypeChange={actions.setAlbumType}
-      onNext={() => actions.setPhase('template')}
+      onNext={() => actions.setPhase('edit')}
     />
   );
 });
 
-const TemplatePhase = memo(function TemplatePhase({ actions, onGenerate }: { actions: ReturnType<typeof useBuilderState>; onGenerate: () => void }) {
+/* Template phase removed — users customize backgrounds in the editor instead */
+
+const EditPhase = memo(function EditPhase({
+  actions,
+  onRegenerate,
+  onGenerate,
+  onGenerateAll,
+}: {
+  actions: BuilderContextValue;
+  onRegenerate: () => void;
+  onGenerate: () => void;
+  onGenerateAll: () => void;
+}) {
   return (
-    <BuilderTemplate
-      selected={actions.selectedTemplate}
-      onSelect={actions.selectTemplate}
-      onBack={() => actions.setPhase('setup')}
+    <BuilderEdit
+      actions={actions}
+      onRegenerate={onRegenerate}
       onGenerate={onGenerate}
-      rejectedIds={actions.rejectedTemplateIds}
-      onHideTemplate={actions.hideTemplate}
-      onUnhideAll={actions.unhideAllTemplates}
+      onGenerateAll={onGenerateAll}
     />
   );
 });
 
-const EditPhase = memo(function EditPhase({ actions, onRegenerate }: { actions: ReturnType<typeof useBuilderState>; onRegenerate: () => void }) {
-  return <BuilderEdit actions={actions} onRegenerate={onRegenerate} />;
-});
-
-const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions: ReturnType<typeof useBuilderState>; onOrder: () => void }) {
+const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions: BuilderContextValue; onOrder: () => void }) {
   return (
     <BuilderPreview
       pages={actions.albumPages}
@@ -63,17 +64,27 @@ const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions:
 });
 
 export default function Builder() {
-  const actions = useBuilderState();
+  const actions = useBuilderContext();
   const navigate = useNavigate();
   const [errorKey, setErrorKey] = useState(0);
 
   const handleGenerate = useCallback(() => {
-    actions.generateAlbum();
+    // Only generate fresh pages if no real content exists yet.
+    // If user already has edited pages, just navigate to Edit — don't wipe.
+    const hasExistingPages = actions.albumPages.length > 1 ||
+      (actions.albumPages[0]?.slotFills?.some((f) => f !== null) ?? false);
+    if (!hasExistingPages) {
+      actions.generateAlbum();
+    }
     actions.setPhase('edit');
   }, [actions]);
 
   const handleRegenerate = useCallback(() => {
     actions.regeneratePage();
+  }, [actions]);
+
+  const handleGenerateAll = useCallback(() => {
+    actions.generateAlbum();
   }, [actions]);
 
   const handleReset = useCallback(() => {
@@ -120,6 +131,21 @@ export default function Builder() {
           })}
 
           <div className="flex-1" />
+
+          {/* Restart — wipes everything and starts fresh */}
+          {actions.albumPages.length > 0 && (
+            <button
+              onClick={() => {
+                if (window.confirm('Start a new album? All current pages and edits will be lost.')) {
+                  actions.reset();
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#9B9B9B] hover:bg-[#FDE8E4] hover:text-[#E8A598] transition-all"
+              title="New Album"
+            >
+              <RotateCcw size={13} /> New
+            </button>
+          )}
         </div>
 
         {/* Phase Content */}
@@ -132,17 +158,15 @@ export default function Builder() {
               </motion.div>
             )}
 
-            {actions.phase === 'template' && (
-              <motion.div key="template" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.2 }} className="h-full">
-                <TemplatePhase actions={actions} onGenerate={handleGenerate} />
-              </motion.div>
-            )}
-
             {actions.phase === 'edit' && (
               <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="h-full">
-                <EditPhase actions={actions} onRegenerate={handleRegenerate} />
+                <EditPhase
+                  actions={actions}
+                  onRegenerate={handleRegenerate}
+                  onGenerate={handleGenerate}
+                  onGenerateAll={handleGenerateAll}
+                />
               </motion.div>
             )}
 

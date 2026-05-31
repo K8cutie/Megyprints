@@ -329,8 +329,8 @@ export default function EditSidebar(props: EditSidebarProps) {
                       {tmpl.slots.map((slot, si) => (
                         <div key={si} className="absolute bg-[#E8E8E8] rounded-sm"
                           style={{
-                            left: `${slot.x}%`, top: `${slot.y}%`,
-                            width: `${slot.width}%`, height: `${slot.height}%`,
+                            left: `${slot.x * 100}%`, top: `${slot.y * 100}%`,
+                            width: `${slot.width * 100}%`, height: `${slot.height * 100}%`,
                             borderRadius: slot.shape === 'circle' ? '50%' : slot.shape === 'rounded' ? '3px' : '1px',
                             opacity: 0.7,
                           }}

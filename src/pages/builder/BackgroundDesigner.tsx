@@ -1,4 +1,4 @@
-import { useState, useId } from 'react';
+import { useState, useId, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Paintbrush,
@@ -6,19 +6,19 @@ import {
   GraduationCap,
   Check,
   Droplets,
+  Upload,
+  X,
 } from 'lucide-react';
 import type { AlbumPage } from './types';
 
 /* ─── Tabs ─── */
 type BgTab = 'solid' | 'gradient' | 'image' | 'pattern';
 
-const TABS: { key: BgTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'solid', label: 'Solid', icon: <Paintbrush size={16} /> },
-  // Design choice: GraduationCap icon is used here as a visual metaphor for
-  // "gradation" / gradient. Keeping as-is since it's an intentional design choice.
-  { key: 'gradient', label: 'Gradient', icon: <GraduationCap size={16} /> },
-  { key: 'image', label: 'Image', icon: <Image size={16} /> },
-  { key: 'pattern', label: 'Pattern', icon: <Paintbrush size={16} /> },
+const TABS: { key: BgTab; label: string; icon: React.ReactNode; title: string }[] = [
+  { key: 'solid', label: 'Solid', title: 'Solid Color', icon: <Paintbrush size={14} /> },
+  { key: 'gradient', label: 'Gradient', title: 'Gradient', icon: <GraduationCap size={14} /> },
+  { key: 'image', label: 'Image', title: 'Image Background', icon: <Image size={14} /> },
+  { key: 'pattern', label: 'Pattern', title: 'Pattern', icon: <Paintbrush size={14} /> },
 ];
 
 /* ─── Pattern definitions ─── */
@@ -32,6 +32,17 @@ interface BackgroundDesignerProps {
 
 export default function BackgroundDesigner({ background, onChange }: BackgroundDesignerProps) {
   const [activeTab, setActiveTab] = useState<BgTab>('solid');
+  const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setCustomImageUrl(url);
+    onChange({ type: 'image', image: url });
+    e.target.value = '';
+  }, [onChange]);
 
   /* Solid colour presets */
   const solidPresets = [
@@ -50,36 +61,37 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
   ];
 
   /* Image presets */
-  const imagePresets = [
-    '/bg-textures/paper.jpg',
-    '/bg-textures/linen.jpg',
-    '/bg-textures/leather.jpg',
-    '/bg-textures/marble.jpg',
-    '/bg-textures/wood.jpg',
+  const IMAGE_PRESETS = [
+    { id: 'paper', name: 'Paper', css: 'linear-gradient(135deg, #F5F5F0 0%, #E8E8E0 100%)' },
+    { id: 'linen', name: 'Linen', css: 'linear-gradient(135deg, #E8E0D8 0%, #D8D0C8 100%)' },
+    { id: 'leather', name: 'Leather', css: 'linear-gradient(135deg, #8B4513 0%, #A0522D 100%)' },
+    { id: 'marble', name: 'Marble', css: 'linear-gradient(135deg, #F8F8F8 0%, #E0E0E0 50%, #F0F0F0 100%)' },
+    { id: 'wood', name: 'Wood', css: 'linear-gradient(135deg, #DEB887 0%, #CD853F 100%)' },
   ];
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full flex flex-col h-full">
       {/* Tab bar */}
-      <div className="flex gap-1 p-1 bg-stone-100 rounded-lg">
+      <div className="flex gap-1 p-1 bg-stone-100 rounded-lg shrink-0">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-md transition-all ${
+            title={t.title}
+            className={`flex-1 flex items-center justify-center py-1.5 rounded-md transition-all ${
               activeTab === t.key
-                ? 'bg-white shadow-sm text-stone-900 font-medium'
+                ? 'bg-white shadow-sm text-stone-900'
                 : 'text-stone-500 hover:text-stone-700'
             }`}
           >
             {t.icon}
-            {t.label}
           </button>
         ))}
       </div>
 
-      {/* ─── SOLID ─── */}
-      <AnimatePresence mode="wait">
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto min-h-0 py-3">
+        <AnimatePresence mode="wait">
         {activeTab === 'solid' && (
           <motion.div
             key="solid"
@@ -123,7 +135,7 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
             exit={{ opacity: 0, y: -8 }}
             className="space-y-3"
           >
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               {gradientPresets.map((g, i) => {
                 const css =
                   g.type === 'linear'
@@ -161,25 +173,65 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
             className="space-y-3"
           >
-            <div className="grid grid-cols-3 gap-2">
-              {imagePresets.map((src) => (
+            {/* Upload button */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-2.5 border-2 border-dashed border-rose-300 rounded-lg text-rose-500 text-xs font-medium hover:bg-rose-50 transition-all flex items-center justify-center gap-1.5"
+            >
+              <Upload size={14} /> Upload Custom Image
+            </button>
+
+            {/* Custom image preview */}
+            {customImageUrl && (
+              <div className="relative rounded-lg overflow-hidden border-2 border-rose-400">
+                <img src={customImageUrl} alt="Custom background" className="w-full h-20 object-cover" />
                 <button
-                  key={src}
-                  onClick={() => onChange({ type: 'image', image: src })}
+                  onClick={() => {
+                    setCustomImageUrl(null);
+                    onChange({ type: 'solid', solid: '#FFFBF7' });
+                  }}
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 shadow flex items-center justify-center hover:bg-red-50"
+                >
+                  <X size={10} className="text-red-500" />
+                </button>
+                <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-[10px] px-2 py-0.5">
+                  Custom Image
+                </div>
+              </div>
+            )}
+
+            {/* Preset thumbnails */}
+            <p className="text-[10px] text-stone-400 font-medium uppercase tracking-wider">Presets</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {IMAGE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => onChange({ type: 'image', image: preset.css })}
                   className={`relative w-full aspect-square rounded-lg border-2 overflow-hidden transition-all ${
-                    background.type === 'image' && background.image === src
+                    background.type === 'image' && background.image === preset.css
                       ? 'border-rose-400 shadow'
                       : 'border-transparent hover:scale-105'
                   }`}
                 >
-                  <img src={src} alt="" className="w-full h-full object-cover" loading="lazy" />
-                  {background.type === 'image' && background.image === src && (
+                  <div className="w-full h-full" style={{ background: preset.css }} />
+                  {background.type === 'image' && background.image === preset.css && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                      <Check size={20} className="text-white" />
+                      <Check size={16} className="text-white" />
                     </div>
                   )}
+                  <span className="absolute bottom-0 left-0 right-0 text-[9px] text-white bg-black/40 px-1 py-0.5 truncate">
+                    {preset.name}
+                  </span>
                 </button>
               ))}
             </div>
@@ -195,7 +247,7 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
             exit={{ opacity: 0, y: -8 }}
             className="space-y-3"
           >
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               {PATTERN_NAMES.map((name) => (
                 <button
                   key={name}
@@ -213,9 +265,10 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
 
       {/* ─── OPACITY SLIDER (all background types) ─── */}
-      <div className="pt-3 border-t border-stone-200 space-y-2">
+      <div className="shrink-0 pt-3 border-t border-stone-200 space-y-2">
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
             <Droplets size={13} /> Opacity

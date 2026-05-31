@@ -11,12 +11,25 @@ export type LayoutStyle =
 
 export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star';
 
+/** Template margin definition — expressed as 0–1 proportions of page dimensions.
+ *  e.g. { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 } = 4% margin on all sides */
+export interface TemplateMargin {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/** A single photo slot within a template.
+ *  x, y, width, height are 0–1 proportions of the SAFE AREA (not the full page).
+ *  The safe area = page dimensions minus template margins.
+ *  Example: { x: 0, y: 0, width: 0.5, height: 1.0 } fills the left half of the safe area. */
 export interface TemplateSlot {
   id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number;        // 0 = left edge of safe area, 1 = right edge
+  y: number;        // 0 = top edge of safe area, 1 = bottom edge
+  width: number;    // 1.0 = full safe area width
+  height: number;   // 1.0 = full safe area height
   rotation?: number;
   shape?: SlotShape;
   borderRadius?: number;
@@ -26,11 +39,20 @@ export interface TemplateSlot {
   borderColor?: string;
 }
 
+/** Page template definition.
+ *  Templates are orientation-aware and margin-aware.
+ *  Slot coordinates are proportions of the safe area (0–1), making templates
+ *  automatically responsive to any page size without distortion. */
 export interface PageTemplate {
   id: string;
   name: string;
-  category: 'single' | 'duo' | 'grid' | 'hero' | 'masonry' | 'collage' | 'strip' | 'special' | 'mixed';
+  category: 'single' | 'duo' | 'trio' | 'quad' | 'quint' | 'sextet';
   slotCount: number;
+  /** Margins around the page edge — expressed as 0–1 proportions of page dimensions.
+   *  Photos will NEVER render in margin zones. */
+  margin: TemplateMargin;
+  /** Preferred orientation for this template layout */
+  orientation: 'landscape' | 'portrait' | 'square';
   slots: TemplateSlot[];
 }
 

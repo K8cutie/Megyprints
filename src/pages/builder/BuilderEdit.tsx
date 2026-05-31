@@ -13,13 +13,15 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Eye, Sparkles, BoxSelect,
+  Wand2, Upload,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
-import EditSidebar from './EditSidebar';
-import PropertiesPanel from './PropertiesPanel';
+import UnifiedPanel from './UnifiedPanel';
+/* PropertiesPanel is now rendered inside UnifiedPanel */
 import { getCanvasDimensions } from './layouts';
+import { PAGE_TEMPLATES } from './pageTemplates';
 import fabric from './fabric-loader';
 
 /* ── Local helper types for in-place filter effects ─────────────────────── */
@@ -46,17 +48,18 @@ interface BorderShadowValues {
 interface BuilderEditProps {
   actions: BuilderActions;
   onRegenerate?: () => void;
+  onGenerate?: () => void;
+  onGenerateAll?: () => void;
 }
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
 
-export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps): React.ReactElement {
+export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGenerateAll }: BuilderEditProps): React.ReactElement {
   const canvasElRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<'photos' | 'pages' | 'layers' | 'templates'>('photos');
   const [containerMode, setContainerMode] = useState(false);
 
   /* ── Canvas dimensions ── */
@@ -112,6 +115,18 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
 
   /* ── Derived selections ── */
   const currentPage = actions.currentPage;
+
+  /* ── Empty state detection ── */
+  const isPageEmpty = useMemo(() => {
+    const hasSlotFills = currentPage.slotFills?.some((f) => f !== null) ?? false;
+    const hasFreeformPhotos = currentPage.photos.length > 0;
+    const hasText = currentPage.textElements.length > 0;
+    return !hasSlotFills && !hasFreeformPhotos && !hasText;
+  }, [currentPage.slotFills, currentPage.photos.length, currentPage.textElements.length]);
+
+  const hasTemplateButEmpty = useMemo(() => {
+    return (currentPage.slotFills?.length ?? 0) > 0 && !(currentPage.slotFills?.some((f) => f !== null) ?? false);
+  }, [currentPage.slotFills]);
 
   const selectedPhoto: CanvasPhoto | null = useMemo(
     () => (selectedPhotoId ? currentPage.photos.find((p) => p.id === selectedPhotoId) ?? null : null),
@@ -417,6 +432,23 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
     actions.addTextElement(CANVAS_W / 2, CANVAS_H / 2);
   }, [actions, CANVAS_W, CANVAS_H]);
 
+  /* Shuffle layout: pick a random template matching photosPerPage and auto-fill */
+  const handleShuffleLayout = useCallback(() => {
+    const targetSlotCount = actions.photosPerPage ?? (
+      currentPage.templateId
+        ? PAGE_TEMPLATES.find((t) => t.id === currentPage.templateId)?.slotCount ?? 1
+        : 1
+    );
+    const matches = PAGE_TEMPLATES.filter(
+      (t) => t.slotCount === targetSlotCount && t.id !== currentPage.templateId,
+    );
+    if (matches.length > 0) {
+      const random = matches[Math.floor(Math.random() * matches.length)];
+      actions.setPageTemplate(random.id);
+      actions.autoFillSlots();
+    }
+  }, [actions, currentPage.templateId, actions.photosPerPage]);
+
   /* ── Fabric not loaded — show error ── */
   if (!fabricValid) {
     return (
@@ -499,30 +531,7 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
       </AnimatePresence>
 
       <div className="flex h-full bg-[#F5F5F5]">
-        {/* ── Sidebar ── */}
-        <EditSidebar
-          activeTab={sidebarTab}
-          onTabChange={setSidebarTab}
-          uploadedPhotos={actions.uploadedPhotos}
-          albumPages={actions.albumPages}
-          currentPageIndex={actions.currentPageIndex}
-          photos={currentPage.photos}
-          textElements={currentPage.textElements}
-          selectedPhotoId={selectedPhotoId}
-          selectedTextId={selectedTextId}
-          onSelectPhoto={handleSelectPhoto}
-          onSelectText={handleSelectText}
-          onGoToPage={actions.goToPage}
-          onAddPage={actions.addPage}
-          onDeletePage={actions.deletePage}
-          onDuplicatePage={actions.duplicatePage}
-          onAddText={handleAddText}
-          currentTemplateId={currentPage.templateId}
-          onSetTemplate={actions.setPageTemplate}
-          onAutoFill={actions.autoFillSlots}
-          onClearAllSlots={actions.clearAllSlots}
-          onAddPhotos={actions.addPhotos}
-        />
+        {/* Left sidebar removed — all content moved to UnifiedPanel on right */}
 
         {/* ── Canvas Area ── */}
         <div className="flex-1 flex flex-col relative overflow-hidden">
@@ -571,14 +580,6 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
                 <Magnet size={14} />
               </button>
 
-              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
-
-              <button
-                onClick={selectBackground}
-                className="px-2 py-1 text-xs rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"
-              >
-                Background
-              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -599,14 +600,49 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
                 <BoxSelect size={12} /> {containerMode ? 'Container On' : 'Containers'}
               </button>
 
-              {onRegenerate && (
-                <button
-                  onClick={onRegenerate}
-                  title="Regenerate album with new random layouts"
-                  className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
-                >
-                  <Sparkles size={12} /> Regenerate
-                </button>
+              {/* Generate / Regenerate / Generate All */}
+              {isPageEmpty ? (
+                <>
+                  {onGenerate && (
+                    <button
+                      onClick={onGenerate}
+                      title="Generate layout for this page"
+                      className="px-3 py-1.5 bg-[#B8A9D9] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1 transition-all"
+                    >
+                      <Wand2 size={12} /> Generate
+                    </button>
+                  )}
+                  {onGenerateAll && (
+                    <button
+                      onClick={onGenerateAll}
+                      title="Generate all pages from uploaded photos"
+                      className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                    >
+                      <Sparkles size={12} /> Generate All
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  {onRegenerate && (
+                    <button
+                      onClick={onRegenerate}
+                      title="Regenerate album with new random layouts"
+                      className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                    >
+                      <Sparkles size={12} /> Regenerate
+                    </button>
+                  )}
+                  {onGenerateAll && (
+                    <button
+                      onClick={onGenerateAll}
+                      title="Generate all pages from uploaded photos"
+                      className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                    >
+                      <Sparkles size={12} /> Generate All
+                    </button>
+                  )}
+                </>
               )}
               <button
                 onClick={() => actions.setPhase('preview')}
@@ -621,7 +657,7 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
           <div
             ref={containerRef}
             className="flex-1 overflow-auto flex items-center justify-center p-8"
-            title="Scroll up/down to navigate between pages"
+            title="Scroll to navigate pages. Ctrl+Scroll to zoom."
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -634,40 +670,107 @@ export default function BuilderEdit({ actions, onRegenerate }: BuilderEditProps)
                 ref={canvasElRef}
                 style={{ width: CANVAS_W * zoom, height: CANVAS_H * zoom }}
               />
+
+              {/* Empty State Overlay */}
+              <AnimatePresence>
+                {isPageEmpty && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute inset-0 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm rounded-sm z-10"
+                  >
+                    <div className="text-center px-6">
+                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-[#FDE8E4] flex items-center justify-center">
+                        <Wand2 size={24} className="text-[#E8A598]" />
+                      </div>
+                      <h3 className="font-display text-base font-semibold text-[#2D2D2D] mb-2">
+                        This page is empty
+                      </h3>
+                      <p className="text-sm text-[#9B9B9B] mb-6 max-w-[260px] mx-auto">
+                        {actions.uploadedPhotos.length === 0
+                          ? 'Upload photos to get started with your album.'
+                          : hasTemplateButEmpty
+                            ? 'Your template is ready. Fill the slots with your photos or generate a layout automatically.'
+                            : 'Generate a layout to fill this page with your photos.'}
+                      </p>
+                      <div className="flex flex-col gap-2 items-center">
+                        {actions.uploadedPhotos.length > 0 && onGenerate && (
+                          <button
+                            onClick={onGenerate}
+                            className="px-5 py-2 bg-[#B8A9D9] text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
+                          >
+                            <Wand2 size={14} /> Generate Layout
+                          </button>
+                        )}
+                        {actions.uploadedPhotos.length === 0 && (
+                          <button
+                            onClick={() => actions.setPhase('upload')}
+                            className="px-5 py-2 bg-[#F4C2A1] text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
+                          >
+                            <Upload size={14} /> Upload Photos
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </div>
         </div>
 
-        {/* ── Properties Panel ── */}
-        <div className="w-64 bg-white border-l border-[#E8E8E8] overflow-hidden">
-          <PropertiesPanel
-            selectedPhoto={selectedPhoto}
-            selectedText={selectedText}
-            selectedBackground={selectedBg ? (background as any) : null}
-            background={background}
-            selectedSlotIndex={selectedSlotIndex}
-            slotFills={slotFills}
-            slotScales={slotScales}
-            slotOffsetsX={slotOffsetsX}
-            slotOffsetsY={slotOffsetsY}
-            uploadedPhotos={actions.uploadedPhotos}
-            onUpdatePhoto={handleUpdatePhoto}
-            onUpdateFilters={handleUpdateFilters}
-            onUpdateText={handleUpdateText}
-            onDeletePhoto={handleDeletePhoto}
-            onDeleteText={handleDeleteText}
-            onDuplicatePhoto={handleDuplicatePhoto}
-            onBringToFront={handleBringToFront}
-            onSendToBack={handleSendToBack}
-            onUpdateBackground={handleUpdateBackground}
-            onUpdateBackgroundTransform={handleUpdateBackgroundTransform}
-            onUpdateBackgroundFilters={handleUpdateBackgroundFilters}
-            onClearSlot={handleClearSlot}
-            onSetSlotScale={handleSetSlotScale}
-            onSetSlotOffset={handleSetSlotOffset}
-            onReplaceSlotPhoto={handleReplaceSlotPhoto}
-          />
-        </div>
+        {/* ── Unified Panel (replaces EditSidebar + PropertiesPanel) ── */}
+        <UnifiedPanel
+          uploadedPhotos={actions.uploadedPhotos}
+          onAddPhotos={actions.addPhotos}
+          albumPages={actions.albumPages}
+          currentPageIndex={actions.currentPageIndex}
+          photos={currentPage.photos}
+          textElements={currentPage.textElements}
+          selectedPhotoId={selectedPhotoId}
+          selectedTextId={selectedTextId}
+          onGoToPage={actions.goToPage}
+          onAddPage={actions.addPage}
+          onDeletePage={actions.deletePage}
+          onDuplicatePage={actions.duplicatePage}
+          onAddText={handleAddText}
+          onSelectPhoto={handleSelectPhoto}
+          onSelectText={handleSelectText}
+          currentTemplateId={currentPage.templateId}
+          onSetTemplate={actions.setPageTemplate}
+          onAutoFill={actions.autoFillSlots}
+          onClearAllSlots={actions.clearAllSlots}
+          photosPerPage={actions.photosPerPage}
+          onSetPhotosPerPage={actions.setPhotosPerPage}
+          onShuffleLayout={handleShuffleLayout}
+          selectedPhoto={selectedPhoto}
+          selectedText={selectedText}
+          selectedBackground={selectedBg ? (background as any) : null}
+          background={background}
+          selectedSlotIndex={selectedSlotIndex}
+          slotFills={slotFills}
+          slotScales={slotScales}
+          slotOffsetsX={slotOffsetsX}
+          slotOffsetsY={slotOffsetsY}
+          onUpdatePhoto={handleUpdatePhoto}
+          onUpdateFilters={handleUpdateFilters}
+          onUpdateText={handleUpdateText}
+          onDeletePhoto={handleDeletePhoto}
+          onDeleteText={handleDeleteText}
+          onDuplicatePhoto={handleDuplicatePhoto}
+          onBringToFront={handleBringToFront}
+          onSendToBack={handleSendToBack}
+          onUpdateBackground={handleUpdateBackground}
+          onUpdateBackgroundTransform={handleUpdateBackgroundTransform}
+          onUpdateBackgroundFilters={handleUpdateBackgroundFilters}
+          onApplyBackgroundToAll={actions.applyBackgroundToAllPages}
+          onClearSlot={handleClearSlot}
+          onSetSlotScale={handleSetSlotScale}
+          onSetSlotOffset={handleSetSlotOffset}
+          onReplaceSlotPhoto={handleReplaceSlotPhoto}
+        />
       </div>
     </>
   );

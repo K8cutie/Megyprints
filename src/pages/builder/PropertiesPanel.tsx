@@ -5,7 +5,7 @@ import {
   Sun, Moon, Contrast, Droplets, Sparkles, RotateCcw,
   ChevronDown, Palette, Frame, ZoomIn, Move, Replace,
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
-  TypeOutline, Trash2,
+  TypeOutline, Trash2, Layers,
 } from 'lucide-react';
 import type { CanvasPhoto, TextElement, PhotoFilters, AlbumBackground, UploadedPhoto } from './types';
 import { FILTER_PRESETS, DEFAULT_FILTERS, DEFAULT_BG_FILTERS } from './types';
@@ -461,6 +461,7 @@ interface PropertiesPanelProps {
   onUpdateBackground: (bg: AlbumBackground) => void;
   onUpdateBackgroundTransform: (updates: Partial<Pick<AlbumBackground, 'x' | 'y' | 'width' | 'height' | 'rotation'>>) => void;
   onUpdateBackgroundFilters: (filters: Partial<PhotoFilters>) => void;
+  onApplyBackgroundToAll?: () => void;
   onClearSlot: (slotIndex: number) => void;
   onSetSlotScale: (slotIndex: number, scale: number) => void;
   onSetSlotOffset: (slotIndex: number, dx: number, dy: number) => void;
@@ -478,6 +479,7 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
     onUpdatePhoto, onUpdateFilters, onUpdateText,
     onDeletePhoto, onDeleteText, onDuplicatePhoto, onBringToFront, onSendToBack,
     onUpdateBackground, onUpdateBackgroundTransform, onUpdateBackgroundFilters,
+    onApplyBackgroundToAll,
     onClearSlot, onSetSlotScale, onSetSlotOffset, onReplaceSlotPhoto,
   } = props;
 
@@ -573,6 +575,14 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
       <div className="w-full h-full overflow-y-auto px-3 py-4">
         <h3 className="font-display text-sm font-semibold text-[#2D2D2D] mb-3">Page Properties</h3>
         <BackgroundDesigner background={background} onChange={onUpdateBackground} />
+        {onApplyBackgroundToAll && (
+          <button
+            onClick={onApplyBackgroundToAll}
+            className="w-full mt-3 py-2 bg-white border border-[#F4C2A1] text-[#F4C2A1] text-[11px] font-medium rounded-xl hover:bg-[#F4C2A1] hover:text-white flex items-center justify-center gap-1.5 transition-all"
+          >
+            <Layers size={12} /> Apply to All Pages
+          </button>
+        )}
       </div>
     );
   }
