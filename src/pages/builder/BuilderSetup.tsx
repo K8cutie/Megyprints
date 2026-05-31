@@ -7,66 +7,11 @@ import type { AlbumSizePreset } from './types';
    REAL PHOTO SAMPLES — watermark-free from Pexels/Unsplash
    ═══════════════════════════════════════════════════════════ */
 
-const PHOTOS = {
-  wedding1: 'https://images.pexels.com/photos/2253870/pexels-photo-2253870.jpeg?auto=compress&w=400',
-  wedding2: 'https://images.pexels.com/photos/2959192/pexels-photo-2959192.jpeg?auto=compress&w=400',
-  family1: 'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?auto=compress&w=400',
-  family2: 'https://images.pexels.com/photos/3764119/pexels-photo-3764119.jpeg?auto=compress&w=400',
-  baby1: 'https://images.pexels.com/photos/459957/pexels-photo-459957.jpeg?auto=compress&w=400',
-  baby2: 'https://images.pexels.com/photos/161709/newborn-baby-finger-hand-161709.jpeg?auto=compress&w=400',
-  travel1: 'https://images.pexels.com/photos/1287145/pexels-photo-1287145.jpeg?auto=compress&w=400',
-  travel2: 'https://images.pexels.com/photos/2166553/pexels-photo-2166553.jpeg?auto=compress&w=400',
-  birthday1: 'https://images.pexels.com/photos/1543762/pexels-photo-1543762.jpeg?auto=compress&w=400',
-  birthday2: 'https://images.pexels.com/photos/1405528/pexels-photo-1405528.jpeg?auto=compress&w=400',
-  couple1: 'https://images.pexels.com/photos/1024960/pexels-photo-1024960.jpeg?auto=compress&w=400',
-  couple2: 'https://images.pexels.com/photos/3494942/pexels-photo-3494942.jpeg?auto=compress&w=400',
-  landscape1: 'https://images.pexels.com/photos/132037/pexels-photo-132037.jpeg?auto=compress&w=400',
-  food1: 'https://images.pexels.com/photos/3184183/pexels-photo-3184183.jpeg?auto=compress&w=400',
-  grad1: 'https://images.pexels.com/photos/267885/pexels-photo-267885.jpeg?auto=compress&w=400',
-};
 
 interface PageSample {
   bg: string;
   slots: { x: number; y: number; w: number; h: number; photo: string; rotation?: number }[];
 }
-
-/** Standard album pages — visible center crease, margins */
-const STANDARD_PAGES: PageSample[] = [
-  {
-    bg: '#F8F3ED',
-    slots: [
-      { x: 12, y: 18, w: 34, h: 38, photo: PHOTOS.wedding1, rotation: -2 },
-      { x: 54, y: 22, w: 32, h: 32, photo: PHOTOS.couple1 },
-    ],
-  },
-  {
-    bg: '#F0EDE5',
-    slots: [
-      { x: 10, y: 12, w: 80, h: 48, photo: PHOTOS.family1 },
-    ],
-  },
-  {
-    bg: '#FAF5EF',
-    slots: [
-      { x: 10, y: 14, w: 24, h: 32, photo: PHOTOS.baby1 },
-      { x: 40, y: 10, w: 28, h: 36, photo: PHOTOS.baby2, rotation: 3 },
-      { x: 14, y: 56, w: 58, h: 28, photo: PHOTOS.family2 },
-    ],
-  },
-  {
-    bg: '#E8DDD0',
-    slots: [
-      { x: 20, y: 12, w: 60, h: 58, photo: PHOTOS.wedding2, rotation: -1 },
-    ],
-  },
-  {
-    bg: '#F5EDE0',
-    slots: [
-      { x: 12, y: 14, w: 36, h: 42, photo: PHOTOS.travel1 },
-      { x: 52, y: 18, w: 36, h: 38, photo: PHOTOS.travel2, rotation: 2 },
-    ],
-  },
-];
 
 /* ── Size card renderer ── */
 function renderSizeCard(size: typeof ALBUM_SIZES[0], selectedSize: AlbumSizePreset, onSizeChange: (s: AlbumSizePreset) => void) {

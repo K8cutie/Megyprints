@@ -726,8 +726,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           onAddPhotos={actions.addPhotos}
           albumPages={actions.albumPages}
           currentPageIndex={actions.currentPageIndex}
-          photos={currentPage.photos}
-          textElements={currentPage.textElements}
           selectedPhotoId={selectedPhotoId}
           selectedTextId={selectedTextId}
           onGoToPage={actions.goToPage}
@@ -735,8 +733,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           onDeletePage={actions.deletePage}
           onDuplicatePage={actions.duplicatePage}
           onAddText={handleAddText}
-          onSelectPhoto={handleSelectPhoto}
-          onSelectText={handleSelectText}
           currentTemplateId={currentPage.templateId}
           onSetTemplate={actions.setPageTemplate}
           onAutoFill={actions.autoFillSlots}
