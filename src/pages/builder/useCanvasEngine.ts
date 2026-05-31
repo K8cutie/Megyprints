@@ -18,7 +18,7 @@ import type {
 import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset } from './types';
 import { DEFAULT_BG_FILTERS } from './types';
 import { getCanvasDimensions } from './layouts';
-import { getTemplateById, PAGE_TEMPLATES, computeSlotPixels, adaptTemplateToOrientation } from './pageTemplates';
+import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
 import type { BuilderActions } from './useBuilderState';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */

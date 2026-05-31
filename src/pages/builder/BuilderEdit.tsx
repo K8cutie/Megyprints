@@ -82,7 +82,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     resetZoom,
     setShowGrid,
     setSnapEnabled,
-    selectBackground,
     fabricCanvasRef,
   } = useCanvasEngine({
     canvasRef: canvasElRef,

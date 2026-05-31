@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ChevronRight, BookOpen, Ruler, Sparkles } from 'lucide-react';
 import { ALBUM_SIZES } from './types';
 import type { AlbumSizePreset } from './types';
@@ -69,108 +68,6 @@ const STANDARD_PAGES: PageSample[] = [
   },
 ];
 
-/* ── Scrolling album preview component ── */
-
-function ScrollingAlbumPreview({
-  pages,
-  isLayflat,
-  isSelected,
-}: {
-  pages: PageSample[];
-  isLayflat: boolean;
-  isSelected: boolean;
-}) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % pages.length);
-    }, 2800);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [pages.length]);
-
-  const page = pages[currentIndex];
-
-  return (
-    <div
-      className="relative w-full h-full overflow-hidden rounded-t-2xl"
-      style={{ backgroundColor: page.bg }}
-    >
-      {/* Center crease line */}
-      {!isLayflat && (
-        <div className="absolute left-1/2 top-0 bottom-0 w-[3px] -translate-x-1/2 z-20"
-          style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.1) 100%)' }} />
-      )}
-      {isLayflat && (
-        <div className="absolute left-1/2 top-0 bottom-0 w-[1px] -translate-x-1/2 z-20 bg-white/20" />
-      )}
-
-      {/* Photo slots */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentIndex}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }}
-          className="absolute inset-0 p-3"
-        >
-          {page.slots.map((slot, i) => (
-            <motion.div
-              key={`${currentIndex}-${i}`}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.08 + i * 0.08, duration: 0.35 }}
-              className="absolute overflow-hidden"
-              style={{
-                left: `${slot.x}%`,
-                top: `${slot.y}%`,
-                width: `${slot.w}%`,
-                height: `${slot.h}%`,
-                transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
-                borderRadius: '4px',
-                border: '2px solid rgba(255,255,255,0.7)',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              }}
-            >
-              <img
-                src={slot.photo}
-                alt=""
-                className="w-full h-full object-cover"
-                loading="eager"
-              />
-            </motion.div>
-          ))}
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Page indicator dots */}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 z-10">
-        {pages.map((_, i) => (
-          <div
-            key={i}
-            className="w-1.5 h-1.5 rounded-full transition-all"
-            style={{ backgroundColor: i === currentIndex ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.2)' }} />
-        ))}
-      </div>
-
-      {/* Type label */}
-      <div className="absolute top-2 left-2 z-10">
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-black/40 text-white backdrop-blur-sm">
-          {isLayflat ? 'Layflat Spread' : 'Standard Page'}
-        </span>
-      </div>
-
-      {/* Selected glow */}
-      {isSelected && (
-        <div className="absolute inset-0 rounded-t-2xl z-10 pointer-events-none"
-          style={{ boxShadow: 'inset 0 0 0 3px #F4C2A1' }} />
-      )}
-    </div>
-  );
-}
-
 /* ── Size card renderer ── */
 function renderSizeCard(size: typeof ALBUM_SIZES[0], selectedSize: AlbumSizePreset, onSizeChange: (s: AlbumSizePreset) => void) {
   const isSelected = selectedSize === size.preset;
@@ -195,19 +92,6 @@ interface BuilderSetupProps {
   onSizeChange: (size: AlbumSizePreset) => void;
   onNext: () => void;
 }
-
-const ALBUM_TYPES = [
-  {
-    id: 'standard' as const,
-    name: 'Standard Album',
-    description: 'Classic bound pages with customizable backgrounds per page.',
-    pages: STANDARD_PAGES,
-    icon: BookOpen,
-    features: ['Customizable backgrounds', 'Page-by-page layouts', 'Great for all occasions'],
-  },
-];
-
-// Deprecated: Layflat removed — users customize backgrounds in the editor instead
 
 export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: BuilderSetupProps) {
   return (

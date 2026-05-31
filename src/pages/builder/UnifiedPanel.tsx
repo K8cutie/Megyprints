@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Images, FileText, Plus, Trash2, Copy, Layers, LayoutGrid, Upload, Sparkles,
-  GripVertical, Settings2, Palette,
+  Settings2, Palette,
 } from 'lucide-react';
 import type {
   UploadedPhoto, AlbumPage, CanvasPhoto, TextElement, AlbumBackground, PhotoFilters,
@@ -22,8 +22,6 @@ export interface UnifiedPanelProps {
   /* ── Pages tab ── */
   albumPages: AlbumPage[];
   currentPageIndex: number;
-  photos: CanvasPhoto[];
-  textElements: TextElement[];
   selectedPhotoId: string | null;
   selectedTextId: string | null;
   onGoToPage: (index: number) => void;
@@ -31,8 +29,6 @@ export interface UnifiedPanelProps {
   onDeletePage: (index: number) => void;
   onDuplicatePage: (index: number) => void;
   onAddText: () => void;
-  onSelectPhoto: (id: string | null) => void;
-  onSelectText: (id: string | null) => void;
   /* ── Templates tab ── */
   currentTemplateId?: string;
   onSetTemplate?: (id: string) => void;
@@ -72,10 +68,9 @@ export interface UnifiedPanelProps {
 export default function UnifiedPanel(props: UnifiedPanelProps) {
   const {
     uploadedPhotos, onAddPhotos,
-    albumPages, currentPageIndex, photos, textElements,
+    albumPages, currentPageIndex,
     selectedPhotoId, selectedTextId,
     onGoToPage, onAddPage, onDeletePage, onDuplicatePage, onAddText,
-    onSelectPhoto, onSelectText,
     currentTemplateId, onSetTemplate, onAutoFill, onClearAllSlots,
     photosPerPage, onSetPhotosPerPage, onShuffleLayout,
     selectedPhoto, selectedText, selectedBackground, background,

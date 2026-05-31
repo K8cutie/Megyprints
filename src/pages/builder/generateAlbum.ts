@@ -19,36 +19,6 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-/** Pick templates with dedup — same template won't appear within `window` pages.
- *  Filters out rejected template IDs and optionally by slot count. */
-function pickTemplates(count: number, rejectedIds: Set<string> = new Set(), window = 3, slotCount?: number): typeof PAGE_TEMPLATES {
-  // Filter out rejected templates
-  let available = PAGE_TEMPLATES.filter((t) => !rejectedIds.has(t.id));
-
-  // Filter by slot count if specified
-  if (slotCount !== undefined) {
-    available = available.filter((t) => t.slotCount === slotCount);
-  }
-
-  // If all templates are rejected or no slot-match, fall back to full set
-  const poolSource = available.length > 0 ? available : PAGE_TEMPLATES;
-  const pool = shuffle(poolSource);
-  const picked: typeof PAGE_TEMPLATES = [];
-
-  for (let i = 0; i < count; i++) {
-    const recentIds = new Set(picked.slice(-window).map((t) => t.id));
-    let candidate = pool.find((t) => !recentIds.has(t.id));
-
-    if (!candidate) {
-      candidate = pool[Math.floor(Math.random() * pool.length)];
-    }
-
-    picked.push(candidate);
-  }
-
-  return picked;
-}
-
 /** Calculate how many pages we need based on photo count.
  *  Ensures we don't create more slots than we have photos. */
 function calculatePageCount(photoCount: number): number {
