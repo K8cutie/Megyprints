@@ -11,7 +11,6 @@ import type {
   SlotGeometryOverride,
 } from './types';
 import { PAGE_TEMPLATES } from './pageTemplates';
-import { getCanvasDimensions } from './layouts';
 import { generateAlbum } from './generateAlbum';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -298,9 +297,12 @@ export function useBuilderState(): BuilderActions {
         }
       });
 
-      // Pick a random template different from current
-      const otherTemplates = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
-      const pool = otherTemplates.length > 0 ? otherTemplates : PAGE_TEMPLATES;
+      // Pick a random template different from current, respecting slot count filter
+      let pool = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
+      if (photosPerPage !== undefined) {
+        pool = pool.filter((t) => t.slotCount === photosPerPage);
+      }
+      if (pool.length === 0) pool = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
       const template = pool[Math.floor(Math.random() * pool.length)];
       const slotCount = template.slots.length;
 
@@ -315,6 +317,9 @@ export function useBuilderState(): BuilderActions {
         slotOffsetsX: new Array(slotCount).fill(0),
         slotOffsetsY: new Array(slotCount).fill(0),
       };
+
+      // Ensure slotFills is an array
+      newPage.slotFills = new Array(slotCount).fill(null);
 
       // Fill slots, preferring unused photos
       let slotIdx = 0;
@@ -336,7 +341,7 @@ export function useBuilderState(): BuilderActions {
       next[currentPageIndex] = newPage;
       return next;
     });
-  }, [currentPageIndex, albumSize, uploadedPhotos]);
+  }, [currentPageIndex, albumSize, uploadedPhotos, photosPerPage]);
 
   const shuffleLayout = useCallback(() => {
     setAlbumPages((prev) => {
@@ -344,8 +349,11 @@ export function useBuilderState(): BuilderActions {
       const page = next[currentPageIndex];
       if (!page) return prev;
 
-      const otherTemplates = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
-      const pool = otherTemplates.length > 0 ? otherTemplates : PAGE_TEMPLATES;
+      let pool = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
+      if (photosPerPage !== undefined) {
+        pool = pool.filter((t) => t.slotCount === photosPerPage);
+      }
+      if (pool.length === 0) pool = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
       const template = pool[Math.floor(Math.random() * pool.length)];
       const slotCount = template.slots.length;
 
@@ -411,7 +419,7 @@ export function useBuilderState(): BuilderActions {
     updateCurrentPage((page) => {
       const slotCount = page.slotFills?.length ?? 0;
       if (slotCount === 0) return page;
-      const fills = [...page.slotFills];
+      const fills = [...(page.slotFills ?? [])];
       let photoIdx = 0;
       for (let i = 0; i < slotCount; i++) {
         if (fills[i] === null && photoIdx < uploadedPhotos.length) {
@@ -546,7 +554,6 @@ export function useBuilderState(): BuilderActions {
         rotation: 0,
         opacity: 100,
         width: 200,
-        zIndex: (page.textElements.length > 0 ? Math.max(...page.textElements.map((t) => t.zIndex)) : 0) + 1,
       };
       return { ...page, textElements: [...page.textElements, newText] };
     });

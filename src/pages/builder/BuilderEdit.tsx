@@ -12,7 +12,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Eye, Sparkles, BoxSelect,
+  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles, BoxSelect,
   Wand2, Upload,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
@@ -622,12 +622,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                   )}
                 </>
               )}
-              <button
-                onClick={() => actions.setPhase('preview')}
-                className="px-3 py-1.5 bg-[#F4C2A1] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1"
-              >
-                <Eye size={12} /> Preview
-              </button>
             </div>
           </div>
 
