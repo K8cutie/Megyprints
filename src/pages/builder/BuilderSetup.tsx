@@ -8,11 +8,6 @@ import type { AlbumSizePreset } from './types';
    ═══════════════════════════════════════════════════════════ */
 
 
-interface PageSample {
-  bg: string;
-  slots: { x: number; y: number; w: number; h: number; photo: string; rotation?: number }[];
-}
-
 /* ── Size card renderer ── */
 function renderSizeCard(size: typeof ALBUM_SIZES[0], selectedSize: AlbumSizePreset, onSizeChange: (s: AlbumSizePreset) => void) {
   const isSelected = selectedSize === size.preset;

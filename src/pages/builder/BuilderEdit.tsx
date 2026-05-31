@@ -324,27 +324,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
   /* ── Handler callbacks ── */
 
-  const handleSelectPhoto = useCallback((id: string | null) => {
-    // Selection is managed by the canvas engine; this syncs sidebar click → canvas
-    if (id && fabricCanvasRef.current) {
-      const obj = fabricCanvasRef.current.getObjects().find((o: any) => o.photoId === id);
-      if (obj) {
-        fabricCanvasRef.current.setActiveObject(obj);
-        fabricCanvasRef.current.requestRenderAll();
-      }
-    }
-  }, [fabricCanvasRef]);
-
-  const handleSelectText = useCallback((id: string | null) => {
-    if (id && fabricCanvasRef.current) {
-      const obj = fabricCanvasRef.current.getObjects().find((o: any) => o.textId === id);
-      if (obj) {
-        fabricCanvasRef.current.setActiveObject(obj);
-        fabricCanvasRef.current.requestRenderAll();
-      }
-    }
-  }, [fabricCanvasRef]);
-
   const handleUpdatePhoto = useCallback(
     (id: string, updates: Partial<CanvasPhoto>) => actions.updatePhotoTransform(id, updates),
     [actions],
