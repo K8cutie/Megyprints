@@ -289,11 +289,15 @@ export function useBuilderState(): BuilderActions {
       const page = next[currentPageIndex];
       if (!page) return prev;
 
-      // ── 1. Collect existing photos on this page (preserve these) ──
-      const existingFills = (page.slotFills ?? [])
-        .filter((f): f is number => f !== null);
+      // Collect all used photo indices on other pages (dedup)
+      const used = new Set<number>();
+      next.forEach((p, i) => {
+        if (i !== currentPageIndex) {
+          (p.slotFills ?? []).forEach((f) => { if (f !== null) used.add(f); });
+        }
+      });
 
-      // ── 2. Pick a random template different from current ──
+      // Pick a random template different from current, respecting slot count filter
       let pool = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
       if (photosPerPage !== undefined) {
         pool = pool.filter((t) => t.slotCount === photosPerPage);
@@ -302,7 +306,6 @@ export function useBuilderState(): BuilderActions {
       const template = pool[Math.floor(Math.random() * pool.length)];
       const slotCount = template.slots.length;
 
-      // ── 3. Build new page with preserved photos + new template ──
       const newPage: AlbumPage = {
         ...createEmptyPage(Date.now(), albumSize),
         id: page.id,
@@ -315,35 +318,25 @@ export function useBuilderState(): BuilderActions {
         slotOffsetsY: new Array(slotCount).fill(0),
       };
 
-      // Explicitly initialize slotFills to satisfy TypeScript
+      // Ensure slotFills is an array
       newPage.slotFills = new Array(slotCount).fill(null);
 
-      // ── 4. Preserve existing photos first ──
-      // Same or more slots: all existing photos stay
-      // Fewer slots: excess photos are freed back to pool
-      for (let i = 0; i < Math.min(existingFills.length, slotCount); i++) {
-        newPage.slotFills[i] = existingFills[i];
-      }
-
-      // ── 5. Fill empty slots from unused photo pool ──
-      const usedGlobally = new Set<number>();
-      next.forEach((p) => {
-        (p.slotFills ?? []).forEach((f) => { if (f !== null) usedGlobally.add(f); });
-      });
-      // Remove this page's preserved photos from "used" so we can re-fill our empty slots
-      for (let i = 0; i < Math.min(existingFills.length, slotCount); i++) {
-        usedGlobally.delete(existingFills[i]);
-      }
-
-      let slotIdx = Math.min(existingFills.length, slotCount);
+      // Fill slots, preferring unused photos
+      let slotIdx = 0;
       for (let i = 0; i < uploadedPhotos.length && slotIdx < slotCount; i++) {
-        if (!usedGlobally.has(i)) {
+        if (!used.has(i)) {
           newPage.slotFills[slotIdx] = i;
-          usedGlobally.add(i);
+          used.add(i);
           slotIdx++;
         }
       }
-      // Remaining empty slots = "no more pictures in pool" (left as null)
+      // If we ran out of unused photos, fill remaining with any photos
+      for (let i = 0; i < uploadedPhotos.length && slotIdx < slotCount; i++) {
+        if (newPage.slotFills[slotIdx] === null) {
+          newPage.slotFills[slotIdx] = i;
+          slotIdx++;
+        }
+      }
 
       next[currentPageIndex] = newPage;
       return next;
@@ -374,10 +367,9 @@ export function useBuilderState(): BuilderActions {
         slotOffsetsX: new Array(slotCount).fill(0),
         slotOffsetsY: new Array(slotCount).fill(0),
       };
-
       return next;
     });
-  }, [currentPageIndex, albumSize, uploadedPhotos, photosPerPage]);
+  }, [currentPageIndex]);
 
   /* ── Slot management ── */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {

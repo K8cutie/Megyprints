@@ -509,7 +509,53 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       </AnimatePresence>
 
       <div className="flex h-full bg-[#F5F5F5]">
-        {/* Left sidebar removed — all content moved to UnifiedPanel on right */}
+        {/* ── Unified Panel (LEFT side) ── */}
+        <UnifiedPanel
+          uploadedPhotos={actions.uploadedPhotos}
+          onAddPhotos={actions.addPhotos}
+          albumPages={actions.albumPages}
+          currentPageIndex={actions.currentPageIndex}
+          selectedPhotoId={selectedPhotoId}
+          selectedTextId={selectedTextId}
+          onGoToPage={actions.goToPage}
+          onAddPage={actions.addPage}
+          onDeletePage={actions.deletePage}
+          onDuplicatePage={actions.duplicatePage}
+          onAddText={handleAddText}
+          currentTemplateId={currentPage.templateId}
+          onSetTemplate={actions.setPageTemplate}
+          onAutoFill={actions.autoFillSlots}
+          onClearAllSlots={actions.clearAllSlots}
+          photosPerPage={actions.photosPerPage}
+          onSetPhotosPerPage={actions.setPhotosPerPage}
+          onShuffleLayout={handleShuffleLayout}
+          selectedPhoto={selectedPhoto}
+          selectedText={selectedText}
+          selectedBackground={selectedBg ? (background as any) : null}
+          background={background}
+          selectedSlotIndex={selectedSlotIndex}
+          slotFills={slotFills}
+          slotScales={slotScales}
+          slotOffsetsX={slotOffsetsX}
+          slotOffsetsY={slotOffsetsY}
+          onUpdatePhoto={handleUpdatePhoto}
+          onUpdateFilters={handleUpdateFilters}
+          onUpdateText={handleUpdateText}
+          onDeletePhoto={handleDeletePhoto}
+          onDeleteText={handleDeleteText}
+          onDuplicatePhoto={handleDuplicatePhoto}
+          onBringToFront={handleBringToFront}
+          onSendToBack={handleSendToBack}
+          onUpdateBackground={handleUpdateBackground}
+          onUpdateBackgroundTransform={handleUpdateBackgroundTransform}
+          onUpdateBackgroundFilters={handleUpdateBackgroundFilters}
+          onApplyBackgroundToAll={actions.applyBackgroundToAllPages}
+          onClearSlot={handleClearSlot}
+          onSetSlotScale={handleSetSlotScale}
+          onSetSlotOffset={handleSetSlotOffset}
+          onReplaceSlotPhoto={handleReplaceSlotPhoto}
+          getPageSnapshot={actions.getPageSnapshot}
+        />
 
         {/* ── Canvas Area ── */}
         <div className="flex-1 flex flex-col relative overflow-hidden">
@@ -693,52 +739,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           </div>
         </div>
 
-        {/* ── Unified Panel (replaces EditSidebar + PropertiesPanel) ── */}
-        <UnifiedPanel
-          uploadedPhotos={actions.uploadedPhotos}
-          onAddPhotos={actions.addPhotos}
-          albumPages={actions.albumPages}
-          currentPageIndex={actions.currentPageIndex}
-          selectedPhotoId={selectedPhotoId}
-          selectedTextId={selectedTextId}
-          onGoToPage={actions.goToPage}
-          onAddPage={actions.addPage}
-          onDeletePage={actions.deletePage}
-          onDuplicatePage={actions.duplicatePage}
-          onAddText={handleAddText}
-          currentTemplateId={currentPage.templateId}
-          onSetTemplate={actions.setPageTemplate}
-          onAutoFill={actions.autoFillSlots}
-          onClearAllSlots={actions.clearAllSlots}
-          photosPerPage={actions.photosPerPage}
-          onSetPhotosPerPage={actions.setPhotosPerPage}
-          onShuffleLayout={handleShuffleLayout}
-          selectedPhoto={selectedPhoto}
-          selectedText={selectedText}
-          selectedBackground={selectedBg ? (background as any) : null}
-          background={background}
-          selectedSlotIndex={selectedSlotIndex}
-          slotFills={slotFills}
-          slotScales={slotScales}
-          slotOffsetsX={slotOffsetsX}
-          slotOffsetsY={slotOffsetsY}
-          onUpdatePhoto={handleUpdatePhoto}
-          onUpdateFilters={handleUpdateFilters}
-          onUpdateText={handleUpdateText}
-          onDeletePhoto={handleDeletePhoto}
-          onDeleteText={handleDeleteText}
-          onDuplicatePhoto={handleDuplicatePhoto}
-          onBringToFront={handleBringToFront}
-          onSendToBack={handleSendToBack}
-          onUpdateBackground={handleUpdateBackground}
-          onUpdateBackgroundTransform={handleUpdateBackgroundTransform}
-          onUpdateBackgroundFilters={handleUpdateBackgroundFilters}
-          onApplyBackgroundToAll={actions.applyBackgroundToAllPages}
-          onClearSlot={handleClearSlot}
-          onSetSlotScale={handleSetSlotScale}
-          onSetSlotOffset={handleSetSlotOffset}
-          onReplaceSlotPhoto={handleReplaceSlotPhoto}
-        />
       </div>
     </>
   );
