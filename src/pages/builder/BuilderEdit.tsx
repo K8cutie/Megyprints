@@ -1,27 +1,33 @@
 /**
  * BuilderEdit.tsx
- * ==============================================================================
+ * =============================================================================
  * Refactored presentational component for the album builder's canvas editor.
  * All canvas logic lives in useCanvasEngine.ts — this file only handles:
  *  - JSX layout (sidebar / canvas / properties panel)
  *  - Photo picker modal
  *  - In-place Fabric filter/border/shadow updates (effects)
  *  - Handler delegation to the state management hook
+ *  - Selection change reporting via onSelectionChange callback
  */
 
+import { Link } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles, BoxSelect,
-  Wand2, Upload,
+  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles,
+  Wand2, Upload, Home, PanelLeftOpen,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
 import UnifiedPanel from './UnifiedPanel';
+import { useBuilderContext } from './BuilderContext';
+import { CloudSaveStatus } from '../../components/CloudSaveStatus';
+import { useAuth } from '../../lib/authContext';
 /* PropertiesPanel is now rendered inside UnifiedPanel */
 import { getCanvasDimensions } from './layouts';
 import { PAGE_TEMPLATES } from './pageTemplates';
+import { templateTracker } from './varietyTracker';
 import fabric from './fabric-loader';
 
 /* ── Local helper types for in-place filter effects ─────────────────────── */
@@ -50,17 +56,50 @@ interface BuilderEditProps {
   onRegenerate?: () => void;
   onGenerate?: () => void;
   onGenerateAll?: () => void;
+  containerModeRef?: React.MutableRefObject<((enable: boolean) => void) | undefined>;
+  onAction?: (action: string, payload?: Record<string, unknown>) => void;
+  onSelectionChange?: (ctx: { selectedPhotoId: string | null; selectedSlotIndex: number | null; selectedTextId: string | null }) => void;
 }
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
 
-export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGenerateAll }: BuilderEditProps): React.ReactElement {
+export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGenerateAll, containerModeRef, onAction: _onAction, onSelectionChange }: BuilderEditProps): React.ReactElement {
   const canvasElRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
 
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
   const [containerMode, setContainerMode] = useState(false);
+
+  /* ── Sidebar hidden by default — Megy Assistant is the primary control ── */
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+
+  /* ── Keyboard shortcut: Ctrl+Shift+S toggles sidebar (power users) ── */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        setSidebarVisible(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  /* ── Register container mode toggle for Megy (via parent ref) ── */
+  useEffect(() => {
+    if (containerModeRef) {
+      containerModeRef.current = (enable: boolean) => {
+        setContainerMode(enable);
+      };
+    }
+    return () => {
+      if (containerModeRef) {
+        containerModeRef.current = undefined;
+      }
+    };
+  }, [containerModeRef]);
 
   /* ── Canvas dimensions ── */
   const { width: CANVAS_W, height: CANVAS_H } = useMemo(
@@ -90,27 +129,61 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     uploadedPhotos: actions.uploadedPhotos,
     albumType: actions.albumType,
     albumSize: actions.albumSize,
-    onSlotClick: (slotIndex) => {
-      if (containerMode) return; // In container mode, slot click fills photo
+    onSlotClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
       setSelectedSlotForPicker(slotIndex);
       setShowPhotoPicker(true);
-    },
+    }, [containerMode]),
     actions,
     containerMode,
-    onContainerModified: (slotIndex, geometry) => {
+    onContainerModified: useCallback((slotIndex: number, geometry: any) => {
       actions.updateSlotGeometry(slotIndex, geometry);
-    },
-    onRenderComplete: (canvas) => {
+    }, [actions]),
+    onRenderComplete: useCallback((canvas: any) => {
       try {
-        const dataUrl = (canvas as any).toDataURL({ format: 'png', multiplier: 2 });
+        // Small JPEG thumbnail — the snapshot is only used for the project
+        // cover now (Preview renders live). Keeping it tiny avoids writing
+        // megabyte-sized base64 to Supabase on every auto-save.
+        const dataUrl = canvas.toDataURL({ format: 'jpeg', quality: 0.5, multiplier: 0.35 });
         actions.setPageSnapshot(actions.currentPage.id, dataUrl);
       } catch {
         // silently fail if canvas isn't ready for export
       }
-    },
+    }, [actions]),
   });
 
   const [selectedSlotForPicker, setSelectedSlotForPicker] = useState<number | null>(null);
+
+  /* ── Photo picker only offers UNUSED photos, so the same photo is never
+     placed twice. When everything's used, the picker asks for more. ── */
+  const usedPhotoIndices = useMemo(() => {
+    const used = new Set<number>();
+    actions.albumPages.forEach((p) => (p.slotFills ?? []).forEach((f) => { if (f != null) used.add(f); }));
+    return used;
+  }, [actions.albumPages]);
+
+  const availablePhotos = useMemo(
+    () => actions.uploadedPhotos
+      .map((photo, idx) => ({ photo, idx }))
+      .filter(({ idx }) => !usedPhotoIndices.has(idx)),
+    [actions.uploadedPhotos, usedPhotoIndices],
+  );
+
+  /* ── Report selection changes upward to Builder.tsx ── */
+  useEffect(() => {
+    onSelectionChange?.({ selectedPhotoId, selectedSlotIndex, selectedTextId });
+  }, [selectedPhotoId, selectedSlotIndex, selectedTextId, onSelectionChange]);
+
+  /* ── Sync canvas selections to builder context (for assistant access) ── */
+  useEffect(() => {
+    actions.setSelectedPhotoId(selectedPhotoId);
+  }, [selectedPhotoId, actions]);
+  useEffect(() => {
+    actions.setSelectedSlotIndex(selectedSlotIndex);
+  }, [selectedSlotIndex, actions]);
+  useEffect(() => {
+    actions.setSelectedTextId(selectedTextId);
+  }, [selectedTextId, actions]);
 
   /* ── Derived selections ── */
   const currentPage = actions.currentPage;
@@ -136,6 +209,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     () => (selectedTextId ? currentPage.textElements.find((t) => t.id === selectedTextId) ?? null : null),
     [selectedTextId, currentPage.textElements],
   );
+
+  /* Megy owns every mutation — background writes go through dispatch, not the store. */
+  const { dispatch } = useBuilderContext();
 
   const background = currentPage.background;
 
@@ -366,8 +442,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   );
 
   const handleUpdateBackground = useCallback(
-    (bg: typeof background) => actions.setPageBackground(bg),
-    [actions],
+    (bg: typeof background) => { void dispatch({ type: 'set_background', payload: { background: bg }, rawMessage: 'set background' }); },
+    [dispatch],
+  );
+
+  const handleApplyBackgroundToAll = useCallback(
+    () => { void dispatch({ type: 'set_background', payload: { background, applyAll: true }, rawMessage: 'apply background to all pages' }); },
+    [dispatch, background],
   );
 
   const handleUpdateBackgroundTransform = useCallback(
@@ -421,9 +502,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       (t) => t.slotCount === targetSlotCount && t.id !== currentPage.templateId,
     );
     if (matches.length > 0) {
-      const random = matches[Math.floor(Math.random() * matches.length)];
-      actions.setPageTemplate(random.id);
-      actions.autoFillSlots();
+      const randomId = templateTracker.pick(matches.map(t => t.id), currentPage.templateId) ?? matches[Math.floor(Math.random() * matches.length)].id;
+      void dispatch({ type: 'change_template', payload: { templateId: randomId }, rawMessage: 'change template' });
+      void dispatch({ type: 'auto_fill', rawMessage: 'auto fill' });
     }
   }, [actions, currentPage.templateId, actions.photosPerPage]);
 
@@ -474,9 +555,24 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 <p className="text-sm text-[#9B9B9B] text-center py-8">
                   No photos uploaded yet. Go to the Photos tab to upload.
                 </p>
+              ) : availablePhotos.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-[#6B6B6B] font-medium mb-1">
+                    All your photos are already in the album.
+                  </p>
+                  <p className="text-xs text-[#9B9B9B] mb-4">
+                    Add more photos to swap in something new.
+                  </p>
+                  <button
+                    onClick={() => { setShowPhotoPicker(false); _onAction?.('trigger-upload'); }}
+                    className="px-5 py-2 bg-[#F4C2A1] text-white text-sm font-semibold rounded-lg hover:brightness-105 inline-flex items-center gap-2"
+                  >
+                    <Upload size={14} /> Add Photos
+                  </button>
+                </div>
               ) : (
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                  {actions.uploadedPhotos.map((photo, idx) => (
+                  {availablePhotos.map(({ photo, idx }) => (
                     <button
                       key={photo.id}
                       onClick={() => {
@@ -509,59 +605,85 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       </AnimatePresence>
 
       <div className="flex h-full bg-[#F5F5F5]">
-        {/* ── Unified Panel (LEFT side) ── */}
-        <UnifiedPanel
-          uploadedPhotos={actions.uploadedPhotos}
-          onAddPhotos={actions.addPhotos}
-          albumPages={actions.albumPages}
-          currentPageIndex={actions.currentPageIndex}
-          selectedPhotoId={selectedPhotoId}
-          selectedTextId={selectedTextId}
-          onGoToPage={actions.goToPage}
-          onAddPage={actions.addPage}
-          onDeletePage={actions.deletePage}
-          onDuplicatePage={actions.duplicatePage}
-          onAddText={handleAddText}
-          currentTemplateId={currentPage.templateId}
-          onSetTemplate={actions.setPageTemplate}
-          onAutoFill={actions.autoFillSlots}
-          onClearAllSlots={actions.clearAllSlots}
-          photosPerPage={actions.photosPerPage}
-          onSetPhotosPerPage={actions.setPhotosPerPage}
-          onShuffleLayout={handleShuffleLayout}
-          selectedPhoto={selectedPhoto}
-          selectedText={selectedText}
-          selectedBackground={selectedBg ? (background as any) : null}
-          background={background}
-          selectedSlotIndex={selectedSlotIndex}
-          slotFills={slotFills}
-          slotScales={slotScales}
-          slotOffsetsX={slotOffsetsX}
-          slotOffsetsY={slotOffsetsY}
-          onUpdatePhoto={handleUpdatePhoto}
-          onUpdateFilters={handleUpdateFilters}
-          onUpdateText={handleUpdateText}
-          onDeletePhoto={handleDeletePhoto}
-          onDeleteText={handleDeleteText}
-          onDuplicatePhoto={handleDuplicatePhoto}
-          onBringToFront={handleBringToFront}
-          onSendToBack={handleSendToBack}
-          onUpdateBackground={handleUpdateBackground}
-          onUpdateBackgroundTransform={handleUpdateBackgroundTransform}
-          onUpdateBackgroundFilters={handleUpdateBackgroundFilters}
-          onApplyBackgroundToAll={actions.applyBackgroundToAllPages}
-          onClearSlot={handleClearSlot}
-          onSetSlotScale={handleSetSlotScale}
-          onSetSlotOffset={handleSetSlotOffset}
-          onReplaceSlotPhoto={handleReplaceSlotPhoto}
-          getPageSnapshot={actions.getPageSnapshot}
-        />
+        {/* ── Unified Panel (LEFT side) — hidden by default ── */}
+        {sidebarVisible && (
+          <UnifiedPanel
+            uploadedPhotos={actions.uploadedPhotos}
+            onAddPhotos={(files) => { void dispatch({ type: 'add_photos', payload: { files }, rawMessage: 'add photos' }); }}
+            albumPages={actions.albumPages}
+            currentPageIndex={actions.currentPageIndex}
+            selectedPhotoId={selectedPhotoId}
+            selectedTextId={selectedTextId}
+            onGoToPage={actions.goToPage}
+            onAddPage={() => { void dispatch({ type: 'add_page', rawMessage: 'add page' }); }}
+            onDeletePage={(idx) => { void dispatch({ type: 'delete_page', payload: { pageIndex: idx }, rawMessage: 'delete page' }); }}
+            onDuplicatePage={(idx) => { void dispatch({ type: 'duplicate_page', payload: { pageIndex: idx }, rawMessage: 'duplicate page' }); }}
+            onAddText={handleAddText}
+            currentTemplateId={currentPage.templateId}
+            onSetTemplate={(id) => { void dispatch({ type: 'change_template', payload: { templateId: id }, rawMessage: 'change template' }); }}
+            onAutoFill={() => { void dispatch({ type: 'auto_fill', rawMessage: 'auto fill' }); }}
+            onClearAllSlots={() => { void dispatch({ type: 'clear_slots', rawMessage: 'clear slots' }); }}
+            photosPerPage={actions.photosPerPage}
+            onSetPhotosPerPage={(count) => { void dispatch({ type: 'set_photos_per_page', payload: { count }, rawMessage: 'set photos per page' }); }}
+            onShuffleLayout={handleShuffleLayout}
+            selectedPhoto={selectedPhoto}
+            selectedText={selectedText}
+            selectedBackground={selectedBg ? (background as any) : null}
+            background={background}
+            selectedSlotIndex={selectedSlotIndex}
+            slotFills={slotFills}
+            slotScales={slotScales}
+            slotOffsetsX={slotOffsetsX}
+            slotOffsetsY={slotOffsetsY}
+            onUpdatePhoto={handleUpdatePhoto}
+            onUpdateFilters={handleUpdateFilters}
+            onUpdateText={handleUpdateText}
+            onDeletePhoto={handleDeletePhoto}
+            onDeleteText={handleDeleteText}
+            onDuplicatePhoto={handleDuplicatePhoto}
+            onBringToFront={handleBringToFront}
+            onSendToBack={handleSendToBack}
+            onUpdateBackground={handleUpdateBackground}
+            onUpdateBackgroundTransform={handleUpdateBackgroundTransform}
+            onUpdateBackgroundFilters={handleUpdateBackgroundFilters}
+            onApplyBackgroundToAll={handleApplyBackgroundToAll}
+            onClearSlot={handleClearSlot}
+            onSetSlotScale={handleSetSlotScale}
+            onSetSlotOffset={handleSetSlotOffset}
+            onReplaceSlotPhoto={handleReplaceSlotPhoto}
+            getPageSnapshot={actions.getPageSnapshot}
+          />
+        )}
 
         {/* ── Canvas Area ── */}
         <div className="flex-1 flex flex-col relative overflow-hidden">
+          {/* Sidebar toggle — visible when panel is hidden */}
+          {!sidebarVisible && (
+            <button
+              onClick={() => setSidebarVisible(true)}
+              className="absolute top-3 left-3 z-40 flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl shadow-md border border-[#E8E8E8] text-xs font-medium text-[#6B6B6B] hover:text-[#F4C2A1] hover:border-[#F4C2A1]/30 transition-all"
+              title="Show sidebar (Ctrl+Shift+S)"
+            >
+              <PanelLeftOpen size={14} />
+              <span className="hidden sm:inline">Panels</span>
+            </button>
+          )}
+
           {/* Toolbar */}
           <div className="h-10 bg-white border-b border-[#E8E8E8] flex items-center justify-between px-3 shrink-0">
             <div className="flex items-center gap-1">
+              {/* Home → Homepage */}
+              <Link
+                to="/"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[#6B6B6B] hover:bg-[#F0F0F0] hover:text-[#F4C2A1] transition-all mr-1"
+                title="Go to homepage"
+              >
+                <Home size={16} />
+                <span className="text-xs font-semibold">Home</span>
+              </Link>
+
+              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
+
               <button
                 onClick={() => actions.setPhase('setup')}
                 className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"
@@ -588,7 +710,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
               {/* Grid */}
               <button
-                onClick={() => setShowGrid((v) => !v)}
+                onClick={() => setShowGrid((v: boolean) => !v)}
                 className={`p-1.5 rounded-md text-[#6B6B6B] transition-colors ${showGrid ? 'bg-[#FDE8E4] text-[#E8A598]' : 'hover:bg-[#F0F0F0]'}`}
                 title="Toggle grid"
               >
@@ -597,7 +719,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
               {/* Snap */}
               <button
-                onClick={() => setSnapEnabled((v) => !v)}
+                onClick={() => setSnapEnabled((v: boolean) => !v)}
                 className={`p-1.5 rounded-md text-[#6B6B6B] transition-colors ${snapEnabled ? 'bg-[#FDE8E4] text-[#E8A598]' : 'hover:bg-[#F0F0F0]'}`}
                 title="Toggle snap to grid"
               >
@@ -607,22 +729,16 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             </div>
 
             <div className="flex items-center gap-2">
+              <CloudSaveStatus
+                status={actions.cloudSaveStatus}
+                lastSavedAt={actions.lastSavedAt}
+                isLoggedIn={!!user}
+                onManualSave={actions.manualSave}
+              />
+              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
               <span className="text-xs text-[#9B9B9B]">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
-              {/* Container Mode Toggle */}
-              <button
-                onClick={() => setContainerMode((prev) => !prev)}
-                title={containerMode ? 'Exit container editing mode' : 'Edit slot containers (resize & move boxes)'}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all"
-                style={{
-                  backgroundColor: containerMode ? '#3B82F6' : '#FFFFFF',
-                  color: containerMode ? '#FFFFFF' : '#3B82F6',
-                  border: containerMode ? '1px solid #3B82F6' : '1px solid #93C5FD',
-                }}
-              >
-                <BoxSelect size={12} /> {containerMode ? 'Container On' : 'Containers'}
-              </button>
 
               {/* Generate / Regenerate / Generate All */}
               {isPageEmpty ? (
@@ -677,6 +793,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             className="flex-1 overflow-auto flex items-center justify-center p-8"
             title="Scroll to navigate pages. Ctrl+Scroll to zoom."
           >
+            <div className="flex flex-col items-center gap-2">
+              {/* Page number above the page */}
+              <span className="text-xs font-medium text-[#6B6B6B] tabular-nums">
+                Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
+              </span>
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -724,7 +845,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                         )}
                         {actions.uploadedPhotos.length === 0 && (
                           <button
-                            onClick={() => actions.setPhase('setup')}
+                            onClick={() => _onAction?.('trigger-upload')}
                             className="px-5 py-2 bg-[#F4C2A1] text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
                           >
                             <Upload size={14} /> Upload Photos
@@ -736,6 +857,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 )}
               </AnimatePresence>
             </motion.div>
+            </div>
           </div>
         </div>
 

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <rect width="1000" height="1000" fill="#FFF3D8"/>
+  <g stroke="#D9B36A" stroke-width="2" opacity="0.6" fill="none">
+    <path d="M150 130 q 14 60 -4 150"/>
+    <path d="M270 110 q 16 70 0 170"/>
+    <path d="M730 110 q -16 70 0 170"/>
+    <path d="M850 130 q -14 60 4 150"/>
+  </g>
+  <g>
+    <ellipse cx="150" cy="110" rx="42" ry="50" fill="#E89B8B"/>
+    <polygon points="150,158 140,172 160,172" fill="#E89B8B"/>
+    <ellipse cx="270" cy="92" rx="42" ry="50" fill="#6DB5D5"/>
+    <polygon points="270,140 260,154 280,154" fill="#6DB5D5"/>
+    <ellipse cx="730" cy="92" rx="42" ry="50" fill="#9BC4A8"/>
+    <polygon points="730,140 720,154 740,154" fill="#9BC4A8"/>
+    <ellipse cx="850" cy="110" rx="42" ry="50" fill="#C9A9D9"/>
+    <polygon points="850,158 840,172 860,172" fill="#C9A9D9"/>
+  </g>
+  <g fill="#E8B84B" opacity="0.85">
+    <circle cx="180" cy="900" r="9"/><circle cx="340" cy="930" r="7"/><circle cx="520" cy="908" r="9"/>
+    <circle cx="690" cy="930" r="7"/><circle cx="860" cy="906" r="9"/>
+  </g>
+</svg>

@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useRef, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -13,23 +13,21 @@ import {
   Star,
 } from 'lucide-react';
 import BuilderDemoSection from './BuilderDemoSection';
+import { UserProjectsSection } from '../components/UserProjectsSection';
 
 gsap.registerPlugin(ScrollTrigger);
 
 /* ───────────────────────── easing token ───────────────────────── */
 const gentle = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
-/* ═══════════════════════════ SECTION 1: HERO ═══════════════════════════ */
-function HeroSection() {
-  const bgRef = useRef<HTMLDivElement>(null);
-
+/* ═══════════════════════════ SECTION 1: HERO ═══════════════════════════
+   Megy is the centerpiece — the primary entry point for all users.
+   ═══════════════════════════════════════════════════════════════════════ */
+function HeroSection({ megyComponent }: { megyComponent: React.ReactNode }) {
   return (
     <section className="relative min-h-[100dvh] min-h-[700px] flex items-center justify-center overflow-hidden">
       {/* Background Image with Ken Burns */}
-      <div
-        ref={bgRef}
-        className="absolute inset-0 w-full h-full animate-ken-burns"
-      >
+      <div className="absolute inset-0 w-full h-full animate-ken-burns">
         <img
           src="/hero-albums.jpg"
           alt="Beautiful photo albums"
@@ -42,59 +40,34 @@ function HeroSection() {
         className="absolute inset-0"
         style={{
           background:
-            'linear-gradient(180deg, rgba(45,45,45,0.7) 0%, rgba(45,45,45,0.3) 100%)',
+            'linear-gradient(180deg, rgba(45,45,45,0.6) 0%, rgba(45,45,45,0.4) 50%, rgba(45,45,45,0.7) 100%)',
         }}
       />
 
-      {/* Content */}
-      <div className="relative z-10 max-w-[720px] mx-auto px-6 text-center">
-        <motion.h1
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
-          className="font-display text-[2.5rem] sm:text-[3.5rem] lg:text-[4.5rem] font-bold text-white leading-[1.05] tracking-[-0.01em]"
-          style={{ textShadow: '0 2px 20px rgba(0,0,0,0.2)' }}
-        >
-          Turn Your Photos Into Timeless Albums
-        </motion.h1>
-
-        <motion.p
+      {/* Content — Megy centered as the primary interface */}
+      <div className="relative z-10 w-full max-w-[560px] mx-auto px-6">
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.5, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
-          className="font-body text-[1rem] sm:text-[1.125rem] font-normal text-white/90 leading-[1.7] mt-5 max-w-[560px] mx-auto"
+          transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
         >
-          Upload your memories, choose a beautiful template, and let us create a
-          stunning album you'll treasure forever.
-        </motion.p>
+          {/* Megy Welcome Card — the star of the show */}
+          {megyComponent}
+        </motion.div>
 
+        {/* Scroll Indicator */}
         <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.8, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
-          className="mt-9"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2, duration: 0.5 }}
+          className="mt-8 flex flex-col items-center gap-2"
         >
-          <Link
-            to="/builder"
-            className="inline-flex items-center font-body text-[0.875rem] font-semibold bg-[#F4C2A1] text-white px-9 py-4 rounded-xl shadow-button hover:shadow-button-hover hover:scale-[1.03] transition-all duration-200"
-          >
-            Start Creating Your Album
-          </Link>
+          <span className="font-body text-[0.75rem] font-medium uppercase tracking-wider text-white/60">
+            Scroll to explore
+          </span>
+          <ChevronDown className="w-5 h-5 text-white/60 animate-bounce-gentle" />
         </motion.div>
       </div>
-
-      {/* Scroll Indicator */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.2, duration: 0.5 }}
-        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2"
-      >
-        <span className="font-body text-[0.75rem] font-medium uppercase tracking-wider text-white/60">
-          Scroll to explore
-        </span>
-        <ChevronDown className="w-5 h-5 text-white/60 animate-bounce-gentle" />
-      </motion.div>
     </section>
   );
 }
@@ -612,10 +585,73 @@ function CTASection() {
 
 /* ═══════════════════════════ HOME PAGE ═══════════════════════════ */
 export default function Home() {
+  const navigate = useNavigate();
+
+  const handleMegyAction = useCallback((action: string, payload?: any) => {
+    switch (action) {
+      case 'go-builder':
+        sessionStorage.setItem('megy-fresh-start', '1');
+        navigate('/builder');
+        break;
+      case 'load-album':
+        if (payload?.albumId) {
+          navigate(`/builder?album=${payload.albumId}`);
+        }
+        break;
+      case 'dismiss':
+        // Megy handles its own dismiss state internally
+        break;
+      default:
+        break;
+    }
+  }, [navigate]);
+
+  // Hero welcome card — sends visitors into the builder, where the one true
+  // Megy (assistant/MegyAssistant) guides them. No separate home wizard.
+  const megyComponent = (
+    <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 text-center">
+      <img
+        src="/megy-character.png"
+        alt="Megy"
+        className="w-24 h-24 mx-auto object-contain drop-shadow-lg mb-4"
+        draggable={false}
+      />
+      <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#2D2D2D] mb-2">
+        Hi, I&apos;m Megy 👋
+      </h1>
+      <p className="font-body text-[#6B6B6B] leading-relaxed mb-6">
+        Your personal album designer. Upload your photos and I&apos;ll build a
+        beautiful, print-ready album for you — no design skills needed.
+      </p>
+      <button
+        onClick={() => handleMegyAction('go-builder')}
+        className="w-full inline-flex items-center justify-center gap-2 bg-[#F4C2A1] hover:bg-[#E8A598] text-white font-semibold px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all text-base"
+      >
+        <Sparkles size={18} /> Start Creating
+      </button>
+      <Link
+        to="/templates"
+        className="inline-block mt-3 text-sm font-medium text-[#8B7E7A] hover:text-[#F4C2A1] transition-colors"
+      >
+        Or browse templates first →
+      </Link>
+    </div>
+  );
+
   return (
     <>
-      <HeroSection />
+      {/* Hero — Megy is the centerpiece */}
+      <HeroSection megyComponent={megyComponent} />
+
       <TrustBarSection />
+
+      {/* User projects — still visible below the fold as fallback */}
+      <div className="bg-[#FFFBF7] py-16">
+        <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
+          <UserProjectsSection />
+        </div>
+      </div>
+
       <HowItWorksSection />
       <TemplatePreviewSection />
       <BuilderDemoSection />

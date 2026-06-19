@@ -2,7 +2,7 @@ export type BuilderPhase = 'setup' | 'upload' | 'template' | 'edit' | 'preview';
 
 export type TemplateType =
   | 'wedding' | 'baby' | 'birthday' | 'family' | 'graduation'
-  | 'travel' | 'minimalist' | 'kids' | 'vintage' | 'classic';
+  | 'travel' | 'minimalist' | 'kids' | 'vintage' | 'classic' | 'baptism';
 
 export type LayoutStyle =
   | 'fullBleed' | 'duoPortrait' | 'duoLandscape' | 'fourGrid'
@@ -43,6 +43,8 @@ export interface TemplateSlot {
  *  Templates are orientation-aware and margin-aware.
  *  Slot coordinates are proportions of the safe area (0–1), making templates
  *  automatically responsive to any page size without distortion. */
+export type PhotoRatio = '4:3' | '3:4' | '3:2' | '2:3' | '1:1' | '16:9' | '9:16';
+
 export interface PageTemplate {
   id: string;
   name: string;
@@ -53,6 +55,10 @@ export interface PageTemplate {
   margin: TemplateMargin;
   /** Preferred orientation for this template layout */
   orientation: 'landscape' | 'portrait' | 'square';
+  /** Target photo aspect ratio for all slots in this template */
+  targetRatio: PhotoRatio;
+  /** Which album sizes this template is designed for */
+  albumSizes: AlbumSizePreset[];
   slots: TemplateSlot[];
 }
 
@@ -64,10 +70,7 @@ export interface FilledSlot {
 export type BackgroundType = 'solid' | 'gradient' | 'pattern' | 'image';
 
 export type AlbumSizePreset =
-  | '6x6' | '8x8' | '10x10' | '12x12'
-  | '8x10' | '8x11' | '11x14' | 'a4' | 'a5'
-  | '10x8' | '11x8' | '14x11' | 'a4l'
-  | 'custom';
+  | '6x6' | '8x8' | '9x9' | '6x4' | '11.5x8' | '8.5x11';
 
 export type MaterialType = 'matte' | 'glossy' | 'semigloss' | 'pearl' | 'linen';
 export type CoverType = 'softcover' | 'hardboundLeather' | 'hardboundLinen' | 'premiumVelvet' | 'acrylicLayflat';
@@ -212,13 +215,28 @@ export interface AlbumPage {
   size: AlbumSizePreset;
   customWidth?: number;
   customHeight?: number;
+  /** Theme-baked photo-frame styling. When set, the editor/preview/print
+   *  render every slot with this frame; falls back to per-slot template
+   *  borders when undefined (older albums). Frozen into the order snapshot. */
+  photoBorderColor?: string;
+  photoBorderWidth?: number;
+  /** Theme-baked decorative corner-art base path, e.g.
+   *  "/themes/wedding/pages/wedding1". Renderers append "_tl.png"/"_tr.png"/
+   *  "_bl.png"/"_br.png". Undefined = no corner decorations. */
+  cornerBase?: string;
 }
 
+/** UploadedPhoto — photo stored locally in IndexedDB.  Only metadata
+    travels to Supabase.  The actual File bytes stay in the browser. */
 export interface UploadedPhoto {
   id: string;
-  file: File;
-  previewUrl: string;
+  previewUrl: string; // transient blob URL (revoked on cleanup)
   name: string;
+  type: string;
+  size: number;
+  width: number;
+  height: number;
+  capturedAt?: number | null; // EXIF DateTimeOriginal (ms) — drives moment grouping
 }
 
 export interface ThemeConfig {
@@ -227,6 +245,10 @@ export interface ThemeConfig {
   description: string;
   coverImage: string;
   backgroundImage?: string;
+  /** Selectable background designs for this theme (3 per theme). The first is
+   *  the default applied when the theme is chosen; the user can switch among
+   *  them. Falls back to [backgroundImage] when not provided. */
+  backgroundVariants?: string[];
   backgroundPalette: string[];
   accentColor: string;
   photoBorderColor: string;
@@ -260,18 +282,10 @@ export interface AlbumSizeConfig {
 export const ALBUM_SIZES: AlbumSizeConfig[] = [
   { preset: '6x6', name: '6×6" Square', width: 1800, height: 1800, category: 'square' },
   { preset: '8x8', name: '8×8" Square', width: 2400, height: 2400, category: 'square' },
-  { preset: '10x10', name: '10×10" Square', width: 3000, height: 3000, category: 'square' },
-  { preset: '12x12', name: '12×12" Square', width: 3600, height: 3600, category: 'square' },
-  { preset: 'a5', name: 'A5 Portrait', width: 1748, height: 2480, category: 'portrait' },
-  { preset: '8x10', name: '8×10" Portrait', width: 2400, height: 3000, category: 'portrait' },
-  { preset: '8x11', name: '8.5×11" Portrait', width: 2550, height: 3300, category: 'portrait' },
-  { preset: 'a4', name: 'A4 Portrait', width: 2480, height: 3508, category: 'portrait' },
-  { preset: '11x14', name: '11×14" Portrait', width: 3300, height: 4200, category: 'portrait' },
-  { preset: '10x8', name: '10×8" Landscape', width: 3000, height: 2400, category: 'landscape' },
-  { preset: '11x8', name: '11×8.5" Landscape', width: 3300, height: 2550, category: 'landscape' },
-  { preset: 'a4l', name: 'A4 Landscape', width: 3508, height: 2480, category: 'landscape' },
-  { preset: '14x11', name: '14×11" Landscape', width: 4200, height: 3300, category: 'landscape' },
-  { preset: 'custom', name: 'Custom Size', width: 2400, height: 3000, category: 'portrait' },
+  { preset: '9x9', name: '9×9" Square', width: 2700, height: 2700, category: 'square' },
+  { preset: '6x4', name: '6×4" Landscape', width: 1800, height: 1200, category: 'landscape' },
+  { preset: '11.5x8', name: '11.5×8" Landscape', width: 3450, height: 2400, category: 'landscape' },
+  { preset: '8.5x11', name: '8.5×11" Portrait', width: 2550, height: 3300, category: 'portrait' },
 ];
 
 export const MATERIALS: { type: MaterialType; name: string; description: string; priceFactor: number }[] = [
@@ -326,7 +340,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'wedding', name: 'Wedding', description: 'Romantic elegance',
     coverImage: './album-wedding.jpg',
     backgroundPalette: ['#F8F3ED', '#F0E8D8', '#FAF5EF', '#E8DDD0', '#F5EDE0'],
-    backgroundImage: './bg-wedding.jpg',
+    backgroundImage: '/themes/bg/wedding.svg',
+    backgroundVariants: ['/themes/bg/wedding.svg', '/themes/bg/wedding-2.svg', '/themes/bg/wedding-3.svg'],
     accentColor: '#C9A96E',
     photoBorderColor: '#E8DDD0',
     photoBorderWidth: 1,
@@ -338,7 +353,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'baby', name: 'Baby', description: 'Soft pastels',
     coverImage: './album-baby.jpg',
     backgroundPalette: ['#E8F0E8', '#F0E8E8', '#E8E8F0', '#F0F0E8', '#E0ECE0'],
-    backgroundImage: './bg-baby.jpg',
+    backgroundImage: '/themes/bg/baby.svg',
+    backgroundVariants: ['/themes/bg/baby.svg', '/themes/bg/baby-2.svg', '/themes/bg/baby-3.svg'],
     accentColor: '#A8C5A8',
     photoBorderColor: '#D8E8D8',
     photoBorderWidth: 2,
@@ -350,7 +366,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'birthday', name: 'Birthday', description: 'Festive warmth',
     coverImage: './album-birthday.jpg',
     backgroundPalette: ['#FFF3D8', '#FFE8C8', '#FFF0D0', '#FFECD0', '#FFF5D8'],
-    backgroundImage: './bg-birthday.jpg',
+    backgroundImage: '/themes/bg/birthday.svg',
+    backgroundVariants: ['/themes/bg/birthday.svg', '/themes/bg/birthday-2.svg', '/themes/bg/birthday-3.svg'],
     accentColor: '#E8B84B',
     photoBorderColor: '#F0D890',
     photoBorderWidth: 2,
@@ -362,7 +379,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'family', name: 'Family', description: 'Warm and timeless',
     coverImage: './album-family.jpg',
     backgroundPalette: ['#F0E5D0', '#E8DCC0', '#F5E8D0', '#EDE0C8', '#F8F0E0'],
-    backgroundImage: './bg-family.jpg',
+    backgroundImage: '/themes/bg/family.svg',
+    backgroundVariants: ['/themes/bg/family.svg', '/themes/bg/family-2.svg', '/themes/bg/family-3.svg'],
     accentColor: '#B8956A',
     photoBorderColor: '#D4C4A8',
     photoBorderWidth: 2,
@@ -374,7 +392,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'graduation', name: 'Graduation', description: 'Academic achievement',
     coverImage: './album-graduation.jpg',
     backgroundPalette: ['#E0E0E8', '#D8D8E0', '#E8E8F0', '#D0D0E0', '#E5E5F0'],
-    backgroundImage: './bg-graduation.jpg',
+    backgroundImage: '/themes/bg/graduation.svg',
+    backgroundVariants: ['/themes/bg/graduation.svg', '/themes/bg/graduation-2.svg', '/themes/bg/graduation-3.svg'],
     accentColor: '#2B4A7A',
     photoBorderColor: '#C0C8D8',
     photoBorderWidth: 1,
@@ -386,7 +405,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'travel', name: 'Travel', description: 'Adventure',
     coverImage: './album-travel.jpg',
     backgroundPalette: ['#E8DFC8', '#DDD0B8', '#E5D8C0', '#F0E8D8', '#D8C8A8'],
-    backgroundImage: './bg-travel.jpg',
+    backgroundImage: '/themes/bg/travel.svg',
+    backgroundVariants: ['/themes/bg/travel.svg', '/themes/bg/travel-2.svg', '/themes/bg/travel-3.svg'],
     accentColor: '#8B7355',
     photoBorderColor: '#C4B49C',
     photoBorderWidth: 1,
@@ -398,7 +418,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'minimalist', name: 'Minimalist', description: 'Clean and quiet',
     coverImage: './album-minimalist.jpg',
     backgroundPalette: ['#F0F0F0', '#E8E8E8', '#F5F5F5', '#E0E0E0', '#F8F8F8'],
-    backgroundImage: './bg-minimalist.jpg',
+    backgroundImage: '/themes/bg/minimalist.svg',
+    backgroundVariants: ['/themes/bg/minimalist.svg', '/themes/bg/minimalist-2.svg', '/themes/bg/minimalist-3.svg'],
     accentColor: '#9B9B9B',
     photoBorderColor: '#D0D0D0',
     photoBorderWidth: 1,
@@ -410,7 +431,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'kids', name: 'Kids', description: 'Playful and bright',
     coverImage: './album-kids.jpg',
     backgroundPalette: ['#FFF0E8', '#E8F0FF', '#FFF0F0', '#F0FFF5', '#F8F0FF'],
-    backgroundImage: './bg-kids.jpg',
+    backgroundImage: '/themes/bg/kids.svg',
+    backgroundVariants: ['/themes/bg/kids.svg', '/themes/bg/kids-2.svg', '/themes/bg/kids-3.svg'],
     accentColor: '#E8A598',
     photoBorderColor: '#F4D0C4',
     photoBorderWidth: 3,
@@ -422,7 +444,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'vintage', name: 'Vintage', description: 'Old-world charm',
     coverImage: './album-vintage.jpg',
     backgroundPalette: ['#E8D8B8', '#DDD0A8', '#F0E0C0', '#E5D8B8', '#D8C8A0'],
-    backgroundImage: './bg-vintage.jpg',
+    backgroundImage: '/themes/bg/vintage.svg',
+    backgroundVariants: ['/themes/bg/vintage.svg', '/themes/bg/vintage-2.svg', '/themes/bg/vintage-3.svg'],
     accentColor: '#8B6F4E',
     photoBorderColor: '#C4A882',
     photoBorderWidth: 2,
@@ -434,7 +457,8 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     type: 'classic', name: 'Classic', description: 'Timeless sophistication',
     coverImage: './album-elegant.jpg',
     backgroundPalette: ['#F0E8D8', '#E8DCC8', '#F5F0E0', '#F8F0E0', '#E8DFD0'],
-    backgroundImage: './bg-classic.jpg',
+    backgroundImage: '/themes/bg/classic.svg',
+    backgroundVariants: ['/themes/bg/classic.svg', '/themes/bg/classic-2.svg', '/themes/bg/classic-3.svg'],
     accentColor: '#9B8B6E',
     photoBorderColor: '#D8CFC0',
     photoBorderWidth: 1,
@@ -442,7 +466,28 @@ export const THEMES: Record<TemplateType, ThemeConfig> = {
     textColor: '#3A3028',
     layoutPreferences: ['fullBleed', 'portraitSingle', 'heroSupporting', 'duoPortrait', 'panorama'],
   },
+  baptism: {
+    type: 'baptism', name: 'Baptism', description: 'Sacred & serene',
+    coverImage: './album-baptism.jpg',
+    backgroundImage: '/themes/bg/baptism-1.svg',
+    backgroundVariants: ['/themes/bg/baptism-1.svg', '/themes/bg/baptism-2.svg', '/themes/bg/baptism-3.svg'],
+    backgroundPalette: ['#FBFAF6', '#F4F6FB', '#FAF8F4', '#F0F4FA', '#F8FAF8'],
+    accentColor: '#B9A66B',
+    photoBorderColor: '#E6E0CF',
+    photoBorderWidth: 2,
+    fontFamily: '"Playfair Display", serif',
+    textColor: '#4A4636',
+    layoutPreferences: ['portraitSingle', 'duoPortrait', 'heroSupporting', 'fullBleed', 'panorama'],
+  },
 };
+
+/** The selectable background designs for a theme (3 per theme), falling back to
+ *  the single backgroundImage, then to an empty list. */
+export function getThemeBackgroundVariants(theme: TemplateType): string[] {
+  const config = THEMES[theme];
+  if (config.backgroundVariants?.length) return config.backgroundVariants;
+  return config.backgroundImage ? [config.backgroundImage] : [];
+}
 
 export function getThemedBackground(theme: TemplateType, pageIndex: number): AlbumBackground {
   const config = THEMES[theme];
@@ -455,10 +500,58 @@ export function getThemedBackground(theme: TemplateType, pageIndex: number): Alb
 
 export function getThemedPhotoBorder(theme: TemplateType): { color: string; width: number } {
   const config = THEMES[theme];
-  return { color: config.photoBorderColor, width: config.photoBorderWidth };
+  // Frames carry the theme's signature accent color (kept thin so it reads as
+  // an elegant mat border, not a heavy outline).
+  return { color: config.accentColor, width: config.photoBorderWidth };
 }
 
-export const DEFAULT_ALBUM_SIZE: AlbumSizePreset = '8x10';
+/** A friendly default cover title per theme, auto-placed on page 1 so the
+ *  theme's font + accent color are visible without the user adding anything. */
+export const THEME_TITLES: Record<TemplateType, string> = {
+  wedding: 'Our Wedding',
+  baby: 'Our Little One',
+  birthday: 'Happy Birthday',
+  family: 'Our Family',
+  graduation: 'Congratulations',
+  travel: 'Our Adventures',
+  minimalist: 'Memories',
+  kids: 'Good Times',
+  vintage: 'Cherished Memories',
+  classic: 'Our Story',
+  baptism: 'Blessed Day',
+};
+
+/** Style + text for a theme's auto-placed title (font + accent color). */
+export function getThemedTitle(theme: TemplateType): { text: string; fontFamily: string; color: string } {
+  const config = THEMES[theme];
+  return { text: THEME_TITLES[theme], fontFamily: config.fontFamily, color: config.accentColor };
+}
+
+/** Themes that ship decorative page-corner art (one set used album-wide).
+ *  Assets live under public/themes/<dir>/pages/<set>_<corner>.png.
+ *
+ *  DISABLED: the available PNGs (wedding1/family1/baptism1) are scrapbook
+ *  photo-FRAME templates with empty ornate frames baked in, so overlaying them
+ *  scatters empty frames in every corner — it looks broken. The corner-render
+ *  pipeline (cornerBase on AlbumPage, editor/preview/print) is intact and ready;
+ *  re-enable a theme here once we have real flourish art (no empty frames), or
+ *  build a "photos fill the frames" feature. */
+const THEME_CORNER_SETS: Partial<Record<TemplateType, string>> = {};
+
+/** Base path for a theme's corner art (album-wide), or undefined if none. */
+export function getThemeCornerBase(theme: TemplateType): string | undefined {
+  return THEME_CORNER_SETS[theme];
+}
+
+export type CornerPos = 'tl' | 'tr' | 'bl' | 'br';
+export const CORNER_POSITIONS: CornerPos[] = ['tl', 'tr', 'bl', 'br'];
+
+/** Build the URL for one corner image from a baked corner base. */
+export function cornerImageUrl(base: string, pos: CornerPos): string {
+  return `${base}_${pos}.png`;
+}
+
+export const DEFAULT_ALBUM_SIZE: AlbumSizePreset = '8x8';
 export const DEFAULT_MATERIAL: MaterialType = 'matte';
 export const DEFAULT_COVER: CoverType = 'softcover';
 

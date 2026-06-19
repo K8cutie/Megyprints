@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
+import AuthNav from './AuthNav';
 
 const navLinks = [
   { label: 'Home', path: '/' },
@@ -86,13 +87,16 @@ export default function Navbar() {
             ))}
           </nav>
 
-          {/* Desktop CTA */}
-          <Link
-            to="/builder"
-            className="hidden md:inline-flex items-center font-body text-[0.875rem] font-semibold bg-[#F4C2A1] text-white px-6 py-2.5 rounded-lg shadow-button hover:shadow-button-hover hover:scale-[1.03] transition-all duration-200"
-          >
-            Get Started
-          </Link>
+          {/* Right side: Auth + CTA */}
+          <div className="hidden md:flex items-center gap-4">
+            <AuthNav />
+            <Link
+              to="/builder"
+              className="inline-flex items-center font-body text-[0.875rem] font-semibold bg-[#F4C2A1] text-white px-6 py-2.5 rounded-lg shadow-button hover:shadow-button-hover hover:scale-[1.03] transition-all duration-200"
+            >
+              Get Started
+            </Link>
+          </div>
 
           {/* Mobile Hamburger */}
           <button

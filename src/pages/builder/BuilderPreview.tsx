@@ -1,9 +1,13 @@
-import { ChevronLeft, ChevronRight, ShoppingCart } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Download } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
+import { CORNER_POSITIONS, cornerImageUrl } from './types';
+import { downloadAlbumPdf } from './generateAlbumPdf';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { slotShapeStyle } from './slotShapeStyle';
 import { PREVIEW_DIMS } from './PreviewSizeConstants';
+import { bindingMarginFraction, bindingEdge, applyBindingMargin } from './binding';
 
 /* ══════════════════════════════════════════════════════════════════════════
    BuilderPreview — Spread-only view with side arrows
@@ -27,42 +31,55 @@ function backgroundToCss(bg: any): React.CSSProperties {
     case 'gradient': {
       const g = bg.gradient;
       if (!g) return { backgroundColor: '#FFFBF7' };
-      const dir = g.direction === 'radial' ? 'circle' : g.direction || 'to bottom';
-      const stops = g.colors.map((c: any) => `${c.color} ${c.position}%`).join(', ');
-      return { background: g.direction === 'radial' ? `radial-gradient(${stops})` : `linear-gradient(${dir}, ${stops})` };
+      // Handle both formats:
+      // Sidebar: { colors: [{ color, position }], direction: 'radial' | 'to bottom' }
+      // Wizard:  { type: 'linear', angle: 135, stops: [{ offset, color }] }
+      if (g.stops) {
+        // Wizard format — honor radial vs linear
+        const stops = g.stops.map((s: any) => `${s.color} ${(s.offset ?? 0) * 100}%`).join(', ');
+        return { background: g.type === 'radial' ? `radial-gradient(circle, ${stops})` : `linear-gradient(${g.angle ?? 135}deg, ${stops})` };
+      }
+      if (g.colors) {
+        // Sidebar format
+        const dir = g.direction === 'radial' ? 'circle' : g.direction || 'to bottom';
+        const stops = g.colors.map((c: any) => `${c.color} ${c.position}%`).join(', ');
+        return { background: g.direction === 'radial' ? `radial-gradient(${stops})` : `linear-gradient(${dir}, ${stops})` };
+      }
+      return { backgroundColor: '#FFFBF7' };
     }
     case 'image': {
-      if (bg.customImage) return { backgroundImage: `url(${bg.customImage})`, backgroundSize: 'cover', backgroundPosition: 'center' };
-      const preset = bg.preset;
-      if (preset?.includes('url')) return { backgroundImage: preset, backgroundSize: 'cover', backgroundPosition: 'center' };
-      return { backgroundImage: preset, backgroundSize: 'cover' };
+      // BackgroundDesigner stores the value in `bg.image` (a blob URL for
+      // uploads, or a CSS gradient string for the built-in presets).
+      const img = bg.image ?? bg.customImage ?? bg.preset;
+      if (!img) return { backgroundColor: '#FFFBF7' };
+      return String(img).includes('gradient(')
+        ? { background: img }
+        : { backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center' };
     }
     case 'pattern': {
-      const p = bg.pattern;
-      if (!p) return { backgroundColor: '#FFFBF7' };
-      return { backgroundImage: p.svg, backgroundSize: `${p.size || 20}px ${p.size || 20}px`, backgroundColor: p.color || '#FFFBF7' };
+      // pattern is a name string ('dots', etc.); SVG patterns aren't rendered
+      // in the DOM preview yet — show a light tint so the page isn't blank.
+      return { backgroundColor: '#F1EFEC' };
     }
     default: return { backgroundColor: '#FFFBF7' };
   }
 }
 
-/** Page renderer — snapshot when available, else DOM fallback */
-function PageView({ page, photos, singleW, H, getPageSnapshot }: {
-  page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number;
-  getPageSnapshot: (pageId: string) => string | undefined;
+/** Page renderer — always renders from LIVE page data so Preview matches the
+ *  real pages. (Cached canvas snapshots were unreliable: only captured for
+ *  pages the user had visited, saved via a delayed callback that could attach
+ *  to the wrong page during navigation, and kept stale across regeneration —
+ *  which made two different pages show the same image.) */
+function PageView({ page, photos, singleW, H, pageIndex }: {
+  page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
 }) {
-  const snapshot = getPageSnapshot?.(page.id);
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
 
-  if (snapshot) {
-    return (
-      <img src={snapshot} alt="" className="absolute inset-0 w-full h-full object-contain" />
-    );
-  }
-
   const template = page.templateId ? getTemplateById(page.templateId) : null;
-  const margin = template?.margin ?? { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
+  const baseMargin = template?.margin ?? { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
+  // Reserve the binding keep-out on the inner edge so slots match the editor.
+  const margin = applyBindingMargin(baseMargin, page.size, pageIndex);
   const safeX = margin.left * singleW;
   const safeY = margin.top * H;
   const safeW = singleW * (1 - margin.left - margin.right);
@@ -70,7 +87,7 @@ function PageView({ page, photos, singleW, H, getPageSnapshot }: {
 
   return (
     <>
-      <div className="absolute inset-0" style={backgroundToCss(page.background)} />
+      <div className="absolute inset-0" style={{ ...backgroundToCss(page.background), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
       {template && page.slotFills?.map((photoIdx, idx) => {
         if (photoIdx == null) return null;
         const uploaded = photos[photoIdx];
@@ -87,13 +104,16 @@ function PageView({ page, photos, singleW, H, getPageSnapshot }: {
         const imgH = height * slotScale;
         const imgLeft = (width - imgW) / 2 + slotOffsetX * sx;
         const imgTop = (height - imgH) / 2 + slotOffsetY * sy;
+        // Theme-baked frame overrides the per-slot template border when present.
+        const frameWidth = page.photoBorderWidth ?? slot.borderWidth;
+        const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
 
         return (
           <div key={`slot-${idx}`} className="absolute" style={{
             zIndex: 1, left, top, width, height,
             transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
             transformOrigin: 'center center',
-            border: slot.borderWidth ? `${slot.borderWidth}px solid ${slot.borderColor || '#FFFFFF'}` : undefined,
+            border: frameWidth ? `${frameWidth}px solid ${frameColor}` : undefined,
             boxSizing: 'border-box', overflow: 'hidden', ...shapeStyle,
           }}>
             <img src={uploaded.previewUrl} alt="" draggable={false}
@@ -114,12 +134,55 @@ function PageView({ page, photos, singleW, H, getPageSnapshot }: {
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
         }}>{t.text}</div>
       ))}
+      {/* Theme decorative corners — one set, all four corners, on top of photos */}
+      {page.cornerBase && CORNER_POSITIONS.map((pos) => {
+        const size = Math.min(singleW, H) * 0.25;
+        const isTop = pos === 'tl' || pos === 'tr';
+        const isLeft = pos === 'tl' || pos === 'bl';
+        return (
+          <img key={`corner-${pos}`} src={cornerImageUrl(page.cornerBase!, pos)} alt="" draggable={false}
+            className="absolute pointer-events-none" style={{
+              zIndex: 4, width: size, height: size, objectFit: 'contain',
+              top: isTop ? 0 : undefined, bottom: isTop ? undefined : 0,
+              left: isLeft ? 0 : undefined, right: isLeft ? undefined : 0,
+            }} />
+        );
+      })}
+      {/* Binding (gutter) keep-out guide — 0.5" reserve on the inner edge */}
+      {(() => {
+        const frac = bindingMarginFraction(page.size);
+        const onLeft = bindingEdge(pageIndex) === 'left';
+        return (
+          <div className="absolute top-0 bottom-0 pointer-events-none" style={{
+            zIndex: 3,
+            left: onLeft ? 0 : singleW * (1 - frac),
+            width: singleW * frac,
+            background: 'rgba(232,165,152,0.10)',
+            borderRight: onLeft ? '1.5px dashed #E8A598' : undefined,
+            borderLeft: onLeft ? undefined : '1.5px dashed #E8A598',
+          }} />
+        );
+      })()}
     </>
   );
 }
 
-export default function BuilderPreview({ pages, currentIndex, photos, albumSize, getPageSnapshot, onGoToPage, onBack: _onBack, onOrder }: BuilderPreviewProps) {
+export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack: _onBack, onOrder }: BuilderPreviewProps) {
   const total = pages.length;
+
+  // Compile the album into a single print-ready PDF and download it.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const handleDownloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      await downloadAlbumPdf(pages, photos, albumSize, 'megyprints-album.pdf');
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('Sorry — could not generate the PDF. Please try again.');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   // Spread pairs: 0-1, 2-3, 4-5, etc.
   const spreadLeftIndex = Math.floor(currentIndex / 2) * 2;
@@ -142,12 +205,21 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         <span className="text-xs text-[#6B6B6B] font-medium tabular-nums">
           {spreadLeftIndex + 1}-{Math.min(spreadLeftIndex + 2, total)} / {total}
         </span>
-        <button
-          onClick={onOrder}
-          className="px-4 py-2 bg-[#E8A598] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5"
-        >
-          <ShoppingCart size={14} /> Order
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadPdf}
+            disabled={pdfBusy}
+            className="px-4 py-2 bg-white border border-[#E8A598] text-[#C98A5E] text-xs font-semibold rounded-lg hover:bg-[#FFF5F0] flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-wait"
+          >
+            <Download size={14} /> {pdfBusy ? 'Preparing…' : 'Print PDF'}
+          </button>
+          <button
+            onClick={onOrder}
+            className="px-4 py-2 bg-[#E8A598] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5"
+          >
+            <ShoppingCart size={14} /> Order
+          </button>
+        </div>
       </div>
 
       {/* Page display with side arrows */}
@@ -166,7 +238,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           {/* Pages */}
           <div className="flex flex-col items-center gap-2">
             {/* Page number labels */}
-            <div className="flex items-center gap-5" style={{ width: singleW * 2 + 20 }}>
+            <div className="flex items-center" style={{ width: singleW * 2 }}>
               <span className="text-xs font-medium text-[#6B6B6B]" style={{ width: singleW, textAlign: 'center' }}>
                 Page {spreadLeftIndex + 1}
               </span>
@@ -181,26 +253,21 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             <div
               className="relative bg-white shadow-xl"
               style={{
-                width: singleW * 2 + 20,
+                width: singleW * 2,
                 height: H,
                 boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
               }}
             >
               {/* Left Page */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} getPageSnapshot={getPageSnapshot} />
+                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} />
               </div>
 
-              {/* Spine */}
+              {/* Right Page — flush against the left page (no center gap/spine;
+                  the dashed binding guides already mark the gutter). */}
               {spreadRightPage && (
-                <div className="absolute top-0 bottom-0 w-[2px] z-20"
-                  style={{ left: singleW, background: 'linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0.08) 100%)' }} />
-              )}
-
-              {/* Right Page */}
-              {spreadRightPage && (
-                <div className="absolute overflow-hidden" style={{ left: singleW + 20, top: 0, width: singleW, height: H }}>
-                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} getPageSnapshot={getPageSnapshot} />
+                <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
+                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} />
                 </div>
               )}
             </div>

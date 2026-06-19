@@ -24,6 +24,27 @@ const TABS: { key: BgTab; label: string; icon: React.ReactNode; title: string }[
 /* ─── Pattern definitions ─── */
 const PATTERN_NAMES = ['dots', 'stripes', 'grid', 'diagonal', 'circles', 'chevron'] as const;
 
+/* ─── Live-preview CSS for a background (so opacity etc. is visible) ─── */
+function bgPreviewStyle(bg: AlbumPage['background']): React.CSSProperties {
+  if (!bg) return {};
+  const b = bg as any;
+  if (bg.type === 'solid') return { backgroundColor: b.solid || '#FFFBF7' };
+  if (bg.type === 'image' && b.image) {
+    const img = b.image as string;
+    // Image presets store a CSS gradient in .image; uploads store a blob URL.
+    return img.includes('gradient(')
+      ? { background: img }
+      : { backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+  }
+  if (bg.type === 'gradient' && b.gradient) {
+    const g = b.gradient;
+    const stops = g.stops.map((s: { color: string; offset: number }) => `${s.color} ${Math.round((s.offset ?? 0) * 100)}%`).join(', ');
+    return { background: g.type === 'radial' ? `radial-gradient(circle, ${stops})` : `linear-gradient(${g.angle ?? 0}deg, ${stops})` };
+  }
+  if (bg.type === 'pattern') return { backgroundColor: '#F1EFEC' };
+  return { backgroundColor: '#FFFBF7' };
+}
+
 /* ─── Component ─── */
 interface BackgroundDesignerProps {
   background: AlbumPage['background'];
@@ -71,6 +92,18 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
 
   return (
     <div className="w-full flex flex-col h-full">
+      {/* Live page preview — shows the real background WITH opacity over the
+          page base, so the user isn't guessing. */}
+      <div
+        className="relative w-full h-48 rounded-xl overflow-hidden border border-stone-200 shrink-0 mb-2.5"
+        style={{ backgroundColor: '#FFFBF7' }}
+      >
+        <div className="absolute inset-0" style={{ ...bgPreviewStyle(background), opacity: (background.opacity ?? 100) / 100 }} />
+        <span className="absolute bottom-1.5 left-2 text-[10px] font-medium text-stone-500 bg-white/75 px-1.5 py-0.5 rounded">
+          Page preview · {Math.round(background.opacity ?? 100)}%
+        </span>
+      </div>
+
       {/* Tab bar */}
       <div className="flex gap-1 p-1 bg-stone-100 rounded-lg shrink-0">
         {TABS.map((t) => (
@@ -191,23 +224,15 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
               <Upload size={14} /> Upload Custom Image
             </button>
 
-            {/* Custom image preview */}
+            {/* The uploaded image is shown big in the Page preview above —
+                here we only offer a way to remove it. */}
             {customImageUrl && (
-              <div className="relative rounded-lg overflow-hidden border-2 border-rose-400">
-                <img src={customImageUrl} alt="Custom background" className="w-full h-20 object-cover" />
-                <button
-                  onClick={() => {
-                    setCustomImageUrl(null);
-                    onChange({ type: 'solid', solid: '#FFFBF7' });
-                  }}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 shadow flex items-center justify-center hover:bg-red-50"
-                >
-                  <X size={10} className="text-red-500" />
-                </button>
-                <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-[10px] px-2 py-0.5">
-                  Custom Image
-                </div>
-              </div>
+              <button
+                onClick={() => { setCustomImageUrl(null); onChange({ type: 'solid', solid: '#FFFBF7' }); }}
+                className="w-full py-2 rounded-lg text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 transition-all flex items-center justify-center gap-1.5"
+              >
+                <X size={12} /> Remove custom image
+              </button>
             )}
 
             {/* Preset thumbnails */}
@@ -286,7 +311,7 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
           onChange={(e) =>
             onChange({ ...background, opacity: Number(e.target.value) })
           }
-          className="w-full h-1.5 bg-stone-200 rounded-full appearance-none cursor-pointer accent-rose-400"
+          className="w-full cursor-pointer accent-rose-400"
         />
       </div>
     </div>

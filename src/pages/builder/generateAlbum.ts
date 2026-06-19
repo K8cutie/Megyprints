@@ -1,15 +1,28 @@
-import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle } from './types';
-import { PAGE_TEMPLATES } from './pageTemplates';
+import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate } from './types';
+import { getTemplatesForRatio, getTemplatesForAlbum } from './pageTemplates';
+import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
+import { templateTracker } from './varietyTracker';
 
 /* ══════════════════════════════════════════════════════════════════════════
-   generateAlbum — Dynamic page count + randomized template selection
+   SMART ALBUM GENERATION — Ratio-aware template matching
    ══════════════════════════════════════════════════════════════════════════ */
 
 const MIN_PAGES = 40;
 
-function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
+/** Deterministic page ID from index */
+function makePageId(index: number): string {
+  return `page-${String(index).padStart(4, '0')}`;
+}
+
+function createEmptyPage(
+  index: number,
+  size: AlbumSizePreset,
+  background?: AlbumPage['background'],
+  border?: { color: string; width: number },
+  cornerBase?: string,
+): AlbumPage {
   return {
-    id: `page-${Date.now()}-${index}`,
+    id: makePageId(index),
     layout: 'freeform' as LayoutStyle,
     size,
     templateId: undefined,
@@ -20,92 +33,227 @@ function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
     slotGeometries: [],
     photos: [],
     textElements: [],
-    background: { type: 'solid' as const, solid: '#FFFBF7' },
+    background: background ?? { type: 'solid' as const, solid: '#FFFBF7' },
+    photoBorderColor: border?.color,
+    photoBorderWidth: border?.width,
+    cornerBase,
   };
 }
 
+/** A new "moment" starts when consecutive shots are more than this apart. */
+const MOMENT_GAP_MS = 3 * 60 * 60 * 1000; // 3 hours
+
+/** Split photos into chronological "moments" by EXIF capture time, so photos
+ *  taken close together land on the same page(s). Photos without EXIF time keep
+ *  their upload order in a trailing group. Returns arrays of photo indices. */
+function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
+  const timed: { i: number; t: number }[] = [];
+  const untimed: number[] = [];
+  photos.forEach((p, i) => {
+    if (typeof p.capturedAt === 'number') timed.push({ i, t: p.capturedAt });
+    else untimed.push(i);
+  });
+  timed.sort((a, b) => a.t - b.t);
+
+  const groups: number[][] = [];
+  let current: number[] = [];
+  let lastT: number | null = null;
+  for (const { i, t } of timed) {
+    if (lastT !== null && t - lastT > MOMENT_GAP_MS) {
+      if (current.length) groups.push(current);
+      current = [];
+    }
+    current.push(i);
+    lastT = t;
+  }
+  if (current.length) groups.push(current);
+  if (untimed.length) groups.push(untimed); // no-EXIF photos → trailing group
+
+  // Nothing had a capture time → one group in upload order (old behaviour).
+  return groups.length ? groups : [photos.map((_, i) => i)];
+}
+
 /**
- * Generate album pages from uploaded photos.
- *
- * Logic:
- *   1. 40 pages = hard minimum floor
- *   2. Dynamically expands pages beyond 40 if needed to consume all photos
- *   3. Templates are randomly selected (mixed slot counts) for visual variety
+ * Smart album generation:
+ *  1. Analyze all photos to find dominant aspect ratio
+ *  2. Select templates that match the dominant ratio + album size
+ *  3. Place photos in ratio-matched slots — no more cropping disasters
+ *  4. Fall back to mixed-ratio templates if needed
  */
 export function generateAlbum(
   photos: UploadedPhoto[],
   albumSize: AlbumSizePreset,
-  _preferredSlotCount?: number | undefined,
+  photosPerPage?: number | undefined,
+  background?: AlbumPage['background'] | undefined,
+  options?: { randomize?: boolean; border?: { color: string; width: number }; cornerBase?: string },
 ): AlbumPage[] {
   const totalPhotos = photos.length;
+  // Surprise Me mode: keep the photo sequence (chronological) but repackage it
+  // into random templates + random slot counts so page breaks and photo
+  // positions visibly differ on every click.
+  const randomize = options?.randomize ?? false;
+  // Theme-baked photo frame + corner art applied to every generated page.
+  const border = options?.border;
+  const cornerBase = options?.cornerBase;
 
-  // If no photos, still create the minimum 40 empty pages
+  // No photos → minimum empty pages
   if (totalPhotos === 0) {
-    return Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, albumSize));
+    return Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, albumSize, background, border, cornerBase));
   }
 
-  // Target photos per page (rounded). This drives PAGE COUNT only.
-  const photosPerPageTarget = Math.max(1, Math.round(totalPhotos / MIN_PAGES));
+  // ── 1. Analyze photo aspect ratios ──
+  const analysis = analyzePhotos(photos);
+  const dominantRatio = analysis.dominantRatio;
 
-  // Pages needed = enough to fit all photos at the target density, but never below 40
-  const pagesNeeded = Math.max(MIN_PAGES, Math.ceil(totalPhotos / photosPerPageTarget));
+  // ── 2. Group photos into chronological "moments" (EXIF capture time) ──
+  const momentGroups = groupPhotosByMoment(photos);
+
+  // photo index → aspect ratio (from the ratio analysis)
+  const ratioOf: Record<number, PhotoRatio> = {};
+  (Object.entries(analysis.groups) as [PhotoRatio, number[]][]).forEach(([ratio, idxs]) => {
+    idxs.forEach((i) => { ratioOf[i] = ratio; });
+  });
+
+  // Templates for a ratio at this size; fall back to any template for the size
+  // if that ratio has no dedicated template (a coverage gap).
+  const templatesForRatio = (ratio: PhotoRatio): PageTemplate[] => {
+    const list = getTemplatesForRatio(albumSize, ratio);
+    return list.length ? list : getTemplatesForAlbum(albumSize);
+  };
 
   const pages: AlbumPage[] = [];
-  let photoIndex = 0;
+  let pageIdx = 0;
 
-  for (let pageIdx = 0; pageIdx < pagesNeeded; pageIdx++) {
-    // ── Pick a random template from ALL templates (visual variety) ──
-    const template = PAGE_TEMPLATES[Math.floor(Math.random() * PAGE_TEMPLATES.length)];
+  const pushPage = (template: PageTemplate, fills: number[]) => {
     const slotCount = template.slots.length;
-
-    const page = createEmptyPage(pageIdx, albumSize);
+    const page = createEmptyPage(pageIdx, albumSize, background, border, cornerBase);
     page.templateId = template.id;
-
-    // Initialise slot arrays
     page.slotFills = new Array(slotCount).fill(null);
     page.slotScales = new Array(slotCount).fill(1);
     page.slotOffsetsX = new Array(slotCount).fill(0);
     page.slotOffsetsY = new Array(slotCount).fill(0);
+    fills.forEach((photoIdx, s) => { page.slotFills![s] = photoIdx; });
+    pages.push(page);
+    pageIdx++;
+  };
 
-    // Fill slots sequentially until we run out of photos
-    for (let slotIdx = 0; slotIdx < slotCount; slotIdx++) {
-      if (photoIndex < totalPhotos) {
-        page.slotFills[slotIdx] = photoIndex;
-        photoIndex++;
-      }
+  // ── 3. Lay out each moment RATIO-BY-RATIO. Every photo lands in a slot of its
+  //       OWN ratio (no cropping). The tail leftover of a ratio gets a
+  //       single-photo full-page template of that same ratio — never cropped,
+  //       never an empty slot. ──
+  for (const group of momentGroups) {
+    const byRatio: Partial<Record<PhotoRatio, number[]>> = {};
+    for (const i of group) {
+      const r = ratioOf[i] ?? dominantRatio;
+      (byRatio[r] ??= []).push(i);
     }
 
-    pages.push(page);
+    for (const ratio of Object.keys(byRatio) as PhotoRatio[]) {
+      const queue = byRatio[ratio]!;
+      const ratioTemplates = templatesForRatio(ratio);
+      const onePhoto = ratioTemplates.filter((t) => t.slotCount === 1);
+      // In randomize mode ignore the fixed photos-per-page so slot counts (and
+      // therefore page breaks / photo positions) vary on every click.
+      let multi = (photosPerPage && !randomize)
+        ? ratioTemplates.filter((t) => t.slotCount === photosPerPage)
+        : ratioTemplates.filter((t) => t.slotCount > 1);
+      if (multi.length === 0) multi = ratioTemplates;
+
+      while (queue.length > 0) {
+        // Prefer a multi-slot template that fits the remaining photos. For a
+        // leftover smaller than any multi-slot, drop to a single-photo full-page
+        // of this ratio — the leftover fix.
+        let candidates = multi.filter((t) => t.slotCount <= queue.length);
+        if (candidates.length === 0) {
+          candidates = onePhoto.length
+            ? onePhoto
+            : ratioTemplates.filter((t) => t.slotCount <= queue.length);
+          if (candidates.length === 0) candidates = ratioTemplates;
+        }
+        const id = randomize
+          ? candidates[Math.floor(Math.random() * candidates.length)].id
+          : (templateTracker.pick(candidates.map((t) => t.id))
+            ?? candidates[Math.floor(Math.random() * candidates.length)].id);
+        const template = candidates.find((t) => t.id === id) ?? candidates[0];
+        const take = Math.min(template.slots.length, queue.length);
+        pushPage(template, queue.splice(0, take));
+      }
+    }
+  }
+
+  // ── 4. Pad out to the minimum page count with empty pages ──
+  while (pages.length < MIN_PAGES) {
+    pages.push(createEmptyPage(pageIdx++, albumSize, background, border, cornerBase));
   }
 
   return pages;
 }
 
 /**
- * Shuffle layout: pick a new random template for the current page
- * (different from current one) and preserve existing slot fills.
+ * Shuffle layout: pick a new random template matching the dominant ratio
+ * and re-place photos into ratio-matched slots.
  */
 export function shufflePageLayout(
   page: AlbumPage,
-  _photos: UploadedPhoto[],
+  photos: UploadedPhoto[],
 ): AlbumPage {
-  // Exclude the current template
-  const otherTemplates = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
-  const pool = otherTemplates.length > 0 ? otherTemplates : PAGE_TEMPLATES;
+  if (!photos.length || !page.templateId) return page;
 
-  const template = pool[Math.floor(Math.random() * pool.length)];
+  // Analyze photos to maintain ratio awareness
+  const analysis = analyzePhotos(photos);
+  const albumSize = page.size;
+  const dominantRatio = analysis.dominantRatio;
+
+  // Get templates matching dominant ratio, excluding current
+  const matchingTemplates = getTemplatesForRatio(albumSize, dominantRatio)
+    .filter(t => t.id !== page.templateId);
+
+  const pool = matchingTemplates.length > 0
+    ? matchingTemplates
+    : getTemplatesForAlbum(albumSize).filter(t => t.id !== page.templateId);
+
+  const templateId = templateTracker.pick(pool.map(t => t.id), page.templateId) ?? pool[Math.floor(Math.random() * pool.length)].id;
+  const template = pool.find(t => t.id === templateId) ?? pool[0];
   const slotCount = template.slots.length;
 
+  // Preserve existing fills, re-matched to new slot count
   const existingFills = (page.slotFills ?? []).filter((f): f is number => f !== null);
 
-  const newPage: AlbumPage = {
+  // Build ratio queues from existing fills
+  const ratioQueues: Record<PhotoRatio, number[]> = {
+    '4:3': [], '3:4': [], '3:2': [], '2:3': [], '1:1': [], '16:9': [], '9:16': [],
+  };
+  existingFills.forEach(idx => {
+    const ratio = analysis.assignments[idx];
+    if (ratio) ratioQueues[ratio].push(idx);
+  });
+
+  // Fill new slots with ratio-matched photos
+  const newFills: (number | null)[] = new Array(slotCount).fill(null);
+  for (let slotIdx = 0; slotIdx < slotCount && existingFills.length > 0; slotIdx++) {
+    const targetRatio = template.targetRatio;
+    let bestPhotoIdx: number | null = null;
+
+    if (ratioQueues[targetRatio] && ratioQueues[targetRatio].length > 0) {
+      bestPhotoIdx = ratioQueues[targetRatio].shift()!;
+    } else {
+      for (const queue of Object.values(ratioQueues)) {
+        if (queue.length > 0) {
+          bestPhotoIdx = queue.shift()!;
+          break;
+        }
+      }
+    }
+
+    newFills[slotIdx] = bestPhotoIdx;
+  }
+
+  return {
     ...page,
     templateId: template.id,
-    slotFills: new Array(slotCount).fill(null).map((_, i) => existingFills[i] ?? null),
+    slotFills: newFills,
     slotScales: new Array(slotCount).fill(1),
     slotOffsetsX: new Array(slotCount).fill(0),
     slotOffsetsY: new Array(slotCount).fill(0),
   };
-
-  return newPage;
 }

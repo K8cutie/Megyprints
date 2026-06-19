@@ -4,17 +4,23 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Check, ShoppingCart, BookOpen, Palette, HardDrive } from 'lucide-react';
 import { MATERIALS, COVERS, ALBUM_SIZES, PRICE_CONFIG } from './builder/types';
+import { useAuth } from '../lib/authContext';
+import { createOrderFromLatestAlbum } from '../lib/orders';
 
 export default function Order() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [material, setMaterial] = useState<MaterialType>('matte');
   const [cover, setCover] = useState<CoverType>('softcover');
-  const [size, setSize] = useState<AlbumSizePreset>('8x10');
+  const [size, setSize] = useState<AlbumSizePreset>('8x8');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [orderNumber, setOrderNumber] = useState('');
 
   const totalPrice = useMemo(() => {
     const mat = MATERIALS.find((m) => m.type === material)?.priceFactor ?? 1;
@@ -23,13 +29,35 @@ export default function Order() {
     return Math.round(base * mat * cov);
   }, [material, cover]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setErrorMsg('');
     const newErrors: Record<string, boolean> = {};
     if (!name.trim()) newErrors.name = true;
     if (!phone.trim()) newErrors.phone = true;
     if (!address.trim()) newErrors.address = true;
     setErrors(newErrors);
-    if (Object.keys(newErrors).length === 0) setSubmitted(true);
+    if (Object.keys(newErrors).length > 0) return;
+
+    if (!user) {
+      setErrorMsg('Please sign in to place your order — that\'s how we tie it to your album and contact you.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const order = await createOrderFromLatestAlbum({
+        userId: user.id,
+        specs: { material, cover, size },
+        shipping: { name: name.trim(), phone: phone.trim(), address: address.trim() },
+        amount: totalPrice,
+      });
+      setOrderNumber(order.order_number);
+      setSubmitted(true);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Something went wrong placing your order.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -40,7 +68,12 @@ export default function Order() {
             <Check size={40} className="text-[#2E7D4A]" />
           </div>
           <h2 className="font-display text-3xl font-bold text-[#2D2D2D]">Thank You!</h2>
-          <p className="text-[#6B6B6B] mt-3">Your order has been submitted. Our team will review your album and contact you within 24 hours.</p>
+          {orderNumber && (
+            <p className="mt-3 text-sm font-medium text-[#2D2D2D]">
+              Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span>
+            </p>
+          )}
+          <p className="text-[#6B6B6B] mt-2">Your order has been submitted. Our team will review your album and contact you within 24 hours.</p>
           <div className="mt-6 flex gap-3 justify-center">
             <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-[#F4C2A1] text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
             <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-[#6B6B6B] rounded-lg font-medium hover:bg-[#F0F0F0]">Home</button>
@@ -138,10 +171,13 @@ export default function Order() {
                   <p className="text-[10px] text-[#9B9B9B] mt-1">*Sample pricing. Actual price may vary.</p>
                 </div>
               </div>
-              <button onClick={handleSubmit}
-                className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2">
-                <ShoppingCart size={16} /> Submit Order
+              <button onClick={handleSubmit} disabled={submitting}
+                className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
+                <ShoppingCart size={16} /> {submitting ? 'Placing order…' : 'Submit Order'}
               </button>
+              {errorMsg && (
+                <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>
+              )}
             </div>
           </div>
         </div>
@@ -149,5 +185,3 @@ export default function Order() {
     </div>
   );
 }
-
-

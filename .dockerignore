@@ -1,7 +1,12 @@
 node_modules
 npm-debug.log
 dist
-git
-.github
+.git
+.gitignore
+.env
+.env.local
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md
 *.md
-!README.md

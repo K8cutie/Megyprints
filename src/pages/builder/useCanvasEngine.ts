@@ -16,9 +16,10 @@ import type {
   MouseEvent as FabricMouseEvent,
 } from './fabric-types';
 import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset } from './types';
-import { DEFAULT_BG_FILTERS } from './types';
+import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl } from './types';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
+import { bindingMarginFraction, bindingEdge, applyBindingMargin } from './binding';
 import type { BuilderActions } from './useBuilderState';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
@@ -475,7 +476,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, onContainerModifiedRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -541,7 +542,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, onContainerModifiedRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -774,21 +775,17 @@ function createBackgroundObject(
     top: y,
     angle: rotation,
     opacity: opacity / 100,
-    selectable: true,
-    evented: true,
-    hasControls: true,
-    hasBorders: true,
-    cornerColor: '#F4C2A1',
-    cornerStrokeColor: '#E8A598',
-    cornerSize: 8,
-    transparentCorners: false,
-    borderColor: '#F4C2A1',
-    borderDashArray: [4, 2],
-    lockMovementX: false,
-    lockMovementY: false,
-    lockScalingX: false,
-    lockScalingY: false,
-    lockRotation: false,
+    /* Megy is the sole orchestrator. The background is a preference set
+       through Megy's Background panel — never manipulated on the canvas. */
+    selectable: false,
+    evented: false,
+    hasControls: false,
+    hasBorders: false,
+    lockMovementX: true,
+    lockMovementY: true,
+    lockScalingX: true,
+    lockScalingY: true,
+    lockRotation: true,
   };
 
   function addBg(obj: any) {
@@ -863,18 +860,24 @@ function renderTemplateSlots(
   onSlotClick: (slotIndex: number) => void,
   renderId: number,
   containerMode: boolean,
+  albumSize: string,
+  pageIndex: number,
   onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void,
+  frameColor?: string,
+  frameWidth?: number,
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
   // Adapt template to canvas orientation (rotate 90° if needed)
   const adaptedTemplate = adaptTemplateToOrientation(template, canvasW, canvasH);
 
-  // Phase 1: compute safe area from template margins
-  const safeX = canvasW * adaptedTemplate.margin.left;
-  const safeY = canvasH * adaptedTemplate.margin.top;
-  const safeW = canvasW * (1 - adaptedTemplate.margin.left - adaptedTemplate.margin.right);
-  const safeH = canvasH * (1 - adaptedTemplate.margin.top - adaptedTemplate.margin.bottom);
+  // Phase 1: compute safe area from template margins — with the binding keep-out
+  // added to the inner (spine) edge so slots never land in the gutter.
+  const m = applyBindingMargin(adaptedTemplate.margin, albumSize, pageIndex);
+  const safeX = canvasW * m.left;
+  const safeY = canvasH * m.top;
+  const safeW = canvasW * (1 - m.left - m.right);
+  const safeH = canvasH * (1 - m.top - m.bottom);
 
   adaptedTemplate.slots.forEach((rawSlot: any, i: number) => {
     // Merge template slot with user geometry overrides
@@ -888,7 +891,8 @@ function renderTemplateSlots(
     const sh = slot.height * safeH;
 
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
-      fab.Image.fromURL(uploadedPhotos[photoIndex].previewUrl, (img: any) => {
+      const photoUrl = uploadedPhotos[photoIndex].previewUrl;
+      fab.Image.fromURL(photoUrl, (img: any) => {
         /* Skip if a newer render has started — prevents stale images
            from appearing when switching pages rapidly */
         if (renderId !== currentRenderId) return;
@@ -908,16 +912,21 @@ function renderTemplateSlots(
           scaleX: finalScale,
           scaleY: finalScale,
           angle: slot.rotation ?? 0,
+          /* Megy is the sole orchestrator. The canvas is a RENDERER:
+             a slot photo can be selected (to delete/replace via Megy) but
+             never manually moved, scaled, or rotated. */
           selectable: true,
           evented: true,
-          cornerColor: '#F4C2A1',
-          cornerSize: 8,
-          transparentCorners: false,
+          hasControls: false,
+          hasBorders: true,
           borderColor: '#EF4444',
           borderScaleFactor: 2,
-          hasControls: true,
-          hasBorders: true,
-          lockRotation: false,
+          lockMovementX: true,
+          lockMovementY: true,
+          lockScalingX: true,
+          lockScalingY: true,
+          lockRotation: true,
+          hoverCursor: 'pointer',
           /* Only register clicks on visible (clipped) pixels —
              prevents bounding box overlap from blocking adjacent slots */
           perPixelTargetFind: true,
@@ -983,8 +992,8 @@ function renderTemplateSlots(
 
         // Slot border frame — THE CONTAINER. White outline normally,
         // becomes thick blue+selectable in container mode for resize/move.
-        const borderStroke = containerMode ? '#3B82F6' : '#FFFFFF';
-        const borderWidth = containerMode ? 3 : 2;
+        const borderStroke = containerMode ? '#3B82F6' : (frameColor ?? '#FFFFFF');
+        const borderWidth = containerMode ? 3 : (frameWidth ?? 2);
         const borderBase = {
           fill: 'transparent' as const,
           stroke: borderStroke,
@@ -1134,6 +1143,8 @@ function renderScene(
   canvasH: number,
   onSlotClick: (slotIndex: number) => void,
   containerMode: boolean = false,
+  albumSize: string = '8x8',
+  pageIndex: number = 0,
   onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void,
 ) {
   // Increment render ID — cancels stale async image callbacks
@@ -1159,7 +1170,34 @@ function renderScene(
 
   const geoms = page.slotGeometries;
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, onContainerModified);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth);
+  }
+
+  // 3b. Decorative theme corners (one set, all four corners), locked + on top.
+  // Tagged with SLOT_ID so renderTemplateSlots' cleanup clears them next render.
+  if (page.cornerBase) {
+    const cornerSize = Math.min(canvasW, canvasH) * 0.25;
+    const cornerBase = page.cornerBase;
+    CORNER_POSITIONS.forEach((pos) => {
+      fab.Image.fromURL(cornerImageUrl(cornerBase, pos), (cimg: any) => {
+        if (thisRenderId !== currentRenderId) return;
+        const isTop = pos === 'tl' || pos === 'tr';
+        const isLeft = pos === 'tl' || pos === 'bl';
+        const scale = cornerSize / Math.max(cimg.width || cornerSize, cimg.height || cornerSize);
+        const dw = (cimg.width || cornerSize) * scale;
+        const dh = (cimg.height || cornerSize) * scale;
+        cimg.set({
+          left: isLeft ? 0 : canvasW - dw,
+          top: isTop ? 0 : canvasH - dh,
+          scaleX: scale, scaleY: scale,
+          selectable: false, evented: false, hasControls: false, hasBorders: false,
+        });
+        cimg.slotId = `${SLOT_ID}-corner-${pos}`;
+        canvas.add(cimg);
+        cimg.bringToFront();
+        canvas.requestRenderAll();
+      });
+    });
   }
 
   // 4. Add text elements — use saved width/scale if available
@@ -1181,6 +1219,10 @@ function renderScene(
       textAlign: text.alignment,
       angle: text.rotation,
       opacity: text.opacity / 100,
+      /* Text is the ONE fully-customizable element on the canvas — users write
+         their own memories/experiences here, so it stays directly editable:
+         click to select, double-click to edit, drag to move. (Slot photos and
+         the background stay locked — Megy still owns those.) */
       selectable: true,
       evented: true,
       editable: true,
@@ -1233,6 +1275,29 @@ function renderScene(
     canvas.sendToBack(creaseLine);
     canvas.sendToBack(leftLabel);
     canvas.sendToBack(rightLabel);
+  }
+
+  // ── Binding (gutter) keep-out guide — the 0.5" spine reserve on the inner edge ──
+  {
+    const bFrac = bindingMarginFraction(albumSize);
+    const onLeft = bindingEdge(pageIndex) === 'left';
+    const zoneX = onLeft ? 0 : canvasW * (1 - bFrac);
+    const lineX = onLeft ? canvasW * bFrac : canvasW * (1 - bFrac);
+
+    const zone = new fab.Rect({
+      left: zoneX, top: 0, width: canvasW * bFrac, height: canvasH,
+      fill: 'rgba(232,165,152,0.10)', stroke: 'transparent',
+      selectable: false, evented: false, hasControls: false, hasBorders: false,
+    });
+    zone.isGuide = true;
+    canvas.add(zone);
+
+    const bindLine = new fab.Line([lineX, 0, lineX, canvasH], {
+      stroke: '#E8A598', strokeWidth: 1.5, strokeDashArray: [8, 5],
+      selectable: false, evented: false, opacity: 0.7,
+    });
+    bindLine.isGuide = true;
+    canvas.add(bindLine);
   }
 
   canvas.renderAll();

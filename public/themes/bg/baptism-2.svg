@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <rect width="1000" height="1000" fill="#F7FAFD"/>
+  <path d="M500 140 C 432 140 388 214 374 304 Q395 334 416 304 Q437 334 458 304 Q479 334 500 304 Q521 334 542 304 Q563 334 584 304 Q605 334 626 304 C 612 214 568 140 500 140 Z" fill="#F4EAD0" stroke="#B9A66B" stroke-width="3"/>
+  <g stroke="#C9B886" stroke-width="2" opacity="0.7" stroke-linecap="round">
+    <line x1="500" y1="150" x2="405" y2="312"/>
+    <line x1="500" y1="148" x2="447" y2="314"/>
+    <line x1="500" y1="146" x2="500" y2="316"/>
+    <line x1="500" y1="148" x2="553" y2="314"/>
+    <line x1="500" y1="150" x2="595" y2="312"/>
+  </g>
+  <g fill="#A9C4DC">
+    <path d="M456 356 C 446 372 446 384 456 392 C 466 384 466 372 456 356 Z"/>
+    <path d="M500 366 C 490 382 490 394 500 402 C 510 394 510 382 500 366 Z"/>
+    <path d="M544 356 C 534 372 534 384 544 392 C 554 384 554 372 544 356 Z"/>
+  </g>
+  <g fill="none" stroke="#B6D0E2" stroke-width="3" opacity="0.6" stroke-linecap="round">
+    <path d="M120 880 Q 200 856 280 880 T 440 880 T 600 880 T 760 880 T 900 880"/>
+    <path d="M150 912 Q 230 888 310 912 T 470 912 T 630 912 T 790 912"/>
+  </g>
+</svg>

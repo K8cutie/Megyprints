@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <rect width="1000" height="1000" fill="#E9DABA"/>
+  <rect x="44" y="44" width="912" height="912" fill="none" stroke="#8B6F4E" stroke-width="1.5" opacity="0.4"/>
+  <g fill="none" stroke="#8B6F4E" stroke-width="2.5" opacity="0.55" stroke-linecap="round">
+    <g transform="translate(70,70)">
+      <path d="M0 70 C 0 30 30 0 70 0"/>
+      <path d="M18 70 C 18 42 42 18 70 18"/>
+      <path d="M70 0 C 88 0 98 12 96 28 C 94 40 80 42 78 30"/>
+    </g>
+    <g transform="translate(930,930) rotate(180)">
+      <path d="M0 70 C 0 30 30 0 70 0"/>
+      <path d="M18 70 C 18 42 42 18 70 18"/>
+      <path d="M70 0 C 88 0 98 12 96 28 C 94 40 80 42 78 30"/>
+    </g>
+  </g>
+</svg>

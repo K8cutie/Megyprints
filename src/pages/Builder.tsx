@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, PenTool, Eye, ChevronRight, RotateCcw } from 'lucide-react';
@@ -7,7 +7,8 @@ import BuilderSetup from './builder/BuilderSetup';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
-import { useNavigate } from 'react-router-dom';
+import MegyAssistant from '../assistant/MegyAssistant';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const phases = [
   { id: 'setup' as const, label: 'Setup', icon: Settings },
@@ -19,8 +20,10 @@ const SetupPhase = memo(function SetupPhase({ actions }: { actions: BuilderConte
   return (
     <BuilderSetup
       selectedSize={actions.albumSize}
-      onSizeChange={actions.setAlbumSize}
-      onNext={() => actions.setPhase('edit')}
+      onSizeChange={(size) => { void actions.dispatch({ type: 'change_size', payload: { size }, rawMessage: `change size to ${size}` }); }}
+      /* Option A: "Start Creating" advances Megy's wizard past the size step;
+         the center screen (phase) follows the wizard, so they move together. */
+      onNext={() => { actions.setWizardStep('pick_background'); actions.setPhase('edit'); }}
     />
   );
 });
@@ -32,11 +35,15 @@ const EditPhase = memo(function EditPhase({
   onRegenerate,
   onGenerate,
   onGenerateAll,
+  containerModeRef,
+  onAction,
 }: {
   actions: BuilderContextValue;
   onRegenerate: () => void;
   onGenerate: () => void;
   onGenerateAll: () => void;
+  containerModeRef: React.MutableRefObject<((enable: boolean) => void) | undefined>;
+  onAction: (action: string, payload?: Record<string, unknown>) => void;
 }) {
   return (
     <BuilderEdit
@@ -44,6 +51,8 @@ const EditPhase = memo(function EditPhase({
       onRegenerate={onRegenerate}
       onGenerate={onGenerate}
       onGenerateAll={onGenerateAll}
+      containerModeRef={containerModeRef}
+      onAction={onAction}
     />
   );
 });
@@ -66,19 +75,30 @@ const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions:
 export default function Builder() {
   const actions = useBuilderContext();
   const navigate = useNavigate();
+
+  /* ── Fresh start: called before any effects run ── */
+  if (sessionStorage.getItem('megy-fresh-start')) {
+    sessionStorage.removeItem('megy-fresh-start');
+    actions.reset();
+  }
+  const [searchParams] = useSearchParams();
   const [errorKey, setErrorKey] = useState(0);
+
+  /* Refs */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerModeRef = useRef<((enable: boolean) => void) | undefined>(undefined);
 
   const handleGenerate = useCallback(() => {
     // Generate layout for the CURRENT page (random template + photos)
-    actions.regeneratePage();
+    void actions.dispatch({ type: 'regenerate_page', rawMessage: 'regenerate page' });
   }, [actions]);
 
   const handleRegenerate = useCallback(() => {
-    actions.regeneratePage();
+    void actions.dispatch({ type: 'regenerate_page', rawMessage: 'regenerate page' });
   }, [actions]);
 
   const handleGenerateAll = useCallback(() => {
-    actions.generateAlbum();
+    void actions.dispatch({ type: 'generate_album', rawMessage: 'generate album' });
   }, [actions]);
 
   const handleReset = useCallback(() => {
@@ -89,6 +109,25 @@ export default function Builder() {
   const handleOrder = useCallback(() => {
     navigate('/order');
   }, [navigate]);
+
+  /* Minimal action handler for BuilderEdit internal triggers */
+  const handleAction = useCallback((actionId: string, _payload?: Record<string, unknown>) => {
+    if (actionId === 'trigger-upload') {
+      fileInputRef.current?.click();
+    }
+  }, []);
+
+  /* Load specific album from URL ?album= param — once only */
+  const hasLoadedRef = useRef<string | null>(null);
+  const userId = actions.user?.id;
+  const loadAlbum = actions.loadAlbum;
+  useEffect(() => {
+    const albumId = searchParams.get('album');
+    if (!albumId || !userId) return;
+    if (hasLoadedRef.current === albumId) return;
+    hasLoadedRef.current = albumId;
+    loadAlbum(albumId);
+  }, [searchParams, userId, loadAlbum]);
 
   const phaseIndex = phases.findIndex((p) => p.id === actions.phase);
 
@@ -160,6 +199,8 @@ export default function Builder() {
                   onRegenerate={handleRegenerate}
                   onGenerate={handleGenerate}
                   onGenerateAll={handleGenerateAll}
+                  containerModeRef={containerModeRef}
+                  onAction={handleAction}
                 />
               </motion.div>
             )}
@@ -172,6 +213,24 @@ export default function Builder() {
             )}
           </AnimatePresence>
         </div>
+
+        {/* ── Megy Assistant ── */}
+        <MegyAssistant />
+
+        {/* Hidden file input for programmatic upload trigger */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ opacity: 0, position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }}
+          onChange={(e) => {
+            if (e.target.files) {
+              void actions.dispatch({ type: 'add_photos', payload: { files: e.target.files }, rawMessage: 'add photos' });
+              e.target.value = '';
+            }
+          }}
+        />
       </div>
     </BuilderErrorBoundary>
   );

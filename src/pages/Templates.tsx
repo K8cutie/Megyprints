@@ -21,6 +21,7 @@ const THEME_CATEGORIES: Record<TemplateType, ThemeCategory> = {
   kids: 'Family',
   vintage: 'Romantic',
   classic: 'Modern',
+  baptism: 'Family',
 };
 
 interface TemplateDisplay {

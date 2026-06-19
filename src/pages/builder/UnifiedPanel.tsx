@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+/* >>> LAST MODIFIED: 2026-06-05 04:10 SGT — Session 7: Tab persistence + memo <<< */
+import { useState, useRef, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Images, FileText, LayoutGrid, Palette, PanelLeftClose, PanelLeftOpen,
@@ -9,6 +10,7 @@ import type {
 } from './types';
 import { PAGE_TEMPLATES, TEMPLATE_CATEGORIES } from './pageTemplates';
 import PropertiesPanel from './PropertiesPanel';
+import { getPersistedSidebarTab, setPersistedSidebarTab } from './sidebarTabStore';
 
 /* ══════════════════════════════════════════════════════════════════════════
    UnifiedPanel — Vertical icon sidebar on the LEFT with collapsible content
@@ -69,11 +71,10 @@ const SIDEBAR_ITEMS: { id: 'photos' | 'pages' | 'templates' | 'background'; icon
   { id: 'background', icon: Palette, label: 'Background' },
 ];
 
-export default function UnifiedPanel(props: UnifiedPanelProps) {
+const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
   const {
     uploadedPhotos, onAddPhotos, getPageSnapshot,
     albumPages, currentPageIndex,
-    selectedPhotoId, selectedTextId,
     onGoToPage, onAddPage, onDeletePage, onDuplicatePage, onAddText,
     currentTemplateId, onSetTemplate, onAutoFill, onClearAllSlots,
     photosPerPage, onSetPhotosPerPage, onShuffleLayout,
@@ -89,16 +90,13 @@ export default function UnifiedPanel(props: UnifiedPanelProps) {
   /* ── Collapse state ── */
   const [collapsed, setCollapsed] = useState(false);
 
-  /* ── Active tab state ── */
-  const [activeTab, setActiveTab] = useState<'photos' | 'pages' | 'templates' | 'background'>('photos');
-
-  /* ── Auto-switch to Background on canvas selection ── */
-  const hasSelection = selectedPhoto !== null || selectedText !== null || selectedBackground !== null || selectedSlotIndex !== null;
-  useEffect(() => {
-    if (hasSelection && activeTab !== 'photos' && activeTab !== 'pages') {
-      setActiveTab('background');
-    }
-  }, [selectedPhotoId, selectedTextId, selectedBackground !== null, selectedSlotIndex, activeTab]);
+  /* ── Active tab — persisted in localStorage so it survives remounts ── */
+  const [, setTabTick] = useState(0);
+  const activeTab = getPersistedSidebarTab();
+  const setActiveTab = useCallback((tab: 'photos' | 'pages' | 'templates' | 'background') => {
+    setPersistedSidebarTab(tab);
+    setTabTick((t) => t + 1);
+  }, []);
 
   /* ── Template filter ── */
   const [templateCategory, setTemplateCategory] = useState<string>('all');
@@ -502,4 +500,6 @@ export default function UnifiedPanel(props: UnifiedPanelProps) {
       </AnimatePresence>
     </div>
   );
-}
+});
+
+export default UnifiedPanel;

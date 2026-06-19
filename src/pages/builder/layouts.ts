@@ -256,6 +256,7 @@ export const TEMPLATE_LAYOUT_PREFERENCES: Record<TemplateType, LayoutStyle[]> = 
   kids: ['fourGrid', 'collage3', 'trio', 'duoPortrait', 'fullBleed'],
   vintage: ['portraitSingle', 'duoPortrait', 'portraitSingle', 'asymDuo', 'panorama'],
   classic: ['fullBleed', 'portraitSingle', 'heroSupporting', 'duoPortrait', 'panorama'],
+  baptism: ['portraitSingle', 'duoPortrait', 'heroSupporting', 'fullBleed', 'panorama'],
 };
 
 export const TEMPLATE_SURPRISE_LAYOUTS: Record<TemplateType, LayoutStyle[]> = {
@@ -269,6 +270,7 @@ export const TEMPLATE_SURPRISE_LAYOUTS: Record<TemplateType, LayoutStyle[]> = {
   kids: ['collage', 'heroSupporting', 'panorama', 'portraitSingle'],
   vintage: ['collage3', 'heroSupporting', 'duoLandscape', 'panorama'],
   classic: ['collage3', 'panorama', 'asymDuo', 'collage'],
+  baptism: ['heroSupporting', 'panorama', 'portraitSingle', 'duoLandscape'],
 };
 
 /* ───────── Canvas dimension helper ───────── */

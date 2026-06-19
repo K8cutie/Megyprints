@@ -1,33 +1,40 @@
-# Multi-stage build for Megy Prints Album Builder
+# ═══════════════════════════════════════════════════════════════════════════
+# Megy Prints Frontend — Production Build
+# ═══════════════════════════════════════════════════════════════════════════
 
-# Stage 1: Build the React app
+# ── Stage 1: Build ──
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Accept Supabase credentials as build arguments
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
 
-# Install dependencies
-RUN npm ci --legacy-peer-deps
+# Set them as environment variables so Vite can use them
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 
-# Copy source code
+# Copy dependency files first (layer caching)
+COPY package.json package-lock.json* ./
+RUN npm ci --prefer-offline --no-audit
+
+# Copy source and build
 COPY . .
-
-# Build the app
 RUN npm run build
 
-# Stage 2: Serve with nginx
+# ── Stage 2: Serve ──
 FROM nginx:alpine
 
-# Copy custom nginx config for SPA routing
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy built files from builder stage
+# Copy built static files from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Expose port 80
 EXPOSE 80
 
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]

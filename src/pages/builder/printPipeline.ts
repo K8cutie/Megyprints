@@ -4,8 +4,9 @@
     ═══════════════════════════════════════════════════════════════ */
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
-import { ALBUM_SIZES } from './types';
-import { getTemplateById } from './pageTemplates';
+import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl } from './types';
+import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
+import { applyBindingMargin } from './binding';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -27,34 +28,20 @@ function getUISize(albumSize: AlbumSizePreset) {
   switch (albumSize) {
     case '6x6': return { width: 432, height: 432 };
     case '8x8': return { width: 576, height: 576 };
-    case '10x10': return { width: 720, height: 720 };
-    case '12x12': return { width: 864, height: 864 };
-    case '8x10': return { width: 576, height: 720 };
-    case '8x11': return { width: 523, height: 720 };
-    case '11x14': return { width: 565, height: 720 };
-    case '10x8': return { width: 720, height: 576 };
-    case '11x8': return { width: 720, height: 523 };
-    case '14x11': return { width: 720, height: 565 };
-    case 'a4': return { width: 510, height: 720 };
-    case 'a4l': return { width: 720, height: 510 };
-    case 'a5': return { width: 360, height: 510 };
-    case 'custom': return { width: 576, height: 720 };
-    default: return { width: 576, height: 720 };
+    case '6x4': return { width: 432, height: 288 };
+    case '11.5x8': return { width: 690, height: 480 };
+    case '8.5x11': return { width: 510, height: 660 };
+    default: return { width: 576, height: 576 };
   }
 }
 
-/** Print dimensions in pixels at 300 DPI */
+/** Print dimensions in pixels at 300 DPI.
+ *  ALBUM_SIZES already stores the print pixel size at 300 DPI
+ *  (e.g. an 8" side = 8 × 300 = 2400px), so we return it directly. */
 export function getPrintDimensions(albumSize: AlbumSizePreset) {
   const config = ALBUM_SIZES.find((s) => s.preset === albumSize);
-  if (!config) return { width: 2400, height: 3000 };
-
-  // Convert mm to inches to pixels at 300 DPI
-  const px = (mm: number) => Math.round((mm / 25.4) * PRINT_DPI);
-
-  return {
-    width: px(config.width),
-    height: px(config.height),
-  };
+  if (!config) return { width: 2400, height: 2400 };
+  return { width: config.width, height: config.height };
 }
 
 /** Generate a print-ready page image at 300 DPI.
@@ -65,11 +52,13 @@ export async function renderPageForPrint(
     page: AlbumPage;
     photos: UploadedPhoto[];
     albumSize: AlbumSizePreset;
+    /** Page index — drives the mirrored binding (gutter) keep-out edge */
+    pageIndex?: number;
     /** Optional: Fabric.js canvas instance — if provided, uses it for high-quality export */
     fabricCanvas?: any;
   },
 ): Promise<Blob> {
-  const { page, photos, albumSize, fabricCanvas } = options;
+  const { page, photos, albumSize, pageIndex = 0, fabricCanvas } = options;
 
   // ── Method 1: Fabric.js canvas export (highest quality) ──
   if (fabricCanvas) {
@@ -83,7 +72,7 @@ export async function renderPageForPrint(
   }
 
   // ── Method 2: Manual canvas compositing (fallback) ──
-  return renderPageManually(page, photos, albumSize);
+  return renderPageManually(page, photos, albumSize, pageIndex);
 }
 
 /** Manual canvas compositing — loads original photos at full resolution
@@ -92,6 +81,7 @@ async function renderPageManually(
   page: AlbumPage,
   photos: UploadedPhoto[],
   albumSize: AlbumSizePreset,
+  pageIndex: number,
 ): Promise<Blob> {
   const { width: W, height: H } = getPrintDimensions(albumSize);
   const canvas = document.createElement('canvas');
@@ -103,22 +93,48 @@ async function renderPageManually(
   await renderBackground(ctx, page, W, H);
 
   // ── Slot Photos ──
+  // Match the editor/preview geometry EXACTLY: adapt the template to the page
+  // orientation, compute the safe area from its margins PLUS the 0.5" binding
+  // keep-out on the inner (spine) edge, then place each slot as a fraction of
+  // that safe area. (Slot coords are fractions 0–1, not percentages.)
   const template = page.templateId ? getTemplateById(page.templateId) : null;
   if (template && page.slotFills) {
-    for (let i = 0; i < template.slots.length; i++) {
-      const slot = template.slots[i];
+    const adapted = adaptTemplateToOrientation(template, W, H);
+    const m = applyBindingMargin(adapted.margin, albumSize, pageIndex);
+    const safeX = W * m.left;
+    const safeY = H * m.top;
+    const safeW = W * (1 - m.left - m.right);
+    const safeH = H * (1 - m.top - m.bottom);
+
+    for (let i = 0; i < adapted.slots.length; i++) {
+      const slot = adapted.slots[i];
       const photoIdx = page.slotFills[i];
       if (photoIdx == null || photoIdx < 0) continue;
 
       const photo = photos[photoIdx];
       if (!photo) continue;
 
-      const sx = (slot.x / 100) * W;
-      const sy = (slot.y / 100) * H;
-      const sw = (slot.width / 100) * W;
-      const sh = (slot.height / 100) * H;
+      const sx = safeX + slot.x * safeW;
+      const sy = safeY + slot.y * safeH;
+      const sw = slot.width * safeW;
+      const sh = slot.height * safeH;
 
       await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i);
+    }
+  }
+
+  // ── Decorative theme corners (one set, all four corners) ──
+  if (page.cornerBase) {
+    const cornerSize = Math.min(W, H) * 0.25;
+    for (const pos of CORNER_POSITIONS) {
+      try {
+        const cimg = await loadImage(cornerImageUrl(page.cornerBase, pos));
+        const isTop = pos === 'tl' || pos === 'tr';
+        const isLeft = pos === 'tl' || pos === 'bl';
+        const cx = isLeft ? 0 : W - cornerSize;
+        const cy = isTop ? 0 : H - cornerSize;
+        ctx.drawImage(cimg, cx, cy, cornerSize, cornerSize);
+      } catch { /* missing corner asset — skip */ }
     }
   }
 
@@ -260,10 +276,15 @@ async function renderSlotPhoto(
 
   ctx.drawImage(img, drawX, drawY, drawW, drawH);
 
-  // Draw white border if specified
-  if (slot.borderWidth) {
-    ctx.strokeStyle = slot.borderColor || '#FFFFFF';
-    ctx.lineWidth = slot.borderWidth * (PRINT_DPI / 72); // scale border to print DPI
+  // Draw the photo frame. The theme-baked page frame overrides the per-slot
+  // template border when present; falls back to the slot border for old albums.
+  const frameWidth = page.photoBorderWidth ?? slot.borderWidth;
+  const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
+  if (frameWidth) {
+    ctx.strokeStyle = frameColor;
+    // The active slot clip halves a centered stroke (only the inner half shows),
+    // so draw it 2x to make the visible inner half equal the intended width.
+    ctx.lineWidth = frameWidth * (PRINT_DPI / 72) * 2;
     ctx.stroke();
   }
 
@@ -330,7 +351,7 @@ function renderTextElement(
   W: number,
   _H: number,
 ) {
-  const fontSize = (text.fontSize || 24) * (W / 576); // Scale relative to 8x10 reference
+  const fontSize = (text.fontSize || 24) * (W / 576); // Scale relative to 8x8 reference
   const fontFamily = text.fontFamily || 'serif';
   const fontWeight = text.bold ? 'bold' : 'normal';
   const fontStyle = text.italic ? 'italic' : 'normal';
@@ -395,6 +416,7 @@ export async function renderAlbumForPrint(
       page: pages[i],
       photos,
       albumSize,
+      pageIndex: i,
     });
     results.push({
       pageIndex: i,

@@ -1,3 +1,20 @@
 node_modules
 dist
 .DS_Store
+
+# Environment files / secrets — never commit (matches .env at any depth;
+# .env.example templates are a different name and stay committable)
+.env
+.env.local
+.env.*.local
+
+# Local safety snapshots created before edits
+_backups/
+
+# Personal Claude Code permission overrides (machine-local)
+.claude/settings.local.json
+
+# Backup copies and archives — not source
+src - Copy/
+src - Copy (2)/
+*.zip
