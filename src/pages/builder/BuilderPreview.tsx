@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, ShoppingCart, Download } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
 import { CORNER_POSITIONS, cornerImageUrl } from './types';
+import { dedupeSlotFills } from './slotUtils';
 import { downloadAlbumPdf } from './generateAlbumPdf';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
@@ -88,7 +89,7 @@ function PageView({ page, photos, singleW, H, pageIndex }: {
   return (
     <>
       <div className="absolute inset-0" style={{ ...backgroundToCss(page.background), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
-      {template && page.slotFills?.map((photoIdx, idx) => {
+      {template && dedupeSlotFills(page.slotFills).map((photoIdx, idx) => {
         if (photoIdx == null) return null;
         const uploaded = photos[photoIdx];
         if (!uploaded) return null;

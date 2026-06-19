@@ -17,6 +17,7 @@ import type {
 } from './fabric-types';
 import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset } from './types';
 import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl } from './types';
+import { dedupeSlotFills } from './slotUtils';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
 import { bindingMarginFraction, bindingEdge, applyBindingMargin } from './binding';
@@ -1163,7 +1164,7 @@ function renderScene(
   // 3. Render template slots
   const templateId = page.templateId ?? PAGE_TEMPLATES[0].id;
   const template = getTemplateById(templateId);
-  const fills = page.slotFills ?? template?.slots.map(() => null) ?? [];
+  const fills = dedupeSlotFills(page.slotFills ?? template?.slots.map(() => null) ?? []);
   const scales = page.slotScales ?? template?.slots.map(() => 1) ?? [];
   const offsetsX = page.slotOffsetsX ?? template?.slots.map(() => 0) ?? [];
   const offsetsY = page.slotOffsetsY ?? template?.slots.map(() => 0) ?? [];

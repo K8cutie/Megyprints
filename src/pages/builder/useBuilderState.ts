@@ -10,7 +10,7 @@ import type {
   PhotoFilters,
   SlotGeometryOverride,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum } from './pageTemplates';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES } from './types';
 import { getCanvasDimensions } from './layouts';
@@ -900,16 +900,20 @@ export function useBuilderState(): BuilderActions {
       const page = next[currentPageIndex];
       if (!page) return prev;
 
-      // ── 1. Collect existing photos on this page (preserve these) ──
-      const existingFills = (page.slotFills ?? [])
-        .filter((f): f is number => f !== null);
+      // ── 1. Collect existing photos on this page (preserve these). Dedup so a
+      //       page that already has duplicates gets cleaned on regenerate. ──
+      const existingFills = [...new Set(
+        (page.slotFills ?? []).filter((f): f is number => f !== null),
+      )];
 
-      // ── 2. Pick a random template different from current ──
-      let pool = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
+      // ── 2. Pick a random template different from current (and matched to
+      //       THIS album's size, so we don't pull a 9x9 template onto an 8x8). ──
+      let pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
       if (photosPerPage !== undefined) {
         pool = pool.filter((t) => t.slotCount === photosPerPage);
       }
-      if (pool.length === 0) pool = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
+      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
+      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize);
       const newTemplateId = templateTracker.pick(pool.map(t => t.id), page.templateId) ?? pool[Math.floor(Math.random() * pool.length)].id;
       const template = pool.find(t => t.id === newTemplateId) ?? pool[0];
       const slotCount = template.slots.length;
@@ -940,25 +944,25 @@ export function useBuilderState(): BuilderActions {
         newPage.slotFills[i] = existingFills[i];
       }
 
-      // ── 5. Fill empty slots from unused photo pool ──
+      // ── 5. Fill empty slots from photos used NOWHERE in the album. ──
+      // NOTE: do NOT free this page's preserved photos back into the pool —
+      // they're already in slots 0..n above, and re-adding them here is exactly
+      // what produced duplicate pictures on the same page ([0,1,0,1,…]).
       const usedGlobally = new Set<number>();
       next.forEach((p) => {
         (p.slotFills ?? []).forEach((f) => { if (f !== null) usedGlobally.add(f); });
       });
-      // Remove this page's preserved photos from "used" so we can re-fill our empty slots
-      for (let i = 0; i < Math.min(existingFills.length, slotCount); i++) {
-        usedGlobally.delete(existingFills[i]);
-      }
 
       let slotIdx = Math.min(existingFills.length, slotCount);
       for (let i = 0; i < uploadedPhotos.length && slotIdx < slotCount; i++) {
-        if (!usedGlobally.has(i)) {
+        // Belt-and-suspenders: never place a photo that's already on this page.
+        if (!usedGlobally.has(i) && !newPage.slotFills.includes(i)) {
           newPage.slotFills[slotIdx] = i;
           usedGlobally.add(i);
           slotIdx++;
         }
       }
-      // Remaining empty slots = "no more pictures in pool" (left as null)
+      // Remaining empty slots = "no more unused pictures" (left as null)
 
       next[currentPageIndex] = newPage;
       return next;
@@ -972,16 +976,19 @@ export function useBuilderState(): BuilderActions {
       const page = next[currentPageIndex];
       if (!page) return prev;
 
-      let pool = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
+      let pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
       if (photosPerPage !== undefined) {
         pool = pool.filter((t) => t.slotCount === photosPerPage);
       }
-      if (pool.length === 0) pool = PAGE_TEMPLATES.filter((t) => t.id !== page.templateId);
+      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
+      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize);
       const newTemplateId = templateTracker.pick(pool.map(t => t.id), page.templateId) ?? pool[Math.floor(Math.random() * pool.length)].id;
       const template = pool.find(t => t.id === newTemplateId) ?? pool[0];
       const slotCount = template.slots.length;
 
-      const existingFills = (page.slotFills ?? []).filter((f): f is number => f !== null);
+      // Distinct existing photos only — guards against any pre-existing dupes
+      // so shuffling a page never carries a duplicate forward.
+      const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
 
       next[currentPageIndex] = {
         ...page,
@@ -994,13 +1001,27 @@ export function useBuilderState(): BuilderActions {
 
       return next;
     });
-  }, [currentPageIndex, photosPerPage]);
+  }, [currentPageIndex, photosPerPage, albumSize]);
 
   /* ── Slot management ── */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
     pushSnapshot();
     updateCurrentPage((page) => {
       const fills = [...(page.slotFills ?? [])];
+      const other = fills.indexOf(photoIndex);
+      if (other !== -1 && other !== slotIndex) {
+        // This photo is already on the page → SWAP the two slots (taking their
+        // framing along) so we never end up with the same picture twice.
+        const scales = [...(page.slotScales ?? [])];
+        const offsetsX = [...(page.slotOffsetsX ?? [])];
+        const offsetsY = [...(page.slotOffsetsY ?? [])];
+        fills[other] = fills[slotIndex] ?? null;
+        fills[slotIndex] = photoIndex;
+        [scales[other], scales[slotIndex]] = [scales[slotIndex], scales[other]];
+        [offsetsX[other], offsetsX[slotIndex]] = [offsetsX[slotIndex], offsetsX[other]];
+        [offsetsY[other], offsetsY[slotIndex]] = [offsetsY[slotIndex], offsetsY[other]];
+        return { ...page, slotFills: fills, slotScales: scales, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
+      }
       fills[slotIndex] = photoIndex;
       return { ...page, slotFills: fills };
     });

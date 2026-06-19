@@ -5,6 +5,7 @@
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl } from './types';
+import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { applyBindingMargin } from './binding';
 
@@ -105,10 +106,11 @@ async function renderPageManually(
     const safeY = H * m.top;
     const safeW = W * (1 - m.left - m.right);
     const safeH = H * (1 - m.top - m.bottom);
+    const fills = dedupeSlotFills(page.slotFills);
 
     for (let i = 0; i < adapted.slots.length; i++) {
       const slot = adapted.slots[i];
-      const photoIdx = page.slotFills[i];
+      const photoIdx = fills[i];
       if (photoIdx == null || photoIdx < 0) continue;
 
       const photo = photos[photoIdx];
