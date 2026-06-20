@@ -57,7 +57,17 @@ create policy "Users can view own orders"
 
 create policy "Users can create own orders"
   on public.orders for insert
-  with check (auth.uid() = user_id);
+  with check (
+    auth.uid() = user_id
+    -- A customer may only create a fresh, UNPAID quote. They cannot self-mark
+    -- an order paid, nor set its price — both are pinned here so a hand-crafted
+    -- REST insert can't sneak status:'paid' / amount:1 past RLS. The operator
+    -- backend (service_role, bypasses RLS) sets amount + flips status to 'paid'.
+    and status = 'pending_payment'
+    and payment_status = 'unpaid'
+    and amount is null
+    and tracking is null
+  );
 
 -- NOTE: no customer UPDATE/DELETE policy on purpose. Once an order is placed,
 -- only the operator (via the backend using the service_role key) changes its

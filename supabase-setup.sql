@@ -4,7 +4,7 @@
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ══════ 1. Enable UUID extension ══════
-extension if not exists "uuid-ossp";
+create extension if not exists "uuid-ossp";
 
 -- ══════ 2. User Profiles table ══════
 create table if not exists public.user_profiles (
@@ -26,7 +26,8 @@ create policy "Users can view own profile"
 
 create policy "Users can update own profile"
   on public.user_profiles for update
-  using (auth.uid() = id);
+  using (auth.uid() = id)
+  with check (auth.uid() = id);  -- post-update row must still be the caller's (can't repoint id)
 
 create policy "Users can insert own profile"
   on public.user_profiles for insert
@@ -86,7 +87,8 @@ create policy "Users can create own albums"
 
 create policy "Users can update own albums"
   on public.albums for update
-  using (auth.uid() = user_id);
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);  -- can't reassign user_id to another account
 
 create policy "Users can delete own albums"
   on public.albums for delete
@@ -107,21 +109,28 @@ create trigger on_album_updated
   for each row execute procedure public.handle_updated_at();
 
 -- ══════ 4. Storage bucket for album photos ══════
--- Note: Run this via Supabase Dashboard → Storage → New Bucket
--- Or use the Supabase API if the bucket doesn't exist
+-- IMPORTANT: create the bucket as PRIVATE (Dashboard → Storage → New Bucket →
+-- "album-photos", Public = OFF). A public bucket makes every customer's photos
+-- world-readable by URL. Then run the policies below (real, runnable — NOT just
+-- comments) so each user can only touch files under their own uid/ folder.
+-- Photos are stored at  <uid>/<file>  so foldername[1] == the owner's uid.
 
--- Enable storage policies via Dashboard:
--- 1. Go to Storage → Policies → album-photos
--- 2. Add these policies:
+create policy "Users can view own photos"
+  on storage.objects for select
+  using (bucket_id = 'album-photos' and auth.uid()::text = (storage.foldername(name))[1]);
 
--- SELECT: Users can view own photos
--- auth.uid()::text = (storage.foldername(name))[1]
+create policy "Users can upload own photos"
+  on storage.objects for insert
+  with check (bucket_id = 'album-photos' and auth.uid()::text = (storage.foldername(name))[1]);
 
--- INSERT: Users can upload own photos
--- auth.uid()::text = (storage.foldername(name))[1]
+create policy "Users can update own photos"
+  on storage.objects for update
+  using (bucket_id = 'album-photos' and auth.uid()::text = (storage.foldername(name))[1])
+  with check (bucket_id = 'album-photos' and auth.uid()::text = (storage.foldername(name))[1]);
 
--- DELETE: Users can delete own photos
--- auth.uid()::text = (storage.foldername(name))[1]
+create policy "Users can delete own photos"
+  on storage.objects for delete
+  using (bucket_id = 'album-photos' and auth.uid()::text = (storage.foldername(name))[1]);
 
 -- ══════ 5. Verify setup ══════
 -- After running, check:

@@ -16,11 +16,24 @@ const PORT = process.env.PORT || 4000;
 
 // ── Middleware ──
 app.use(helmet());
+// CORS fails CLOSED: only the explicitly-configured frontend origin(s) may call
+// the API with credentials. Never fall back to '*' (a wildcard + credentials is
+// a footgun that reflects any origin). Set FRONTEND_URL (comma-separated for
+// multiple, e.g. "https://app.vercel.app,http://localhost:3000").
+const allowedOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true
+  origin(origin, cb) {
+    // allow same-origin / curl / server-to-server (no Origin header)
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(morgan('combined'));
 
 // Rate limiting
