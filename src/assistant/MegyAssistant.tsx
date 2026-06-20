@@ -120,6 +120,9 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 export default function MegyAssistant() {
   const [activeTab, setActiveTab] = useState<TabId>('design');
   const [chatOpen, setChatOpen] = useState(false);
+  // Mobile only: the side panel becomes a bottom drawer that collapses to a peek
+  // (so the canvas is visible) and expands to act. Ignored at md+ (right rail).
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([WELCOME]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -529,7 +532,20 @@ export default function MegyAssistant() {
   }
 
   return (
-    <div className="fixed right-0 top-0 h-full w-[420px] bg-white border-l border-[#F4C2A1]/20 shadow-xl z-[90] flex flex-col overflow-hidden">
+    <div className={`fixed z-[90] bg-white shadow-xl flex flex-col overflow-hidden transition-[height] duration-300
+      left-0 right-0 bottom-0 w-full rounded-t-2xl border-t border-[#F4C2A1]/20
+      ${mobileExpanded ? 'h-[82vh]' : 'h-[66px]'}
+      md:left-auto md:right-0 md:top-0 md:bottom-0 md:h-full md:w-[420px] md:rounded-none md:border-t-0 md:border-l md:transition-none`}>
+
+      {/* Mobile grab-handle — tap to expand/collapse the drawer (hidden at md+) */}
+      <button
+        type="button"
+        onClick={() => setMobileExpanded((v) => !v)}
+        className="md:hidden shrink-0 w-full flex items-center justify-center pt-2 pb-1"
+        aria-label={mobileExpanded ? 'Collapse Megy' : 'Expand Megy'}
+      >
+        <span className="w-10 h-1.5 rounded-full bg-[#E8D8C8]" />
+      </button>
 
       {/* ═══ HEADER ═══ */}
       <div className="bg-[#F4C2A1] px-4 py-3 flex items-center justify-between shrink-0">

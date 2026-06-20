@@ -790,7 +790,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {/* Canvas */}
           <div
             ref={containerRef}
-            className="flex-1 overflow-auto flex items-center justify-center p-8"
+            className="flex-1 overflow-auto flex items-center justify-center p-4 pb-24 md:p-8"
             title="Scroll to navigate pages. Ctrl+Scroll to zoom."
           >
             <div className="flex flex-col items-center gap-2">

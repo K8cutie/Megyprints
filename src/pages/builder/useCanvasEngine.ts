@@ -500,13 +500,73 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     };
   }, [canvasRef, fabricModule, fabricValid, CANVAS_H, CANVAS_W]);
 
+  /* ═══════ Fit the canvas to its container width (mobile) ═══════
+     Scales only the CSS DISPLAY size via setDimensions({cssOnly:true}); the
+     internal backstore stays CANVAS_W×CANVAS_H, so text/slot coordinates (which
+     are absolute canvas px) are untouched. Capped at 1× so desktop never grows. */
+  const fitCanvasToContainer = useCallback(() => {
+    const c = fabricRef.current as any;
+    if (!c || !c.wrapperEl) return;
+    // Fabric nests the canvas in a shadow wrapper that hugs the canvas, so walk
+    // up to the scrollable viewport (the real width constraint), not that wrapper.
+    let host: HTMLElement | null = c.wrapperEl.parentElement;
+    let hops = 0;
+    while (host && hops < 6) {
+      const s = getComputedStyle(host);
+      if (['auto', 'scroll'].includes(s.overflowX) || ['auto', 'scroll'].includes(s.overflowY)) break;
+      host = host.parentElement;
+      hops++;
+    }
+    if (!host) return;
+    const avail = host.clientWidth - 32; // leave room for the container's padding
+    if (avail <= 0) return;
+    const scale = Math.min(1, avail / CANVAS_W);
+    // NOTE: fabric 5.x setDimensions(cssOnly) does NOT append units, so the CSS
+    // values MUST be passed as 'px' strings or the browser ignores them.
+    c.setDimensions(
+      { width: Math.round(CANVAS_W * scale) + 'px', height: Math.round(CANVAS_H * scale) + 'px' },
+      { cssOnly: true },
+    );
+  }, [CANVAS_W, CANVAS_H]);
+
   /* ═══════ Resize canvas when album size changes ═══════ */
   useEffect(() => {
     if (!fabricRef.current || !fabricValid || !fabricModule) return;
     fabricRef.current.setWidth(CANVAS_W);
     fabricRef.current.setHeight(CANVAS_H);
     fabricRef.current.renderAll();
-  }, [CANVAS_W, CANVAS_H, fabricValid, fabricModule]);
+    fitCanvasToContainer();
+  }, [CANVAS_W, CANVAS_H, fabricValid, fabricModule, fitCanvasToContainer]);
+
+  /* Re-fit after the flex layout settles + on any container/viewport resize
+     (orientation, breakpoints). A bare mount-time fit runs too early — the
+     scroll container is briefly canvas-width before flexbox constrains it. */
+  useEffect(() => {
+    if (!fabricValid) return;
+    let ro: ResizeObserver | null = null;
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => {
+      fitCanvasToContainer();
+      const c = fabricRef.current as any;
+      let host: HTMLElement | null = c?.wrapperEl?.parentElement ?? null;
+      let hops = 0;
+      while (host && hops < 6) {
+        const s = getComputedStyle(host);
+        if (['auto', 'scroll'].includes(s.overflowX) || ['auto', 'scroll'].includes(s.overflowY)) break;
+        host = host.parentElement;
+        hops++;
+      }
+      if (host && typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(() => fitCanvasToContainer());
+        ro.observe(host);
+      }
+    }));
+    window.addEventListener('resize', fitCanvasToContainer);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', fitCanvasToContainer);
+      ro?.disconnect();
+    };
+  }, [fabricValid, fitCanvasToContainer]);
 
   /* ═══════ Render scene on structural changes ═══════ */
   useEffect(() => {
