@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import type { ReactNode } from 'react';
 import type { User, Session, Provider } from '@supabase/supabase-js';
 import { AuthError } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { supabase, supabaseConfigured } from './supabase';
 
 // =============================================================================
 // Types
@@ -46,6 +46,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     async function getInitialSession() {
+      // Local-only mode (no Supabase keys configured): skip the network call,
+      // stay logged out, let the album builder run.
+      if (!supabaseConfigured) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         const { data, error: sessionError } = await supabase.auth.getSession();
