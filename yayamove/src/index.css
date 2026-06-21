@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 99%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --primary: 221 83% 53%; /* brand-600 #2563eb */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 214 95% 93%; /* brand-100 */
+    --secondary-foreground: 224 64% 33%;
+
+    --muted: 214 32% 95%;
+    --muted-foreground: 215 20% 45%;
+
+    --accent: 199 89% 60%; /* sky */
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 88%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.9rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight;
+  }
+}
+
+@layer components {
+  /* glassy card used across the app */
+  .glass {
+    @apply bg-white/70 backdrop-blur-xl border border-white/60 shadow-soft;
+  }
+
+  .brand-gradient-text {
+    @apply bg-gradient-to-r from-brand-600 via-brand-500 to-accent bg-clip-text text-transparent;
+  }
+
+  .ring-focus {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+  }
+}
+
+/* tasteful scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(214 25% 80%);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(221 60% 65%);
+  background-clip: content-box;
+}
