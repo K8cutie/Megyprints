@@ -28,6 +28,8 @@ Maid / Kasambahay · Carpentry · Plumbing · Computer Technician · Aircon Serv
 - **Real-time messaging** (Supabase Realtime; fully interactive demo mode)
 - **Provider dashboard** — job leads, send quotes, manage bookings, earnings
 - Ratings & reviews (server-computed) · **admin NBI-verification dashboard**
+- **In-app escrow payments** (PayMongo) with automatic commission split —
+  gateway-agnostic layer, sandbox-ready, hold → auto-release on completion
 - **Privacy Policy / Terms · cookie consent · data export & account deletion**
   (RA 10173 / Data Privacy Act)
 - A real **data layer** (`src/lib/api.ts`): live Supabase queries when configured,
@@ -55,7 +57,19 @@ Run the SQL in `supabase/migrations/` **in order** in the Supabase SQL editor:
 4. `0004_messaging_bookings.sql` — conversations, messages (realtime), bookings + RLS
 5. `0005_admin_and_ratings.sql` — admin role, NBI approval policies, server-side rating triggers
 6. `0006_provider_directory.sql` — public provider directory fields (name/city/geo) + geo indexes
-7. `seed.sql` — optional
+7. `0007_audit_hardening.sql` — message immutability, booking-completion guard, reviews-require-booking, storage limits, hide user_id
+8. `0008_payments.sql` — payments/escrow table, commission split, auto-release-on-completion + RLS
+9. `seed.sql` — optional
+
+### Edge Functions (`supabase/functions/`)
+Deploy with `supabase functions deploy <name>` and set the listed secrets:
+- `delete-account` — RA 10173 erasure (cascade + storage wipe)
+- `paymongo-create-checkout` — creates a PayMongo session server-side (`PAYMONGO_SECRET_KEY`)
+- `paymongo-webhook` — verifies signature, moves payment to escrow (`PAYMONGO_WEBHOOK_SECRET`, deploy `--no-verify-jwt`)
+
+> Payments run in **demo/sandbox** until you add a PayMongo account + keys. PayMongo
+> is acceptance-only, so provider **disbursement** is a separate (pluggable) step —
+> see the escrow notes in `0008_payments.sql` and `COST.md`.
 
 To grant yourself admin (NBI verification queue at `/admin/verification`):
 ```sql

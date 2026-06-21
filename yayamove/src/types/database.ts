@@ -12,6 +12,13 @@ export type BookingStatus =
   | "declined"
   | "completed"
   | "cancelled";
+export type PaymentStatus =
+  | "pending"
+  | "processing"
+  | "held"
+  | "released"
+  | "refunded"
+  | "failed";
 export type CategorySlug =
   | "maid"
   | "carpentry"
@@ -129,6 +136,25 @@ export interface Review {
   created_at: string;
 }
 
+export interface Payment {
+  id: string;
+  booking_id: string | null;
+  seeker_id: string;
+  provider_id: string;
+  gateway: string;
+  gateway_ref: string | null;
+  checkout_url: string | null;
+  currency: string;
+  amount_total: number;
+  commission_rate: number;
+  commission_amount: number;
+  provider_amount: number;
+  status: PaymentStatus;
+  created_at: string;
+  paid_at: string | null;
+  released_at: string | null;
+}
+
 type Row<T> = { Row: T; Insert: Partial<T>; Update: Partial<T>; Relationships: [] };
 
 export interface Database {
@@ -144,6 +170,7 @@ export interface Database {
       quotes: Row<Quote>;
       bookings: Row<Booking>;
       reviews: Row<Review>;
+      payments: Row<Payment>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

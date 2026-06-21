@@ -11,6 +11,7 @@ import {
   MapPin,
   Clock,
   Send,
+  Lock,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
 import { getCategory } from "@/lib/categories";
+import { computeSplit } from "@/lib/payments";
 import {
   SAMPLE_LEADS,
   SAMPLE_PROVIDER_BOOKINGS,
@@ -172,29 +174,43 @@ export function ProviderDashboard() {
           <Card className="p-5">
             <h3 className="font-bold">Your bookings</h3>
             <div className="mt-3 space-y-3">
-              {bookings.map((b) => (
-                <div key={b.id} className="rounded-xl border border-border p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">{b.seekerName}</span>
-                    <span className="text-sm font-bold text-brand-700">{formatPHP(b.amount)}</span>
-                  </div>
-                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                    <MapPin className="size-3" /> {b.address}
-                  </p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <BookingStatus status={b.status} />
-                    {b.status === "requested" && (
-                      <div className="flex gap-1">
-                        <Button size="sm" className="h-7 bg-emerald-600 px-2 hover:bg-emerald-700" onClick={() => updateBooking(b.id, "accepted")}>Accept</Button>
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => updateBooking(b.id, "declined")}>Decline</Button>
-                      </div>
+              {bookings.map((b) => {
+                const share = computeSplit(b.amount).providerAmount;
+                return (
+                  <div key={b.id} className="rounded-xl border border-border p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">{b.seekerName}</span>
+                      <span className="text-sm font-bold text-brand-700">{formatPHP(b.amount)}</span>
+                    </div>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="size-3" /> {b.address}
+                    </p>
+                    {/* escrow: your share after the platform fee */}
+                    {(b.status === "accepted" || b.status === "completed") && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Your share: <span className="font-semibold text-foreground">{formatPHP(share)}</span>
+                        {" · "}
+                        {b.status === "accepted" ? "held in escrow" : "released"}
+                      </p>
                     )}
-                    {b.status === "accepted" && (
-                      <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => updateBooking(b.id, "completed")}>Mark done</Button>
-                    )}
+                    <div className="mt-2 flex items-center justify-between">
+                      <BookingStatus status={b.status} />
+                      {b.status === "requested" && (
+                        <div className="flex gap-1">
+                          <Button size="sm" className="h-7 bg-emerald-600 px-2 hover:bg-emerald-700" onClick={() => updateBooking(b.id, "accepted")}>Accept</Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => updateBooking(b.id, "declined")}>Decline</Button>
+                        </div>
+                      )}
+                      {/* Only the seeker can confirm completion (releases escrow). */}
+                      {b.status === "accepted" && (
+                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <Lock className="size-3" /> seeker releases on completion
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
         </div>

@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/ui/modal";
+import { CheckoutPanel } from "@/components/CheckoutPanel";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { ReviewsSection } from "@/components/ReviewsSection";
 import { formatPHP } from "@/lib/utils";
@@ -272,14 +273,20 @@ function BookingModal({
   provider: ProviderListItem;
   onClose: () => void;
 }) {
+  const [step, setStep] = useState<"details" | "pay" | "done">("details");
   const [date, setDate] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
+  const [amount, setAmount] = useState(String(provider.hourly_rate || 0));
   const [submitting, setSubmitting] = useState(false);
 
-  const submit = async () => {
+  const toPayment = async () => {
     if (!date || !address) {
       toast.error("Please add a date and address.");
+      return;
+    }
+    if (!amount || Number(amount) <= 0) {
+      toast.error("Enter the agreed amount to hold in escrow.");
       return;
     }
     setSubmitting(true);
@@ -290,10 +297,9 @@ function BookingModal({
         scheduled_for: date ? new Date(date).toISOString() : undefined,
         address,
         notes,
-        amount: provider.hourly_rate,
+        amount: Number(amount),
       });
-      toast.success(`Booking requested with ${provider.name}! They'll confirm shortly.`);
-      onClose();
+      setStep("pay");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not send booking.");
     } finally {
@@ -301,30 +307,65 @@ function BookingModal({
     }
   };
 
+  const title =
+    step === "details" ? "Request booking" : step === "pay" ? "Pay & hold in escrow" : "Booking confirmed";
+
   return (
-    <Modal open onClose={onClose} title="Request booking">
-      <p className="text-sm text-muted-foreground">
-        with <span className="font-semibold text-foreground">{provider.name}</span> · {formatPHP(provider.hourly_rate)}/hr
-      </p>
+    <Modal open onClose={onClose} title={title}>
+      {step === "details" && (
+        <>
+          <p className="text-sm text-muted-foreground">
+            with <span className="font-semibold text-foreground">{provider.name}</span> · {formatPHP(provider.hourly_rate)}/hr
+          </p>
+          <div className="mt-4 space-y-3">
+            <div>
+              <Label htmlFor="date">Preferred date &amp; time</Label>
+              <Input id="date" type="datetime-local" className="mt-1.5" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="address">Address</Label>
+              <Input id="address" className="mt-1.5" placeholder="Where is the job?" value={address} onChange={(e) => setAddress(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="amount">Agreed amount (₱)</Label>
+              <Input id="amount" type="number" min={0} className="mt-1.5" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="notes">Notes (optional)</Label>
+              <Textarea id="notes" className="mt-1.5" placeholder="Any details the pro should know…" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+          </div>
+          <Button variant="gradient" size="lg" className="mt-5 w-full" onClick={toPayment} disabled={submitting}>
+            <CalendarCheck /> {submitting ? "Saving…" : "Continue to payment"}
+          </Button>
+        </>
+      )}
 
-      <div className="mt-4 space-y-3">
-        <div>
-          <Label htmlFor="date">Preferred date &amp; time</Label>
-          <Input id="date" type="datetime-local" className="mt-1.5" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="address">Address</Label>
-          <Input id="address" className="mt-1.5" placeholder="Where is the job?" value={address} onChange={(e) => setAddress(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="notes">Notes (optional)</Label>
-          <Textarea id="notes" className="mt-1.5" placeholder="Any details the pro should know…" value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </div>
-      </div>
+      {step === "pay" && (
+        <CheckoutPanel
+          providerName={provider.name}
+          providerId={provider.id}
+          category={provider.primary_category}
+          amount={Number(amount)}
+          onPaid={() => setStep("done")}
+        />
+      )}
 
-      <Button variant="gradient" size="lg" className="mt-5 w-full" onClick={submit} disabled={submitting}>
-        <CalendarCheck /> {submitting ? "Sending…" : "Send booking request"}
-      </Button>
+      {step === "done" && (
+        <div className="py-4 text-center">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-emerald-100">
+            <ShieldCheck className="size-8 text-emerald-500" />
+          </div>
+          <h3 className="mt-4 text-lg font-bold">Payment held in escrow 🔒</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {formatPHP(Number(amount))} is secured. We'll release it to {provider.name.split(" ")[0]} once
+            you mark the job complete. {provider.name.split(" ")[0]} has been notified.
+          </p>
+          <Button variant="gradient" className="mt-5 w-full" onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      )}
     </Modal>
   );
 }

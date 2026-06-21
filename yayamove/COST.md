@@ -42,6 +42,18 @@ infra). Decisions made with cost in mind:
 - ⚠️ Free projects **auto-pause after ~7 days inactivity** — fine pre-launch,
   but schedule a keep-alive ping once you have a pilot running.
 
+## Payments (PayMongo escrow)
+- **Processing fees are the real cost**, not infra: ~2.5–3.5% + ₱ fixed per
+  transaction (GCash/cards via PayMongo). Build the commission rate
+  (`PLATFORM_COMMISSION_RATE`, currently 12%) to cover the fee + margin.
+- Escrow logic adds **no extra infra** — it's a status column + two triggers
+  (`held` on webhook, auto `released` on completion). No polling, no cron.
+- The webhook is the only money-state writer (one Edge Function invocation per
+  paid checkout) — cheap and abuse-resistant.
+- **Disbursement to providers** is the cost/ops watch-item: PayMongo isn't a
+  split gateway, so payouts are a separate rail (InstaPay/PESONet or a payout
+  API). Batch payouts to minimise per-transfer fees.
+
 ## Deliberately deferred (cost vs. value)
 - In-app payments / escrow — heaviest piece; phase it in once jobs flow (see the
   product discussion). Until then, off-platform payment keeps processing fees at $0.

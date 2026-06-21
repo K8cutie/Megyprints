@@ -47,6 +47,20 @@ Carried over from the Megyprints pre-production audit so we fix it early
 - ✅ Ratings & `jobs_completed` are computed by DB triggers from real reviews /
   completed bookings — never settable by a client.
 
+## Payments & escrow (PayMongo)
+- ✅ PayMongo **secret key stays server-side** in an Edge Function — never in the
+  bundle (only the public anon key ships).
+- ✅ **Money state is uncheatable from the client:** a guard trigger freezes
+  `status`/amounts/`gateway_ref`/`paid_at`/`released_at` for non-service_role,
+  non-admin callers. Only the **signature-verified webhook** sets `held` (escrow).
+- ✅ **Escrow auto-releases** on booking completion via a DB trigger — and only
+  the seeker can complete a booking (0007), so a provider can't release their own
+  escrow.
+- ✅ Commission rate is **snapshotted** per payment; amounts validated (`>= 0`).
+- 🔜 Custody/compliance: holding funds is BSP-regulated — requires the registered
+  business + merchant onboarding before live keys. Provider **disbursement** is a
+  separate, pluggable rail (PayMongo is acceptance-only).
+
 ## Audit remediation (pass 4 — security/QA/quality auditors)
 - ✅ **Admin route gated** (`AdminRoute` + `is_admin()` RPC) in addition to RLS —
   the admin surface no longer renders for non-admins.
