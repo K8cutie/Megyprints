@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Star, Navigation } from "lucide-react";
-import { CATEGORY_BY_SLUG } from "@/lib/categories";
+import { getCategory } from "@/lib/categories";
 import { NCR_CENTER } from "@/lib/locations";
 import type { ProviderListItem } from "@/lib/sampleData";
 import { cn, formatPHP } from "@/lib/utils";
@@ -80,7 +80,7 @@ export function ProviderMap({ providers, userLoc, selectedId, onSelect }: Props)
 
       {/* provider pins */}
       {points.providers.map(({ p, x, y }) => {
-        const cat = CATEGORY_BY_SLUG[p.primary_category];
+        const cat = getCategory(p.primary_category);
         const Icon = cat.icon;
         const selected = selectedId === p.id;
         return (

@@ -4,9 +4,10 @@ import { Send, ArrowLeft, ShieldCheck, MessageSquare, Search } from "lucide-reac
 import { useChat } from "@/hooks/useChat";
 import { ME } from "@/lib/sampleChat";
 import { CATEGORY_BY_SLUG, type CategorySlug } from "@/lib/categories";
-import { cn, initials, timeAgo } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
 
 export default function Messages() {
   const { conversations, messagesByConv, typing, totalUnread, unreadFor, lastMessageFor, send, markRead } = useChat();
@@ -19,10 +20,11 @@ export default function Messages() {
   const activeConv = conversations.find((c) => c.id === active);
   const activeMessages = active ? messagesByConv[active] ?? [] : [];
 
-  // mark read + autoscroll when opening / on new messages
+  // mark read only when there's actually something unread (avoids a write per
+  // inbound message in live mode — audit QA-M1)
   useEffect(() => {
-    if (active) markRead(active);
-  }, [active, activeMessages.length, markRead]);
+    if (active && unreadFor(active) > 0) markRead(active);
+  }, [active, activeMessages.length, markRead, unreadFor]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -95,9 +97,7 @@ export default function Messages() {
                   )}
                 >
                   <div className="relative">
-                    <div className="flex size-12 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">
-                      {initials(c.partyName)}
-                    </div>
+                    <Avatar name={c.partyName} size="sm" />
                     {c.verified && (
                       <ShieldCheck className="absolute -bottom-0.5 -right-0.5 size-4 rounded-full bg-white text-brand-600" />
                     )}
@@ -141,9 +141,7 @@ export default function Messages() {
                   to={`/provider/${activeConv.partyId}`}
                   className="flex min-w-0 flex-1 items-center gap-3"
                 >
-                  <div className="flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">
-                    {initials(activeConv.partyName)}
-                  </div>
+                  <Avatar name={activeConv.partyName} size="sm" />
                   <div className="min-w-0">
                     <p className="flex items-center gap-1.5 truncate font-bold">
                       {activeConv.partyName}

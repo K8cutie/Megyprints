@@ -1,0 +1,29 @@
+# CI for the Yayamove app (isolated to the yayamove/ folder — does not affect
+# the Megyprints app or its deploy workflow).
+name: Yayamove CI
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["yayamove/**"]
+  pull_request:
+    paths: ["yayamove/**"]
+
+defaults:
+  run:
+    working-directory: yayamove
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: yayamove/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test

@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Download, Trash2, ShieldCheck, AlertTriangle, X, Lock } from "lucide-react";
+import { Download, Trash2, ShieldCheck, AlertTriangle, Lock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Modal } from "@/components/ui/modal";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export default function Account() {
   const navigate = useNavigate();
@@ -116,8 +118,17 @@ export default function Account() {
         <DeleteModal
           onClose={() => setConfirming(false)}
           onConfirm={async () => {
-            // Live build: a Supabase Edge Function (service_role) cascades the
-            // delete across all tables + storage, then removes the auth user.
+            // Calls the delete-account Edge Function (service_role) which cascades
+            // the delete across all tables + storage, then removes the auth user.
+            if (isSupabaseConfigured && supabase) {
+              const { error } = await supabase.functions.invoke("delete-account", {
+                method: "POST",
+              });
+              if (error) {
+                toast.error("Could not delete account. Please contact support.");
+                return;
+              }
+            }
             toast.success("Your account and data have been deleted.");
             await signOut();
             navigate("/");
@@ -131,31 +142,31 @@ export default function Account() {
 function DeleteModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
   const [text, setText] = useState("");
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">
-      <Card className="w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-lg font-bold text-destructive">
-            <AlertTriangle className="size-5" /> Delete account
-          </h2>
-          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground"><X className="size-5" /></button>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This permanently erases your account, profile, documents, messages, and bookings.
-          Type <span className="font-bold text-foreground">DELETE</span> to confirm.
-        </p>
-        <Label htmlFor="confirm" className="sr-only">Type DELETE</Label>
-        <Input id="confirm" className="mt-4" placeholder="DELETE" value={text} onChange={(e) => setText(e.target.value)} />
-        <div className="mt-5 flex gap-2">
-          <Button variant="ghost" className="flex-1" onClick={onClose}>Cancel</Button>
-          <Button
-            className="flex-1 bg-destructive hover:brightness-95"
-            disabled={text !== "DELETE"}
-            onClick={onConfirm}
-          >
-            <Trash2 /> Permanently delete
-          </Button>
-        </div>
-      </Card>
-    </div>
+    <Modal
+      open
+      onClose={onClose}
+      title={
+        <h2 className="flex items-center gap-2 text-lg font-bold text-destructive">
+          <AlertTriangle className="size-5" /> Delete account
+        </h2>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        This permanently erases your account, profile, documents, messages, and bookings.
+        Type <span className="font-bold text-foreground">DELETE</span> to confirm.
+      </p>
+      <Label htmlFor="confirm" className="sr-only">Type DELETE</Label>
+      <Input id="confirm" className="mt-4" placeholder="DELETE" value={text} onChange={(e) => setText(e.target.value)} />
+      <div className="mt-5 flex gap-2">
+        <Button variant="ghost" className="flex-1" onClick={onClose}>Cancel</Button>
+        <Button
+          className="flex-1 bg-destructive hover:brightness-95"
+          disabled={text !== "DELETE"}
+          onClick={onConfirm}
+        >
+          <Trash2 /> Permanently delete
+        </Button>
+      </div>
+    </Modal>
   );
 }

@@ -7,6 +7,7 @@ import { DemoBanner } from "@/components/DemoBanner";
 import { CookieConsent } from "@/components/CookieConsent";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AdminRoute } from "@/components/AdminRoute";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ChatProvider } from "@/hooks/useChat";
 
@@ -59,9 +60,25 @@ export default function App() {
                     <Route path="/provider/:id" element={<ProviderDetail />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
-                    <Route path="/become-a-pro" element={<ProviderOnboarding />} />
+                    <Route
+                      path="/become-a-pro"
+                      element={
+                        <ProtectedRoute>
+                          <ProviderOnboarding />
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route path="/messages" element={<Messages />} />
-                    <Route path="/admin/verification" element={<AdminVerification />} />
+                    <Route
+                      path="/admin/verification"
+                      element={
+                        <ProtectedRoute>
+                          <AdminRoute>
+                            <AdminVerification />
+                          </AdminRoute>
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="/terms" element={<Terms />} />
                     <Route

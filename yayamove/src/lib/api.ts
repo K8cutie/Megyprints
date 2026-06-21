@@ -8,12 +8,20 @@
  */
 import { supabase } from "./supabase";
 import { SAMPLE_PROVIDERS, type ProviderListItem } from "./sampleData";
-import type { CategorySlug } from "@/types/database";
+import type { CategorySlug, Database } from "@/types/database";
+
+type JobInsert = Database["public"]["Tables"]["jobs"]["Insert"];
+type BookingInsert = Database["public"]["Tables"]["bookings"]["Insert"];
+
+/** Default page size for growing lists (cost: bounded reads, see COST.md). */
+export const PAGE_SIZE = 24;
 
 export interface ProviderFilter {
   category?: CategorySlug | null;
   city?: string | null;
   verifiedOnly?: boolean;
+  /** zero-based page for pagination */
+  page?: number;
 }
 
 // Small artificial delay so demo-mode loading states are visible/realistic.
@@ -56,11 +64,15 @@ export async function listProviders(filter: ProviderFilter = {}): Promise<Provid
     );
   }
 
+  const page = filter.page ?? 0;
   let q = supabase.from("provider_profiles").select(SELECT);
   if (filter.category) q = q.eq("primary_category", filter.category);
   if (filter.city) q = q.eq("city", filter.city);
   if (filter.verifiedOnly) q = q.eq("verification_status", "verified");
-  const { data, error } = await q.order("rating_avg", { ascending: false });
+  // Bounded read: never pull the whole table, and never silently hit the 1000-row cap.
+  const { data, error } = await q
+    .order("rating_avg", { ascending: false })
+    .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
   if (error) throw error;
   return (data ?? []).map(mapRow);
 }
@@ -100,7 +112,10 @@ export async function createJob(job: NewJob): Promise<{ ok: boolean }> {
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth.user?.id;
   if (!uid) throw new Error("You must be signed in to post a job.");
-  const { error } = await (supabase.from("jobs") as any).insert({ ...job, seeker_id: uid });
+  // `row` is validated against the table's Insert shape (catches column typos);
+  // `as never` only sidesteps the hand-written Database type's builder friction.
+  const row: JobInsert = { ...job, seeker_id: uid };
+  const { error } = await supabase.from("jobs").insert(row as never);
   if (error) throw error;
   return { ok: true };
 }
@@ -122,7 +137,8 @@ export async function createBooking(booking: NewBooking): Promise<{ ok: boolean 
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth.user?.id;
   if (!uid) throw new Error("You must be signed in to book.");
-  const { error } = await (supabase.from("bookings") as any).insert({ ...booking, seeker_id: uid });
+  const row: BookingInsert = { ...booking, seeker_id: uid };
+  const { error } = await supabase.from("bookings").insert(row as never);
   if (error) throw error;
   return { ok: true };
 }

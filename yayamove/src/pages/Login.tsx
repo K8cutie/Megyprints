@@ -26,8 +26,26 @@ export default function Login() {
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  const onForgot = async () => {
+    const email = getValues("email");
+    if (!email) {
+      toast.error("Enter your email above first, then tap Forgot.");
+      return;
+    }
+    if (!isSupabaseConfigured || !supabase) {
+      toast.info("Demo mode — connect Supabase to send reset emails.");
+      return;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`,
+    });
+    if (error) toast.error(error.message);
+    else toast.success("Password reset link sent — check your email.");
+  };
 
   const onSubmit = async (data: FormValues) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -67,7 +85,13 @@ export default function Login() {
               <div>
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <span className="text-xs text-muted-foreground">Forgot?</span>
+                  <button
+                    type="button"
+                    onClick={onForgot}
+                    className="text-xs font-semibold text-brand-700 hover:underline"
+                  >
+                    Forgot?
+                  </button>
                 </div>
                 <div className="relative mt-1.5">
                   <Input

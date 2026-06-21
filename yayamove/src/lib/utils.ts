@@ -44,9 +44,16 @@ export function formatDistance(km: number): string {
   return `${km.toFixed(1)} km away`;
 }
 
+/** Short random id for client-side keys (demo records, optimistic UI). */
+export function uid(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 export function timeAgo(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
+  const diffSeconds = (Date.now() - d.getTime()) / 1000;
+  const future = diffSeconds < 0;
+  let value = Math.abs(diffSeconds);
   const units: [number, string][] = [
     [60, "s"],
     [60, "m"],
@@ -56,16 +63,16 @@ export function timeAgo(date: string | Date): string {
     [12, "mo"],
     [Number.POSITIVE_INFINITY, "y"],
   ];
-  let value = seconds;
   let unit = "s";
   for (const [factor, label] of units) {
-    if (Math.abs(value) < factor) {
+    if (value < factor) {
       unit = label;
       break;
     }
     value = value / factor;
     unit = label;
   }
-  if (unit === "s") return "just now";
-  return `${Math.floor(value)}${unit} ago`;
+  if (unit === "s") return future ? "soon" : "just now";
+  const n = Math.floor(value);
+  return future ? `in ${n}${unit}` : `${n}${unit} ago`;
 }

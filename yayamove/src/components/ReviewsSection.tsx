@@ -4,7 +4,8 @@ import { Star, PenLine } from "lucide-react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
-import { cn, initials, timeAgo } from "@/lib/utils";
+import { Avatar } from "./ui/avatar";
+import { cn, timeAgo, uid } from "@/lib/utils";
 
 interface Review {
   id: string;
@@ -65,7 +66,7 @@ export function ReviewsSection({
     // Live build: insert into `reviews`; a DB trigger recomputes the provider's
     // rating_avg/rating_count server-side (clients can't fake ratings).
     setReviews((prev) => [
-      { id: Math.random().toString(36).slice(2), author: "You", rating, comment: comment.trim(), createdAt: new Date().toISOString() },
+      { id: uid(), author: "You", rating, comment: comment.trim(), createdAt: new Date().toISOString() },
       ...prev,
     ]);
     setComment("");
@@ -107,9 +108,7 @@ export function ReviewsSection({
       <div className="mt-4 space-y-4">
         {reviews.map((r) => (
           <div key={r.id} className="flex gap-3 border-b border-border/60 pb-4 last:border-0 last:pb-0">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-700">
-              {initials(r.author)}
-            </div>
+            <Avatar name={r.author} size="sm" />
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{r.author}</span>

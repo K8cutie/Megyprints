@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
 import { Button } from "./ui/button";
+import { reportError } from "@/lib/report";
 
 interface State {
   hasError: boolean;
@@ -15,9 +16,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     return { hasError: true, message: error.message };
   }
 
-  componentDidCatch(error: Error) {
-    // Hook a real reporter (e.g. Sentry) here in production.
-    console.error("[Yayamove] Uncaught error:", error);
+  componentDidCatch(error: Error, info: { componentStack?: string | null }) {
+    reportError(error, { componentStack: info.componentStack });
   }
 
   render() {

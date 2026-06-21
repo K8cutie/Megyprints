@@ -30,7 +30,11 @@ export function useProvider(id: string | undefined) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
     let active = true;
     setLoading(true);
     getProvider(id)

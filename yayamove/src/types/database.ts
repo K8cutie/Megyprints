@@ -6,6 +6,12 @@
 export type VerificationStatus = "unverified" | "pending" | "verified" | "rejected";
 export type JobStatus = "open" | "matched" | "in_progress" | "completed" | "cancelled";
 export type QuoteStatus = "sent" | "accepted" | "declined" | "withdrawn";
+export type BookingStatus =
+  | "requested"
+  | "accepted"
+  | "declined"
+  | "completed"
+  | "cancelled";
 export type CategorySlug =
   | "maid"
   | "carpentry"
@@ -99,6 +105,20 @@ export interface Quote {
   created_at: string;
 }
 
+export interface Booking {
+  id: string;
+  seeker_id: string;
+  provider_id: string;
+  job_id: string | null;
+  category: CategorySlug;
+  scheduled_for: string | null;
+  address: string | null;
+  notes: string | null;
+  amount: number | null;
+  status: BookingStatus;
+  created_at: string;
+}
+
 export interface Review {
   id: string;
   provider_id: string;
@@ -122,6 +142,7 @@ export interface Database {
       nbi_clearances: Row<NbiClearance>;
       jobs: Row<Job>;
       quotes: Row<Quote>;
+      bookings: Row<Booking>;
       reviews: Row<Review>;
     };
     Views: Record<string, never>;

@@ -2,10 +2,11 @@ import { Link } from "react-router-dom";
 import { Star, MapPin, BadgeCheck, Briefcase, Navigation } from "lucide-react";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { Avatar } from "./ui/avatar";
 import { VerifiedBadge } from "./VerifiedBadge";
-import { CATEGORY_BY_SLUG } from "@/lib/categories";
+import { getCategory } from "@/lib/categories";
 import type { ProviderListItem } from "@/lib/sampleData";
-import { formatPHP, formatDistance, initials } from "@/lib/utils";
+import { formatPHP, formatDistance } from "@/lib/utils";
 
 export function ProviderCard({
   provider,
@@ -14,7 +15,7 @@ export function ProviderCard({
   provider: ProviderListItem;
   distanceKm?: number;
 }) {
-  const cat = CATEGORY_BY_SLUG[provider.primary_category];
+  const cat = getCategory(provider.primary_category);
   const Icon = cat.icon;
 
   return (
@@ -23,11 +24,7 @@ export function ProviderCard({
         <div className={`h-1.5 w-full bg-gradient-to-r ${cat.gradient}`} />
         <div className="p-5">
           <div className="flex items-start gap-3.5">
-            <div
-              className={`flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${cat.gradient} font-display text-lg font-bold text-white shadow-soft`}
-            >
-              {initials(provider.name)}
-            </div>
+            <Avatar name={provider.name} size="lg" gradient={cat.gradient} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <h3 className="truncate text-base font-bold">{provider.name}</h3>

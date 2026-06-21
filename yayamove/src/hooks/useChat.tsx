@@ -17,6 +17,7 @@ import {
   type Conversation,
 } from "@/lib/sampleChat";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { useAuth } from "./useAuth";
 
 interface OpenWithArgs {
   id: string;
@@ -50,6 +51,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [typing, setTyping] = useState<Record<string, boolean>>({});
   const [loading] = useState(false);
   const replyTimers = useRef<Record<string, ReturnType<typeof setTimeout>[]>>({});
+  const { user } = useAuth();
+
+  // Reset in-memory chat when the signed-in user changes so we never show the
+  // previous user's conversations after sign-out (audit QA-L2).
+  useEffect(() => {
+    setConversations(SAMPLE_CONVERSATIONS);
+    setMessages(SAMPLE_MESSAGES);
+    setTyping({});
+  }, [user?.id]);
 
   // NOTE: when Supabase is configured, this is where we'd load the user's
   // conversations and subscribe to the `messages` realtime channel. The demo

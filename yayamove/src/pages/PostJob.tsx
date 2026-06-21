@@ -14,14 +14,19 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-const schema = z.object({
-  category: z.string().min(1, "Pick a service"),
-  title: z.string().min(5, "Give your job a short title"),
-  description: z.string().min(20, "Add a few details (min 20 chars)"),
-  city: z.string().min(2, "Where is the job?"),
-  budgetMin: z.coerce.number().min(0).optional(),
-  budgetMax: z.coerce.number().min(0).optional(),
-});
+const schema = z
+  .object({
+    category: z.string().min(1, "Pick a service"),
+    title: z.string().min(5, "Give your job a short title"),
+    description: z.string().min(20, "Add a few details (min 20 chars)"),
+    city: z.string().min(2, "Where is the job?"),
+    budgetMin: z.coerce.number().min(0).optional(),
+    budgetMax: z.coerce.number().min(0).optional(),
+  })
+  .refine((d) => !d.budgetMin || !d.budgetMax || d.budgetMin <= d.budgetMax, {
+    path: ["budgetMax"],
+    message: "Max budget must be ≥ min budget",
+  });
 type FormValues = z.infer<typeof schema>;
 
 export default function PostJob() {
@@ -142,6 +147,7 @@ export default function PostJob() {
               <Input id="budgetMax" type="number" min={0} className="mt-1.5" placeholder="1500" {...register("budgetMax")} />
             </div>
           </div>
+          {errors.budgetMax && <p className="-mt-2 text-xs text-destructive">{errors.budgetMax.message}</p>}
 
           <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={isSubmitting}>
             <Send /> {isSubmitting ? "Posting…" : "Post job & get quotes"}

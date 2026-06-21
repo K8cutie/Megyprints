@@ -23,7 +23,13 @@ export default function Browse() {
   const [view, setView] = useState<"list" | "map">("list");
   const [selected, setSelected] = useState<string | null>(null);
 
-  const { providers, loading } = useProviders();
+  // Category / city / verified are filtered server-side (bounded read); search,
+  // sort and distance stay client-side over the already-narrowed page.
+  const { providers, loading } = useProviders({
+    category: activeCategory,
+    city: city || null,
+    verifiedOnly,
+  });
 
   // Reference point for distance: the user's GPS, else the chosen city centroid.
   const origin = userLoc ?? (city ? CITY_BY_NAME[city] : null);
@@ -33,9 +39,6 @@ export default function Browse() {
       ...p,
       distanceKm: origin ? haversineKm(origin, { lat: p.lat, lng: p.lng }) : undefined,
     }));
-    if (activeCategory) list = list.filter((p) => p.primary_category === activeCategory);
-    if (verifiedOnly) list = list.filter((p) => p.verified);
-    if (city) list = list.filter((p) => p.city === city);
     if (query.trim()) {
       const q = query.toLowerCase();
       list = list.filter(
@@ -57,7 +60,7 @@ export default function Browse() {
       default: list.sort((a, b) => b.rating_avg - a.rating_avg);
     }
     return list;
-  }, [providers, origin, activeCategory, verifiedOnly, city, query, sort]);
+  }, [providers, origin, query, sort]);
 
   const setCategory = (slug: CategorySlug | null) => {
     const next = new URLSearchParams(params);

@@ -51,7 +51,7 @@ export default function Dashboard() {
 
       <div className="mt-8">
         {mode === "provider" ? (
-          <ProviderDashboard verified={false} />
+          <ProviderDashboard />
         ) : (
           <SeekerView stats={stats} navigate={navigate} />
         )}

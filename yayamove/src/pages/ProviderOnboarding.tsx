@@ -23,7 +23,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { CATEGORIES, type CategorySlug } from "@/lib/categories";
-import { cn } from "@/lib/utils";
+import { cn, uid } from "@/lib/utils";
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+
+/** Validate an uploaded doc (NBI / certificate) client-side. Server-side limits
+ *  are enforced on the bucket too (allowed_mime_types / file_size_limit). */
+function validateUpload(file: File): string | null {
+  if (!ALLOWED_TYPES.includes(file.type)) return "Please upload a JPG, PNG, WebP, or PDF.";
+  if (file.size > MAX_UPLOAD_BYTES) return "File is too large (max 10MB).";
+  return null;
+}
 
 interface Experience {
   id: string;
@@ -48,8 +59,6 @@ const STEPS = [
   { key: "certificates", label: "Certificates", icon: Award },
   { key: "nbi", label: "NBI Clearance", icon: ShieldCheck },
 ] as const;
-
-const uid = () => Math.random().toString(36).slice(2, 9);
 
 export default function ProviderOnboarding() {
   const navigate = useNavigate();
@@ -491,9 +500,20 @@ export default function ProviderOnboarding() {
                 )}
                 <input
                   type="file"
-                  accept="image/*,.pdf"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
                   className="hidden"
-                  onChange={(e) => setNbiFile(e.target.files?.[0] ?? null)}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    if (file) {
+                      const err = validateUpload(file);
+                      if (err) {
+                        toast.error(err);
+                        e.target.value = "";
+                        return;
+                      }
+                    }
+                    setNbiFile(file);
+                  }}
                 />
               </label>
             </div>

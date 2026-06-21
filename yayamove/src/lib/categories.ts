@@ -4,15 +4,13 @@ import {
   Wrench,
   Laptop,
   Snowflake,
+  Briefcase,
   type LucideIcon,
 } from "lucide-react";
+import type { CategorySlug } from "@/types/database";
 
-export type CategorySlug =
-  | "maid"
-  | "carpentry"
-  | "plumbing"
-  | "computer-technician"
-  | "aircon-service";
+// Single canonical home is types/database.ts; re-exported here for convenience.
+export type { CategorySlug };
 
 export interface ServiceCategory {
   slug: CategorySlug;
@@ -71,3 +69,18 @@ export const CATEGORIES: ServiceCategory[] = [
 export const CATEGORY_BY_SLUG: Record<CategorySlug, ServiceCategory> = Object.fromEntries(
   CATEGORIES.map((c) => [c.slug, c]),
 ) as Record<CategorySlug, ServiceCategory>;
+
+/** Neutral fallback so unknown/drifted category slugs never crash a render. */
+export const FALLBACK_CATEGORY: ServiceCategory = {
+  slug: "maid",
+  name: "Service",
+  tagline: "General service",
+  icon: Briefcase,
+  gradient: "from-brand-500 to-brand-700",
+  sampleSkills: [],
+};
+
+/** Safe category lookup — returns a neutral fallback instead of `undefined`. */
+export function getCategory(slug: string | null | undefined): ServiceCategory {
+  return (slug && CATEGORY_BY_SLUG[slug as CategorySlug]) || FALLBACK_CATEGORY;
+}

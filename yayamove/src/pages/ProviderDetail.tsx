@@ -11,10 +11,9 @@ import {
   ShieldCheck,
   Award,
   ArrowLeft,
-  X,
 } from "lucide-react";
 import { type ProviderListItem } from "@/lib/sampleData";
-import { CATEGORY_BY_SLUG, type ServiceCategory } from "@/lib/categories";
+import { getCategory, type ServiceCategory } from "@/lib/categories";
 import { useChat } from "@/hooks/useChat";
 import { useProvider } from "@/hooks/useProviders";
 import { createBooking } from "@/lib/api";
@@ -24,14 +23,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Avatar } from "@/components/ui/avatar";
+import { Modal } from "@/components/ui/modal";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { ReviewsSection } from "@/components/ReviewsSection";
-import { formatPHP, initials } from "@/lib/utils";
+import { formatPHP } from "@/lib/utils";
 
 export default function ProviderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { provider, loading } = useProvider(id);
+  const { conversations } = useChat();
 
   if (loading) {
     return (
@@ -41,7 +43,16 @@ export default function ProviderDetail() {
     );
   }
 
-  if (!provider) {
+  // Fallback: if the full profile isn't available (e.g. an unpublished provider
+  // we still have a chat with), render a limited profile from conversation data
+  // instead of a dead "not found" page (audit QA-C3).
+  let resolved = provider;
+  if (!resolved && id) {
+    const conv = conversations.find((c) => c.partyId === id);
+    if (conv) resolved = limitedFromConversation(id, conv.partyName, conv.partyCategory, conv.verified);
+  }
+
+  if (!resolved) {
     return (
       <div className="container py-24 text-center">
         <p className="text-lg font-bold">Provider not found.</p>
@@ -52,12 +63,39 @@ export default function ProviderDetail() {
     );
   }
 
-  const cat = CATEGORY_BY_SLUG[provider.primary_category];
+  const cat = getCategory(resolved.primary_category);
   const Icon = cat.icon;
 
   return (
-    <ProviderDetailInner provider={provider} cat={cat} Icon={Icon} navigate={navigate} />
+    <ProviderDetailInner provider={resolved} cat={cat} Icon={Icon} navigate={navigate} />
   );
+}
+
+function limitedFromConversation(
+  id: string,
+  name: string,
+  category: string,
+  verified: boolean,
+): ProviderListItem {
+  return {
+    id,
+    name,
+    headline: "",
+    primary_category: category as ProviderListItem["primary_category"],
+    city: "",
+    barangay: "",
+    lat: 0,
+    lng: 0,
+    service_area: "",
+    hourly_rate: 0,
+    years_experience: 0,
+    rating_avg: 0,
+    rating_count: 0,
+    jobs_completed: 0,
+    verified,
+    skills: [],
+    bio: "",
+  };
 }
 
 function ProviderDetailInner({
@@ -101,11 +139,7 @@ function ProviderDetailInner({
           <div className="lg:col-span-2">
             <Card className="p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                <div
-                  className={`flex size-24 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br ${cat.gradient} font-display text-3xl font-extrabold text-white shadow-glow`}
-                >
-                  {initials(provider.name)}
-                </div>
+                <Avatar name={provider.name} size="xl" gradient={cat.gradient} className="shadow-glow" />
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h1 className="text-2xl font-extrabold">{provider.name}</h1>
@@ -268,42 +302,29 @@ function BookingModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
-      <Card className="w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">Request booking</h2>
-          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground">
-            <X className="size-5" />
-          </button>
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          with <span className="font-semibold text-foreground">{provider.name}</span> · {formatPHP(provider.hourly_rate)}/hr
-        </p>
+    <Modal open onClose={onClose} title="Request booking">
+      <p className="text-sm text-muted-foreground">
+        with <span className="font-semibold text-foreground">{provider.name}</span> · {formatPHP(provider.hourly_rate)}/hr
+      </p>
 
-        <div className="mt-4 space-y-3">
-          <div>
-            <Label htmlFor="date">Preferred date &amp; time</Label>
-            <Input id="date" type="datetime-local" className="mt-1.5" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="address">Address</Label>
-            <Input id="address" className="mt-1.5" placeholder="Where is the job?" value={address} onChange={(e) => setAddress(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="notes">Notes (optional)</Label>
-            <Textarea id="notes" className="mt-1.5" placeholder="Any details the pro should know…" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
+      <div className="mt-4 space-y-3">
+        <div>
+          <Label htmlFor="date">Preferred date &amp; time</Label>
+          <Input id="date" type="datetime-local" className="mt-1.5" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
+        <div>
+          <Label htmlFor="address">Address</Label>
+          <Input id="address" className="mt-1.5" placeholder="Where is the job?" value={address} onChange={(e) => setAddress(e.target.value)} />
+        </div>
+        <div>
+          <Label htmlFor="notes">Notes (optional)</Label>
+          <Textarea id="notes" className="mt-1.5" placeholder="Any details the pro should know…" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </div>
+      </div>
 
-        <Button variant="gradient" size="lg" className="mt-5 w-full" onClick={submit} disabled={submitting}>
-          <CalendarCheck /> {submitting ? "Sending…" : "Send booking request"}
-        </Button>
-      </Card>
-    </div>
+      <Button variant="gradient" size="lg" className="mt-5 w-full" onClick={submit} disabled={submitting}>
+        <CalendarCheck /> {submitting ? "Sending…" : "Send booking request"}
+      </Button>
+    </Modal>
   );
 }

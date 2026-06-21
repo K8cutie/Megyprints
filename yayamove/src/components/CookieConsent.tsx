@@ -28,7 +28,7 @@ export function CookieConsent() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 p-3 sm:p-4">
+    <div className="fixed inset-x-0 bottom-0 z-40 p-3 sm:p-4">
       <div className="container">
         <div className="glass flex flex-col items-start gap-3 rounded-2xl p-4 shadow-glow sm:flex-row sm:items-center">
           <Cookie className="size-6 shrink-0 text-brand-600" />

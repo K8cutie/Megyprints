@@ -7,10 +7,10 @@ import {
   Wallet,
   Star,
   ShieldAlert,
+  ShieldCheck,
   MapPin,
   Clock,
   Send,
-  X,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CATEGORY_BY_SLUG } from "@/lib/categories";
+import { Modal } from "@/components/ui/modal";
+import { getCategory } from "@/lib/categories";
 import {
   SAMPLE_LEADS,
   SAMPLE_PROVIDER_BOOKINGS,
@@ -28,7 +29,10 @@ import {
 } from "@/lib/sampleProviderData";
 import { formatPHP, timeAgo } from "@/lib/utils";
 
-export function ProviderDashboard({ verified }: { verified: boolean }) {
+export function ProviderDashboard() {
+  // In live mode this derives from the signed-in provider's verification_status;
+  // in demo we expose a toggle so both states are viewable.
+  const [verified, setVerified] = useState(false);
   const [leads, setLeads] = useState<Lead[]>(SAMPLE_LEADS);
   const [bookings, setBookings] = useState<ProviderBooking[]>(SAMPLE_PROVIDER_BOOKINGS);
   const [quoteFor, setQuoteFor] = useState<Lead | null>(null);
@@ -55,6 +59,17 @@ export function ProviderDashboard({ verified }: { verified: boolean }) {
 
   return (
     <div className="space-y-6">
+      {/* demo: preview verified vs unverified state */}
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-xs text-muted-foreground">Preview state:</span>
+        <button
+          onClick={() => setVerified((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${verified ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}`}
+        >
+          <ShieldCheck className="size-3.5" /> {verified ? "Verified" : "Unverified"}
+        </button>
+      </div>
+
       {/* verification banner */}
       {!verified && (
         <Card className="border-amber-200 bg-amber-50 p-4">
@@ -95,7 +110,7 @@ export function ProviderDashboard({ verified }: { verified: boolean }) {
             </Card>
           ) : (
             leads.map((lead) => {
-              const cat = CATEGORY_BY_SLUG[lead.category];
+              const cat = getCategory(lead.category);
               const Icon = cat.icon;
               return (
                 <Card key={lead.id} className="p-5">
@@ -205,8 +220,8 @@ function QuoteModal({ lead, onClose, onSent }: { lead: Lead; onClose: () => void
   const [message, setMessage] = useState("");
 
   const send = () => {
-    if (!amount) {
-      toast.error("Enter your quote amount.");
+    if (!amount || Number(amount) <= 0) {
+      toast.error("Enter a valid quote amount.");
       return;
     }
     // Live build: insert into `quotes` (RLS: provider_id = my_provider_id()).
@@ -216,28 +231,22 @@ function QuoteModal({ lead, onClose, onSent }: { lead: Lead; onClose: () => void
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">
-      <Card className="w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">Send a quote</h2>
-          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground"><X className="size-5" /></button>
+    <Modal open onClose={onClose} title="Send a quote">
+      <p className="text-sm text-muted-foreground">{lead.title} · {lead.city}</p>
+      <div className="mt-4 space-y-3">
+        <div>
+          <Label htmlFor="amount">Your price (₱)</Label>
+          <Input id="amount" type="number" min={0} className="mt-1.5" placeholder="800" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <p className="mt-1 text-xs text-muted-foreground">Client budget: {formatPHP(lead.budgetMin)}–{formatPHP(lead.budgetMax)}</p>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">{lead.title} · {lead.city}</p>
-        <div className="mt-4 space-y-3">
-          <div>
-            <Label htmlFor="amount">Your price (₱)</Label>
-            <Input id="amount" type="number" min={0} className="mt-1.5" placeholder="800" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <p className="mt-1 text-xs text-muted-foreground">Client budget: {formatPHP(lead.budgetMin)}–{formatPHP(lead.budgetMax)}</p>
-          </div>
-          <div>
-            <Label htmlFor="msg">Message</Label>
-            <Textarea id="msg" className="mt-1.5" placeholder="Introduce yourself and what's included…" value={message} onChange={(e) => setMessage(e.target.value)} />
-          </div>
+        <div>
+          <Label htmlFor="msg">Message</Label>
+          <Textarea id="msg" className="mt-1.5" placeholder="Introduce yourself and what's included…" value={message} onChange={(e) => setMessage(e.target.value)} />
         </div>
-        <Button variant="gradient" size="lg" className="mt-5 w-full" onClick={send}>
-          <Send /> Send quote
-        </Button>
-      </Card>
-    </div>
+      </div>
+      <Button variant="gradient" size="lg" className="mt-5 w-full" onClick={send}>
+        <Send /> Send quote
+      </Button>
+    </Modal>
   );
 }
