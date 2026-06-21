@@ -22,12 +22,17 @@ Mobile-first PWA. Built with React + Vite + TypeScript + Tailwind on Supabase.
 Maid / Kasambahay · Carpentry · Plumbing · Computer Technician · Aircon Service
 
 ## Features
-- Browse & search verified pros · post-a-job flow · provider profiles
+- Browse & search verified pros · **location filtering, "near me", map view**
+- Post-a-job flow · provider profiles · booking requests
 - Provider onboarding wizard (skills, experience, certificates, NBI upload)
 - **Real-time messaging** (Supabase Realtime; fully interactive demo mode)
-- Booking requests · ratings & reviews (server-computed)
-- **Admin NBI-verification dashboard** (`/admin/verification`, admin-gated)
-- Hardened auth · RLS everywhere · private document storage · PWA
+- **Provider dashboard** — job leads, send quotes, manage bookings, earnings
+- Ratings & reviews (server-computed) · **admin NBI-verification dashboard**
+- **Privacy Policy / Terms · cookie consent · data export & account deletion**
+  (RA 10173 / Data Privacy Act)
+- A real **data layer** (`src/lib/api.ts`): live Supabase queries when configured,
+  sample data otherwise — pages never branch, so going live is a config change
+- Hardened auth · RLS everywhere · private document storage · code-split PWA
 
 ## Getting started
 
@@ -49,7 +54,8 @@ Run the SQL in `supabase/migrations/` **in order** in the Supabase SQL editor:
 3. `0003_storage.sql` — buckets & storage policies (NBI/certs are **private**)
 4. `0004_messaging_bookings.sql` — conversations, messages (realtime), bookings + RLS
 5. `0005_admin_and_ratings.sql` — admin role, NBI approval policies, server-side rating triggers
-6. `seed.sql` — optional
+6. `0006_provider_directory.sql` — public provider directory fields (name/city/geo) + geo indexes
+7. `seed.sql` — optional
 
 To grant yourself admin (NBI verification queue at `/admin/verification`):
 ```sql

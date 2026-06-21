@@ -109,7 +109,7 @@ export interface Review {
   created_at: string;
 }
 
-type Row<T> = { Row: T; Insert: Partial<T>; Update: Partial<T> };
+type Row<T> = { Row: T; Insert: Partial<T>; Update: Partial<T>; Relationships: [] };
 
 export interface Database {
   public: {
@@ -127,5 +127,6 @@ export interface Database {
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 }

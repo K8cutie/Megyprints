@@ -7,6 +7,9 @@ export interface SampleProvider {
   headline: string;
   primary_category: CategorySlug;
   city: string;
+  barangay: string;
+  lat: number;
+  lng: number;
   service_area: string;
   hourly_rate: number;
   years_experience: number;
@@ -18,6 +21,9 @@ export interface SampleProvider {
   bio: string;
 }
 
+/** Canonical list-item type used across the app (live + demo share this shape). */
+export type ProviderListItem = SampleProvider;
+
 export const SAMPLE_PROVIDERS: SampleProvider[] = [
   {
     id: "p1",
@@ -25,6 +31,9 @@ export const SAMPLE_PROVIDERS: SampleProvider[] = [
     headline: "Reliable kasambahay • 8 yrs caring for QC homes",
     primary_category: "maid",
     city: "Quezon City",
+    barangay: "Diliman",
+    lat: 14.676,
+    lng: 121.0437,
     service_area: "QC, San Juan, Mandaluyong",
     hourly_rate: 180,
     years_experience: 8,
@@ -41,6 +50,9 @@ export const SAMPLE_PROVIDERS: SampleProvider[] = [
     headline: "Master carpenter • custom cabinets & repairs",
     primary_category: "carpentry",
     city: "Pasig City",
+    barangay: "Kapitolyo",
+    lat: 14.5709,
+    lng: 121.0584,
     service_area: "Pasig, Taguig, Makati",
     hourly_rate: 350,
     years_experience: 15,
@@ -57,6 +69,9 @@ export const SAMPLE_PROVIDERS: SampleProvider[] = [
     headline: "Licensed plumber • fast leak & drainage fixes",
     primary_category: "plumbing",
     city: "Mandaluyong",
+    barangay: "Plainview",
+    lat: 14.5794,
+    lng: 121.0359,
     service_area: "Mandaluyong, Makati, QC",
     hourly_rate: 300,
     years_experience: 10,
@@ -73,6 +88,9 @@ export const SAMPLE_PROVIDERS: SampleProvider[] = [
     headline: "PC & laptop repair • home service",
     primary_category: "computer-technician",
     city: "Makati City",
+    barangay: "Poblacion",
+    lat: 14.5547,
+    lng: 121.0244,
     service_area: "Makati, BGC, Ortigas",
     hourly_rate: 280,
     years_experience: 6,
@@ -89,6 +107,9 @@ export const SAMPLE_PROVIDERS: SampleProvider[] = [
     headline: "Aircon cleaning & repair • split & window type",
     primary_category: "aircon-service",
     city: "Taguig City",
+    barangay: "Western Bicutan",
+    lat: 14.5176,
+    lng: 121.0509,
     service_area: "Taguig, Parañaque, Muntinlupa",
     hourly_rate: 320,
     years_experience: 12,
@@ -105,6 +126,9 @@ export const SAMPLE_PROVIDERS: SampleProvider[] = [
     headline: "All-around kasambahay • cooking specialist",
     primary_category: "maid",
     city: "Parañaque",
+    barangay: "BF Homes",
+    lat: 14.4793,
+    lng: 121.0198,
     service_area: "Parañaque, Las Piñas, Muntinlupa",
     hourly_rate: 200,
     years_experience: 5,

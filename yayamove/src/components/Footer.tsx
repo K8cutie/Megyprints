@@ -42,10 +42,10 @@ export function Footer() {
         <div>
           <h4 className="text-sm font-bold text-white">Trust &amp; safety</h4>
           <ul className="mt-4 space-y-2.5 text-sm text-brand-200/80">
-            <li>NBI clearance verification</li>
-            <li>Ratings &amp; reviews</li>
-            <li className="text-brand-200/50">Privacy Policy (soon)</li>
-            <li className="text-brand-200/50">Data Privacy Act 2012 compliant</li>
+            <li><Link to="/privacy" className="hover:text-white">Privacy Policy</Link></li>
+            <li><Link to="/terms" className="hover:text-white">Terms of Service</Link></li>
+            <li><Link to="/account" className="hover:text-white">Manage my data</Link></li>
+            <li className="text-brand-200/60">Data Privacy Act 2012 compliant</li>
           </ul>
         </div>
       </div>

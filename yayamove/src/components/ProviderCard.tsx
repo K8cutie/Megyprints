@@ -1,13 +1,19 @@
 import { Link } from "react-router-dom";
-import { Star, MapPin, BadgeCheck, Briefcase } from "lucide-react";
+import { Star, MapPin, BadgeCheck, Briefcase, Navigation } from "lucide-react";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { VerifiedBadge } from "./VerifiedBadge";
 import { CATEGORY_BY_SLUG } from "@/lib/categories";
-import type { SampleProvider } from "@/lib/sampleData";
-import { formatPHP, initials } from "@/lib/utils";
+import type { ProviderListItem } from "@/lib/sampleData";
+import { formatPHP, formatDistance, initials } from "@/lib/utils";
 
-export function ProviderCard({ provider }: { provider: SampleProvider }) {
+export function ProviderCard({
+  provider,
+  distanceKm,
+}: {
+  provider: ProviderListItem;
+  distanceKm?: number;
+}) {
   const cat = CATEGORY_BY_SLUG[provider.primary_category];
   const Icon = cat.icon;
 
@@ -60,7 +66,11 @@ export function ProviderCard({ provider }: { provider: SampleProvider }) {
 
           <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <MapPin className="size-3.5" /> {provider.city}
+              {distanceKm !== undefined ? (
+                <><Navigation className="size-3.5 text-brand-500" /> {formatDistance(distanceKm)}</>
+              ) : (
+                <><MapPin className="size-3.5" /> {provider.city}</>
+              )}
             </span>
             <div className="text-right">
               <span className="text-sm font-extrabold text-brand-700">

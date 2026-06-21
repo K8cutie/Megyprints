@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CATEGORIES } from "@/lib/categories";
 import { SAMPLE_PROVIDERS } from "@/lib/sampleData";
+import { useProviders } from "@/hooks/useProviders";
 import { ProviderCard } from "@/components/ProviderCard";
 import { Logo } from "@/components/Logo";
 
@@ -27,6 +28,8 @@ const fadeUp = {
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { providers } = useProviders();
+  const featured = (providers.length ? providers : SAMPLE_PROVIDERS).slice(0, 6);
 
   return (
     <div>
@@ -249,7 +252,7 @@ export default function Landing() {
           </Button>
         </div>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {SAMPLE_PROVIDERS.slice(0, 6).map((p) => (
+          {featured.map((p) => (
             <ProviderCard key={p.id} provider={p} />
           ))}
         </div>

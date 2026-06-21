@@ -13,9 +13,11 @@ import {
   ArrowLeft,
   X,
 } from "lucide-react";
-import { SAMPLE_PROVIDERS, type SampleProvider } from "@/lib/sampleData";
+import { type ProviderListItem } from "@/lib/sampleData";
 import { CATEGORY_BY_SLUG, type ServiceCategory } from "@/lib/categories";
 import { useChat } from "@/hooks/useChat";
+import { useProvider } from "@/hooks/useProviders";
+import { createBooking } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,7 +31,15 @@ import { formatPHP, initials } from "@/lib/utils";
 export default function ProviderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const provider = SAMPLE_PROVIDERS.find((p) => p.id === id);
+  const { provider, loading } = useProvider(id);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="size-8 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
+      </div>
+    );
+  }
 
   if (!provider) {
     return (
@@ -56,7 +66,7 @@ function ProviderDetailInner({
   Icon,
   navigate,
 }: {
-  provider: SampleProvider;
+  provider: ProviderListItem;
   cat: ServiceCategory;
   Icon: ServiceCategory["icon"];
   navigate: ReturnType<typeof useNavigate>;
@@ -225,7 +235,7 @@ function BookingModal({
   provider,
   onClose,
 }: {
-  provider: SampleProvider;
+  provider: ProviderListItem;
   onClose: () => void;
 }) {
   const [date, setDate] = useState("");
@@ -239,11 +249,22 @@ function BookingModal({
       return;
     }
     setSubmitting(true);
-    // Live build: insert into `bookings` (RLS: seeker_id = auth.uid()).
-    await new Promise((r) => setTimeout(r, 600));
-    setSubmitting(false);
-    toast.success(`Booking requested with ${provider.name}! They'll confirm shortly.`);
-    onClose();
+    try {
+      await createBooking({
+        provider_id: provider.id,
+        category: provider.primary_category,
+        scheduled_for: date ? new Date(date).toISOString() : undefined,
+        address,
+        notes,
+        amount: provider.hourly_rate,
+      });
+      toast.success(`Booking requested with ${provider.name}! They'll confirm shortly.`);
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not send booking.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

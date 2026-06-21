@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { DemoBanner } from "@/components/DemoBanner";
+import { CookieConsent } from "@/components/CookieConsent";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AuthProvider } from "@/hooks/useAuth";
@@ -21,6 +22,9 @@ const ProviderOnboarding = lazy(() => import("@/pages/ProviderOnboarding"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Messages = lazy(() => import("@/pages/Messages"));
 const AdminVerification = lazy(() => import("@/pages/AdminVerification"));
+const Account = lazy(() => import("@/pages/Account"));
+const Privacy = lazy(() => import("@/pages/Privacy"));
+const Terms = lazy(() => import("@/pages/Terms"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function ScrollToTop() {
@@ -58,6 +62,16 @@ export default function App() {
                     <Route path="/become-a-pro" element={<ProviderOnboarding />} />
                     <Route path="/messages" element={<Messages />} />
                     <Route path="/admin/verification" element={<AdminVerification />} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/terms" element={<Terms />} />
+                    <Route
+                      path="/account"
+                      element={
+                        <ProtectedRoute>
+                          <Account />
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route
                       path="/post-job"
                       element={
@@ -80,6 +94,7 @@ export default function App() {
               </main>
               <Footer />
             </div>
+            <CookieConsent />
             <Toaster richColors position="top-center" />
           </ChatProvider>
         </AuthProvider>

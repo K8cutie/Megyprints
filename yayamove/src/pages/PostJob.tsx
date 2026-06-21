@@ -5,6 +5,8 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { CheckCircle2, Send } from "lucide-react";
 import { CATEGORIES } from "@/lib/categories";
+import { createJob } from "@/lib/api";
+import type { CategorySlug } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,11 +36,21 @@ export default function PostJob() {
 
   const category = watch("category");
 
-  const onSubmit = async (_data: FormValues) => {
-    // In a live build this inserts into `jobs` (RLS: seeker_id = auth.uid()).
-    await new Promise((r) => setTimeout(r, 600));
-    setSubmitted(true);
-    toast.success("Job posted! Nearby pros will send quotes.");
+  const onSubmit = async (data: FormValues) => {
+    try {
+      await createJob({
+        category: data.category as CategorySlug,
+        title: data.title,
+        description: data.description,
+        city: data.city,
+        budget_min: data.budgetMin,
+        budget_max: data.budgetMax,
+      });
+      setSubmitted(true);
+      toast.success("Job posted! Nearby pros will send quotes.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not post job.");
+    }
   };
 
   if (submitted) {

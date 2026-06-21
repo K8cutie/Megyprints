@@ -1,15 +1,18 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Briefcase, Star, ShieldCheck, Plus, Search, Clock } from "lucide-react";
+import { Briefcase, Star, ShieldCheck, Plus, Search, Clock, Settings } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ProviderDashboard } from "@/components/ProviderDashboard";
+import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const name =
-    (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ?? "there";
+  const name = (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ?? "there";
+  const [mode, setMode] = useState<"seeker" | "provider">("seeker");
 
   const stats = [
     { label: "Active jobs", value: "0", icon: Briefcase },
@@ -22,19 +25,60 @@ export default function Dashboard() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-extrabold">Hi, {name} 👋</h1>
-          <p className="mt-1 text-muted-foreground">Here’s what’s happening on Yayamove.</p>
+          <p className="mt-1 text-muted-foreground">Here's what's happening on Yayamove.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate("/browse")}>
-            <Search /> Browse pros
-          </Button>
-          <Button variant="gradient" onClick={() => navigate("/post-job")}>
-            <Plus /> Post a job
+        <div className="flex items-center gap-2">
+          {/* role toggle (demo: switch between the two experiences) */}
+          <div className="flex items-center gap-1 rounded-xl border border-input bg-white p-1 shadow-soft">
+            {(["seeker", "provider"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-sm font-semibold capitalize transition-colors",
+                  mode === m ? "bg-brand-600 text-white" : "text-muted-foreground",
+                )}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          <Button variant="outline" size="icon" onClick={() => navigate("/account")} aria-label="Account settings">
+            <Settings />
           </Button>
         </div>
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-3">
+      <div className="mt-8">
+        {mode === "provider" ? (
+          <ProviderDashboard verified={false} />
+        ) : (
+          <SeekerView stats={stats} navigate={navigate} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SeekerView({
+  stats,
+  navigate,
+}: {
+  stats: { label: string; value: string; icon: typeof Briefcase }[];
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => navigate("/browse")}>
+          <Search /> Browse pros
+        </Button>
+        <Button variant="gradient" onClick={() => navigate("/post-job")}>
+          <Plus /> Post a job
+        </Button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
         {stats.map((s) => (
           <Card key={s.label} className="p-6">
             <div className="flex items-center justify-between">
@@ -80,6 +124,6 @@ export default function Dashboard() {
           </Button>
         </Card>
       </div>
-    </div>
+    </>
   );
 }
