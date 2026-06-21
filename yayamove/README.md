@@ -21,6 +21,14 @@ Mobile-first PWA. Built with React + Vite + TypeScript + Tailwind on Supabase.
 ## Services (v1)
 Maid / Kasambahay · Carpentry · Plumbing · Computer Technician · Aircon Service
 
+## Features
+- Browse & search verified pros · post-a-job flow · provider profiles
+- Provider onboarding wizard (skills, experience, certificates, NBI upload)
+- **Real-time messaging** (Supabase Realtime; fully interactive demo mode)
+- Booking requests · ratings & reviews (server-computed)
+- **Admin NBI-verification dashboard** (`/admin/verification`, admin-gated)
+- Hardened auth · RLS everywhere · private document storage · PWA
+
 ## Getting started
 
 ```bash
@@ -39,7 +47,14 @@ Run the SQL in `supabase/migrations/` **in order** in the Supabase SQL editor:
 1. `0001_init.sql` — tables, enums, triggers (incl. server-field guards)
 2. `0002_rls_lockdown.sql` — Row-Level Security on every table (+ verification query)
 3. `0003_storage.sql` — buckets & storage policies (NBI/certs are **private**)
-4. `seed.sql` — optional
+4. `0004_messaging_bookings.sql` — conversations, messages (realtime), bookings + RLS
+5. `0005_admin_and_ratings.sql` — admin role, NBI approval policies, server-side rating triggers
+6. `seed.sql` — optional
+
+To grant yourself admin (NBI verification queue at `/admin/verification`):
+```sql
+insert into public.admins (user_id) values ('<your-auth-user-id>');
+```
 
 ## Security posture (carried over from the Megyprints audit)
 

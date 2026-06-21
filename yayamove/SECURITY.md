@@ -32,6 +32,21 @@ Carried over from the Megyprints pre-production audit so we fix it early
 - ✅ 404 catch-all route.
 - ✅ Hardened password policy (10+ chars, mixed case + number).
 
+## Messaging & bookings (added in pass 2)
+- ✅ `conversations`/`messages` RLS: only the two participants can read or write
+  a thread; sender must equal `auth.uid()`.
+- ✅ Realtime enabled on `messages` only (least exposure + cost control).
+- ✅ `bookings` RLS scoped to the seeker who created it and the provider it's for.
+
+## Admin verification (added in pass 2)
+- ✅ `admins` table has **no client policies** — membership is granted only in
+  the SQL editor; `is_admin()` is `security definer`.
+- ✅ Only admins (or `service_role`) can read all NBI clearances and flip a
+  provider's `verification_status`; guard triggers enforce this even on direct
+  REST calls.
+- ✅ Ratings & `jobs_completed` are computed by DB triggers from real reviews /
+  completed bookings — never settable by a client.
+
 ## Before real users (gates)
 - 🔜 Privacy Policy + Terms of Service, linked at signup/footer.
 - 🔜 Error monitoring (e.g. Sentry) + basic analytics.

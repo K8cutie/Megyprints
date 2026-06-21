@@ -1,9 +1,10 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { Menu, X, LogOut, LayoutDashboard } from "lucide-react";
+import { Menu, X, LogOut, LayoutDashboard, MessageSquare } from "lucide-react";
 import { Logo } from "./Logo";
 import { Button } from "./ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useChat } from "@/hooks/useChat";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -15,6 +16,7 @@ const links = [
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const { user, signOut } = useAuth();
+  const { totalUnread } = useChat();
   const navigate = useNavigate();
 
   return (
@@ -44,6 +46,18 @@ export function Navbar() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
+          <button
+            onClick={() => navigate("/messages")}
+            className="ring-focus relative rounded-lg p-2 text-foreground/70 hover:bg-brand-50 hover:text-brand-700"
+            aria-label="Messages"
+          >
+            <MessageSquare className="size-5" />
+            {totalUnread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex min-w-[18px] items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold text-white">
+                {totalUnread}
+              </span>
+            )}
+          </button>
           {user ? (
             <>
               <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
@@ -87,6 +101,20 @@ export function Navbar() {
                 {l.label}
               </NavLink>
             ))}
+            <NavLink
+              to="/messages"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold text-foreground/80 hover:bg-brand-50"
+            >
+              <span className="flex items-center gap-2">
+                <MessageSquare className="size-4" /> Messages
+              </span>
+              {totalUnread > 0 && (
+                <span className="flex min-w-[18px] items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold text-white">
+                  {totalUnread}
+                </span>
+              )}
+            </NavLink>
             <div className="mt-2 flex gap-2">
               {user ? (
                 <>

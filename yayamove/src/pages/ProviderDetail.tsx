@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { toast } from "sonner";
 import {
   Star,
   MapPin,
@@ -9,13 +11,19 @@ import {
   ShieldCheck,
   Award,
   ArrowLeft,
+  X,
 } from "lucide-react";
-import { SAMPLE_PROVIDERS } from "@/lib/sampleData";
-import { CATEGORY_BY_SLUG } from "@/lib/categories";
+import { SAMPLE_PROVIDERS, type SampleProvider } from "@/lib/sampleData";
+import { CATEGORY_BY_SLUG, type ServiceCategory } from "@/lib/categories";
+import { useChat } from "@/hooks/useChat";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { ReviewsSection } from "@/components/ReviewsSection";
 import { formatPHP, initials } from "@/lib/utils";
 
 export default function ProviderDetail() {
@@ -36,6 +44,35 @@ export default function ProviderDetail() {
 
   const cat = CATEGORY_BY_SLUG[provider.primary_category];
   const Icon = cat.icon;
+
+  return (
+    <ProviderDetailInner provider={provider} cat={cat} Icon={Icon} navigate={navigate} />
+  );
+}
+
+function ProviderDetailInner({
+  provider,
+  cat,
+  Icon,
+  navigate,
+}: {
+  provider: SampleProvider;
+  cat: ServiceCategory;
+  Icon: ServiceCategory["icon"];
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const { openWith } = useChat();
+  const [booking, setBooking] = useState(false);
+
+  const startChat = () => {
+    const id = openWith({
+      id: provider.id,
+      name: provider.name,
+      category: provider.primary_category,
+      verified: provider.verified,
+    });
+    navigate(`/messages?c=${id}`);
+  };
 
   return (
     <div>
@@ -132,6 +169,12 @@ export default function ProviderDetail() {
                 </p>
               </section>
             </Card>
+
+            <ReviewsSection
+              providerId={provider.id}
+              ratingAvg={provider.rating_avg}
+              ratingCount={provider.rating_count}
+            />
           </div>
 
           {/* sidebar */}
@@ -148,10 +191,10 @@ export default function ProviderDetail() {
                 <VerifiedBadge verified={provider.verified} />
               </div>
 
-              <Button variant="gradient" size="lg" className="mt-5 w-full">
+              <Button variant="gradient" size="lg" className="mt-5 w-full" onClick={() => setBooking(true)}>
                 <CalendarCheck /> Request booking
               </Button>
-              <Button variant="outline" size="lg" className="mt-2 w-full">
+              <Button variant="outline" size="lg" className="mt-2 w-full" onClick={startChat}>
                 <MessageSquare /> Message
               </Button>
 
@@ -170,6 +213,76 @@ export default function ProviderDetail() {
           </aside>
         </div>
       </div>
+
+      {booking && (
+        <BookingModal provider={provider} onClose={() => setBooking(false)} />
+      )}
+    </div>
+  );
+}
+
+function BookingModal({
+  provider,
+  onClose,
+}: {
+  provider: SampleProvider;
+  onClose: () => void;
+}) {
+  const [date, setDate] = useState("");
+  const [address, setAddress] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    if (!date || !address) {
+      toast.error("Please add a date and address.");
+      return;
+    }
+    setSubmitting(true);
+    // Live build: insert into `bookings` (RLS: seeker_id = auth.uid()).
+    await new Promise((r) => setTimeout(r, 600));
+    setSubmitting(false);
+    toast.success(`Booking requested with ${provider.name}! They'll confirm shortly.`);
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <Card className="w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Request booking</h2>
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground">
+            <X className="size-5" />
+          </button>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          with <span className="font-semibold text-foreground">{provider.name}</span> · {formatPHP(provider.hourly_rate)}/hr
+        </p>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <Label htmlFor="date">Preferred date &amp; time</Label>
+            <Input id="date" type="datetime-local" className="mt-1.5" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="address">Address</Label>
+            <Input id="address" className="mt-1.5" placeholder="Where is the job?" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="notes">Notes (optional)</Label>
+            <Textarea id="notes" className="mt-1.5" placeholder="Any details the pro should know…" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+        </div>
+
+        <Button variant="gradient" size="lg" className="mt-5 w-full" onClick={submit} disabled={submitting}>
+          <CalendarCheck /> {submitting ? "Sending…" : "Send booking request"}
+        </Button>
+      </Card>
     </div>
   );
 }
