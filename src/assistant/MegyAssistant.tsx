@@ -20,7 +20,7 @@ import {
   PanelLeft, Box, Shuffle, Plus, Minus, ArrowLeft, ArrowRight, Upload,
   RefreshCw, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
   RotateCcw, Redo, Sparkles, Trash2, Sun, Moon, Contrast, Droplets,
-  Frame, Search, Send, Home,
+  Frame, Search, Send, Home, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 
 const WELCOME: AssistantMessage = {
@@ -120,6 +120,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 export default function MegyAssistant() {
   const [activeTab, setActiveTab] = useState<TabId>('design');
   const [chatOpen, setChatOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false); // desktop: minimize panel to a thin rail
   // Mobile only: the side panel becomes a bottom drawer that collapses to a peek
   // (so the canvas is visible) and expands to act. Ignored at md+ (right rail).
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -535,7 +536,19 @@ export default function MegyAssistant() {
     <div className={`fixed z-[90] bg-white shadow-xl flex flex-col overflow-hidden transition-[height] duration-300
       left-0 right-0 bottom-0 w-full rounded-t-2xl border-t border-[#F4C2A1]/20
       ${mobileExpanded ? 'h-[82vh]' : 'h-[66px]'}
-      md:left-auto md:right-0 md:top-0 md:bottom-0 md:h-full md:w-[420px] md:rounded-none md:border-t-0 md:border-l md:transition-none`}>
+      md:left-0 md:right-auto md:top-0 md:bottom-0 md:h-full ${collapsed ? 'md:w-[60px]' : 'md:w-[420px]'} md:rounded-none md:border-t-0 md:border-r md:transition-[width] md:duration-300`}>
+
+      {/* Collapsed rail — desktop only, when minimized: Megy icon + expand */}
+      <div className={`hidden ${collapsed ? 'md:flex' : ''} md:flex-col md:items-center md:gap-3 md:pt-4`}>
+        <img src="/megy-character.png" alt="Megy" className="w-8 h-8 object-contain" draggable={false} />
+        <button onClick={() => setCollapsed(false)} title="Expand Megy" aria-label="Expand Megy"
+          className="p-1.5 text-[#9B9B9B] hover:text-[#E8A598] hover:bg-[#FDE8E4] rounded-lg transition-colors">
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Full panel content — hidden on desktop when collapsed */}
+      <div className={`flex flex-col flex-1 min-h-0 ${collapsed ? 'md:hidden' : ''}`}>
 
       {/* Mobile grab-handle — tap to expand/collapse the drawer (hidden at md+) */}
       <button
@@ -562,6 +575,9 @@ export default function MegyAssistant() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <button onClick={() => setCollapsed(true)} className="hidden md:inline-flex p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Minimize panel" aria-label="Minimize panel">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
           <button onClick={() => setChatOpen(!chatOpen)} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat">
             <Send className="w-4 h-4" />
           </button>
@@ -922,6 +938,7 @@ export default function MegyAssistant() {
       {toast && (
         <div className="absolute bottom-4 left-4 right-4 px-4 py-2.5 bg-[#2D2D2D] text-white text-[12px] rounded-xl shadow-lg text-center">{toast}</div>
       )}
+      </div>{/* end full panel content */}
     </div>
   );
 }
