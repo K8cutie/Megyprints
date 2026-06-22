@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles,
+  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, ChevronRight, Sparkles,
   Wand2, Upload, Home, PanelLeftOpen,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
@@ -857,6 +857,31 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 )}
               </AnimatePresence>
             </motion.div>
+
+              {/* Page navigation — prev / next arrows below the page */}
+              {actions.albumPages.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => actions.goToPage(actions.currentPageIndex - 1)}
+                    disabled={actions.currentPageIndex === 0}
+                    title="Previous page"
+                    aria-label="Previous page"
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-[#E8E8E8] text-[#6B6B6B] hover:bg-[#FDE8E4] hover:text-[#E8A598] hover:border-[#F4C2A1] disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <div className="w-px h-5 bg-[#E8E8E8]" />
+                  <button
+                    onClick={() => actions.goToPage(actions.currentPageIndex + 1)}
+                    disabled={actions.currentPageIndex >= actions.albumPages.length - 1}
+                    title="Next page"
+                    aria-label="Next page"
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-[#E8E8E8] text-[#6B6B6B] hover:bg-[#FDE8E4] hover:text-[#E8A598] hover:border-[#F4C2A1] disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
