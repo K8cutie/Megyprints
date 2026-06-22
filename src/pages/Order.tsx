@@ -45,12 +45,29 @@ export default function Order() {
 
     setSubmitting(true);
     try {
+      // Recover the album the user built (id + local snapshot). The snapshot lets
+      // a "built before signing in" album still be ordered; the id makes us order
+      // the exact album they viewed rather than their most-recently-updated one.
+      let pendingAlbumId: string | undefined;
+      let pendingSnapshot: Record<string, unknown> | null = null;
+      try {
+        const raw = sessionStorage.getItem('megy-pending-order-album');
+        if (raw) {
+          const parsed = JSON.parse(raw) as { albumId?: string; snapshot?: Record<string, unknown> };
+          pendingAlbumId = parsed.albumId;
+          pendingSnapshot = parsed.snapshot ?? null;
+        }
+      } catch { /* ignore malformed stash — fall back to latest album */ }
+
       const order = await createOrderFromLatestAlbum({
         userId: user.id,
         specs: { material, cover, size },
         shipping: { name: name.trim(), phone: phone.trim(), address: address.trim() },
         amount: totalPrice,
+        albumId: pendingAlbumId,
+        albumSnapshot: pendingSnapshot,
       });
+      try { sessionStorage.removeItem('megy-pending-order-album'); } catch { /* ignore */ }
       setOrderNumber(order.order_number);
       setSubmitted(true);
     } catch (err) {

@@ -107,8 +107,17 @@ export default function Builder() {
   }, [actions]);
 
   const handleOrder = useCallback(() => {
+    // Stash the album the user is actually viewing so checkout orders THIS one
+    // (not "latest updated"), and so an album built before sign-in survives the
+    // sign-in round-trip on /order (sessionStorage outlives the navigation).
+    try {
+      sessionStorage.setItem(
+        'megy-pending-order-album',
+        JSON.stringify({ albumId: actions.currentAlbumId(), snapshot: actions.getAlbumSnapshot() }),
+      );
+    } catch { /* sessionStorage unavailable — checkout falls back to latest album */ }
     navigate('/order');
-  }, [navigate]);
+  }, [navigate, actions]);
 
   /* Minimal action handler for BuilderEdit internal triggers */
   const handleAction = useCallback((actionId: string, _payload?: Record<string, unknown>) => {

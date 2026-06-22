@@ -320,6 +320,10 @@ export interface BuilderActions {
   user: { id: string } | null;
   loadAlbum: (albumId: string) => Promise<void>;
 
+  // ── Ordering: snapshot + id of the album currently being built ──
+  getAlbumSnapshot: () => AlbumData;
+  currentAlbumId: () => string | undefined;
+
   // ── Selection tracking (for assistant / properties panel) ──
   selectedTextId: string | null;
   selectedPhotoId: string | null;
@@ -1623,6 +1627,8 @@ export function useBuilderState(): BuilderActions {
     getPhotoUrl,
     user,
     loadAlbum,
+    getAlbumSnapshot: serializeAlbum,
+    currentAlbumId: () => cloudAlbumIdRef.current,
     // ── Selection tracking ──
     selectedTextId,
     selectedPhotoId,

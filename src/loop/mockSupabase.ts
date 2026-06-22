@@ -64,10 +64,14 @@ export function seedAlbum(album: Partial<AlbumRow> & { user_id: string }): Album
     id: album.id ?? `album_${state.seq}`,
     user_id: album.user_id,
     title: album.title ?? `Album ${state.seq}`,
+    album_type: album.album_type,
+    album_size: album.album_size,
+    selected_template: album.selected_template,
+    photos_per_page: album.photos_per_page,
     pages: album.pages ?? [{}, {}, {}, {}],
     photos: album.photos ?? [],
+    cover_photo: album.cover_photo,
     updated_at: album.updated_at ?? new Date(Date.now() + state.seq * 1000).toISOString(),
-    ...album,
   };
   state.albums.push(row);
   return row;
@@ -131,13 +135,13 @@ class Query {
   private runSelect(): Result<unknown> {
     let rows: AlbumRow[] = this.table === 'albums' ? [...state.albums] : [];
     for (const [col, val] of this.filters) {
-      rows = rows.filter((r) => (r as Record<string, unknown>)[col] === val);
+      rows = rows.filter((r) => (r as unknown as Record<string, unknown>)[col] === val);
     }
     if (this.orderBy) {
       const { col, asc } = this.orderBy;
       rows.sort((a, b) => {
-        const av = String((a as Record<string, unknown>)[col] ?? '');
-        const bv = String((b as Record<string, unknown>)[col] ?? '');
+        const av = String((a as unknown as Record<string, unknown>)[col] ?? '');
+        const bv = String((b as unknown as Record<string, unknown>)[col] ?? '');
         return asc ? av.localeCompare(bv) : bv.localeCompare(av);
       });
     }

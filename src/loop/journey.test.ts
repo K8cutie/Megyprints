@@ -56,23 +56,21 @@ describe('documented current roadblocks (expected gates)', () => {
   });
 });
 
-describe('LOOP TARGETS — roadblocks the loop should drive to green', () => {
-  // These assert the DESIRED end-state. They currently FAIL (the bug is live),
-  // so `it.fails` keeps the suite green while documenting the gap. When the app
-  // is fixed, the assertion passes, `it.fails` turns RED, and you remove `.fails`.
+describe('LOOP TARGETS — fixed, now locked in', () => {
+  // These were `it.fails` while the bugs were live. The fix (Builder stashes the
+  // active album id + local snapshot in sessionStorage; createOrderFromLatestAlbum
+  // orders that specific album, or falls back to the snapshot for a never-synced
+  // build) drove them green, so they are now ordinary passing assertions.
 
-  it.fails('Late-Binder Lena should reach fulfillment after signing in at checkout', () => {
-    // BUG: an album built while signed-out is never synced to the cloud `albums`
-    // table, so createOrderFromLatestAlbum throws "No saved album found".
-    // FIX: on sign-in, push the local (IndexedDB) album to Supabase under the
-    // new uid before checkout. Today she hits NO_ALBUM.
+  it('Late-Binder Lena reaches fulfillment after signing in at checkout', () => {
+    // FIXED: a build-before-login album now rides along as a snapshot, so it is
+    // no longer lost. (Was: NO_ALBUM.)
     expect(get('late').reached).toBe('FULFILLMENT');
+    expect(get('late').orderNumber).toMatch(/^MEGY-/);
   });
 
-  it.fails('Serial Sofia should order the album she was viewing, not the latest-updated one', () => {
-    // BUG: createOrderFromLatestAlbum picks the most-recently-updated album,
-    // not the one the user was previewing. FIX: pass the active album id from
-    // Builder → Order instead of relying on "latest". Today viewed !== ordered.
+  it('Serial Sofia orders the album she was viewing, not the latest-updated one', () => {
+    // FIXED: checkout orders the explicit active album id, not "latest updated".
     const r = get('serial');
     expect(r.reached).toBe('FULFILLMENT');
     expect(r.orderedAlbumId).toBe(r.viewedAlbumId);

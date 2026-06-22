@@ -49,11 +49,14 @@ export async function runJourney(persona: Persona): Promise<JourneyResult> {
 
   // ── SETUP → DESIGN: pick a size, then build album(s) ──
   result.reached = 'DESIGN';
+  // The local (browser) snapshot the builder now stashes for checkout. It exists
+  // whenever the persona builds, regardless of whether they were signed in.
+  let localSnapshot: Record<string, unknown> | null = null;
   if (persona.buildsAlbum) {
     for (let i = 0; i < persona.albumsBuilt; i++) {
       // Cloud-sync only happens when the user is authenticated during the build.
       // A signed-out builder's album lives only in the browser (IndexedDB) and
-      // never reaches the `albums` table the order logic reads from.
+      // never reaches the `albums` table — but the stashed snapshot now carries it.
       if (persona.signedInDuringBuild) {
         const row = seedAlbum({ user_id: userId, title: `${persona.name}'s Album ${i + 1}` });
         // The persona "intends" to order the FIRST album they built (the one
@@ -61,6 +64,7 @@ export async function runJourney(persona: Persona): Promise<JourneyResult> {
         if (result.viewedAlbumId === null) result.viewedAlbumId = row.id;
       }
     }
+    localSnapshot = { title: `${persona.name}'s Album`, pages: [{}, {}, {}, {}] };
   }
 
   // ── PREVIEW → ORDER_FORM: they navigate to /order ──
@@ -89,6 +93,8 @@ export async function runJourney(persona: Persona): Promise<JourneyResult> {
       specs: { material: 'matte', cover: 'softcover', size: '8x8' },
       shipping: { name: persona.name, phone: '0917-000-0000', address: '123 Test St' },
       amount: 500,
+      albumId: result.viewedAlbumId ?? undefined, // order the album they viewed
+      albumSnapshot: localSnapshot, // fallback for a never-synced (signed-out) build
     });
     result.reached = 'FULFILLMENT';
     result.orderNumber = order.order_number;
