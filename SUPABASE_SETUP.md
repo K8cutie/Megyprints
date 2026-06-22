@@ -2,20 +2,27 @@
 
 ## Part 1: Run SQL (Tables + RLS)
 
+Migrations live in [`supabase/migrations/`](supabase/migrations/) (single source of truth).
+For each file **in order**:
+
 1. Go to **Supabase Dashboard** → **SQL Editor** → **New Query**
-2. Paste the entire contents of `supabase-setup.sql`
-3. Click **Run**
+2. Paste the entire contents of the migration and click **Run**:
+   - `0001_init.sql` — `user_profiles` + `albums` tables, signup trigger, storage + base RLS
+   - `0002_orders.sql` — `orders` table + owner-scoped RLS with the pricing lock
+   - `0003_rls_lockdown.sql` — idempotent RLS re-lockdown + verification query
 
 This creates:
 - `user_profiles` table (auto-creates on signup)
 - `albums` table (cloud save/load)
+- `orders` table (fulfillment)
 - RLS policies (security — users only see their own data)
 
 ## Part 2: Create Storage Bucket (Dashboard clicks)
 
 1. Go to **Storage** → **New Bucket**
 2. Name: `album-photos`
-3. Toggle **Public bucket** → **ON**
+3. Leave **Public bucket** → **OFF** (PRIVATE). A public bucket makes every customer's
+   photos world-readable by URL — access is granted only by the per-user policies below.
 4. Click **Save**
 
 ### Storage Policies (CRITICAL — 404 errors if missing)

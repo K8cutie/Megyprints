@@ -1,6 +1,9 @@
 -- ══════════════════════════════════════════════════════════════════════════
--- Megy Prints — Supabase Database Setup
--- Run this in Supabase Dashboard → SQL Editor → New Query
+-- Megy Prints — 0001_init.sql
+-- Base schema: user_profiles, albums, storage policies, signup/updated_at triggers.
+-- Run order: 0001_init → 0002_orders → 0003_rls_lockdown
+-- (Migrated verbatim from the former root `supabase-setup.sql`; this folder is now
+--  the single source of truth for the schema — do not re-introduce root .sql copies.)
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ══════ 1. Enable UUID extension ══════

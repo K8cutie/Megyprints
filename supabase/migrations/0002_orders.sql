@@ -1,7 +1,9 @@
 -- ══════════════════════════════════════════════════════════════════════════
--- Megy Prints — Orders / Fulfillment Setup
--- Run this in Supabase Dashboard → SQL Editor → New Query
--- (Run AFTER supabase-setup.sql — it reuses public.handle_updated_at)
+-- Megy Prints — 0002_orders.sql
+-- Orders / fulfillment: order_status enum, order-number sequence, orders table,
+-- owner-scoped RLS with the customer pricing lock, updated_at trigger.
+-- Run AFTER 0001_init.sql — it reuses public.handle_updated_at.
+-- (Migrated verbatim from the former root `orders-setup.sql`.)
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ══════ 1. Order status enum ══════
@@ -74,7 +76,7 @@ create policy "Users can create own orders"
 -- status. service_role bypasses RLS, so it needs no policy here.
 
 -- ══════ 5. Auto-update updated_at ══════
--- Reuses public.handle_updated_at() created in supabase-setup.sql.
+-- Reuses public.handle_updated_at() created in 0001_init.sql.
 drop trigger if exists on_order_updated on public.orders;
 create trigger on_order_updated
   before update on public.orders
