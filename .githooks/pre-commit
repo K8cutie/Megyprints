@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# ── Secret safety net (pre-commit) ───────────────────────────────────────────
+# Blocks committing .env files or secret-like values BEFORE they enter history.
+# Bypass (only if you are SURE it is not a secret):  git commit --no-verify
+set -uo pipefail
+
+PATTERNS='-----BEGIN [A-Z ]*PRIVATE KEY-----|sk_live_[0-9A-Za-z]{10,}|sk_test_[0-9A-Za-z]{10,}|rk_live_[0-9A-Za-z]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|ghp_[0-9A-Za-z]{30,}|github_pat_[0-9A-Za-z_]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}|glpat-[0-9A-Za-z_-]{20,}|eyJ[A-Za-z0-9_-]{15,}\.eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]+|postgres(ql)?://[^:@/[:space:]]+:[^@/[:space:]]+@'
+
+fail=0
+
+# 1) Block real .env files (templates ending in .example are allowed)
+envfiles=$(git diff --cached --name-only --diff-filter=ACM -- . ':(exclude).githooks/' \
+  | grep -iE '(^|/)\.env([.][A-Za-z0-9_-]+)*$' | grep -ivE '\.example$' || true)
+if [ -n "$envfiles" ]; then
+  echo "✋ COMMIT BLOCKED — env file(s) that may hold secrets:"
+  printf '%s\n' "$envfiles" | sed 's/^/   • /'
+  fail=1
+fi
+
+# 2) Scan ADDED lines for secret-like values
+hits=$(git diff --cached -U0 --diff-filter=ACM -- . ':(exclude).githooks/' \
+  | grep -E '^\+' | grep -vE '^\+\+\+' | grep -anE -e "$PATTERNS" || true)
+if [ -n "$hits" ]; then
+  echo "✋ COMMIT BLOCKED — possible secret(s) in staged changes:"
+  printf '%s\n' "$hits" | head -20 | sed 's/^/   /'
+  fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+  cat <<'MSG'
+
+  → Put secrets in a .env file (gitignored) or your host's env settings (Vercel/Supabase).
+  → The Supabase ANON key is public-by-design; if that is all this is, it is safe.
+  → Bypass ONLY if you are certain it is not a secret:   git commit --no-verify
+MSG
+  exit 1
+fi
+exit 0

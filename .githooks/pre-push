@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# ── Secret safety net (pre-push) ─────────────────────────────────────────────
+# Backstop: scans the commits being pushed (catches anything committed with
+# --no-verify or before the hook existed). Bypass (rare): git push --no-verify
+set -uo pipefail
+
+PATTERNS='-----BEGIN [A-Z ]*PRIVATE KEY-----|sk_live_[0-9A-Za-z]{10,}|sk_test_[0-9A-Za-z]{10,}|rk_live_[0-9A-Za-z]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|ghp_[0-9A-Za-z]{30,}|github_pat_[0-9A-Za-z_]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}|glpat-[0-9A-Za-z_-]{20,}|eyJ[A-Za-z0-9_-]{15,}\.eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]+|postgres(ql)?://[^:@/[:space:]]+:[^@/[:space:]]+@'
+
+ZERO='0000000000000000000000000000000000000000'
+fail=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$ZERO" ] && continue            # branch deletion — nothing to scan
+  if [ "$remote_sha" = "$ZERO" ]; then
+    rangeargs="$local_sha --not --remotes"          # new branch: commits not yet on any remote
+  else
+    rangeargs="$remote_sha..$local_sha"             # existing branch: only the new commits
+  fi
+
+  envfiles=$(git log --name-only --pretty=format: --diff-filter=ACM $rangeargs -- . ':(exclude).githooks/' 2>/dev/null \
+    | sort -u | grep -iE '(^|/)\.env([.][A-Za-z0-9_-]+)*$' | grep -ivE '\.example$' || true)
+  hits=$(git log -p -U0 --diff-filter=ACM $rangeargs -- . ':(exclude).githooks/' 2>/dev/null \
+    | grep -E '^\+' | grep -vE '^\+\+\+' | grep -anE -e "$PATTERNS" || true)
+
+  if [ -n "$envfiles" ] || [ -n "$hits" ]; then
+    echo "✋ PUSH BLOCKED — secret-like content in commits headed to $remote_ref:"
+    [ -n "$envfiles" ] && printf '%s\n' "$envfiles" | sed 's/^/   • env file: /'
+    [ -n "$hits" ]     && printf '%s\n' "$hits" | head -20 | sed 's/^/   /'
+    fail=1
+  fi
+done
+
+if [ "$fail" -ne 0 ]; then
+  cat <<'MSG'
+
+  → A secret may already be in your commits. ROTATE it, remove it from history, then re-push.
+  → Bypass ONLY if certain it is not a secret:  git push --no-verify
+MSG
+  exit 1
+fi
+exit 0
