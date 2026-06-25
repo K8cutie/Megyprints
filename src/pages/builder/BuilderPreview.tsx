@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ShoppingCart, Download } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
 import { CORNER_POSITIONS, cornerImageUrl } from './types';
@@ -190,7 +190,33 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const spreadLeftPage = pages[spreadLeftIndex];
   const spreadRightPage = pages[spreadLeftIndex + 1];
 
-  const { w: singleW, h: H } = PREVIEW_DIMS[albumSize] || { w: 500, h: 625 };
+  // Responsive sizing: the spread (two pages side by side) scales DOWN to fit the
+  // available stage, so it shrinks with the window instead of overflowing or
+  // hiding behind the Megy panel. Capped at 1x (never bigger than the design size).
+  const base = PREVIEW_DIMS[albumSize] || { w: 500, h: 625 };
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [fitScale, setFitScale] = useState(1);
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const compute = () => {
+      const isDesktop = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
+      const panelReserve = isDesktop ? 340 : 0;   // Megy side panel width (desktop)
+      const chromeW = 2 * 56 + 48 + 48;            // nav arrows + gaps + horizontal padding
+      const chromeH = 48 + 34;                     // vertical padding + page-number labels
+      const availW = el.clientWidth - panelReserve - chromeW;
+      const availH = el.clientHeight - chromeH;
+      const fit = Math.min(availW / (base.w * 2), availH / base.h);
+      setFitScale(Math.max(0.15, Math.min(1, fit)));
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    window.addEventListener('resize', compute);
+    return () => { ro.disconnect(); window.removeEventListener('resize', compute); };
+  }, [base.w, base.h]);
+  const singleW = Math.round(base.w * fitScale);
+  const H = Math.round(base.h * fitScale);
 
   // Navigate by 2 pages (one spread) at a time
   const navPrev = () => onGoToPage(Math.max(0, currentIndex - 2));
@@ -224,7 +250,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       </div>
 
       {/* Page display with side arrows */}
-      <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
+      <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 md:pl-[352px] overflow-auto">
         <div className="flex items-center gap-6">
           {/* Prev Arrow — left side */}
           <button
