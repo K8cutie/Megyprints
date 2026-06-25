@@ -117,10 +117,14 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
    MAIN COMPONENT
    ══════════════════════════════════════════════════════════════════════════ */
 
-export default function MegyAssistant() {
+export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollapsed }: { collapsed?: boolean; onToggleCollapsed?: (v: boolean) => void } = {}) {
   const [activeTab, setActiveTab] = useState<TabId>('design');
   const [chatOpen, setChatOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false); // desktop: minimize panel to a thin rail
+  // Collapse is controlled by the parent (so the layout can reserve panel width);
+  // falls back to local state if rendered standalone.
+  const [collapsedLocal, setCollapsedLocal] = useState(false);
+  const collapsed = collapsedProp ?? collapsedLocal;
+  const setCollapsed = (v: boolean) => { if (onToggleCollapsed) onToggleCollapsed(v); else setCollapsedLocal(v); };
   // Mobile only: the side panel becomes a bottom drawer that collapses to a peek
   // (so the canvas is visible) and expands to act. Ignored at md+ (right rail).
   const [mobileExpanded, setMobileExpanded] = useState(false);

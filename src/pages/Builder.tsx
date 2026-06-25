@@ -130,10 +130,13 @@ export default function Builder() {
   }, [searchParams, userId, loadAlbum]);
 
   const phaseIndex = phases.findIndex((p) => p.id === actions.phase);
+  // Desktop: reserve the Megy panel's width so the toolbar + canvas sit BESIDE
+  // it (never underneath). Reacts to the panel collapsing to its thin rail.
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   const content = (
     <BuilderErrorBoundary key={errorKey} onReset={handleReset}>
-      <div className="fixed inset-0 z-[60] bg-white flex flex-col">
+      <div className={`fixed inset-0 z-[60] bg-white flex flex-col transition-[padding] duration-300 ${panelCollapsed ? 'md:pl-[60px]' : 'md:pl-[340px]'}`}>
         {/* Step Indicator */}
         <div className="h-12 bg-white border-b border-[#E8E8E8] flex items-center px-4 gap-1 shrink-0">
           <div className="flex items-center gap-1 mr-4">
@@ -215,7 +218,7 @@ export default function Builder() {
         </div>
 
         {/* ── Megy Assistant ── */}
-        <MegyAssistant />
+        <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} />
 
         {/* Hidden file input for programmatic upload trigger */}
         <input

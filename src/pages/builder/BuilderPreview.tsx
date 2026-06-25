@@ -200,11 +200,11 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     const el = stageRef.current;
     if (!el) return;
     const compute = () => {
-      const isDesktop = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
-      const panelReserve = isDesktop ? 340 : 0;   // Megy side panel width (desktop)
+      // The builder root already reserves the Megy panel's width, so the stage
+      // measures only the space available beside it.
       const chromeW = 2 * 56 + 48 + 48;            // nav arrows + gaps + horizontal padding
       const chromeH = 48 + 34;                     // vertical padding + page-number labels
-      const availW = el.clientWidth - panelReserve - chromeW;
+      const availW = el.clientWidth - chromeW;
       const availH = el.clientHeight - chromeH;
       const fit = Math.min(availW / (base.w * 2), availH / base.h);
       setFitScale(Math.max(0.15, Math.min(1, fit)));
@@ -250,7 +250,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       </div>
 
       {/* Page display with side arrows */}
-      <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 md:pl-[352px] overflow-auto">
+      <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 overflow-auto">
         <div className="flex items-center gap-6">
           {/* Prev Arrow — left side */}
           <button
