@@ -518,9 +518,14 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       hops++;
     }
     if (!host) return;
-    const avail = host.clientWidth - 32; // leave room for the container's padding
-    if (avail <= 0) return;
-    const scale = Math.min(1, avail / CANVAS_W);
+    // Fit the WHOLE page into the viewport — BOTH width and height — and let it
+    // GROW to fill big screens (capped to avoid extreme upscaling blur). Reserve
+    // vertical room for the page-number label + nav arrows + container padding.
+    const availW = host.clientWidth - 32;
+    const availH = host.clientHeight - 120;
+    if (availW <= 0 || availH <= 0) return;
+    const baseFit = Math.max(0.2, Math.min(2.5, Math.min(availW / CANVAS_W, availH / CANVAS_H)));
+    const scale = baseFit * zoomRef.current;
     // NOTE: fabric 5.x setDimensions(cssOnly) does NOT append units, so the CSS
     // values MUST be passed as 'px' strings or the browser ignores them.
     c.setDimensions(
@@ -567,6 +572,12 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       ro?.disconnect();
     };
   }, [fabricValid, fitCanvasToContainer]);
+
+  /* Re-fit when the user zooms — zoom folds into the fit scale. */
+  useEffect(() => {
+    if (!fabricValid) return;
+    fitCanvasToContainer();
+  }, [zoom, fabricValid, fitCanvasToContainer]);
 
   /* ═══════ Render scene on structural changes ═══════ */
   useEffect(() => {

@@ -536,7 +536,7 @@ export default function MegyAssistant() {
     <div className={`fixed z-[90] bg-white shadow-xl flex flex-col overflow-hidden transition-[height] duration-300
       left-0 right-0 bottom-0 w-full rounded-t-2xl border-t border-[#F4C2A1]/20
       ${mobileExpanded ? 'h-[82vh]' : 'h-[66px]'}
-      md:left-0 md:right-auto md:top-0 md:bottom-0 md:h-full ${collapsed ? 'md:w-[60px]' : 'md:w-[420px]'} md:rounded-none md:border-t-0 md:border-r md:transition-[width] md:duration-300`}>
+      md:left-0 md:right-auto md:top-0 md:bottom-0 md:h-full ${collapsed ? 'md:w-[60px]' : 'md:w-[340px]'} md:rounded-none md:border-t-0 md:border-r md:transition-[width] md:duration-300`}>
 
       {/* Collapsed rail — desktop only, when minimized: Megy icon + expand */}
       <div className={`hidden ${collapsed ? 'md:flex' : ''} md:flex-col md:items-center md:gap-3 md:pt-4`}>

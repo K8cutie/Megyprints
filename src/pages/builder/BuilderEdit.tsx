@@ -790,10 +790,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {/* Canvas */}
           <div
             ref={containerRef}
-            className="flex-1 overflow-auto flex items-center justify-center p-4 pb-24 md:p-8"
+            className="flex-1 overflow-auto flex p-4 pb-24 md:p-8"
             title="Scroll to navigate pages. Ctrl+Scroll to zoom."
           >
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-2 m-auto">
               {/* Page number above the page */}
               <span className="text-xs font-medium text-[#6B6B6B] tabular-nums">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
@@ -805,10 +805,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               className="shadow-xl relative"
               style={{ boxShadow: '0 8px 32px rgba(45,45,45,0.15)' }}
             >
-              <canvas
-                ref={canvasElRef}
-                style={{ width: CANVAS_W * zoom, height: CANVAS_H * zoom }}
-              />
+              {/* Fabric owns the canvas display size (CSS) via the fit routine —
+                  no inline width/height here, or it would clobber the fit. */}
+              <canvas ref={canvasElRef} />
 
               {/* Empty State Overlay */}
               <AnimatePresence>
