@@ -261,8 +261,8 @@ export class WizardEngine {
         if (cur >= lastUsed) {
           return {
             title: "All Pages Reviewed 🎉",
-            body: `You've been through all **${usedCount}** pages — this album looks wonderful. Let's go ahead and order this memorable keepsake! (Or keep tweaking — your call.)`,
-            actions: ["Shuffle This Page", "✨ Add a Quote", "Order this album →", "Review from the start"],
+            body: `You've been through all **${usedCount}** pages — this album looks wonderful. Let's take a look at the finished album! (Or keep tweaking — your call.)`,
+            actions: ["Shuffle This Page", "✨ Add a Quote", "Preview the album →", "Review from the start"],
             tips: ["You can keep editing any page before ordering", "Your photos stay on your device until you order"],
           };
         }

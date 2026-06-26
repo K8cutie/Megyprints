@@ -168,7 +168,7 @@ function PageView({ page, photos, singleW, H, pageIndex }: {
   );
 }
 
-export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack: _onBack, onOrder }: BuilderPreviewProps) {
+export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
   const total = pages.length;
 
   // Compile the album into a single print-ready PDF and download it.
@@ -225,8 +225,14 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const hasPrev = spreadLeftIndex > 0;
   const hasNext = spreadLeftIndex + 2 < total;
 
+  // Forced order CTA — auto-shows once they reach the last spread of the preview.
+  const [showOrderCta, setShowOrderCta] = useState(false);
+  useEffect(() => {
+    if (!hasNext && total > 0) setShowOrderCta(true);
+  }, [hasNext, total]);
+
   return (
-    <div className="flex flex-col h-full bg-[#F5F5F5]">
+    <div className="flex flex-col h-full bg-[#F5F5F5] relative">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-5 py-2.5 border-b border-[#E8E4E0] bg-white">
         <span className="text-xs text-[#6B6B6B] font-medium tabular-nums">
@@ -311,6 +317,29 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           </button>
         </div>
       </div>
+
+      {/* Forced order CTA — auto-shows on the last spread; no dismiss (must choose). */}
+      {showOrderCta && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 text-center">
+            <div className="text-4xl mb-2">📦</div>
+            <h3 className="font-display text-2xl font-semibold text-[#2D2D2D] mb-1">You've reached the end</h3>
+            <p className="text-sm text-[#6B6B6B] mb-6">Your album looks beautiful. Make it real.</p>
+            <button
+              onClick={onOrder}
+              className="w-full py-4 bg-[#E8A598] text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md"
+            >
+              ORDER ALBUM
+            </button>
+            <button
+              onClick={onBack}
+              className="mt-4 text-xs text-[#9B9B9B] hover:text-[#6B6B6B] transition-colors"
+            >
+              …or do you want to change anything?
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -315,7 +315,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         } else if (action.includes('Quote')) {
           const q = builder.addThemedQuote?.();
           showToast(q ? `Added: "${q}"` : 'This page is full — no room for a quote here.');
-        } else if (/order/i.test(action)) {
+        } else if (/preview/i.test(action)) {
           void builder.dispatch({ type: 'preview_album', rawMessage: 'preview album' });
         } else if (/start/i.test(action)) {
           builder.goToPage(0);
