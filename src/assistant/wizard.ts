@@ -233,7 +233,7 @@ export class WizardEngine {
           body: photoCount > 0
             ? `Great! You have **${photoCount}** photo${photoCount > 1 ? 's' : ''} ready. Upload more or let's generate your album!`
             : "Upload your photos and I'll auto-arrange them into beautiful layouts. You can upload as many as you want — I'll pick the best ones for each page.",
-          actions: photoCount > 0 ? ["Upload More Photos", "Generate Album →"] : ["Upload Photos", "Use Placeholders (skip for now)"],
+          actions: photoCount > 0 ? ["Upload More Photos", "Generate Album →"] : ["Upload Photos"],
           tips: ["📱 Upload straight from your phone for the best quality — and I'll auto-sort your photos into pages by the moment they were taken", "I'll match photo ratios to frame shapes automatically"],
         };
 
