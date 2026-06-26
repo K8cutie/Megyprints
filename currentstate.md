@@ -1,9 +1,38 @@
 # Megy Prints — Current State
-**Last updated:** 2026-06-20 (theme-system + guided-wizard session) · **Build:** ✅ green (`npm run build` exit 0, ~7s)
-**Next session mode:** open — candidates below (richer themes / fulfillment wire-up / queued QA backlog).
+**Last updated:** 2026-06-26 (mobile text boxes + per-slot/mixed ratios + tiled templates + /admin) · **Build:** ✅ green (`npm run build` exit 0, ~11s)
+**Next session mode:** open — run migration 0004, eyeball templates in /admin, iterate the iOS text-box keyboard.
 
 > This is the resume point. Read this + `MEGY_NORTH_STAR.md` + `SESSION RULES.md` first.
 > Everything below is build-verified; items the **user** watched live in the browser are marked ✅ seen.
+
+---
+
+## Session 2026-06-26 — Mobile text boxes, per-slot/mixed ratios, tiled templates, /admin
+
+Built BLIND (mobile + generation tested by the user on Vercel; no live device here). All pushed to `main`; Vercel auto-deploys. See memory `megyprints-template-system`.
+
+### Mobile text-box editor (textSlots)
+- `PageTemplate.textSlots` (caption/title regions, separate from photo slots so they don't affect ratio-matching). `TextElement.boxIndex` links text → box. `setBoxText` action (create / update / clear-on-empty) in useBuilderState.
+- `MobileTextEditor.tsx` — floating format bar above the keyboard (B/I/U, font, size, color, align) via `visualViewport`. Tap a box in MobileReview → editor. PageView renders filled boxes formatted + clipped; empty shows "Tap to add text". **iOS keyboard positioning is the part that needs on-device iteration.**
+
+### Per-slot ratios + mixed-ratio generation
+- `TemplateSlot.ratio` (per-slot; rs/rsBox/rsBoxExact + `fill` tag it). One template can mix ratios; falls back to `targetRatio`.
+- `generateAlbum.ts`: greedy mixed-template fill (`tryMixedFill`) when a moment's photos supply every ratio a template needs, else ratio-by-ratio + single-photo full-page leftover fallback (scarcity = non-issue).
+
+### Tiled templates (`tiledTemplates.ts`) — tight, phone-native, 2" floor
+- Edge-to-edge tilings, PHONE-NATIVE (4:3 / 3:4 / 1:1) + one wide bonus (16:9 mosaic). `MIN_FRAME_INCHES = 2` per album physical size → small albums auto-drop dense layouts.
+- Square recipes (6×6: 12, 8×8: 14, 9×9: 14) + non-square uniform-grid generator (6×4, 11.5×8, 8.5×11; cell ratio = (w/h) × pageAspect, tagged nearest phone-native so the matcher selects them). Geometry verified numerically.
+- **Design rule the user taught:** tile so each region's shape = a standard ratio + a textbox absorbs the leftover (no whitespace, no crop). Mixed ratios + textboxes are the canvas-PACKING tools.
+
+### /admin template manager
+- `src/pages/Admin.tsx` — operator-only (`ADMIN_EMAIL` gate + RLS), per-size thumbnail grid (`TemplateThumb`), hide (on/off) + soft-delete/restore. Linked from Profile for the operator.
+- Persistence: Supabase `template_settings` (migration **0004**: public read, admin-write gated by email in RLS). `loadTemplateSettings()` on app start → inactive-id filter on getTemplatesForAlbum/Ratio/Count (NOT getTemplateById, so existing albums still render).
+- **⚠ OUTSTANDING manual step: run `supabase/migrations/0004_template_settings.sql`** in the Supabase SQL editor — until then /admin changes are session-local only.
+
+### Still open
+- Harden `cycleLayout` / shuffle for per-slot ratios (mixed templates can mismatch a photo on manual "Change").
+- Landscape/portrait tilings are modest (geometry + 2" limit; not a hard 20/size).
+- Deferred from before: "Surprise Me" stale-closure bg bug; order-page size pre-fill from album.
 
 ---
 
