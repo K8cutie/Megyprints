@@ -13,12 +13,19 @@
 import { supabase, supabaseConfigured } from './supabase';
 import { setInactiveTemplateIds } from '../pages/builder/pageTemplates';
 
-export const ADMIN_EMAIL = 'archgarcia@gmail.com';
+/** Operator accounts (the client-side gate). Adding an email here ALSO requires a
+ *  migration that updates the RLS allow-list (supabase/migrations/0006_admin_emails.sql) —
+ *  the database is the real guard; this list only controls what the UI shows. */
+export const ADMIN_EMAILS = ['archgarcia@gmail.com', 'megyprints@gmail.com'];
+/** Primary operator email — for display. */
+export const ADMIN_EMAIL = ADMIN_EMAILS[0];
 
-/** True when the given email is the operator account (case-insensitive, since
+/** True when the given email is an operator account (case-insensitive, since
  *  email addresses aren't case-sensitive and providers vary the casing). */
 export function isAdminEmail(email?: string | null): boolean {
-  return !!email && email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  if (!email) return false;
+  const e = email.trim().toLowerCase();
+  return ADMIN_EMAILS.some((a) => a.toLowerCase() === e);
 }
 
 export interface TemplateState { hidden: boolean; deleted: boolean; }

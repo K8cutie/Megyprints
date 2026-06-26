@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, ClipboardList, LayoutGrid, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
-import { isAdminEmail, ADMIN_EMAIL } from '../lib/templateSettings';
+import { isAdminEmail, ADMIN_EMAILS } from '../lib/templateSettings';
 import { fetchAllOrders, type AdminOrder } from '../lib/adminOrders';
 import OverviewPanel from './admin/OverviewPanel';
 import OrdersPanel from './admin/OrdersPanel';
@@ -47,7 +47,7 @@ export default function Admin() {
         <p className="text-sm mt-2 text-[#6B6B6B]">This console is for the Megy Prints operator account only.</p>
         <p className="text-xs mt-4 text-[#9B9B9B]">
           Signed in as <b>{user.email ?? '(no email)'}</b><br />
-          Operator account is <b>{ADMIN_EMAIL}</b>
+          Operator accounts: <b>{ADMIN_EMAILS.join(', ')}</b>
         </p>
         <Link to="/" className="inline-block mt-5 text-sm text-[#E8A598]">← Back to site</Link>
       </div>
