@@ -9,7 +9,7 @@ import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { slotShapeStyle } from './slotShapeStyle';
 import { PREVIEW_DIMS } from './PreviewSizeConstants';
-import { bindingMarginFraction, bindingEdge, applyBindingMargin } from './binding';
+import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
 
 /* ══════════════════════════════════════════════════════════════════════════
    BuilderPreview — Spread-only view with side arrows
@@ -83,7 +83,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   const template = page.templateId ? getTemplateById(page.templateId) : null;
   const baseMargin = template?.margin ?? { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
   // Reserve the binding keep-out on the inner edge so slots match the editor.
-  const margin = applyBindingMargin(baseMargin, page.size, pageIndex);
+  const margin = marginForTemplate(template, baseMargin, page.size, pageIndex);
   const safeX = margin.left * singleW;
   const safeY = margin.top * H;
   const safeW = singleW * (1 - margin.left - margin.right);

@@ -31,3 +31,16 @@ export function applyBindingMargin(margin: Margin, albumSize: string, pageIndex:
     ? { ...margin, left: margin.left + frac }
     : { ...margin, right: margin.right + frac };
 }
+
+/** Effective page margin for rendering. A full-bleed template runs the photo to
+ *  ALL four edges (no safe margin, no binding gutter); everything else gets the
+ *  binding reserve added to its inner edge. Use this everywhere a page renders. */
+export function marginForTemplate(
+  template: { fullBleed?: boolean } | null | undefined,
+  baseMargin: Margin,
+  albumSize: string,
+  pageIndex: number,
+): Margin {
+  if (template?.fullBleed) return { top: 0, bottom: 0, left: 0, right: 0 };
+  return applyBindingMargin(baseMargin, albumSize, pageIndex);
+}

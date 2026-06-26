@@ -7,7 +7,7 @@ import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
-import { applyBindingMargin } from './binding';
+import { marginForTemplate } from './binding';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -101,7 +101,7 @@ async function renderPageManually(
   const template = page.templateId ? getTemplateById(page.templateId) : null;
   if (template && page.slotFills) {
     const adapted = adaptTemplateToOrientation(template, W, H);
-    const m = applyBindingMargin(adapted.margin, albumSize, pageIndex);
+    const m = marginForTemplate(adapted, adapted.margin, albumSize, pageIndex);
     const safeX = W * m.left;
     const safeY = H * m.top;
     const safeW = W * (1 - m.left - m.right);

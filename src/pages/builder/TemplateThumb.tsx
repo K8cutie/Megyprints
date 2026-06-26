@@ -13,7 +13,7 @@ export default function TemplateThumb({ template, size, w = 140 }: {
   const dims = getCanvasDimensions(size);
   const aspect = dims.width / Math.max(1, dims.height);
   const H = Math.round(w / aspect);
-  const m = template.margin;
+  const m = template.fullBleed ? { top: 0, bottom: 0, left: 0, right: 0 } : template.margin;
   const safeX = m.left, safeY = m.top;
   const safeW = 1 - m.left - m.right, safeH = 1 - m.top - m.bottom;
   const pct = (n: number) => `${n * 100}%`;

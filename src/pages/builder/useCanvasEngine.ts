@@ -20,7 +20,7 @@ import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
-import { bindingMarginFraction, bindingEdge, applyBindingMargin } from './binding';
+import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
 import type { BuilderActions } from './useBuilderState';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
@@ -945,7 +945,7 @@ function renderTemplateSlots(
 
   // Phase 1: compute safe area from template margins — with the binding keep-out
   // added to the inner (spine) edge so slots never land in the gutter.
-  const m = applyBindingMargin(adaptedTemplate.margin, albumSize, pageIndex);
+  const m = marginForTemplate(adaptedTemplate, adaptedTemplate.margin, albumSize, pageIndex);
   const safeX = canvasW * m.left;
   const safeY = canvasH * m.top;
   const safeW = canvasW * (1 - m.left - m.right);

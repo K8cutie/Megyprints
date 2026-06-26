@@ -77,6 +77,9 @@ export interface PageTemplate {
   slots: TemplateSlot[];
   /** Optional text-box regions (captions/titles). Empty until the user fills them. */
   textSlots?: TextSlot[];
+  /** True full-bleed: the photo runs to ALL four page edges — no safe margin and
+   *  no binding gutter. Use only for single-photo full-page layouts. */
+  fullBleed?: boolean;
 }
 
 export interface FilledSlot {

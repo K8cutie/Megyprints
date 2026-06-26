@@ -16,6 +16,7 @@ import type { PageTemplate, TemplateSlot, TextSlot, PhotoRatio, AlbumSizePreset,
 
 const MIN_FRAME_INCHES = 2;
 const MARGIN: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
+const ZERO_MARGIN: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 
 /** Physical album dimensions (inches). */
 const INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
@@ -39,6 +40,7 @@ interface Recipe {
   category: PageTemplate['category'];
   photos: PhotoRegion[];
   texts?: TextSlot[];
+  fullBleed?: boolean; // single full-page photo → run to all four edges
 }
 
 /** Build a recipe into a real PageTemplate for one album size, or null if any
@@ -67,12 +69,13 @@ function buildForSize(
     name: r.name,
     category: r.category,
     slotCount: slots.length,
-    margin: MARGIN,
+    margin: r.fullBleed ? ZERO_MARGIN : MARGIN,
     orientation,
     targetRatio: r.photos[0]?.ratio ?? '1:1',
     albumSizes: [size],
     slots,
     textSlots: r.texts,
+    fullBleed: r.fullBleed,
   };
 }
 
@@ -82,8 +85,8 @@ const cap = (x: number, y: number, w: number, h: number): TextSlot =>
 /* ── SQUARE recipes (safe area ≈ square, so region w/h ≈ ratio) ───────────────
    Phone-native ratios only: 1:1, 4:3, 3:4. Every recipe tiles [0,1]² fully. */
 const SQUARE_RECIPES: Recipe[] = [
-  // 1 photo
-  { key: 'full', name: 'Full bleed', category: 'single',
+  // 1 photo — true full-bleed (photo to all four edges, no border)
+  { key: 'full', name: 'Full bleed', category: 'single', fullBleed: true,
     photos: [{ x: 0, y: 0, w: 1, h: 1, ratio: '1:1' }] },
   { key: 'banner-cap', name: 'Banner + caption', category: 'single',
     photos: [{ x: 0, y: 0, w: 1, h: 0.75, ratio: '4:3' }], texts: [cap(0, 0.75, 1, 0.25)] },
@@ -169,6 +172,7 @@ function gridTemplate(spec: GridSpec): PageTemplate | null {
   const safeHin = ih * (1 - MARGIN.top - MARGIN.bottom);
   const photoRows = caption ? rows - 1 : rows;
   if (photoRows < 1) return null;
+  const fullBleed = photoRows === 1 && cols === 1 && !caption; // single full-page photo
 
   const cw = 1 / cols, ch = 1 / rows;
   if (Math.min(cw * safeWin, ch * safeHin) < MIN_FRAME_INCHES) return null; // print floor
@@ -188,12 +192,13 @@ function gridTemplate(spec: GridSpec): PageTemplate | null {
     name,
     category: catFor(slots.length),
     slotCount: slots.length,
-    margin: MARGIN,
+    margin: fullBleed ? ZERO_MARGIN : MARGIN,
     orientation: orientFor(A),
     targetRatio: ratio,
     albumSizes: [size],
     slots,
     textSlots: texts,
+    fullBleed,
   };
 }
 
