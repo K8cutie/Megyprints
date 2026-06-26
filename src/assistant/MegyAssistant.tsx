@@ -591,9 +591,6 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <button onClick={() => setCollapsed(true)} className="hidden md:inline-flex p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Minimize panel" aria-label="Minimize panel">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <button onClick={doRestartWizard} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Restart wizard from the beginning" aria-label="Restart wizard">
-            <RotateCcw className="w-4 h-4" />
-          </button>
           <button onClick={() => setChatOpen(!chatOpen)} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat">
             <Send className="w-4 h-4" />
           </button>
@@ -687,6 +684,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <span>Surprise Me — New Layouts</span>
         </button>
         <p className="text-[10px] text-[#8B7E7A] text-center mt-1.5">Reshuffles every page into fresh layouts — same theme. Click again for another arrangement!</p>
+        <button onClick={doRestartWizard} className="w-full mt-2 flex items-center justify-center gap-2 py-2 text-[#9B9B9B] hover:text-[#E8A598] hover:bg-[#FDE8E4]/50 rounded-lg text-xs font-medium transition-all">
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Restart Wizard — start over</span>
+        </button>
       </div>
 
       {/* ═══ TABS ═══ */}
