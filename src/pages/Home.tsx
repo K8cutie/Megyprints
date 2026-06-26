@@ -609,32 +609,55 @@ export default function Home() {
   // Hero welcome card — sends visitors into the builder, where the one true
   // Megy (assistant/MegyAssistant) guides them. No separate home wizard.
   const megyComponent = (
-    <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 text-center">
-      <img
-        src="/megy-character.png"
-        alt="Megy"
-        className="w-24 h-24 mx-auto object-contain drop-shadow-lg mb-4"
-        draggable={false}
+    <div className="relative">
+      {/* Soft on-brand glow behind the card for depth */}
+      <div
+        className="absolute -inset-5 rounded-[2.25rem] bg-gradient-to-br from-[#F4C2A1]/45 via-[#E8A598]/25 to-[#B8A9D9]/35 blur-2xl"
+        aria-hidden
       />
-      <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#2D2D2D] mb-2">
-        Hi, I&apos;m Megy 👋
-      </h1>
-      <p className="font-body text-[#6B6B6B] leading-relaxed mb-6">
-        Your personal album designer. Upload your photos and I&apos;ll build a
-        beautiful, print-ready album for you — no design skills needed.
-      </p>
-      <button
-        onClick={() => handleMegyAction('go-builder')}
-        className="w-full inline-flex items-center justify-center gap-2 bg-[#F4C2A1] hover:bg-[#E8A598] text-white font-semibold px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all text-base"
-      >
-        <Sparkles size={18} /> Start Creating
-      </button>
-      <Link
-        to="/templates"
-        className="inline-block mt-3 text-sm font-medium text-[#8B7E7A] hover:text-[#F4C2A1] transition-colors"
-      >
-        Or browse templates first →
-      </Link>
+      <div className="relative overflow-hidden bg-white/90 backdrop-blur-xl rounded-[1.75rem] border border-white/70 p-8 text-center shadow-[0_24px_70px_-20px_rgba(45,45,45,0.45)]">
+        {/* Subtle top sheen — glass highlight */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/70 to-transparent" aria-hidden />
+
+        <img
+          src="/megy-character.png"
+          alt="Megy, your personal album designer"
+          className="relative w-24 h-24 mx-auto object-contain drop-shadow-lg mb-4"
+          draggable={false}
+        />
+        <h1 className="relative font-display text-[1.85rem] sm:text-[2.35rem] font-bold text-[#2D2D2D] leading-[1.08] tracking-tight mb-2">
+          Hi, I&apos;m Megy 👋
+        </h1>
+        <p className="relative font-body text-[0.95rem] text-[#6B6B6B] leading-relaxed mb-5 max-w-[34ch] mx-auto">
+          Your personal album designer. Upload your photos and I&apos;ll build a
+          beautiful, print-ready album — no design skills needed.
+        </p>
+
+        {/* Trust chips — honest feature statements, not fabricated stats */}
+        <div className="relative flex flex-wrap items-center justify-center gap-1.5 mb-6">
+          {['No sign-up needed', 'Ready in minutes', 'Print-quality'].map((chip) => (
+            <span
+              key={chip}
+              className="text-[0.7rem] font-medium text-[#8B6F47] bg-[#FDE8E4]/80 px-2.5 py-1 rounded-full"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
+
+        <button
+          onClick={() => handleMegyAction('go-builder')}
+          className="relative w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-[#F4C2A1] to-[#E8A598] text-white font-semibold px-8 py-4 rounded-2xl shadow-[0_8px_26px_-8px_rgba(232,165,152,0.85)] hover:shadow-[0_12px_34px_-8px_rgba(232,165,152,0.95)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-200 text-base"
+        >
+          <Sparkles size={18} /> Start Creating
+        </button>
+        <Link
+          to="/templates"
+          className="relative inline-block mt-3 text-sm font-medium text-[#8B7E7A] hover:text-[#E8A598] transition-colors"
+        >
+          Or browse templates first →
+        </Link>
+      </div>
     </div>
   );
 
