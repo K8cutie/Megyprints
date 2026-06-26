@@ -443,12 +443,16 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             <h3 className="font-display text-xl font-semibold text-[#2D2D2D] mb-2"><TypeText text={msg.title} /></h3>
             {(wizardRef.current.state.step === 'upload_photos' && builder.uploadedPhotos.length > 0) ? (
               <div className="mb-4">
-                <p className="text-sm text-[#5A5A5A] leading-relaxed mb-3">Here&apos;s your album setup — ready when you are:</p>
-                <ul className="space-y-1.5">
-                  <li className="flex items-center gap-2 text-sm text-[#2D2D2D]"><span className="text-[#F4C2A1] font-bold">•</span><span><strong>{builder.uploadedPhotos.length}</strong> photos</span></li>
-                  <li className="flex items-center gap-2 text-sm text-[#2D2D2D]"><span className="text-[#F4C2A1] font-bold">•</span><span><strong>{builder.albumSize}</strong> album</span></li>
-                  <li className="flex items-center gap-2 text-sm text-[#2D2D2D]"><span className="text-[#F4C2A1] font-bold">•</span><span className="capitalize"><strong>{builder.selectedTemplate}</strong> theme</span></li>
-                </ul>
+                {/* Eye-catching photo count */}
+                <div className="flex items-baseline gap-2 mb-3">
+                  <span className="font-display text-5xl font-bold text-[#E8A598] leading-none">{builder.uploadedPhotos.length}</span>
+                  <span className="text-base text-[#5A5A5A]">photos ready 🎉</span>
+                </div>
+                <p className="text-sm text-[#5A5A5A] leading-relaxed mb-2">Your album setup:</p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-3 py-1.5 rounded-full bg-[#FDE8E4] text-[#E8A598] text-sm font-semibold">{builder.albumSize} album</span>
+                  <span className="px-3 py-1.5 rounded-full bg-[#FDE8E4] text-[#E8A598] text-sm font-semibold capitalize">{builder.selectedTemplate} theme</span>
+                </div>
                 <p className="text-xs text-[#8B7E7A] mt-3">I&apos;ll create 40+ pages with auto-matched layouts.</p>
               </div>
             ) : (
