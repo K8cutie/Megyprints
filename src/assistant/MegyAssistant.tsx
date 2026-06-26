@@ -117,7 +117,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
    MAIN COMPONENT
    ══════════════════════════════════════════════════════════════════════════ */
 
-export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollapsed }: { collapsed?: boolean; onToggleCollapsed?: (v: boolean) => void } = {}) {
+export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollapsed, suppressDrawer }: { collapsed?: boolean; onToggleCollapsed?: (v: boolean) => void; suppressDrawer?: boolean } = {}) {
   const [activeTab, setActiveTab] = useState<TabId>('design');
   const [chatOpen, setChatOpen] = useState(false);
   // Collapse is controlled by the parent (so the layout can reserve panel width);
@@ -544,6 +544,11 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       </div>
     );
   }
+
+  // Mobile: during the swipe-review (MobileReview is the full UI), hide the Megy
+  // bottom drawer so it doesn't cover the Change bar. Centerpiece steps (size,
+  // background, upload, generate) return earlier above, so they're unaffected.
+  if (suppressDrawer) return null;
 
   return (
     <div className={`fixed z-[90] bg-white shadow-xl flex flex-col overflow-hidden transition-[height] duration-300
