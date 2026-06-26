@@ -75,6 +75,12 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   /* ── Sidebar hidden by default — Megy Assistant is the primary control ── */
   const [sidebarVisible, setSidebarVisible] = useState(false);
 
+  /* ── Megy is the SOLE orchestrator: hide manual canvas tools (zoom, grid,
+     snap, phase nav, generate buttons, legacy panel) from the frontend. The
+     user only edits TEXT and REPLACES photos directly; everything else is
+     Megy's job. Flip to false to bring the power-user tools back. ── */
+  const ORCHESTRATOR_MODE = true;
+
   /* ── Keyboard shortcut: Ctrl+Shift+S toggles sidebar (power users) ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -657,8 +663,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
         {/* ── Canvas Area ── */}
         <div className="flex-1 flex flex-col relative overflow-hidden">
-          {/* Sidebar toggle — visible when panel is hidden */}
-          {!sidebarVisible && (
+          {/* Sidebar toggle — hidden in orchestrator mode (Ctrl+Shift+S still works) */}
+          {!ORCHESTRATOR_MODE && !sidebarVisible && (
             <button
               onClick={() => setSidebarVisible(true)}
               className="absolute top-3 left-3 z-40 flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl shadow-md border border-[#E8E8E8] text-xs font-medium text-[#6B6B6B] hover:text-[#F4C2A1] hover:border-[#F4C2A1]/30 transition-all"
@@ -682,6 +688,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 <span className="text-xs font-semibold">Home</span>
               </Link>
 
+              {!ORCHESTRATOR_MODE && (
+              <>
               <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
 
               <button
@@ -725,6 +733,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               >
                 <Magnet size={14} />
               </button>
+              </>
+              )}
 
             </div>
 
@@ -740,8 +750,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
 
-              {/* Generate / Regenerate / Generate All */}
-              {isPageEmpty ? (
+              {/* Generate / Regenerate / Generate All — hidden in orchestrator mode (use Megy) */}
+              {ORCHESTRATOR_MODE ? null : isPageEmpty ? (
                 <>
                   {onGenerate && (
                     <button

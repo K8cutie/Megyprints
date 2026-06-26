@@ -597,9 +597,12 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <button onClick={() => setChatOpen(!chatOpen)} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat">
             <Send className="w-4 h-4" />
           </button>
+          {/* Legacy sidebar button hidden — Megy is the sole orchestrator (Ctrl+Shift+S still works) */}
+          {false && (
           <button onClick={() => alert('Use Ctrl+Shift+S to open the legacy sidebar')} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Legacy sidebar (Ctrl+Shift+S)">
             <PanelLeft className="w-4 h-4" />
           </button>
+          )}
         </div>
       </div>
 

@@ -133,6 +133,9 @@ export default function Builder() {
   // Desktop: reserve the Megy panel's width so the toolbar + canvas sit BESIDE
   // it (never underneath). Reacts to the panel collapsing to its thin rail.
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  // Phase chips hidden — Megy is the sole orchestrator and drives phases through
+  // the wizard (Next / Previous / step actions). Flip true to show them again.
+  const SHOW_PHASE_CHIPS = false;
 
   const content = (
     <BuilderErrorBoundary key={errorKey} onReset={handleReset}>
@@ -145,7 +148,7 @@ export default function Builder() {
             <span className="w-1.5 h-1.5 rounded-full bg-[#F4C2A1] ml-0.5" />
           </div>
 
-          {phases.map((phase, i) => {
+          {SHOW_PHASE_CHIPS && phases.map((phase, i) => {
             const isActive = i === phaseIndex;
             const isPast = i < phaseIndex;
             const Icon = phase.icon;
