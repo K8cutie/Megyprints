@@ -72,8 +72,9 @@ function backgroundToCss(bg: any): React.CSSProperties {
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
+  onSlotTap?: (slotIndex: number) => void;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -111,12 +112,14 @@ export function PageView({ page, photos, singleW, H, pageIndex }: {
         const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
 
         return (
-          <div key={`slot-${idx}`} className="absolute" style={{
+          <div key={`slot-${idx}`} className="absolute"
+            onClick={onSlotTap ? (e) => { e.stopPropagation(); onSlotTap(idx); } : undefined}
+            style={{
             zIndex: 1, left, top, width, height,
             transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
             transformOrigin: 'center center',
             border: frameWidth ? `${frameWidth}px solid ${frameColor}` : undefined,
-            boxSizing: 'border-box', overflow: 'hidden', ...shapeStyle,
+            boxSizing: 'border-box', overflow: 'hidden', cursor: onSlotTap ? 'pointer' : undefined, ...shapeStyle,
           }}>
             <img src={uploaded.previewUrl} alt="" draggable={false}
               className="absolute object-cover"

@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, RefreshCw, Check, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Check, Loader2, X } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -19,6 +19,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const page = pages[idx];
   const isLast = idx >= total - 1;
   const [finishing, setFinishing] = useState(false);
+  const [replaceSlot, setReplaceSlot] = useState<number | null>(null); // tap-to-replace target
 
   // Fit the page to the phone viewport (both dimensions).
   const [dims, setDims] = useState({ w: 320, h: 320 });
@@ -57,10 +58,10 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#F5F5F5]">
+    <div className="h-full flex flex-col bg-[#F5F5F5] relative">
       {/* Page counter */}
       <div className="shrink-0 text-center py-2.5 text-xs font-medium text-[#6B6B6B]">
-        Page {idx + 1} of {total} · swipe to browse
+        Page {idx + 1} of {total} · tap a photo to replace
       </div>
 
       {/* Swipeable page */}
@@ -82,7 +83,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             className="bg-white shadow-xl shrink-0"
             style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
           >
-            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx} />}
+            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx} onSlotTap={(slotIndex) => setReplaceSlot(slotIndex)} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -110,6 +111,42 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           </button>
         )}
       </div>
+
+      {/* Tap-to-replace photo picker — bottom sheet */}
+      <AnimatePresence>
+        {replaceSlot !== null && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/40 flex items-end"
+            onClick={() => setReplaceSlot(null)}
+          >
+            <motion.div
+              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              className="w-full bg-white rounded-t-2xl max-h-[60vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
+                <span className="text-sm font-semibold text-[#2D2D2D]">Replace photo</span>
+                <button onClick={() => setReplaceSlot(null)} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+              </div>
+              {actions.uploadedPhotos.length === 0 ? (
+                <p className="p-6 text-center text-sm text-[#9B9B9B]">No photos uploaded yet.</p>
+              ) : (
+                <div className="overflow-y-auto p-3 grid grid-cols-3 gap-2">
+                  {actions.uploadedPhotos.map((p, i) => (
+                    <button key={i}
+                      onClick={() => { if (replaceSlot !== null) actions.fillSlot(replaceSlot, i); setReplaceSlot(null); }}
+                      className="aspect-square rounded-lg overflow-hidden bg-[#F0F0F0] active:scale-95 transition-transform">
+                      <img src={p.previewUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
