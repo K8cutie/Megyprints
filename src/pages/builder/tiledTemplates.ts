@@ -15,8 +15,20 @@
 import type { PageTemplate, TemplateSlot, TextSlot, PhotoRatio, AlbumSizePreset, TemplateMargin } from './types';
 
 const MIN_FRAME_INCHES = 2;
+const GAP_MM = 5; // physical gutter between adjacent frames, for visual distinction
 const MARGIN: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
 const ZERO_MARGIN: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
+
+/** The GAP_MM gutter as a fraction of the safe area, per axis. */
+function gapFracs(safeWin: number, safeHin: number) {
+  const gIn = GAP_MM / 25.4;
+  return { gx: gIn / safeWin, gy: gIn / safeHin };
+}
+/** Shrink a region by half the gap on every side → adjacent regions end up a
+ *  FULL gap apart; outer edges get a half-gap breathing margin. */
+function inset(x: number, y: number, w: number, h: number, gx: number, gy: number) {
+  return { x: x + gx / 2, y: y + gy / 2, w: w - gx, h: h - gy };
+}
 
 /** Physical album dimensions (inches). */
 const INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
@@ -53,16 +65,22 @@ function buildForSize(
   const { w: iw, h: ih } = INCHES[size];
   const safeWin = iw * (1 - MARGIN.left - MARGIN.right);
   const safeHin = ih * (1 - MARGIN.top - MARGIN.bottom);
+  const { gx, gy } = r.fullBleed ? { gx: 0, gy: 0 } : gapFracs(safeWin, safeHin);
 
   for (const p of r.photos) {
-    const shortest = Math.min(p.w * safeWin, p.h * safeHin);
+    // Check the PRINTED frame size after the gap inset, not the raw region.
+    const shortest = Math.min((p.w - gx) * safeWin, (p.h - gy) * safeHin);
     if (shortest < MIN_FRAME_INCHES) return null; // too small to print — drop it
   }
 
-  const slots: TemplateSlot[] = r.photos.map((p, i) => ({
-    id: `${r.key}-${size}-s${i}`,
-    x: p.x, y: p.y, width: p.w, height: p.h, ratio: p.ratio,
-  }));
+  const slots: TemplateSlot[] = r.photos.map((p, i) => {
+    const b = inset(p.x, p.y, p.w, p.h, gx, gy);
+    return { id: `${r.key}-${size}-s${i}`, x: b.x, y: b.y, width: b.w, height: b.h, ratio: p.ratio };
+  });
+  const textSlots: TextSlot[] | undefined = r.texts?.map((t) => {
+    const b = inset(t.x, t.y, t.width, t.height, gx, gy);
+    return { ...t, x: b.x, y: b.y, width: b.w, height: b.h };
+  });
 
   return {
     id: `tile-${r.key}-${size}`,
@@ -74,7 +92,7 @@ function buildForSize(
     targetRatio: r.photos[0]?.ratio ?? '1:1',
     albumSizes: [size],
     slots,
-    textSlots: r.texts,
+    textSlots,
     fullBleed: r.fullBleed,
   };
 }
@@ -173,19 +191,22 @@ function gridTemplate(spec: GridSpec): PageTemplate | null {
   const photoRows = caption ? rows - 1 : rows;
   if (photoRows < 1) return null;
   const fullBleed = photoRows === 1 && cols === 1 && !caption; // single full-page photo
+  const { gx, gy } = fullBleed ? { gx: 0, gy: 0 } : gapFracs(safeWin, safeHin);
 
   const cw = 1 / cols, ch = 1 / rows;
-  if (Math.min(cw * safeWin, ch * safeHin) < MIN_FRAME_INCHES) return null; // print floor
+  if (Math.min((cw - gx) * safeWin, (ch - gy) * safeHin) < MIN_FRAME_INCHES) return null; // print floor
   const ratio = nearestRatio((cw / ch) * A);
 
   const slots: TemplateSlot[] = [];
   let n = 0;
   for (let r = 0; r < photoRows; r++) {
     for (let c = 0; c < cols; c++) {
-      slots.push({ id: `grid-${size}-${rows}x${cols}-s${n++}`, x: c * cw, y: r * ch, width: cw, height: ch, ratio });
+      const b = inset(c * cw, r * ch, cw, ch, gx, gy);
+      slots.push({ id: `grid-${size}-${rows}x${cols}-s${n++}`, x: b.x, y: b.y, width: b.w, height: b.h, ratio });
     }
   }
-  const texts = caption ? [cap(0, photoRows * ch, 1, 1 - photoRows * ch)] : undefined;
+  const cb = inset(0, photoRows * ch, 1, 1 - photoRows * ch, gx, gy);
+  const texts = caption ? [cap(cb.x, cb.y, cb.w, cb.h)] : undefined;
 
   return {
     id: `tile-grid-${rows}x${cols}${caption ? '-cap' : ''}-${size}`,

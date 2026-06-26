@@ -149,7 +149,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           <div key={`tslot-${i}`} className="absolute flex items-center"
             onClick={onTextSlotTap ? (e) => { e.stopPropagation(); onTextSlotTap(i); } : undefined}
             style={{
-              zIndex: 2, left: safeX + ts.x * safeW, top: safeY + ts.y * safeH,
+              // Above theme corner art (zIndex 4) so the box is never buried.
+              zIndex: 5, left: safeX + ts.x * safeW, top: safeY + ts.y * safeH,
               width: ts.width * safeW, height: ts.height * safeH, overflow: 'hidden',
               justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
               cursor: onTextSlotTap ? 'pointer' : undefined,
@@ -163,11 +164,17 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}>{boxed.text}</span>
             ) : (
-              <span style={{
-                width: '100%', textAlign: 'center',
-                fontSize: 11 * sx, color: 'rgba(139,111,71,0.5)',
-                border: '1px dashed rgba(232,165,152,0.5)', borderRadius: 4, padding: `${3 * sx}px ${6 * sx}px`,
-              }}>{ts.placeholder || 'Tap to add text'}</span>
+              // Empty: a clear, tappable text field that fills the box.
+              <div style={{
+                width: '100%', height: '100%', boxSizing: 'border-box',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: `${4 * sx}px`,
+                border: `${Math.max(1, 1.25 * sx)}px dashed rgba(232,165,152,0.85)`, borderRadius: `${6 * sx}px`,
+                background: 'rgba(253,232,228,0.45)',
+                color: 'rgba(139,111,71,0.9)', fontSize: `${11 * sx}px`, fontWeight: 500,
+              }}>
+                <span style={{ fontSize: `${12 * sx}px` }}>✎</span>
+                {ts.placeholder || 'Tap to add text'}
+              </div>
             )}
           </div>
         );
