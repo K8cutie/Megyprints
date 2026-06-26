@@ -702,11 +702,12 @@ const T8x8_CAPTION: PageTemplate = {
 };
 
 /* Sample MIXED-RATIO template — proves per-slot ratios + the matching generator.
-   3:2 landscape on top, 1:1 square below. Generation uses it when a moment has
-   both a landscape and a square photo; otherwise the leftover fallback applies. */
+   4:3 phone-landscape on top, 3:4 phone-portrait below — the two ratios a phone
+   actually shoots, so it's easy to trigger. Generation uses it when a moment has
+   both a landscape and a portrait photo; otherwise the leftover fallback applies. */
 const T8x8_MIX_01: PageTemplate = tmpl(
-  'T8x8_mix_01', 'Landscape + square', 'duo', STD, 'square', '3:2', ['8x8'],
-  [rsBox(0, 0, '3:2', 1.0, 0.48, '8x8'), rsBox(0, 0.52, '1:1', 1.0, 0.48, '8x8')],
+  'T8x8_mix_01', 'Landscape + portrait', 'duo', STD, 'square', '4:3', ['8x8'],
+  [rsBox(0, 0, '4:3', 1.0, 0.42, '8x8'), rsBox(0, 0.45, '3:4', 1.0, 0.52, '8x8')],
 );
 
 const PAGE_TEMPLATES_BASE: PageTemplate[] = [
