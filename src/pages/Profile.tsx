@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/authContext';
-import { ADMIN_EMAIL } from '../lib/templateSettings';
+import { isAdminEmail } from '../lib/templateSettings';
 import { useAlbumSync } from '../lib/useAlbumSync';
 import { supabase } from '../lib/supabase';
 import type { AlbumData } from '../lib/useAlbumSync';
@@ -222,7 +222,7 @@ export function Profile({ onBack }: ProfilePageProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            {user?.email === ADMIN_EMAIL && (
+            {isAdminEmail(user?.email) && (
               <Link
                 to="/admin"
                 className="flex items-center gap-2 rounded-xl border-2 border-[#E8D5D0] px-4 py-2 text-sm font-medium text-[#4A423F] hover:bg-[#F5EDE8] transition-all"

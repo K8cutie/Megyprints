@@ -15,6 +15,12 @@ import { setInactiveTemplateIds } from '../pages/builder/pageTemplates';
 
 export const ADMIN_EMAIL = 'archgarcia@gmail.com';
 
+/** True when the given email is the operator account (case-insensitive, since
+ *  email addresses aren't case-sensitive and providers vary the casing). */
+export function isAdminEmail(email?: string | null): boolean {
+  return !!email && email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+}
+
 export interface TemplateState { hidden: boolean; deleted: boolean; }
 
 // template_id → state. Absent = active.

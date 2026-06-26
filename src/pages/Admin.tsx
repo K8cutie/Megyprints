@@ -10,7 +10,7 @@ import { Eye, EyeOff, Trash2, RotateCcw, Loader2 } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { supabaseConfigured } from '../lib/supabase';
 import {
-  ADMIN_EMAIL, loadTemplateSettings, getAllStates, setTemplateState, type TemplateState,
+  ADMIN_EMAIL, isAdminEmail, loadTemplateSettings, getAllStates, setTemplateState, type TemplateState,
 } from '../lib/templateSettings';
 import { PAGE_TEMPLATES } from './builder/pageTemplates';
 import type { AlbumSizePreset } from './builder/types';
@@ -56,11 +56,16 @@ export default function Admin() {
   }, [size, states]);
 
   if (!user) return null; // ProtectedRoute handles the redirect to login
-  if (user.email !== ADMIN_EMAIL) {
+  if (!isAdminEmail(user.email)) {
     return (
       <div className="max-w-md mx-auto py-24 px-4 text-center">
         <p className="text-lg font-semibold text-[#2D2D2D]">Not authorized</p>
         <p className="text-sm mt-2 text-[#6B6B6B]">This page is for the Megy Prints operator account only.</p>
+        <p className="text-xs mt-4 text-[#9B9B9B]">
+          Signed in as <b>{user.email ?? '(no email)'}</b><br />
+          Operator account is <b>{ADMIN_EMAIL}</b>
+        </p>
+        <p className="text-xs mt-2 text-[#9B9B9B]">Sign in with the operator email, then reopen this page.</p>
       </div>
     );
   }
