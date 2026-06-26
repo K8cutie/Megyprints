@@ -689,7 +689,17 @@ const T9x9_19 = tmpl('t9x9-19', 'Windowpane', 'quint', STD, 'square', '1:1', [S9
    ASSEMBLE ALL TEMPLATES
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* Sample template with a TEXT BOX (caption) — proves the textSlots feature.
+   Any template becomes text-capable just by adding a `textSlots` entry. */
+const T8x8_CAPTION: PageTemplate = {
+  ...T8x8_01,
+  id: 'T8x8_caption',
+  name: 'Photo + caption',
+  textSlots: [{ id: 'cap', x: 0.06, y: 0.8, width: 0.88, height: 0.14, align: 'center', placeholder: 'Tap to add text' }],
+};
+
 const PAGE_TEMPLATES_BASE: PageTemplate[] = [
+  T8x8_CAPTION,
   // 6×4 (6 templates)
   T6x4_01, T6x4_02, T6x4_03, T6x4_04, T6x4_05, T6x4_06,
   // 6×6 (19 templates)

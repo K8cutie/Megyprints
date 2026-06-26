@@ -139,6 +139,18 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap }: {
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
         }}>{t.text}</div>
       ))}
+      {/* Template text boxes (caption/title regions). Empty → faint tap hint. */}
+      {template?.textSlots?.map((ts, i) => (
+        <div key={`tslot-${i}`} className="absolute flex items-center justify-center" style={{
+          zIndex: 2, left: safeX + ts.x * safeW, top: safeY + ts.y * safeH,
+          width: ts.width * safeW, height: ts.height * safeH,
+        }}>
+          <span style={{
+            fontSize: 11 * sx, color: 'rgba(139,111,71,0.5)', textAlign: 'center',
+            border: '1px dashed rgba(232,165,152,0.5)', borderRadius: 4, padding: `${3 * sx}px ${6 * sx}px`,
+          }}>{ts.placeholder || 'Tap to add text'}</span>
+        </div>
+      ))}
       {/* Theme decorative corners — one set, all four corners, on top of photos */}
       {page.cornerBase && CORNER_POSITIONS.map((pos) => {
         const size = Math.min(singleW, H) * 0.25;

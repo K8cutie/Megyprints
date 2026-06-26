@@ -39,6 +39,18 @@ export interface TemplateSlot {
   borderColor?: string;
 }
 
+/** A text box region within a template (proportions of the SAFE AREA, like photo
+ *  slots). The user taps it to add/edit text; the text is clipped to this box. */
+export interface TextSlot {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  align?: 'left' | 'center' | 'right';
+  placeholder?: string;
+}
+
 /** Page template definition.
  *  Templates are orientation-aware and margin-aware.
  *  Slot coordinates are proportions of the safe area (0–1), making templates
@@ -60,6 +72,8 @@ export interface PageTemplate {
   /** Which album sizes this template is designed for */
   albumSizes: AlbumSizePreset[];
   slots: TemplateSlot[];
+  /** Optional text-box regions (captions/titles). Empty until the user fills them. */
+  textSlots?: TextSlot[];
 }
 
 export interface FilledSlot {
@@ -186,6 +200,8 @@ export interface TextElement {
   width?: number;
   scaleX?: number;
   scaleY?: number;
+  /** If set, this text fills template.textSlots[boxIndex] instead of free x/y. */
+  boxIndex?: number;
 }
 
 /** Per-slot geometry overrides for container editing mode.
