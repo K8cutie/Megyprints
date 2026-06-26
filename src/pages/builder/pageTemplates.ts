@@ -178,6 +178,18 @@ function rsBoxExact(
   };
 }
 
+/** Exact-fill slot: the photo fills the region [x,y,w,h] of the safe area edge to
+ *  edge (object-cover, no centering). Use for tightly TILED templates — pick
+ *  region shapes whose aspect ≈ the standard `ratio` so the matched photo fills
+ *  with no whitespace and negligible crop. Coords are 0–1 of the safe area. */
+function fill(
+  x: number, y: number, width: number, height: number, ratio: PhotoRatio,
+  opts: Partial<Omit<TemplateSlot, 'id' | 'x' | 'y' | 'width' | 'height'>> = {},
+): TemplateSlot {
+  slotCounter += 1;
+  return { id: `s${slotCounter}`, x, y, width, height, ratio, ...opts };
+}
+
 /** Helper: create a template */
 function tmpl(
   id: string, name: string, category: PageTemplate['category'],
@@ -692,27 +704,39 @@ const T9x9_19 = tmpl('t9x9-19', 'Windowpane', 'quint', STD, 'square', '1:1', [S9
    ASSEMBLE ALL TEMPLATES
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* Sample TEXT-BOX template — a standard 4:3 photo in the top zone and a dedicated
-   caption band below it (NO overlap, photo ratio stays standard). Any template
-   becomes text-capable just by adding a `textSlots` entry. */
-const T8x8_CAPTION: PageTemplate = {
-  ...tmpl('T8x8_caption', 'Photo + caption', 'single', STD, 'square', '4:3', ['8x8'],
-    [rsBox(0, 0, '4:3', 1.0, 0.74, '8x8')]),
-  textSlots: [{ id: 'cap', x: 0.05, y: 0.78, width: 0.9, height: 0.18, align: 'center', placeholder: 'Tap to add text' }],
+/* ── TIGHT-TILED sample templates ──────────────────────────────────────────
+   The page is carved into regions that tile edge-to-edge; each region's shape ≈
+   a standard photo ratio (so the photo fills it — no whitespace), and a textbox
+   absorbs the leftover region. This is the packing the mixed-ratio + textbox
+   features unlock, vs. centering standard photos in oversized boxes. Coords are
+   0–1 of the safe area; the regions cover the whole [0,1]² → zero wasted canvas. */
+
+// A — Banner + caption: a 4:3 landscape fills the top, a caption band the bottom.
+const T8x8_TILE_A: PageTemplate = {
+  ...tmpl('T8x8_tile_a', 'Banner + caption', 'single', STD, 'square', '4:3', ['8x8'],
+    [fill(0, 0, 1, 0.75, '4:3')]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.75, width: 1, height: 0.25, align: 'center', placeholder: 'Tap to add text' }],
 };
 
-/* Sample MIXED-RATIO template — proves per-slot ratios + the matching generator.
-   4:3 phone-landscape on top, 3:4 phone-portrait below — the two ratios a phone
-   actually shoots, so it's easy to trigger. Generation uses it when a moment has
-   both a landscape and a portrait photo; otherwise the leftover fallback applies. */
-const T8x8_MIX_01: PageTemplate = tmpl(
-  'T8x8_mix_01', 'Landscape + portrait', 'duo', STD, 'square', '4:3', ['8x8'],
-  [rsBox(0, 0, '4:3', 1.0, 0.42, '8x8'), rsBox(0, 0.45, '3:4', 1.0, 0.52, '8x8')],
-);
+// B — Portrait pair + caption: two 3:4 portraits fill the top full-width.
+const T8x8_TILE_B: PageTemplate = {
+  ...tmpl('T8x8_tile_b', 'Portrait pair + caption', 'duo', STD, 'square', '3:4', ['8x8'],
+    [fill(0, 0, 0.5, 0.6667, '3:4'), fill(0.5, 0, 0.5, 0.6667, '3:4')]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.6667, width: 1, height: 0.3333, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+// C — Headline mosaic (the wireframe): wide 16:9 top, 1:1 square bottom-left,
+//     textbox bottom-right. True mixed ratios, edge to edge, no gaps.
+const T8x8_TILE_C: PageTemplate = {
+  ...tmpl('T8x8_tile_c', 'Headline mosaic', 'duo', STD, 'square', '16:9', ['8x8'],
+    [fill(0, 0, 1, 0.5625, '16:9'), fill(0, 0.5625, 0.4375, 0.4375, '1:1')]),
+  textSlots: [{ id: 'cap', x: 0.4375, y: 0.5625, width: 0.5625, height: 0.4375, align: 'center', placeholder: 'Tap to add text' }],
+};
 
 const PAGE_TEMPLATES_BASE: PageTemplate[] = [
-  T8x8_CAPTION,
-  T8x8_MIX_01,
+  T8x8_TILE_A,
+  T8x8_TILE_B,
+  T8x8_TILE_C,
   // 6×4 (6 templates)
   T6x4_01, T6x4_02, T6x4_03, T6x4_04, T6x4_05, T6x4_06,
   // 6×6 (19 templates)
