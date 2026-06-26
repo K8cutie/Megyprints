@@ -63,6 +63,6 @@ export class VarietyTracker {
 }
 
 /** Module-level trackers for the builder */
-export const templateTracker = new VarietyTracker(3);   // last 3 templates
+export const templateTracker = new VarietyTracker(5);   // last 5 templates — spread layouts across more consecutive pages
 export const themeTracker = new VarietyTracker(2);      // last 2 themes
 export const backgroundTracker = new VarietyTracker(2); // last 2 backgrounds

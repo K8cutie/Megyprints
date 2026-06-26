@@ -196,11 +196,16 @@ export function generateAlbum(
       const queue = byRatio[ratio]!;
       const ratioTemplates = templatesForRatio(ratio);
       const onePhoto = ratioTemplates.filter((t) => t.slotCount === 1);
-      // In randomize mode ignore the fixed photos-per-page so slot counts (and
-      // therefore page breaks / photo positions) vary on every click.
+      // Honor the photos-per-page target, but allow ±1 slot so there are enough
+      // DISTINCT templates to rotate between. A strict exact-count filter often
+      // leaves just one active template for a ratio (worse after curation),
+      // which is what made many pages land on the same layout. A little density
+      // variation also reads more naturally than every page being identical.
+      // In randomize mode, ignore the target entirely so layouts vary the most.
       let multi = (photosPerPage && !randomize)
-        ? ratioTemplates.filter((t) => t.slotCount === photosPerPage)
+        ? ratioTemplates.filter((t) => t.slotCount >= Math.max(2, photosPerPage - 1) && t.slotCount <= photosPerPage + 1)
         : ratioTemplates.filter((t) => t.slotCount > 1);
+      if (multi.length === 0) multi = ratioTemplates.filter((t) => t.slotCount > 1);
       if (multi.length === 0) multi = ratioTemplates;
 
       while (queue.length > 0) {
