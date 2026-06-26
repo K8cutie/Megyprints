@@ -137,13 +137,57 @@ export function generateAlbum(
     pageIdx++;
   };
 
-  // ── 3. Lay out each moment RATIO-BY-RATIO. Every photo lands in a slot of its
-  //       OWN ratio (no cropping). The tail leftover of a ratio gets a
-  //       single-photo full-page template of that same ratio — never cropped,
-  //       never an empty slot. ──
+  // Templates that MIX photo ratios on one page (e.g. 3:2 + 1:1 + 2:3). Filled
+  // greedily when a moment's photos supply every ratio the template needs.
+  const mixedTemplates = getTemplatesForAlbum(albumSize).filter((t) => {
+    const rset = new Set(t.slots.map((s) => s.ratio).filter(Boolean));
+    return rset.size > 1;
+  });
+
+  // Try to fill a mixed template from `pool`: one unused photo per slot whose
+  // ratio matches that slot's ratio. Returns the fills, or null if any slot
+  // can't be matched (the template is then skipped this round).
+  const tryMixedFill = (template: PageTemplate, pool: number[]): number[] | null => {
+    const used = new Set<number>();
+    const fills: number[] = [];
+    for (const slot of template.slots) {
+      const need = slot.ratio ?? template.targetRatio;
+      const pick = pool.find((idx) => !used.has(idx) && (ratioOf[idx] ?? dominantRatio) === need);
+      if (pick === undefined) return null;
+      used.add(pick);
+      fills.push(pick);
+    }
+    return fills;
+  };
+
+  // ── 3. Lay out each moment. First place any MIXED-ratio templates the pool can
+  //       satisfy; then the remaining photos go RATIO-BY-RATIO (homogeneous
+  //       templates + single-photo full-page leftovers). Every photo lands in a
+  //       slot of its OWN ratio — never cropped. ──
   for (const group of momentGroups) {
+    let remaining = [...group];
+
+    // ── 3a. Greedily place mixed-ratio templates while the pool supports them. ──
+    if (mixedTemplates.length > 0) {
+      let placed = true;
+      while (placed) {
+        placed = false;
+        for (const template of mixedTemplates) {
+          const fills = tryMixedFill(template, remaining);
+          if (fills) {
+            pushPage(template, fills);
+            const usedSet = new Set(fills);
+            remaining = remaining.filter((i) => !usedSet.has(i));
+            placed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // ── 3b. Remaining photos → ratio by ratio. ──
     const byRatio: Partial<Record<PhotoRatio, number[]>> = {};
-    for (const i of group) {
+    for (const i of remaining) {
       const r = ratioOf[i] ?? dominantRatio;
       (byRatio[r] ??= []).push(i);
     }

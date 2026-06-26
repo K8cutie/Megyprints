@@ -701,8 +701,17 @@ const T8x8_CAPTION: PageTemplate = {
   textSlots: [{ id: 'cap', x: 0.06, y: 0.8, width: 0.88, height: 0.14, align: 'center', placeholder: 'Tap to add text' }],
 };
 
+/* Sample MIXED-RATIO template — proves per-slot ratios + the matching generator.
+   3:2 landscape on top, 1:1 square below. Generation uses it when a moment has
+   both a landscape and a square photo; otherwise the leftover fallback applies. */
+const T8x8_MIX_01: PageTemplate = tmpl(
+  'T8x8_mix_01', 'Landscape + square', 'duo', STD, 'square', '3:2', ['8x8'],
+  [rsBox(0, 0, '3:2', 1.0, 0.48, '8x8'), rsBox(0, 0.52, '1:1', 1.0, 0.48, '8x8')],
+);
+
 const PAGE_TEMPLATES_BASE: PageTemplate[] = [
   T8x8_CAPTION,
+  T8x8_MIX_01,
   // 6×4 (6 templates)
   T6x4_01, T6x4_02, T6x4_03, T6x4_04, T6x4_05, T6x4_06,
   // 6×6 (19 templates)
