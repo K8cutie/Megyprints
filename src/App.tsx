@@ -29,7 +29,6 @@ export default function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/order" element={<Order />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
           <Route
             path="/builder/*"
             element={
@@ -41,6 +40,8 @@ export default function App() {
             }
           />
         </Route>
+        {/* Operator console — outside the customer Layout (its own chrome) */}
+        <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
       </Routes>
     </AuthProvider>
   );
