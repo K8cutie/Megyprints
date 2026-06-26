@@ -10,6 +10,8 @@ import { getTemplateById } from './pageTemplates';
 import { slotShapeStyle } from './slotShapeStyle';
 import { PREVIEW_DIMS } from './PreviewSizeConstants';
 import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
+import { useBuilderContext } from './BuilderContext';
+import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 
 /* ══════════════════════════════════════════════════════════════════════════
    BuilderPreview — Spread-only view with side arrows
@@ -214,6 +216,27 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
   const total = pages.length;
+  const { setBoxText } = useBuilderContext();
+
+  // Tap a textbox in the preview → open the formatting editor for THAT page.
+  const [edit, setEdit] = useState<{ pageIndex: number; slot: number } | null>(null);
+  const buildBoxInitial = (pageIndex: number, slot: number): BoxTextContent => {
+    const page = pages[pageIndex];
+    const existing = page?.textElements?.find((t) => t.boxIndex === slot);
+    if (existing) {
+      return {
+        text: existing.text, fontSize: existing.fontSize, fontFamily: existing.fontFamily,
+        color: existing.color, bold: existing.bold, italic: existing.italic,
+        underline: existing.underline, alignment: existing.alignment,
+      };
+    }
+    const ts = (page?.templateId ? getTemplateById(page.templateId) : null)?.textSlots?.[slot];
+    return {
+      text: '', fontSize: 28, fontFamily: 'Georgia, "Times New Roman", serif',
+      color: '#2D2D2D', bold: false, italic: false, underline: false,
+      alignment: ts?.align ?? 'center',
+    };
+  };
 
   // Compile the album into a single print-ready PDF and download it.
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -337,14 +360,16 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             >
               {/* Left Page */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} />
+                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex}
+                  onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })} />
               </div>
 
               {/* Right Page — flush against the left page (no center gap/spine;
                   the dashed binding guides already mark the gutter). */}
               {spreadRightPage && (
                 <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
-                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} />
+                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1}
+                    onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })} />
                 </div>
               )}
             </div>
@@ -383,6 +408,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             </button>
           </div>
         </div>
+      )}
+
+      {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too) */}
+      {edit && (
+        <MobileTextEditor
+          initial={buildBoxInitial(edit.pageIndex, edit.slot)}
+          onSave={(content) => setBoxText(edit.slot, content, edit.pageIndex)}
+          onClose={() => setEdit(null)}
+        />
       )}
     </div>
   );

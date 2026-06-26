@@ -269,9 +269,10 @@ export interface BuilderActions {
   addThemedQuote: () => string | null;
   updateTextElement: (id: string, updates: Partial<TextElement>) => void;
   deleteTextElement: (id: string) => void;
-  /** Set the text for a template text box (textSlots[slotIndex]) on the current
-   *  page. Creates/updates the boxed TextElement; empty text clears the box. */
-  setBoxText: (slotIndex: number, content: Partial<TextElement> & { text: string }) => void;
+  /** Set the text for a template text box (textSlots[slotIndex]). Targets the
+   *  current page by default, or an explicit pageIndex (the preview spread shows
+   *  two pages). Creates/updates the boxed TextElement; empty text clears it. */
+  setBoxText: (slotIndex: number, content: Partial<TextElement> & { text: string }, pageIndex?: number) => void;
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
@@ -1393,10 +1394,10 @@ export function useBuilderState(): BuilderActions {
 
   // Text bound to a template text box (textSlots[slotIndex]). Position/size come
   // from the template's slot at render time, so x/y are unused for boxed text.
-  const setBoxText = useCallback((slotIndex: number, content: Partial<TextElement> & { text: string }) => {
+  const setBoxText = useCallback((slotIndex: number, content: Partial<TextElement> & { text: string }, pageIndex?: number) => {
     pushSnapshot();
     const theme = THEMES[selectedTemplate];
-    updateCurrentPage((page) => {
+    const applyToPage = (page: AlbumPage): AlbumPage => {
       const existing = page.textElements.find((t) => t.boxIndex === slotIndex);
       const trimmed = content.text.trim();
       // Empty → clear the box (revert to the "Tap to add text" placeholder).
@@ -1429,7 +1430,18 @@ export function useBuilderState(): BuilderActions {
         boxIndex: slotIndex,
       };
       return { ...page, textElements: [...page.textElements, newText] };
-    });
+    };
+    // Default: the current page. The preview spread passes an explicit pageIndex
+    // so it can edit either of the two pages on screen.
+    if (pageIndex == null) {
+      updateCurrentPage(applyToPage);
+    } else {
+      setAlbumPages((prev) => {
+        const next = [...prev];
+        if (next[pageIndex]) next[pageIndex] = applyToPage(next[pageIndex]);
+        return next;
+      });
+    }
   }, [updateCurrentPage, selectedTemplate]);
 
   /* ── Background ── */
