@@ -241,8 +241,8 @@ export class WizardEngine {
         return {
           title: "Step 4: Generate Your Album ✨",
           body: `You have **${builder.uploadedPhotos.length}** photos, **${builder.albumSize}** album, and the **${builder.selectedTemplate}** theme. Ready to generate? I'll create 40+ pages with auto-matched layouts.`,
-          actions: ["Generate Album Now", "Surprise Me! 🎲 (random theme + full album)", "Preview a Sample Page First"],
-          tips: ["'Generate Album' creates 40+ pages with your chosen theme", "'Surprise Me' randomizes theme AND generates the whole album", "You can always regenerate individual pages later"],
+          actions: ["Generate Album Now"],
+          tips: ["'Generate Album' creates 40+ pages with your chosen theme", "You can always regenerate individual pages later"],
         };
 
       case 'review_pages': {
