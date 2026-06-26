@@ -132,7 +132,97 @@ const SQUARE_RECIPES: Recipe[] = [
     })), texts: [cap(0, 0.6667, 1, 0.3333)] },
 ];
 
-/** All generated tiled templates (square albums first). */
-export const TILED_TEMPLATES: PageTemplate[] = SQUARE_SIZES.flatMap((size) =>
-  SQUARE_RECIPES.map((r) => buildForSize(r, size, 'square')).filter((t): t is PageTemplate => t !== null),
-);
+/* ── LANDSCAPE / PORTRAIT via uniform grids ──────────────────────────────────
+   Non-square pages don't share square recipes (a region's TRUE ratio is
+   (w/h) × pageAspect, which changes with the page shape). So we tile them with
+   uniform R×C grids — grids always tile perfectly — and compute each cell's real
+   ratio per size, tagging the nearest standard ratio. Cells that land near a
+   phone-native ratio (e.g. 6×4 → 1×2 gives exact 3:4 portraits) crop barely or
+   not at all. The 2" floor drops any grid whose cells print too small. */
+
+// PHONE-NATIVE + square only. Grid cells are tagged with the nearest of these so
+// the generator actually SELECTS them for real customer photos (the matcher picks
+// templates by tagged ratio). A cell whose true shape isn't exactly one of these
+// fills via object-cover with a small crop — the cost of a tight landscape page.
+const PHONE_RATIOS: { r: PhotoRatio; v: number }[] = [
+  { r: '3:4', v: 3 / 4 }, { r: '1:1', v: 1 }, { r: '4:3', v: 4 / 3 },
+];
+function nearestRatio(v: number): PhotoRatio {
+  let best = PHONE_RATIOS[0], bd = Infinity;
+  for (const s of PHONE_RATIOS) {
+    const d = Math.abs(Math.log(s.v) - Math.log(v)); // log distance = perceptual ratio nearness
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best.r;
+}
+const CATEGORY: PageTemplate['category'][] = ['single', 'single', 'duo', 'trio', 'quad', 'quint', 'sextet'];
+const catFor = (n: number): PageTemplate['category'] => CATEGORY[Math.min(n, 6)];
+const orientFor = (a: number): PageTemplate['orientation'] => (a > 1.05 ? 'landscape' : a < 0.95 ? 'portrait' : 'square');
+
+interface GridSpec { size: AlbumSizePreset; rows: number; cols: number; caption?: boolean; name: string; }
+
+function gridTemplate(spec: GridSpec): PageTemplate | null {
+  const { size, rows, cols, caption, name } = spec;
+  const { w: iw, h: ih } = INCHES[size];
+  const A = iw / ih;
+  const safeWin = iw * (1 - MARGIN.left - MARGIN.right);
+  const safeHin = ih * (1 - MARGIN.top - MARGIN.bottom);
+  const photoRows = caption ? rows - 1 : rows;
+  if (photoRows < 1) return null;
+
+  const cw = 1 / cols, ch = 1 / rows;
+  if (Math.min(cw * safeWin, ch * safeHin) < MIN_FRAME_INCHES) return null; // print floor
+  const ratio = nearestRatio((cw / ch) * A);
+
+  const slots: TemplateSlot[] = [];
+  let n = 0;
+  for (let r = 0; r < photoRows; r++) {
+    for (let c = 0; c < cols; c++) {
+      slots.push({ id: `grid-${size}-${rows}x${cols}-s${n++}`, x: c * cw, y: r * ch, width: cw, height: ch, ratio });
+    }
+  }
+  const texts = caption ? [cap(0, photoRows * ch, 1, 1 - photoRows * ch)] : undefined;
+
+  return {
+    id: `tile-grid-${rows}x${cols}${caption ? '-cap' : ''}-${size}`,
+    name,
+    category: catFor(slots.length),
+    slotCount: slots.length,
+    margin: MARGIN,
+    orientation: orientFor(A),
+    targetRatio: ratio,
+    albumSizes: [size],
+    slots,
+    textSlots: texts,
+  };
+}
+
+// Liberal spec list — gridTemplate() returns null for any that breaks the 2"
+// floor, so small albums (6×4) keep only the coarse grids automatically.
+const GRID_SPECS: GridSpec[] = [
+  // 6×4 landscape (A = 1.50)
+  { size: '6x4', rows: 1, cols: 1, name: 'Full landscape' },
+  { size: '6x4', rows: 1, cols: 2, name: 'Two portraits' },
+  { size: '6x4', rows: 2, cols: 2, name: 'Four frames' },
+  // 11.5×8 landscape (A = 1.44)
+  { size: '11.5x8', rows: 1, cols: 1, name: 'Full landscape' },
+  { size: '11.5x8', rows: 1, cols: 2, name: 'Two portraits' },
+  { size: '11.5x8', rows: 2, cols: 2, name: 'Four frames' },
+  { size: '11.5x8', rows: 2, cols: 3, name: 'Six frames' },
+  { size: '11.5x8', rows: 2, cols: 2, caption: true, name: 'Two + caption' },
+  { size: '11.5x8', rows: 3, cols: 3, caption: true, name: 'Six + caption' },
+  // 8.5×11 portrait (A = 0.77)
+  { size: '8.5x11', rows: 1, cols: 1, name: 'Full portrait' },
+  { size: '8.5x11', rows: 2, cols: 1, name: 'Two stacked' },
+  { size: '8.5x11', rows: 2, cols: 2, name: 'Four frames' },
+  { size: '8.5x11', rows: 3, cols: 2, name: 'Six frames' },
+  { size: '8.5x11', rows: 2, cols: 2, caption: true, name: 'Two + caption' },
+  { size: '8.5x11', rows: 3, cols: 2, caption: true, name: 'Four + caption' },
+];
+
+/** All generated tiled templates: square recipes + non-square grids. */
+export const TILED_TEMPLATES: PageTemplate[] = [
+  ...SQUARE_SIZES.flatMap((size) =>
+    SQUARE_RECIPES.map((r) => buildForSize(r, size, 'square')).filter((t): t is PageTemplate => t !== null)),
+  ...GRID_SPECS.map(gridTemplate).filter((t): t is PageTemplate => t !== null),
+];
