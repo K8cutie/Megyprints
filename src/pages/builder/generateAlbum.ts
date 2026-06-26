@@ -167,21 +167,34 @@ export function generateAlbum(
   for (const group of momentGroups) {
     let remaining = [...group];
 
-    // ── 3a. Greedily place mixed-ratio templates while the pool supports them. ──
+    // ── 3a. Place mixed-ratio templates the pool can satisfy — but with VARIETY,
+    //       not always the first match (that made every mixed-ratio moment land
+    //       on the SAME template). If only one mixed template fits and it was used
+    //       recently, stop forcing mixed here and let the more-varied
+    //       ratio-by-ratio path take these photos instead. ──
     if (mixedTemplates.length > 0) {
       let placed = true;
       while (placed) {
         placed = false;
-        for (const template of mixedTemplates) {
-          const fills = tryMixedFill(template, remaining);
-          if (fills) {
-            pushPage(template, fills);
-            const usedSet = new Set(fills);
-            remaining = remaining.filter((i) => !usedSet.has(i));
-            placed = true;
-            break;
-          }
-        }
+        // Every mixed template fillable from the remaining pool right now.
+        const fillable = mixedTemplates
+          .map((t) => ({ t, fills: tryMixedFill(t, remaining) }))
+          .filter((x): x is { t: PageTemplate; fills: number[] } => x.fills !== null);
+        if (fillable.length === 0) break;
+
+        const ids = fillable.map((x) => x.t.id);
+        // Single mixed option that we just used → break the monotony: let 3b
+        // handle these photos with its larger, varied homogeneous pool.
+        if (!randomize && ids.length === 1 && templateTracker.getRecent().includes(ids[0])) break;
+
+        const id = randomize
+          ? ids[Math.floor(Math.random() * ids.length)]
+          : (templateTracker.pick(ids) ?? ids[Math.floor(Math.random() * ids.length)]);
+        const chosen = fillable.find((x) => x.t.id === id) ?? fillable[0];
+        pushPage(chosen.t, chosen.fills);
+        const usedSet = new Set(chosen.fills);
+        remaining = remaining.filter((i) => !usedSet.has(i));
+        placed = true;
       }
     }
 
