@@ -4,6 +4,7 @@ import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
 import { CORNER_POSITIONS, cornerImageUrl } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { downloadAlbumPdf } from './generateAlbumPdf';
+import { setPendingPrintJob } from '../../lib/printQueue';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { slotShapeStyle } from './slotShapeStyle';
@@ -326,7 +327,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             <h3 className="font-display text-2xl font-semibold text-[#2D2D2D] mb-1">You've reached the end</h3>
             <p className="text-sm text-[#6B6B6B] mb-6">Your album looks beautiful. Make it real.</p>
             <button
-              onClick={onOrder}
+              onClick={() => { setPendingPrintJob({ pages, photos, albumSize }); onOrder(); }}
               className="w-full py-4 bg-[#E8A598] text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md"
             >
               ORDER ALBUM
