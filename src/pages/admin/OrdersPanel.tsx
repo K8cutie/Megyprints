@@ -1,34 +1,43 @@
-/* Orders tab — the fulfillment queue. The operator sets a price, marks paid, and
-   advances each order's status. All writes are admin-gated by RLS (migration 0005). */
+/* Orders tab — the fulfillment queue. Status changes go through the status-only
+   DB function (safe for fulfillment). Price + Mark-paid are FINANCIAL and only
+   render when canSeeFinancials (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
 import { Loader2, Check } from 'lucide-react';
 import {
-  type AdminOrder, ORDER_STATUSES, STATUS_LABELS, updateOrder,
+  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus,
 } from '../../lib/adminOrders';
 
-export default function OrdersPanel({ orders, onChanged }: { orders: AdminOrder[]; onChanged: () => Promise<void> }) {
+export default function OrdersPanel({ orders, onChanged, canSeeFinancials }: {
+  orders: AdminOrder[];
+  onChanged: () => Promise<void>;
+  canSeeFinancials: boolean;
+}) {
   if (orders.length === 0) {
     return <p className="text-sm text-[#9B9B9B] py-16 text-center">No orders yet.</p>;
   }
   return (
     <div className="space-y-3">
-      {orders.map((o) => <OrderRow key={o.id} o={o} onChanged={onChanged} />)}
+      {orders.map((o) => <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} />)}
     </div>
   );
 }
 
-function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => Promise<void> }) {
+function OrderRow({ o, onChanged, canSeeFinancials }: {
+  o: AdminOrder; onChanged: () => Promise<void>; canSeeFinancials: boolean;
+}) {
   const [saving, setSaving] = useState(false);
   const [price, setPrice] = useState(o.amount != null ? String(o.amount) : '');
   const [err, setErr] = useState<string | null>(null);
 
-  const save = async (patch: Parameters<typeof updateOrder>[1]) => {
+  const run = async (fn: () => Promise<string | null>) => {
     setSaving(true); setErr(null);
-    const e = await updateOrder(o.id, patch);
+    const e = await fn();
     if (e) setErr(e); else await onChanged();
     setSaving(false);
   };
+  const saveFin = (patch: OrderPatch) => run(() => updateOrder(o.id, patch));
+  const changeStatus = (status: AdminOrder['status']) => run(() => setOrderStatus(o.id, status));
 
   const paid = o.payment_status === 'paid';
   const date = o.created_at.slice(0, 10);
@@ -53,23 +62,24 @@ function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => Promise<vo
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Price */}
-          <div className="flex items-center gap-1">
-            <span className="text-sm text-[#9B9B9B]">₱</span>
-            <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="numeric" placeholder="price"
-              className="w-20 h-8 px-2 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1]" />
-            <button onClick={() => save({ amount: price ? Number(price) : null })} disabled={saving}
-              className="h-8 px-2 rounded-lg bg-[#F5F5F5] text-xs text-[#6B6B6B] disabled:opacity-50">Set</button>
-          </div>
-          {/* Mark paid */}
-          {!paid && (
-            <button onClick={() => save({ payment_status: 'paid', status: 'paid' })} disabled={saving}
-              className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-[#2E7D4A] flex items-center gap-1 disabled:opacity-50">
-              <Check size={13} /> Mark paid
-            </button>
+          {canSeeFinancials && (
+            <>
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-[#9B9B9B]">₱</span>
+                <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="numeric" placeholder="price"
+                  className="w-20 h-8 px-2 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1]" />
+                <button onClick={() => saveFin({ amount: price ? Number(price) : null })} disabled={saving}
+                  className="h-8 px-2 rounded-lg bg-[#F5F5F5] text-xs text-[#6B6B6B] disabled:opacity-50">Set</button>
+              </div>
+              {!paid && (
+                <button onClick={() => saveFin({ payment_status: 'paid', status: 'paid' })} disabled={saving}
+                  className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-[#2E7D4A] flex items-center gap-1 disabled:opacity-50">
+                  <Check size={13} /> Mark paid
+                </button>
+              )}
+            </>
           )}
-          {/* Status */}
-          <select value={o.status} onChange={(e) => save({ status: e.target.value as AdminOrder['status'] })} disabled={saving}
+          <select value={o.status} onChange={(e) => changeStatus(e.target.value as AdminOrder['status'])} disabled={saving}
             className="h-8 px-2 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1] bg-white">
             {ORDER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
           </select>

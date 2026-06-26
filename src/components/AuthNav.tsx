@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { User, LogOut, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
-import { isAdminEmail } from '../lib/templateSettings';
+import { resolveRole } from '../lib/roles';
 import LoginModal from '../pages/auth/LoginModal';
 import SignupModal from '../pages/auth/SignupModal';
 
@@ -12,11 +12,20 @@ export default function AuthNav() {
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
 
+  // Show the Admin entry for ANY operator (owner or fulfillment), not just owners.
+  const [isOperator, setIsOperator] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!user) { setIsOperator(false); return; }
+    void resolveRole(user.email).then((r) => { if (active) setIsOperator(r !== null); });
+    return () => { active = false; };
+  }, [user?.email]);
+
   return (
     <>
       {user ? (
         <div className="flex items-center gap-1">
-          {isAdminEmail(user.email) && (
+          {isOperator && (
             <Link
               to="/admin"
               className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-[#E8A598] rounded-lg hover:brightness-105 transition-all"

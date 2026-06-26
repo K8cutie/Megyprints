@@ -40,17 +40,20 @@ export interface AdminOrder {
   updated_at: string;
 }
 
-const COLUMNS =
-  'id, order_number, status, payment_status, amount, currency, album_size, material, cover, page_count, ship_name, ship_phone, ship_address, tracking, created_at, updated_at';
-
-/** Every order, newest first (operator view). */
+/** Every order the caller may see, newest first. Goes through the role-aware
+ *  operator_orders() function — owners get the peso amount, fulfillment gets it
+ *  NULLed. Fulfillment has no direct orders access; this is their only read. */
 export async function fetchAllOrders(): Promise<AdminOrder[]> {
-  const { data, error } = await supabase
-    .from('orders')
-    .select(COLUMNS)
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.rpc('operator_orders');
   if (error) throw new Error(error.message);
   return (data ?? []) as AdminOrder[];
+}
+
+/** Advance status (owner OR fulfillment) via the status-only DB function — the
+ *  safe write path that cannot touch financials. */
+export async function setOrderStatus(id: string, status: OrderStatus): Promise<string | null> {
+  const { error } = await supabase.rpc('set_order_status', { p_id: id, p_status: status });
+  return error ? error.message : null;
 }
 
 export type OrderPatch = Partial<Pick<AdminOrder, 'status' | 'amount' | 'payment_status' | 'tracking'>>;
