@@ -269,6 +269,9 @@ export interface BuilderActions {
   addThemedQuote: () => string | null;
   updateTextElement: (id: string, updates: Partial<TextElement>) => void;
   deleteTextElement: (id: string) => void;
+  /** Set the text for a template text box (textSlots[slotIndex]) on the current
+   *  page. Creates/updates the boxed TextElement; empty text clears the box. */
+  setBoxText: (slotIndex: number, content: Partial<TextElement> & { text: string }) => void;
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
@@ -1388,6 +1391,47 @@ export function useBuilderState(): BuilderActions {
     }));
   }, [updateCurrentPage]);
 
+  // Text bound to a template text box (textSlots[slotIndex]). Position/size come
+  // from the template's slot at render time, so x/y are unused for boxed text.
+  const setBoxText = useCallback((slotIndex: number, content: Partial<TextElement> & { text: string }) => {
+    pushSnapshot();
+    const theme = THEMES[selectedTemplate];
+    updateCurrentPage((page) => {
+      const existing = page.textElements.find((t) => t.boxIndex === slotIndex);
+      const trimmed = content.text.trim();
+      // Empty → clear the box (revert to the "Tap to add text" placeholder).
+      if (!trimmed) {
+        return existing
+          ? { ...page, textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex) }
+          : page;
+      }
+      if (existing) {
+        return {
+          ...page,
+          textElements: page.textElements.map((t) =>
+            t.boxIndex === slotIndex ? { ...t, ...content, text: trimmed } : t),
+        };
+      }
+      const newText: TextElement = {
+        id: `box-${slotIndex}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        text: trimmed,
+        x: 0,
+        y: 0,
+        fontSize: content.fontSize ?? 28,
+        fontFamily: content.fontFamily ?? theme.fontFamily,
+        color: content.color ?? theme.textColor,
+        bold: content.bold ?? false,
+        italic: content.italic ?? false,
+        underline: content.underline ?? false,
+        alignment: content.alignment ?? 'center',
+        rotation: 0,
+        opacity: 100,
+        boxIndex: slotIndex,
+      };
+      return { ...page, textElements: [...page.textElements, newText] };
+    });
+  }, [updateCurrentPage, selectedTemplate]);
+
   /* ── Background ── */
   const setPageBackground = useCallback((bg: AlbumBackground) => {
     pushSnapshot();
@@ -1634,6 +1678,7 @@ export function useBuilderState(): BuilderActions {
     addThemedQuote,
     updateTextElement,
     deleteTextElement,
+    setBoxText,
     setPageBackground,
     updateBackgroundTransform,
     updateBackgroundFilters,

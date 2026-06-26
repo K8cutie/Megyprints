@@ -72,9 +72,10 @@ function backgroundToCss(bg: any): React.CSSProperties {
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
+  onTextSlotTap?: (slotIndex: number) => void;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -127,7 +128,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap }: {
           </div>
         );
       })}
-      {page.textElements?.map((t, i) => (
+      {page.textElements?.filter((t) => t.boxIndex == null).map((t, i) => (
         <div key={`txt-${i}`} className="absolute pointer-events-none" style={{
           zIndex: 2, left: t.x * sx, top: t.y * sy,
           width: (t.width || t.text.length * (t.fontSize || 24) * 0.6) * sx,
@@ -139,18 +140,38 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap }: {
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
         }}>{t.text}</div>
       ))}
-      {/* Template text boxes (caption/title regions). Empty → faint tap hint. */}
-      {template?.textSlots?.map((ts, i) => (
-        <div key={`tslot-${i}`} className="absolute flex items-center justify-center" style={{
-          zIndex: 2, left: safeX + ts.x * safeW, top: safeY + ts.y * safeH,
-          width: ts.width * safeW, height: ts.height * safeH,
-        }}>
-          <span style={{
-            fontSize: 11 * sx, color: 'rgba(139,111,71,0.5)', textAlign: 'center',
-            border: '1px dashed rgba(232,165,152,0.5)', borderRadius: 4, padding: `${3 * sx}px ${6 * sx}px`,
-          }}>{ts.placeholder || 'Tap to add text'}</span>
-        </div>
-      ))}
+      {/* Template text boxes. Filled → formatted text clipped to the box; empty →
+          faint tap hint. Tapping opens the text editor (onTextSlotTap). */}
+      {template?.textSlots?.map((ts, i) => {
+        const boxed = page.textElements?.find((t) => t.boxIndex === i);
+        const align = boxed?.alignment ?? ts.align ?? 'center';
+        return (
+          <div key={`tslot-${i}`} className="absolute flex items-center"
+            onClick={onTextSlotTap ? (e) => { e.stopPropagation(); onTextSlotTap(i); } : undefined}
+            style={{
+              zIndex: 2, left: safeX + ts.x * safeW, top: safeY + ts.y * safeH,
+              width: ts.width * safeW, height: ts.height * safeH, overflow: 'hidden',
+              justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
+              cursor: onTextSlotTap ? 'pointer' : undefined,
+            }}>
+            {boxed ? (
+              <span style={{
+                width: '100%', textAlign: align as any,
+                fontFamily: boxed.fontFamily || 'serif', fontSize: (boxed.fontSize || 24) * sx,
+                fontWeight: boxed.bold ? 'bold' : 'normal', fontStyle: boxed.italic ? 'italic' : 'normal',
+                textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
+                lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              }}>{boxed.text}</span>
+            ) : (
+              <span style={{
+                width: '100%', textAlign: 'center',
+                fontSize: 11 * sx, color: 'rgba(139,111,71,0.5)',
+                border: '1px dashed rgba(232,165,152,0.5)', borderRadius: 4, padding: `${3 * sx}px ${6 * sx}px`,
+              }}>{ts.placeholder || 'Tap to add text'}</span>
+            )}
+          </div>
+        );
+      })}
       {/* Theme decorative corners — one set, all four corners, on top of photos */}
       {page.cornerBase && CORNER_POSITIONS.map((pos) => {
         const size = Math.min(singleW, H) * 0.25;

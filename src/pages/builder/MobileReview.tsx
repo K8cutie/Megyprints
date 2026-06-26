@@ -11,6 +11,8 @@ import { ChevronLeft, ChevronRight, RefreshCw, Check, Loader2, X } from 'lucide-
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
+import { getTemplateById } from './pageTemplates';
+import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 
 export default function MobileReview({ actions, onDone }: { actions: BuilderContextValue; onDone: () => void }) {
   const pages = actions.albumPages;
@@ -20,6 +22,26 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const isLast = idx >= total - 1;
   const [finishing, setFinishing] = useState(false);
   const [replaceSlot, setReplaceSlot] = useState<number | null>(null); // tap-to-replace target
+  const [editSlot, setEditSlot] = useState<number | null>(null); // tap-to-edit-text target
+
+  // Seed the editor from the box's existing text, or the template's defaults.
+  const template = page?.templateId ? getTemplateById(page.templateId) : null;
+  const buildInitial = (slotIndex: number): BoxTextContent => {
+    const existing = page?.textElements?.find((t) => t.boxIndex === slotIndex);
+    if (existing) {
+      return {
+        text: existing.text, fontSize: existing.fontSize, fontFamily: existing.fontFamily,
+        color: existing.color, bold: existing.bold, italic: existing.italic,
+        underline: existing.underline, alignment: existing.alignment,
+      };
+    }
+    const ts = template?.textSlots?.[slotIndex];
+    return {
+      text: '', fontSize: 28, fontFamily: 'Georgia, "Times New Roman", serif',
+      color: '#2D2D2D', bold: false, italic: false, underline: false,
+      alignment: ts?.align ?? 'center',
+    };
+  };
 
   // Fit the page to the phone viewport (both dimensions).
   const [dims, setDims] = useState({ w: 320, h: 320 });
@@ -83,7 +105,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             className="bg-white shadow-xl shrink-0 relative overflow-hidden"
             style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
           >
-            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx} onSlotTap={(slotIndex) => setReplaceSlot(slotIndex)} />}
+            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx} onSlotTap={(slotIndex) => setReplaceSlot(slotIndex)} onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -147,6 +169,15 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Tap-to-edit text — the floating-bar editor above the keyboard */}
+      {editSlot !== null && (
+        <MobileTextEditor
+          initial={buildInitial(editSlot)}
+          onSave={(content) => actions.setBoxText(editSlot, content)}
+          onClose={() => setEditSlot(null)}
+        />
+      )}
     </div>
   );
 }
