@@ -10,8 +10,11 @@ import {
   Trash2,
   ChevronLeft,
   Loader2,
+  LayoutGrid,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/authContext';
+import { ADMIN_EMAIL } from '../lib/templateSettings';
 import { useAlbumSync } from '../lib/useAlbumSync';
 import { supabase } from '../lib/supabase';
 import type { AlbumData } from '../lib/useAlbumSync';
@@ -218,13 +221,24 @@ export function Profile({ onBack }: ProfilePageProps) {
             <h1 className="text-xl font-bold text-[#4A423F]">My Profile</h1>
           </div>
 
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 rounded-xl border-2 border-[#E8D5D0] px-4 py-2 text-sm font-medium text-[#4A423F] hover:bg-red-50 hover:border-red-200 hover:text-red-500 transition-all"
-          >
-            <LogOut size={16} />
-            <span className="hidden sm:inline">Sign Out</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {user?.email === ADMIN_EMAIL && (
+              <Link
+                to="/admin"
+                className="flex items-center gap-2 rounded-xl border-2 border-[#E8D5D0] px-4 py-2 text-sm font-medium text-[#4A423F] hover:bg-[#F5EDE8] transition-all"
+              >
+                <LayoutGrid size={16} />
+                <span className="hidden sm:inline">Templates</span>
+              </Link>
+            )}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 rounded-xl border-2 border-[#E8D5D0] px-4 py-2 text-sm font-medium text-[#4A423F] hover:bg-red-50 hover:border-red-200 hover:text-red-500 transition-all"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          </div>
         </div>
       </header>
 
