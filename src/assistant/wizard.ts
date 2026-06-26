@@ -23,7 +23,6 @@ export type WizardStep =
   | 'pick_size'
   | 'pick_background'
   | 'upload_photos'
-  | 'generate_album'
   | 'review_pages'
   | 'add_text'
   | 'finalize';
@@ -44,7 +43,6 @@ export const WIZARD_ORDER: WizardStep[] = [
   'pick_size',
   'pick_background',
   'upload_photos',
-  'generate_album',
   'review_pages',
   'add_text',
   'finalize',
@@ -62,8 +60,7 @@ export const STEP_META: Record<WizardStep, { title: string; description: string;
   welcome: { title: 'Welcome', description: 'Meet Megy and learn the basics', emoji: '👋' },
   pick_size: { title: 'Album Size', description: 'Choose your album dimensions', emoji: '📐' },
   pick_background: { title: 'Background', description: 'Pick a color or texture', emoji: '🎨' },
-  upload_photos: { title: 'Photos', description: 'Upload your memories', emoji: '📸' },
-  generate_album: { title: 'Generate', description: 'Auto-layout your album', emoji: '✨' },
+  upload_photos: { title: 'Photos', description: 'Upload, then generate', emoji: '📸' },
   review_pages: { title: 'Review', description: 'Fine-tune each page', emoji: '🔍' },
   add_text: { title: 'Text', description: 'Add captions and quotes', emoji: '✍️' },
   finalize: { title: 'Finalize', description: 'Preview and order', emoji: '📦' },
@@ -110,16 +107,11 @@ export class WizardEngine {
     const hasFilledPages = builder.albumPages.some(
       (p) => (p.slotFills?.some((f) => f != null) ?? false) || p.photos.length > 0,
     );
-    if (builder.albumPages.length >= 40 && (this.state.completed.includes('generate_album') || hasFilledPages)) {
+    if (builder.albumPages.length >= 40 && hasFilledPages) {
       return 'review_pages';
     }
 
-    // If user explicitly generated → stay at generate step
-    if (this.state.completed.includes('upload_photos') || this.state.skipped.includes('upload_photos')) {
-      return 'generate_album';
-    }
-
-    // If user explicitly picked background → upload photos
+    // After picking a background (or uploading) → the combined upload + generate step
     if (this.state.completed.includes('pick_background')) {
       return 'upload_photos';
     }
@@ -169,8 +161,9 @@ export class WizardEngine {
       case 'welcome': return true; // Auto-complete
       case 'pick_size': return false; // Must click a size in wizard
       case 'pick_background': return false; // Must click a background
-      case 'upload_photos': return builder.uploadedPhotos.length > 0;
-      case 'generate_album': return builder.albumPages.length >= 40;
+      // Combined upload + generate: "complete" only once the album is generated,
+      // so Next can't skip past generation.
+      case 'upload_photos': return builder.albumPages.length >= 40;
       case 'review_pages': return this.state.completed.includes('review_pages');
       case 'add_text': return this.state.completed.includes('add_text');
       case 'finalize': return builder.phase === 'preview';
@@ -237,14 +230,6 @@ export class WizardEngine {
           tips: ["📱 Upload straight from your phone for the best quality — and I'll auto-sort your photos into pages by the moment they were taken", "I'll match photo ratios to frame shapes automatically"],
         };
 
-      case 'generate_album':
-        return {
-          title: "Step 4: Generate Your Album ✨",
-          body: `You have **${builder.uploadedPhotos.length}** photos, **${builder.albumSize}** album, and the **${builder.selectedTemplate}** theme. Ready to generate? I'll create 40+ pages with auto-matched layouts.`,
-          actions: ["Generate Album Now"],
-          tips: ["'Generate Album' creates 40+ pages with your chosen theme", "You can always regenerate individual pages later"],
-        };
-
       case 'review_pages': {
         const pages = builder.albumPages;
         const usedIdx = pages
@@ -267,7 +252,7 @@ export class WizardEngine {
           };
         }
         return {
-          title: "Step 5: Review Each Page 🔍",
+          title: "Step 4: Review Each Page 🔍",
           body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here).
 
 Reshuffle this page, drop in a **quote** where there's room, then move on with **See Next Page**.`,
@@ -278,7 +263,7 @@ Reshuffle this page, drop in a **quote** where there's room, then move on with *
 
       case 'add_text':
         return {
-          title: "Step 6: Add Text & Captions ✍️",
+          title: "Step 5: Add Text & Captions ✍️",
           body: "Personalize your album with captions, dates, quotes, or titles. Click any page to add text elements, then style them with fonts, colors, and effects.",
           actions: ["Add Text to This Page", "Add Date Stamp", "Skip to Finalize →"],
           tips: ["Script fonts look great for quotes", "Bold + large size = perfect titles"],
@@ -286,7 +271,7 @@ Reshuffle this page, drop in a **quote** where there's room, then move on with *
 
       case 'finalize':
         return {
-          title: "Step 7: Preview & Order 📦",
+          title: "Step 6: Preview & Order 📦",
           body: "Your album looks amazing! Preview the full album, make any final tweaks, then place your order. I'll save everything to the cloud so you can come back anytime.",
           actions: ["Preview Full Album", "Save to Cloud", "Place Order →"],
           tips: ["Albums are saved automatically", "You can reorder or reprint anytime"],

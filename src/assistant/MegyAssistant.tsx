@@ -286,26 +286,14 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         }
         break;
       case 'upload_photos':
-        if (action.includes('Upload')) {
-          fileInputRef.current?.click();
-        } else if (action.includes('Generate') || action.includes('Placeholders')) {
-          wizardRef.current.skip(); // Mark as skipped so detectStep knows we passed it
-          setWizardStep(wizardRef.current.state.step);
-          showToast('Placeholders added! You can replace them with real photos later.');
-        }
-        break;
-      case 'generate_album':
-        if (action.includes('Surprise')) {
-          // Surprise Me = full album generation with randomization
-          void builder.dispatch({ type: 'surprise_me', rawMessage: 'Surprise me' });
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
-          showToast('Fresh layouts across your album!');
-        } else if (action.includes('Generate')) {
+        if (action.includes('Generate')) {
+          // The upload step doubles as Generate — build the album, then jump to Review.
           void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' });
           wizardRef.current.advance();
           setWizardStep(wizardRef.current.state.step);
           showToast('Album generated!');
+        } else if (action.includes('Upload')) {
+          fileInputRef.current?.click();
         }
         break;
       case 'review_pages': {
@@ -422,7 +410,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   /* ── Option A / centerpiece: during the guided pre-album steps, Megy's card
      IS the screen. Once an album exists (review onward) we fall back to the
      canvas + side panel. This removes any competing center control. ── */
-  const centerStage = showWizard && ['welcome', 'pick_size', 'pick_background', 'upload_photos', 'generate_album'].includes(wizardStep);
+  const centerStage = showWizard && ['welcome', 'pick_size', 'pick_background', 'upload_photos'].includes(wizardStep);
 
   if (centerStage) {
     const msg = wizardRef.current.getMessage();
@@ -453,7 +441,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
           <div className="p-6 bg-white rounded-2xl border border-[#F4C2A1]/20 shadow-xl" key={wizardKey}>
             <h3 className="font-display text-xl font-semibold text-[#2D2D2D] mb-2"><TypeText text={msg.title} /></h3>
-            {wizardRef.current.state.step === 'generate_album' ? (
+            {(wizardRef.current.state.step === 'upload_photos' && builder.uploadedPhotos.length > 0) ? (
               <div className="mb-4">
                 <p className="text-sm text-[#5A5A5A] leading-relaxed mb-3">Here&apos;s your album setup — ready when you are:</p>
                 <ul className="space-y-1.5">

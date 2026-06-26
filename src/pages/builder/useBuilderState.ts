@@ -300,8 +300,8 @@ export interface BuilderActions {
   setPhase: (phase: string) => void;
 
   // Wizard
-  wizardStep: 'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'generate_album' | 'review_pages' | 'add_text' | 'finalize';
-  setWizardStep: (step: 'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'generate_album' | 'review_pages' | 'add_text' | 'finalize') => void;
+  wizardStep: 'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize';
+  setWizardStep: (step: 'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize') => void;
 
   // Undo / Redo
   undo: () => void;
@@ -357,7 +357,7 @@ export function useBuilderState(): BuilderActions {
   const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState().photosPerPage);
   const [phase, setPhase] = useState('setup');
   // ── Wizard step tracking — assistant is the primary controller ──
-  const [wizardStep, setWizardStep] = useState<'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'generate_album' | 'review_pages' | 'add_text' | 'finalize'>('welcome');
+  const [wizardStep, setWizardStep] = useState<'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize'>('welcome');
 
   // ── Selection tracking ──
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
