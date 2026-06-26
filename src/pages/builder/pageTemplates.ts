@@ -79,6 +79,7 @@ function rs(
     y: Math.round(cy * 10000) / 10000,
     width: Math.round(sw * 10000) / 10000,
     height: Math.round(sh * 10000) / 10000,
+    ratio: targetRatio,
     ...opts,
   };
 }
@@ -130,6 +131,7 @@ function rsBox(
     y: Math.round(cy * 10000) / 10000,
     width: Math.round(width * 10000) / 10000,
     height: Math.round(height * 10000) / 10000,
+    ratio: targetRatio,
     ...opts,
   };
 }
@@ -171,6 +173,7 @@ function rsBoxExact(
     y: Math.round(y * 10000) / 10000,
     width: Math.round(width * 10000) / 10000,
     height: Math.round(height * 10000) / 10000,
+    ratio: targetRatio,
     ...opts,
   };
 }

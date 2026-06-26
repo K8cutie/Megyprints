@@ -30,6 +30,9 @@ export interface TemplateSlot {
   y: number;        // 0 = top edge of safe area, 1 = bottom edge
   width: number;    // 1.0 = full safe area width
   height: number;   // 1.0 = full safe area height
+  /** This slot's photo ratio. Lets ONE template mix ratios (e.g. 1:1 + 3:2 + 2:3).
+   *  Falls back to the template's targetRatio when absent (legacy templates). */
+  ratio?: PhotoRatio;
   rotation?: number;
   shape?: SlotShape;
   borderRadius?: number;
