@@ -193,6 +193,10 @@ export class ActionEngine {
         }
 
         case 'preview_album': {
+          // Start the preview at the FIRST page. Mobile review leaves the user on
+          // the last page, and the preview's forced order CTA auto-fires on the
+          // last spread — so without this it would skip straight to ordering.
+          this.builder.goToPage(0);
           this.builder.setPhase('preview');
           return { intentType: intent.type, success: true, message: 'Opening preview.' };
         }
