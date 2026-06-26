@@ -180,8 +180,8 @@ export default function Order() {
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <div className="flex items-center gap-2 text-[#6B6B6B] mb-4"><CreditCard size={18} /> <span className="text-sm font-medium">Pay for your album</span></div>
             <div className="space-y-2 text-sm border-y border-[#F0F0F0] py-4 mb-4">
-              <div className="flex justify-between"><span className="text-[#6B6B6B]">Album</span><span>{ALBUM_SIZES.find((s) => s.preset === size)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
-              <div className="flex justify-between text-lg font-semibold pt-1"><span>Total</span><span>₱{totalPrice}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-[#6B6B6B] shrink-0">Album</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === size)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
+              <div className="flex justify-between items-baseline pt-1"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice}</span></div>
             </div>
             <button
               onClick={handlePay}
@@ -280,11 +280,11 @@ export default function Order() {
             <div className="bg-white rounded-2xl p-6 shadow-sm sticky top-24">
               <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4">Order Summary</h3>
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between"><span className="text-[#6B6B6B]">Material</span><span>{MATERIALS.find((m) => m.type === material)?.name}</span></div>
-                <div className="flex justify-between"><span className="text-[#6B6B6B]">Cover</span><span>{COVERS.find((c) => c.type === cover)?.name}</span></div>
-                <div className="flex justify-between"><span className="text-[#6B6B6B]">Size</span><span>{ALBUM_SIZES.find((s) => s.preset === size)?.name}</span></div>
+                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Material</span><span className="font-semibold text-[#E8A598] text-right">{MATERIALS.find((m) => m.type === material)?.name}</span></div>
+                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Cover</span><span className="font-semibold text-[#E8A598] text-right">{COVERS.find((c) => c.type === cover)?.name}</span></div>
+                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Size</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === size)?.name}</span></div>
                 <div className="border-t border-[#F0F0F0] pt-3 mt-3">
-                  <div className="flex justify-between text-lg font-semibold"><span>Total</span><span>₱{totalPrice}</span></div>
+                  <div className="flex justify-between items-baseline"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice}</span></div>
                   <p className="text-[10px] text-[#9B9B9B] mt-1">*Sample pricing. Actual price may vary.</p>
                 </div>
               </div>
