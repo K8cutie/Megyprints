@@ -10,10 +10,12 @@ import Order from './pages/Order';
 import Profile from './pages/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
 import BuilderErrorBoundary from './pages/builder/BuilderErrorBoundary';
+import InstallPrompt from './components/InstallPrompt';
 
 export default function App() {
   return (
     <AuthProvider>
+      <InstallPrompt />
       <Routes>
         <Route element={<Layout><Outlet /></Layout>}>
           <Route path="/" element={<Home />} />
