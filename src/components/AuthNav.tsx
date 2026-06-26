@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
+import { isAdminEmail } from '../lib/templateSettings';
 import LoginModal from '../pages/auth/LoginModal';
 import SignupModal from '../pages/auth/SignupModal';
 
@@ -15,6 +16,16 @@ export default function AuthNav() {
     <>
       {user ? (
         <div className="flex items-center gap-1">
+          {isAdminEmail(user.email) && (
+            <Link
+              to="/admin"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-[#E8A598] rounded-lg hover:brightness-105 transition-all"
+              title="Operator console"
+            >
+              <LayoutDashboard size={15} />
+              <span className="hidden sm:inline">Admin</span>
+            </Link>
+          )}
           <Link
             to="/profile"
             className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#2D2D2D] hover:text-[#E8A598] transition-colors rounded-lg hover:bg-[#FDE8E4] min-w-0"
