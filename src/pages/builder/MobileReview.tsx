@@ -80,7 +80,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -36 }}
             transition={{ duration: 0.18 }}
-            className="bg-white shadow-xl shrink-0"
+            className="bg-white shadow-xl shrink-0 relative overflow-hidden"
             style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
           >
             {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx} onSlotTap={(slotIndex) => setReplaceSlot(slotIndex)} />}
