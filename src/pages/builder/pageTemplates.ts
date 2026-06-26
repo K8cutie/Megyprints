@@ -1,5 +1,6 @@
 import type { PageTemplate, TemplateSlot, TemplateMargin, AlbumSizePreset } from './types';
 import type { PhotoRatio } from './photoAnalyzer';
+import { TILED_TEMPLATES } from './tiledTemplates';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  87 SMART TEMPLATES — Ratio-locked, album-size-aware, phone-first
@@ -704,29 +705,11 @@ const T9x9_19 = tmpl('t9x9-19', 'Windowpane', 'quint', STD, 'square', '1:1', [S9
    ASSEMBLE ALL TEMPLATES
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── TIGHT-TILED sample templates ──────────────────────────────────────────
-   The page is carved into regions that tile edge-to-edge; each region's shape ≈
-   a standard photo ratio (so the photo fills it — no whitespace), and a textbox
-   absorbs the leftover region. This is the packing the mixed-ratio + textbox
-   features unlock, vs. centering standard photos in oversized boxes. Coords are
-   0–1 of the safe area; the regions cover the whole [0,1]² → zero wasted canvas. */
+/* Bonus WIDE mosaic (the wireframe) — needs a 16:9 photo, so it's a "bonus tier"
+   layout for panorama shooters. The bulk of tiled templates (phone-native 4:3 /
+   3:4 / 1:1) are generated in tiledTemplates.ts. Uses fill() for edge-to-edge.
 
-// A — Banner + caption: a 4:3 landscape fills the top, a caption band the bottom.
-const T8x8_TILE_A: PageTemplate = {
-  ...tmpl('T8x8_tile_a', 'Banner + caption', 'single', STD, 'square', '4:3', ['8x8'],
-    [fill(0, 0, 1, 0.75, '4:3')]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.75, width: 1, height: 0.25, align: 'center', placeholder: 'Tap to add text' }],
-};
-
-// B — Portrait pair + caption: two 3:4 portraits fill the top full-width.
-const T8x8_TILE_B: PageTemplate = {
-  ...tmpl('T8x8_tile_b', 'Portrait pair + caption', 'duo', STD, 'square', '3:4', ['8x8'],
-    [fill(0, 0, 0.5, 0.6667, '3:4'), fill(0.5, 0, 0.5, 0.6667, '3:4')]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.6667, width: 1, height: 0.3333, align: 'center', placeholder: 'Tap to add text' }],
-};
-
-// C — Headline mosaic (the wireframe): wide 16:9 top, 1:1 square bottom-left,
-//     textbox bottom-right. True mixed ratios, edge to edge, no gaps.
+   C — Headline mosaic: wide 16:9 top, 1:1 square bottom-left, textbox bottom-right. */
 const T8x8_TILE_C: PageTemplate = {
   ...tmpl('T8x8_tile_c', 'Headline mosaic', 'duo', STD, 'square', '16:9', ['8x8'],
     [fill(0, 0, 1, 0.5625, '16:9'), fill(0, 0.5625, 0.4375, 0.4375, '1:1')]),
@@ -734,8 +717,6 @@ const T8x8_TILE_C: PageTemplate = {
 };
 
 const PAGE_TEMPLATES_BASE: PageTemplate[] = [
-  T8x8_TILE_A,
-  T8x8_TILE_B,
   T8x8_TILE_C,
   // 6×4 (6 templates)
   T6x4_01, T6x4_02, T6x4_03, T6x4_04, T6x4_05, T6x4_06,
@@ -796,7 +777,7 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
   }
 }
 
-export const PAGE_TEMPLATES: PageTemplate[] = [...PAGE_TEMPLATES_BASE, ...GAP_FILLERS];
+export const PAGE_TEMPLATES: PageTemplate[] = [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS];
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 
