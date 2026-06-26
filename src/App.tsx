@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Routes, Route, Outlet } from 'react-router-dom';
 import { AuthProvider } from './lib/authContext';
 import { BuilderProvider } from './pages/builder/BuilderContext';
@@ -8,11 +9,16 @@ import Templates from './pages/Templates';
 import Contact from './pages/Contact';
 import Order from './pages/Order';
 import Profile from './pages/Profile';
+import Admin from './pages/Admin';
 import ProtectedRoute from './components/ProtectedRoute';
 import BuilderErrorBoundary from './pages/builder/BuilderErrorBoundary';
 import InstallPrompt from './components/InstallPrompt';
+import { loadTemplateSettings } from './lib/templateSettings';
 
 export default function App() {
+  // Load operator template overrides once, then apply them to generation.
+  useEffect(() => { void loadTemplateSettings(); }, []);
+
   return (
     <AuthProvider>
       <InstallPrompt />
@@ -23,6 +29,7 @@ export default function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/order" element={<Order />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
           <Route
             path="/builder/*"
             element={

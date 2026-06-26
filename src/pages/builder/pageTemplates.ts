@@ -781,9 +781,21 @@ export const PAGE_TEMPLATES: PageTemplate[] = [...TILED_TEMPLATES, ...PAGE_TEMPL
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 
+/** Operator-hidden / soft-deleted template ids. Populated at app start from
+ *  Supabase (see lib/templateSettings). These are excluded from SELECTION (album
+ *  generation + the "Change" cycle) but NOT from getTemplateById — so an album
+ *  already using a now-off template still renders. */
+let INACTIVE_TEMPLATE_IDS = new Set<string>();
+export function setInactiveTemplateIds(ids: Set<string>): void {
+  INACTIVE_TEMPLATE_IDS = ids;
+}
+function isActive(t: PageTemplate): boolean {
+  return !INACTIVE_TEMPLATE_IDS.has(t.id);
+}
+
 /** Get templates filtered by album size */
 export function getTemplatesForAlbum(albumSize: AlbumSizePreset): PageTemplate[] {
-  return PAGE_TEMPLATES.filter(t => t.albumSizes.includes(albumSize));
+  return PAGE_TEMPLATES.filter(t => isActive(t) && t.albumSizes.includes(albumSize));
 }
 
 /** Get templates filtered by album size AND target ratio */
@@ -792,7 +804,7 @@ export function getTemplatesForRatio(
   targetRatio: PhotoRatio,
 ): PageTemplate[] {
   return PAGE_TEMPLATES.filter(
-    t => t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio,
+    t => isActive(t) && t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio,
   );
 }
 
@@ -803,7 +815,7 @@ export function getTemplatesForCount(
   slotCount: number,
 ): PageTemplate[] {
   return PAGE_TEMPLATES.filter(
-    t => t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio && t.slotCount === slotCount,
+    t => isActive(t) && t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio && t.slotCount === slotCount,
   );
 }
 
