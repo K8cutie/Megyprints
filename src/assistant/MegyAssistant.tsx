@@ -117,7 +117,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
    MAIN COMPONENT
    ══════════════════════════════════════════════════════════════════════════ */
 
-export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollapsed, suppressDrawer }: { collapsed?: boolean; onToggleCollapsed?: (v: boolean) => void; suppressDrawer?: boolean } = {}) {
+export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollapsed, mobilePulldown }: { collapsed?: boolean; onToggleCollapsed?: (v: boolean) => void; mobilePulldown?: boolean } = {}) {
   const [activeTab, setActiveTab] = useState<TabId>('design');
   const [chatOpen, setChatOpen] = useState(false);
   // Collapse is controlled by the parent (so the layout can reserve panel width);
@@ -545,15 +545,25 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     );
   }
 
-  // Mobile: during the swipe-review (MobileReview is the full UI), hide the Megy
-  // bottom drawer so it doesn't cover the Change bar. Centerpiece steps (size,
-  // background, upload, generate) return earlier above, so they're unaffected.
-  if (suppressDrawer) return null;
-
   return (
+    <>
+      {/* Mobile (post-wizard): Megy collapses to a small character icon in the
+          upper-right; tap it to pull Megy DOWN from the top. */}
+      {mobilePulldown && !mobileExpanded && (
+        <button
+          type="button"
+          onClick={() => setMobileExpanded(true)}
+          className="md:hidden fixed top-1.5 right-3 z-[95] w-10 h-10 rounded-full bg-[#F4C2A1] shadow-lg flex items-center justify-center overflow-hidden active:scale-95 transition-transform"
+          aria-label="Open Megy"
+        >
+          <img src="/megy-character.png" alt="Megy" className="w-7 h-7 object-contain" draggable={false} />
+        </button>
+      )}
+
     <div className={`fixed z-[90] bg-white shadow-xl flex flex-col overflow-hidden transition-[height] duration-300
-      left-0 right-0 bottom-0 w-full rounded-t-2xl border-t border-[#F4C2A1]/20
-      ${mobileExpanded ? 'h-[82vh]' : 'h-[66px]'}
+      ${mobilePulldown
+        ? `left-0 right-0 top-0 w-full rounded-b-2xl border-b border-[#F4C2A1]/20 ${mobileExpanded ? 'h-[82vh]' : 'h-0'}`
+        : `left-0 right-0 bottom-0 w-full rounded-t-2xl border-t border-[#F4C2A1]/20 ${mobileExpanded ? 'h-[82vh]' : 'h-[66px]'}`}
       md:left-0 md:right-auto md:top-0 md:bottom-0 md:h-full ${collapsed ? 'md:w-[60px]' : 'md:w-[340px]'} md:rounded-none md:border-t-0 md:border-r md:transition-[width] md:duration-300`}>
 
       {/* Collapsed rail — desktop only, when minimized: Megy icon + expand */}
@@ -572,7 +582,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       <button
         type="button"
         onClick={() => setMobileExpanded((v) => !v)}
-        className="md:hidden shrink-0 w-full flex items-center justify-center pt-2 pb-1"
+        className={`md:hidden shrink-0 w-full flex items-center justify-center ${mobilePulldown ? 'order-last pb-3 pt-1' : 'pt-2 pb-1'}`}
         aria-label={mobileExpanded ? 'Collapse Megy' : 'Expand Megy'}
       >
         <span className="w-10 h-1.5 rounded-full bg-[#E8D8C8]" />
@@ -965,6 +975,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       )}
       </div>{/* end full panel content */}
     </div>
+    </>
   );
 }
 

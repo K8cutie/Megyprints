@@ -214,7 +214,7 @@ export default function Builder() {
         </div>
 
         {/* ── Megy Assistant ── */}
-        <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} suppressDrawer={isMobile && actions.phase === 'edit'} />
+        <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'preview')} />
 
         {/* Hidden file input for programmatic upload trigger */}
         <input
