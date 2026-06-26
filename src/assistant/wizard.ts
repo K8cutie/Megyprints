@@ -83,6 +83,16 @@ export class WizardEngine {
     };
   }
 
+  /** Restart Wizard — wipe the journey back to the very first step (welcome).
+      Marks first-time so detectStep() holds at welcome instead of jumping to
+      pick_size on the next reconcile. */
+  restart() {
+    this.state.step = 'welcome';
+    this.state.completed = [];
+    this.state.skipped = [];
+    this.state.isFirstTime = true;
+  }
+
   /* ── Step detection ──
      Only auto-detect forward when the BUILDER PHASE changes (user clicked
      "Start Creating" in the center screen). During setup, the wizard should

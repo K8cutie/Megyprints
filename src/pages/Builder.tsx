@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, PenTool, Eye, ChevronRight, RotateCcw } from 'lucide-react';
+import { Settings, PenTool, Eye, ChevronRight } from 'lucide-react';
 import { useBuilderContext, type BuilderContextValue } from './builder/BuilderContext';
 import BuilderSetup from './builder/BuilderSetup';
 import BuilderEdit from './builder/BuilderEdit';
@@ -167,21 +167,6 @@ export default function Builder() {
           })}
 
           <div className="flex-1" />
-
-          {/* Restart — wipes everything and starts fresh */}
-          {actions.albumPages.length > 0 && (
-            <button
-              onClick={() => {
-                if (window.confirm('Start a new album? All current pages and edits will be lost.')) {
-                  actions.reset();
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#9B9B9B] hover:bg-[#FDE8E4] hover:text-[#E8A598] transition-all"
-              title="New Album"
-            >
-              <RotateCcw size={13} /> New
-            </button>
-          )}
         </div>
 
         {/* Phase Content */}

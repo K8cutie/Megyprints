@@ -349,6 +349,15 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         break;
     }
   }, [builder, showToast]);
+  const doRestartWizard = () => {
+    if (!window.confirm('Restart from the beginning? Your current album and photos will be cleared.')) return;
+    builder.reset();                              // wipe album + photos
+    wizardRef.current.restart();                  // engine → welcome, clear flags
+    setShowWizard(true);                          // re-show the guided centerpiece
+    setWizardStep(wizardRef.current.state.step);  // syncs store + phase via effects
+    try { localStorage.removeItem(WIZARD_STORAGE_KEY); } catch { /* ignore */ }
+    showToast('Wizard restarted — back to the beginning');
+  };
   const doSurprise = () => {
     void builder.dispatch({ type: 'surprise_me', rawMessage: 'Surprise me' });
     showToast('Fresh layouts across your album!');
@@ -581,6 +590,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         <div className="flex items-center gap-1">
           <button onClick={() => setCollapsed(true)} className="hidden md:inline-flex p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Minimize panel" aria-label="Minimize panel">
             <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button onClick={doRestartWizard} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Restart wizard from the beginning" aria-label="Restart wizard">
+            <RotateCcw className="w-4 h-4" />
           </button>
           <button onClick={() => setChatOpen(!chatOpen)} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat">
             <Send className="w-4 h-4" />
