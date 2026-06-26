@@ -11,6 +11,7 @@ import type {
   SlotGeometryOverride,
 } from './types';
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum } from './pageTemplates';
+import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES } from './types';
 import { getCanvasDimensions } from './layouts';
@@ -1004,19 +1005,28 @@ export function useBuilderState(): BuilderActions {
     });
   }, [currentPageIndex, photosPerPage, albumSize]);
 
-  /* Cycle the current page DETERMINISTICALLY through same-photo-count layouts for
-     this size (next in order, loops back) — powers mobile "Change". Re-flows the
-     existing photos into the new template's slots. */
+  /* Cycle the current page through ratio-MATCHED layouts (same photo count AND
+     same slot ratio as the photos), in order, looping — powers mobile "Change".
+     Re-flows the photos so they never get cropped into a mismatched slot. */
   const cycleLayout = useCallback(() => {
     pushSnapshot();
+    const analysis = analyzePhotos(uploadedPhotos);
     setAlbumPages((prev) => {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page) return prev;
       const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
       const count = existingFills.length;
-      let pool = getTemplatesForAlbum(albumSize).filter((t) => t.slotCount === count);
-      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize);
+      // The page's dominant photo ratio → only cycle templates whose slots match.
+      const ratios = existingFills.map((i) => analysis.assignments[i]).filter(Boolean) as PhotoRatio[];
+      const tally: Partial<Record<PhotoRatio, number>> = {};
+      let pageRatio: PhotoRatio | undefined = ratios[0];
+      let bestR = 0;
+      for (const r of ratios) { tally[r] = (tally[r] ?? 0) + 1; if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; } }
+      const allForSize = getTemplatesForAlbum(albumSize);
+      let pool = allForSize.filter((t) => t.slotCount === count && (!pageRatio || t.targetRatio === pageRatio));
+      if (pool.length === 0) pool = allForSize.filter((t) => t.slotCount === count);
+      if (pool.length === 0) pool = allForSize;
       pool = [...pool].sort((a, b) => a.id.localeCompare(b.id));
       if (pool.length === 0) return prev;
       const curIdx = pool.findIndex((t) => t.id === page.templateId);
@@ -1032,7 +1042,7 @@ export function useBuilderState(): BuilderActions {
       };
       return next;
     });
-  }, [currentPageIndex, albumSize]);
+  }, [currentPageIndex, albumSize, uploadedPhotos]);
 
   /* ── Slot management ── */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
