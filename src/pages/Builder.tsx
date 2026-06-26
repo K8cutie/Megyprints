@@ -6,8 +6,10 @@ import { useBuilderContext, type BuilderContextValue } from './builder/BuilderCo
 import BuilderSetup from './builder/BuilderSetup';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
+import MobileReview from './builder/MobileReview';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
 import MegyAssistant from '../assistant/MegyAssistant';
+import { useIsMobile } from '../hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const phases = [
@@ -136,6 +138,8 @@ export default function Builder() {
   // Phase chips hidden — Megy is the sole orchestrator and drives phases through
   // the wizard (Next / Previous / step actions). Flip true to show them again.
   const SHOW_PHASE_CHIPS = false;
+  // Mobile: the edit/review step becomes the swipe-and-approve MobileReview.
+  const isMobile = useIsMobile();
 
   const content = (
     <BuilderErrorBoundary key={errorKey} onReset={handleReset}>
@@ -185,14 +189,18 @@ export default function Builder() {
             {actions.phase === 'edit' && (
               <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="h-full">
-                <EditPhase
-                  actions={actions}
-                  onRegenerate={handleRegenerate}
-                  onGenerate={handleGenerate}
-                  onGenerateAll={handleGenerateAll}
-                  containerModeRef={containerModeRef}
-                  onAction={handleAction}
-                />
+                {isMobile ? (
+                  <MobileReview actions={actions} onDone={() => { void actions.dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }} />
+                ) : (
+                  <EditPhase
+                    actions={actions}
+                    onRegenerate={handleRegenerate}
+                    onGenerate={handleGenerate}
+                    onGenerateAll={handleGenerateAll}
+                    containerModeRef={containerModeRef}
+                    onAction={handleAction}
+                  />
+                )}
               </motion.div>
             )}
 

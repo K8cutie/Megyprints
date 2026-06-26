@@ -242,6 +242,7 @@ export interface BuilderActions {
   generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean }) => void;
   regeneratePage: () => void;
   shuffleLayout: () => void;
+  cycleLayout: () => void;
   autoFillSlots: () => void;
   clearAllSlots: () => void;
 
@@ -1003,6 +1004,36 @@ export function useBuilderState(): BuilderActions {
     });
   }, [currentPageIndex, photosPerPage, albumSize]);
 
+  /* Cycle the current page DETERMINISTICALLY through same-photo-count layouts for
+     this size (next in order, loops back) — powers mobile "Change". Re-flows the
+     existing photos into the new template's slots. */
+  const cycleLayout = useCallback(() => {
+    pushSnapshot();
+    setAlbumPages((prev) => {
+      const next = [...prev];
+      const page = next[currentPageIndex];
+      if (!page) return prev;
+      const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
+      const count = existingFills.length;
+      let pool = getTemplatesForAlbum(albumSize).filter((t) => t.slotCount === count);
+      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize);
+      pool = [...pool].sort((a, b) => a.id.localeCompare(b.id));
+      if (pool.length === 0) return prev;
+      const curIdx = pool.findIndex((t) => t.id === page.templateId);
+      const template = pool[(curIdx + 1) % pool.length];
+      const slotCount = template.slots.length;
+      next[currentPageIndex] = {
+        ...page,
+        templateId: template.id,
+        slotFills: new Array(slotCount).fill(null).map((_, i) => existingFills[i] ?? null),
+        slotScales: new Array(slotCount).fill(1),
+        slotOffsetsX: new Array(slotCount).fill(0),
+        slotOffsetsY: new Array(slotCount).fill(0),
+      };
+      return next;
+    });
+  }, [currentPageIndex, albumSize]);
+
   /* ── Slot management ── */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
     pushSnapshot();
@@ -1574,6 +1605,7 @@ export function useBuilderState(): BuilderActions {
     generateAlbum: generateAlbumAction,
     regeneratePage,
     shuffleLayout,
+    cycleLayout,
     autoFillSlots,
     clearAllSlots,
     fillSlot,

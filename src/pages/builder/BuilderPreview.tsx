@@ -72,7 +72,7 @@ function backgroundToCss(bg: any): React.CSSProperties {
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-function PageView({ page, photos, singleW, H, pageIndex }: {
+export function PageView({ page, photos, singleW, H, pageIndex }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
