@@ -111,7 +111,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         const imgLeft = (width - imgW) / 2 + slotOffsetX * sx;
         const imgTop = (height - imgH) / 2 + slotOffsetY * sy;
         // Theme-baked frame overrides the per-slot template border when present.
-        const frameWidth = page.photoBorderWidth ?? slot.borderWidth;
+        // Full-bleed (single-photo, no-textbox) pages get no frame at all.
+        const frameWidth = template.fullBleed ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
         const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
 
         return (

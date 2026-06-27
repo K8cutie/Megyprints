@@ -1065,7 +1065,10 @@ function renderTemplateSlots(
         // Slot border frame — THE CONTAINER. White outline normally,
         // becomes thick blue+selectable in container mode for resize/move.
         const borderStroke = containerMode ? '#3B82F6' : (frameColor ?? '#FFFFFF');
-        const borderWidth = containerMode ? 3 : (frameWidth ?? 2);
+        // Full-bleed (single-photo, no-textbox) pages draw no frame — but keep the
+        // blue container outline in edit mode so the slot is still selectable.
+        const effFrameWidth = adaptedTemplate.fullBleed ? 0 : frameWidth;
+        const borderWidth = containerMode ? 3 : (effFrameWidth ?? 2);
         const borderBase = {
           fill: 'transparent' as const,
           stroke: borderStroke,

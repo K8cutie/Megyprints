@@ -777,7 +777,26 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
   }
 }
 
-export const PAGE_TEMPLATES: PageTemplate[] = [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS];
+/** Single-photo page rule: a template with exactly ONE photo slot and NO textbox
+ *  renders full bleed — the photo runs edge to edge with no inner margin and no
+ *  frame. Templates that carry a textbox keep their margin (the caption needs the
+ *  breathing room), and multi-photo templates are untouched. The lone slot is
+ *  expanded to the whole page (object-cover fills it) and its per-slot border is
+ *  dropped; `fullBleed` then zeroes the page margin in every renderer via
+ *  marginForTemplate, and the renderers skip the theme frame for full-bleed pages. */
+function applySinglePicFullBleed(t: PageTemplate): PageTemplate {
+  const hasTextbox = !!(t.textSlots && t.textSlots.length > 0);
+  if (t.slotCount !== 1 || hasTextbox || t.fullBleed) return t;
+  const [slot] = t.slots;
+  return {
+    ...t,
+    fullBleed: true,
+    slots: [{ ...slot, x: 0, y: 0, width: 1, height: 1, borderWidth: 0, borderColor: undefined }],
+  };
+}
+
+export const PAGE_TEMPLATES: PageTemplate[] =
+  [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS].map(applySinglePicFullBleed);
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 

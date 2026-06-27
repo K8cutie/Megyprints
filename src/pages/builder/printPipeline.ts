@@ -121,7 +121,7 @@ async function renderPageManually(
       const sw = slot.width * safeW;
       const sh = slot.height * safeH;
 
-      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i);
+      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false);
     }
   }
 
@@ -227,6 +227,7 @@ async function renderSlotPhoto(
   sh: number,
   page: AlbumPage,
   slotIndex: number,
+  fullBleed: boolean,
 ) {
   // Load original photo at full resolution
   let img: HTMLImageElement;
@@ -280,7 +281,7 @@ async function renderSlotPhoto(
 
   // Draw the photo frame. The theme-baked page frame overrides the per-slot
   // template border when present; falls back to the slot border for old albums.
-  const frameWidth = page.photoBorderWidth ?? slot.borderWidth;
+  const frameWidth = fullBleed ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
   const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
   if (frameWidth) {
     ctx.strokeStyle = frameColor;
