@@ -10,7 +10,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useRef, type ReactNode } from 'react';
-import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Check, X, Minus, Plus } from 'lucide-react';
+import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Check, X, Minus, Plus, ChevronDown } from 'lucide-react';
 import type { TextElement } from './types';
 
 export type BoxTextContent = Pick<
@@ -18,10 +18,29 @@ export type BoxTextContent = Pick<
   'text' | 'fontSize' | 'fontFamily' | 'color' | 'bold' | 'italic' | 'underline' | 'alignment'
 >;
 
+// 20 caption fonts (loaded in index.html, display=swap). A mix of serif, sans,
+// script and display so any mood — elegant, playful, bold — has a fit.
 const FONTS = [
-  { name: 'Serif', family: 'Georgia, "Times New Roman", serif' },
-  { name: 'Sans', family: 'system-ui, -apple-system, sans-serif' },
-  { name: 'Rounded', family: '"Trebuchet MS", "Segoe UI", sans-serif' },
+  { name: 'Georgia', family: 'Georgia, "Times New Roman", serif' },
+  { name: 'Playfair', family: '"Playfair Display", Georgia, serif' },
+  { name: 'Lora', family: '"Lora", Georgia, serif' },
+  { name: 'Merriweather', family: '"Merriweather", Georgia, serif' },
+  { name: 'Cormorant', family: '"Cormorant Garamond", Georgia, serif' },
+  { name: 'Baskerville', family: '"Libre Baskerville", Georgia, serif' },
+  { name: 'DM Sans', family: '"DM Sans", system-ui, sans-serif' },
+  { name: 'Montserrat', family: '"Montserrat", system-ui, sans-serif' },
+  { name: 'Poppins', family: '"Poppins", system-ui, sans-serif' },
+  { name: 'Raleway', family: '"Raleway", system-ui, sans-serif' },
+  { name: 'Nunito', family: '"Nunito", system-ui, sans-serif' },
+  { name: 'Quicksand', family: '"Quicksand", system-ui, sans-serif' },
+  { name: 'Work Sans', family: '"Work Sans", system-ui, sans-serif' },
+  { name: 'Dancing Script', family: '"Dancing Script", cursive' },
+  { name: 'Pacifico', family: '"Pacifico", cursive' },
+  { name: 'Caveat', family: '"Caveat", cursive' },
+  { name: 'Great Vibes', family: '"Great Vibes", cursive' },
+  { name: 'Sacramento', family: '"Sacramento", cursive' },
+  { name: 'Lobster', family: '"Lobster", cursive' },
+  { name: 'Bebas Neue', family: '"Bebas Neue", system-ui, sans-serif' },
 ];
 const COLORS = ['#2D2D2D', '#FFFFFF', '#E8A598', '#C9A24B', '#2E7D4A', '#3A6EA5', '#9B5DE5'];
 
@@ -61,7 +80,7 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
   };
 
   const fontIdx = Math.max(0, FONTS.findIndex((f) => f.family === fontFamily));
-  const cycleFont = () => setFontFamily(FONTS[(fontIdx + 1) % FONTS.length].family);
+  const [fontOpen, setFontOpen] = useState(false);
 
   return (
     <div className="fixed left-0 right-0 z-[120] bg-white flex flex-col"
@@ -95,15 +114,31 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
       </div>
 
       {/* Format bar — floats directly above the keyboard */}
-      <div className="shrink-0 border-t border-[#E8E8E8] bg-white overflow-x-auto">
+      <div className="shrink-0 border-t border-[#E8E8E8] bg-white relative">
+        {/* Font picker dropdown — opens upward, each font shown in its own face */}
+        {fontOpen && (
+          <>
+            <div className="fixed inset-0 z-[1]" onClick={() => setFontOpen(false)} />
+            <div className="absolute bottom-full left-0 right-0 z-[2] max-h-72 overflow-y-auto bg-white border-t border-[#E8E8E8] shadow-[0_-10px_30px_rgba(0,0,0,0.14)]">
+              {FONTS.map((f) => (
+                <button key={f.name} onClick={() => { setFontFamily(f.family); setFontOpen(false); }}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-left ${f.family === fontFamily ? 'bg-[#FDE8E4]' : 'active:bg-[#F5F5F5]'}`}>
+                  <span className="text-[18px] text-[#2D2D2D] truncate" style={{ fontFamily: f.family }}>{f.name}</span>
+                  {f.family === fontFamily && <Check size={16} className="text-[#E8A598] shrink-0 ml-2" />}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        <div className="overflow-x-auto">
         <div className="flex items-center gap-1 px-3 py-2 whitespace-nowrap" style={{ minWidth: 'max-content' }}>
           <ToolBtn active={bold} onClick={() => setBold((v) => !v)}><Bold size={18} /></ToolBtn>
           <ToolBtn active={italic} onClick={() => setItalic((v) => !v)}><Italic size={18} /></ToolBtn>
           <ToolBtn active={underline} onClick={() => setUnderline((v) => !v)}><Underline size={18} /></ToolBtn>
           <Divider />
-          <button onClick={cycleFont}
-            className="px-3 h-9 rounded-lg text-sm text-[#2D2D2D] bg-[#F5F5F5] active:scale-95 transition-transform shrink-0"
-            style={{ fontFamily }}>{FONTS[fontIdx].name}</button>
+          <button onClick={() => setFontOpen((v) => !v)}
+            className="px-3 h-9 rounded-lg text-sm text-[#2D2D2D] bg-[#F5F5F5] active:scale-95 transition-transform shrink-0 flex items-center gap-1.5"
+            style={{ fontFamily }}>{FONTS[fontIdx].name} <ChevronDown size={14} className="text-[#9B9B9B]" /></button>
           <Divider />
           <ToolBtn onClick={() => setFontSize((s) => Math.max(14, s - 2))}><Minus size={16} /></ToolBtn>
           <span className="text-sm text-[#6B6B6B] w-7 text-center tabular-nums">{fontSize}</span>
@@ -122,6 +157,7 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
           <ToolBtn active={alignment === 'left'} onClick={() => setAlignment('left')}><AlignLeft size={18} /></ToolBtn>
           <ToolBtn active={alignment === 'center'} onClick={() => setAlignment('center')}><AlignCenter size={18} /></ToolBtn>
           <ToolBtn active={alignment === 'right'} onClick={() => setAlignment('right')}><AlignRight size={18} /></ToolBtn>
+        </div>
         </div>
       </div>
     </div>

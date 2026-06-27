@@ -141,8 +141,26 @@ async function renderPageManually(
   }
 
   // ── Text Elements ──
+  // Bound captions (boxIndex) print INSIDE their textbox region; free text keeps
+  // its x/y. Each element's chosen font is loaded before drawing so the canvas
+  // doesn't silently fall back to the default serif.
+  const textTpl = template ? adaptTemplateToOrientation(template, W, H) : null;
+  const tm = textTpl ? marginForTemplate(textTpl, textTpl.margin, albumSize, pageIndex) : null;
   for (const text of page.textElements || []) {
-    renderTextElement(ctx, text, W, H);
+    const fam = text.fontFamily || 'serif';
+    const primary = fam.match(/"([^"]+)"/)?.[1];
+    if (primary) {
+      try { await document.fonts.load(`${(text.fontSize || 24) * (W / 576)}px "${primary}"`); } catch { /* ignore */ }
+    }
+    let slot: { x: number; y: number; w: number; h: number; align?: 'left' | 'center' | 'right' } | null = null;
+    if (text.boxIndex != null && textTpl && tm) {
+      const ts = textTpl.textSlots?.[text.boxIndex];
+      if (ts) {
+        const sX = W * tm.left, sY = H * tm.top, sW = W * (1 - tm.left - tm.right), sH = H * (1 - tm.top - tm.bottom);
+        slot = { x: sX + ts.x * sW, y: sY + ts.y * sH, w: ts.width * sW, h: ts.height * sH, align: ts.align };
+      }
+    }
+    renderTextElement(ctx, text, W, H, slot);
   }
 
   return new Promise((resolve) => {
@@ -353,28 +371,33 @@ function renderTextElement(
   text: any,
   W: number,
   _H: number,
+  slot?: { x: number; y: number; w: number; h: number; align?: 'left' | 'center' | 'right' } | null,
 ) {
   const fontSize = (text.fontSize || 24) * (W / 576); // Scale relative to 8x8 reference
   const fontFamily = text.fontFamily || 'serif';
   const fontWeight = text.bold ? 'bold' : 'normal';
   const fontStyle = text.italic ? 'italic' : 'normal';
+  const align = (slot?.align ?? text.alignment ?? 'center') as CanvasTextAlign;
 
   ctx.save();
   ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
   ctx.fillStyle = text.color || '#2D2D2D';
-  ctx.textAlign = (text.alignment as CanvasTextAlign) || 'center';
+  ctx.textAlign = align;
   ctx.textBaseline = 'middle';
 
-  if (text.rotation) {
+  if (slot) {
+    // Caption bound to a textbox region — draw it INSIDE the slot (centred
+    // vertically, aligned horizontally), matching the editor + preview. Without
+    // this, box-bound text (x=y=0) printed in the top-left corner.
+    const pad = slot.w * 0.04;
+    const cx = align === 'left' ? slot.x + pad : align === 'right' ? slot.x + slot.w - pad : slot.x + slot.w / 2;
+    ctx.fillText(text.text, cx, slot.y + slot.h / 2);
+  } else if (text.rotation) {
     ctx.translate(text.x * (W / 576), text.y * (W / 576));
     ctx.rotate((text.rotation * Math.PI) / 180);
     ctx.fillText(text.text, 0, 0);
   } else {
-    ctx.fillText(
-      text.text,
-      text.x * (W / 576),
-      text.y * (W / 576),
-    );
+    ctx.fillText(text.text, text.x * (W / 576), text.y * (W / 576));
   }
 
   ctx.restore();
