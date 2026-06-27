@@ -83,7 +83,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
     <div className="h-full flex flex-col bg-[#F5F5F5] relative">
       {/* Page counter */}
       <div className="shrink-0 text-center py-2.5 text-xs font-medium text-[#6B6B6B]">
-        Page {idx + 1} of {total} · tap a photo to replace
+        Page {idx + 1} of {total} · tap 🗑 to remove a photo, + to add one
       </div>
 
       {/* Swipeable page */}
@@ -105,7 +105,11 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             className="bg-white shadow-xl shrink-0 relative overflow-hidden"
             style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
           >
-            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx} onSlotTap={(slotIndex) => setReplaceSlot(slotIndex)} onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)} />}
+            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx}
+              editable
+              onAddToSlot={(slotIndex) => setReplaceSlot(slotIndex)}
+              onRemoveFromSlot={(slotIndex) => actions.clearSlot(slotIndex)}
+              onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -149,7 +153,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
-                <span className="text-sm font-semibold text-[#2D2D2D]">Replace photo</span>
+                <span className="text-sm font-semibold text-[#2D2D2D]">Add a photo</span>
                 <button onClick={() => setReplaceSlot(null)} className="text-[#9B9B9B] p-1"><X size={18} /></button>
               </div>
               {actions.uploadedPhotos.length === 0 ? (

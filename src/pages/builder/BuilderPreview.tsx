@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Download, Plus, Trash2 } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
 import { CORNER_POSITIONS, cornerImageUrl } from './types';
 import { dedupeSlotFills } from './slotUtils';
@@ -74,10 +74,15 @@ function backgroundToCss(bg: any): React.CSSProperties {
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, editable, onAddToSlot, onRemoveFromSlot }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
+  // Mobile edit mode: empty frames show a "+" to add a photo; filled frames show
+  // a trashcan to remove it.
+  editable?: boolean;
+  onAddToSlot?: (slotIndex: number) => void;
+  onRemoveFromSlot?: (slotIndex: number) => void;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -95,10 +100,33 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
     <>
       <div className="absolute inset-0" style={{ ...backgroundToCss(page.background), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
       {template && dedupeSlotFills(page.slotFills).map((photoIdx, idx) => {
-        if (photoIdx == null) return null;
-        const uploaded = photos[photoIdx];
-        if (!uploaded) return null;
         const slot = template.slots[idx];
+        if (!slot) return null;
+        const uploaded = photoIdx != null ? photos[photoIdx] : undefined;
+
+        // Empty frame → in edit mode, a tappable dashed frame with a "+" to add.
+        if (!uploaded) {
+          if (!editable) return null;
+          return (
+            <div key={`slot-${idx}`} className="absolute flex items-center justify-center"
+              onClick={onAddToSlot ? (e) => { e.stopPropagation(); onAddToSlot(idx); } : undefined}
+              style={{
+                zIndex: 1, left: safeX + slot.x * safeW, top: safeY + slot.y * safeH,
+                width: slot.width * safeW, height: slot.height * safeH,
+                border: '2px dashed rgba(232,165,152,0.85)', borderRadius: 10,
+                background: 'rgba(253,232,228,0.5)', cursor: 'pointer', boxSizing: 'border-box',
+              }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
+              }}>
+                <Plus size={26} color="white" />
+              </div>
+            </div>
+          );
+        }
+
         const { style: shapeStyle, width, height, leftOffset, topOffset } =
           slotShapeStyle(slot, slot.width * safeW, slot.height * safeH);
         const left = safeX + slot.x * safeW + leftOffset;
@@ -128,6 +156,16 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             <img src={uploaded.previewUrl} alt="" draggable={false}
               className="absolute object-cover"
               style={{ left: imgLeft, top: imgTop, width: imgW, height: imgH }} />
+            {editable && onRemoveFromSlot && (
+              <button onClick={(e) => { e.stopPropagation(); onRemoveFromSlot(idx); }} aria-label="Remove photo"
+                style={{
+                  position: 'absolute', top: 6, right: 6, zIndex: 6, width: 30, height: 30,
+                  borderRadius: '50%', background: 'rgba(45,45,45,0.65)', border: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                <Trash2 size={16} color="white" />
+              </button>
+            )}
           </div>
         );
       })}
