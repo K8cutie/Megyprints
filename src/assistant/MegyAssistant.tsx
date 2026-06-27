@@ -614,6 +614,14 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         </div>
       </div>
 
+      {/* ═══ RESTART — just under the title bar ═══ */}
+      <div className="px-4 py-2 bg-[#FFF8F0] border-b border-[#F4C2A1]/10 shrink-0">
+        <button onClick={doRestartWizard} className="w-full flex items-center justify-center gap-2 py-2 text-[#9B9B9B] hover:text-[#E8A598] hover:bg-[#FDE8E4]/50 rounded-lg text-xs font-medium transition-all">
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Restart Wizard — start over</span>
+        </button>
+      </div>
+
       {/* ═══ WIZARD PROGRESS BAR ═══ */}
       {showWizard && (
         <div className="px-4 py-2 bg-[#FFF8F0] border-b border-[#F4C2A1]/10 shrink-0">
@@ -688,13 +696,6 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         </div>
       )}
 
-      {/* ═══ RESTART ═══ */}
-      <div className="px-4 py-3 bg-[#FFF8F0] border-b border-[#F4C2A1]/10 shrink-0">
-        <button onClick={doRestartWizard} className="w-full flex items-center justify-center gap-2 py-2 text-[#9B9B9B] hover:text-[#E8A598] hover:bg-[#FDE8E4]/50 rounded-lg text-xs font-medium transition-all">
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Restart Wizard — start over</span>
-        </button>
-      </div>
 
       {/* ═══ TABS ═══ */}
       <div className="flex border-b border-[#F4C2A1]/10 shrink-0">
