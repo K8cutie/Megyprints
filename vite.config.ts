@@ -32,6 +32,25 @@ export default defineConfig({
         // Main bundle is ~3MB; raise the precache limit so it works offline.
         globPatterns: ['**/*.{js,css,html,png,svg,woff,woff2}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        // Apply a shipped build on the NEXT load instead of waiting for every tab
+        // to close — the new service worker activates immediately and claims open
+        // clients. Old precaches are pruned so they can't be served stale.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        // App shell = network-first: when online, always fetch the latest HTML so
+        // new asset hashes load right away; fall back to cache only when offline.
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'app-shell',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 8 },
+            },
+          },
+        ],
       },
     }),
   ],
