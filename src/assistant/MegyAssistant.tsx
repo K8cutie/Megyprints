@@ -10,7 +10,7 @@ import { parseIntent } from './intentParser';
 import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
-import { DENSITY_BY_SIZE, DENSITY_LABELS } from '../pages/builder/densities';
+import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
 import type { AssistantMessage } from './types';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
 import { getThemeBackgroundVariants } from '../pages/builder/types';
@@ -453,7 +453,16 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   <span className="px-3 py-1.5 rounded-full bg-[#FDE8E4] text-[#E8A598] text-sm font-semibold">{builder.albumSize} album</span>
                   <span className="px-3 py-1.5 rounded-full bg-[#FDE8E4] text-[#E8A598] text-sm font-semibold capitalize">{builder.selectedTemplate} theme</span>
                 </div>
-                <p className="text-xs text-[#8B7E7A] mt-3">I&apos;ll create 40+ pages with auto-matched layouts.</p>
+                {(() => {
+                  const est = estimateAlbumFill(builder.uploadedPhotos.length, builder.albumSize, builder.photosPerPage);
+                  return est.fillsAlbum ? (
+                    <p className="text-xs text-[#2E7D4A] mt-3">✓ Plenty for a full {MIN_ALBUM_PAGES}-page album.</p>
+                  ) : (
+                    <p className="text-xs text-[#B8791F] mt-3 leading-relaxed">
+                      These fill about <b>{est.estimatedPages}</b> of {MIN_ALBUM_PAGES} pages. Add ~<b>{est.shortBy}</b> more photos to fill the album — or generate now and leave the extra pages blank to fill later.
+                    </p>
+                  );
+                })()}
               </div>
             ) : (
               <p className="text-sm text-[#5A5A5A] leading-relaxed mb-4">{msg.body}</p>

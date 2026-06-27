@@ -2,12 +2,11 @@ import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTempla
 import { getTemplatesForRatio, getTemplatesForAlbum } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { templateTracker } from './varietyTracker';
+import { MIN_ALBUM_PAGES as MIN_PAGES } from './densities';
 
 /* ══════════════════════════════════════════════════════════════════════════
    SMART ALBUM GENERATION — Ratio-aware template matching
    ══════════════════════════════════════════════════════════════════════════ */
-
-const MIN_PAGES = 40;
 
 /** Deterministic page ID from index */
 function makePageId(index: number): string {
