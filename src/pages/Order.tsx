@@ -2,12 +2,11 @@ import { useState, useMemo, useEffect } from 'react';
 import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Download, Package } from 'lucide-react';
+import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package } from 'lucide-react';
 import { MATERIALS, COVERS, ALBUM_SIZES, PRICE_CONFIG } from './builder/types';
 import { useAuth } from '../lib/authContext';
-import { createOrderFromLatestAlbum } from '../lib/orders';
+import { createOrderFromLatestAlbum, uploadOrderPrintPdf } from '../lib/orders';
 import { getPendingPrintJob } from '../lib/printQueue';
-import { downloadAlbumPdf } from './builder/generateAlbumPdf';
 
 type Step = 'form' | 'payment' | 'tracking';
 
@@ -34,7 +33,7 @@ export default function Order() {
   const [errorMsg, setErrorMsg] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
   const [trackStage, setTrackStage] = useState(0);
-  const [pdfState, setPdfState] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
+  const [prepMsg, setPrepMsg] = useState('');
 
   const totalPrice = useMemo(() => {
     const mat = MATERIALS.find((m) => m.type === material)?.priceFactor ?? 1;
@@ -73,6 +72,20 @@ export default function Order() {
         amount: totalPrice,
       });
       setOrderNumber(order.order_number);
+      // Build the print-ready PDF NOW (the photos live in THIS browser) and send
+      // it to the private fulfillment bucket. Only Megyprints can download it —
+      // the customer never gets the file. Best-effort: the order still stands if
+      // this hiccups (we log it so it can be regenerated from a re-opened album).
+      const job = getPendingPrintJob();
+      if (job && job.pages.length > 0) {
+        setPrepMsg('Preparing your album for printing…');
+        try {
+          await uploadOrderPrintPdf(order.id, job);
+        } catch (e) {
+          console.error('Print PDF upload failed:', e);
+        }
+        setPrepMsg('');
+      }
       setTrackStage(0);
       setStep('tracking');
     } catch (err) {
@@ -89,23 +102,6 @@ export default function Order() {
     const t = setTimeout(() => setTrackStage((s) => s + 1), 2400);
     return () => clearTimeout(t);
   }, [step, trackStage]);
-
-  // ── Real print-ready PDF (built from the job stashed by the Preview) ──
-  const handleDownloadPdf = async () => {
-    const job = getPendingPrintJob();
-    if (!job || job.pages.length === 0) {
-      setPdfState('error');
-      return;
-    }
-    setPdfState('working');
-    try {
-      await downloadAlbumPdf(job.pages, job.photos, job.albumSize, `megyprints-${orderNumber || 'album'}.pdf`);
-      setPdfState('done');
-    } catch (err) {
-      console.error('Print PDF failed:', err);
-      setPdfState('error');
-    }
-  };
 
   /* ══════════════ TRACKING ══════════════ */
   if (step === 'tracking') {
@@ -141,22 +137,12 @@ export default function Order() {
             </div>
           </div>
 
-          {/* Print-ready PDF — the artifact that goes to the printer */}
+          {/* Print-ready file goes straight to Megyprints — customers don't get
+              the PDF (so it can't be printed elsewhere). Just reassure them. */}
           {printerReached && (
             <div className="bg-white rounded-2xl p-6 shadow-sm mt-4">
-              <h3 className="font-display text-base font-semibold text-[#2D2D2D] mb-1 flex items-center gap-2"><Printer size={16} /> Print-ready file</h3>
-              <p className="text-xs text-[#6B6B6B] mb-3">This is the 300 DPI PDF our printer uses to produce your album.</p>
-              <button
-                onClick={handleDownloadPdf}
-                disabled={pdfState === 'working'}
-                className="w-full py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
-              >
-                {pdfState === 'working'
-                  ? <><Loader2 size={16} className="animate-spin" /> Building print file…</>
-                  : <><Download size={16} /> Download print-ready PDF</>}
-              </button>
-              {pdfState === 'done' && <p className="mt-2 text-xs text-[#2E7D4A] text-center">Print file downloaded ✓</p>}
-              {pdfState === 'error' && <p className="mt-2 text-xs text-red-500 text-center">Couldn't build the print file. Make sure you came here straight from the album preview.</p>}
+              <h3 className="font-display text-base font-semibold text-[#2D2D2D] mb-1 flex items-center gap-2"><Printer size={16} /> Sent to print</h3>
+              <p className="text-xs text-[#6B6B6B]">Your print-ready album has been sent to Megyprints. We'll print it on premium paper and ship it to your address — no action needed on your end. 💛</p>
             </div>
           )}
 
@@ -188,7 +174,7 @@ export default function Order() {
               disabled={submitting}
               className="w-full py-3.5 bg-[#E8A598] text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
             >
-              {submitting ? <><Loader2 size={16} className="animate-spin" /> Processing payment…</> : <>Pay ₱{totalPrice}</>}
+              {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Processing payment…'}</> : <>Pay ₱{totalPrice}</>}
             </button>
             <p className="mt-3 text-[11px] text-[#9B9B9B] text-center">🔒 Simulated payment — no real charge. (Xendit checkout goes here later.)</p>
             {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}

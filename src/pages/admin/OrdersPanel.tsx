@@ -3,10 +3,11 @@
    render when canSeeFinancials (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
-import { Loader2, Check } from 'lucide-react';
+import { Loader2, Check, Download } from 'lucide-react';
 import {
   type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus,
 } from '../../lib/adminOrders';
+import { supabase } from '../../lib/supabase';
 
 export default function OrdersPanel({ orders, onChanged, canSeeFinancials }: {
   orders: AdminOrder[];
@@ -38,6 +39,18 @@ function OrderRow({ o, onChanged, canSeeFinancials }: {
   };
   const saveFin = (patch: OrderPatch) => run(() => updateOrder(o.id, patch));
   const changeStatus = (status: AdminOrder['status']) => run(() => setOrderStatus(o.id, status));
+
+  // Pull the print-ready PDF (operators only — RLS blocks customers). Built on
+  // the customer's device at order time and stored at "<order_id>.pdf".
+  const downloadPrintPdf = async () => {
+    setSaving(true); setErr(null);
+    const { data, error } = await supabase.storage
+      .from('print-pdfs')
+      .createSignedUrl(`${o.id}.pdf`, 120, { download: `megyprints-${o.order_number}.pdf` });
+    setSaving(false);
+    if (error || !data?.signedUrl) { setErr('Print file not ready for this order yet.'); return; }
+    window.open(data.signedUrl, '_blank');
+  };
 
   const paid = o.payment_status === 'paid';
   const date = o.created_at.slice(0, 10);
@@ -78,6 +91,12 @@ function OrderRow({ o, onChanged, canSeeFinancials }: {
                 </button>
               )}
             </>
+          )}
+          {paid && (
+            <button onClick={downloadPrintPdf} disabled={saving}
+              className="h-8 px-3 rounded-lg bg-[#FFF1E8] text-xs font-medium text-[#C98A5E] flex items-center gap-1 disabled:opacity-50">
+              <Download size={13} /> Print PDF
+            </button>
           )}
           <select value={o.status} onChange={(e) => changeStatus(e.target.value as AdminOrder['status'])} disabled={saving}
             className="h-8 px-2 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1] bg-white">

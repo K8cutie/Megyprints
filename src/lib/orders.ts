@@ -8,6 +8,8 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 import { supabase } from './supabase';
+import { generateAlbumPdf } from '../pages/builder/generateAlbumPdf';
+import type { PrintJob } from './printQueue';
 
 export interface ShippingDetails {
   name: string;
@@ -79,4 +81,19 @@ export async function createOrderFromLatestAlbum(opts: {
 
   if (error) throw new Error(`Could not place your order: ${error.message}`);
   return data as CreatedOrder;
+}
+
+/**
+ * Build the print-ready PDF for an order and upload it to the private
+ * `print-pdfs` bucket (path "<order_id>.pdf"). MUST run on the customer's device
+ * — the photos live only in their browser (the print job carries them). Only
+ * operators can later download it, so the album can't be printed elsewhere.
+ * Throws on failure so the caller can surface it.
+ */
+export async function uploadOrderPrintPdf(orderId: string, job: PrintJob): Promise<void> {
+  const blob = await generateAlbumPdf(job.pages, job.photos, job.albumSize);
+  const { error } = await supabase.storage
+    .from('print-pdfs')
+    .upload(`${orderId}.pdf`, blob, { contentType: 'application/pdf', upsert: true });
+  if (error) throw new Error(`Print file upload failed: ${error.message}`);
 }
