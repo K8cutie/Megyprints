@@ -7,6 +7,7 @@ import BuilderSetup from './builder/BuilderSetup';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
 import MobileReview from './builder/MobileReview';
+import LayoutPicker from './builder/LayoutPicker';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
 import MegyAssistant from '../assistant/MegyAssistant';
 import { useIsMobile } from '../hooks/use-mobile';
@@ -215,6 +216,9 @@ export default function Builder() {
 
         {/* ── Megy Assistant ── */}
         <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'preview')} />
+
+        {/* "Change layout" picker — shared by mobile review + desktop panel */}
+        <LayoutPicker actions={actions} />
 
         {/* Hidden file input for programmatic upload trigger */}
         <input

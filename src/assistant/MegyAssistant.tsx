@@ -297,9 +297,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         }
         break;
       case 'review_pages': {
-        if (action.includes('Shuffle')) {
-          void builder.dispatch({ type: 'shuffle_layout', rawMessage: 'shuffle layout' });
-          showToast('This page shuffled');
+        if (/layout/i.test(action)) {
+          builder.setLayoutPickerOpen(true);
         } else if (action.includes('Quote')) {
           const q = builder.addThemedQuote?.();
           showToast(q ? `Added: "${q}"` : 'This page is full — no room for a quote here.');

@@ -249,6 +249,9 @@ export interface BuilderActions {
   availableTemplatesForCurrentPage: () => PageTemplate[];
   /** Apply a chosen template to the current page, keeping its photos. */
   applyPageLayout: (templateId: string) => void;
+  /** The "Change layout" picker open state — shared by mobile + desktop. */
+  layoutPickerOpen: boolean;
+  setLayoutPickerOpen: (v: boolean) => void;
   autoFillSlots: () => void;
   clearAllSlots: () => void;
 
@@ -362,6 +365,9 @@ export function useBuilderState(): BuilderActions {
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState().rejectedTemplateIds);
   const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState().photosPerPage);
   const [phase, setPhase] = useState('setup');
+  // ── Layout picker (the "Change layout" sheet/modal) — shared so the mobile
+  //    review and the desktop panel both open the same picker ──
+  const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   // ── Wizard step tracking — assistant is the primary controller ──
   const [wizardStep, setWizardStep] = useState<'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize'>('welcome');
 
@@ -1725,6 +1731,8 @@ export function useBuilderState(): BuilderActions {
     cycleLayout,
     availableTemplatesForCurrentPage,
     applyPageLayout,
+    layoutPickerOpen,
+    setLayoutPickerOpen,
     autoFillSlots,
     clearAllSlots,
     fillSlot,
