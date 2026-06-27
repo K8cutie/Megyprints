@@ -21,4 +21,10 @@ if ('serviceWorker' in navigator) {
     reloading = true
     window.location.reload()
   })
+  // Proactively check for a newer SW on every load instead of waiting for the
+  // browser's periodic (up to 24h) check — so a fresh deploy is picked up on the
+  // next visit, not a day later.
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    for (const r of regs) r.update()
+  }).catch(() => { /* ignore */ })
 }
