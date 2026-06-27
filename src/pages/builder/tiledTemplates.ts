@@ -246,9 +246,69 @@ const GRID_SPECS: GridSpec[] = [
   { size: '8.5x11', rows: 3, cols: 2, caption: true, name: 'Four + caption' },
 ];
 
-/** All generated tiled templates: square recipes + non-square grids. */
+/* ── CUSTOM explicit-region templates (any size) ─────────────────────────────
+   For layouts the uniform grids can't express — e.g. a TEXT BOX beside the photo.
+   Each photo region's true ratio = (w/h) × pageAspect, tagged to nearest
+   phone-native; the 5mm gap + 2" floor apply just like the others. */
+interface RegionSpec { x: number; y: number; w: number; h: number; }
+interface CustomSpec {
+  size: AlbumSizePreset;
+  key: string;
+  name: string;
+  category: PageTemplate['category'];
+  photos: RegionSpec[];
+  texts: RegionSpec[];
+}
+
+function customTemplate(spec: CustomSpec): PageTemplate | null {
+  const { size, key, name, category, photos, texts } = spec;
+  const { w: iw, h: ih } = INCHES[size];
+  const A = iw / ih;
+  const safeWin = iw * (1 - MARGIN.left - MARGIN.right);
+  const safeHin = ih * (1 - MARGIN.top - MARGIN.bottom);
+  const { gx, gy } = gapFracs(safeWin, safeHin);
+
+  const slots: TemplateSlot[] = [];
+  for (let i = 0; i < photos.length; i++) {
+    const p = photos[i];
+    const b = inset(p.x, p.y, p.w, p.h, gx, gy);
+    if (Math.min(b.w * safeWin, b.h * safeHin) < MIN_FRAME_INCHES) return null; // print floor
+    slots.push({ id: `${key}-${size}-s${i}`, x: b.x, y: b.y, width: b.w, height: b.h, ratio: nearestRatio((p.w / p.h) * A) });
+  }
+  const textSlots: TextSlot[] = texts.map((t, i) => {
+    const b = inset(t.x, t.y, t.w, t.h, gx, gy);
+    return { id: i === 0 ? 'cap' : `cap${i}`, x: b.x, y: b.y, width: b.w, height: b.h, align: 'center', placeholder: 'Tap to add text' };
+  });
+
+  return {
+    id: `tile-${key}-${size}`,
+    name,
+    category,
+    slotCount: slots.length,
+    margin: MARGIN,
+    orientation: orientFor(A),
+    targetRatio: slots[0]?.ratio ?? '1:1',
+    albumSizes: [size],
+    slots,
+    textSlots,
+  };
+}
+
+const CUSTOM_TEXT_SPECS: CustomSpec[] = [
+  // 6×4 — text BESIDE the photo. A caption band below would force a panorama-wide
+  // photo on this short (4") album, so the caption goes in a side column instead.
+  { size: '6x4', key: 'portrait-capR', name: 'Portrait + caption', category: 'single',
+    photos: [{ x: 0, y: 0, w: 0.5, h: 1 }], texts: [{ x: 0.5, y: 0, w: 0.5, h: 1 }] },
+  { size: '6x4', key: 'portrait-capL', name: 'Caption + portrait', category: 'single',
+    photos: [{ x: 0.5, y: 0, w: 0.5, h: 1 }], texts: [{ x: 0, y: 0, w: 0.5, h: 1 }] },
+  { size: '6x4', key: 'square-capR', name: 'Square + caption', category: 'single',
+    photos: [{ x: 0, y: 0, w: 0.62, h: 1 }], texts: [{ x: 0.62, y: 0, w: 0.38, h: 1 }] },
+];
+
+/** All generated tiled templates: square recipes + non-square grids + custom. */
 export const TILED_TEMPLATES: PageTemplate[] = [
   ...SQUARE_SIZES.flatMap((size) =>
     SQUARE_RECIPES.map((r) => buildForSize(r, size, 'square')).filter((t): t is PageTemplate => t !== null)),
   ...GRID_SPECS.map(gridTemplate).filter((t): t is PageTemplate => t !== null),
+  ...CUSTOM_TEXT_SPECS.map(customTemplate).filter((t): t is PageTemplate => t !== null),
 ];
