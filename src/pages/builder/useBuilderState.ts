@@ -9,6 +9,7 @@ import type {
   AlbumBackground,
   PhotoFilters,
   SlotGeometryOverride,
+  PageTemplate,
 } from './types';
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
@@ -244,6 +245,10 @@ export interface BuilderActions {
   regeneratePage: () => void;
   shuffleLayout: () => void;
   cycleLayout: () => void;
+  /** Templates available for the current page (for the layout picker). */
+  availableTemplatesForCurrentPage: () => PageTemplate[];
+  /** Apply a chosen template to the current page, keeping its photos. */
+  applyPageLayout: (templateId: string) => void;
   autoFillSlots: () => void;
   clearAllSlots: () => void;
 
@@ -1048,6 +1053,52 @@ export function useBuilderState(): BuilderActions {
     });
   }, [currentPageIndex, albumSize, uploadedPhotos]);
 
+  /** The templates available for the current page (same pool the cycle uses:
+   *  matching the page's photo count + dominant ratio, active only), sorted —
+   *  for the layout picker so the user can choose directly. */
+  const availableTemplatesForCurrentPage = useCallback((): PageTemplate[] => {
+    const page = albumPages[currentPageIndex];
+    if (!page) return [];
+    const analysis = analyzePhotos(uploadedPhotos);
+    const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
+    const count = existingFills.length;
+    const ratios = existingFills.map((i) => analysis.assignments[i]).filter(Boolean) as PhotoRatio[];
+    const tally: Partial<Record<PhotoRatio, number>> = {};
+    let pageRatio: PhotoRatio | undefined = ratios[0];
+    let bestR = 0;
+    for (const r of ratios) { tally[r] = (tally[r] ?? 0) + 1; if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; } }
+    const allForSize = getTemplatesForAlbum(albumSize);
+    let pool = allForSize.filter((t) => t.slotCount === count && (!pageRatio || t.targetRatio === pageRatio));
+    if (pool.length === 0) pool = allForSize.filter((t) => t.slotCount === count);
+    if (pool.length === 0) pool = allForSize;
+    return [...pool].sort((a, b) => a.id.localeCompare(b.id));
+  }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
+
+  /** Apply a SPECIFIC template to the current page (the picker's choice), keeping
+   *  the existing photos (re-filled into the new slots — unlike setPageTemplate
+   *  which clears them). */
+  const applyPageLayout = useCallback((templateId: string) => {
+    const template = getTemplateById(templateId);
+    if (!template) return;
+    pushSnapshot();
+    setAlbumPages((prev) => {
+      const next = [...prev];
+      const page = next[currentPageIndex];
+      if (!page) return prev;
+      const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
+      const slotCount = template.slots.length;
+      next[currentPageIndex] = {
+        ...page,
+        templateId: template.id,
+        slotFills: new Array(slotCount).fill(null).map((_, i) => existingFills[i] ?? null),
+        slotScales: new Array(slotCount).fill(1),
+        slotOffsetsX: new Array(slotCount).fill(0),
+        slotOffsetsY: new Array(slotCount).fill(0),
+      };
+      return next;
+    });
+  }, [currentPageIndex]);
+
   /* ── Slot management ── */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
     pushSnapshot();
@@ -1672,6 +1723,8 @@ export function useBuilderState(): BuilderActions {
     regeneratePage,
     shuffleLayout,
     cycleLayout,
+    availableTemplatesForCurrentPage,
+    applyPageLayout,
     autoFillSlots,
     clearAllSlots,
     fillSlot,

@@ -1,17 +1,18 @@
 /* ══════════════════════════════════════════════════════════════════════════
    MobileReview — the phone review experience: "Megy does it, you approve."
-   Each page fills the screen; swipe (or arrows) to move freely. "Change" cycles
-   the page's layout to the next template (loops). "Done" appears only on the
-   LAST page → a brief "Loading album preview…" beat → Preview.
+   Each page fills the screen; swipe (or arrows) to move freely. "Change layout"
+   opens a picker of the available templates for that page. "Done" appears only on
+   the LAST page → a brief "Loading album preview…" beat → Preview.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, RefreshCw, Check, Loader2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
+import TemplateThumb from './TemplateThumb';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 
 export default function MobileReview({ actions, onDone }: { actions: BuilderContextValue; onDone: () => void }) {
@@ -23,6 +24,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [finishing, setFinishing] = useState(false);
   const [replaceSlot, setReplaceSlot] = useState<number | null>(null); // tap-to-replace target
   const [editSlot, setEditSlot] = useState<number | null>(null); // tap-to-edit-text target
+  const [showLayouts, setShowLayouts] = useState(false); // layout picker sheet
 
   // Seed the editor from the box's existing text, or the template's defaults.
   const template = page?.templateId ? getTemplateById(page.templateId) : null;
@@ -117,9 +119,9 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] disabled:opacity-30 transition-opacity">
             <ChevronLeft size={22} />
           </button>
-          <button onClick={() => actions.cycleLayout()}
+          <button onClick={() => setShowLayouts(true)}
             className="flex-1 h-12 rounded-xl bg-[#F4C2A1] text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-            <RefreshCw size={18} /> Change
+            <LayoutGrid size={18} /> Change layout
           </button>
           <button onClick={goNext} disabled={isLast}
             className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] disabled:opacity-30 transition-opacity">
@@ -165,6 +167,50 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                   ))}
                 </div>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Layout picker — bottom sheet showing the available templates */}
+      <AnimatePresence>
+        {showLayouts && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/40 flex items-end"
+            onClick={() => setShowLayouts(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              className="w-full bg-white rounded-t-2xl max-h-[72vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
+                <span className="text-sm font-semibold text-[#2D2D2D]">Choose a layout</span>
+                <button onClick={() => setShowLayouts(false)} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+              </div>
+              {(() => {
+                const layouts = actions.availableTemplatesForCurrentPage();
+                if (layouts.length === 0) {
+                  return <p className="p-6 text-center text-sm text-[#9B9B9B]">No other layouts fit this page.</p>;
+                }
+                return (
+                  <div className="overflow-y-auto p-3 grid grid-cols-2 gap-3">
+                    {layouts.map((t) => {
+                      const current = t.id === page?.templateId;
+                      return (
+                        <button key={t.id}
+                          onClick={() => { actions.applyPageLayout(t.id); setShowLayouts(false); }}
+                          className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 active:scale-95 transition-transform ${current ? 'border-[#F4C2A1] bg-[#FFF8F0]' : 'border-[#F0F0F0] bg-white'}`}>
+                          <TemplateThumb template={t} size={actions.albumSize} w={130} />
+                          <span className="text-[11px] text-[#6B6B6B] truncate max-w-full">{current ? '✓ Current' : t.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </motion.div>
           </motion.div>
         )}
