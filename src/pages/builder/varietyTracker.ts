@@ -36,7 +36,10 @@ export class VarietyTracker {
    */
   pick(pool: string[], current?: string): string | null {
     if (pool.length === 0) return null;
-    if (pool.length === 1) return pool[0];
+    // Record single-option picks too — otherwise callers that check getRecent()
+    // (e.g. the mixed-template de-cluster guard) never see this pick, so a lone
+    // template gets placed on page after page beside itself.
+    if (pool.length === 1) { this.track(pool[0]); return pool[0]; }
 
     const recentKeys = new Set<string>(this.history);
     if (current) recentKeys.add(current);

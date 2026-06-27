@@ -16,7 +16,7 @@ import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackgro
 import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import {
-  Wand2, Images, LayoutGrid, Palette, Type, ChevronUp, ChevronDown,
+  Images, LayoutGrid, Palette, Type, ChevronUp, ChevronDown,
   PanelLeft, Box, Shuffle, Plus, Minus, ArrowLeft, ArrowRight, Upload,
   RefreshCw, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
   RotateCcw, Redo, Sparkles, Trash2, Sun, Moon, Contrast, Droplets,
@@ -345,10 +345,6 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     setWizardStep(wizardRef.current.state.step);  // syncs store + phase via effects
     try { localStorage.removeItem(WIZARD_STORAGE_KEY); } catch { /* ignore */ }
     showToast('Wizard restarted — back to the beginning');
-  };
-  const doSurprise = () => {
-    void builder.dispatch({ type: 'surprise_me', rawMessage: 'Surprise me' });
-    showToast('Fresh layouts across your album!');
   };
   const doGenerate = () => { void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }); showToast('Album generated!'); };
   const doShuffle = () => { void builder.dispatch({ type: 'shuffle_layout', rawMessage: 'shuffle layout' }); showToast('Layout shuffled'); };
@@ -693,14 +689,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         </div>
       )}
 
-      {/* ═══ SURPRISE ME ═══ */}
+      {/* ═══ RESTART ═══ */}
       <div className="px-4 py-3 bg-[#FFF8F0] border-b border-[#F4C2A1]/10 shrink-0">
-        <button onClick={doSurprise} className="w-full flex items-center justify-center gap-2.5 py-3 bg-[#F4C2A1] hover:bg-[#E8A598] text-white rounded-xl font-semibold text-sm transition-all hover:shadow-md active:scale-[0.98]">
-          <Wand2 className="w-5 h-5" />
-          <span>Surprise Me — New Layouts</span>
-        </button>
-        <p className="text-[10px] text-[#8B7E7A] text-center mt-1.5">Reshuffles every page into fresh layouts — same theme. Click again for another arrangement!</p>
-        <button onClick={doRestartWizard} className="w-full mt-2 flex items-center justify-center gap-2 py-2 text-[#9B9B9B] hover:text-[#E8A598] hover:bg-[#FDE8E4]/50 rounded-lg text-xs font-medium transition-all">
+        <button onClick={doRestartWizard} className="w-full flex items-center justify-center gap-2 py-2 text-[#9B9B9B] hover:text-[#E8A598] hover:bg-[#FDE8E4]/50 rounded-lg text-xs font-medium transition-all">
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Restart Wizard — start over</span>
         </button>
