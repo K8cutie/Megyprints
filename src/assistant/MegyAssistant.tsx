@@ -106,6 +106,10 @@ const THEMES: { id: TemplateType; label: string; color: string }[] = [
 /* ── Tab definition ── */
 type TabId = 'design' | 'layout' | 'photos' | 'view';
 
+// The tools tabs (Design / Layout / Photos / View) and their panels are hidden —
+// the wizard now drives everything (layout picker, page nav, regenerate, etc.).
+// Flip to true to bring the manual tool panels back.
+const SHOW_TOOL_TABS = false;
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'design', label: 'Design', icon: <Palette className="w-4 h-4" /> },
   { id: 'layout', label: 'Layout', icon: <LayoutGrid className="w-4 h-4" /> },
@@ -698,6 +702,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
 
       {/* ═══ TABS ═══ */}
+      {SHOW_TOOL_TABS && (
       <div className="flex border-b border-[#F4C2A1]/10 shrink-0">
         {TABS.map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors ${activeTab === tab.id ? 'text-[#F4C2A1] bg-[#FFF8F0] border-b-2 border-[#F4C2A1]' : 'text-[#9B9B9B] hover:text-[#2D2D2D] hover:bg-[#FFF8F0]/50'}`}>
@@ -706,6 +711,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           </button>
         ))}
       </div>
+      )}
 
       {/* ═══ TAB CONTENT ═══ */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -713,7 +719,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleFileUpload} className="hidden" />
 
         {/* ── DESIGN TAB (Rich) ── */}
-        {activeTab === 'design' && (
+        {SHOW_TOOL_TABS && activeTab === 'design' && (
           <div className="p-4 space-y-3">
 
             {/* Background Section */}
@@ -792,7 +798,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         )}
 
         {/* ── LAYOUT TAB ── */}
-        {activeTab === 'layout' && (
+        {SHOW_TOOL_TABS && activeTab === 'layout' && (
           <div className="p-4 space-y-4">
             <div>
               <h3 className="text-[11px] font-semibold text-[#2D2D2D] uppercase tracking-wide mb-2">Navigation</h3>
@@ -838,7 +844,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         )}
 
         {/* ── PHOTOS TAB ── */}
-        {activeTab === 'photos' && (
+        {SHOW_TOOL_TABS && activeTab === 'photos' && (
           <div className="p-4 space-y-4">
             <div>
               <h3 className="text-[11px] font-semibold text-[#2D2D2D] uppercase tracking-wide mb-2">Upload</h3>
@@ -918,7 +924,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         )}
 
         {/* ── VIEW TAB ── */}
-        {activeTab === 'view' && (
+        {SHOW_TOOL_TABS && activeTab === 'view' && (
           <div className="p-4 space-y-4">
             <div className="p-3 bg-[#FFF8F0] rounded-xl space-y-2">
               <h3 className="text-[11px] font-semibold text-[#2D2D2D] uppercase tracking-wide">Album Info</h3>
