@@ -1,0 +1,60 @@
+name: Apply Supabase migrations
+
+# Auto-applies any NEW migration files added in a push to main, so you never have
+# to copy-paste SQL into the Supabase dashboard again. It only runs the migrations
+# that CHANGED in that push — it never re-runs old ones (some early migrations
+# aren't safe to re-apply). Needs one secret: SUPABASE_DB_URL (see repo setup).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # need the previous commit to diff against
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply migrations changed in this push
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set. Add it in repo Settings → Secrets → Actions."
+            exit 1
+          fi
+
+          BEFORE='${{ github.event.before }}'
+          if [ -z "$BEFORE" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            BEFORE="$(git rev-parse HEAD~1 2>/dev/null || true)"
+          fi
+
+          if [ -n "$BEFORE" ]; then
+            CHANGED="$(git diff --name-only --diff-filter=AM "$BEFORE" "${{ github.sha }}" -- 'supabase/migrations/*.sql' || true)"
+          else
+            CHANGED="$(ls supabase/migrations/*.sql 2>/dev/null || true)"
+          fi
+
+          if [ -z "$CHANGED" ]; then
+            echo "No new/changed migrations in this push — nothing to apply."
+            exit 0
+          fi
+
+          echo "Applying:"
+          echo "$CHANGED"
+          echo "------------------------------------------------------------"
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            echo "── Running $f ──"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done <<< "$CHANGED"
+          echo "------------------------------------------------------------"
+          echo "All new migrations applied."
