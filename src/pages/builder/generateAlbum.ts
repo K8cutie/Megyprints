@@ -2,7 +2,7 @@ import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTempla
 import { getTemplatesForRatio, getTemplatesForAlbum } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { templateTracker } from './varietyTracker';
-import { MIN_ALBUM_PAGES as MIN_PAGES } from './densities';
+import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
 
 /* ══════════════════════════════════════════════════════════════════════════
    SMART ALBUM GENERATION — Ratio-aware template matching
@@ -95,6 +95,17 @@ export function generateAlbum(
   const border = options?.border;
   const cornerBase = options?.cornerBase;
 
+  // FILL MODE: on AUTO, if there aren't enough photos for the natural look to fill
+  // the album (which is what leaves blank pages), drop to the LOWEST density that
+  // still fills MIN_PAGES — i.e. 1 photo/page for 40–79 photos. Photo-rich albums
+  // (>= MIN_PAGES × natural) keep the natural mixed/multi look. Guarantees no
+  // surprise blanks without ballooning the page count.
+  const fillDensity = (!randomize && photosPerPage == null && totalPhotos < MIN_PAGES * naturalPerPage(albumSize))
+    ? Math.max(1, Math.floor(totalPhotos / MIN_PAGES))
+    : undefined;
+  const effPerPage = photosPerPage ?? fillDensity;
+  const fillMode = fillDensity != null;
+
   // No photos → minimum empty pages
   if (totalPhotos === 0) {
     return Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, albumSize, background, border, cornerBase));
@@ -171,7 +182,7 @@ export function generateAlbum(
     //       on the SAME template). If only one mixed template fits and it was used
     //       recently, stop forcing mixed here and let the more-varied
     //       ratio-by-ratio path take these photos instead. ──
-    if (mixedTemplates.length > 0) {
+    if (mixedTemplates.length > 0 && !fillMode) {
       let placed = true;
       while (placed) {
         placed = false;
@@ -214,11 +225,15 @@ export function generateAlbum(
       // which is what made many pages land on the same layout. A little density
       // variation also reads more naturally than every page being identical.
       // In randomize mode, ignore the target entirely so layouts vary the most.
-      let multi = (photosPerPage && !randomize)
-        ? ratioTemplates.filter((t) => t.slotCount >= Math.max(2, photosPerPage - 1) && t.slotCount <= photosPerPage + 1)
-        : ratioTemplates.filter((t) => t.slotCount > 1);
-      if (multi.length === 0) multi = ratioTemplates.filter((t) => t.slotCount > 1);
-      if (multi.length === 0) multi = ratioTemplates;
+      // Fill mode at 1/page → single-photo full-page templates (multi stays empty,
+      // so the loop falls to `onePhoto`). Otherwise honor the density target ±1.
+      let multi = (effPerPage === 1 && !randomize)
+        ? []
+        : (effPerPage && !randomize)
+          ? ratioTemplates.filter((t) => t.slotCount >= Math.max(2, effPerPage - 1) && t.slotCount <= effPerPage + 1)
+          : ratioTemplates.filter((t) => t.slotCount > 1);
+      if (multi.length === 0 && effPerPage !== 1) multi = ratioTemplates.filter((t) => t.slotCount > 1);
+      if (multi.length === 0 && effPerPage !== 1) multi = ratioTemplates;
 
       while (queue.length > 0) {
         // Prefer a multi-slot template that fits the remaining photos. For a

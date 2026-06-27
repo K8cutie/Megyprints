@@ -41,36 +41,55 @@ export function densityRangeLabel(sizePreset: string): string {
  *  generateAlbum, which imports this so the two never drift.) */
 export const MIN_ALBUM_PAGES = 40;
 
-/** Typical photos-per-page on AUTO (no explicit density chosen) — used ONLY for
- *  the upload-time fill estimate, not for generation. Auto leans toward fewer,
- *  bigger photos, so ~2 (3 for the large landscape/portrait sizes). */
-const AUTO_PER_PAGE: Record<string, number> = {
+/** Typical photos-per-page on AUTO (no explicit density) — the "natural" look
+ *  when there are plenty of photos. ~2 (3 for the large landscape/portrait sizes). */
+const NATURAL_BY_SIZE: Record<string, number> = {
   '6x4': 2, '6x6': 2, '8x8': 2, '9x9': 2, '11.5x8': 3, '8.5x11': 3,
 };
+export function naturalPerPage(albumSize: string): number {
+  return NATURAL_BY_SIZE[albumSize] ?? 2;
+}
+
+/** The density generation will actually use for the AUTO case: the natural look
+ *  when there are enough photos for it, otherwise drop toward 1/page so the album
+ *  still fills MIN_ALBUM_PAGES without blanks (the lowest density that fills). */
+export function autoDensity(photoCount: number, albumSize: string): number {
+  const natural = naturalPerPage(albumSize);
+  if (photoCount >= MIN_ALBUM_PAGES * natural) return natural;
+  return Math.max(1, Math.floor(photoCount / MIN_ALBUM_PAGES)); // 1/page for < natural-fill
+}
 
 export interface FillEstimate {
   perPage: number;
   estimatedPages: number;  // pages the uploaded photos roughly fill
-  fillsAlbum: boolean;     // enough to fill all MIN_ALBUM_PAGES
+  fillsAlbum: boolean;     // enough to fill all MIN_ALBUM_PAGES (no blanks)
   photosForFull: number;   // photos needed to fill the album
   shortBy: number;         // suggested extra photos (0 if already enough)
 }
 
 /** Estimate how much of a full {MIN_ALBUM_PAGES}-page album the uploaded photos
- *  will fill, so we can nudge the user to add more BEFORE generating (avoids
- *  surprise blank pages). Uses the chosen density, or an auto typical. */
+ *  will fill — matching what generation does — so we can nudge the user to add
+ *  more BEFORE generating (avoids surprise blank pages). On AUTO the floor to
+ *  fill is MIN_ALBUM_PAGES photos (1 per page); an explicit density needs more. */
 export function estimateAlbumFill(
   photoCount: number, albumSize: string, photosPerPage?: number,
 ): FillEstimate {
-  const perPage = photosPerPage && photosPerPage > 0
-    ? photosPerPage
-    : (AUTO_PER_PAGE[albumSize] ?? 2);
-  const photosForFull = MIN_ALBUM_PAGES * perPage;
+  if (photosPerPage && photosPerPage > 0) {
+    const photosForFull = MIN_ALBUM_PAGES * photosPerPage;
+    return {
+      perPage: photosPerPage,
+      estimatedPages: Math.max(0, Math.round(photoCount / photosPerPage)),
+      fillsAlbum: photoCount >= photosForFull,
+      photosForFull,
+      shortBy: Math.max(0, photosForFull - photoCount),
+    };
+  }
+  const perPage = autoDensity(photoCount, albumSize);
   return {
     perPage,
     estimatedPages: Math.max(0, Math.round(photoCount / perPage)),
-    fillsAlbum: photoCount >= photosForFull,
-    photosForFull,
-    shortBy: Math.max(0, photosForFull - photoCount),
+    fillsAlbum: photoCount >= MIN_ALBUM_PAGES,
+    photosForFull: MIN_ALBUM_PAGES,
+    shortBy: Math.max(0, MIN_ALBUM_PAGES - photoCount),
   };
 }
