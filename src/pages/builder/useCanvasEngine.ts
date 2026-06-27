@@ -1318,10 +1318,9 @@ function renderScene(
       textAlign: text.alignment,
       angle: text.rotation,
       opacity: text.opacity / 100,
-      /* Text is the ONE fully-customizable element on the canvas — users write
-         their own memories/experiences here, so it stays directly editable:
-         click to select, double-click to edit, drag to move. (Slot photos and
-         the background stay locked — Megy still owns those.) */
+      /* Free text (a title/quote) stays fully movable. A caption BOUND to a
+         template textbox is fixed to its region — editable (double-click to type)
+         but locked in place + non-resizable, so it can never drift to a corner. */
       selectable: true,
       evented: true,
       editable: true,
@@ -1330,6 +1329,7 @@ function renderScene(
       cornerSize: 8,
       transparentCorners: false,
       borderColor: '#F4C2A1',
+      ...(slotRect ? { lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, hasControls: false } : {}),
       width: slotRect ? slotRect.width : (text.width ?? autoWidth),
       scaleX: text.scaleX ?? 1,
       scaleY: text.scaleY ?? 1,
