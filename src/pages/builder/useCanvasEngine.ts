@@ -177,11 +177,6 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   snapEnabledRef.current = snapEnabled;
   const onSlotClickRef = useRef(onSlotClick);
   onSlotClickRef.current = onSlotClick;
-  // Tapping an empty textbox region seeds an editable caption in that slot; it
-  // then renders as an in-slot editable Fabric textbox (double-click to edit).
-  const onTextSlotClickRef = useRef((slotIndex: number) => {
-    actionsRef.current.setBoxText(slotIndex, { text: 'Your caption' });
-  });
   const containerModeRef = useRef(containerMode);
   containerModeRef.current = containerMode;
   const onContainerModifiedRef = useRef(onContainerModified);
@@ -482,7 +477,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -619,7 +614,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -1226,7 +1221,6 @@ function renderScene(
   albumSize: string = '8x8',
   pageIndex: number = 0,
   onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void,
-  onTextSlotClick: (slotIndex: number) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1350,20 +1344,21 @@ function renderScene(
       left: r.left, top: r.top, width: r.width, height: r.height,
       fill: 'rgba(253,232,228,0.45)', stroke: 'rgba(232,165,152,0.85)',
       strokeDashArray: [6, 4], strokeWidth: 1.5, rx: 6, ry: 6,
-      selectable: false, evented: true, hoverCursor: 'pointer',
+      // Visual-only on the canvas — NEVER auto-insert placeholder words (that
+      // would print). Captions are typed via the preview's empty editor.
+      selectable: false, evented: false,
     });
     box.slotId = `${SLOT_ID}-textbox-${i}`;
-    const label = new fab.Text(r.placeholder || 'Tap to add text', {
+    const label = new fab.Text('Caption — add in Preview', {
       left: r.left + r.width / 2, top: r.top + r.height / 2,
       originX: 'center', originY: 'center',
-      fontSize: Math.max(12, Math.min(r.width, r.height) * 0.09),
+      fontSize: Math.max(12, Math.min(r.width, r.height) * 0.085),
       fill: '#8B6F47', fontFamily: '"DM Sans", sans-serif',
       selectable: false, evented: false,
     });
     label.slotId = `${SLOT_ID}-textbox-label-${i}`;
     canvas.add(box);
     canvas.add(label);
-    box.on('mousedown', () => onTextSlotClick(i));
   });
 
   // Ensure text stays on top even when slot images load async
