@@ -247,17 +247,15 @@ export class WizardEngine {
           return {
             title: "All Pages Reviewed 🎉",
             body: `You've been through all **${usedCount}** pages — this album looks wonderful. Let's take a look at the finished album! (Or keep tweaking — your call.)`,
-            actions: ["Shuffle This Page", "✨ Add a Quote", "Preview the album →", "Review from the start"],
+            actions: ["Shuffle This Page", "Preview the album →", "Review from the start"],
             tips: ["You can keep editing any page before ordering", "Your photos stay on your device until you order"],
           };
         }
         return {
           title: "Step 4: Review Each Page 🔍",
-          body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here).
-
-Reshuffle this page, drop in a **quote** where there's room, then move on with **See Next Page**.`,
-          actions: ["Shuffle This Page", "✨ Add a Quote", "See Next Page →"],
-          tips: ["Go page by page — each can have its own layout and quote", "'Add a Quote' fills empty space with a themed line you can edit", "When every page looks right, you'll order from the last page"],
+          body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then use the ‹ › arrows to move through your album.`,
+          actions: ["Shuffle This Page"],
+          tips: ["Go page by page — each can have its own layout", "Use the ‹ › arrows to move between pages", "When every page looks right, you'll order from the last page"],
         };
       }
 

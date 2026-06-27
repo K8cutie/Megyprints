@@ -644,12 +644,12 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             <p className="text-[11px] text-[#5A5A5A] leading-relaxed mb-2">
               {wizardRef.current.getMessage().body}
             </p>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-2">
               {wizardRef.current.getMessage().actions.map((action) => (
                 <button
                   key={action}
                   onClick={() => handleWizardAction(action)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
+                  className={`flex-1 min-w-[130px] px-4 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] ${
                     action.includes('→') || action.includes('Now')
                       ? 'bg-[#F4C2A1] text-white hover:bg-[#E8A598]'
                       : 'bg-[#FFF8F0] text-[#2D2D2D] hover:bg-[#F4C2A1]/20 border border-[#F4C2A1]/15'
