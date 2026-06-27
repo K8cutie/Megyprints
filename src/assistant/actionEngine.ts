@@ -24,8 +24,10 @@ export class ActionEngine {
           return { intentType: intent.type, success: true, message: 'Album generated! Your photos have been arranged across all pages.' };
 
         case 'shuffle_layout':
-          this.builder.shuffleLayout();
-          return { intentType: intent.type, success: true, message: 'Page layout shuffled with a new template.' };
+          // Cycle through the available templates IN ORDER (exhaust every option
+          // before repeating), not a random pick — matches the mobile "Change".
+          this.builder.cycleLayout();
+          return { intentType: intent.type, success: true, message: 'Next layout.' };
 
         case 'regenerate_page':
           this.builder.regeneratePage();
