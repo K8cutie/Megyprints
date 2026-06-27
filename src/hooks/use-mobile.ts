@@ -1,6 +1,9 @@
 import * as React from "react"
 
-const MOBILE_BREAKPOINT = 768
+// 1024 (Tailwind `lg`) so tablets (iPad portrait 768–834, etc.) get the
+// touch-friendly mobile flow, not the mouse-oriented desktop canvas. Kept in
+// sync with the `lg:` interface switches in MegyAssistant / Builder / InstallPrompt.
+const MOBILE_BREAKPOINT = 1024
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)

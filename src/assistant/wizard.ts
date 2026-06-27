@@ -196,7 +196,7 @@ export class WizardEngine {
           title: "Welcome to MegyPrints! 🎉",
           body: "I'm **Megy**, your personal album designer. I'll guide you through creating a beautiful photo album in just a few steps. No design experience needed — just your photos and a few choices!",
           actions: ["Let's Get Started →"],
-          tips: ["You can always ask me for help by clicking the chat icon", "Use 'Surprise Me' anytime to randomize a page"],
+          tips: ["You can always ask me for help by clicking the chat icon", "I auto-arrange your photos into varied layouts — no design work needed"],
         };
 
       case 'pick_size':

@@ -550,7 +550,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         <button
           type="button"
           onClick={() => setMobileExpanded(true)}
-          className="md:hidden fixed top-1.5 right-3 z-[95] w-10 h-10 rounded-full bg-[#F4C2A1] shadow-lg flex items-center justify-center overflow-hidden active:scale-95 transition-transform"
+          className="lg:hidden fixed top-1.5 right-3 z-[95] w-10 h-10 rounded-full bg-[#F4C2A1] shadow-lg flex items-center justify-center overflow-hidden active:scale-95 transition-transform"
           aria-label="Open Megy"
         >
           <img src="/megy-character.png" alt="Megy" className="w-7 h-7 object-contain" draggable={false} />
@@ -561,10 +561,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       ${mobilePulldown
         ? `left-0 right-0 top-0 w-full rounded-b-2xl border-b border-[#F4C2A1]/20 ${mobileExpanded ? 'h-[82vh]' : 'h-0'}`
         : `left-0 right-0 bottom-0 w-full rounded-t-2xl border-t border-[#F4C2A1]/20 ${mobileExpanded ? 'h-[82vh]' : 'h-[66px]'}`}
-      md:left-0 md:right-auto md:top-0 md:bottom-0 md:h-full ${collapsed ? 'md:w-[60px]' : 'md:w-[340px]'} md:rounded-none md:border-t-0 md:border-r md:transition-[width] md:duration-300`}>
+      lg:left-0 lg:right-auto lg:top-0 lg:bottom-0 lg:h-full ${collapsed ? 'lg:w-[60px]' : 'lg:w-[340px]'} lg:rounded-none lg:border-t-0 lg:border-r lg:transition-[width] lg:duration-300`}>
 
       {/* Collapsed rail — desktop only, when minimized: Megy icon + expand */}
-      <div className={`hidden ${collapsed ? 'md:flex' : ''} md:flex-col md:items-center md:gap-3 md:pt-4`}>
+      <div className={`hidden ${collapsed ? 'lg:flex' : ''} lg:flex-col lg:items-center lg:gap-3 lg:pt-4`}>
         <img src="/megy-character.png" alt="Megy" className="w-8 h-8 object-contain" draggable={false} />
         <button onClick={() => setCollapsed(false)} title="Expand Megy" aria-label="Expand Megy"
           className="p-1.5 text-[#9B9B9B] hover:text-[#E8A598] hover:bg-[#FDE8E4] rounded-lg transition-colors">
@@ -573,13 +573,13 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       </div>
 
       {/* Full panel content — hidden on desktop when collapsed */}
-      <div className={`flex flex-col flex-1 min-h-0 ${collapsed ? 'md:hidden' : ''}`}>
+      <div className={`flex flex-col flex-1 min-h-0 ${collapsed ? 'lg:hidden' : ''}`}>
 
       {/* Mobile grab-handle — tap to expand/collapse the drawer (hidden at md+) */}
       <button
         type="button"
         onClick={() => setMobileExpanded((v) => !v)}
-        className={`md:hidden shrink-0 w-full flex items-center justify-center ${mobilePulldown ? 'order-last pb-3 pt-1' : 'pt-2 pb-1'}`}
+        className={`lg:hidden shrink-0 w-full flex items-center justify-center ${mobilePulldown ? 'order-last pb-3 pt-1' : 'pt-2 pb-1'}`}
         aria-label={mobileExpanded ? 'Collapse Megy' : 'Expand Megy'}
       >
         <span className="w-10 h-1.5 rounded-full bg-[#E8D8C8]" />
@@ -600,7 +600,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setCollapsed(true)} className="hidden md:inline-flex p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Minimize panel" aria-label="Minimize panel">
+          <button onClick={() => setCollapsed(true)} className="hidden lg:inline-flex p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Minimize panel" aria-label="Minimize panel">
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button onClick={() => setChatOpen(!chatOpen)} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat">

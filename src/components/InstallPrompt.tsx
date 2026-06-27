@@ -44,7 +44,7 @@ export default function InstallPrompt() {
   if (!deferred && !iosHint) return null;
 
   return (
-    <div className="fixed bottom-3 left-3 right-3 z-[200] md:hidden bg-white rounded-2xl shadow-xl border border-[#F4C2A1]/30 p-3 flex items-center gap-3">
+    <div className="fixed bottom-3 left-3 right-3 z-[200] lg:hidden bg-white rounded-2xl shadow-xl border border-[#F4C2A1]/30 p-3 flex items-center gap-3">
       <img src="/megy-character.png" alt="Megy" className="w-10 h-10 rounded-xl shrink-0" draggable={false} />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-[#2D2D2D]">Install Megy Prints</p>
