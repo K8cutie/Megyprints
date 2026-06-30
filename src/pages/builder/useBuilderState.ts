@@ -166,6 +166,32 @@ function isStateCorrupted(state: SerializedState): boolean {
    recoverable photos. Rehydration from IndexedDB now handles returning
    users; intentional fresh starts use the `megy-fresh-start` signal. */
 
+/** Heal STRANDED captions: an unbound text element (free, not a deliberate theme
+ *  quote) on a page that has an empty textbox should belong IN that box. Bind it
+ *  so it renders fixed + centered instead of floating at the top-left. Only fills
+ *  boxes with no caption yet; idempotent (already-bound text is left alone). */
+function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
+  return pages.map((page) => {
+    if (!page.textElements?.length || !page.templateId) return page;
+    const slots = getTemplateById(page.templateId)?.textSlots ?? [];
+    if (!slots.length) return page;
+    const filled = new Set<number>(
+      page.textElements.filter((t) => t.boxIndex != null).map((t) => t.boxIndex as number),
+    );
+    let changed = false;
+    const textElements = page.textElements.map((t) => {
+      if (t.boxIndex != null || t.id.startsWith('theme-quote')) return t;
+      let slot = -1;
+      for (let i = 0; i < slots.length; i++) { if (!filled.has(i)) { slot = i; break; } }
+      if (slot < 0) return t; // no empty box left
+      filled.add(slot);
+      changed = true;
+      return { ...t, boxIndex: slot, x: 0, y: 0 };
+    });
+    return changed ? { ...page, textElements } : page;
+  });
+}
+
 function getInitialState(): SerializedState {
   // ── LEAK FIX #1a: Check for explicit fresh-start signal ──
   // Home.tsx sets this when user clicks "Create New Album"
@@ -209,7 +235,7 @@ function getInitialState(): SerializedState {
     albumSize: effectiveSaved?.albumSize ?? defaultSize,
     selectedTemplate: effectiveSaved?.selectedTemplate ?? 'classic',
     uploadedPhotos: effectiveSaved?.uploadedPhotos ?? [],
-    albumPages: effectiveSaved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, defaultSize)),
+    albumPages: bindStrandedCaptions(effectiveSaved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, defaultSize))),
     currentPageIndex: effectiveSaved?.currentPageIndex ?? 0,
     rejectedTemplateIds: effectiveSaved?.rejectedTemplateIds ?? [],
     photosPerPage: effectiveSaved?.photosPerPage ?? undefined,
@@ -627,7 +653,7 @@ export function useBuilderState(): BuilderActions {
                 };
               }
             );
-            setAlbumPages(restoredPages);
+            setAlbumPages(bindStrandedCaptions(restoredPages));
           }
           // Rehydrate photo metadata from cloud + restore from IndexedDB
           if (albumData.photos && albumData.photos.length > 0) {
@@ -1365,26 +1391,40 @@ export function useBuilderState(): BuilderActions {
     // New text inherits the active theme's font + color so captions match the
     // occasion. The user can still restyle any text element afterward.
     const theme = THEMES[selectedTemplate];
+    const trimmed = text && text.trim() ? text.trim() : '';
+    // A page's TEXTBOX owns its caption. If the page has a textbox region with no
+    // caption yet, the new text belongs INSIDE it (bound → fixed + centered),
+    // never as a free-floating element that strands at the top-left. Only fall
+    // back to free text when there's no empty textbox to fill (e.g. a full-bleed
+    // photo page or one whose boxes are already captioned).
+    const cur = albumPages[currentPageIndex];
+    const curTemplate = cur?.templateId ? getTemplateById(cur.templateId) : null;
+    const slots = curTemplate?.textSlots ?? [];
+    const emptyBox = slots.findIndex((_s, i) => !(cur?.textElements ?? []).some((t) => t.boxIndex === i));
     updateCurrentPage((page) => {
+      if (slots.length > 0 && emptyBox >= 0) {
+        const newText: TextElement = {
+          id: `box-${emptyBox}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          text: trimmed || 'Double-tap to edit',
+          x: 0, y: 0, fontSize: 28,
+          fontFamily: theme.fontFamily, color: theme.textColor,
+          bold: false, italic: false, underline: false,
+          alignment: (slots[emptyBox].align ?? 'center') as TextElement['alignment'],
+          rotation: 0, opacity: 100, boxIndex: emptyBox,
+        };
+        return { ...page, textElements: [...page.textElements, newText] };
+      }
       const newText: TextElement = {
         id: `text-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        text: text && text.trim() ? text : 'Double click to edit',
-        x,
-        y,
-        fontSize: 32,
-        fontFamily: theme.fontFamily,
-        color: theme.textColor,
-        bold: false,
-        italic: false,
-        underline: false,
-        alignment: 'center',
-        rotation: 0,
-        opacity: 100,
-        width: 200,
+        text: trimmed || 'Double click to edit',
+        x, y, fontSize: 32,
+        fontFamily: theme.fontFamily, color: theme.textColor,
+        bold: false, italic: false, underline: false,
+        alignment: 'center', rotation: 0, opacity: 100, width: 200,
       };
       return { ...page, textElements: [...page.textElements, newText] };
     });
-  }, [updateCurrentPage, selectedTemplate]);
+  }, [updateCurrentPage, selectedTemplate, albumPages, currentPageIndex]);
 
   // Drop a themed quote into the current page's largest empty band (so the user
   // doesn't have to type). Returns the quote placed, or null when the page is
