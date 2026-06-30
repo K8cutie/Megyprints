@@ -10,6 +10,7 @@ import { parseIntent } from './intentParser';
 import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
+import ThemePreviewCard from '../pages/builder/ThemePreviewCard';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
 import type { AssistantMessage } from './types';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
@@ -471,30 +472,18 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                  whole look (background + frames + corner art) via apply_theme;
                  the chosen theme is baked into the album when it generates. */
               <div className="grid grid-cols-2 gap-2.5">
-                {THEMES.map((t) => {
-                  const selected = builder.selectedTemplate === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => {
-                        void builder.dispatch({ type: 'apply_theme', payload: { theme: t.id }, rawMessage: `apply ${t.id} theme` });
-                        showToast(`${t.label} theme selected`);
-                      }}
-                      className={`flex flex-col items-stretch rounded-xl overflow-hidden border-2 transition-all ${selected ? 'border-[#F4C2A1] ring-2 ring-[#F4C2A1]/30' : 'border-[#F0F0F0] hover:border-[#F4C2A1]/50'}`}
-                    >
-                      <div className="h-16 w-full" style={{ backgroundColor: t.color }}>
-                        <img
-                          src={`/themes/bg/${t.id}.svg`}
-                          alt=""
-                          draggable={false}
-                          className="h-16 w-full object-cover"
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                        />
-                      </div>
-                      <span className="py-1.5 text-xs font-medium text-[#2D2D2D]">{t.label}{selected ? ' ✓' : ''}</span>
-                    </button>
-                  );
-                })}
+                {THEMES.map((t) => (
+                  <ThemePreviewCard
+                    key={t.id}
+                    id={t.id}
+                    label={t.label}
+                    selected={builder.selectedTemplate === t.id}
+                    onSelect={() => {
+                      void builder.dispatch({ type: 'apply_theme', payload: { theme: t.id }, rawMessage: `apply ${t.id} theme` });
+                      showToast(`${t.label} theme selected`);
+                    }}
+                  />
+                ))}
               </div>
             ) : (
               <div className="flex flex-col gap-2.5">
