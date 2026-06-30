@@ -14,7 +14,7 @@ import ThemePreviewCard from '../pages/builder/ThemePreviewCard';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
 import type { AssistantMessage } from './types';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
-import { getThemeBackgroundVariants } from '../pages/builder/types';
+import { getThemeBackgroundVariants, BORDER_STYLES, FRAME_STYLES, frameStyleToCss } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import {
   Images, LayoutGrid, Palette, Type, ChevronUp, ChevronDown,
@@ -366,6 +366,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const doSetTheme = (t: TemplateType) => { void builder.dispatch({ type: 'apply_theme', payload: { theme: t }, rawMessage: `apply ${t} theme` }); showToast(`Theme: ${t}`); };
   // Analyze photo CONTENT on-device (MobileNet) and suggest the closest theme.
   const [suggesting, setSuggesting] = useState(false);
+  /* Step-2 customization: which manual picker (Background/Border/Frame) is open.
+     Only one panel is shown at a time; clicking the active button closes it. */
+  const [activePicker, setActivePicker] = useState<'bg' | 'border' | 'frame' | null>(null);
   const doSuggestTheme = async () => {
     if (!builder.uploadedPhotos.length || suggesting) return;
     setSuggesting(true);
@@ -468,22 +471,137 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               <p className="text-sm text-[#5A5A5A] leading-relaxed mb-4">{msg.body}</p>
             )}
             {wizardRef.current.state.step === 'pick_background' ? (
-              /* Theme picker on the center stage. Each occasion theme sets the
-                 whole look (background + frames + corner art) via apply_theme;
-                 the chosen theme is baked into the album when it generates. */
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                {THEMES.map((t) => (
-                  <ThemePreviewCard
-                    key={t.id}
-                    id={t.id}
-                    label={t.label}
-                    selected={builder.selectedTemplate === t.id}
-                    onSelect={() => {
-                      void builder.dispatch({ type: 'apply_theme', payload: { theme: t.id }, rawMessage: `apply ${t.id} theme` });
-                      showToast(`${t.label} theme selected`);
-                    }}
-                  />
-                ))}
+              /* Step-2 customization page.
+                 TOP: occasion themes as quick-pick PRESETS — each sets the whole
+                 look (background + frames + corner art) via apply_theme.
+                 BELOW: three manual controls (Background / Border / Frame), each
+                 opening a picker that applies on click. */
+              <div className="space-y-4">
+                {/* Quick-pick occasion presets (unchanged) */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {THEMES.map((t) => (
+                    <ThemePreviewCard
+                      key={t.id}
+                      id={t.id}
+                      label={t.label}
+                      selected={builder.selectedTemplate === t.id}
+                      onSelect={() => {
+                        void builder.dispatch({ type: 'apply_theme', payload: { theme: t.id }, rawMessage: `apply ${t.id} theme` });
+                        showToast(`${t.label} theme selected`);
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Manual customization controls */}
+                <div className="pt-1">
+                  <p className="text-xs font-semibold text-[#8B7E7A] mb-2">Or customize it yourself</p>
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      { key: 'bg' as const, label: 'Background', icon: <Palette className="w-4 h-4" /> },
+                      { key: 'border' as const, label: 'Border', icon: <Box className="w-4 h-4" /> },
+                      { key: 'frame' as const, label: 'Frame', icon: <Frame className="w-4 h-4" /> },
+                    ]).map((b) => {
+                      const open = activePicker === b.key;
+                      return (
+                        <button
+                          key={b.key}
+                          onClick={() => setActivePicker(open ? null : b.key)}
+                          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold border transition-all active:scale-[0.98] ${
+                            open
+                              ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-md'
+                              : 'bg-[#FFF8F0] text-[#2D2D2D] border-[#F4C2A1]/30 hover:bg-[#F4C2A1]/20'
+                          }`}
+                        >
+                          {b.icon}
+                          <span>{b.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* BACKGROUND picker — reuses RichBackgroundDesigner (colors,
+                    gradients, upload, patterns, "Your Photos"); applies on click. */}
+                {activePicker === 'bg' && (
+                  <div className="rounded-2xl border border-[#F4C2A1]/30 bg-[#FFF8F0] p-3">
+                    <RichBackgroundDesigner
+                      background={page?.background}
+                      photos={builder.uploadedPhotos}
+                      onChange={(bg) => { if (bg) doSetBg(bg); }}
+                    />
+                  </div>
+                )}
+
+                {/* BORDER picker — swatch thumbnails → set_border (applies to all pages). */}
+                {activePicker === 'border' && (
+                  <div className="rounded-2xl border border-[#F4C2A1]/30 bg-[#FFF8F0] p-3">
+                    <p className="text-xs font-medium text-[#9B9B9B] mb-2.5">Pick a border for every photo</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      {BORDER_STYLES.map((border) => {
+                        const selected =
+                          page?.photoBorderColor === border.color &&
+                          page?.photoBorderWidth === border.width &&
+                          (page?.photoBorderStyle ?? 'solid') === border.style;
+                        return (
+                          <button
+                            key={border.id}
+                            onClick={() => {
+                              void builder.dispatch({ type: 'set_border', payload: { border }, rawMessage: `set ${border.label} border` });
+                              showToast(`${border.label} border applied`);
+                            }}
+                            className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 transition-all ${
+                              selected ? 'border-[#F4C2A1] ring-2 ring-[#F4C2A1]/30 bg-white' : 'border-[#F0F0F0] hover:border-[#F4C2A1]/50 bg-white'
+                            }`}
+                          >
+                            <span
+                              className="w-full h-10 rounded-md bg-[#EDE6DD]"
+                              style={{ border: `${border.width}px ${border.style} ${border.color}` }}
+                            />
+                            <span className="text-[10px] font-medium text-[#5A5A5A] text-center leading-tight">{border.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* FRAME picker — decorative-frame thumbnails → set_frame (all pages).
+                    Each preview uses frameStyleToCss — the SAME helper the DOM
+                    renderer uses — so the thumbnail can't drift from the result. */}
+                {activePicker === 'frame' && (
+                  <div className="rounded-2xl border border-[#F4C2A1]/30 bg-[#FFF8F0] p-3">
+                    <p className="text-xs font-medium text-[#9B9B9B] mb-2.5">Pick a frame for the photos</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                      {FRAME_STYLES.map((frameOpt) => {
+                        const selected = (page?.frameStyle ?? 'none') === frameOpt.id;
+                        const css = frameStyleToCss(frameOpt.id, '#F4C2A1');
+                        return (
+                          <button
+                            key={frameOpt.id}
+                            onClick={() => {
+                              void builder.dispatch({ type: 'set_frame', payload: { frame: frameOpt.id }, rawMessage: `set ${frameOpt.label} frame` });
+                              showToast(frameOpt.id === 'none' ? 'Frame removed' : `${frameOpt.label} frame applied`);
+                            }}
+                            className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 transition-all ${
+                              selected ? 'border-[#F4C2A1] ring-2 ring-[#F4C2A1]/30 bg-white' : 'border-[#F0F0F0] hover:border-[#F4C2A1]/50 bg-white'
+                            }`}
+                          >
+                            <span className="w-full flex items-center justify-center py-2">
+                              <span style={css.wrapper} className="inline-block">
+                                <span
+                                  className="block w-9 h-9 rounded-sm bg-gradient-to-br from-[#E8A598] to-[#F4C2A1]"
+                                  style={css.inner}
+                                />
+                              </span>
+                            </span>
+                            <span className="text-[10px] font-medium text-[#5A5A5A] text-center leading-tight">{frameOpt.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-2.5">

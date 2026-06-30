@@ -5,7 +5,7 @@
 
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AssistantIntent, ExecutedAction } from './types';
-import type { AlbumBackground, AlbumSizePreset, TemplateType, TextElement } from '../pages/builder/types';
+import type { AlbumBackground, AlbumSizePreset, TemplateType, TextElement, FrameStyle } from '../pages/builder/types';
 import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '../pages/builder/types';
 
 export class ActionEngine {
@@ -118,6 +118,9 @@ export class ActionEngine {
           this.builder.setPageBackground(themedBg);
           this.builder.applyBackgroundToAllPages(themedBg);
           this.builder.applyPhotoFrameToAllPages(getThemedPhotoBorder(theme));
+          // A theme owns a clean look — clear any decorative frame the user had
+          // picked manually so switching occasions doesn't leave a stale frame.
+          this.builder.applyFrameToAllPages('none');
           this.builder.applyCornersToAllPages(getThemeCornerBase(theme));
           // Keep any auto-placed title on-brand (font + color, and the default
           // text) when switching themes.
@@ -143,6 +146,27 @@ export class ActionEngine {
             this.builder.setPageBackground(bg);
           }
           return { intentType: intent.type, success: true, message: applyAll ? 'Background applied to all pages.' : 'Background updated.' };
+        }
+
+        case 'set_border': {
+          // The Step-2 Border picker passes a full border spec ({color,width,style}).
+          const border = intent.payload?.border as { color: string; width: number; style?: 'solid' | 'dashed' | 'dotted' } | undefined;
+          if (!border) {
+            return { intentType: intent.type, success: false, message: 'Pick a border style.' };
+          }
+          // Applies to every page so the album reads consistently.
+          this.builder.applyPhotoFrameToAllPages(border);
+          return { intentType: intent.type, success: true, message: 'Border applied to all pages.' };
+        }
+
+        case 'set_frame': {
+          // The Step-2 Frame picker passes a typed FrameStyle id.
+          const frame = intent.payload?.frame as FrameStyle | undefined;
+          if (!frame) {
+            return { intentType: intent.type, success: false, message: 'Pick a frame style.' };
+          }
+          this.builder.applyFrameToAllPages(frame);
+          return { intentType: intent.type, success: true, message: frame === 'none' ? 'Frame removed from all pages.' : 'Frame applied to all pages.' };
         }
 
         case 'add_photos': {

@@ -68,6 +68,14 @@ const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
     'background', 'change background', 'set background', 'bg', 'page color',
     'backdrop', 'wallpaper',
   ],
+  set_border: [
+    'border', 'set border', 'change border', 'photo border', 'border style',
+    'border color', 'edge',
+  ],
+  set_frame: [
+    'frame', 'set frame', 'change frame', 'photo frame', 'frame style',
+    'matte', 'polaroid', 'shadowbox',
+  ],
   add_text: [
     'add text', 'insert text', 'text box', 'caption', 'label',
     'write ', 'add words',
@@ -150,7 +158,8 @@ export function parseIntent(message: string): ParsedCommand {
     auto_fill: 0, clear_slots: 0, add_page: 0, delete_page: 0, duplicate_page: 0,
     go_to_page: 0, next_page: 0, prev_page: 0,
     change_size: 0, change_template: 0, apply_theme: 0,
-    set_background: 0, add_text: 0, update_text: 0, delete_text: 0, preview_album: 0, status: 0,
+    set_background: 0, set_border: 0, set_frame: 0,
+    add_text: 0, update_text: 0, delete_text: 0, preview_album: 0, status: 0,
     help: 0, undo: 0, redo: 0, reset: 0, surprise_me: 0,
     add_photos: 0, set_photos_per_page: 0, unknown: 0,
   };

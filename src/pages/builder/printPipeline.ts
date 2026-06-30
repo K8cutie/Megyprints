@@ -262,10 +262,76 @@ async function renderSlotPhoto(
     return;
   }
 
+  // ── Frame / border spec (single source: types.ts FRAME_STYLES) ──────────
+  // 1 UI css-px → PX print-px. Matches the border scale (frameWidth*PRINT_DPI/72)
+  // used below and the raw-px insets/pads of the Fabric + DOM renderers, so the
+  // three renderers stay in lockstep.
+  const PX = PRINT_DPI / 72;
+  const effFrameStyle = (fullBleed ? 'none' : page.frameStyle) ?? 'none';
+  const effBorderStyle = page.photoBorderStyle ?? 'solid';
+  const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
+  // Frames mirror Fabric: suppressed for full-bleed pages and the heart shape.
+  const drawFrame = effFrameStyle !== 'none' && slot.shape !== 'heart';
+  const isRect = slot.shape !== 'circle' && slot.shape !== 'oval';
+
+  // ── Decorative mat (matte / polaroid) — drawn BEHIND the photo, OUTSIDE the
+  // slot clip so it extends past the slot edge. Polaroid is weighted at the
+  // bottom and casts a stronger drop shadow.
+  if (drawFrame && (effFrameStyle === 'matte' || effFrameStyle === 'polaroid')) {
+    const pad = 8 * PX;
+    const bottomPad = (effFrameStyle === 'polaroid' ? 28 : 8) * PX;
+    ctx.save();
+    ctx.fillStyle = '#FFFFFF';
+    if (effFrameStyle === 'polaroid') {
+      ctx.shadowColor = 'rgba(0,0,0,0.22)';
+      ctx.shadowBlur = 16 * PX;
+      ctx.shadowOffsetY = 6 * PX;
+    } else {
+      ctx.shadowColor = 'rgba(0,0,0,0.18)';
+      ctx.shadowBlur = 6 * PX;
+    }
+    if (isRect) {
+      ctx.fillRect(sx - pad, sy - pad, sw + pad * 2, sh + pad + bottomPad);
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(
+        sx + sw / 2,
+        sy + sh / 2 + (bottomPad - pad) / 2,
+        sw / 2 + pad,
+        sh / 2 + (pad + bottomPad) / 2,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ── Shadowbox — outer drop shadow cast by the photo itself. Drawn as a filled
+  // backing rect (under the photo) carrying the shadow, since the clipped photo
+  // can't cast one outward.
+  if (drawFrame && effFrameStyle === 'shadowbox') {
+    ctx.save();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = 'rgba(0,0,0,0.25)';
+    ctx.shadowBlur = 14 * PX;
+    ctx.shadowOffsetY = 4 * PX;
+    if (isRect) {
+      ctx.fillRect(sx, sy, sw, sh);
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(sx + sw / 2, sy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   ctx.save();
 
-  // Clip to slot shape
-  applySlotClip(ctx, slot, sx, sy, sw, sh);
+  // Clip to slot shape. Rounded frame clips with a 10% corner radius.
+  const clipRadius = drawFrame && effFrameStyle === 'rounded' ? Math.min(sw, sh) * 0.1 : 0;
+  applySlotClip(ctx, slot, sx, sy, sw, sh, clipRadius);
 
   // Apply rotation around slot center
   const rotation = slot.rotation || 0;
@@ -306,20 +372,53 @@ async function renderSlotPhoto(
 
   // Draw the photo frame. The theme-baked page frame overrides the per-slot
   // template border when present; falls back to the slot border for old albums.
-  const frameWidth = fullBleed ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
-  const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
+  // The `rounded` decorative frame thickens a thin border to 3px (matches
+  // Fabric's max(borderWidth,3)) so the soft corner reads.
+  let frameWidth = fullBleed ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
+  if (drawFrame && effFrameStyle === 'rounded') frameWidth = Math.max(frameWidth ?? 0, 3);
   if (frameWidth) {
     ctx.strokeStyle = frameColor;
+    // Dashed / dotted border style — mirrors the DOM (border-style) + Fabric
+    // (strokeDashArray) renderers. The line dash is in print px, so scale by PX.
+    const lw = frameWidth * PX * 2;
+    if (effBorderStyle === 'dashed') ctx.setLineDash([lw, lw]);
+    else if (effBorderStyle === 'dotted') ctx.setLineDash([1, lw]);
+    else ctx.setLineDash([]);
+    if (effBorderStyle === 'dotted') ctx.lineCap = 'round';
     // The active slot clip halves a centered stroke (only the inner half shows),
     // so draw it 2x to make the visible inner half equal the intended width.
-    ctx.lineWidth = frameWidth * (PRINT_DPI / 72) * 2;
+    ctx.lineWidth = lw;
     ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineCap = 'butt';
   }
 
   ctx.restore();
+
+  // ── Decorative inset line frames (thin / double) ───────────────────────────
+  // Drawn AFTER the clip is released so the lines sit cleanly inside the slot
+  // edge (mirrors the Fabric inset rects/ellipses + the DOM inset box-shadow /
+  // outline). 1px (thin) and the inner gap (3px) scale by PX to print res.
+  if (drawFrame && (effFrameStyle === 'thin' || effFrameStyle === 'double')) {
+    ctx.save();
+    ctx.strokeStyle = frameColor;
+    ctx.lineWidth = 1 * PX;
+    const inset = (effFrameStyle === 'double' ? 3 : 1) * PX;
+    if (isRect) {
+      ctx.strokeRect(sx + inset, sy + inset, sw - inset * 2, sh - inset * 2);
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(sx + sw / 2, sy + sh / 2, sw / 2 - inset, sh / 2 - inset, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 }
 
-/** Apply clip path for special shapes */
+/** Apply clip path for special shapes.
+ *  `cornerRadius` (print px) rounds the default rect clip — used by the
+ *  `rounded` decorative frame so the photo corners match the DOM/Fabric
+ *  renderers' 10% radius. */
 function applySlotClip(
   ctx: CanvasRenderingContext2D,
   slot: any,
@@ -327,6 +426,7 @@ function applySlotClip(
   y: number,
   w: number,
   h: number,
+  cornerRadius = 0,
 ) {
   ctx.beginPath();
 
@@ -365,8 +465,23 @@ function applySlotClip(
       ctx.closePath();
       break;
     }
-    default:
-      ctx.rect(x, y, w, h);
+    default: {
+      const r = Math.min(cornerRadius, Math.min(w, h) / 2);
+      if (r > 0) {
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.arcTo(x + w, y, x + w, y + r, r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+        ctx.lineTo(x + r, y + h);
+        ctx.arcTo(x, y + h, x, y + h - r, r);
+        ctx.lineTo(x, y + r);
+        ctx.arcTo(x, y, x + r, y, r);
+        ctx.closePath();
+      } else {
+        ctx.rect(x, y, w, h);
+      }
+    }
   }
 
   ctx.clip();

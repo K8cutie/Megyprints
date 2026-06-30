@@ -10,6 +10,7 @@ import type {
   PhotoFilters,
   SlotGeometryOverride,
   PageTemplate,
+  FrameStyle,
 } from './types';
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
@@ -313,7 +314,8 @@ export interface BuilderActions {
   updateBackgroundTransform: (updates: Partial<Pick<AlbumBackground, 'x' | 'y' | 'width' | 'height' | 'rotation'>>) => void;
   updateBackgroundFilters: (filters: Partial<PhotoFilters>) => void;
   applyBackgroundToAllPages: (bg?: AlbumBackground) => void;
-  applyPhotoFrameToAllPages: (border: { color: string; width: number }) => void;
+  applyPhotoFrameToAllPages: (border: { color: string; width: number; style?: 'solid' | 'dashed' | 'dotted' }) => void;
+  applyFrameToAllPages: (frame: FrameStyle) => void;
   applyCornersToAllPages: (cornerBase?: string) => void;
   restyleThemedTitles: (theme: TemplateType) => void;
 
@@ -898,15 +900,35 @@ export function useBuilderState(): BuilderActions {
   }, []);
 
   /* ── Generation ── */
+  // Remember a custom Border/Frame chosen on the Step-2 wizard so it survives album
+  // generation (the buttons live on the pre-album step; without this the pick is
+  // lost when generateAlbum builds fresh pages). Set by applyPhotoFrameToAllPages /
+  // applyFrameToAllPages below, which set_border / set_frame already call.
+  const wizardBorderRef = useRef<{ color: string; width: number; style?: 'solid' | 'dashed' | 'dotted' } | null>(null);
+  const wizardFrameRef = useRef<FrameStyle | null>(null);
+
   const generateAlbumAction = useCallback((wizardBackground?: AlbumBackground, options?: { randomize?: boolean }) => {
     pushSnapshot();
     // Bake the active theme's photo frame + corner art onto every generated page.
-    const border = getThemedPhotoBorder(selectedTemplate);
+    // A custom Border picked on the wizard overrides the theme's border here.
+    const border: { color: string; width: number; style?: 'solid' | 'dashed' | 'dotted' } =
+      wizardBorderRef.current ?? getThemedPhotoBorder(selectedTemplate);
     const cornerBase = getThemeCornerBase(selectedTemplate);
     // Fall back to the theme's own background so image-less palette themes
     // (e.g. baptism) don't generate as plain white when no bg is passed.
     const bg = wizardBackground ?? getThemedBackground(selectedTemplate, 0);
-    const newPages = generateAlbum(uploadedPhotos, albumSize, photosPerPage, bg, { ...options, border, cornerBase });
+    let newPages = generateAlbum(uploadedPhotos, albumSize, photosPerPage, bg, { ...options, border, cornerBase });
+    // createEmptyPage only carries border color/width — also apply the border STYLE
+    // and the decorative FRAME (when chosen) onto every freshly generated page.
+    const bStyle = border.style;
+    const wFrame = wizardFrameRef.current;
+    if (bStyle || wFrame) {
+      newPages = newPages.map((p) => ({
+        ...p,
+        ...(bStyle ? { photoBorderStyle: bStyle } : {}),
+        ...(wFrame ? { frameStyle: wFrame } : {}),
+      }));
+    }
     // Auto-place a themed title on page 1 (theme font + accent color) so the
     // theme's typography + palette are visible without the user adding text.
     // Tagged `theme-title-*` so re-theming can restyle it (restyleThemedTitles).
@@ -1575,9 +1597,24 @@ export function useBuilderState(): BuilderActions {
   }, [currentPage.background]);
 
   // Bake a theme's photo frame onto every existing page (used by apply_theme).
-  const applyPhotoFrameToAllPages = useCallback((border: { color: string; width: number }) => {
+  // `style` is optional and back-compat: omitted = solid border.
+  const applyPhotoFrameToAllPages = useCallback((border: { color: string; width: number; style?: 'solid' | 'dashed' | 'dotted' }) => {
     pushSnapshot();
-    setAlbumPages((prev) => prev.map((p) => ({ ...p, photoBorderColor: border.color, photoBorderWidth: border.width })));
+    // Remember the choice so it also survives album (re)generation.
+    wizardBorderRef.current = { color: border.color, width: border.width, style: border.style };
+    setAlbumPages((prev) => prev.map((p) => ({
+      ...p,
+      photoBorderColor: border.color,
+      photoBorderWidth: border.width,
+      photoBorderStyle: border.style ?? 'solid',
+    })));
+  }, []);
+
+  // Apply a decorative frame style around the photos on every existing page.
+  const applyFrameToAllPages = useCallback((frame: FrameStyle) => {
+    pushSnapshot();
+    wizardFrameRef.current = frame; // remember for (re)generation
+    setAlbumPages((prev) => prev.map((p) => ({ ...p, frameStyle: frame })));
   }, []);
 
   // Bake a theme's decorative corner art onto every existing page (used by
@@ -1797,6 +1834,7 @@ export function useBuilderState(): BuilderActions {
     updateBackgroundFilters,
     applyBackgroundToAllPages,
     applyPhotoFrameToAllPages,
+    applyFrameToAllPages,
     applyCornersToAllPages,
     restyleThemedTitles,
     setPageTemplate,

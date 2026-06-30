@@ -21,6 +21,8 @@ export type AssistantIntentType =
   | 'change_template'
   | 'apply_theme'
   | 'set_background'
+  | 'set_border'
+  | 'set_frame'
   | 'add_text'
   | 'update_text'
   | 'delete_text'

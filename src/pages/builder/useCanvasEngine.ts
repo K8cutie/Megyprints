@@ -15,7 +15,7 @@ import type {
   ObjectEvent,
   MouseEvent as FabricMouseEvent,
 } from './fabric-types';
-import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset } from './types';
+import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset, FrameStyle } from './types';
 import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getCanvasDimensions } from './layouts';
@@ -946,6 +946,8 @@ function renderTemplateSlots(
   onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void,
   frameColor?: string,
   frameWidth?: number,
+  borderStyle?: 'solid' | 'dashed' | 'dotted',
+  frameStyle?: FrameStyle,
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
@@ -1078,10 +1080,21 @@ function renderTemplateSlots(
         // blue container outline in edit mode so the slot is still selectable.
         const effFrameWidth = adaptedTemplate.fullBleed ? 0 : frameWidth;
         const borderWidth = containerMode ? 3 : (effFrameWidth ?? 2);
+        // Dashed/dotted border style — only on the real (non-container) outline,
+        // and only when the slot actually draws a border. Mirrors the DOM
+        // (border-style) + print (ctx.setLineDash) renderers.
+        const effBorderStyle = borderStyle ?? 'solid';
+        let borderDashArray: number[] | undefined;
+        if (!containerMode && borderWidth > 0) {
+          if (effBorderStyle === 'dashed') borderDashArray = [borderWidth * 2, borderWidth * 2];
+          else if (effBorderStyle === 'dotted') borderDashArray = [1, borderWidth * 2];
+        }
         const borderBase = {
           fill: 'transparent' as const,
           stroke: borderStroke,
           strokeWidth: borderWidth,
+          strokeDashArray: borderDashArray,
+          strokeLineCap: effBorderStyle === 'dotted' ? ('round' as const) : ('butt' as const),
           selectable: containerMode,
           evented: containerMode,
           hasControls: containerMode,
@@ -1111,6 +1124,95 @@ function renderTemplateSlots(
         borderObj.slotId = `${SLOT_ID}-border-${i}`;
         canvas.add(borderObj);
         borderObj.bringToFront();
+
+        // ── Decorative FRAME layer ─────────────────────────────────────────
+        // Drawn AROUND each slot, keyed off the shared FRAME_STYLES registry so
+        // the Fabric / DOM / print renderers stay in lockstep. Frame objects are
+        // tagged `${SLOT_ID}-frame-${i}` so the cleanup pass (filters on
+        // SLOT_ID) removes them on every rerender. Suppressed for full-bleed
+        // pages (no border ⇒ no decorative frame) and in container mode (the
+        // blue resize outline owns the slot then).
+        const effFrameStyle: FrameStyle = frameStyle ?? 'none';
+        if (
+          !containerMode &&
+          !adaptedTemplate.fullBleed &&
+          effFrameStyle !== 'none' &&
+          slot.shape !== 'heart'
+        ) {
+          const frameTag = `${SLOT_ID}-frame-${i}`;
+          const matFill = '#FFFFFF';
+          const isRect = slot.shape !== 'circle' && slot.shape !== 'oval';
+          // A passive (non-interactive) primitive shared by every frame piece.
+          const passive = {
+            selectable: false,
+            evented: false,
+            hasControls: false,
+            hasBorders: false,
+          };
+
+          if (effFrameStyle === 'rounded' && isRect) {
+            // Soft rounded corners + a 3px accent border on the slot border rect.
+            const rr = Math.min(sw, sh) * 0.1;
+            borderObj.set({ rx: rr, ry: rr, strokeWidth: Math.max(borderWidth, 3) });
+          } else if (effFrameStyle === 'shadowbox') {
+            // Floating photo: keep the 1px border + cast an outer drop shadow.
+            borderObj.set('shadow', new fab.Shadow({ color: 'rgba(0,0,0,0.25)', blur: 14, offsetX: 0, offsetY: 4 }));
+          } else if (effFrameStyle === 'double') {
+            // Second concentric line inset 3px inside the slot border.
+            const inset = 3;
+            const dbl = isRect
+              ? new fab.Rect({ left: sx + inset, top: sy + inset, width: sw - inset * 2, height: sh - inset * 2, fill: 'transparent', stroke: frameColor ?? '#FFFFFF', strokeWidth: 1, ...passive })
+              : new fab.Ellipse({ left: sx + sw / 2, top: sy + sh / 2, rx: sw / 2 - inset, ry: sh / 2 - inset, originX: 'center', originY: 'center', fill: 'transparent', stroke: frameColor ?? '#FFFFFF', strokeWidth: 1, ...passive });
+            dbl.slotId = frameTag;
+            canvas.add(dbl);
+            dbl.bringToFront();
+          } else if (effFrameStyle === 'thin') {
+            // Single 1px inset hairline just inside the slot edge.
+            const inset = 1;
+            const hair = isRect
+              ? new fab.Rect({ left: sx + inset, top: sy + inset, width: sw - inset * 2, height: sh - inset * 2, fill: 'transparent', stroke: frameColor ?? '#FFFFFF', strokeWidth: 1, ...passive })
+              : new fab.Ellipse({ left: sx + sw / 2, top: sy + sh / 2, rx: sw / 2 - inset, ry: sh / 2 - inset, originX: 'center', originY: 'center', fill: 'transparent', stroke: frameColor ?? '#FFFFFF', strokeWidth: 1, ...passive });
+            hair.slotId = frameTag;
+            canvas.add(hair);
+            hair.bringToFront();
+          } else if (effFrameStyle === 'matte' || effFrameStyle === 'polaroid') {
+            // White mat behind the photo. Polaroid is weighted at the bottom and
+            // casts a soft drop shadow; matte is an even mount.
+            const pad = 8;
+            const bottomPad = effFrameStyle === 'polaroid' ? 28 : pad;
+            const matShadow = effFrameStyle === 'polaroid'
+              ? new fab.Shadow({ color: 'rgba(0,0,0,0.22)', blur: 16, offsetX: 0, offsetY: 6 })
+              : new fab.Shadow({ color: 'rgba(0,0,0,0.18)', blur: 6, offsetX: 0, offsetY: 0 });
+            const mat = isRect
+              ? new fab.Rect({
+                  left: sx - pad,
+                  top: sy - pad,
+                  width: sw + pad * 2,
+                  height: sh + pad + bottomPad,
+                  fill: matFill,
+                  shadow: matShadow,
+                  ...passive,
+                })
+              : new fab.Ellipse({
+                  left: sx + sw / 2,
+                  top: sy + sh / 2 + (bottomPad - pad) / 2,
+                  rx: sw / 2 + pad,
+                  ry: sh / 2 + (pad + bottomPad) / 2,
+                  originX: 'center',
+                  originY: 'center',
+                  fill: matFill,
+                  shadow: matShadow,
+                  ...passive,
+                });
+            mat.slotId = frameTag;
+            canvas.add(mat);
+            // Mat must sit UNDER the photo but ABOVE the page background. The
+            // photo + its border were already added, so drop the mat just below
+            // them by re-raising the photo and border back to the front.
+            img.bringToFront();
+            borderObj.bringToFront();
+          }
+        }
 
         // Container mode: save geometry when border is moved/resized
         if (containerMode && onContainerModified) {
@@ -1255,7 +1357,7 @@ function renderScene(
 
   const geoms = page.slotGeometries;
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle);
   }
 
   // 3b. Decorative theme corners (one set, all four corners), locked + on top.

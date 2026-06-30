@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2 } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
-import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
+import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { setPendingPrintJob } from '../../lib/printQueue';
 import { getCanvasDimensions } from './layouts';
@@ -142,6 +142,15 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         // Full-bleed (single-photo, no-textbox) pages get no frame at all.
         const frameWidth = template.fullBleed ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
         const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
+        // Per-page border line-style (solid by default for back-compat).
+        const borderLineStyle = page.photoBorderStyle ?? 'solid';
+        // Decorative frame (single source of truth in types.ts). 'none'/absent → {}.
+        const frameCss = template.fullBleed
+          ? {}
+          : frameStyleToCss(page.frameStyle, frameColor);
+        // Outer drop shadows (polaroid / shadowbox) need overflow visible to show;
+        // any other frame keeps the photo clipped to the slot/shape.
+        const frameClips = !(page.frameStyle === 'polaroid' || page.frameStyle === 'shadowbox');
 
         return (
           <div key={`slot-${idx}`} className="absolute"
@@ -150,12 +159,13 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             zIndex: 1, left, top, width, height,
             transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined,
             transformOrigin: 'center center',
-            border: frameWidth ? `${frameWidth}px solid ${frameColor}` : undefined,
-            boxSizing: 'border-box', overflow: 'hidden', cursor: onSlotTap ? 'pointer' : undefined, ...shapeStyle,
+            border: frameWidth ? `${frameWidth}px ${borderLineStyle} ${frameColor}` : undefined,
+            boxSizing: 'border-box', overflow: frameClips ? 'hidden' : 'visible',
+            cursor: onSlotTap ? 'pointer' : undefined, ...shapeStyle, ...frameCss.wrapper,
           }}>
             <img src={uploaded.previewUrl} alt="" draggable={false}
               className="absolute object-cover"
-              style={{ left: imgLeft, top: imgTop, width: imgW, height: imgH }} />
+              style={{ left: imgLeft, top: imgTop, width: imgW, height: imgH, ...frameCss.inner }} />
             {editable && onRemoveFromSlot && (
               <button onClick={(e) => { e.stopPropagation(); onRemoveFromSlot(idx); }} aria-label="Remove photo"
                 style={{

@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 export type BuilderPhase = 'setup' | 'upload' | 'template' | 'edit' | 'preview';
 
 export type TemplateType =
@@ -264,6 +266,12 @@ export interface AlbumPage {
    *  borders when undefined (older albums). Frozen into the order snapshot. */
   photoBorderColor?: string;
   photoBorderWidth?: number;
+  /** Border line style for the slot border. Defaults to 'solid' when absent
+   *  (back-compat with older albums). Shared across all three renderers. */
+  photoBorderStyle?: 'solid' | 'dashed' | 'dotted';
+  /** Decorative frame treatment drawn around each photo slot (museum mat,
+   *  polaroid, shadow-box, …). 'none'/undefined = plain border only. */
+  frameStyle?: FrameStyle;
   /** Theme-baked decorative corner-art base path, e.g.
    *  "/themes/wedding/pages/wedding1". Renderers append "_tl.png"/"_tr.png"/
    *  "_bl.png"/"_br.png". Undefined = no corner decorations. */
@@ -600,3 +608,134 @@ export const DEFAULT_MATERIAL: MaterialType = 'matte';
 export const DEFAULT_COVER: CoverType = 'softcover';
 
 export const PRICE_CONFIG = { basePrice: 500 };
+
+/* ───────────────────────────────────────────────────────────────────────────
+   BORDER + FRAME STYLE REGISTRIES (single source of truth)
+
+   These registries are shared by the Step-2 customization pickers AND by all
+   three renderers (BuilderPreview PageView, useCanvasEngine Fabric, and the
+   print pipeline) so a style change can never drift between them.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/** A selectable photo-border preset. `style` maps to the CSS border-style /
+ *  the Fabric dash array / the print ctx.setLineDash equivalent. */
+export interface BorderStyleOption {
+  id: string;
+  label: string;
+  color: string;
+  width: number;
+  style: 'solid' | 'dashed' | 'dotted';
+}
+
+/** Curated border presets surfaced by the Step-2 "Border" picker. */
+export const BORDER_STYLES: BorderStyleOption[] = [
+  { id: 'thin-white', label: 'Thin White', color: '#FFFFFF', width: 4, style: 'solid' },
+  { id: 'hairline-charcoal', label: 'Hairline Charcoal', color: '#2D2D2D', width: 2, style: 'solid' },
+  { id: 'peach', label: 'Peach', color: '#F4C2A1', width: 5, style: 'solid' },
+  { id: 'dashed-charcoal', label: 'Dashed Charcoal', color: '#4A4A4A', width: 3, style: 'dashed' },
+  { id: 'dotted-peach', label: 'Dotted Peach', color: '#E8A598', width: 3, style: 'dotted' },
+  { id: 'bold-gold', label: 'Bold Gold', color: '#C9A24B', width: 6, style: 'solid' },
+];
+
+/** Decorative frame treatments drawn AROUND each photo slot. */
+export type FrameStyle =
+  | 'none'
+  | 'thin'
+  | 'double'
+  | 'rounded'
+  | 'matte'
+  | 'polaroid'
+  | 'shadowbox';
+
+/** A selectable frame preset surfaced by the Step-2 "Frame" picker. */
+export interface FrameStyleOption {
+  id: FrameStyle;
+  label: string;
+}
+
+/** Curated frame presets, in picker order. */
+export const FRAME_STYLES: FrameStyleOption[] = [
+  { id: 'none', label: 'None' },
+  { id: 'thin', label: 'Thin' },
+  { id: 'double', label: 'Double' },
+  { id: 'rounded', label: 'Rounded' },
+  { id: 'matte', label: 'Matte' },
+  { id: 'polaroid', label: 'Polaroid' },
+  { id: 'shadowbox', label: 'Shadow Box' },
+];
+
+/** The two-layer CSS spec a frame produces: an optional outer `wrapper` style
+ *  (mat / padding / shadow) and an optional `inner` style applied to the photo
+ *  element itself (radius / extra border). Returned by {@link frameStyleToCss}
+ *  and consumed by the DOM renderer + the picker thumbnails so they cannot
+ *  drift apart. */
+export interface FrameCss {
+  wrapper?: CSSProperties;
+  inner?: CSSProperties;
+}
+
+/**
+ * Pure helper translating a {@link FrameStyle} into composable CSS.
+ *
+ * Used by the DOM renderer (BuilderPreview PageView) and the picker thumbnails;
+ * the Fabric + print renderers mirror the same intent with their own
+ * primitives keyed off {@link FRAME_STYLES}.
+ *
+ * @param frame  The frame treatment (undefined / 'none' → no decoration).
+ * @param accent Accent colour used where the frame draws a tinted line
+ *               (e.g. the inner hairline of the `thin`/`double` frames).
+ */
+export function frameStyleToCss(
+  frame: FrameStyle | undefined,
+  accent: string = '#FFFFFF',
+): FrameCss {
+  switch (frame) {
+    case 'thin':
+      return {
+        inner: {
+          boxShadow: `inset 0 0 0 1px ${accent}`,
+        },
+      };
+    case 'double':
+      return {
+        inner: {
+          border: `1px solid ${accent}`,
+          outline: `1px solid ${accent}`,
+          outlineOffset: '3px',
+        },
+      };
+    case 'rounded':
+      return {
+        inner: {
+          borderRadius: '10%',
+          border: `3px solid ${accent}`,
+        },
+      };
+    case 'matte':
+      return {
+        wrapper: {
+          backgroundColor: '#FFFFFF',
+          padding: '8px',
+          boxShadow: 'inset 0 0 6px rgba(0,0,0,0.18)',
+        },
+      };
+    case 'polaroid':
+      return {
+        wrapper: {
+          backgroundColor: '#FFFFFF',
+          padding: '8px 8px 28px',
+          boxShadow: '0 6px 16px rgba(0,0,0,0.22)',
+        },
+      };
+    case 'shadowbox':
+      return {
+        wrapper: {
+          border: '1px solid rgba(0,0,0,0.15)',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+        },
+      };
+    case 'none':
+    default:
+      return {};
+  }
+}
