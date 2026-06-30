@@ -1122,21 +1122,10 @@ export function useBuilderState(): BuilderActions {
     let bestR = 0;
     for (const r of ratios) { tally[r] = (tally[r] ?? 0) + 1; if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; } }
     const allForSize = getTemplatesForAlbum(albumSize);
-    // Show EVERY layout with the same photo count — not just the few whose
-    // targetRatio exactly matches these photos (that hid most of the library in
-    // the "Change layout" picker). Rank ratio-matching layouts first so the
-    // best-fitting options are on top; the user sees the real crop in each live
-    // preview and picks the look directly.
-    let pool = allForSize.filter((t) => t.slotCount === count);
-    if (pool.length === 0) pool = allForSize; // last resort: any layout for this album
-    return [...pool].sort((a, b) => {
-      if (pageRatio) {
-        const am = a.targetRatio === pageRatio ? 0 : 1;
-        const bm = b.targetRatio === pageRatio ? 0 : 1;
-        if (am !== bm) return am - bm;
-      }
-      return a.id.localeCompare(b.id);
-    });
+    let pool = allForSize.filter((t) => t.slotCount === count && (!pageRatio || t.targetRatio === pageRatio));
+    if (pool.length === 0) pool = allForSize.filter((t) => t.slotCount === count);
+    if (pool.length === 0) pool = allForSize;
+    return [...pool].sort((a, b) => a.id.localeCompare(b.id));
   }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
 
   /** Apply a SPECIFIC template to the current page (the picker's choice), keeping
