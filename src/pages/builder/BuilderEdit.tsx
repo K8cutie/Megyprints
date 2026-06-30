@@ -20,6 +20,8 @@ import {
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
+import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import { getTemplateById } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
 import { CloudSaveStatus } from '../../components/CloudSaveStatus';
@@ -140,6 +142,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       setSelectedSlotForPicker(slotIndex);
       setShowPhotoPicker(true);
     }, [containerMode]),
+    onTextSlotClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
+      setTextEditSlot(slotIndex);
+    }, [containerMode]),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {
@@ -159,6 +165,26 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   });
 
   const [selectedSlotForPicker, setSelectedSlotForPicker] = useState<number | null>(null);
+  // Which template textbox slot is being edited (its caption). Opens the same
+  // editor the mobile review + preview use, so editing is identical everywhere.
+  const [textEditSlot, setTextEditSlot] = useState<number | null>(null);
+  const buildBoxInitial = useCallback((slot: number): BoxTextContent => {
+    const page = actions.currentPage;
+    const existing = page?.textElements?.find((t) => t.boxIndex === slot);
+    const ts = (page?.templateId ? getTemplateById(page.templateId) : null)?.textSlots?.[slot];
+    if (existing) {
+      return {
+        text: existing.text, fontSize: existing.fontSize, fontFamily: existing.fontFamily,
+        color: existing.color, bold: existing.bold, italic: existing.italic,
+        underline: existing.underline, alignment: existing.alignment,
+      };
+    }
+    return {
+      text: '', fontSize: 28, fontFamily: 'Georgia, "Times New Roman", serif',
+      color: '#2D2D2D', bold: false, italic: false, underline: false,
+      alignment: ts?.align ?? 'center',
+    };
+  }, [actions.currentPage]);
 
   /* ── Photo picker only offers UNUSED photos, so the same photo is never
      placed twice. When everything's used, the picker asks for more. ── */
@@ -609,6 +635,17 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Caption editor — same component the mobile review + preview use, so the
+          desktop canvas textbox edits identically. Click the box → type → it
+          binds to the slot and renders fixed + centered. */}
+      {textEditSlot !== null && (
+        <MobileTextEditor
+          initial={buildBoxInitial(textEditSlot)}
+          onSave={(content) => { actions.setBoxText(textEditSlot, content); setTextEditSlot(null); }}
+          onClose={() => setTextEditSlot(null)}
+        />
+      )}
 
       <div className="flex h-full bg-[#F5F5F5]">
         {/* ── Unified Panel (LEFT side) — hidden by default ── */}

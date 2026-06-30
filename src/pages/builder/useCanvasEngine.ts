@@ -82,6 +82,9 @@ export interface UseCanvasEngineOptions {
   albumType: 'standard' | 'layflat';
   albumSize: string;
   onSlotClick: (slotIndex: number) => void;
+  /** Click on a template textbox region (empty placeholder or bound caption) →
+   *  open the shared text editor for that slot. */
+  onTextSlotClick?: (slotIndex: number) => void;
   actions: BuilderActions;
   /** When true, slot containers become selectable and resizable */
   containerMode?: boolean;
@@ -134,6 +137,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     albumType,
     albumSize,
     onSlotClick,
+    onTextSlotClick,
     actions,
     containerMode = false,
     onContainerModified,
@@ -177,6 +181,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   snapEnabledRef.current = snapEnabled;
   const onSlotClickRef = useRef(onSlotClick);
   onSlotClickRef.current = onSlotClick;
+  const onTextSlotClickRef = useRef<(slotIndex: number) => void>(() => {});
+  onTextSlotClickRef.current = onTextSlotClick ?? (() => {});
   const containerModeRef = useRef(containerMode);
   containerModeRef.current = containerMode;
   const onContainerModifiedRef = useRef(onContainerModified);
@@ -477,7 +483,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -614,7 +620,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -1221,6 +1227,7 @@ function renderScene(
   albumSize: string = '8x8',
   pageIndex: number = 0,
   onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void,
+  onTextSlotClick: (slotIndex: number) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1302,7 +1309,10 @@ function renderScene(
     const autoWidth = Math.max(text.text.length * text.fontSize * 0.6, 100);
     const fabricText = new fab.Textbox(text.text, {
       left: slotRect ? slotRect.left : text.x,
-      top: slotRect ? slotRect.top : text.y,
+      // Bound captions sit VERTICALLY CENTERED in their box (origin = center),
+      // matching the preview + mobile review. Free text keeps top-left origin.
+      top: slotRect ? (slotRect.top + slotRect.height / 2) : text.y,
+      originY: slotRect ? 'center' : 'top',
       fontSize: text.fontSize,
       fontFamily: text.fontFamily,
       fill: text.color,
@@ -1312,30 +1322,36 @@ function renderScene(
       textAlign: text.alignment,
       angle: text.rotation,
       opacity: text.opacity / 100,
-      /* Free text (a title/quote) stays fully movable. A caption BOUND to a
-         template textbox is fixed to its region — editable (double-click to type)
-         but locked in place + non-resizable, so it can never drift to a corner. */
-      selectable: true,
+      /* Free text (a title/quote) stays fully movable + inline-editable. A caption
+         BOUND to a template textbox is LOCKED to its region and opens the shared
+         text editor on click — same as the mobile review + preview — so editing is
+         identical in every view (no drifting, no inline quirks). */
+      selectable: slotRect ? false : true,
       evented: true,
-      editable: true,
+      editable: slotRect ? false : true,
+      hoverCursor: slotRect ? 'pointer' : undefined,
       editingBorderColor: '#F4C2A1',
       cornerColor: '#F4C2A1',
       cornerSize: 8,
       transparentCorners: false,
       borderColor: '#F4C2A1',
-      ...(slotRect ? { lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, hasControls: false } : {}),
       width: slotRect ? slotRect.width : (text.width ?? autoWidth),
       scaleX: text.scaleX ?? 1,
       scaleY: text.scaleY ?? 1,
     });
     fabricText.textId = text.id;
+    if (slotRect && text.boxIndex != null) {
+      const bi = text.boxIndex;
+      fabricText.on('mousedown', () => onTextSlotClick(bi));
+    }
     canvas.add(fabricText);
     textObjects.push(fabricText);
   });
 
-  // 4b. Empty textbox placeholders — draw the "Tap to add text" region in-slot so
-  // the desktop canvas shows the textbox exactly where the template defines it,
-  // matching the mobile review + preview. Skip any slot that already has a caption.
+  // 4b. Empty textbox placeholders — a tappable "Tap to add text" region in-slot,
+  // identical to the mobile review + preview. Clicking opens the shared text
+  // editor (via onTextSlotClick) and the typed caption binds to this slot. Skip
+  // any slot that already has a caption.
   (template?.textSlots ?? []).forEach((_ts, i) => {
     if (page.textElements.some((t) => t.boxIndex === i)) return;
     const r = textSlotRect(i);
@@ -1344,12 +1360,10 @@ function renderScene(
       left: r.left, top: r.top, width: r.width, height: r.height,
       fill: 'rgba(253,232,228,0.45)', stroke: 'rgba(232,165,152,0.85)',
       strokeDashArray: [6, 4], strokeWidth: 1.5, rx: 6, ry: 6,
-      // Visual-only on the canvas — NEVER auto-insert placeholder words (that
-      // would print). Captions are typed via the preview's empty editor.
-      selectable: false, evented: false,
+      selectable: false, evented: true, hoverCursor: 'pointer',
     });
     box.slotId = `${SLOT_ID}-textbox-${i}`;
-    const label = new fab.Text('Caption — add in Preview', {
+    const label = new fab.Text('✎  Tap to add text', {
       left: r.left + r.width / 2, top: r.top + r.height / 2,
       originX: 'center', originY: 'center',
       fontSize: Math.max(12, Math.min(r.width, r.height) * 0.085),
@@ -1359,6 +1373,7 @@ function renderScene(
     label.slotId = `${SLOT_ID}-textbox-label-${i}`;
     canvas.add(box);
     canvas.add(label);
+    box.on('mousedown', () => onTextSlotClick(i));
   });
 
   // Ensure text stays on top even when slot images load async
