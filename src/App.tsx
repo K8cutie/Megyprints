@@ -29,17 +29,21 @@ export default function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/order" element={<Order />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route
-            path="/builder/*"
-            element={
-              <BuilderErrorBoundary onReset={() => window.location.reload()}>
-                <BuilderProvider>
-                  <Builder />
-                </BuilderProvider>
-              </BuilderErrorBoundary>
-            }
-          />
         </Route>
+        {/* Builder — a full-screen app with its own chrome. Kept OUTSIDE Layout so the
+            marketing Lenis smooth-scroll (which hijacks the mouse wheel and scrolls the
+            window instead of the editor/wizard's own overflow containers) is not active
+            here. THIS is what broke wheel-scrolling in the builder. */}
+        <Route
+          path="/builder/*"
+          element={
+            <BuilderErrorBoundary onReset={() => window.location.reload()}>
+              <BuilderProvider>
+                <Builder />
+              </BuilderProvider>
+            </BuilderErrorBoundary>
+          }
+        />
         {/* Operator console — outside the customer Layout (its own chrome) */}
         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
       </Routes>
