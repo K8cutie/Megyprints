@@ -524,13 +524,15 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       hops++;
     }
     if (!host) return;
-    // Fit the WHOLE page into the viewport — BOTH width and height — and let it
-    // GROW to fill big screens (capped to avoid extreme upscaling blur). Reserve
-    // vertical room for the page-number label + nav arrows + container padding.
+    // Fit the page to the available WIDTH only (never upscale past 100%) and let
+    // its height overflow the scroll container — so a tall page can be SCROLLED
+    // through with the mouse wheel. Fitting to height as well made every page fit
+    // the viewport exactly, leaving nothing to scroll (the "lost my scroll wheel"
+    // regression). Zoom still folds in via zoomRef; Ctrl/Cmd+wheel zoom and the
+    // ‹ › nav arrows are unaffected.
     const availW = host.clientWidth - 32;
-    const availH = host.clientHeight - 120;
-    if (availW <= 0 || availH <= 0) return;
-    const baseFit = Math.max(0.2, Math.min(2.5, Math.min(availW / CANVAS_W, availH / CANVAS_H)));
+    if (availW <= 0) return;
+    const baseFit = Math.max(0.2, Math.min(1, availW / CANVAS_W));
     const scale = baseFit * zoomRef.current;
     // NOTE: fabric 5.x setDimensions(cssOnly) does NOT append units, so the CSS
     // values MUST be passed as 'px' strings or the browser ignores them.
@@ -713,9 +715,12 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       return () => container.removeEventListener('wheel', handleWheel);
     };
 
-    // Delay to ensure DOM is ready
-    const timer = setTimeout(attach, 100);
-    return () => clearTimeout(timer);
+    // Delay to ensure DOM is ready. Keep the detach handle so the wheel listener
+    // is actually removed on unmount (previously attach()'s cleanup was swallowed
+    // by setTimeout and the listener leaked).
+    let detach: (() => void) | null = null;
+    const timer = setTimeout(() => { detach = attach(); }, 100);
+    return () => { clearTimeout(timer); detach?.(); };
   }, []);
 
   /* ═══════ Zoom helpers ═══════ */

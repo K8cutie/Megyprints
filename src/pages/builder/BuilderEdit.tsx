@@ -837,10 +837,14 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {/* Canvas */}
           <div
             ref={containerRef}
-            className="flex-1 overflow-auto flex p-4 pb-24 md:p-8"
-            title="Scroll to navigate pages. Ctrl+Scroll to zoom."
+            className="flex-1 overflow-auto flex flex-col items-center p-4 pb-24 md:p-8"
+            title="Scroll up/down the page · Ctrl+Scroll to zoom · ‹ › to change page"
           >
-            <div className="flex flex-col items-center gap-2 m-auto">
+            {/* Top-aligned (not m-auto): a page taller than the viewport must be
+                able to OVERFLOW downward so the wheel can scroll through it. Auto
+                margins / vertical centering push the overflow into unreachable
+                negative space (the canvas gets clipped top & bottom). */}
+            <div className="flex flex-col items-center gap-2 my-auto shrink-0">
               {/* Page number above the page */}
               <span className="text-xs font-medium text-[#6B6B6B] tabular-nums">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
