@@ -878,6 +878,271 @@ const T8x8_22 = tmpl('t8x8-22', 'Sextet Grid 2×3', 'sextet', STD, 'square', '1:
 ]);
 
 /* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — Increment 1: 4:3 + 5-photo "Strip Five" (filmstrip)
+   Five equal full-height columns, all 4:3, no caption. Fills the EMPTY
+   (4:3 × 5-photo × square) cell.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Strip Five (4:3 filmstrip) removed — 4:3 photos in full-height columns left
+   ~85% whitespace on a square album (the no-oversized-box rule). The 4:3 × 5-photo
+   square cell is covered by Two-Top-Three-Bottom below. */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — Increment 2: 4:3 + 5-photo "Two-Top Three-Bottom + Caption"
+   Two larger 4:3 cells on the top row, three smaller 4:3 cells on the bottom
+   row, with a bottom caption band absorbing leftover space. All slots 4:3
+   (strict match, zero crop). Distinct from Strip Five (Inc 1).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const T6x6_23: PageTemplate = {
+  ...tmpl('t6x6-23', 'Two-Top Three-Bottom + Caption', 'quint', STD, 'square', '4:3', [S66], [
+    rsBox(0, 0, '4:3', 0.485, 0.42, S66),
+    rsBox(0.515, 0, '4:3', 0.485, 0.42, S66),
+    rsBox(0, 0.45, '4:3', 0.313, 0.40, S66),
+    rsBox(0.343, 0.45, '4:3', 0.313, 0.40, S66),
+    rsBox(0.686, 0.45, '4:3', 0.313, 0.40, S66),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.87, width: 1, height: 0.13, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T8x8_24: PageTemplate = {
+  ...tmpl('t8x8-24', 'Two-Top Three-Bottom + Caption', 'quint', STD, 'square', '4:3', [S88], [
+    rsBox(0, 0, '4:3', 0.485, 0.42, S88),
+    rsBox(0.515, 0, '4:3', 0.485, 0.42, S88),
+    rsBox(0, 0.45, '4:3', 0.313, 0.40, S88),
+    rsBox(0.343, 0.45, '4:3', 0.313, 0.40, S88),
+    rsBox(0.686, 0.45, '4:3', 0.313, 0.40, S88),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.87, width: 1, height: 0.13, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T9x9_24: PageTemplate = {
+  ...tmpl('t9x9-24', 'Two-Top Three-Bottom + Caption', 'quint', STD, 'square', '4:3', [S99], [
+    rsBox(0, 0, '4:3', 0.485, 0.42, S99),
+    rsBox(0.515, 0, '4:3', 0.485, 0.42, S99),
+    rsBox(0, 0.45, '4:3', 0.313, 0.40, S99),
+    rsBox(0.343, 0.45, '4:3', 0.313, 0.40, S99),
+    rsBox(0.686, 0.45, '4:3', 0.313, 0.40, S99),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.87, width: 1, height: 0.13, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — Increment 3: 4:3 + 6-photo "Three-Top Three-Bottom"
+   Sextet grid, 3 columns x 2 rows, all slots 4:3 (strict match, zero crop).
+   Cols x=0/0.343/0.686 (w=0.313); rows y=0/0.515 (h=0.485). No caption.
+   Fills the EMPTY (4:3 × 6-photo × square) cell; distinct from the 1:1 2×3 grid.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const T6x6_24 = tmpl('t6x6-24', 'Three-Top Three-Bottom', 'sextet', STD, 'square', '4:3', [S66], [
+  rsBox(0, 0, '4:3', 0.313, 0.485, S66),
+  rsBox(0.343, 0, '4:3', 0.313, 0.485, S66),
+  rsBox(0.686, 0, '4:3', 0.313, 0.485, S66),
+  rsBox(0, 0.515, '4:3', 0.313, 0.485, S66),
+  rsBox(0.343, 0.515, '4:3', 0.313, 0.485, S66),
+  rsBox(0.686, 0.515, '4:3', 0.313, 0.485, S66),
+]);
+const T8x8_25 = tmpl('t8x8-25', 'Three-Top Three-Bottom', 'sextet', STD, 'square', '4:3', [S88], [
+  rsBox(0, 0, '4:3', 0.313, 0.485, S88),
+  rsBox(0.343, 0, '4:3', 0.313, 0.485, S88),
+  rsBox(0.686, 0, '4:3', 0.313, 0.485, S88),
+  rsBox(0, 0.515, '4:3', 0.313, 0.485, S88),
+  rsBox(0.343, 0.515, '4:3', 0.313, 0.485, S88),
+  rsBox(0.686, 0.515, '4:3', 0.313, 0.485, S88),
+]);
+const T9x9_25 = tmpl('t9x9-25', 'Three-Top Three-Bottom', 'sextet', STD, 'square', '4:3', [S99], [
+  rsBox(0, 0, '4:3', 0.313, 0.485, S99),
+  rsBox(0.343, 0, '4:3', 0.313, 0.485, S99),
+  rsBox(0.686, 0, '4:3', 0.313, 0.485, S99),
+  rsBox(0, 0.515, '4:3', 0.313, 0.485, S99),
+  rsBox(0.343, 0.515, '4:3', 0.313, 0.485, S99),
+  rsBox(0.686, 0.515, '4:3', 0.313, 0.485, S99),
+]);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — Increment 4: 4:3 + 6-photo "Hero + Five Satellites"
+   Sextet, dominant 0.62×0.62 hero top-left; 2-tall satellite column on the
+   right (x=0.64) and a 3-wide satellite row along the bottom (y=0.64). Every
+   slot 4:3 (strict match, zero crop). Packed edge-to-edge, no caption.
+   Distinct from the Three-Top Three-Bottom grid — a hero-anchored sextet.
+   Fills (4:3 × 6-photo × square) with a SECOND archetype.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const T6x6_25 = tmpl('t6x6-25', 'Hero + Five Satellites', 'sextet', STD, 'square', '4:3', [S66], [
+  rsBox(0, 0, '4:3', 0.62, 0.62, S66),
+  rsBox(0.64, 0, '4:3', 0.36, 0.30, S66),
+  rsBox(0.64, 0.32, '4:3', 0.36, 0.30, S66),
+  rsBox(0, 0.64, '4:3', 0.30, 0.36, S66),
+  rsBox(0.32, 0.64, '4:3', 0.30, 0.36, S66),
+  rsBox(0.64, 0.64, '4:3', 0.30, 0.36, S66),
+]);
+const T8x8_26 = tmpl('t8x8-26', 'Hero + Five Satellites', 'sextet', STD, 'square', '4:3', [S88], [
+  rsBox(0, 0, '4:3', 0.62, 0.62, S88),
+  rsBox(0.64, 0, '4:3', 0.36, 0.30, S88),
+  rsBox(0.64, 0.32, '4:3', 0.36, 0.30, S88),
+  rsBox(0, 0.64, '4:3', 0.30, 0.36, S88),
+  rsBox(0.32, 0.64, '4:3', 0.30, 0.36, S88),
+  rsBox(0.64, 0.64, '4:3', 0.30, 0.36, S88),
+]);
+const T9x9_26 = tmpl('t9x9-26', 'Hero + Five Satellites', 'sextet', STD, 'square', '4:3', [S99], [
+  rsBox(0, 0, '4:3', 0.62, 0.62, S99),
+  rsBox(0.64, 0, '4:3', 0.36, 0.30, S99),
+  rsBox(0.64, 0.32, '4:3', 0.36, 0.30, S99),
+  rsBox(0, 0.64, '4:3', 0.30, 0.36, S99),
+  rsBox(0.32, 0.64, '4:3', 0.30, 0.36, S99),
+  rsBox(0.64, 0.64, '4:3', 0.30, 0.36, S99),
+]);
+
+/* ──────────────────────────────────────────────────────────────────────────
+   6x6 / 8x8 / 9x9 NEW — Increment 5: 3:4 + 5-photo "Strip Five Portrait"
+   Five equal full-height tall columns (portrait filmstrip). STRICT 3:4: every
+   slot carries '3:4' (zero crop). Distinct from the 4:3 Strip Five (Inc 1).
+   No textSlot — packs edge-to-edge.
+   ────────────────────────────────────────────────────────────────────────── */
+/* Strip Five Portrait (3:4 filmstrip) removed — same whitespace problem on a
+   square album. The 3:4 × 5-photo square cell is covered by Hero + Quad Strip. */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — Increment 6: 3:4 + 5-photo "Hero + Quad Strip + Caption"
+   One large portrait hero on the left (trimmed to clear a caption band beneath
+   it) + a 4-up right satellite stack. All 5 slots carry '3:4' (strict match,
+   zero crop). Caption band sits under the hero, absorbing the leftover space.
+   Distinct from Strip Five Portrait (Inc 5).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const T6x6_27: PageTemplate = {
+  ...tmpl('t6x6-27', 'Hero + Quad Strip + Caption', 'quint', STD, 'square', '3:4', [S66], [
+    rsBox(0, 0, '3:4', 0.60, 0.90, S66),
+    rsBox(0.64, 0, '3:4', 0.36, 0.235, S66),
+    rsBox(0.64, 0.255, '3:4', 0.36, 0.235, S66),
+    rsBox(0.64, 0.51, '3:4', 0.36, 0.235, S66),
+    rsBox(0.64, 0.765, '3:4', 0.36, 0.235, S66),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.92, width: 0.60, height: 0.08, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T8x8_28: PageTemplate = {
+  ...tmpl('t8x8-28', 'Hero + Quad Strip + Caption', 'quint', STD, 'square', '3:4', [S88], [
+    rsBox(0, 0, '3:4', 0.60, 0.90, S88),
+    rsBox(0.64, 0, '3:4', 0.36, 0.235, S88),
+    rsBox(0.64, 0.255, '3:4', 0.36, 0.235, S88),
+    rsBox(0.64, 0.51, '3:4', 0.36, 0.235, S88),
+    rsBox(0.64, 0.765, '3:4', 0.36, 0.235, S88),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.92, width: 0.60, height: 0.08, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T9x9_28: PageTemplate = {
+  ...tmpl('t9x9-28', 'Hero + Quad Strip + Caption', 'quint', STD, 'square', '3:4', [S99], [
+    rsBox(0, 0, '3:4', 0.60, 0.90, S99),
+    rsBox(0.64, 0, '3:4', 0.36, 0.235, S99),
+    rsBox(0.64, 0.255, '3:4', 0.36, 0.235, S99),
+    rsBox(0.64, 0.51, '3:4', 0.36, 0.235, S99),
+    rsBox(0.64, 0.765, '3:4', 0.36, 0.235, S99),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.92, width: 0.60, height: 0.08, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — Increment 7: 3:4 + 6-photo "Three-Top Three-Bottom Portrait"
+   Two rows of three equal cells, every slot '3:4' (strict match, zero crop).
+   Cols x=0,0.343,0.686 (w=0.313); rows y=0 and y=0.515 (h=0.485). The portrait
+   counterpart of the 4:3 sextet grid (Inc 3). No textSlot — packs edge-to-edge.
+   Fills (3:4 × 6-photo × square).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const T6x6_28 = tmpl('t6x6-28', 'Three-Top Three-Bottom Portrait', 'sextet', STD, 'square', '3:4', [S66], [
+  rsBox(0, 0, '3:4', 0.313, 0.485, S66),
+  rsBox(0.343, 0, '3:4', 0.313, 0.485, S66),
+  rsBox(0.686, 0, '3:4', 0.313, 0.485, S66),
+  rsBox(0, 0.515, '3:4', 0.313, 0.485, S66),
+  rsBox(0.343, 0.515, '3:4', 0.313, 0.485, S66),
+  rsBox(0.686, 0.515, '3:4', 0.313, 0.485, S66),
+]);
+const T8x8_29 = tmpl('t8x8-29', 'Three-Top Three-Bottom Portrait', 'sextet', STD, 'square', '3:4', [S88], [
+  rsBox(0, 0, '3:4', 0.313, 0.485, S88),
+  rsBox(0.343, 0, '3:4', 0.313, 0.485, S88),
+  rsBox(0.686, 0, '3:4', 0.313, 0.485, S88),
+  rsBox(0, 0.515, '3:4', 0.313, 0.485, S88),
+  rsBox(0.343, 0.515, '3:4', 0.313, 0.485, S88),
+  rsBox(0.686, 0.515, '3:4', 0.313, 0.485, S88),
+]);
+const T9x9_29 = tmpl('t9x9-29', 'Three-Top Three-Bottom Portrait', 'sextet', STD, 'square', '3:4', [S99], [
+  rsBox(0, 0, '3:4', 0.313, 0.485, S99),
+  rsBox(0.343, 0, '3:4', 0.313, 0.485, S99),
+  rsBox(0.686, 0, '3:4', 0.313, 0.485, S99),
+  rsBox(0, 0.515, '3:4', 0.313, 0.485, S99),
+  rsBox(0.343, 0.515, '3:4', 0.313, 0.485, S99),
+  rsBox(0.686, 0.515, '3:4', 0.313, 0.485, S99),
+]);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — Increment 8a: 1:1 + 6-photo "Hero + Five Satellites"
+   One dominant 1:1 hero (top-left) wrapped by 5 small 1:1 cells — 2 stacked on
+   the right and 3 along the bottom. STRICT 1:1: every slot carries '1:1' (zero
+   crop). A second sextet archetype for the square 6-photo cell (beyond the
+   2×3 grid). No textSlot — packs edge-to-edge.
+   ══════════════════════════════════════════════════════════════════════════ */
+const T6x6_29 = tmpl('t6x6-29', 'Hero + Five Satellites', 'sextet', STD, 'square', '1:1', [S66], [
+  rsBox(0, 0, '1:1', 0.62, 0.62, S66),
+  rsBox(0.64, 0, '1:1', 0.36, 0.30, S66),
+  rsBox(0.64, 0.32, '1:1', 0.36, 0.30, S66),
+  rsBox(0, 0.64, '1:1', 0.30, 0.36, S66),
+  rsBox(0.32, 0.64, '1:1', 0.30, 0.36, S66),
+  rsBox(0.64, 0.64, '1:1', 0.30, 0.36, S66),
+]);
+const T8x8_30 = tmpl('t8x8-30', 'Hero + Five Satellites', 'sextet', STD, 'square', '1:1', [S88], [
+  rsBox(0, 0, '1:1', 0.62, 0.62, S88),
+  rsBox(0.64, 0, '1:1', 0.36, 0.30, S88),
+  rsBox(0.64, 0.32, '1:1', 0.36, 0.30, S88),
+  rsBox(0, 0.64, '1:1', 0.30, 0.36, S88),
+  rsBox(0.32, 0.64, '1:1', 0.30, 0.36, S88),
+  rsBox(0.64, 0.64, '1:1', 0.30, 0.36, S88),
+]);
+const T9x9_30 = tmpl('t9x9-30', 'Hero + Five Satellites', 'sextet', STD, 'square', '1:1', [S99], [
+  rsBox(0, 0, '1:1', 0.62, 0.62, S99),
+  rsBox(0.64, 0, '1:1', 0.36, 0.30, S99),
+  rsBox(0.64, 0.32, '1:1', 0.36, 0.30, S99),
+  rsBox(0, 0.64, '1:1', 0.30, 0.36, S99),
+  rsBox(0.32, 0.64, '1:1', 0.30, 0.36, S99),
+  rsBox(0.64, 0.64, '1:1', 0.30, 0.36, S99),
+]);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — Increment 8b: 1:1 + 5-photo "L-Frame + Caption"
+   An L of photos wraps the page: 3 cells across the top row + 2 more down the
+   left column, leaving the inner bottom-right corner open for a caption. STRICT
+   1:1: every slot carries '1:1' (zero crop). The caption textSlot absorbs the
+   open inner-L corner (canvas-packing). Distinct from pinwheel/windowpane.
+   ══════════════════════════════════════════════════════════════════════════ */
+const T6x6_30: PageTemplate = {
+  ...tmpl('t6x6-30', 'L-Frame + Caption', 'quint', STD, 'square', '1:1', [S66], [
+    rsBox(0, 0, '1:1', 0.313, 0.313, S66),
+    rsBox(0.343, 0, '1:1', 0.313, 0.313, S66),
+    rsBox(0.686, 0, '1:1', 0.313, 0.313, S66),
+    rsBox(0, 0.343, '1:1', 0.313, 0.313, S66),
+    rsBox(0, 0.686, '1:1', 0.313, 0.313, S66),
+  ]),
+  textSlots: [{ id: 'cap', x: 0.343, y: 0.343, width: 0.657, height: 0.657, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T8x8_31: PageTemplate = {
+  ...tmpl('t8x8-31', 'L-Frame + Caption', 'quint', STD, 'square', '1:1', [S88], [
+    rsBox(0, 0, '1:1', 0.313, 0.313, S88),
+    rsBox(0.343, 0, '1:1', 0.313, 0.313, S88),
+    rsBox(0.686, 0, '1:1', 0.313, 0.313, S88),
+    rsBox(0, 0.343, '1:1', 0.313, 0.313, S88),
+    rsBox(0, 0.686, '1:1', 0.313, 0.313, S88),
+  ]),
+  textSlots: [{ id: 'cap', x: 0.343, y: 0.343, width: 0.657, height: 0.657, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T9x9_31: PageTemplate = {
+  ...tmpl('t9x9-31', 'L-Frame + Caption', 'quint', STD, 'square', '1:1', [S99], [
+    rsBox(0, 0, '1:1', 0.313, 0.313, S99),
+    rsBox(0.343, 0, '1:1', 0.313, 0.313, S99),
+    rsBox(0.686, 0, '1:1', 0.313, 0.313, S99),
+    rsBox(0, 0.343, '1:1', 0.313, 0.313, S99),
+    rsBox(0, 0.686, '1:1', 0.313, 0.313, S99),
+  ]),
+  textSlots: [{ id: 'cap', x: 0.343, y: 0.343, width: 0.657, height: 0.657, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
    ASSEMBLE ALL TEMPLATES
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -911,6 +1176,20 @@ const PAGE_TEMPLATES_BASE: PageTemplate[] = [
   T6x6_20, T8x8_20, T9x9_20,
   // 6×6 / 8×8 / 9×9 NEW (square 5-photo pinwheel + 6-photo 2×3 grid)
   T6x6_21, T8x8_21, T9x9_21, T8x8_22,
+  // 6×6 / 8×8 / 9×9 NEW (Inc 2: 4:3 5-photo Two-Top Three-Bottom + Caption)
+  T6x6_23, T8x8_24, T9x9_24,
+  // 6×6 / 8×8 / 9×9 NEW (Inc 3: 4:3 6-photo Three-Top Three-Bottom sextet grid)
+  T6x6_24, T8x8_25, T9x9_25,
+  // 6×6 / 8×8 / 9×9 NEW (Inc 4: 4:3 6-photo Hero + Five Satellites sextet)
+  T6x6_25, T8x8_26, T9x9_26,
+  // 6×6 / 8×8 / 9×9 NEW (Inc 6: 3:4 5-photo Hero + Quad Strip + Caption)
+  T6x6_27, T8x8_28, T9x9_28,
+  // 6×6 / 8×8 / 9×9 NEW (Inc 7: 3:4 6-photo Three-Top Three-Bottom Portrait)
+  T6x6_28, T8x8_29, T9x9_29,
+  // 6×6 / 8×8 / 9×9 NEW (Inc 8a: 1:1 6-photo Hero + Five Satellites)
+  T6x6_29, T8x8_30, T9x9_30,
+  // 6×6 / 8×8 / 9×9 NEW (Inc 8b: 1:1 5-photo L-Frame + Caption)
+  T6x6_30, T8x8_31, T9x9_31,
   // 11.5×8 (12 templates)
   T1158_01, T1158_02, T1158_03, T1158_04, T1158_05, T1158_06, T1158_07, T1158_08, T1158_09, T1158_10, T1158_11, T1158_12,
   // 11.5×8 NEW (varied-ratio 3/4/5-photo)
