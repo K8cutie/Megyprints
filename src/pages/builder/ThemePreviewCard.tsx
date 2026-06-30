@@ -1,14 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   ThemePreviewCard — a mini "this is your album" preview for the Step 2 theme
-   picker. Instead of a flat color swatch, it shows the elements a theme actually
-   controls, all at once: the background (SVG/texture), a framed sample photo (the
-   theme's frame colour + width), and a sample caption in the theme's font + text
-   colour. So the card reads as the real look, not a paint chip.
+   ThemePreviewCard — a theme tile for the Step 2 "Pick a Theme" picker.
+   Shows the theme's REAL album cover photo (public/album-*.jpg) so each occasion
+   looks distinct and appealing — a Wedding reads as a wedding, Kids as kids, etc.
+   (An earlier version rendered an identical beige placeholder for every theme,
+   which made them indistinguishable / useless.)
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { TemplateType } from './types';
 import { THEMES } from './types';
-import { THEME_QUOTES } from './themeQuotes';
 
 export default function ThemePreviewCard({ id, label, selected, onSelect }: {
   id: TemplateType;
@@ -17,9 +16,6 @@ export default function ThemePreviewCard({ id, label, selected, onSelect }: {
   onSelect: () => void;
 }) {
   const t = THEMES[id];
-  const quote = THEME_QUOTES[id]?.[0] ?? '';
-  const frame = `${Math.max(1, t.photoBorderWidth)}px solid ${t.photoBorderColor}`;
-  const fallbackBg = t.backgroundPalette?.[0] ?? '#FFFBF7';
 
   return (
     <button
@@ -30,33 +26,18 @@ export default function ThemePreviewCard({ id, label, selected, onSelect }: {
         selected ? 'border-[#F4C2A1] ring-2 ring-[#F4C2A1]/30' : 'border-[#F0F0F0] hover:border-[#F4C2A1]/60'
       }`}
     >
-      {/* Mini album page */}
-      <div className="relative w-full" style={{ aspectRatio: '4 / 3', backgroundColor: fallbackBg }}>
-        {t.backgroundImage && (
-          <img
-            src={t.backgroundImage}
-            alt=""
-            draggable={false}
-            className="absolute inset-0 h-full w-full object-cover"
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-          />
-        )}
-        {/* Page content: a framed sample photo + a themed caption, inset like a real page */}
-        <div className="absolute inset-0 flex flex-col gap-1 p-2">
-          <div
-            className="flex-1 overflow-hidden rounded-[3px]"
-            style={{ border: frame, background: 'linear-gradient(135deg,#cfc7ba 0%,#ece5d9 55%,#dcd3c4 100%)' }}
-          />
-          <div
-            className="px-0.5 text-center leading-snug line-clamp-2"
-            style={{ fontFamily: t.fontFamily, color: t.textColor, fontSize: 10 }}
-          >
-            {quote}
-          </div>
-        </div>
+      {/* Real per-theme album cover photo */}
+      <div className="relative w-full aspect-[4/3] overflow-hidden bg-[#F5F0E8]">
+        <img
+          src={t.coverImage}
+          alt={`${label} album`}
+          loading="lazy"
+          draggable={false}
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
         {selected && (
           <div
-            className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-white"
+            className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-white shadow"
             style={{ backgroundColor: t.accentColor, fontSize: 11 }}
             aria-hidden="true"
           >
