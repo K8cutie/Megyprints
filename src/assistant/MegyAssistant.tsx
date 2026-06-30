@@ -416,7 +416,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     const msg = wizardRef.current.getMessage();
     const prog = wizardRef.current.getProgress();
     return (
-      <div className="fixed inset-0 z-[95] bg-[#FFFBF7] flex flex-col items-center justify-center p-6 overflow-auto">
+      <div className="fixed inset-0 z-[95] bg-[#FFFBF7] flex flex-col items-center [justify-content:safe_center] p-6 overflow-auto">
         {/* Hidden file input so the Upload step works on the center stage too */}
         <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleFileUpload} className="hidden" />
 
@@ -431,7 +431,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
         <img src="/megy-character.png" alt="Megy" className="w-20 h-20 object-contain mb-4 drop-shadow-lg" draggable={false} />
 
-        <div className="w-full max-w-lg">
+        <div className={`w-full ${wizardRef.current.state.step === 'pick_background' ? 'max-w-4xl' : 'max-w-lg'}`}>
           <div className="flex items-center mb-1">
             <span className="text-[11px] font-medium text-[#8B7E7A]">{prog.label}</span>
           </div>
@@ -471,7 +471,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               /* Theme picker on the center stage. Each occasion theme sets the
                  whole look (background + frames + corner art) via apply_theme;
                  the chosen theme is baked into the album when it generates. */
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                 {THEMES.map((t) => (
                   <ThemePreviewCard
                     key={t.id}
