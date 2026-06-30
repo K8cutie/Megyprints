@@ -232,6 +232,23 @@ const T6x4_06 = tmpl('t6x4-06', 'Stacked Portrait', 'duo', STD, 'landscape', '3:
   rsBox(0, 0.515, '3:4', 1.0, 0.485, S64),
 ]);
 
+// ── 3-Photo NEW (varied-ratio with/without caption) ──
+// 3-photo: three 3:2 photos across the top + bottom caption band
+const T6x4_07: PageTemplate = {
+  ...tmpl('t6x4-07', 'Trio Strip + Caption', 'trio', STD, 'landscape', '3:2', [S64], [
+    rsBox(0, 0, '3:2', 0.313, 0.78, S64),
+    rsBox(0.343, 0, '3:2', 0.313, 0.78, S64),
+    rsBox(0.686, 0, '3:2', 0.313, 0.78, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.82, width: 1, height: 0.18, align: 'center', placeholder: 'Tap to add text' }],
+};
+// 3-photo: 4:3 hero left + two stacked 4:3 right (no caption — variety)
+const T6x4_08 = tmpl('t6x4-08', 'Hero + Pair 4:3', 'trio', STD, 'landscape', '4:3', [S64], [
+  rsBox(0, 0, '4:3', 0.63, 1.0, S64),
+  rsBox(0.66, 0, '4:3', 0.34, 0.485, S64),
+  rsBox(0.66, 0.515, '4:3', 0.34, 0.485, S64),
+]);
+
 /* ══════════════════════════════════════════════════════════════════════════
    6×6″ SQUARE TEMPLATES (19 total) — Ratio-matched, creative layouts
    ══════════════════════════════════════════════════════════════════════════ */
@@ -414,6 +431,38 @@ const T1158_12 = tmpl('t1158-12', '2 Left + 3 Right 4:3', 'quint', STD, 'landsca
   rsBox(0.515, 0.686, '4:3', 0.485, 0.313, S1158),
 ]);
 
+// ── NEW: varied-ratio 3/4/5-photo (3) ──
+// 3-photo: pano 16:9 band on top + pair of 3:2 below
+const T1158_13 = tmpl('t1158-13', 'Pano Top + Pair 3:2', 'trio', STD, 'landscape', '16:9', [S1158], [
+  rsBox(0, 0, '16:9', 1.0, 0.55, S1158),
+  rsBox(0, 0.58, '3:2', 0.485, 0.42, S1158),
+  rsBox(0.515, 0.58, '3:2', 0.485, 0.42, S1158),
+]);
+// 4-photo: 3:2 hero right + stack of three 4:3 left
+const T1158_14 = tmpl('t1158-14', 'Hero Right + Stack 4:3', 'quad', STD, 'landscape', '3:2', [S1158], [
+  rsBox(0.37, 0, '3:2', 0.63, 1.0, S1158),
+  rsBox(0, 0, '4:3', 0.34, 0.313, S1158),
+  rsBox(0, 0.343, '4:3', 0.34, 0.313, S1158),
+  rsBox(0, 0.686, '4:3', 0.34, 0.313, S1158),
+]);
+// 5-photo: filmstrip of five 3:2 columns
+const T1158_15 = tmpl('t1158-15', 'Filmstrip Five 3:2', 'quint', STD, 'landscape', '3:2', [S1158], [
+  rsBox(0, 0, '3:2', 0.188, 1.0, S1158),
+  rsBox(0.203, 0, '3:2', 0.188, 1.0, S1158),
+  rsBox(0.406, 0, '3:2', 0.188, 1.0, S1158),
+  rsBox(0.609, 0, '3:2', 0.188, 1.0, S1158),
+  rsBox(0.812, 0, '3:2', 0.188, 1.0, S1158),
+]);
+// 3-photo: three 4:3 stacked in the left two-thirds + side caption column on the right
+const T1158_16: PageTemplate = {
+  ...tmpl('t1158-16', 'Trio + Side Caption', 'trio', STD, 'landscape', '4:3', [S1158], [
+    rsBox(0, 0, '4:3', 0.64, 0.31, S1158),
+    rsBox(0, 0.345, '4:3', 0.64, 0.31, S1158),
+    rsBox(0, 0.69, '4:3', 0.64, 0.31, S1158),
+  ]),
+  textSlots: [{ id: 'cap', x: 0.7, y: 0, width: 0.3, height: 1, align: 'center', placeholder: 'Tap to add text' }],
+};
+
 /* ══════════════════════════════════════════════════════════════════════════
    8.5×11″ PORTRAIT TEMPLATES (12 total) — 1-5 photos
    ══════════════════════════════════════════════════════════════════════════ */
@@ -490,6 +539,53 @@ const T8511_12 = tmpl('t8511-12', '3 Left + 2 Right Portrait', 'quint', STD, 'po
   rsBox(0.343, 0.515, '3:4', 0.313, 0.485, S8511),
   rsBox(0.686, 0, '3:4', 0.313, 1.0, S8511),
 ]);
+
+// ── Increment 5: Portrait varied-ratio additions ──
+// Pano Sandwich (quad): wide 16:9 top + two 3:4 mid + wide 16:9 bottom
+const T8511_13 = tmpl('t8511-13', 'Pano Sandwich Portrait', 'quad', STD, 'portrait', '16:9', [S8511], [
+  rsBox(0, 0, '16:9', 1.0, 0.30, S8511),
+  rsBox(0, 0.33, '3:4', 0.485, 0.34, S8511),
+  rsBox(0.515, 0.33, '3:4', 0.485, 0.34, S8511),
+  rsBox(0, 0.69, '16:9', 1.0, 0.31, S8511),
+]);
+// Tall Column Trio 9:16 (trio): three full-height portrait columns + caption band
+const T8511_14: PageTemplate = {
+  ...tmpl('t8511-14', 'Tall Column Trio 9:16', 'trio', STD, 'portrait', '9:16', [S8511], [
+    rsBox(0, 0, '9:16', 0.313, 0.85, S8511),
+    rsBox(0.343, 0, '9:16', 0.313, 0.85, S8511),
+    rsBox(0.686, 0, '9:16', 0.313, 0.85, S8511),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.87, width: 1, height: 0.13, align: 'center', placeholder: 'Tap to add text' }],
+};
+// Portrait Five 2:3 (quint): two on top + three on bottom
+const T8511_15 = tmpl('t8511-15', 'Portrait Five 2:3', 'quint', STD, 'portrait', '2:3', [S8511], [
+  rsBox(0, 0, '2:3', 0.485, 0.46, S8511),
+  rsBox(0.515, 0, '2:3', 0.485, 0.46, S8511),
+  rsBox(0, 0.49, '2:3', 0.313, 0.51, S8511),
+  rsBox(0.343, 0.49, '2:3', 0.313, 0.51, S8511),
+  rsBox(0.686, 0.49, '2:3', 0.313, 0.51, S8511),
+]);
+
+// ── Increment 6: portrait + square caption layouts ──
+// Stack + Bottom Caption (quad): 2×2 grid of 3:4 in the upper region + caption band.
+const T8511_16: PageTemplate = {
+  ...tmpl('t8511-16', 'Stack + Bottom Caption', 'quad', STD, 'portrait', '3:4', [S8511], [
+    rsBox(0, 0, '3:4', 0.485, 0.40, S8511),
+    rsBox(0.515, 0, '3:4', 0.485, 0.40, S8511),
+    rsBox(0, 0.42, '3:4', 0.485, 0.40, S8511),
+    rsBox(0.515, 0.42, '3:4', 0.485, 0.40, S8511),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.85, width: 1, height: 0.15, align: 'center', placeholder: 'Tap to add text' }],
+};
+// Hero + Side Caption Portrait (trio): two 3:4 across the top + one 3:4 bottom-left + side caption column.
+const T8511_17: PageTemplate = {
+  ...tmpl('t8511-17', 'Hero + Side Caption Portrait', 'trio', STD, 'portrait', '3:4', [S8511], [
+    rsBox(0, 0, '3:4', 0.485, 0.55, S8511),
+    rsBox(0.515, 0, '3:4', 0.485, 0.55, S8511),
+    rsBox(0, 0.58, '3:4', 0.46, 0.42, S8511),
+  ]),
+  textSlots: [{ id: 'cap', x: 0.5, y: 0.58, width: 0.5, height: 0.42, align: 'center', placeholder: 'Tap to add text' }],
+};
 
 /* ══════════════════════════════════════════════════════════════════════════
    8×8″ SQUARE TEMPLATES (19 total) — Ratio-matched, creative layouts
@@ -702,6 +798,86 @@ const T9x9_19 = tmpl('t9x9-19', 'Windowpane', 'quint', STD, 'square', '1:1', [S9
 ]);
 
 /* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — square 4-photo mixed-ratio + caption band
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// Frame Trio + Caption — 4 photos (top 4:3 pair, bottom 3:4 pair), caption band.
+const T6x6_20: PageTemplate = {
+  ...tmpl('t6x6-20', 'Frame Trio + Caption', 'quad', STD, 'square', '4:3', [S66], [
+    rsBox(0, 0, '4:3', 0.485, 0.40, S66),
+    rsBox(0.515, 0, '4:3', 0.485, 0.40, S66),
+    rsBox(0, 0.43, '3:4', 0.485, 0.39, S66),
+    rsBox(0.515, 0.43, '3:4', 0.485, 0.39, S66),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.85, width: 1, height: 0.15, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T8x8_20: PageTemplate = {
+  ...tmpl('t8x8-20', 'Frame Trio + Caption', 'quad', STD, 'square', '4:3', [S88], [
+    rsBox(0, 0, '4:3', 0.485, 0.40, S88),
+    rsBox(0.515, 0, '4:3', 0.485, 0.40, S88),
+    rsBox(0, 0.43, '3:4', 0.485, 0.39, S88),
+    rsBox(0.515, 0.43, '3:4', 0.485, 0.39, S88),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.85, width: 1, height: 0.15, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T9x9_20: PageTemplate = {
+  ...tmpl('t9x9-20', 'Frame Trio + Caption', 'quad', STD, 'square', '4:3', [S99], [
+    rsBox(0, 0, '4:3', 0.485, 0.40, S99),
+    rsBox(0.515, 0, '4:3', 0.485, 0.40, S99),
+    rsBox(0, 0.43, '3:4', 0.485, 0.39, S99),
+    rsBox(0.515, 0.43, '3:4', 0.485, 0.39, S99),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.85, width: 1, height: 0.15, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — square 5-photo windowpane (no shapes) + 6-photo grid
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// Pinwheel Five — 5 photos: tall 1:1 hero left, four 1:1 satellites stacked right.
+const T6x6_21 = tmpl('t6x6-21', 'Pinwheel Five', 'quint', STD, 'square', '1:1', [S66], [
+  rsBox(0, 0, '1:1', 0.62, 1.0, S66),
+  rsBox(0.64, 0, '1:1', 0.36, 0.235, S66),
+  rsBox(0.64, 0.255, '1:1', 0.36, 0.235, S66),
+  rsBox(0.64, 0.51, '1:1', 0.36, 0.235, S66),
+  rsBox(0.64, 0.765, '1:1', 0.36, 0.235, S66),
+]);
+const T8x8_21 = tmpl('t8x8-21', 'Pinwheel Five', 'quint', STD, 'square', '1:1', [S88], [
+  rsBox(0, 0, '1:1', 0.62, 1.0, S88),
+  rsBox(0.64, 0, '1:1', 0.36, 0.235, S88),
+  rsBox(0.64, 0.255, '1:1', 0.36, 0.235, S88),
+  rsBox(0.64, 0.51, '1:1', 0.36, 0.235, S88),
+  rsBox(0.64, 0.765, '1:1', 0.36, 0.235, S88),
+]);
+
+// Sextet Grid 2×3 — 6 photos: two columns (x 0 / 0.515) by three rows (y 0 / 0.343 / 0.686).
+const T9x9_21 = tmpl('t9x9-21', 'Sextet Grid 2×3', 'sextet', STD, 'square', '1:1', [S99], [
+  rsBox(0, 0, '1:1', 0.485, 0.313, S99),
+  rsBox(0.515, 0, '1:1', 0.485, 0.313, S99),
+  rsBox(0, 0.343, '1:1', 0.485, 0.313, S99),
+  rsBox(0.515, 0.343, '1:1', 0.485, 0.313, S99),
+  rsBox(0, 0.686, '1:1', 0.485, 0.313, S99),
+  rsBox(0.515, 0.686, '1:1', 0.485, 0.313, S99),
+]);
+// Increment 6: Wide Pair + Caption (trio) — two 16:9 bands stacked + bottom-left square + side caption.
+const T9x9_22: PageTemplate = {
+  ...tmpl('t9x9-22', 'Wide Pair + Caption', 'trio', STD, 'square', '16:9', [S99], [
+    rsBox(0, 0, '16:9', 1.0, 0.36, S99),
+    rsBox(0, 0.39, '16:9', 1.0, 0.36, S99),
+    rsBox(0, 0.78, '1:1', 0.45, 0.22, S99),
+  ]),
+  textSlots: [{ id: 'cap', x: 0.5, y: 0.78, width: 0.5, height: 0.22, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T8x8_22 = tmpl('t8x8-22', 'Sextet Grid 2×3', 'sextet', STD, 'square', '1:1', [S88], [
+  rsBox(0, 0, '1:1', 0.485, 0.313, S88),
+  rsBox(0.515, 0, '1:1', 0.485, 0.313, S88),
+  rsBox(0, 0.343, '1:1', 0.485, 0.313, S88),
+  rsBox(0.515, 0.343, '1:1', 0.485, 0.313, S88),
+  rsBox(0, 0.686, '1:1', 0.485, 0.313, S88),
+  rsBox(0.515, 0.686, '1:1', 0.485, 0.313, S88),
+]);
+
+/* ══════════════════════════════════════════════════════════════════════════
    ASSEMBLE ALL TEMPLATES
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -720,6 +896,8 @@ const PAGE_TEMPLATES_BASE: PageTemplate[] = [
   T8x8_TILE_C,
   // 6×4 (6 templates)
   T6x4_01, T6x4_02, T6x4_03, T6x4_04, T6x4_05, T6x4_06,
+  // 6×4 NEW (trio strip + caption, hero + pair)
+  T6x4_07, T6x4_08,
   // 6×6 (19 templates)
   T6x6_01, T6x6_02, T6x6_03, T6x6_04, T6x6_05, T6x6_06, T6x6_07, T6x6_08, T6x6_09,
   T6x6_10, T6x6_11, T6x6_12, T6x6_13, T6x6_14, T6x6_15, T6x6_16, T6x6_17, T6x6_18, T6x6_19,
@@ -729,10 +907,21 @@ const PAGE_TEMPLATES_BASE: PageTemplate[] = [
   // 9×9 (19 templates)
   T9x9_01, T9x9_02, T9x9_03, T9x9_04, T9x9_05, T9x9_06, T9x9_07, T9x9_08, T9x9_09,
   T9x9_10, T9x9_11, T9x9_12, T9x9_13, T9x9_14, T9x9_15, T9x9_16, T9x9_17, T9x9_18, T9x9_19,
+  // 6×6 / 8×8 / 9×9 NEW (square 4-photo + caption)
+  T6x6_20, T8x8_20, T9x9_20,
+  // 6×6 / 8×8 / 9×9 NEW (square 5-photo pinwheel + 6-photo 2×3 grid)
+  T6x6_21, T8x8_21, T9x9_21, T8x8_22,
   // 11.5×8 (12 templates)
   T1158_01, T1158_02, T1158_03, T1158_04, T1158_05, T1158_06, T1158_07, T1158_08, T1158_09, T1158_10, T1158_11, T1158_12,
+  // 11.5×8 NEW (varied-ratio 3/4/5-photo)
+  T1158_13, T1158_14, T1158_15,
+  // 11.5×8 NEW (trio + side caption)
+  T1158_16,
   // 8.5×11 (12 templates)
   T8511_01, T8511_02, T8511_03, T8511_04, T8511_05, T8511_06, T8511_07, T8511_08, T8511_09, T8511_10, T8511_11, T8511_12,
+  T8511_13, T8511_14, T8511_15,
+  // 8.5×11 + 9×9 NEW (increment 6: caption layouts)
+  T8511_16, T8511_17, T9x9_22,
 ];
 
 /* ══════════════════════════════════════════════════════════════════════════
