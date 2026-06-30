@@ -9,7 +9,8 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import type { AlbumPage } from './types';
+import type { AlbumPage, UploadedPhoto } from './types';
+import { resolveBgImageSrc } from './types';
 
 /* ─── Tabs ─── */
 type BgTab = 'solid' | 'gradient' | 'image' | 'pattern';
@@ -25,16 +26,18 @@ const TABS: { key: BgTab; label: string; icon: React.ReactNode; title: string }[
 const PATTERN_NAMES = ['dots', 'stripes', 'grid', 'diagonal', 'circles', 'chevron'] as const;
 
 /* ─── Live-preview CSS for a background (so opacity etc. is visible) ─── */
-function bgPreviewStyle(bg: AlbumPage['background']): React.CSSProperties {
+function bgPreviewStyle(bg: AlbumPage['background'], photos: UploadedPhoto[]): React.CSSProperties {
   if (!bg) return {};
   const b = bg as any;
   if (bg.type === 'solid') return { backgroundColor: b.solid || '#FFFBF7' };
-  if (bg.type === 'image' && b.image) {
-    const img = b.image as string;
-    // Image presets store a CSS gradient in .image; uploads store a blob URL.
+  if (bg.type === 'image') {
+    const img = resolveBgImageSrc(b, photos);
+    if (!img) return { backgroundColor: '#FFFBF7' };
+    // Image presets store a CSS gradient in .image; uploads / photos store a URL.
+    // Quote the url() so URLs with special chars (e.g. data: SVGs) stay valid.
     return img.includes('gradient(')
       ? { background: img }
-      : { backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+      : { backgroundImage: `url("${img}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
   }
   if (bg.type === 'gradient' && b.gradient) {
     const g = b.gradient;
@@ -49,9 +52,11 @@ function bgPreviewStyle(bg: AlbumPage['background']): React.CSSProperties {
 interface BackgroundDesignerProps {
   background: AlbumPage['background'];
   onChange: (bg: AlbumPage['background']) => void;
+  /** The user's uploaded album photos — offered as background choices. */
+  photos?: UploadedPhoto[];
 }
 
-export default function BackgroundDesigner({ background, onChange }: BackgroundDesignerProps) {
+export default function BackgroundDesigner({ background, onChange, photos = [] }: BackgroundDesignerProps) {
   const [activeTab, setActiveTab] = useState<BgTab>('solid');
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -98,7 +103,7 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
         className="relative w-full h-48 rounded-xl overflow-hidden border border-stone-200 shrink-0 mb-2.5"
         style={{ backgroundColor: '#FFFBF7' }}
       >
-        <div className="absolute inset-0" style={{ ...bgPreviewStyle(background), opacity: (background.opacity ?? 100) / 100 }} />
+        <div className="absolute inset-0" style={{ ...bgPreviewStyle(background, photos), opacity: (background.opacity ?? 100) / 100 }} />
         <span className="absolute bottom-1.5 left-2 text-[10px] font-medium text-stone-500 bg-white/75 px-1.5 py-0.5 rounded">
           Page preview · {Math.round(background.opacity ?? 100)}%
         </span>
@@ -209,6 +214,39 @@ export default function BackgroundDesigner({ background, onChange }: BackgroundD
             transition={{ duration: 0.15 }}
             className="space-y-3"
           >
+            {/* ─── Your uploaded photos → use one as the page background ─── */}
+            <p className="text-[10px] text-stone-400 font-medium uppercase tracking-wider">Your Photos</p>
+            {photos.length > 0 ? (
+              <div className="grid grid-cols-3 gap-1.5">
+                {photos.map((p) => {
+                  const active = background.type === 'image' && background.photoId === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => onChange({ type: 'image', image: p.previewUrl, photoId: p.id, opacity: background.opacity ?? 100 })}
+                      title={p.name}
+                      className={`relative w-full aspect-square rounded-lg border-2 overflow-hidden transition-all ${
+                        active ? 'border-rose-400 shadow' : 'border-transparent hover:scale-105'
+                      }`}
+                    >
+                      <img src={p.previewUrl} alt={p.name} draggable={false} className="w-full h-full object-cover" />
+                      {active && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                          <Check size={16} className="text-white" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[11px] text-stone-400 text-center py-2 bg-stone-50 rounded-lg">
+                Upload photos first to use one as a background.
+              </p>
+            )}
+
+            <div className="border-t border-stone-100" />
+
             {/* Upload button */}
             <input
               ref={fileInputRef}

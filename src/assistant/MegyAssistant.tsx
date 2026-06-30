@@ -713,7 +713,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
             {/* Background Section */}
             <Section id="background" title="Background" icon={<Palette className="w-4 h-4" />} expanded={expanded} toggle={toggle}>
-              <RichBackgroundDesigner background={page?.background} onChange={(bg) => { if (bg) doSetBg(bg); }} />
+              <RichBackgroundDesigner background={page?.background} photos={builder.uploadedPhotos} onChange={(bg) => { if (bg) doSetBg(bg); }} />
             </Section>
 
             {/* Themes Section */}

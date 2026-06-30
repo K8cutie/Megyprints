@@ -136,6 +136,11 @@ export interface AlbumBackground {
   };
   pattern?: string;
   image?: string;
+  /** When the background image comes from one of the user's uploaded album
+   *  photos, we store its photo id. The blob URL in `image` is transient (it's
+   *  revoked / dies after a reload), but the id re-resolves to a fresh URL from
+   *  IndexedDB — so a photo-background survives a reload. */
+  photoId?: string;
   x?: number;
   y?: number;
   width?: number;
@@ -148,6 +153,23 @@ export interface AlbumBackground {
 export const DEFAULT_BACKGROUND: AlbumBackground = {
   type: 'solid', solid: '#FFFBF7',
 };
+
+/** Resolve the displayable image URL for an image background. If it references an
+ *  uploaded photo by id, return that photo's LIVE previewUrl (the URL stored in
+ *  `image` may be a dead blob after a reload); otherwise fall back to `image`.
+ *  Shared by every renderer (preview DOM, Fabric canvas, print) so a photo
+ *  background resolves identically everywhere. */
+export function resolveBgImageSrc(
+  bg: { image?: string; photoId?: string; customImage?: string; preset?: string } | undefined | null,
+  photos: { id: string; previewUrl: string }[] = [],
+): string | undefined {
+  if (!bg) return undefined;
+  if (bg.photoId) {
+    const p = photos.find((ph) => ph.id === bg.photoId);
+    if (p?.previewUrl) return p.previewUrl;
+  }
+  return bg.image ?? bg.customImage ?? bg.preset;
+}
 
 export const DEFAULT_BG_FILTERS: PhotoFilters = {
   ...DEFAULT_FILTERS,

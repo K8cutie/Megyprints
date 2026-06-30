@@ -4,7 +4,7 @@
     ═══════════════════════════════════════════════════════════════ */
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
-import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl } from './types';
+import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
@@ -91,7 +91,7 @@ async function renderPageManually(
   const ctx = canvas.getContext('2d')!;
 
   // ── Background ──
-  await renderBackground(ctx, page, W, H);
+  await renderBackground(ctx, page, W, H, photos);
 
   // ── Slot Photos ──
   // Match the editor/preview geometry EXACTLY: adapt the template to the page
@@ -174,6 +174,7 @@ async function renderBackground(
   page: AlbumPage,
   W: number,
   H: number,
+  photos: UploadedPhoto[],
 ) {
   const bg = page.background;
   if (!bg) {
@@ -209,17 +210,23 @@ async function renderBackground(
       break;
     }
 
-    case 'image':
-      if (bg.image) {
+    case 'image': {
+      const src = resolveBgImageSrc(bg, photos);
+      if (src && !src.includes('gradient(')) {
         try {
-          const img = await loadImage(bg.image);
+          const img = await loadImage(src);
           ctx.drawImage(img, 0, 0, W, H);
         } catch {
           ctx.fillStyle = '#FFFBF7';
           ctx.fillRect(0, 0, W, H);
         }
+      } else {
+        // gradient-string presets or no source → neutral fill
+        ctx.fillStyle = '#FFFBF7';
+        ctx.fillRect(0, 0, W, H);
       }
       break;
+    }
 
     default:
       ctx.fillStyle = '#FFFBF7';

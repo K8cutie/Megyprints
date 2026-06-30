@@ -16,7 +16,7 @@ import type {
   MouseEvent as FabricMouseEvent,
 } from './fabric-types';
 import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset } from './types';
-import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl } from './types';
+import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
@@ -763,9 +763,11 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       }
     }
 
-    createBackgroundObject(fab, canvas, currentPage.background, CANVAS_W, CANVAS_H);
+    createBackgroundObject(fab, canvas, currentPage.background, CANVAS_W, CANVAS_H, uploadedPhotos);
     canvas.renderAll();
-  }, [showGrid, CANVAS_W, CANVAS_H, fabricModule, fabricValid, currentPage.background]);
+    // uploadedPhotos in deps: a photo-background resolves its id → live URL from
+    // the photos, which rehydrate after the album loads — re-run when they arrive.
+  }, [showGrid, CANVAS_W, CANVAS_H, fabricModule, fabricValid, currentPage.background, uploadedPhotos]);
 
   /* ═══════ Select background helper ═══════ */
   const selectBackground = useCallback(() => {
@@ -774,7 +776,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     const fab = fabricModule as any;
     let bgObj = canvas.getObjects().find((o: any) => o.bgId === BG_ID);
     if (!bgObj) {
-      createBackgroundObject(fab, canvas, pageRef.current.background, CANVAS_W, CANVAS_H);
+      createBackgroundObject(fab, canvas, pageRef.current.background, CANVAS_W, CANVAS_H, photosRef.current);
       bgObj = canvas.getObjects().find((o: any) => o.bgId === BG_ID);
     }
     if (bgObj) {
@@ -831,6 +833,7 @@ function createBackgroundObject(
   bg: AlbumPage['background'],
   W: number,
   H: number,
+  photos: UploadedPhoto[] = [],
 ) {
   canvas.getObjects().filter((o: any) => o.bgId === BG_ID).forEach((o: any) => canvas.remove(o));
 
@@ -867,7 +870,8 @@ function createBackgroundObject(
     canvas.requestRenderAll();
   }
 
-  if (bg.type === 'image' && (bg as any).image) {
+  const imgSrc = resolveBgImageSrc(bg, photos);
+  if (bg.type === 'image' && imgSrc) {
     const htmlImg = new Image();
     htmlImg.crossOrigin = 'anonymous';
     htmlImg.onload = () => {
@@ -883,7 +887,7 @@ function createBackgroundObject(
       const rect = new fab.Rect({ ...baseProps, width: w, height: h, fill: (bg as any).solid || '#FFFBF7' });
       addBg(rect);
     };
-    htmlImg.src = (bg as any).image;
+    htmlImg.src = imgSrc;
   } else if (bg.type === 'gradient' && (bg as any).gradient) {
     const { type, angle, stops } = (bg as any).gradient;
     const fabricStops = stops.map((s: { offset: number; color: string }) => ({
@@ -1234,7 +1238,7 @@ function renderScene(
   toRemove.forEach((obj: any) => canvas.remove(obj));
 
   // 2. Create background
-  createBackgroundObject(fab, canvas, page.background, canvasW, canvasH);
+  createBackgroundObject(fab, canvas, page.background, canvasW, canvasH, uploadedPhotos);
 
   // 3. Render template slots
   const templateId = page.templateId ?? PAGE_TEMPLATES[0].id;

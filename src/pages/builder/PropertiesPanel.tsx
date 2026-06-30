@@ -563,7 +563,7 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
         </Section>
 
         <Section id="bgType" title="Background Type" icon={<Palette size={14} />}>
-          <BackgroundDesigner background={background} onChange={onUpdateBackground} />
+          <BackgroundDesigner background={background} onChange={onUpdateBackground} photos={uploadedPhotos} />
         </Section>
       </div>
     );
@@ -574,7 +574,7 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
     return (
       <div className="w-full h-full overflow-y-auto px-3 py-4">
         <h3 className="font-display text-sm font-semibold text-[#2D2D2D] mb-3">Page Properties</h3>
-        <BackgroundDesigner background={background} onChange={onUpdateBackground} />
+        <BackgroundDesigner background={background} onChange={onUpdateBackground} photos={uploadedPhotos} />
         {onApplyBackgroundToAll && (
           <button
             onClick={onApplyBackgroundToAll}

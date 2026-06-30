@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2 } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
-import { CORNER_POSITIONS, cornerImageUrl } from './types';
+import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { setPendingPrintJob } from '../../lib/printQueue';
 import { getCanvasDimensions } from './layouts';
@@ -27,7 +27,7 @@ interface BuilderPreviewProps {
   onOrder: () => void;
 }
 
-function backgroundToCss(bg: any): React.CSSProperties {
+function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProperties {
   if (!bg) return {};
   switch (bg.type) {
     case 'solid': return { backgroundColor: bg.solid || '#FFFBF7' };
@@ -52,12 +52,13 @@ function backgroundToCss(bg: any): React.CSSProperties {
     }
     case 'image': {
       // BackgroundDesigner stores the value in `bg.image` (a blob URL for
-      // uploads, or a CSS gradient string for the built-in presets).
-      const img = bg.image ?? bg.customImage ?? bg.preset;
+      // uploads, or a CSS gradient string for the built-in presets) — or, for a
+      // user photo, a `photoId` we re-resolve to a live URL from the photos.
+      const img = resolveBgImageSrc(bg, photos);
       if (!img) return { backgroundColor: '#FFFBF7' };
       return String(img).includes('gradient(')
         ? { background: img }
-        : { backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+        : { backgroundImage: `url("${img}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
     }
     case 'pattern': {
       // pattern is a name string ('dots', etc.); SVG patterns aren't rendered
@@ -97,7 +98,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
   return (
     <>
-      <div className="absolute inset-0" style={{ ...backgroundToCss(page.background), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
+      <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
       {template && dedupeSlotFills(page.slotFills).map((photoIdx, idx) => {
         const slot = template.slots[idx];
         if (!slot) return null;
