@@ -704,15 +704,9 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
           return;
         }
 
-        // Regular scroll on canvas area → PAGE NAVIGATION
-        e.preventDefault();
-        if (e.deltaY > 0) {
-          const next = Math.min(actionsRef.current.currentPageIndex + 1, actionsRef.current.albumPages.length - 1);
-          if (next !== actionsRef.current.currentPageIndex) actionsRef.current.goToPage(next);
-        } else if (e.deltaY < 0) {
-          const prev = Math.max(actionsRef.current.currentPageIndex - 1, 0);
-          if (prev !== actionsRef.current.currentPageIndex) actionsRef.current.goToPage(prev);
-        }
+        // Plain wheel → let the browser scroll normally. (Hijacking the wheel to
+        // flip album pages stole normal scrolling everywhere the cursor sat over
+        // the canvas; page navigation is via the ‹ › arrows / Previous-Next.)
       };
 
       container.addEventListener('wheel', handleWheel, { passive: false });
