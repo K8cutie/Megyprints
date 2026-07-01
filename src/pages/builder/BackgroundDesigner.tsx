@@ -17,10 +17,10 @@ import { resolveBgImageSrc } from './types';
 type BgTab = 'solid' | 'gradient' | 'image' | 'pattern';
 
 const TABS: { key: BgTab; label: string; icon: React.ReactNode; title: string }[] = [
-  { key: 'solid', label: 'Solid', title: 'Solid Color', icon: <PaintBucket size={14} /> },
-  { key: 'gradient', label: 'Gradient', title: 'Gradient', icon: <Blend size={14} /> },
-  { key: 'image', label: 'Image', title: 'Image Background', icon: <Image size={14} /> },
-  { key: 'pattern', label: 'Pattern', title: 'Pattern', icon: <LayoutGrid size={14} /> },
+  { key: 'solid', label: 'Solid', title: 'Solid Color', icon: <PaintBucket size={20} /> },
+  { key: 'gradient', label: 'Gradient', title: 'Gradient', icon: <Blend size={20} /> },
+  { key: 'image', label: 'Image', title: 'Image Background', icon: <Image size={20} /> },
+  { key: 'pattern', label: 'Pattern', title: 'Pattern', icon: <LayoutGrid size={20} /> },
 ];
 
 /* ─── Pattern definitions ─── */
@@ -110,23 +110,26 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
         </span>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 p-1 bg-stone-100 rounded-lg shrink-0">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
-            title={t.title}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-              activeTab === t.key
-                ? 'bg-white shadow-sm text-stone-900'
-                : 'text-stone-500 hover:text-stone-700'
-            }`}
-          >
-            {t.icon}
-            <span>{t.label}</span>
-          </button>
-        ))}
+      {/* Tab cards — 2×2 on mobile, 4-across on wider screens */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+        {TABS.map((t) => {
+          const active = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              title={t.title}
+              className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border-2 text-xs font-medium transition-all ${
+                active
+                  ? 'border-rose-400 bg-rose-50 text-stone-900 shadow'
+                  : 'border-stone-200 bg-white text-stone-500 hover:border-stone-300 hover:text-stone-700 hover:shadow-sm'
+              }`}
+            >
+              <span className={active ? 'text-rose-500' : 'text-stone-400'}>{t.icon}</span>
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Scrollable content area */}
