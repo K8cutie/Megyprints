@@ -556,7 +556,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 {activePicker === 'frame' && (
                   <div className="rounded-2xl border border-[#F4C2A1]/30 bg-[#FFF8F0] p-3">
                     <p className="text-xs font-medium text-[#9B9B9B] mb-2.5">Pick a frame for the photos</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {FRAME_STYLES.map((frameOpt) => {
                         const selected = (page?.frameStyle ?? 'none') === frameOpt.id;
                         const css = frameStyleToCss(frameOpt.id, '#F4C2A1');
@@ -567,19 +567,19 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                               void builder.dispatch({ type: 'set_frame', payload: { frame: frameOpt.id }, rawMessage: `set ${frameOpt.label} frame` });
                               showToast(frameOpt.id === 'none' ? 'Frame removed' : `${frameOpt.label} frame applied`);
                             }}
-                            className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 transition-all ${
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
                               selected ? 'border-[#F4C2A1] ring-2 ring-[#F4C2A1]/30 bg-white' : 'border-[#F0F0F0] hover:border-[#F4C2A1]/50 bg-white'
                             }`}
                           >
-                            <span className="w-full flex items-center justify-center py-2">
+                            <span className="w-full flex items-center justify-center py-3">
                               <span style={css.wrapper} className="inline-block">
                                 <span
-                                  className="block w-9 h-9 rounded-sm bg-gradient-to-br from-[#E8A598] to-[#F4C2A1]"
+                                  className="block w-20 h-20 rounded-sm bg-gradient-to-br from-[#E8A598] to-[#F4C2A1]"
                                   style={css.inner}
                                 />
                               </span>
                             </span>
-                            <span className="text-[10px] font-medium text-[#5A5A5A] text-center leading-tight">{frameOpt.label}</span>
+                            <span className="text-sm font-medium text-[#5A5A5A] text-center leading-tight">{frameOpt.label}</span>
                           </button>
                         );
                       })}
