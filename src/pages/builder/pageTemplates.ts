@@ -248,6 +248,164 @@ const T6x4_08 = tmpl('t6x4-08', 'Hero + Pair 4:3', 'trio', STD, 'landscape', '4:
   rsBox(0.66, 0, '4:3', 0.34, 0.485, S64),
   rsBox(0.66, 0.515, '4:3', 0.34, 0.485, S64),
 ]);
+// INC1 3-photo additions — every cell FILLS its box (maxW/maxH == targetRatio/1.5).
+// 6x4 canvasRatio=1.5 → 1:1 cell 0.667 (tall), 4:3 cell 0.889, 3:2 cell 1.0 (square).
+// 3-photo: three 1:1 tall cells across a top band + caption fills the leftover bottom band.
+// 1:1 intrinsic on 1.5 canvas = 0.6667, so a 0.307-wide cell is 0.4605 tall → fills exactly.
+const T6x4_09: PageTemplate = {
+  ...tmpl('t6x4-09', 'Trio Squares 1:1 + Caption', 'trio', STD, 'landscape', '1:1', [S64], [
+    rsBox(0.02, 0, '1:1', 0.307, 0.4605, S64),
+    rsBox(0.347, 0, '1:1', 0.307, 0.4605, S64),
+    rsBox(0.674, 0, '1:1', 0.307, 0.4605, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.5, width: 1, height: 0.48, align: 'center', placeholder: 'Tap to add text' }],
+};
+// 3-photo: 3:2 square hero left + two square cells stacked right (fills a 0.66-tall band edge-to-edge)
+// + caption fills the leftover bottom band. 3:2 intrinsic on 1.5 canvas = 1.0 → cells are square.
+const T6x4_10: PageTemplate = {
+  ...tmpl('t6x4-10', 'Hero + Pair 3:2 + Caption', 'trio', STD, 'landscape', '3:2', [S64], [
+    rsBox(0, 0, '3:2', 0.66, 0.66, S64),
+    rsBox(0.68, 0, '3:2', 0.32, 0.32, S64),
+    rsBox(0.68, 0.34, '3:2', 0.32, 0.32, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.7, width: 1, height: 0.28, align: 'center', placeholder: 'Tap to add text' }],
+};
+// 3-photo: three 4:3 columns in a centered band + caption fills the leftover bottom band.
+// 4:3 intrinsic on 1.5 canvas = 0.8889, so a 0.313-wide cell is 0.3521 tall → fills exactly.
+const T6x4_11: PageTemplate = {
+  ...tmpl('t6x4-11', 'Trio Columns 4:3 + Caption', 'trio', STD, 'landscape', '4:3', [S64], [
+    rsBox(0.0155, 0.02, '4:3', 0.313, 0.3521, S64),
+    rsBox(0.3435, 0.02, '4:3', 0.313, 0.3521, S64),
+    rsBox(0.6715, 0.02, '4:3', 0.313, 0.3521, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.44, width: 1, height: 0.54, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+// ── INC2 4-photo (quad) additions ──
+// 6x4 canvasRatio=1.5 → intrinsic fill ratios: 3:2→1.0 (square), 4:3→0.8889.
+// 4-photo: clean 2x2 of SQUARE 3:2 cells tiling the whole page edge-to-edge, NO caption.
+// 3:2 intrinsic = 1.0 → each 0.49×0.49 box is square and fills exactly (cx/cy offset = 0).
+const T6x4_12 = tmpl('t6x4-12', 'Quad Grid 2×2 3:2', 'quad', STD, 'landscape', '3:2', [S64], [
+  rsBox(0, 0, '3:2', 0.49, 0.49, S64),
+  rsBox(0.51, 0, '3:2', 0.49, 0.49, S64),
+  rsBox(0, 0.51, '3:2', 0.49, 0.49, S64),
+  rsBox(0.51, 0.51, '3:2', 0.49, 0.49, S64),
+]);
+// 4-photo: 2x2 of 4:3 cells centered in a top band + caption fills the leftover bottom band.
+// 4:3 intrinsic = 0.8889 → cell h=0.42 ⇒ w=0.42*0.8889=0.3734, so each box fills exactly.
+/* t6x4-13 removed — 4:3 in a 2×2 on a 3:2 page left ~24% side whitespace. */
+// 4-photo: 4:3 hero left + three 4:3 cells stacked right (no caption — variety).
+// 4:3 intrinsic = 0.8889 → hero box 0.62×0.6975 fills; right cells 0.2845×0.32 fill.
+// Hero centered vertically at y=0.15; right column x=0.66, three cells + 0.02 gutters fill height.
+/* t6x4-14 removed — hero left bare top/bottom bands (~30% empty). */
+
+// ── INC3 4 & 5-photo additions ──
+// 6x4 canvasRatio=1.5 → 1:1 intrinsic = 0.6667 (tall). A 1:1 cell FILLS only when
+// maxW/maxH == 0.6667. Four/five 1:1 cells across the width can't ALSO fill full page
+// height (would need each 0.6667 wide), so the cell band is the honest fill and the
+// genuine leftover bottom band becomes a caption — NEVER an oversized full-height box.
+// 4-photo: four 1:1 tall cells across a top band + caption fills the leftover bottom.
+// cell w=0.235 ⇒ h=0.235/0.6667=0.3525 → box 0.235×0.3525 fills exactly (offset 0).
+const T6x4_15: PageTemplate = {
+  ...tmpl('t6x4-15', 'Quad Row 1:1 + Caption', 'quad', STD, 'landscape', '1:1', [S64], [
+    rsBox(0, 0.03, '1:1', 0.235, 0.3525, S64),
+    rsBox(0.255, 0.03, '1:1', 0.235, 0.3525, S64),
+    rsBox(0.51, 0.03, '1:1', 0.235, 0.3525, S64),
+    rsBox(0.765, 0.03, '1:1', 0.235, 0.3525, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.42, width: 1, height: 0.56, align: 'center', placeholder: 'Tap to add text' }],
+};
+// 5-photo: five 1:1 tall cells across a top band (filmstrip that ACTUALLY fills) + caption.
+// cell w=0.188 ⇒ h=0.188/0.6667=0.282 → box 0.188×0.282 fills exactly (offset 0).
+const T6x4_16: PageTemplate = {
+  ...tmpl('t6x4-16', 'Five Row 1:1 + Caption', 'quint', STD, 'landscape', '1:1', [S64], [
+    rsBox(0, 0.04, '1:1', 0.188, 0.282, S64),
+    rsBox(0.203, 0.04, '1:1', 0.188, 0.282, S64),
+    rsBox(0.406, 0.04, '1:1', 0.188, 0.282, S64),
+    rsBox(0.609, 0.04, '1:1', 0.188, 0.282, S64),
+    rsBox(0.812, 0.04, '1:1', 0.188, 0.282, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.4, width: 1, height: 0.58, align: 'center', placeholder: 'Tap to add text' }],
+};
+// 5-photo: big square 3:2 hero left + 2x2 of small square 3:2 cells right — tiles a
+// full-height 0.66-tall band edge-to-edge, then a caption fills the leftover bottom.
+// 3:2 intrinsic on 1.5 canvas = 1.0 → every 3:2 cell is SQUARE (maxW=maxH), fills exactly.
+// Hero 0.66×0.66; right 2x2 of 0.155×0.155 with 0.02 gutters spans the 0.66-tall band.
+const T6x4_17: PageTemplate = {
+  ...tmpl('t6x4-17', 'Hero + Quad 3:2 + Caption', 'quint', STD, 'landscape', '3:2', [S64], [
+    rsBox(0, 0, '3:2', 0.66, 0.66, S64),
+    rsBox(0.68, 0, '3:2', 0.155, 0.155, S64),
+    rsBox(0.845, 0, '3:2', 0.155, 0.155, S64),
+    rsBox(0.68, 0.175, '3:2', 0.155, 0.155, S64),
+    rsBox(0.845, 0.175, '3:2', 0.155, 0.155, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.7, width: 1, height: 0.28, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+// ── INC4 5 & 6-photo additions ──
+// 6x4 canvasRatio=1.5 → intrinsic fill ratios: 4:3→0.8889, 1:1→0.6667.
+// Every cell FILLS only when maxW/maxH == intrinsic; captions take genuine leftover.
+// 5-photo: two 4:3 cells top + three 4:3 cells bottom + caption fills the leftover band.
+// 4:3 intrinsic = 0.8889. Top: w=0.44 ⇒ h=0.44/0.8889=0.495 → box fills exactly.
+// Bottom: w=0.313 ⇒ h=0.313/0.8889=0.3521 → box fills exactly. Two rows tile a top band,
+// caption fills the remaining ~0.12 bottom band edge-to-edge.
+const T6x4_18: PageTemplate = {
+  ...tmpl('t6x4-18', 'Two-Top Three-Bottom 4:3 + Caption', 'quint', STD, 'landscape', '4:3', [S64], [
+    rsBox(0.03, 0, '4:3', 0.44, 0.495, S64),
+    rsBox(0.53, 0, '4:3', 0.44, 0.495, S64),
+    rsBox(0.0155, 0.515, '4:3', 0.313, 0.3521, S64),
+    rsBox(0.3435, 0.515, '4:3', 0.313, 0.3521, S64),
+    rsBox(0.6715, 0.515, '4:3', 0.313, 0.3521, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.88, width: 1, height: 0.12, align: 'center', placeholder: 'Tap to add text' }],
+};
+// 6-photo: six 1:1 tall cells in a 3-col × 2-row grid that TILES the whole page edge-to-edge.
+// 1:1 intrinsic = 0.6667 → cell w=0.32 ⇒ h=0.32/0.6667=0.48 → box fills exactly (offset 0).
+// xi=0,0.34,0.68  yi=0,0.515 → 0.02–0.035 gutters, no caption (fills fully).
+const T6x4_19 = tmpl('t6x4-19', 'Sextet Grid 3×2 1:1', 'sextet', STD, 'landscape', '1:1', [S64], [
+  rsBox(0, 0, '1:1', 0.32, 0.48, S64),
+  rsBox(0.34, 0, '1:1', 0.32, 0.48, S64),
+  rsBox(0.68, 0, '1:1', 0.32, 0.48, S64),
+  rsBox(0, 0.515, '1:1', 0.32, 0.48, S64),
+  rsBox(0.34, 0.515, '1:1', 0.32, 0.48, S64),
+  rsBox(0.68, 0.515, '1:1', 0.32, 0.48, S64),
+]);
+// 6-photo: six 4:3 cells in a 3-col × 2-row band + caption fills the leftover bottom band.
+// 4:3 intrinsic = 0.8889 → cell w=0.313 ⇒ h=0.313/0.8889=0.3521 → box fills exactly.
+// Two rows span 0..~0.744, caption fills the remaining bottom band edge-to-edge.
+const T6x4_20: PageTemplate = {
+  ...tmpl('t6x4-20', 'Sextet Grid 3×2 4:3 + Caption', 'sextet', STD, 'landscape', '4:3', [S64], [
+    rsBox(0.0155, 0.02, '4:3', 0.313, 0.3521, S64),
+    rsBox(0.3435, 0.02, '4:3', 0.313, 0.3521, S64),
+    rsBox(0.6715, 0.02, '4:3', 0.313, 0.3521, S64),
+    rsBox(0.0155, 0.392, '4:3', 0.313, 0.3521, S64),
+    rsBox(0.3435, 0.392, '4:3', 0.313, 0.3521, S64),
+    rsBox(0.6715, 0.392, '4:3', 0.313, 0.3521, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.76, width: 1, height: 0.24, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+// ── INC5 (finish 3/6-photo variety) ──
+// 6x4 canvasRatio=1.5 → intrinsic fill ratios: 3:2→1.0 (square), 4:3→0.8889, 1:1→0.6667.
+// 3-photo: three TRUE-SQUARE 3:2 cells in a top band + caption fills the larger bottom band.
+// Distinct from T6x4_07 (0.313×0.78 boxes = photo centered in tall box, NOT filled): here each
+// 0.32×0.32 box IS square so the 3:2 photo fills it exactly (offset 0), caption owns the rest.
+const T6x4_21: PageTemplate = {
+  ...tmpl('t6x4-21', 'Trio Row 3:2 + Caption', 'trio', STD, 'landscape', '3:2', [S64], [
+    rsBox(0.02, 0.02, '3:2', 0.32, 0.32, S64),
+    rsBox(0.34, 0.02, '3:2', 0.32, 0.32, S64),
+    rsBox(0.66, 0.02, '3:2', 0.32, 0.32, S64),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.4, width: 1, height: 0.58, align: 'center', placeholder: 'Tap to add text' }],
+};
+// 6-photo: 1:1 hero left + five small 1:1 satellites clustered right (3 top row + 2 bottom row).
+// 1:1 intrinsic = 0.6667 (tall). Hero 0.48×0.72 fills exactly (0.48/0.72=0.6667). Satellites
+// 0.15×0.225 fill exactly (0.15/0.225=0.6667). Every cell is a filled tall 1:1 box — no whitespace.
+/* t6x4-22 removed — tiny satellites left ~49% of the page bare (floating photos). */
+// 4-photo: staggered 2x2 of 4:3 cells (top row shifted left, bottom row shifted right) + caption
+// fills the leftover bottom band edge-to-edge. 4:3 intrinsic = 0.8889 → cell w=0.34 ⇒
+// h=0.34/0.8889=0.3825 → each box fills exactly (offset 0). The x-stagger gives an offset look.
+/* t6x4-23 removed — x-stagger left bare corners (~30% empty). */
 
 /* ══════════════════════════════════════════════════════════════════════════
    6×6″ SQUARE TEMPLATES (19 total) — Ratio-matched, creative layouts
@@ -445,14 +603,20 @@ const T1158_14 = tmpl('t1158-14', 'Hero Right + Stack 4:3', 'quad', STD, 'landsc
   rsBox(0, 0.343, '4:3', 0.34, 0.313, S1158),
   rsBox(0, 0.686, '4:3', 0.34, 0.313, S1158),
 ]);
-// 5-photo: filmstrip of five 3:2 columns
-const T1158_15 = tmpl('t1158-15', 'Filmstrip Five 3:2', 'quint', STD, 'landscape', '3:2', [S1158], [
-  rsBox(0, 0, '3:2', 0.188, 1.0, S1158),
-  rsBox(0.203, 0, '3:2', 0.188, 1.0, S1158),
-  rsBox(0.406, 0, '3:2', 0.188, 1.0, S1158),
-  rsBox(0.609, 0, '3:2', 0.188, 1.0, S1158),
-  rsBox(0.812, 0, '3:2', 0.188, 1.0, S1158),
-]);
+// 5-photo: two 3:2 top + three 3:2 bottom, all cells FILL, caption owns the leftover band.
+// 11.5x8 canvasRatio=1.4375 → 3:2 intrinsic = 1.0435. Top: w=0.44 ⇒ h=0.44/1.0435=0.4217 (fills).
+// Bottom: w=0.313 ⇒ h=0.313/1.0435=0.3 (fills). (Replaces the old full-height-column filmstrip that
+// left ~82% of each column empty — the forbidden "Strip Five" whitespace pattern.)
+const T1158_15: PageTemplate = {
+  ...tmpl('t1158-15', 'Two-Top Three-Bottom 3:2 + Caption', 'quint', STD, 'landscape', '3:2', [S1158], [
+    rsBox(0.03, 0, '3:2', 0.44, 0.4217, S1158),
+    rsBox(0.53, 0, '3:2', 0.44, 0.4217, S1158),
+    rsBox(0.0155, 0.44, '3:2', 0.313, 0.3, S1158),
+    rsBox(0.3435, 0.44, '3:2', 0.313, 0.3, S1158),
+    rsBox(0.6715, 0.44, '3:2', 0.313, 0.3, S1158),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.76, width: 1, height: 0.24, align: 'center', placeholder: 'Tap to add text' }],
+};
 // 3-photo: three 4:3 stacked in the left two-thirds + side caption column on the right
 const T1158_16: PageTemplate = {
   ...tmpl('t1158-16', 'Trio + Side Caption', 'trio', STD, 'landscape', '4:3', [S1158], [
@@ -461,6 +625,52 @@ const T1158_16: PageTemplate = {
     rsBox(0, 0.69, '4:3', 0.64, 0.31, S1158),
   ]),
   textSlots: [{ id: 'cap', x: 0.7, y: 0, width: 0.3, height: 1, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+// ── INC6: 11.5×8 6-photo additions (canvasRatio = 3450/2400 = 1.4375) ──
+// Anti-whitespace intrinsics on this canvas: 4:3 → 1.3333/1.4375 = 0.9275 ; 3:2 → 1.5/1.4375 = 1.0435.
+// Every cell's maxW/maxH equals its intrinsic ratio so rsBox fills it edge-to-edge (cx/cy offset = 0).
+
+// 6-photo: six 4:3 cells, 3 cols × 2 rows. 4:3 cell w=0.32 ⇒ h=0.32/0.9275=0.345 (fills exactly).
+// Grid spans y 0..0.71 (width-bound on 1.4375 canvas); the genuine leftover bottom band is a caption.
+const T1158_17: PageTemplate = {
+  ...tmpl('t1158-17', 'Sextet Grid 3×2 4:3 + Caption', 'sextet', STD, 'landscape', '4:3', [S1158], [
+    rsBox(0, 0, '4:3', 0.32, 0.345, S1158),
+    rsBox(0.34, 0, '4:3', 0.32, 0.345, S1158),
+    rsBox(0.68, 0, '4:3', 0.32, 0.345, S1158),
+    rsBox(0, 0.365, '4:3', 0.32, 0.345, S1158),
+    rsBox(0.34, 0.365, '4:3', 0.32, 0.345, S1158),
+    rsBox(0.68, 0.365, '4:3', 0.32, 0.345, S1158),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.73, width: 1, height: 0.27, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+// 6-photo: one 4:3 hero (left, fills 0.80×0.8625 exactly) + caption below it, and a right filmstrip
+// of five 4:3 cells (each w=0.174 ⇒ h=0.174/0.9275=0.1876, fills exactly) spanning full height.
+const T1158_18: PageTemplate = {
+  ...tmpl('t1158-18', 'Hero + Five 4:3 + Caption', 'sextet', STD, 'landscape', '4:3', [S1158], [
+    rsBox(0, 0, '4:3', 0.80, 0.8625, S1158),
+    rsBox(0.826, 0, '4:3', 0.174, 0.1876, S1158),
+    rsBox(0.826, 0.203, '4:3', 0.174, 0.1876, S1158),
+    rsBox(0.826, 0.406, '4:3', 0.174, 0.1876, S1158),
+    rsBox(0.826, 0.609, '4:3', 0.174, 0.1876, S1158),
+    rsBox(0.826, 0.812, '4:3', 0.174, 0.1876, S1158),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.885, width: 0.80, height: 0.115, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+// 6-photo: six 3:2 cells, 3 cols × 2 rows. 3:2 cell w=0.32 ⇒ h=0.32/1.0435=0.3067 (fills exactly).
+// Grid spans y 0..0.637 (width-bound on 1.4375 canvas); the leftover bottom band is a caption.
+const T1158_19: PageTemplate = {
+  ...tmpl('t1158-19', 'Sextet 3×2 3:2 + Caption', 'sextet', STD, 'landscape', '3:2', [S1158], [
+    rsBox(0, 0, '3:2', 0.32, 0.3067, S1158),
+    rsBox(0.34, 0, '3:2', 0.32, 0.3067, S1158),
+    rsBox(0.68, 0, '3:2', 0.32, 0.3067, S1158),
+    rsBox(0, 0.33, '3:2', 0.32, 0.3067, S1158),
+    rsBox(0.34, 0.33, '3:2', 0.32, 0.3067, S1158),
+    rsBox(0.68, 0.33, '3:2', 0.32, 0.3067, S1158),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.66, width: 1, height: 0.34, align: 'center', placeholder: 'Tap to add text' }],
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -585,6 +795,40 @@ const T8511_17: PageTemplate = {
     rsBox(0, 0.58, '3:4', 0.46, 0.42, S8511),
   ]),
   textSlots: [{ id: 'cap', x: 0.5, y: 0.58, width: 0.5, height: 0.42, align: 'center', placeholder: 'Tap to add text' }],
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   8.5×11 NEW — Increment 7: 3:4 + 6-photo sextet, FILL-correct.
+   Portrait canvasRatio = 2550/3300 = 0.7727, so a 3:4 cell fills its box only
+   when boxW/boxH = 0.75/0.7727 = 0.9706 (near-square in normalized coords).
+   The clean tessellation for 6 near-square cells is 3 cols × 2 rows covering the
+   top ~0.665 band (col w=0.313 → h=0.313/0.9706=0.3225). The genuine leftover
+   band becomes a caption — never empty margin. Two distinct arrangements: caption
+   BELOW the grid (t8511-18) vs a title band ABOVE it (t8511-19).
+   ══════════════════════════════════════════════════════════════════════════ */
+// Sextet Grid 3×2 3:4 + Caption: three columns, two rows, caption fills bottom band.
+const T8511_18: PageTemplate = {
+  ...tmpl('t8511-18', 'Sextet Grid 3×2 3:4 + Caption', 'sextet', STD, 'portrait', '3:4', [S8511], [
+    rsBox(0, 0, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0.343, 0, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0.686, 0, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0, 0.343, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0.343, 0.343, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0.686, 0.343, '3:4', 0.313, 0.3225, S8511),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.69, width: 1, height: 0.31, align: 'center', placeholder: 'Tap to add text' }],
+};
+// Title Band + Sextet 3×2 3:4: title caption fills the top band, grid fills below.
+const T8511_19: PageTemplate = {
+  ...tmpl('t8511-19', 'Title + Sextet 3×2 3:4', 'sextet', STD, 'portrait', '3:4', [S8511], [
+    rsBox(0, 0.335, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0.343, 0.335, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0.686, 0.335, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0, 0.6775, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0.343, 0.6775, '3:4', 0.313, 0.3225, S8511),
+    rsBox(0.686, 0.6775, '3:4', 0.313, 0.3225, S8511),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0, width: 1, height: 0.315, align: 'center', placeholder: 'Tap to add text' }],
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -801,33 +1045,35 @@ const T9x9_19 = tmpl('t9x9-19', 'Windowpane', 'quint', STD, 'square', '1:1', [S9
    6x6 / 8x8 / 9x9 NEW — square 4-photo mixed-ratio + caption band
    ══════════════════════════════════════════════════════════════════════════ */
 
-// Frame Trio + Caption — 4 photos (top 4:3 pair, bottom 3:4 pair), caption band.
+// Quad 2×2 4:3 + Caption — 4 photos in a strict 4:3 grid, caption fills leftover bottom band.
+// Square canvas (canvasRatio=1.0) → 4:3 intrinsic = 1.3333. Cell w=0.485 ⇒ h=0.485/1.3333=0.3638
+// → each rsBox fills exactly (offset 0). Two rows span y 0..0.76; caption owns the bottom band.
 const T6x6_20: PageTemplate = {
-  ...tmpl('t6x6-20', 'Frame Trio + Caption', 'quad', STD, 'square', '4:3', [S66], [
-    rsBox(0, 0, '4:3', 0.485, 0.40, S66),
-    rsBox(0.515, 0, '4:3', 0.485, 0.40, S66),
-    rsBox(0, 0.43, '3:4', 0.485, 0.39, S66),
-    rsBox(0.515, 0.43, '3:4', 0.485, 0.39, S66),
+  ...tmpl('t6x6-20', 'Frame Quad 4:3 + Caption', 'quad', STD, 'square', '4:3', [S66], [
+    rsBox(0, 0, '4:3', 0.485, 0.3638, S66),
+    rsBox(0.515, 0, '4:3', 0.485, 0.3638, S66),
+    rsBox(0, 0.39, '4:3', 0.485, 0.3638, S66),
+    rsBox(0.515, 0.39, '4:3', 0.485, 0.3638, S66),
   ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.85, width: 1, height: 0.15, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0, y: 0.78, width: 1, height: 0.22, align: 'center', placeholder: 'Tap to add text' }],
 };
 const T8x8_20: PageTemplate = {
-  ...tmpl('t8x8-20', 'Frame Trio + Caption', 'quad', STD, 'square', '4:3', [S88], [
-    rsBox(0, 0, '4:3', 0.485, 0.40, S88),
-    rsBox(0.515, 0, '4:3', 0.485, 0.40, S88),
-    rsBox(0, 0.43, '3:4', 0.485, 0.39, S88),
-    rsBox(0.515, 0.43, '3:4', 0.485, 0.39, S88),
+  ...tmpl('t8x8-20', 'Frame Quad 4:3 + Caption', 'quad', STD, 'square', '4:3', [S88], [
+    rsBox(0, 0, '4:3', 0.485, 0.3638, S88),
+    rsBox(0.515, 0, '4:3', 0.485, 0.3638, S88),
+    rsBox(0, 0.39, '4:3', 0.485, 0.3638, S88),
+    rsBox(0.515, 0.39, '4:3', 0.485, 0.3638, S88),
   ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.85, width: 1, height: 0.15, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0, y: 0.78, width: 1, height: 0.22, align: 'center', placeholder: 'Tap to add text' }],
 };
 const T9x9_20: PageTemplate = {
-  ...tmpl('t9x9-20', 'Frame Trio + Caption', 'quad', STD, 'square', '4:3', [S99], [
-    rsBox(0, 0, '4:3', 0.485, 0.40, S99),
-    rsBox(0.515, 0, '4:3', 0.485, 0.40, S99),
-    rsBox(0, 0.43, '3:4', 0.485, 0.39, S99),
-    rsBox(0.515, 0.43, '3:4', 0.485, 0.39, S99),
+  ...tmpl('t9x9-20', 'Frame Quad 4:3 + Caption', 'quad', STD, 'square', '4:3', [S99], [
+    rsBox(0, 0, '4:3', 0.485, 0.3638, S99),
+    rsBox(0.515, 0, '4:3', 0.485, 0.3638, S99),
+    rsBox(0, 0.39, '4:3', 0.485, 0.3638, S99),
+    rsBox(0.515, 0.39, '4:3', 0.485, 0.3638, S99),
   ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.85, width: 1, height: 0.15, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0, y: 0.78, width: 1, height: 0.22, align: 'center', placeholder: 'Tap to add text' }],
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -859,14 +1105,16 @@ const T9x9_21 = tmpl('t9x9-21', 'Sextet Grid 2×3', 'sextet', STD, 'square', '1:
   rsBox(0, 0.686, '1:1', 0.485, 0.313, S99),
   rsBox(0.515, 0.686, '1:1', 0.485, 0.313, S99),
 ]);
-// Increment 6: Wide Pair + Caption (trio) — two 16:9 bands stacked + bottom-left square + side caption.
+// Wide Trio + Caption (trio) — full-width 16:9 pano hero on top, two half-width 16:9 cells
+// below, caption fills the leftover bottom band. Square canvas → 16:9 intrinsic = 1.7778.
+// Hero w=1.0 ⇒ h=0.5625 (fills). Bottom cells w=0.49 ⇒ h=0.49/1.7778=0.2756 (fill). Every slot 16:9.
 const T9x9_22: PageTemplate = {
-  ...tmpl('t9x9-22', 'Wide Pair + Caption', 'trio', STD, 'square', '16:9', [S99], [
-    rsBox(0, 0, '16:9', 1.0, 0.36, S99),
-    rsBox(0, 0.39, '16:9', 1.0, 0.36, S99),
-    rsBox(0, 0.78, '1:1', 0.45, 0.22, S99),
+  ...tmpl('t9x9-22', 'Wide Trio + Caption', 'trio', STD, 'square', '16:9', [S99], [
+    rsBox(0, 0, '16:9', 1.0, 0.5625, S99),
+    rsBox(0, 0.5825, '16:9', 0.49, 0.2756, S99),
+    rsBox(0.51, 0.5825, '16:9', 0.49, 0.2756, S99),
   ]),
-  textSlots: [{ id: 'cap', x: 0.5, y: 0.78, width: 0.5, height: 0.22, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0, y: 0.87, width: 1, height: 0.13, align: 'center', placeholder: 'Tap to add text' }],
 };
 const T8x8_22 = tmpl('t8x8-22', 'Sextet Grid 2×3', 'sextet', STD, 'square', '1:1', [S88], [
   rsBox(0, 0, '1:1', 0.485, 0.313, S88),
@@ -891,71 +1139,84 @@ const T8x8_22 = tmpl('t8x8-22', 'Sextet Grid 2×3', 'sextet', STD, 'square', '1:
    6x6 / 8x8 / 9x9 NEW — Increment 2: 4:3 + 5-photo "Two-Top Three-Bottom + Caption"
    Two larger 4:3 cells on the top row, three smaller 4:3 cells on the bottom
    row, with a bottom caption band absorbing leftover space. All slots 4:3
-   (strict match, zero crop). Distinct from Strip Five (Inc 1).
+   (strict match, zero crop). Square canvas → 4:3 intrinsic = 1.3333, so every cell's
+   maxW/maxH equals 1.3333: top w=0.485 ⇒ h=0.3638; bottom w=0.313 ⇒ h=0.2348 — each
+   box fills exactly (offset 0). Distinct from Strip Five (Inc 1).
    ══════════════════════════════════════════════════════════════════════════ */
 
 const T6x6_23: PageTemplate = {
   ...tmpl('t6x6-23', 'Two-Top Three-Bottom + Caption', 'quint', STD, 'square', '4:3', [S66], [
-    rsBox(0, 0, '4:3', 0.485, 0.42, S66),
-    rsBox(0.515, 0, '4:3', 0.485, 0.42, S66),
-    rsBox(0, 0.45, '4:3', 0.313, 0.40, S66),
-    rsBox(0.343, 0.45, '4:3', 0.313, 0.40, S66),
-    rsBox(0.686, 0.45, '4:3', 0.313, 0.40, S66),
+    rsBox(0.0075, 0.02, '4:3', 0.485, 0.3638, S66),
+    rsBox(0.5075, 0.02, '4:3', 0.485, 0.3638, S66),
+    rsBox(0, 0.41, '4:3', 0.313, 0.2348, S66),
+    rsBox(0.343, 0.41, '4:3', 0.313, 0.2348, S66),
+    rsBox(0.686, 0.41, '4:3', 0.313, 0.2348, S66),
   ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.87, width: 1, height: 0.13, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0, y: 0.68, width: 1, height: 0.32, align: 'center', placeholder: 'Tap to add text' }],
 };
 const T8x8_24: PageTemplate = {
   ...tmpl('t8x8-24', 'Two-Top Three-Bottom + Caption', 'quint', STD, 'square', '4:3', [S88], [
-    rsBox(0, 0, '4:3', 0.485, 0.42, S88),
-    rsBox(0.515, 0, '4:3', 0.485, 0.42, S88),
-    rsBox(0, 0.45, '4:3', 0.313, 0.40, S88),
-    rsBox(0.343, 0.45, '4:3', 0.313, 0.40, S88),
-    rsBox(0.686, 0.45, '4:3', 0.313, 0.40, S88),
+    rsBox(0.0075, 0.02, '4:3', 0.485, 0.3638, S88),
+    rsBox(0.5075, 0.02, '4:3', 0.485, 0.3638, S88),
+    rsBox(0, 0.41, '4:3', 0.313, 0.2348, S88),
+    rsBox(0.343, 0.41, '4:3', 0.313, 0.2348, S88),
+    rsBox(0.686, 0.41, '4:3', 0.313, 0.2348, S88),
   ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.87, width: 1, height: 0.13, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0, y: 0.68, width: 1, height: 0.32, align: 'center', placeholder: 'Tap to add text' }],
 };
 const T9x9_24: PageTemplate = {
   ...tmpl('t9x9-24', 'Two-Top Three-Bottom + Caption', 'quint', STD, 'square', '4:3', [S99], [
-    rsBox(0, 0, '4:3', 0.485, 0.42, S99),
-    rsBox(0.515, 0, '4:3', 0.485, 0.42, S99),
-    rsBox(0, 0.45, '4:3', 0.313, 0.40, S99),
-    rsBox(0.343, 0.45, '4:3', 0.313, 0.40, S99),
-    rsBox(0.686, 0.45, '4:3', 0.313, 0.40, S99),
+    rsBox(0.0075, 0.02, '4:3', 0.485, 0.3638, S99),
+    rsBox(0.5075, 0.02, '4:3', 0.485, 0.3638, S99),
+    rsBox(0, 0.41, '4:3', 0.313, 0.2348, S99),
+    rsBox(0.343, 0.41, '4:3', 0.313, 0.2348, S99),
+    rsBox(0.686, 0.41, '4:3', 0.313, 0.2348, S99),
   ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.87, width: 1, height: 0.13, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0, y: 0.68, width: 1, height: 0.32, align: 'center', placeholder: 'Tap to add text' }],
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
-   6x6 / 8x8 / 9x9 NEW — Increment 3: 4:3 + 6-photo "Three-Top Three-Bottom"
+   6x6 / 8x8 / 9x9 NEW — Increment 3: 4:3 + 6-photo "Three-Top Three-Bottom + Caption"
    Sextet grid, 3 columns x 2 rows, all slots 4:3 (strict match, zero crop).
-   Cols x=0/0.343/0.686 (w=0.313); rows y=0/0.515 (h=0.485). No caption.
-   Fills the EMPTY (4:3 × 6-photo × square) cell; distinct from the 1:1 2×3 grid.
+   Square canvas → 4:3 intrinsic = 1.3333, so a 0.313-wide cell is 0.2348 tall and
+   FILLS exactly (offset 0). Two rows tile a top band (y 0.02..0.5148); the genuine
+   leftover bottom band is a caption — never an oversized box with a centered photo.
+   Cols x=0/0.343/0.686 (w=0.313); rows y=0.02/0.28 (h=0.2348).
    ══════════════════════════════════════════════════════════════════════════ */
 
-const T6x6_24 = tmpl('t6x6-24', 'Three-Top Three-Bottom', 'sextet', STD, 'square', '4:3', [S66], [
-  rsBox(0, 0, '4:3', 0.313, 0.485, S66),
-  rsBox(0.343, 0, '4:3', 0.313, 0.485, S66),
-  rsBox(0.686, 0, '4:3', 0.313, 0.485, S66),
-  rsBox(0, 0.515, '4:3', 0.313, 0.485, S66),
-  rsBox(0.343, 0.515, '4:3', 0.313, 0.485, S66),
-  rsBox(0.686, 0.515, '4:3', 0.313, 0.485, S66),
-]);
-const T8x8_25 = tmpl('t8x8-25', 'Three-Top Three-Bottom', 'sextet', STD, 'square', '4:3', [S88], [
-  rsBox(0, 0, '4:3', 0.313, 0.485, S88),
-  rsBox(0.343, 0, '4:3', 0.313, 0.485, S88),
-  rsBox(0.686, 0, '4:3', 0.313, 0.485, S88),
-  rsBox(0, 0.515, '4:3', 0.313, 0.485, S88),
-  rsBox(0.343, 0.515, '4:3', 0.313, 0.485, S88),
-  rsBox(0.686, 0.515, '4:3', 0.313, 0.485, S88),
-]);
-const T9x9_25 = tmpl('t9x9-25', 'Three-Top Three-Bottom', 'sextet', STD, 'square', '4:3', [S99], [
-  rsBox(0, 0, '4:3', 0.313, 0.485, S99),
-  rsBox(0.343, 0, '4:3', 0.313, 0.485, S99),
-  rsBox(0.686, 0, '4:3', 0.313, 0.485, S99),
-  rsBox(0, 0.515, '4:3', 0.313, 0.485, S99),
-  rsBox(0.343, 0.515, '4:3', 0.313, 0.485, S99),
-  rsBox(0.686, 0.515, '4:3', 0.313, 0.485, S99),
-]);
+const T6x6_24: PageTemplate = {
+  ...tmpl('t6x6-24', 'Three-Top Three-Bottom + Caption', 'sextet', STD, 'square', '4:3', [S66], [
+    rsBox(0, 0.02, '4:3', 0.313, 0.2348, S66),
+    rsBox(0.343, 0.02, '4:3', 0.313, 0.2348, S66),
+    rsBox(0.686, 0.02, '4:3', 0.313, 0.2348, S66),
+    rsBox(0, 0.28, '4:3', 0.313, 0.2348, S66),
+    rsBox(0.343, 0.28, '4:3', 0.313, 0.2348, S66),
+    rsBox(0.686, 0.28, '4:3', 0.313, 0.2348, S66),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.55, width: 1, height: 0.45, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T8x8_25: PageTemplate = {
+  ...tmpl('t8x8-25', 'Three-Top Three-Bottom + Caption', 'sextet', STD, 'square', '4:3', [S88], [
+    rsBox(0, 0.02, '4:3', 0.313, 0.2348, S88),
+    rsBox(0.343, 0.02, '4:3', 0.313, 0.2348, S88),
+    rsBox(0.686, 0.02, '4:3', 0.313, 0.2348, S88),
+    rsBox(0, 0.28, '4:3', 0.313, 0.2348, S88),
+    rsBox(0.343, 0.28, '4:3', 0.313, 0.2348, S88),
+    rsBox(0.686, 0.28, '4:3', 0.313, 0.2348, S88),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.55, width: 1, height: 0.45, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T9x9_25: PageTemplate = {
+  ...tmpl('t9x9-25', 'Three-Top Three-Bottom + Caption', 'sextet', STD, 'square', '4:3', [S99], [
+    rsBox(0, 0.02, '4:3', 0.313, 0.2348, S99),
+    rsBox(0.343, 0.02, '4:3', 0.313, 0.2348, S99),
+    rsBox(0.686, 0.02, '4:3', 0.313, 0.2348, S99),
+    rsBox(0, 0.28, '4:3', 0.313, 0.2348, S99),
+    rsBox(0.343, 0.28, '4:3', 0.313, 0.2348, S99),
+    rsBox(0.686, 0.28, '4:3', 0.313, 0.2348, S99),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.55, width: 1, height: 0.45, align: 'center', placeholder: 'Tap to add text' }],
+};
 
 /* ══════════════════════════════════════════════════════════════════════════
    6x6 / 8x8 / 9x9 NEW — Increment 4: 4:3 + 6-photo "Hero + Five Satellites"
@@ -1001,42 +1262,42 @@ const T9x9_26 = tmpl('t9x9-26', 'Hero + Five Satellites', 'sextet', STD, 'square
    square album. The 3:4 × 5-photo square cell is covered by Hero + Quad Strip. */
 
 /* ══════════════════════════════════════════════════════════════════════════
-   6x6 / 8x8 / 9x9 NEW — Increment 6: 3:4 + 5-photo "Hero + Quad Strip + Caption"
-   One large portrait hero on the left (trimmed to clear a caption band beneath
-   it) + a 4-up right satellite stack. All 5 slots carry '3:4' (strict match,
-   zero crop). Caption band sits under the hero, absorbing the leftover space.
-   Distinct from Strip Five Portrait (Inc 5).
+   6x6 / 8x8 / 9x9 NEW — Increment 6: 3:4 + 5-photo "Hero + Quad + Caption"
+   One large portrait hero on the left (full height, fills) + a 2×2 grid of 3:4
+   satellites on the right; a caption fills the genuine leftover bottom-right band.
+   Square canvas → 3:4 intrinsic = 0.75. Hero w=0.49 ⇒ h=0.49/0.75=0.6533 (fills).
+   Satellites w=0.235 ⇒ h=0.235/0.75=0.3133 (fill exactly, offset 0). All 5 slots '3:4'.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const T6x6_27: PageTemplate = {
-  ...tmpl('t6x6-27', 'Hero + Quad Strip + Caption', 'quint', STD, 'square', '3:4', [S66], [
-    rsBox(0, 0, '3:4', 0.60, 0.90, S66),
-    rsBox(0.64, 0, '3:4', 0.36, 0.235, S66),
-    rsBox(0.64, 0.255, '3:4', 0.36, 0.235, S66),
-    rsBox(0.64, 0.51, '3:4', 0.36, 0.235, S66),
-    rsBox(0.64, 0.765, '3:4', 0.36, 0.235, S66),
+  ...tmpl('t6x6-27', 'Hero + Quad + Caption', 'quint', STD, 'square', '3:4', [S66], [
+    rsBox(0, 0.17, '3:4', 0.49, 0.6533, S66),
+    rsBox(0.51, 0.02, '3:4', 0.235, 0.3133, S66),
+    rsBox(0.765, 0.02, '3:4', 0.235, 0.3133, S66),
+    rsBox(0.51, 0.35, '3:4', 0.235, 0.3133, S66),
+    rsBox(0.765, 0.35, '3:4', 0.235, 0.3133, S66),
   ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.92, width: 0.60, height: 0.08, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0.51, y: 0.68, width: 0.49, height: 0.32, align: 'center', placeholder: 'Tap to add text' }],
 };
 const T8x8_28: PageTemplate = {
-  ...tmpl('t8x8-28', 'Hero + Quad Strip + Caption', 'quint', STD, 'square', '3:4', [S88], [
-    rsBox(0, 0, '3:4', 0.60, 0.90, S88),
-    rsBox(0.64, 0, '3:4', 0.36, 0.235, S88),
-    rsBox(0.64, 0.255, '3:4', 0.36, 0.235, S88),
-    rsBox(0.64, 0.51, '3:4', 0.36, 0.235, S88),
-    rsBox(0.64, 0.765, '3:4', 0.36, 0.235, S88),
+  ...tmpl('t8x8-28', 'Hero + Quad + Caption', 'quint', STD, 'square', '3:4', [S88], [
+    rsBox(0, 0.17, '3:4', 0.49, 0.6533, S88),
+    rsBox(0.51, 0.02, '3:4', 0.235, 0.3133, S88),
+    rsBox(0.765, 0.02, '3:4', 0.235, 0.3133, S88),
+    rsBox(0.51, 0.35, '3:4', 0.235, 0.3133, S88),
+    rsBox(0.765, 0.35, '3:4', 0.235, 0.3133, S88),
   ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.92, width: 0.60, height: 0.08, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0.51, y: 0.68, width: 0.49, height: 0.32, align: 'center', placeholder: 'Tap to add text' }],
 };
 const T9x9_28: PageTemplate = {
-  ...tmpl('t9x9-28', 'Hero + Quad Strip + Caption', 'quint', STD, 'square', '3:4', [S99], [
-    rsBox(0, 0, '3:4', 0.60, 0.90, S99),
-    rsBox(0.64, 0, '3:4', 0.36, 0.235, S99),
-    rsBox(0.64, 0.255, '3:4', 0.36, 0.235, S99),
-    rsBox(0.64, 0.51, '3:4', 0.36, 0.235, S99),
-    rsBox(0.64, 0.765, '3:4', 0.36, 0.235, S99),
+  ...tmpl('t9x9-28', 'Hero + Quad + Caption', 'quint', STD, 'square', '3:4', [S99], [
+    rsBox(0, 0.17, '3:4', 0.49, 0.6533, S99),
+    rsBox(0.51, 0.02, '3:4', 0.235, 0.3133, S99),
+    rsBox(0.765, 0.02, '3:4', 0.235, 0.3133, S99),
+    rsBox(0.51, 0.35, '3:4', 0.235, 0.3133, S99),
+    rsBox(0.765, 0.35, '3:4', 0.235, 0.3133, S99),
   ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.92, width: 0.60, height: 0.08, align: 'center', placeholder: 'Tap to add text' }],
+  textSlots: [{ id: 'cap', x: 0.51, y: 0.68, width: 0.49, height: 0.32, align: 'center', placeholder: 'Tap to add text' }],
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1143,6 +1404,97 @@ const T9x9_31: PageTemplate = {
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
+   6x6 / 8x8 / 9x9 NEW — Increment 7: FILL-CORRECT square 4-photo (the user's
+   original "4-photo shows too few" gripe). Square canvasRatio = 1.0, so a cell's
+   intrinsic ratio == its targetRatio. The existing Grid 2×2 4:3/3:4 templates
+   (t*x*-15/16) size their boxes 0.485×0.485 — which CENTERS a 4:3/3:4 photo and
+   leaves whitespace. These new templates size each box to the intrinsic ratio so
+   every photo FILLS its cell edge-to-edge, and the genuine leftover band becomes
+   a caption (never empty margin).
+     • Quad 2×2 4:3 + Caption: cell 0.49×0.3675 (4:3), two rows (top 0.735),
+       caption fills the bottom band.
+     • Quad 2×2 3:4 + Caption: cell 0.3675×0.49 (3:4), two cols (left 0.735),
+       caption fills the right band.
+     • Hero + Trio 4:3: full-width 4:3 hero (1.0×0.75) on top + three 4:3 cells
+       (0.32×0.24) filling the bottom row. Tessellates the full page, no caption.
+   ══════════════════════════════════════════════════════════════════════════ */
+// Quad 2×2 4:3 + Caption
+const T6x6_31: PageTemplate = {
+  ...tmpl('t6x6-31', 'Quad 2×2 4:3 + Caption', 'quad', STD, 'square', '4:3', [S66], [
+    rsBox(0, 0, '4:3', 0.49, 0.3675, S66),
+    rsBox(0.51, 0, '4:3', 0.49, 0.3675, S66),
+    rsBox(0, 0.3775, '4:3', 0.49, 0.3675, S66),
+    rsBox(0.51, 0.3775, '4:3', 0.49, 0.3675, S66),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.755, width: 1, height: 0.245, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T8x8_32: PageTemplate = {
+  ...tmpl('t8x8-32', 'Quad 2×2 4:3 + Caption', 'quad', STD, 'square', '4:3', [S88], [
+    rsBox(0, 0, '4:3', 0.49, 0.3675, S88),
+    rsBox(0.51, 0, '4:3', 0.49, 0.3675, S88),
+    rsBox(0, 0.3775, '4:3', 0.49, 0.3675, S88),
+    rsBox(0.51, 0.3775, '4:3', 0.49, 0.3675, S88),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.755, width: 1, height: 0.245, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T9x9_32: PageTemplate = {
+  ...tmpl('t9x9-32', 'Quad 2×2 4:3 + Caption', 'quad', STD, 'square', '4:3', [S99], [
+    rsBox(0, 0, '4:3', 0.49, 0.3675, S99),
+    rsBox(0.51, 0, '4:3', 0.49, 0.3675, S99),
+    rsBox(0, 0.3775, '4:3', 0.49, 0.3675, S99),
+    rsBox(0.51, 0.3775, '4:3', 0.49, 0.3675, S99),
+  ]),
+  textSlots: [{ id: 'cap', x: 0, y: 0.755, width: 1, height: 0.245, align: 'center', placeholder: 'Tap to add text' }],
+};
+// Quad 2×2 3:4 + Caption
+const T6x6_32: PageTemplate = {
+  ...tmpl('t6x6-32', 'Quad 2×2 3:4 + Caption', 'quad', STD, 'square', '3:4', [S66], [
+    rsBox(0, 0, '3:4', 0.3675, 0.49, S66),
+    rsBox(0, 0.51, '3:4', 0.3675, 0.49, S66),
+    rsBox(0.3775, 0, '3:4', 0.3675, 0.49, S66),
+    rsBox(0.3775, 0.51, '3:4', 0.3675, 0.49, S66),
+  ]),
+  textSlots: [{ id: 'cap', x: 0.755, y: 0, width: 0.245, height: 1, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T8x8_33: PageTemplate = {
+  ...tmpl('t8x8-33', 'Quad 2×2 3:4 + Caption', 'quad', STD, 'square', '3:4', [S88], [
+    rsBox(0, 0, '3:4', 0.3675, 0.49, S88),
+    rsBox(0, 0.51, '3:4', 0.3675, 0.49, S88),
+    rsBox(0.3775, 0, '3:4', 0.3675, 0.49, S88),
+    rsBox(0.3775, 0.51, '3:4', 0.3675, 0.49, S88),
+  ]),
+  textSlots: [{ id: 'cap', x: 0.755, y: 0, width: 0.245, height: 1, align: 'center', placeholder: 'Tap to add text' }],
+};
+const T9x9_33: PageTemplate = {
+  ...tmpl('t9x9-33', 'Quad 2×2 3:4 + Caption', 'quad', STD, 'square', '3:4', [S99], [
+    rsBox(0, 0, '3:4', 0.3675, 0.49, S99),
+    rsBox(0, 0.51, '3:4', 0.3675, 0.49, S99),
+    rsBox(0.3775, 0, '3:4', 0.3675, 0.49, S99),
+    rsBox(0.3775, 0.51, '3:4', 0.3675, 0.49, S99),
+  ]),
+  textSlots: [{ id: 'cap', x: 0.755, y: 0, width: 0.245, height: 1, align: 'center', placeholder: 'Tap to add text' }],
+};
+// Hero + Trio 4:3 (full-page fill, no caption)
+const T6x6_33 = tmpl('t6x6-33', 'Hero + Trio 4:3', 'quad', STD, 'square', '4:3', [S66], [
+  rsBox(0, 0, '4:3', 1.0, 0.75, S66),
+  rsBox(0.02, 0.76, '4:3', 0.32, 0.24, S66),
+  rsBox(0.34, 0.76, '4:3', 0.32, 0.24, S66),
+  rsBox(0.66, 0.76, '4:3', 0.32, 0.24, S66),
+]);
+const T8x8_34 = tmpl('t8x8-34', 'Hero + Trio 4:3', 'quad', STD, 'square', '4:3', [S88], [
+  rsBox(0, 0, '4:3', 1.0, 0.75, S88),
+  rsBox(0.02, 0.76, '4:3', 0.32, 0.24, S88),
+  rsBox(0.34, 0.76, '4:3', 0.32, 0.24, S88),
+  rsBox(0.66, 0.76, '4:3', 0.32, 0.24, S88),
+]);
+const T9x9_34 = tmpl('t9x9-34', 'Hero + Trio 4:3', 'quad', STD, 'square', '4:3', [S99], [
+  rsBox(0, 0, '4:3', 1.0, 0.75, S99),
+  rsBox(0.02, 0.76, '4:3', 0.32, 0.24, S99),
+  rsBox(0.34, 0.76, '4:3', 0.32, 0.24, S99),
+  rsBox(0.66, 0.76, '4:3', 0.32, 0.24, S99),
+]);
+
+/* ══════════════════════════════════════════════════════════════════════════
    ASSEMBLE ALL TEMPLATES
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -1163,6 +1515,16 @@ const PAGE_TEMPLATES_BASE: PageTemplate[] = [
   T6x4_01, T6x4_02, T6x4_03, T6x4_04, T6x4_05, T6x4_06,
   // 6×4 NEW (trio strip + caption, hero + pair)
   T6x4_07, T6x4_08,
+  // 6×4 INC1 (3-photo fill: trio squares, hero+pair 3:2, trio columns 4:3)
+  T6x4_09, T6x4_10, T6x4_11,
+  // 6×4 INC2 (4-photo quad: 2x2 3:2, 2x2 4:3 + caption, hero + trio strip 4:3)
+  T6x4_12,
+  // 6×4 INC3 (4 & 5-photo: quad row 1:1, five row 1:1, hero + quad 3:2)
+  T6x4_15, T6x4_16, T6x4_17,
+  // 6×4 INC4 (5 & 6-photo: two-top three-bottom 4:3, sextet 3x2 1:1, sextet 3x2 4:3)
+  T6x4_18, T6x4_19, T6x4_20,
+  // 6×4 INC5 (finish variety: trio row 3:2 + cap, hero + five 1:1, quad staggered 4:3 + cap)
+  T6x4_21,
   // 6×6 (19 templates)
   T6x6_01, T6x6_02, T6x6_03, T6x6_04, T6x6_05, T6x6_06, T6x6_07, T6x6_08, T6x6_09,
   T6x6_10, T6x6_11, T6x6_12, T6x6_13, T6x6_14, T6x6_15, T6x6_16, T6x6_17, T6x6_18, T6x6_19,
@@ -1190,17 +1552,25 @@ const PAGE_TEMPLATES_BASE: PageTemplate[] = [
   T6x6_29, T8x8_30, T9x9_30,
   // 6×6 / 8×8 / 9×9 NEW (Inc 8b: 1:1 5-photo L-Frame + Caption)
   T6x6_30, T8x8_31, T9x9_31,
+  // 6×6 / 8×8 / 9×9 NEW (Inc 7: FILL-correct square 4-photo — Quad 2×2 4:3 + Cap, 3:4 + Cap, Hero + Trio 4:3)
+  T6x6_31, T8x8_32, T9x9_32,
+  T6x6_32, T8x8_33, T9x9_33,
+  T6x6_33, T8x8_34, T9x9_34,
   // 11.5×8 (12 templates)
   T1158_01, T1158_02, T1158_03, T1158_04, T1158_05, T1158_06, T1158_07, T1158_08, T1158_09, T1158_10, T1158_11, T1158_12,
   // 11.5×8 NEW (varied-ratio 3/4/5-photo)
   T1158_13, T1158_14, T1158_15,
   // 11.5×8 NEW (trio + side caption)
   T1158_16,
+  // 11.5×8 NEW (INC6: 6-photo sextet grids + hero)
+  T1158_17, T1158_18, T1158_19,
   // 8.5×11 (12 templates)
   T8511_01, T8511_02, T8511_03, T8511_04, T8511_05, T8511_06, T8511_07, T8511_08, T8511_09, T8511_10, T8511_11, T8511_12,
   T8511_13, T8511_14, T8511_15,
   // 8.5×11 + 9×9 NEW (increment 6: caption layouts)
   T8511_16, T8511_17, T9x9_22,
+  // 8.5×11 NEW (Inc 7: 3:4 6-photo sextet — grid + caption / title + grid)
+  T8511_18, T8511_19,
 ];
 
 /* ══════════════════════════════════════════════════════════════════════════
