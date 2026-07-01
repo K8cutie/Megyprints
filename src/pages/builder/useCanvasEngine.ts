@@ -118,9 +118,15 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const bg = page.background;
   const bgTransform = `${bg.x ?? 0},${bg.y ?? 0},${bg.width ?? 0},${bg.height ?? 0},${bg.rotation ?? 0},${bg.opacity ?? 100}`;
   const slotFills = page.slotFills ? page.slotFills.join(',') : '';
-  /* BUG FIX: include FULL text data in fingerprint so property changes trigger re-render */
+  /* Include FULL text data — content, geometry AND formatting — so ANY edit
+     changes the fingerprint and repaints. Formatting fields (font, color, style,
+     alignment, opacity, scale) were previously omitted, so RE-EDITING an existing
+     caption's format didn't repaint the canvas until a page-nav changed the
+     fingerprint. Add worked because a new element changes the id list below. */
   const textData = page.textElements.map((t) =>
-    `${t.id}:${t.text.slice(0,20)}:${t.fontSize}:${Math.round(t.x)}:${Math.round(t.y)}:${t.rotation}`
+    `${t.id}:${t.text.slice(0,20)}:${t.fontSize}:${Math.round(t.x)}:${Math.round(t.y)}:${t.rotation}` +
+    `:${t.fontFamily ?? ''}:${t.color ?? ''}:${t.bold ? 1 : 0}:${t.italic ? 1 : 0}:${t.underline ? 1 : 0}:${t.alignment ?? ''}:${t.opacity ?? 100}:${t.backgroundColor ?? ''}` +
+    `:${t.width ?? ''}:${t.scaleX ?? ''}:${t.scaleY ?? ''}`
   ).join('|');
   const slotGeoms = page.slotGeometries ? page.slotGeometries.map((g) => `${g?.x ?? ''}:${g?.y ?? ''}:${g?.width ?? ''}:${g?.height ?? ''}`).join('|') : '';
   return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}`;
