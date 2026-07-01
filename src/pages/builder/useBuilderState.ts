@@ -1122,10 +1122,14 @@ export function useBuilderState(): BuilderActions {
     let bestR = 0;
     for (const r of ratios) { tally[r] = (tally[r] ?? 0) + 1; if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; } }
     const allForSize = getTemplatesForAlbum(albumSize);
-    let pool = allForSize.filter((t) => t.slotCount === count && (!pageRatio || t.targetRatio === pageRatio));
-    if (pool.length === 0) pool = allForSize.filter((t) => t.slotCount === count);
+    // EXPERIMENT: slotCount removed from the qualification — show EVERY layout whose
+    // ratio matches the page's photos, regardless of photo count. Strict RATIO match
+    // stays (no crop). Note: picking a layout with FEWER slots than photos drops the
+    // extra photos from this page; MORE slots leaves empty "+" slots to fill.
+    let pool = allForSize.filter((t) => (!pageRatio || t.targetRatio === pageRatio));
     if (pool.length === 0) pool = allForSize;
-    return [...pool].sort((a, b) => a.id.localeCompare(b.id));
+    // Same photo count first, then nearest counts, then by id.
+    return [...pool].sort((a, b) => Math.abs(a.slotCount - count) - Math.abs(b.slotCount - count) || a.id.localeCompare(b.id));
   }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
 
   /** Apply a SPECIFIC template to the current page (the picker's choice), keeping
