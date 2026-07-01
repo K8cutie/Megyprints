@@ -79,17 +79,30 @@ export default function Builder() {
   const actions = useBuilderContext();
   const navigate = useNavigate();
 
-  /* ── Fresh start: called before any effects run ── */
-  if (sessionStorage.getItem('megy-fresh-start')) {
-    sessionStorage.removeItem('megy-fresh-start');
-    actions.reset();
-  }
   const [searchParams] = useSearchParams();
   const [errorKey, setErrorKey] = useState(0);
 
   /* Refs */
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerModeRef = useRef<((enable: boolean) => void) | undefined>(undefined);
+
+  /* ── Fresh start (Home → "Create New Album") ──
+     getInitialState() already inits empty state when the `megy-fresh-start`
+     flag is set, so children mount fresh with no stale flash. Here we run
+     reset()'s side effects — clear IndexedDB + localStorage and set
+     skipCloudLoadRef so the provider's cloud/rehydrate effects skip old data.
+     This lives in a mount effect, NOT the render body: calling a
+     BuilderProvider setter mid-render triggered React's "cannot update a
+     component while rendering a different component" warning. Builder is a
+     child of the provider, so this effect still runs BEFORE the provider's
+     cloud/rehydrate effects, preserving the skip-guard timing. */
+  useEffect(() => {
+    if (sessionStorage.getItem('megy-fresh-start')) {
+      sessionStorage.removeItem('megy-fresh-start');
+      actions.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleGenerate = useCallback(() => {
     // Generate layout for the CURRENT page (random template + photos)
