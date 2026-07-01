@@ -10,7 +10,6 @@ import { parseIntent } from './intentParser';
 import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
-import ThemePreviewCard from '../pages/builder/ThemePreviewCard';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
 import type { AssistantMessage } from './types';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
@@ -368,7 +367,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const [suggesting, setSuggesting] = useState(false);
   /* Step-2 customization: which manual picker (Background/Border/Frame) is open.
      Only one panel is shown at a time; clicking the active button closes it. */
-  const [activePicker, setActivePicker] = useState<'bg' | 'border' | 'frame' | null>(null);
+  // Step-2 is now the customization studio — open Background by default so the
+  // step isn't empty now that the occasion presets are gone.
+  const [activePicker, setActivePicker] = useState<'bg' | 'border' | 'frame' | null>('bg');
   const doSuggestTheme = async () => {
     if (!builder.uploadedPhotos.length || suggesting) return;
     setSuggesting(true);
@@ -477,48 +478,31 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                  BELOW: three manual controls (Background / Border / Frame), each
                  opening a picker that applies on click. */
               <div className="space-y-4">
-                {/* Quick-pick occasion presets (unchanged) */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                  {THEMES.map((t) => (
-                    <ThemePreviewCard
-                      key={t.id}
-                      id={t.id}
-                      label={t.label}
-                      selected={builder.selectedTemplate === t.id}
-                      onSelect={() => {
-                        void builder.dispatch({ type: 'apply_theme', payload: { theme: t.id }, rawMessage: `apply ${t.id} theme` });
-                        showToast(`${t.label} theme selected`);
-                      }}
-                    />
-                  ))}
-                </div>
-
-                {/* Manual customization controls */}
-                <div className="pt-1">
-                  <p className="text-xs font-semibold text-[#8B7E7A] mb-2">Or customize it yourself</p>
-                  <div className="flex flex-wrap gap-2">
-                    {([
-                      { key: 'bg' as const, label: 'Background', icon: <Palette className="w-4 h-4" /> },
-                      { key: 'border' as const, label: 'Border', icon: <Box className="w-4 h-4" /> },
-                      { key: 'frame' as const, label: 'Frame', icon: <Frame className="w-4 h-4" /> },
-                    ]).map((b) => {
-                      const open = activePicker === b.key;
-                      return (
-                        <button
-                          key={b.key}
-                          onClick={() => setActivePicker(open ? null : b.key)}
-                          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold border transition-all active:scale-[0.98] ${
-                            open
-                              ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-md'
-                              : 'bg-[#FFF8F0] text-[#2D2D2D] border-[#F4C2A1]/30 hover:bg-[#F4C2A1]/20'
-                          }`}
-                        >
-                          {b.icon}
-                          <span>{b.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                {/* Step-2 customization studio — Background / Border / Frame ARE the
+                    step now (occasion-theme presets removed). One picker open at a
+                    time; Background is open by default so there's something to do. */}
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { key: 'bg' as const, label: 'Background', icon: <Palette className="w-4 h-4" /> },
+                    { key: 'border' as const, label: 'Border', icon: <Box className="w-4 h-4" /> },
+                    { key: 'frame' as const, label: 'Frame', icon: <Frame className="w-4 h-4" /> },
+                  ]).map((b) => {
+                    const open = activePicker === b.key;
+                    return (
+                      <button
+                        key={b.key}
+                        onClick={() => setActivePicker(open ? null : b.key)}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold border transition-all active:scale-[0.98] ${
+                          open
+                            ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-md'
+                            : 'bg-[#FFF8F0] text-[#2D2D2D] border-[#F4C2A1]/30 hover:bg-[#F4C2A1]/20'
+                        }`}
+                      >
+                        {b.icon}
+                        <span>{b.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* BACKGROUND picker — reuses RichBackgroundDesigner (colors,

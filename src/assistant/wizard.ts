@@ -59,7 +59,7 @@ export function phaseForStep(step: WizardStep): 'setup' | 'edit' | 'preview' {
 export const STEP_META: Record<WizardStep, { title: string; description: string; emoji: string }> = {
   welcome: { title: 'Welcome', description: 'Meet Megy and learn the basics', emoji: '👋' },
   pick_size: { title: 'Album Size', description: 'Choose your album dimensions', emoji: '📐' },
-  pick_background: { title: 'Background', description: 'Pick a color or texture', emoji: '🎨' },
+  pick_background: { title: 'Style', description: 'Background, border & frame', emoji: '🎨' },
   upload_photos: { title: 'Photos', description: 'Upload, then generate', emoji: '📸' },
   review_pages: { title: 'Review', description: 'Fine-tune each page', emoji: '🔍' },
   add_text: { title: 'Text', description: 'Add captions and quotes', emoji: '✍️' },
@@ -211,12 +211,12 @@ export class WizardEngine {
 
       case 'pick_background':
         return {
-          title: "Step 2: Pick a Theme 🎨",
-          body: `Pick a theme for your **${builder.albumSize}** album. Each theme styles the whole album for you — background, photo frames, and decorative touches — so it reads as the right occasion. You can fine-tune anything later.`,
-          /* The theme grid is rendered directly on the center stage; selecting a
-             theme dispatches apply_theme. No text actions needed here. */
+          title: "Step 2: Style Your Album 🎨",
+          body: `Style your ${builder.albumSize} album — set the background, the photo border, and a decorative frame. Each choice applies to the whole album, and you can fine-tune anything later.`,
+          /* Background / Border / Frame controls render on the center stage; each
+             dispatches set_background / set_border / set_frame. No text actions. */
           actions: [],
-          tips: ["A theme sets the whole look — background, frames, and corner art", "Pick the closest occasion; you can still tweak colors after"],
+          tips: ["Background = behind the page · Border = the line edge · Frame = around each photo", "You can change any of it later, on any page"],
         };
 
       case 'upload_photos':
