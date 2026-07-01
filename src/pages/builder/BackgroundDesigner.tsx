@@ -101,6 +101,29 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
         </span>
       </div>
 
+      {/* ─── OPACITY SLIDER — sits right under the live preview ─── */}
+      <div className="shrink-0 mb-2.5 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
+            <Droplets size={13} /> Opacity
+          </label>
+          <span className="text-xs text-stone-400 tabular-nums">
+            {Math.round((background.opacity ?? 100))}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={background.opacity ?? 100}
+          onChange={(e) =>
+            onChange({ ...background, opacity: Number(e.target.value) })
+          }
+          className="w-full cursor-pointer accent-rose-400"
+        />
+      </div>
+
       {/* Tab cards — 2×2 on mobile, 4-across on wider screens */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
         {TABS.map((t) => {
@@ -298,29 +321,6 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
           </motion.div>
         )}
       </AnimatePresence>
-      </div>
-
-      {/* ─── OPACITY SLIDER (all background types) ─── */}
-      <div className="shrink-0 pt-3 border-t border-stone-200 space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
-            <Droplets size={13} /> Opacity
-          </label>
-          <span className="text-xs text-stone-400 tabular-nums">
-            {Math.round((background.opacity ?? 100))}%
-          </span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={background.opacity ?? 100}
-          onChange={(e) =>
-            onChange({ ...background, opacity: Number(e.target.value) })
-          }
-          className="w-full cursor-pointer accent-rose-400"
-        />
       </div>
     </div>
   );
