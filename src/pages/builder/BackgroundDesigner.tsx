@@ -1,9 +1,10 @@
 import { useState, useId, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Paintbrush,
+  PaintBucket,
   Image,
-  GraduationCap,
+  Blend,
+  LayoutGrid,
   Check,
   Droplets,
   Upload,
@@ -16,10 +17,10 @@ import { resolveBgImageSrc } from './types';
 type BgTab = 'solid' | 'gradient' | 'image' | 'pattern';
 
 const TABS: { key: BgTab; label: string; icon: React.ReactNode; title: string }[] = [
-  { key: 'solid', label: 'Solid', title: 'Solid Color', icon: <Paintbrush size={14} /> },
-  { key: 'gradient', label: 'Gradient', title: 'Gradient', icon: <GraduationCap size={14} /> },
+  { key: 'solid', label: 'Solid', title: 'Solid Color', icon: <PaintBucket size={14} /> },
+  { key: 'gradient', label: 'Gradient', title: 'Gradient', icon: <Blend size={14} /> },
   { key: 'image', label: 'Image', title: 'Image Background', icon: <Image size={14} /> },
-  { key: 'pattern', label: 'Pattern', title: 'Pattern', icon: <Paintbrush size={14} /> },
+  { key: 'pattern', label: 'Pattern', title: 'Pattern', icon: <LayoutGrid size={14} /> },
 ];
 
 /* ─── Pattern definitions ─── */
@@ -116,13 +117,14 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
             key={t.key}
             onClick={() => setActiveTab(t.key)}
             title={t.title}
-            className={`flex-1 flex items-center justify-center py-1.5 rounded-md transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all ${
               activeTab === t.key
                 ? 'bg-white shadow-sm text-stone-900'
                 : 'text-stone-500 hover:text-stone-700'
             }`}
           >
             {t.icon}
+            <span>{t.label}</span>
           </button>
         ))}
       </div>
