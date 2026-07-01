@@ -343,17 +343,11 @@ export const ALBUM_SIZES: AlbumSizeConfig[] = [
 export const MATERIALS: { type: MaterialType; name: string; description: string; priceFactor: number }[] = [
   { type: 'matte', name: 'Matte', description: 'Soft, non-reflective finish. Elegant and understated.', priceFactor: 1.0 },
   { type: 'glossy', name: 'Glossy', description: 'Vibrant, shiny finish. Colors pop with a premium look.', priceFactor: 1.15 },
-  { type: 'semigloss', name: 'Semi-Gloss', description: 'Balanced sheen. Best of both matte and glossy worlds.', priceFactor: 1.25 },
-  { type: 'pearl', name: 'Pearl', description: 'Subtle shimmer with metallic warmth. Truly special.', priceFactor: 1.5 },
-  { type: 'linen', name: 'Linen', description: 'Textured paper with a classic, tactile feel.', priceFactor: 1.35 },
 ];
 
 export const COVERS: { type: CoverType; name: string; description: string; priceFactor: number }[] = [
   { type: 'softcover', name: 'Softcover', description: 'Flexible, lightweight cover. Perfect for casual albums.', priceFactor: 1.0 },
-  { type: 'hardboundLeather', name: 'Hardbound Leather', description: 'Durable hard cover with genuine leather feel.', priceFactor: 1.8 },
-  { type: 'hardboundLinen', name: 'Hardbound Linen', description: 'Classic hard cover wrapped in textured linen.', priceFactor: 1.6 },
-  { type: 'premiumVelvet', name: 'Premium Velvet', description: 'Luxurious velvet touch cover. Our finest option.', priceFactor: 2.2 },
-  { type: 'acrylicLayflat', name: 'Acrylic Layflat', description: 'Crystal clear acrylic with layflat pages. Ultra-premium.', priceFactor: 2.8 },
+  { type: 'hardboundLeather', name: 'Hardbound', description: 'Durable hard cover with genuine leather feel.', priceFactor: 1.8 },
 ];
 
 export const FILTER_PRESETS: { name: string; filters: Partial<PhotoFilters> }[] = [
