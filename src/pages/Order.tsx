@@ -7,6 +7,7 @@ import { MATERIALS, COVERS, ALBUM_SIZES, PRICE_CONFIG } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { createOrderFromLatestAlbum, uploadOrderPrintPdf } from '../lib/orders';
 import { getPendingPrintJob } from '../lib/printQueue';
+import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, normalizeAddress, isValidAddress } from '../lib/contact';
 
 type Step = 'form' | 'payment' | 'tracking';
 
@@ -27,7 +28,7 @@ export default function Order() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [step, setStep] = useState<Step>('form');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -45,12 +46,23 @@ export default function Order() {
   // ── Form → Payment ──
   const handleProceedToPayment = () => {
     setErrorMsg('');
-    const newErrors: Record<string, boolean> = {};
-    if (!name.trim()) newErrors.name = true;
-    if (!phone.trim()) newErrors.phone = true;
-    if (!address.trim()) newErrors.address = true;
+    const cleanName = normalizeFullName(name);
+    const canonicalPhone = normalizePHPhone(phone);
+    const cleanAddress = normalizeAddress(address);
+
+    const newErrors: Record<string, string> = {};
+    if (!isValidFullName(cleanName)) newErrors.name = 'Please enter your full name.';
+    if (!canonicalPhone) newErrors.phone = 'Enter a valid PH mobile number, e.g. 0917 123 4567.';
+    if (!isValidAddress(cleanAddress)) newErrors.address = 'Enter your complete delivery address (street, barangay, city).';
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
+
+    // Reflect the cleaned/canonical values back so the user sees exactly what
+    // we'll store (and the order later re-derives the same E.164 phone).
+    setName(cleanName);
+    setPhone(formatPHPhoneDisplay(canonicalPhone!));
+    setAddress(cleanAddress);
+
     if (!user) {
       setErrorMsg('Please sign in to place your order — that\'s how we tie it to your album and contact you.');
       return;
@@ -68,7 +80,13 @@ export default function Order() {
       const order = await createOrderFromLatestAlbum({
         userId: user!.id,
         specs: { material, cover, size },
-        shipping: { name: name.trim(), phone: phone.trim(), address: address.trim() },
+        // Store canonical, DB-friendly values: collapsed name, E.164 phone,
+        // normalized multi-line address.
+        shipping: {
+          name: normalizeFullName(name),
+          phone: normalizePHPhone(phone) ?? normalizeFullName(phone),
+          address: normalizeAddress(address),
+        },
         amount: totalPrice,
       });
       setOrderNumber(order.order_number);
@@ -244,18 +262,31 @@ export default function Order() {
               <div className="space-y-3">
                 <div>
                   <label className="text-xs text-[#6B6B6B] mb-1 block">Full Name</label>
-                  <input value={name} onChange={(e) => setName(e.target.value)}
+                  <input value={name}
+                    onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: '' })); }}
+                    autoComplete="name" maxLength={80}
+                    aria-invalid={!!errors.name}
                     className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.name ? 'border-red-400' : 'border-[#E8E8E8]'}`} placeholder="Juan Dela Cruz" />
+                  {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
                 </div>
                 <div>
                   <label className="text-xs text-[#6B6B6B] mb-1 block">Phone Number</label>
-                  <input value={phone} onChange={(e) => setPhone(e.target.value)}
+                  <input value={phone}
+                    onChange={(e) => { setPhone(e.target.value); if (errors.phone) setErrors((p) => ({ ...p, phone: '' })); }}
+                    onBlur={() => { const c = normalizePHPhone(phone); if (c) setPhone(formatPHPhoneDisplay(c)); }}
+                    inputMode="tel" autoComplete="tel" maxLength={20}
+                    aria-invalid={!!errors.phone}
                     className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.phone ? 'border-red-400' : 'border-[#E8E8E8]'}`} placeholder="+63 9XX XXX XXXX" />
+                  {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                 </div>
                 <div>
                   <label className="text-xs text-[#6B6B6B] mb-1 block">Delivery Address</label>
-                  <textarea value={address} onChange={(e) => setAddress(e.target.value)}
+                  <textarea value={address}
+                    onChange={(e) => { setAddress(e.target.value); if (errors.address) setErrors((p) => ({ ...p, address: '' })); }}
+                    autoComplete="street-address" maxLength={500}
+                    aria-invalid={!!errors.address}
                     className={`w-full border rounded-lg px-3 py-2 text-sm h-20 resize-none ${errors.address ? 'border-red-400' : 'border-[#E8E8E8]'}`} placeholder="Complete address..." />
+                  {errors.address && <p className="text-xs text-red-500 mt-1">{errors.address}</p>}
                 </div>
               </div>
             </div>
