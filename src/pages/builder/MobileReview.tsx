@@ -23,6 +23,18 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [finishing, setFinishing] = useState(false);
   const [replaceSlot, setReplaceSlot] = useState<number | null>(null); // tap-to-replace target
   const [editSlot, setEditSlot] = useState<number | null>(null); // tap-to-edit-text target
+  const [editTextId, setEditTextId] = useState<string | null>(null); // tap-to-edit free text (theme title)
+
+  // Seed the editor from a FREE text element (e.g. the theme title) by id.
+  const buildTextInitial = (textId: string): BoxTextContent => {
+    const el = page?.textElements?.find((t) => t.id === textId);
+    return {
+      text: el?.text ?? '', fontSize: el?.fontSize ?? 28,
+      fontFamily: el?.fontFamily ?? 'Georgia, "Times New Roman", serif',
+      color: el?.color ?? '#2D2D2D', bold: el?.bold ?? false, italic: el?.italic ?? false,
+      underline: el?.underline ?? false, alignment: el?.alignment ?? 'center',
+    };
+  };
 
   // Seed the editor from the box's existing text, or the template's defaults.
   const template = page?.templateId ? getTemplateById(page.templateId) : null;
@@ -109,7 +121,8 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               editable
               onAddToSlot={(slotIndex) => setReplaceSlot(slotIndex)}
               onRemoveFromSlot={(slotIndex) => actions.clearSlot(slotIndex)}
-              onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)} />}
+              onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)}
+              onTextTap={(textId) => setEditTextId(textId)} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -180,6 +193,14 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           initial={buildInitial(editSlot)}
           onSave={(content) => actions.setBoxText(editSlot, content)}
           onClose={() => setEditSlot(null)}
+        />
+      )}
+      {/* Free text (theme title) → saves by id so the font/color/text stick. */}
+      {editTextId !== null && (
+        <MobileTextEditor
+          initial={buildTextInitial(editTextId)}
+          onSave={(content) => actions.updateTextElement(editTextId, content)}
+          onClose={() => setEditTextId(null)}
         />
       )}
     </div>

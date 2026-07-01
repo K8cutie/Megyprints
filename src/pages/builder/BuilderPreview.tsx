@@ -74,10 +74,12 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, editable, onAddToSlot, onRemoveFromSlot }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, editable, onAddToSlot, onRemoveFromSlot }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
+  /** Tap a FREE text element (e.g. the auto-placed theme title) to edit it by id. */
+  onTextTap?: (id: string) => void;
   // Mobile edit mode: empty frames show a "+" to add a photo; filled frames show
   // a trashcan to remove it.
   editable?: boolean;
@@ -180,8 +182,11 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         );
       })}
       {page.textElements?.filter((t) => t.boxIndex == null).map((t, i) => (
-        <div key={`txt-${i}`} className="absolute pointer-events-none" style={{
-          zIndex: 2, left: t.x * sx, top: t.y * sy,
+        <div key={`txt-${i}`}
+          className={`absolute ${onTextTap ? 'cursor-pointer' : 'pointer-events-none'}`}
+          onClick={onTextTap ? (e) => { e.stopPropagation(); onTextTap(t.id); } : undefined}
+          style={{
+          zIndex: 3, left: t.x * sx, top: t.y * sy,
           width: (t.width || t.text.length * (t.fontSize || 24) * 0.6) * sx,
           transform: `rotate(${t.rotation || 0}deg) scale(${t.scaleX ?? 1}, ${t.scaleY ?? 1})`,
           transformOrigin: 'top left', fontFamily: t.fontFamily || 'serif',
@@ -265,10 +270,20 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
   const total = pages.length;
-  const { setBoxText } = useBuilderContext();
+  const { setBoxText, updateTextElement } = useBuilderContext();
 
   // Tap a textbox in the preview → open the formatting editor for THAT page.
-  const [edit, setEdit] = useState<{ pageIndex: number; slot: number } | null>(null);
+  // `slot` = a template caption box; `textId` = a free element (e.g. the theme title).
+  const [edit, setEdit] = useState<{ pageIndex: number; slot?: number; textId?: string } | null>(null);
+  const buildTextInitial = (pageIndex: number, textId: string): BoxTextContent => {
+    const el = pages[pageIndex]?.textElements?.find((t) => t.id === textId);
+    return {
+      text: el?.text ?? '', fontSize: el?.fontSize ?? 28,
+      fontFamily: el?.fontFamily ?? 'Georgia, "Times New Roman", serif',
+      color: el?.color ?? '#2D2D2D', bold: el?.bold ?? false, italic: el?.italic ?? false,
+      underline: el?.underline ?? false, alignment: el?.alignment ?? 'center',
+    };
+  };
   const buildBoxInitial = (pageIndex: number, slot: number): BoxTextContent => {
     const page = pages[pageIndex];
     const existing = page?.textElements?.find((t) => t.boxIndex === slot);
@@ -393,7 +408,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               {/* Left Page */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
                 <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex}
-                  onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })} />
+                  onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
+                  onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })} />
               </div>
 
               {/* Right Page — flush against the left page (no center gap/spine;
@@ -401,7 +417,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               {spreadRightPage && (
                 <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
                   <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1}
-                    onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })} />
+                    onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })}
+                    onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })} />
                 </div>
               )}
             </div>
@@ -442,11 +459,16 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         </div>
       )}
 
-      {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too) */}
+      {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too).
+          A caption box saves via setBoxText(slot); a free element (theme title)
+          saves via updateTextElement(id) so its font/color/text actually stick. */}
       {edit && (
         <MobileTextEditor
-          initial={buildBoxInitial(edit.pageIndex, edit.slot)}
-          onSave={(content) => setBoxText(edit.slot, content, edit.pageIndex)}
+          initial={edit.textId != null ? buildTextInitial(edit.pageIndex, edit.textId) : buildBoxInitial(edit.pageIndex, edit.slot!)}
+          onSave={(content) => {
+            if (edit.textId != null) updateTextElement(edit.textId, content);
+            else setBoxText(edit.slot!, content, edit.pageIndex);
+          }}
           onClose={() => setEdit(null)}
         />
       )}

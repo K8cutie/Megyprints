@@ -1640,8 +1640,11 @@ export function useBuilderState(): BuilderActions {
       ...p,
       textElements: p.textElements.map((t) => {
         if (!t.id.startsWith('theme-title')) return t;
-        const newText = defaultTitles.includes(t.text) ? text : t.text;
-        return { ...t, fontFamily, color, text: newText };
+        // Once the user personalizes the title (types their own words), it's
+        // theirs — keep its text, font AND color. Only auto-restyle a title that
+        // still shows a theme default, so re-theming never wipes a chosen font.
+        if (!defaultTitles.includes(t.text)) return t;
+        return { ...t, fontFamily, color, text };
       }),
     })));
   }, []);
