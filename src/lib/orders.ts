@@ -10,6 +10,7 @@
 import { supabase } from './supabase';
 import { generateAlbumPdf } from '../pages/builder/generateAlbumPdf';
 import type { PrintJob } from './printQueue';
+import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeAddress, isValidAddress } from './contact';
 
 export interface ShippingDetails {
   name: string;
@@ -55,6 +56,17 @@ export async function createOrderFromLatestAlbum(opts: {
 
   const pageCount = Array.isArray(album.pages) ? album.pages.length : 0;
 
+  // Normalize + validate shipping at the data boundary so EVERY caller (not just
+  // the checkout form) stores canonical, DB-friendly values. The `orders` table
+  // also enforces these via CHECK constraints (migration 0009) as a final
+  // backstop against a bypassing client.
+  const shipName = normalizeFullName(opts.shipping.name);
+  const shipPhone = normalizePHPhone(opts.shipping.phone);
+  const shipAddress = normalizeAddress(opts.shipping.address);
+  if (!isValidFullName(shipName) || !shipPhone || !isValidAddress(shipAddress)) {
+    throw new Error('Please provide a valid name, PH mobile number, and complete delivery address.');
+  }
+
   // 2. Insert the order as an UNPAID quote. order_number + status come from DB
   //    defaults. We deliberately do NOT send `amount` or `status` here: price is
   //    set server-side by the operator (service_role) at the "mark as paid" step,
@@ -71,9 +83,9 @@ export async function createOrderFromLatestAlbum(opts: {
       material: opts.specs.material,
       cover: opts.specs.cover,
       page_count: pageCount,
-      ship_name: opts.shipping.name,
-      ship_phone: opts.shipping.phone,
-      ship_address: opts.shipping.address,
+      ship_name: shipName,
+      ship_phone: shipPhone,       // canonical E.164 (+639XXXXXXXXX)
+      ship_address: shipAddress,
       status_history: [{ status: 'pending_payment', at: new Date().toISOString() }],
     })
     .select('id, order_number, status')
