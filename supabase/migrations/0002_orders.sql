@@ -17,7 +17,9 @@ create sequence if not exists public.orders_seq;
 
 -- ══════ 3. Orders table ══════
 create table if not exists public.orders (
-  id uuid default uuid_generate_v4() primary key,
+  -- gen_random_uuid() is Postgres-native (PG13+) — no uuid-ossp extension /
+  -- search_path dependency, so it resolves under the CLI's migration role too.
+  id uuid default gen_random_uuid() primary key,
   -- MP-2026-0001 — generated server-side so the client never sets it
   order_number text unique not null
     default ('MP-' || to_char(now(),'YYYY') || '-' || lpad(nextval('public.orders_seq')::text, 4, '0')),
