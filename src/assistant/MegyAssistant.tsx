@@ -481,24 +481,24 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 {/* Step-2 customization studio — Background / Border / Frame ARE the
                     step now (occasion-theme presets removed). One picker open at a
                     time; Background is open by default so there's something to do. */}
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
                   {([
-                    { key: 'bg' as const, label: 'Background', icon: <Palette className="w-4 h-4" /> },
-                    { key: 'border' as const, label: 'Border', icon: <Box className="w-4 h-4" /> },
-                    { key: 'frame' as const, label: 'Frame', icon: <Frame className="w-4 h-4" /> },
+                    { key: 'bg' as const, label: 'Background', icon: <Palette className="w-6 h-6" /> },
+                    { key: 'border' as const, label: 'Border', icon: <Box className="w-6 h-6" /> },
+                    { key: 'frame' as const, label: 'Frame', icon: <Frame className="w-6 h-6" /> },
                   ]).map((b) => {
                     const open = activePicker === b.key;
                     return (
                       <button
                         key={b.key}
                         onClick={() => setActivePicker(open ? null : b.key)}
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold border transition-all active:scale-[0.98] ${
+                        className={`flex flex-col items-center justify-center gap-2 py-4 px-2 rounded-2xl border-2 text-sm sm:text-base font-semibold transition-all active:scale-[0.98] ${
                           open
-                            ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-md'
-                            : 'bg-[#FFF8F0] text-[#2D2D2D] border-[#F4C2A1]/30 hover:bg-[#F4C2A1]/20'
+                            ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-lg'
+                            : 'bg-white text-[#2D2D2D] border-[#F4C2A1]/40 hover:border-[#F4C2A1] hover:bg-[#F4C2A1]/10 shadow-sm'
                         }`}
                       >
-                        {b.icon}
+                        <span className={open ? 'text-white' : 'text-[#E8A598]'}>{b.icon}</span>
                         <span>{b.label}</span>
                       </button>
                     );
