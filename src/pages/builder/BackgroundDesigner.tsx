@@ -87,15 +87,6 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
     { type: 'radial' as const, angle: 0, stops: [{ color: '#FFFBF7', offset: 0 }, { color: '#E7E5E4', offset: 1 }] },
   ];
 
-  /* Image presets */
-  const IMAGE_PRESETS = [
-    { id: 'paper', name: 'Paper', css: 'linear-gradient(135deg, #F5F5F0 0%, #E8E8E0 100%)' },
-    { id: 'linen', name: 'Linen', css: 'linear-gradient(135deg, #E8E0D8 0%, #D8D0C8 100%)' },
-    { id: 'leather', name: 'Leather', css: 'linear-gradient(135deg, #8B4513 0%, #A0522D 100%)' },
-    { id: 'marble', name: 'Marble', css: 'linear-gradient(135deg, #F8F8F8 0%, #E0E0E0 50%, #F0F0F0 100%)' },
-    { id: 'wood', name: 'Wood', css: 'linear-gradient(135deg, #DEB887 0%, #CD853F 100%)' },
-  ];
-
   return (
     <div className="w-full flex flex-col h-full">
       {/* Live page preview — shows the real background WITH opacity over the
@@ -262,9 +253,9 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full py-2.5 border-2 border-dashed border-rose-300 rounded-lg text-rose-500 text-xs font-medium hover:bg-rose-50 transition-all flex items-center justify-center gap-1.5"
+              className="w-full py-8 border-2 border-dashed border-rose-300 rounded-xl text-rose-500 text-sm font-semibold hover:bg-rose-50 transition-all flex flex-col items-center justify-center gap-2"
             >
-              <Upload size={14} /> Upload Custom Image
+              <Upload size={28} /> Upload Custom Image
             </button>
 
             {/* The uploaded image is shown big in the Page preview above —
@@ -277,32 +268,6 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
                 <X size={12} /> Remove custom image
               </button>
             )}
-
-            {/* Preset thumbnails */}
-            <p className="text-[10px] text-stone-400 font-medium uppercase tracking-wider">Presets</p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {IMAGE_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  onClick={() => onChange({ type: 'image', image: preset.css })}
-                  className={`relative w-full aspect-square rounded-lg border-2 overflow-hidden transition-all ${
-                    background.type === 'image' && background.image === preset.css
-                      ? 'border-rose-400 shadow'
-                      : 'border-transparent hover:scale-105'
-                  }`}
-                >
-                  <div className="w-full h-full" style={{ background: preset.css }} />
-                  {background.type === 'image' && background.image === preset.css && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                      <Check size={16} className="text-white" />
-                    </div>
-                  )}
-                  <span className="absolute bottom-0 left-0 right-0 text-[9px] text-white bg-black/40 px-1 py-0.5 truncate">
-                    {preset.name}
-                  </span>
-                </button>
-              ))}
-            </div>
           </motion.div>
         )}
 
