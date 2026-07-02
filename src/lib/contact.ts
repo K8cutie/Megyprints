@@ -46,8 +46,62 @@ export function normalizeAddress(raw: string): string {
     .trim();
 }
 
-/** A usable delivery address: 10–500 chars after normalization. */
+/** A usable delivery address: 10–500 chars after normalization. Used as the
+ *  length backstop on the COMPOSED address string (see composeAddress). */
 export function isValidAddress(raw: string): boolean {
   const a = normalizeAddress(raw);
   return a.length >= 10 && a.length <= 500;
+}
+
+/* ── Structured PH delivery address ────────────────────────────────────────
+   Captured via cascading PSGC pickers (region→province→city→barangay) + a
+   free-text street line + ZIP, so every order has a real, routable location
+   instead of a free-text blob a courier can't act on. */
+export interface AddressValue {
+  regionCode: string; regionName: string;
+  provinceCode: string; provinceName: string;
+  cityCode: string; cityName: string;
+  barangayCode: string; barangayName: string;
+  street: string; // house/unit no. + street
+  zip: string;    // 4-digit PH ZIP
+}
+
+export const EMPTY_ADDRESS: AddressValue = {
+  regionCode: '', regionName: '', provinceCode: '', provinceName: '',
+  cityCode: '', cityName: '', barangayCode: '', barangayName: '', street: '', zip: '',
+};
+
+export const normalizeStreet = (raw: string): string => raw.replace(/\s+/g, ' ').trim();
+
+export const isValidZip = (zip: string): boolean => /^\d{4}$/.test((zip || '').trim());
+
+/** Per-field validation for the UI. Empty object = valid. */
+export function validateAddress(a: AddressValue): Partial<Record<keyof AddressValue, string>> {
+  const e: Partial<Record<keyof AddressValue, string>> = {};
+  if (!a.regionCode) e.regionCode = 'Select a region.';
+  if (!a.provinceCode) e.provinceCode = 'Select a province.';
+  if (!a.cityCode) e.cityCode = 'Select a city / municipality.';
+  if (!a.barangayCode) e.barangayCode = 'Select a barangay.';
+  const st = normalizeStreet(a.street);
+  if (st.length < 3) e.street = 'Enter house/unit no. and street.';
+  else if (st.length > 120) e.street = 'Street is too long (max 120).';
+  if (!isValidZip(a.zip)) e.zip = 'Enter a 4-digit ZIP code.';
+  return e;
+}
+
+export const isValidStructuredAddress = (a: AddressValue): boolean =>
+  Object.keys(validateAddress(a)).length === 0;
+
+/** Canonical single-line address stored on the order (street → barangay → city
+ *  → province → ZIP). Region is kept in structured storage but omitted here, per
+ *  PH addressing convention. */
+export function composeAddress(a: AddressValue): string {
+  const parts = [
+    normalizeStreet(a.street),
+    a.barangayName ? `Brgy. ${a.barangayName}` : '',
+    a.cityName,
+    a.provinceName,
+  ].filter(Boolean);
+  const line = parts.join(', ');
+  return a.zip ? `${line} ${a.zip.trim()}` : line;
 }

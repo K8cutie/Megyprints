@@ -10,12 +10,13 @@
 import { supabase } from './supabase';
 import { generateAlbumPdf } from '../pages/builder/generateAlbumPdf';
 import type { PrintJob } from './printQueue';
-import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeAddress, isValidAddress } from './contact';
+import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
 
 export interface ShippingDetails {
   name: string;
   phone: string;
-  address: string;
+  /** Structured PH address captured via the cascading PSGC picker. */
+  address: AddressValue;
 }
 
 export interface OrderSpecs {
@@ -58,14 +59,17 @@ export async function createOrderFromLatestAlbum(opts: {
 
   // Normalize + validate shipping at the data boundary so EVERY caller (not just
   // the checkout form) stores canonical, DB-friendly values. The `orders` table
-  // also enforces these via CHECK constraints (migration 0009) as a final
+  // also enforces these via CHECK constraints (migrations 0009/0010) as a final
   // backstop against a bypassing client.
   const shipName = normalizeFullName(opts.shipping.name);
   const shipPhone = normalizePHPhone(opts.shipping.phone);
-  const shipAddress = normalizeAddress(opts.shipping.address);
-  if (!isValidFullName(shipName) || !shipPhone || !isValidAddress(shipAddress)) {
+  const addr = opts.shipping.address;
+  if (!isValidFullName(shipName) || !shipPhone || !isValidStructuredAddress(addr)) {
     throw new Error('Please provide a valid name, PH mobile number, and complete delivery address.');
   }
+  // Canonical single-line address for the operator/courier + the structured PSGC
+  // parts (queryable, routable). Names come straight from PSGC so they're clean.
+  const shipAddress = composeAddress(addr);
 
   // 2. Insert the order as an UNPAID quote. order_number + status come from DB
   //    defaults. We deliberately do NOT send `amount` or `status` here: price is
@@ -85,7 +89,13 @@ export async function createOrderFromLatestAlbum(opts: {
       page_count: pageCount,
       ship_name: shipName,
       ship_phone: shipPhone,       // canonical E.164 (+639XXXXXXXXX)
-      ship_address: shipAddress,
+      ship_address: shipAddress,   // composed single-line
+      ship_region: addr.regionName,
+      ship_province: addr.provinceName,
+      ship_city: addr.cityName,
+      ship_barangay: addr.barangayName,
+      ship_street: normalizeStreet(addr.street),
+      ship_zip: addr.zip.trim(),
       status_history: [{ status: 'pending_payment', at: new Date().toISOString() }],
     })
     .select('id, order_number, status')

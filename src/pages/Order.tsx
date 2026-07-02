@@ -7,7 +7,8 @@ import { MATERIALS, COVERS, ALBUM_SIZES, PRICE_CONFIG } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { createOrderFromLatestAlbum, uploadOrderPrintPdf } from '../lib/orders';
 import { getPendingPrintJob } from '../lib/printQueue';
-import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, normalizeAddress, isValidAddress } from '../lib/contact';
+import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, validateAddress, EMPTY_ADDRESS, type AddressValue } from '../lib/contact';
+import AddressPicker from '../components/AddressPicker';
 
 type Step = 'form' | 'payment' | 'tracking';
 
@@ -27,8 +28,9 @@ export default function Order() {
   const [size, setSize] = useState<AlbumSizePreset>('8x8');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
+  const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [addressErrors, setAddressErrors] = useState<Partial<Record<keyof AddressValue, string>>>({});
   const [step, setStep] = useState<Step>('form');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -48,20 +50,19 @@ export default function Order() {
     setErrorMsg('');
     const cleanName = normalizeFullName(name);
     const canonicalPhone = normalizePHPhone(phone);
-    const cleanAddress = normalizeAddress(address);
+    const addrErrs = validateAddress(address);
 
     const newErrors: Record<string, string> = {};
     if (!isValidFullName(cleanName)) newErrors.name = 'Please enter your full name.';
     if (!canonicalPhone) newErrors.phone = 'Enter a valid PH mobile number, e.g. 0917 123 4567.';
-    if (!isValidAddress(cleanAddress)) newErrors.address = 'Enter your complete delivery address (street, barangay, city).';
     setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) return;
+    setAddressErrors(addrErrs);
+    if (Object.keys(newErrors).length > 0 || Object.keys(addrErrs).length > 0) return;
 
     // Reflect the cleaned/canonical values back so the user sees exactly what
     // we'll store (and the order later re-derives the same E.164 phone).
     setName(cleanName);
     setPhone(formatPHPhoneDisplay(canonicalPhone!));
-    setAddress(cleanAddress);
 
     if (!user) {
       setErrorMsg('Please sign in to place your order — that\'s how we tie it to your album and contact you.');
@@ -80,13 +81,9 @@ export default function Order() {
       const order = await createOrderFromLatestAlbum({
         userId: user!.id,
         specs: { material, cover, size },
-        // Store canonical, DB-friendly values: collapsed name, E.164 phone,
-        // normalized multi-line address.
-        shipping: {
-          name: normalizeFullName(name),
-          phone: normalizePHPhone(phone) ?? normalizeFullName(phone),
-          address: normalizeAddress(address),
-        },
+        // createOrderFromLatestAlbum normalizes name/phone + composes the address
+        // from these structured PSGC parts (single source of truth).
+        shipping: { name, phone, address },
         amount: totalPrice,
       });
       setOrderNumber(order.order_number);
@@ -280,13 +277,12 @@ export default function Order() {
                   {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-[#6B6B6B] mb-1 block">Delivery Address</label>
-                  <textarea value={address}
-                    onChange={(e) => { setAddress(e.target.value); if (errors.address) setErrors((p) => ({ ...p, address: '' })); }}
-                    autoComplete="street-address" maxLength={500}
-                    aria-invalid={!!errors.address}
-                    className={`w-full border rounded-lg px-3 py-2 text-sm h-20 resize-none ${errors.address ? 'border-red-400' : 'border-[#E8E8E8]'}`} placeholder="Complete address..." />
-                  {errors.address && <p className="text-xs text-red-500 mt-1">{errors.address}</p>}
+                  <label className="text-xs text-[#6B6B6B] mb-2 block">Delivery Address</label>
+                  <AddressPicker
+                    value={address}
+                    onChange={(v) => { setAddress(v); if (Object.keys(addressErrors).length) setAddressErrors({}); }}
+                    errors={addressErrors}
+                  />
                 </div>
               </div>
             </div>
