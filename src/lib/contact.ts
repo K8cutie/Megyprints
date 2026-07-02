@@ -85,6 +85,7 @@ export function validateAddress(a: AddressValue): Partial<Record<keyof AddressVa
   const st = normalizeStreet(a.street);
   if (st.length < 3) e.street = 'Enter house/unit no. and street.';
   else if (st.length > 120) e.street = 'Street is too long (max 120).';
+  else if (!/[\p{L}\p{N}]/u.test(st)) e.street = 'Enter a real street (letters or numbers).';
   if (!isValidZip(a.zip)) e.zip = 'Enter a 4-digit ZIP code.';
   return e;
 }
