@@ -84,8 +84,7 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
             </div>
           )}
           <p className="text-xs text-[#6B6B6B]">
-            Add a video link for your album — scan the printed QR to open it, then re-point it anytime
-            <span className="font-medium text-[#8B6F47]"> without reprinting</span>.
+            <span className="font-medium text-[#8B6F47]">Bring your album to life</span> — add a video that plays when anyone scans the QR on your printed page.
           </p>
           <div>
             <label className="text-xs text-[#6B6B6B] mb-1 block">Video link</label>
