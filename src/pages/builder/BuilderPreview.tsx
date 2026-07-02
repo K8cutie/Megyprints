@@ -156,22 +156,40 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         if (!uploaded) {
           const onEmptyTap = onChooseSlot ?? onAddToSlot;
           if (!editable || !onEmptyTap) return null;
+          // Where the 3-way chooser is wired (onChooseSlot) and the slot is big
+          // enough, spell out what the box can hold ("Click to add: Photo/Text/QR")
+          // instead of a bare "+"; otherwise fall back to the "+" bubble.
+          const cell = Math.min(slotW, slotH);
+          const showList = !!onChooseSlot && cell >= 84;
+          const fs = Math.max(9, Math.min(13, cell * 0.1));
           return (
-            <div key={`slot-${idx}`} className="absolute flex items-center justify-center"
+            <div key={`slot-${idx}`} className="absolute flex flex-col items-center justify-center text-center"
               onClick={(e) => { e.stopPropagation(); onEmptyTap(idx); }}
               style={{
                 zIndex: 1, left: slotLeft, top: slotTop,
                 width: slotW, height: slotH,
                 border: '2px dashed rgba(232,165,152,0.85)', borderRadius: 10,
                 background: 'rgba(253,232,228,0.5)', cursor: 'pointer', boxSizing: 'border-box',
+                color: '#B5674F', padding: 6, gap: `${3 * sx}px`, overflow: 'hidden',
               }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
-              }}>
-                <Plus size={26} color="white" />
-              </div>
+              {showList ? (
+                <>
+                  <span style={{ fontWeight: 700, fontSize: fs * 1.08, whiteSpace: 'nowrap' }}>Click to add:</span>
+                  <div style={{ fontSize: fs, fontWeight: 600, lineHeight: 1.55, textAlign: 'left' }}>
+                    <div>•&nbsp; Photo</div>
+                    <div>•&nbsp; Text</div>
+                    <div>•&nbsp; QR</div>
+                  </div>
+                </>
+              ) : (
+                <div style={{
+                  width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
+                }}>
+                  <Plus size={26} color="white" />
+                </div>
+              )}
             </div>
           );
         }

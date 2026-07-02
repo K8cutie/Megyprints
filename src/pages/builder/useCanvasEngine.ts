@@ -1378,20 +1378,24 @@ function renderTemplateSlots(
       slotRect.slotIndex = i;
       canvas.add(slotRect);
 
-      const plusText = new fab.Text('+', {
-        left: sx + sw / 2,
-        top: sy + sh / 2,
-        originX: 'center',
-        originY: 'center',
-        fontSize: Math.max(24, Math.min(sw, sh) * 0.3),
-        fontFamily: '"DM Sans", sans-serif',
-        fontWeight: 'bold',
-        fill: '#E8A598',
-        selectable: false,
-        evented: false,
-      });
-      plusText.slotId = `${SLOT_ID}-plus-${i}`;
-      canvas.add(plusText);
+      // Spell out what an empty box can hold (chooser: Photo/Text/QR) when the
+      // slot is big enough; fall back to a bare "+" in tight cells.
+      const cell = Math.min(sw, sh);
+      const hint = cell >= 120
+        ? new fab.Text('Click to add:\n•  Photo\n•  Text\n•  QR', {
+            left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center',
+            fontSize: Math.max(11, Math.min(15, cell * 0.085)),
+            fontFamily: '"DM Sans", sans-serif', fontWeight: '600', fill: '#C4826A',
+            textAlign: 'center', lineHeight: 1.4, selectable: false, evented: false,
+          })
+        : new fab.Text('+', {
+            left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center',
+            fontSize: Math.max(24, cell * 0.3),
+            fontFamily: '"DM Sans", sans-serif', fontWeight: 'bold', fill: '#E8A598',
+            selectable: false, evented: false,
+          });
+      hint.slotId = `${SLOT_ID}-plus-${i}`;
+      canvas.add(hint);
 
       slotRect.on('mousedown', () => onSlotClick(i));
     }
