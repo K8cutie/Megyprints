@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, QrCode } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2 } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
 import { dedupeSlotFills } from './slotUtils';
@@ -77,7 +77,7 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, editable, onAddToSlot, onRemoveFromSlot }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -85,6 +85,11 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   onTextTap?: (id: string) => void;
   /** Tap a QR living-memory slot (empty → add; filled → edit). Present only in editable contexts. */
   onQrSlotTap?: (slotIndex: number) => void;
+  /** Tap a filled per-slot TEXT to re-open its editor. Present only in editable contexts. */
+  onSlotTextTap?: (slotIndex: number) => void;
+  /** Tap an EMPTY slot's "+" → open the content chooser (photo / text / QR).
+   *  When present, this SUPERSEDES onAddToSlot for empty slots. */
+  onChooseSlot?: (slotIndex: number) => void;
   // Mobile edit mode: empty frames show a "+" to add a photo; filled frames show
   // a trashcan to remove it.
   editable?: boolean;
@@ -108,22 +113,55 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
       <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
       {template && template.slots.map((slot, idx) => {
         if (!slot) return null;
-        // QR slots are rendered by the qrFills map below — never as a photo slot.
-        // Iterating template.slots (not slotFills) also means a freshly-picked
-        // template shows a tappable "+" for every empty photo slot immediately.
-        if (slot.kind === 'qr') return null;
+        // Content precedence is DRIVEN BY page data, not slot.kind:
+        //   qrFills[i] → QR (drawn by the qrFills map below) → skip here.
+        //   slotTexts[i] → text rendered in this slot's rect.
+        //   slotFills[i] → photo.
+        //   else empty + editable → a "+" that opens the content chooser.
+        if (page.qrFills?.[idx]) return null;
+        const slotLeft = safeX + slot.x * safeW;
+        const slotTop = safeY + slot.y * safeH;
+        const slotW = slot.width * safeW;
+        const slotH = slot.height * safeH;
+
+        // (b) Per-slot TEXT — mirrors the box-text span styling below.
+        const st = page.slotTexts?.[idx] ?? null;
+        if (st) {
+          const align = st.alignment ?? 'center';
+          return (
+            <div key={`slot-${idx}`}
+              className={`absolute flex items-center ${onSlotTextTap ? 'cursor-pointer' : ''}`}
+              onClick={onSlotTextTap ? (e) => { e.stopPropagation(); onSlotTextTap(idx); } : undefined}
+              style={{
+                zIndex: 1, left: slotLeft, top: slotTop, width: slotW, height: slotH, overflow: 'hidden',
+                justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
+              }}>
+              <span style={{
+                width: '100%', textAlign: align as any,
+                fontFamily: st.fontFamily || 'serif', fontSize: (st.fontSize || 24) * sx,
+                fontWeight: st.bold ? 'bold' : 'normal', fontStyle: st.italic ? 'italic' : 'normal',
+                textDecoration: st.underline ? 'underline' : 'none', color: st.color || '#2D2D2D',
+                lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              }}>{st.text}</span>
+            </div>
+          );
+        }
+
         const photoIdx = dedupeSlotFills(page.slotFills)[idx] ?? null;
         const uploaded = photoIdx != null ? photos[photoIdx] : undefined;
 
-        // Empty frame → in edit mode, a tappable dashed frame with a "+" to add.
+        // Empty frame → in edit mode, a tappable dashed frame with a "+".
+        // The "+" opens the content chooser (onChooseSlot) when wired, else the
+        // legacy add-photo picker (onAddToSlot).
         if (!uploaded) {
-          if (!editable) return null;
+          const onEmptyTap = onChooseSlot ?? onAddToSlot;
+          if (!editable || !onEmptyTap) return null;
           return (
             <div key={`slot-${idx}`} className="absolute flex items-center justify-center"
-              onClick={onAddToSlot ? (e) => { e.stopPropagation(); onAddToSlot(idx); } : undefined}
+              onClick={(e) => { e.stopPropagation(); onEmptyTap(idx); }}
               style={{
-                zIndex: 1, left: safeX + slot.x * safeW, top: safeY + slot.y * safeH,
-                width: slot.width * safeW, height: slot.height * safeH,
+                zIndex: 1, left: slotLeft, top: slotTop,
+                width: slotW, height: slotH,
                 border: '2px dashed rgba(232,165,152,0.85)', borderRadius: 10,
                 background: 'rgba(253,232,228,0.5)', cursor: 'pointer', boxSizing: 'border-box',
               }}>
@@ -190,37 +228,22 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           </div>
         );
       })}
-      {/* QR living-memory slots — filled by page.qrFills (not slotFills). */}
+      {/* QR living-memory content — content-driven by page.qrFills on ANY slot.
+          Empty QR slots are no longer auto-shown; the chooser "+" owns the empty
+          state. The QR is drawn on top (white backing) so it stays scannable. */}
       {template?.slots.map((slot, idx) => {
-        if (slot.kind !== 'qr') return null;
         const qr = page.qrFills?.[idx] ?? null;
+        if (!qr) return null;
         const cellLeft = safeX + slot.x * safeW;
         const cellTop = safeY + slot.y * safeH;
         const cellW = slot.width * safeW;
         const cellH = slot.height * safeH;
-        if (qr) {
-          const { dx, dy, side } = qrRect(cellLeft, cellTop, cellW, cellH);
-          return (
-            <div key={`qr-${idx}`} className="absolute"
-              onClick={onQrSlotTap ? (e) => { e.stopPropagation(); onQrSlotTap(idx); } : undefined}
-              style={{ zIndex: 2, left: dx, top: dy, width: side, height: side, background: '#fff', cursor: onQrSlotTap ? 'pointer' : undefined }}>
-              <img src={qr.qrPngDataUrl} alt="QR memory" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            </div>
-          );
-        }
-        // Empty QR slot: interactive "add" placeholder only in editable contexts.
-        if (!onQrSlotTap) return null;
+        const { dx, dy, side } = qrRect(cellLeft, cellTop, cellW, cellH);
         return (
-          <div key={`qr-${idx}`} className="absolute flex flex-col items-center justify-center text-center"
-            onClick={(e) => { e.stopPropagation(); onQrSlotTap(idx); }}
-            style={{
-              zIndex: 2, left: cellLeft, top: cellTop, width: cellW, height: cellH, boxSizing: 'border-box',
-              border: `${Math.max(1, 1.25 * sx)}px dashed rgba(232,165,152,0.85)`, borderRadius: `${8 * sx}px`,
-              background: 'rgba(253,232,228,0.5)', color: 'rgba(139,111,71,0.95)', cursor: 'pointer',
-              gap: `${4 * sx}px`, padding: `${6 * sx}px`,
-            }}>
-            <QrCode size={Math.max(16, Math.min(cellW, cellH) * 0.32)} />
-            <span style={{ fontSize: `${Math.max(9, 11 * sx)}px`, fontWeight: 600, lineHeight: 1.1 }}>＋ Add QR code</span>
+          <div key={`qr-${idx}`} className="absolute"
+            onClick={onQrSlotTap ? (e) => { e.stopPropagation(); onQrSlotTap(idx); } : undefined}
+            style={{ zIndex: 2, left: dx, top: dy, width: side, height: side, background: '#fff', cursor: onQrSlotTap ? 'pointer' : undefined }}>
+            <img src={qr.qrPngDataUrl} alt="QR memory" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
         );
       })}

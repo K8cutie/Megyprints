@@ -17,7 +17,7 @@ import type {
   ObjectEvent,
   MouseEvent as FabricMouseEvent,
 } from './fabric-types';
-import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset, FrameStyle } from './types';
+import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset, FrameStyle, SlotText } from './types';
 import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getCanvasDimensions } from './layouts';
@@ -89,6 +89,8 @@ export interface UseCanvasEngineOptions {
   onTextSlotClick?: (slotIndex: number) => void;
   /** Click on a QR living-memory slot (empty → add; filled → edit/relink). */
   onQrSlotClick?: (slotIndex: number) => void;
+  /** Click on a filled per-slot TEXT → re-open the shared text editor for it. */
+  onSlotTextClick?: (slotIndex: number) => void;
   actions: BuilderActions;
   /** When true, slot containers become selectable and resizable */
   containerMode?: boolean;
@@ -135,7 +137,16 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const slotGeoms = page.slotGeometries ? page.slotGeometries.map((g) => `${g?.x ?? ''}:${g?.y ?? ''}:${g?.width ?? ''}:${g?.height ?? ''}`).join('|') : '';
   // QR fills — so adding/relinking/removing a QR memory repaints the canvas.
   const qrData = page.qrFills ? page.qrFills.map((q) => q ? `${q.code}:${q.destination}` : '').join('|') : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}`;
+  // Per-slot caption text (page.slotTexts) — so ADD/EDIT of a slot caption
+  // changes the fingerprint and repaints the Fabric editor. Slot fills stay
+  // null for a text-only slot, so without this the fingerprint was identical
+  // and the editor desynced from PageView/print until a page-nav.
+  const slotTextData = page.slotTexts
+    ? page.slotTexts.map((s) => s
+        ? `${s.text.slice(0,20)}:${s.fontSize}:${s.fontFamily ?? ''}:${s.color ?? ''}:${s.bold ? 1 : 0}:${s.italic ? 1 : 0}:${s.underline ? 1 : 0}:${s.alignment ?? ''}`
+        : '').join('|')
+    : '';
+  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -151,6 +162,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     onSlotClick,
     onTextSlotClick,
     onQrSlotClick,
+    onSlotTextClick,
     actions,
     containerMode = false,
     onContainerModified,
@@ -198,6 +210,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   onTextSlotClickRef.current = onTextSlotClick ?? (() => {});
   const onQrSlotClickRef = useRef<(slotIndex: number) => void>(() => {});
   onQrSlotClickRef.current = onQrSlotClick ?? (() => {});
+  const onSlotTextClickRef = useRef<(slotIndex: number) => void>(() => {});
+  onSlotTextClickRef.current = onSlotTextClick ?? (() => {});
   const containerModeRef = useRef(containerMode);
   containerModeRef.current = containerMode;
   const onContainerModifiedRef = useRef(onContainerModified);
@@ -498,7 +512,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -637,7 +651,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -965,6 +979,8 @@ function renderTemplateSlots(
   frameStyle?: FrameStyle,
   qrFills?: (QrFill | null)[],
   onQrSlotClick: (slotIndex: number) => void = () => {},
+  slotTexts?: (SlotText | null)[],
+  onSlotTextClick: (slotIndex: number) => void = () => {},
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
@@ -990,43 +1006,54 @@ function renderTemplateSlots(
     const sw = slot.width * safeW;
     const sh = slot.height * safeH;
 
-    // QR living-memory slots use qrFills[i] (NOT slotFills[i]). Handle first so
-    // an empty QR slot never falls into the empty-photo → photo-picker branch.
-    if (slot.kind === 'qr') {
-      const qr = qrFills?.[i] ?? null;
+    // Content precedence is DRIVEN BY page data (not slot.kind):
+    //   qrFills[i] → QR, slotTexts[i] → text, slotFills[i] → photo, else empty "+".
+    // QR is handled first so it never falls into the empty-photo branch, and the
+    // empty state is owned by the chooser "+" (no auto-empty QR placeholder).
+    const qr = qrFills?.[i] ?? null;
+    if (qr) {
       const { dx, dy, side } = qrRect(sx, sy, sw, sh);
-      if (qr) {
-        const backing = new fab.Rect({ left: dx, top: dy, width: side, height: side, fill: '#ffffff', selectable: false, evented: false });
-        backing.slotId = `${SLOT_ID}-qrbg-${i}`;
-        canvas.add(backing);
-        fab.Image.fromURL(qr.qrPngDataUrl, (img: any) => {
-          if (renderId !== currentRenderId) return;
-          img.set({ left: dx, top: dy, selectable: false, evented: true, hoverCursor: 'pointer' });
-          img.scaleToWidth(side);
-          img.slotId = `${SLOT_ID}-qr-${i}`;
-          img.slotIndex = i;
-          img.on('mousedown', () => onQrSlotClick(i));
-          canvas.add(img);
-          canvas.renderAll();
-        });
-      } else {
-        const rect = new fab.Rect({
-          left: sx, top: sy, width: sw, height: sh,
-          fill: 'rgba(244,194,161,0.08)', stroke: '#E8A598', strokeDashArray: [8, 6],
-          strokeWidth: 1.5, rx: 10, ry: 10, selectable: false, hoverCursor: 'pointer',
-        });
-        rect.slotId = `${SLOT_ID}-qrempty-${i}`;
-        rect.slotIndex = i;
-        canvas.add(rect);
-        const label = new fab.Text('▦  ＋ Add QR code', {
-          left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center',
-          fontSize: Math.max(11, Math.min(sw, sh) * 0.11), fontFamily: '"DM Sans", sans-serif',
-          fontWeight: '600', fill: '#8B6F47', textAlign: 'center', selectable: false, evented: false,
-        });
-        label.slotId = `${SLOT_ID}-qrlabel-${i}`;
-        canvas.add(label);
-        rect.on('mousedown', () => onQrSlotClick(i));
-      }
+      const backing = new fab.Rect({ left: dx, top: dy, width: side, height: side, fill: '#ffffff', selectable: false, evented: false });
+      backing.slotId = `${SLOT_ID}-qrbg-${i}`;
+      canvas.add(backing);
+      fab.Image.fromURL(qr.qrPngDataUrl, (img: any) => {
+        if (renderId !== currentRenderId) return;
+        img.set({ left: dx, top: dy, selectable: false, evented: true, hoverCursor: 'pointer' });
+        img.scaleToWidth(side);
+        img.slotId = `${SLOT_ID}-qr-${i}`;
+        img.slotIndex = i;
+        img.on('mousedown', () => onQrSlotClick(i));
+        canvas.add(img);
+        canvas.renderAll();
+      });
+      return;
+    }
+
+    // Per-slot TEXT — a centered, locked Textbox mirroring the bound-caption
+    // Textbox below (originY center, tap re-opens the editor via onSlotTextClick).
+    const st = slotTexts?.[i] ?? null;
+    if (st) {
+      const stText = new fab.Textbox(st.text, {
+        left: sx,
+        top: sy + sh / 2,
+        originY: 'center',
+        width: sw,
+        fontSize: st.fontSize,
+        fontFamily: st.fontFamily,
+        fill: st.color,
+        fontWeight: st.bold ? 'bold' : 'normal',
+        fontStyle: st.italic ? 'italic' : 'normal',
+        underline: st.underline,
+        textAlign: st.alignment,
+        selectable: false,
+        evented: true,
+        editable: false,
+        hoverCursor: 'pointer',
+      });
+      stText.slotId = `${SLOT_ID}-slottext-${i}`;
+      stText.slotIndex = i;
+      stText.on('mousedown', () => onSlotTextClick(i));
+      canvas.add(stText);
       return;
     }
 
@@ -1391,6 +1418,7 @@ function renderScene(
   onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void,
   onTextSlotClick: (slotIndex: number) => void = () => {},
   onQrSlotClick: (slotIndex: number) => void = () => {},
+  onSlotTextClick: (slotIndex: number) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1415,7 +1443,7 @@ function renderScene(
 
   const geoms = page.slotGeometries;
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick, page.slotTexts, onSlotTextClick);
   }
 
   // 3b. Decorative theme corners (one set, all four corners), locked + on top.

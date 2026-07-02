@@ -10,6 +10,7 @@ import type {
   PhotoFilters,
   SlotGeometryOverride,
   QrFill,
+  SlotText,
   PageTemplate,
   FrameStyle,
 } from './types';
@@ -57,12 +58,76 @@ function normalizePage(p: any): any {
     slotOffsetsY: get('slotOffsetsY', 'slot_offsets_y') ?? [],
     slotGeometries: get('slotGeometries', 'slot_geometries') ?? [],
     qrFills: get('qrFills', 'qr_fills') ?? [],
+    slotTexts: get('slotTexts', 'slot_texts') ?? [],
     textElements: get('textElements', 'text_elements') ?? [],
     templateId: get('templateId', 'template_id') ?? null,
     photos: p.photos ?? [],
     background: p.background ?? { type: 'solid', solid: '#FFFBF7' },
     layout: p.layout ?? 'freeform',
   };
+}
+
+/** Re-flow preserved photo fills into a new slot count, SKIPPING any slot index
+ *  claimed by a carried-over QR or per-slot text (mutual exclusivity). Used by
+ *  the layout-change actions (shuffle/cycle/applyPageLayout) so chooser-placed
+ *  QR/text survive a layout change and photos never land on a claimed slot. */
+function reflowFills(
+  existingFills: number[],
+  slotCount: number,
+  qrFills?: (unknown | null)[],
+  slotTexts?: (unknown | null)[],
+): (number | null)[] {
+  const out: (number | null)[] = new Array(slotCount).fill(null);
+  let ptr = 0;
+  for (let i = 0; i < slotCount && ptr < existingFills.length; i++) {
+    if (qrFills?.[i] || slotTexts?.[i]) continue; // slot claimed by QR/text
+    out[i] = existingFills[ptr];
+    ptr++;
+  }
+  return out;
+}
+
+/* Re-lay a page onto a new template: carry QR/text (trimmed to the new slot
+   count), reflow the existing photos into the new slots, and reset per-slot
+   framing. Shared by shuffle / cycle / apply-layout so the "change the layout"
+   behavior lives in exactly one place. */
+function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage {
+  const existingFills = [...new Set(
+    (page.slotFills ?? []).filter((f): f is number => f !== null),
+  )];
+  const slotCount = template.slots.length;
+  const carriedQr = (page.qrFills ?? []).slice(0, slotCount);
+  const carriedText = (page.slotTexts ?? []).slice(0, slotCount);
+  return {
+    ...page,
+    templateId: template.id,
+    qrFills: carriedQr,
+    slotTexts: carriedText,
+    slotFills: reflowFills(existingFills, slotCount, carriedQr, carriedText),
+    slotScales: new Array(slotCount).fill(1),
+    slotOffsetsX: new Array(slotCount).fill(0),
+    slotOffsetsY: new Array(slotCount).fill(0),
+  };
+}
+
+/* The page's dominant photo ratio (the most common ratio among the photos
+   currently placed on it) — used to cycle/pick only ratio-matched templates so
+   photos never get cropped into a mismatched slot. */
+function dominantPageRatio(
+  existingFills: number[],
+  assignments: Partial<Record<number, PhotoRatio>>,
+): PhotoRatio | undefined {
+  const ratios = existingFills
+    .map((i) => assignments[i])
+    .filter(Boolean) as PhotoRatio[];
+  const tally: Partial<Record<PhotoRatio, number>> = {};
+  let pageRatio: PhotoRatio | undefined = ratios[0];
+  let bestR = 0;
+  for (const r of ratios) {
+    tally[r] = (tally[r] ?? 0) + 1;
+    if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; }
+  }
+  return pageRatio;
 }
 
 function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
@@ -291,6 +356,9 @@ export interface BuilderActions {
   setSlotOffset: (slotIndex: number, dx: number, dy: number) => void;
   updateSlotGeometry: (slotIndex: number, geometry: SlotGeometryOverride) => void;
   setQrFill: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
+  /** Set (or clear, with null) the per-slot text fill for slot i. Mirrors
+   *  setQrFill; clears any photo/QR at the same slot when content is non-null. */
+  setSlotText: (slotIndex: number, content: SlotText | null, pageIndex?: number) => void;
 
   // Canvas photos (freeform)
   addPhotoToCanvas: (photoIndex: number, x: number, y: number) => void;
@@ -996,6 +1064,9 @@ export function useBuilderState(): BuilderActions {
         photoBorderWidth: page.photoBorderWidth,
         cornerBase: page.cornerBase,
         textElements: page.textElements,
+        // Carry chooser-placed QR / text forward so a regenerate doesn't drop them.
+        qrFills: (page.qrFills ?? []).slice(0, slotCount),
+        slotTexts: (page.slotTexts ?? []).slice(0, slotCount),
         slotFills: new Array(slotCount).fill(null),
         slotScales: new Array(slotCount).fill(1),
         slotOffsetsX: new Array(slotCount).fill(0),
@@ -1005,11 +1076,15 @@ export function useBuilderState(): BuilderActions {
       // Explicitly initialize slotFills to satisfy TypeScript
       newPage.slotFills = new Array(slotCount).fill(null);
 
-      // ── 4. Preserve existing photos first ──
+      // ── 4. Preserve existing photos first, skipping any slot now claimed by
+      //       a carried-over QR/text (mutual exclusivity). ──
       // Same or more slots: all existing photos stay
       // Fewer slots: excess photos are freed back to pool
-      for (let i = 0; i < Math.min(existingFills.length, slotCount); i++) {
-        newPage.slotFills[i] = existingFills[i];
+      let preserveIdx = 0;
+      for (let i = 0; i < slotCount && preserveIdx < existingFills.length; i++) {
+        if (newPage.qrFills?.[i] || newPage.slotTexts?.[i]) continue;
+        newPage.slotFills[i] = existingFills[preserveIdx];
+        preserveIdx++;
       }
 
       // ── 5. Fill empty slots from photos used NOWHERE in the album. ──
@@ -1021,13 +1096,19 @@ export function useBuilderState(): BuilderActions {
         (p.slotFills ?? []).forEach((f) => { if (f !== null) usedGlobally.add(f); });
       });
 
-      let slotIdx = Math.min(existingFills.length, slotCount);
-      for (let i = 0; i < uploadedPhotos.length && slotIdx < slotCount; i++) {
+      // Walk actual empty slots (skipping QR/text-claimed ones) and place unused photos.
+      const emptySlots: number[] = [];
+      for (let i = 0; i < slotCount; i++) {
+        if (newPage.qrFills?.[i] || newPage.slotTexts?.[i]) continue;
+        if (newPage.slotFills[i] === null) emptySlots.push(i);
+      }
+      let emptyPtr = 0;
+      for (let i = 0; i < uploadedPhotos.length && emptyPtr < emptySlots.length; i++) {
         // Belt-and-suspenders: never place a photo that's already on this page.
         if (!usedGlobally.has(i) && !newPage.slotFills.includes(i)) {
-          newPage.slotFills[slotIdx] = i;
+          newPage.slotFills[emptySlots[emptyPtr]] = i;
           usedGlobally.add(i);
-          slotIdx++;
+          emptyPtr++;
         }
       }
       // Remaining empty slots = "no more unused pictures" (left as null)
@@ -1052,20 +1133,10 @@ export function useBuilderState(): BuilderActions {
       if (pool.length === 0) pool = getTemplatesForAlbum(albumSize);
       const newTemplateId = templateTracker.pick(pool.map(t => t.id), page.templateId) ?? pool[Math.floor(Math.random() * pool.length)].id;
       const template = pool.find(t => t.id === newTemplateId) ?? pool[0];
-      const slotCount = template.slots.length;
 
-      // Distinct existing photos only — guards against any pre-existing dupes
-      // so shuffling a page never carries a duplicate forward.
-      const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
-
-      next[currentPageIndex] = {
-        ...page,
-        templateId: template.id,
-        slotFills: new Array(slotCount).fill(null).map((_, i) => existingFills[i] ?? null),
-        slotScales: new Array(slotCount).fill(1),
-        slotOffsetsX: new Array(slotCount).fill(0),
-        slotOffsetsY: new Array(slotCount).fill(0),
-      };
+      // relayPageOnTemplate dedups existing fills, so shuffling never carries a
+      // duplicate forward.
+      next[currentPageIndex] = relayPageOnTemplate(page, template);
 
       return next;
     });
@@ -1084,11 +1155,7 @@ export function useBuilderState(): BuilderActions {
       const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
       const count = existingFills.length;
       // The page's dominant photo ratio → only cycle templates whose slots match.
-      const ratios = existingFills.map((i) => analysis.assignments[i]).filter(Boolean) as PhotoRatio[];
-      const tally: Partial<Record<PhotoRatio, number>> = {};
-      let pageRatio: PhotoRatio | undefined = ratios[0];
-      let bestR = 0;
-      for (const r of ratios) { tally[r] = (tally[r] ?? 0) + 1; if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; } }
+      const pageRatio = dominantPageRatio(existingFills, analysis.assignments);
       const allForSize = getTemplatesForAlbum(albumSize);
       let pool = allForSize.filter((t) => t.slotCount === count && (!pageRatio || t.targetRatio === pageRatio));
       if (pool.length === 0) pool = allForSize.filter((t) => t.slotCount === count);
@@ -1097,15 +1164,7 @@ export function useBuilderState(): BuilderActions {
       if (pool.length === 0) return prev;
       const curIdx = pool.findIndex((t) => t.id === page.templateId);
       const template = pool[(curIdx + 1) % pool.length];
-      const slotCount = template.slots.length;
-      next[currentPageIndex] = {
-        ...page,
-        templateId: template.id,
-        slotFills: new Array(slotCount).fill(null).map((_, i) => existingFills[i] ?? null),
-        slotScales: new Array(slotCount).fill(1),
-        slotOffsetsX: new Array(slotCount).fill(0),
-        slotOffsetsY: new Array(slotCount).fill(0),
-      };
+      next[currentPageIndex] = relayPageOnTemplate(page, template);
       return next;
     });
   }, [currentPageIndex, albumSize, uploadedPhotos]);
@@ -1119,11 +1178,7 @@ export function useBuilderState(): BuilderActions {
     const analysis = analyzePhotos(uploadedPhotos);
     const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
     const count = existingFills.length;
-    const ratios = existingFills.map((i) => analysis.assignments[i]).filter(Boolean) as PhotoRatio[];
-    const tally: Partial<Record<PhotoRatio, number>> = {};
-    let pageRatio: PhotoRatio | undefined = ratios[0];
-    let bestR = 0;
-    for (const r of ratios) { tally[r] = (tally[r] ?? 0) + 1; if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; } }
+    const pageRatio = dominantPageRatio(existingFills, analysis.assignments);
     const allForSize = getTemplatesForAlbum(albumSize);
     // EXPERIMENT: slotCount removed from the qualification — show EVERY layout whose
     // ratio matches the page's photos, regardless of photo count. Strict RATIO match
@@ -1146,16 +1201,7 @@ export function useBuilderState(): BuilderActions {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page) return prev;
-      const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
-      const slotCount = template.slots.length;
-      next[currentPageIndex] = {
-        ...page,
-        templateId: template.id,
-        slotFills: new Array(slotCount).fill(null).map((_, i) => existingFills[i] ?? null),
-        slotScales: new Array(slotCount).fill(1),
-        slotOffsetsX: new Array(slotCount).fill(0),
-        slotOffsetsY: new Array(slotCount).fill(0),
-      };
+      next[currentPageIndex] = relayPageOnTemplate(page, template);
       return next;
     });
   }, [currentPageIndex]);
@@ -1165,6 +1211,11 @@ export function useBuilderState(): BuilderActions {
     pushSnapshot();
     updateCurrentPage((page) => {
       const fills = [...(page.slotFills ?? [])];
+      // Mutual exclusivity: a photo claims this slot → clear any QR/text there.
+      const qrFills = [...(page.qrFills ?? [])];
+      const slotTexts = [...(page.slotTexts ?? [])];
+      qrFills[slotIndex] = null;
+      slotTexts[slotIndex] = null;
       const other = fills.indexOf(photoIndex);
       if (other !== -1 && other !== slotIndex) {
         // This photo is already on the page → SWAP the two slots (taking their
@@ -1177,10 +1228,10 @@ export function useBuilderState(): BuilderActions {
         [scales[other], scales[slotIndex]] = [scales[slotIndex], scales[other]];
         [offsetsX[other], offsetsX[slotIndex]] = [offsetsX[slotIndex], offsetsX[other]];
         [offsetsY[other], offsetsY[slotIndex]] = [offsetsY[slotIndex], offsetsY[other]];
-        return { ...page, slotFills: fills, slotScales: scales, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
+        return { ...page, slotFills: fills, slotScales: scales, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY, qrFills, slotTexts };
       }
       fills[slotIndex] = photoIndex;
-      return { ...page, slotFills: fills };
+      return { ...page, slotFills: fills, qrFills, slotTexts };
     });
 
     // ── Face-centered auto-pan ──
@@ -1256,7 +1307,43 @@ export function useBuilderState(): BuilderActions {
     const apply = (page: AlbumPage): AlbumPage => {
       const qrFills = [...(page.qrFills ?? [])];
       qrFills[slotIndex] = fill;
+      // Mutual exclusivity: setting a QR clears any photo/text at this slot.
+      if (fill) {
+        const fills = [...(page.slotFills ?? [])];
+        const slotTexts = [...(page.slotTexts ?? [])];
+        fills[slotIndex] = null;
+        slotTexts[slotIndex] = null;
+        return { ...page, qrFills, slotFills: fills, slotTexts };
+      }
       return { ...page, qrFills };
+    };
+    if (pageIndex == null) {
+      updateCurrentPage(apply);
+    } else {
+      setAlbumPages((prev) => {
+        const next = [...prev];
+        if (next[pageIndex]) next[pageIndex] = apply(next[pageIndex]);
+        return next;
+      });
+    }
+  }, [updateCurrentPage]);
+
+  /** Set (or clear, with null) the per-slot text fill for slot `slotIndex`.
+   *  Mirrors setQrFill: pageIndex defaults to the current page. Setting a
+   *  non-null text clears any photo/QR at the same slot (mutual exclusivity). */
+  const setSlotText = useCallback((slotIndex: number, content: SlotText | null, pageIndex?: number) => {
+    pushSnapshot();
+    const apply = (page: AlbumPage): AlbumPage => {
+      const slotTexts = [...(page.slotTexts ?? [])];
+      slotTexts[slotIndex] = content;
+      if (content) {
+        const fills = [...(page.slotFills ?? [])];
+        const qrFills = [...(page.qrFills ?? [])];
+        fills[slotIndex] = null;
+        qrFills[slotIndex] = null;
+        return { ...page, slotTexts, slotFills: fills, qrFills };
+      }
+      return { ...page, slotTexts };
     };
     if (pageIndex == null) {
       updateCurrentPage(apply);
@@ -1280,6 +1367,7 @@ export function useBuilderState(): BuilderActions {
       let photoIdx = 0;
       for (let i = 0; i < slotCount; i++) {
         if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
+        if (page.qrFills?.[i] || page.slotTexts?.[i]) continue; // slot claimed by QR/text
         if (fills[i] === null && photoIdx < uploadedPhotos.length) {
           while (photoIdx < uploadedPhotos.length && fills.includes(photoIdx)) {
             photoIdx++;
@@ -1850,6 +1938,7 @@ export function useBuilderState(): BuilderActions {
     setSlotOffset,
     updateSlotGeometry,
     setQrFill,
+    setSlotText,
     addPhotoToCanvas,
     updatePhotoTransform,
     updatePhotoFilters,

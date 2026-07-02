@@ -9,7 +9,7 @@ import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
-import type { QrFill } from './types';
+import type { QrFill, SlotText } from './types';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -101,8 +101,9 @@ async function renderPageManually(
   // keep-out on the inner (spine) edge, then place each slot as a fraction of
   // that safe area. (Slot coords are fractions 0–1, not percentages.)
   const template = page.templateId ? getTemplateById(page.templateId) : null;
-  // NOTE: `|| page.qrFills` so a QR-only page (no photo fills) still renders.
-  if (template && (page.slotFills || page.qrFills)) {
+  // NOTE: `|| page.qrFills || page.slotTexts` so a QR-only or text-only page
+  // (no photo fills) still renders its content-driven slots.
+  if (template && (page.slotFills || page.qrFills || page.slotTexts)) {
     const adapted = adaptTemplateToOrientation(template, W, H);
     const m = marginForTemplate(adapted, adapted.margin, albumSize, pageIndex);
     const safeX = W * m.left;
@@ -118,10 +119,16 @@ async function renderPageManually(
       const sw = slot.width * safeW;
       const sh = slot.height * safeH;
 
-      // QR slots first — they use qrFills[i], not slotFills[i].
-      if (slot.kind === 'qr') {
-        const qr = page.qrFills?.[i] ?? null;
-        if (qr) await renderSlotQr(ctx, qr, sx, sy, sw, sh);
+      // Content precedence is DRIVEN BY page data (not slot.kind): QR → text →
+      // photo. QR uses qrFills[i]; per-slot text uses slotTexts[i].
+      const qr = page.qrFills?.[i] ?? null;
+      if (qr) {
+        await renderSlotQr(ctx, qr, sx, sy, sw, sh);
+        continue;
+      }
+      const st = page.slotTexts?.[i] ?? null;
+      if (st) {
+        renderSlotText(ctx, st, sx, sy, sw, sh, W);
         continue;
       }
 
@@ -546,6 +553,53 @@ function renderTextElement(
     ctx.fillText(text.text, 0, 0);
   } else {
     ctx.fillText(text.text, text.x * (W / 576), text.y * (W / 576));
+  }
+
+  ctx.restore();
+}
+
+/** Render per-slot text (page.slotTexts[i]) centered inside its slot rect.
+ *  Mirrors the caption-in-slot branch of renderTextElement byte-for-byte (same
+ *  font-string, same W/576 scale, same centered-in-rect placement) so print
+ *  matches the DOM + Fabric renderers. Underline is drawn manually (canvas has
+ *  no native text underline). */
+function renderSlotText(
+  ctx: CanvasRenderingContext2D,
+  st: SlotText,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  W: number,
+) {
+  const fontSize = (st.fontSize || 24) * (W / 576);
+  const fontFamily = st.fontFamily || 'serif';
+  const fontWeight = st.bold ? 'bold' : 'normal';
+  const fontStyle = st.italic ? 'italic' : 'normal';
+  const align = (st.alignment ?? 'center') as CanvasTextAlign;
+
+  ctx.save();
+  ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
+  ctx.fillStyle = st.color || '#2D2D2D';
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+
+  const pad = w * 0.04;
+  const cx = align === 'left' ? x + pad : align === 'right' ? x + w - pad : x + w / 2;
+  const cy = y + h / 2;
+  ctx.fillText(st.text, cx, cy);
+
+  if (st.underline) {
+    const metrics = ctx.measureText(st.text);
+    const textW = metrics.width;
+    const ux = align === 'left' ? cx : align === 'right' ? cx - textW : cx - textW / 2;
+    const uy = cy + fontSize * 0.5;
+    ctx.strokeStyle = st.color || '#2D2D2D';
+    ctx.lineWidth = Math.max(1, fontSize * 0.05);
+    ctx.beginPath();
+    ctx.moveTo(ux, uy);
+    ctx.lineTo(ux + textW, uy);
+    ctx.stroke();
   }
 
   ctx.restore();

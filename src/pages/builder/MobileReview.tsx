@@ -14,6 +14,7 @@ import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
+import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
 
 export default function MobileReview({ actions, onDone }: { actions: BuilderContextValue; onDone: () => void }) {
@@ -23,8 +24,10 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const page = pages[idx];
   const isLast = idx >= total - 1;
   const [finishing, setFinishing] = useState(false);
+  const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
   const [replaceSlot, setReplaceSlot] = useState<number | null>(null); // tap-to-replace target
-  const [editSlot, setEditSlot] = useState<number | null>(null); // tap-to-edit-text target
+  const [editSlot, setEditSlot] = useState<number | null>(null); // tap-to-edit-text target (template caption box)
+  const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null); // per-slot text (chooser)
   const [editTextId, setEditTextId] = useState<string | null>(null); // tap-to-edit free text (theme title)
   const [qrEditSlot, setQrEditSlot] = useState<number | null>(null); // tap-to-add/edit QR memory
 
@@ -55,6 +58,16 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
       text: '', fontSize: 28, fontFamily: 'Georgia, "Times New Roman", serif',
       color: '#2D2D2D', bold: false, italic: false, underline: false,
       alignment: ts?.align ?? 'center',
+    };
+  };
+
+  // Seed the per-slot text editor (chooser "Add Text") from any existing slot text.
+  const buildSlotTextInitial = (slotIndex: number): BoxTextContent => {
+    const existing = page?.slotTexts?.[slotIndex];
+    if (existing) return { ...existing };
+    return {
+      text: '', fontSize: 28, fontFamily: 'Georgia, "Times New Roman", serif',
+      color: '#2D2D2D', bold: false, italic: false, underline: false, alignment: 'center',
     };
   };
 
@@ -122,8 +135,9 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           >
             {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx}
               editable
-              onAddToSlot={(slotIndex) => setReplaceSlot(slotIndex)}
+              onChooseSlot={(slotIndex) => setChooserSlot(slotIndex)}
               onRemoveFromSlot={(slotIndex) => actions.clearSlot(slotIndex)}
+              onSlotTextTap={(slotIndex) => setSlotTextEditSlot(slotIndex)}
               onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)}
               onTextTap={(textId) => setEditTextId(textId)}
               onQrSlotTap={(slot) => setQrEditSlot(slot)} />}
@@ -154,6 +168,17 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           </button>
         )}
       </div>
+
+      {/* Empty-slot content chooser — Photo / Text / QR (bottom sheet) */}
+      {chooserSlot !== null && (
+        <SlotChooser
+          mobile
+          onPhoto={() => setReplaceSlot(chooserSlot)}
+          onText={() => setSlotTextEditSlot(chooserSlot)}
+          onQr={() => setQrEditSlot(chooserSlot)}
+          onClose={() => setChooserSlot(null)}
+        />
+      )}
 
       {/* Tap-to-replace photo picker — bottom sheet */}
       <AnimatePresence>
@@ -197,6 +222,15 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           initial={buildInitial(editSlot)}
           onSave={(content) => actions.setBoxText(editSlot, content)}
           onClose={() => setEditSlot(null)}
+        />
+      )}
+      {/* Per-slot text (chooser "Add Text") → saves via setSlotText. Clearing the
+          text (empty) removes the slot text so the box returns to a "+" chooser. */}
+      {slotTextEditSlot !== null && (
+        <MobileTextEditor
+          initial={buildSlotTextInitial(slotTextEditSlot)}
+          onSave={(content) => actions.setSlotText(slotTextEditSlot, content.text.trim() ? content : null, idx)}
+          onClose={() => setSlotTextEditSlot(null)}
         />
       )}
       {/* Free text (theme title) → saves by id so the font/color/text stick. */}

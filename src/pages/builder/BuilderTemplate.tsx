@@ -177,10 +177,13 @@ export default function BuilderTemplate({
   const themes = useMemo(() => Object.values(THEMES), []);
   const hiddenCount = rejectedIds.length;
 
-  // Filter templates by slot count preference
+  // Filter templates by slot count preference. Retired QR templates (tqr-*) are
+  // excluded from selection — they still resolve via getTemplateById so old
+  // albums render, but users can't pick them anymore.
   const filteredTemplates = useMemo(() => {
-    if (preferredSlotCount === undefined || preferredSlotCount === null) return PAGE_TEMPLATES;
-    return PAGE_TEMPLATES.filter((t) => photoSlotCount(t) === preferredSlotCount);
+    const base = PAGE_TEMPLATES.filter((t) => !hasQrSlot(t));
+    if (preferredSlotCount === undefined || preferredSlotCount === null) return base;
+    return base.filter((t) => photoSlotCount(t) === preferredSlotCount);
   }, [preferredSlotCount]);
 
   // Slot count options

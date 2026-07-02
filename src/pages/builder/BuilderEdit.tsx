@@ -22,6 +22,7 @@ import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
+import SlotChooser from './SlotChooser';
 import { getTemplateById } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
@@ -29,7 +30,7 @@ import { CloudSaveStatus } from '../../components/CloudSaveStatus';
 import { useAuth } from '../../lib/authContext';
 /* PropertiesPanel is now rendered inside UnifiedPanel */
 import { getCanvasDimensions } from './layouts';
-import { PAGE_TEMPLATES } from './pageTemplates';
+import { PAGE_TEMPLATES, hasQrSlot } from './pageTemplates';
 import { templateTracker } from './varietyTracker';
 import fabric from './fabric-loader';
 
@@ -140,8 +141,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     albumSize: actions.albumSize,
     onSlotClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
-      setSelectedSlotForPicker(slotIndex);
-      setShowPhotoPicker(true);
+      // Empty slot → open the 3-way content chooser (photo / text / QR).
+      setChooserSlot(slotIndex);
     }, [containerMode]),
     onTextSlotClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
@@ -150,6 +151,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     onQrSlotClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
       setQrEditSlot(slotIndex);
+    }, [containerMode]),
+    onSlotTextClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
+      setSlotTextEditSlot(slotIndex);
     }, [containerMode]),
     actions,
     containerMode,
@@ -170,10 +175,22 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   });
 
   const [selectedSlotForPicker, setSelectedSlotForPicker] = useState<number | null>(null);
+  // The empty-slot content chooser (photo / text / QR) target.
+  const [chooserSlot, setChooserSlot] = useState<number | null>(null);
   // Which template textbox slot is being edited (its caption). Opens the same
   // editor the mobile review + preview use, so editing is identical everywhere.
   const [textEditSlot, setTextEditSlot] = useState<number | null>(null);
+  // Per-slot text (chooser "Add Text") target — distinct from the caption box above.
+  const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null);
   const [qrEditSlot, setQrEditSlot] = useState<number | null>(null);
+  const buildSlotTextInitial = useCallback((slot: number): BoxTextContent => {
+    const existing = actions.currentPage?.slotTexts?.[slot];
+    if (existing) return { ...existing };
+    return {
+      text: '', fontSize: 28, fontFamily: 'Georgia, "Times New Roman", serif',
+      color: '#2D2D2D', bold: false, italic: false, underline: false, alignment: 'center',
+    };
+  }, [actions.currentPage]);
   const buildBoxInitial = useCallback((slot: number): BoxTextContent => {
     const page = actions.currentPage;
     const existing = page?.textElements?.find((t) => t.boxIndex === slot);
@@ -537,7 +554,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         : 1
     );
     const matches = PAGE_TEMPLATES.filter(
-      (t) => t.slotCount === targetSlotCount && t.id !== currentPage.templateId,
+      (t) => !hasQrSlot(t) && t.slotCount === targetSlotCount && t.id !== currentPage.templateId,
     );
     if (matches.length > 0) {
       const randomId = templateTracker.pick(matches.map(t => t.id), currentPage.templateId) ?? matches[Math.floor(Math.random() * matches.length)].id;
@@ -658,6 +675,25 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           onSave={(fill) => { actions.setQrFill(qrEditSlot, fill); setQrEditSlot(null); }}
           onRemove={() => { actions.setQrFill(qrEditSlot, null); setQrEditSlot(null); }}
           onClose={() => setQrEditSlot(null)}
+        />
+      )}
+
+      {/* Empty-slot content chooser — Photo / Text / QR (desktop modal) */}
+      {chooserSlot !== null && (
+        <SlotChooser
+          onPhoto={() => { setSelectedSlotForPicker(chooserSlot); setShowPhotoPicker(true); }}
+          onText={() => setSlotTextEditSlot(chooserSlot)}
+          onQr={() => setQrEditSlot(chooserSlot)}
+          onClose={() => setChooserSlot(null)}
+        />
+      )}
+
+      {/* Per-slot text editor (chooser "Add Text") → saves via setSlotText. */}
+      {slotTextEditSlot !== null && (
+        <MobileTextEditor
+          initial={buildSlotTextInitial(slotTextEditSlot)}
+          onSave={(content) => { actions.setSlotText(slotTextEditSlot, content.text.trim() ? content : null); setSlotTextEditSlot(null); }}
+          onClose={() => setSlotTextEditSlot(null)}
         />
       )}
 

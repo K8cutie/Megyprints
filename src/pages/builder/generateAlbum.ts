@@ -142,7 +142,11 @@ export function generateAlbum(
     page.slotScales = new Array(slotCount).fill(1);
     page.slotOffsetsX = new Array(slotCount).fill(0);
     page.slotOffsetsY = new Array(slotCount).fill(0);
-    fills.forEach((photoIdx, s) => { page.slotFills![s] = photoIdx; });
+    fills.forEach((photoIdx, s) => {
+      // Defensive (fresh pages): never overwrite a slot claimed by QR/text.
+      if (page.qrFills?.[s] || page.slotTexts?.[s]) return;
+      page.slotFills![s] = photoIdx;
+    });
     pages.push(page);
     pageIdx++;
   };
@@ -304,9 +308,16 @@ export function shufflePageLayout(
     if (ratio) ratioQueues[ratio].push(idx);
   });
 
+  // Carry any chooser-placed QR / per-slot text forward (mutual exclusivity:
+  // a claimed slot never gets a photo).
+  const carriedQr = (page.qrFills ?? []).slice(0, slotCount);
+  const carriedText = (page.slotTexts ?? []).slice(0, slotCount);
+
   // Fill new slots with ratio-matched photos
   const newFills: (number | null)[] = new Array(slotCount).fill(null);
   for (let slotIdx = 0; slotIdx < slotCount && existingFills.length > 0; slotIdx++) {
+    // Skip slots claimed by a carried-over QR/text.
+    if (carriedQr[slotIdx] || carriedText[slotIdx]) continue;
     const targetRatio = template.targetRatio;
     let bestPhotoIdx: number | null = null;
 
@@ -327,6 +338,8 @@ export function shufflePageLayout(
   return {
     ...page,
     templateId: template.id,
+    qrFills: carriedQr,
+    slotTexts: carriedText,
     slotFills: newFills,
     slotScales: new Array(slotCount).fill(1),
     slotOffsetsX: new Array(slotCount).fill(0),

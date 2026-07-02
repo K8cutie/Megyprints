@@ -219,11 +219,11 @@ export interface PhotoSlot {
   rotation?: number;
 }
 
-export interface TextElement {
-  id: string;
+/** Shared text-styling fields used by both free/caption text (TextElement) and
+ *  per-slot injected text (SlotText). Kept as ONE definition so the two carriers
+ *  can't drift; each extends it with its own positioning/extra fields. */
+export interface TextStyle {
   text: string;
-  x: number;
-  y: number;
   fontSize: number;
   fontFamily: string;
   color: string;
@@ -231,6 +231,12 @@ export interface TextElement {
   italic: boolean;
   underline: boolean;
   alignment: 'left' | 'center' | 'right';
+}
+
+export interface TextElement extends TextStyle {
+  id: string;
+  x: number;
+  y: number;
   rotation: number;
   opacity: number;
   backgroundColor?: string;
@@ -271,6 +277,13 @@ export interface QrFill {
   createdAt: number;
 }
 
+/** Per-slot text content injected into a PHOTO slot via the content chooser.
+ *  Positional, parallel to template.slots — index i pairs with slots[i] exactly
+ *  like slotFills[i]/qrFills[i]. Null = no text at that slot. DISTINCT from the
+ *  template.textSlots caption system; carries the same styling fields as the
+ *  MobileTextEditor's exported content (BoxTextContent). */
+export type SlotText = TextStyle;
+
 export interface AlbumPage {
   id: string;
   layout: LayoutStyle;
@@ -285,6 +298,10 @@ export interface AlbumPage {
    *  is used only when slots[i].kind === 'qr'. Serializes as-is (local, cloud,
    *  order snapshot). */
   qrFills?: (QrFill | null)[];
+  /** Per-slot text fills. Positional, parallel to template.slots — index i is
+   *  rendered when neither qrFills[i] nor slotFills[i] claims the slot.
+   *  Serializes as-is (local, cloud, order snapshot). */
+  slotTexts?: (SlotText | null)[];
   background: AlbumBackground;
   photos: CanvasPhoto[];
   textElements: TextElement[];

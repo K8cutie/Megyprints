@@ -104,9 +104,12 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
   const slotOptions = [1, 2, 3, 4, 5];
 
   const filteredTemplates = (() => {
-    let result = templateCategory === 'all'
+    // Exclude retired QR templates (tqr-*) from selection — they still resolve via
+    // getTemplateById so old albums render, but users can't pick them anymore.
+    let result = (templateCategory === 'all'
       ? PAGE_TEMPLATES
-      : PAGE_TEMPLATES.filter((t) => t.category === templateCategory);
+      : PAGE_TEMPLATES.filter((t) => t.category === templateCategory)
+    ).filter((t) => !hasQrSlot(t));
     if (photosPerPage !== undefined) {
       result = result.filter((t) => photoSlotCount(t) === photosPerPage);
     }
@@ -220,7 +223,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-[10px] font-semibold text-[#2D2D2D] uppercase tracking-wider">Slot Count</h4>
                         <span className="text-[9px] text-[#9B9B9B]">
-                          {PAGE_TEMPLATES.filter(t => photosPerPage === undefined ? true : photoSlotCount(t) === photosPerPage).length} match
+                          {PAGE_TEMPLATES.filter(t => !hasQrSlot(t) && (photosPerPage === undefined ? true : photoSlotCount(t) === photosPerPage)).length} match
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1 mb-3">
@@ -301,7 +304,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                       <button onClick={() => setTemplateCategory('all')}
                         className="px-2.5 py-1 text-[10px] rounded-full font-medium transition-colors"
                         style={{ backgroundColor: templateCategory === 'all' ? '#F4C2A1' : '#F0F0F0', color: templateCategory === 'all' ? '#fff' : '#6B6B6B' }}>
-                        All ({PAGE_TEMPLATES.length})
+                        All ({PAGE_TEMPLATES.filter(t => !hasQrSlot(t)).length})
                       </button>
                       {TEMPLATE_CATEGORIES.map((cat) => (
                         <button key={cat.id} onClick={() => setTemplateCategory(cat.id)}
