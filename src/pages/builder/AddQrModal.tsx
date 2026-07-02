@@ -84,11 +84,11 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
             </div>
           )}
           <p className="text-xs text-[#6B6B6B]">
-            Paste a video or media link. We turn it into a QR on the printed page — and you can re-point it later
+            Add a link to a video related to your album — anyone who scans the QR on your printed page can open it. You can re-point it to a new video later,
             <span className="font-medium text-[#8B6F47]"> without reprinting</span>.
           </p>
           <div>
-            <label className="text-xs text-[#6B6B6B] mb-1 block">Link</label>
+            <label className="text-xs text-[#6B6B6B] mb-1 block">Video link</label>
             <input
               value={url}
               onChange={(e) => { setUrl(e.target.value); if (error) setError(''); }}
