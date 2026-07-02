@@ -3,6 +3,7 @@ import { X, QrCode, Trash2, Loader2 } from 'lucide-react';
 import type { QrFill } from './types';
 import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination } from '../../lib/qrMemory';
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
+import { useAuth } from '../../lib/authContext';
 
 /* Add / edit a QR "living memory" for a template QR slot. New: mints a stable
    code, generates a print-crisp QR encoding /m/:code, and returns the fill.
@@ -14,6 +15,7 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
   onRemove: () => void;
   onClose: () => void;
 }) {
+  const { user } = useAuth();
   const [url, setUrl] = useState(initial?.destination ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -22,18 +24,25 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
     setError('');
     const v = validateDestination(url);
     if ('error' in v) { setError(v.error); return; }
+    // A QR memory lives in qr_memories, keyed to the owner (RLS). Without a signed-in
+    // account we CANNOT save a row — and a QR with no row resolves to "Memory not
+    // found" when anyone scans it. So require sign-in and never place a dead QR.
+    if (!user) {
+      setError('Please sign in first — a QR memory is saved to your Megyprints account so it opens for anyone who scans it (no app needed) and you can re-point it later.');
+      return;
+    }
     setBusy(true);
     try {
       if (initial) {
-        // Relink: keep the SAME code + printed QR image; re-point the destination
-        // locally + in the DB (best-effort — local qrFill is the render source).
-        void updateMemoryDestination(initial.code, v.url);
+        // Relink: keep the SAME code + printed QR image; re-point the destination.
+        // Await it so we only update the local fill once the DB actually persisted.
+        const ok = await updateMemoryDestination(initial.code, v.url);
+        if (!ok) { setError('Couldn’t save the new link. Please try again.'); return; }
         onSave({ ...initial, destination: v.url });
         return;
       }
-      // New: mint a code, generate the QR encoding /m/:code, and persist. Retry on
-      // the astronomically-rare code clash (re-mint). If not signed in, we still
-      // keep the local fill — the row is created at checkout (ensureMemoriesForFills).
+      // New: mint a code, generate the QR encoding /m/:code, and persist. Only place
+      // the QR once the row is CONFIRMED created — otherwise a scan hits a dead code.
       let fill: QrFill | null = null;
       for (let attempt = 0; attempt < 5; attempt++) {
         const code = mintCode();
@@ -42,7 +51,9 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
         const candidate: QrFill = { code, destination: v.url, qrPngDataUrl, memoryUrl: memUrl, createdAt: Date.now() };
         const res = await tryCreateMemory(candidate);
         if (res === 'conflict') continue; // re-mint and try again
-        fill = candidate;
+        if (res === 'skip') { setError('Please sign in first to save the QR memory.'); return; }
+        if (res === 'error') { setError('Couldn’t save the QR just now. Please try again.'); return; }
+        fill = candidate; // res === 'ok' — row created
         break;
       }
       if (!fill) { setError('Could not generate a unique code. Please try again.'); return; }
@@ -65,6 +76,11 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
         </div>
 
         <div className="p-5 space-y-3">
+          {!user && (
+            <div className="text-[11px] leading-snug text-[#8B6F47] bg-[#FFF3EC] border border-[#F4C2A1]/60 rounded-lg px-3 py-2">
+              <span className="font-semibold">Sign in to add a QR.</span> The link is saved to your account so it opens for anyone who scans it — no app needed — and you can re-point it anytime.
+            </div>
+          )}
           <p className="text-xs text-[#6B6B6B]">
             Paste a video or media link. We turn it into a QR on the printed page — and you can re-point it later
             <span className="font-medium text-[#8B6F47]"> without reprinting</span>.
