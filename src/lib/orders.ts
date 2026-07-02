@@ -11,6 +11,7 @@ import { supabase } from './supabase';
 import { generateAlbumPdf } from '../pages/builder/generateAlbumPdf';
 import type { PrintJob } from './printQueue';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
+import { ensureMemoriesForFills } from './qrMemories';
 
 export interface ShippingDetails {
   name: string;
@@ -102,6 +103,18 @@ export async function createOrderFromLatestAlbum(opts: {
     .single();
 
   if (error) throw new Error(`Could not place your order: ${error.message}`);
+
+  // Reliability belt: ensure every QR "living memory" in the album has a
+  // resolvable row so the printed /m/:code always works (best-effort; the user
+  // is signed in here). INSERT-only — never clobbers a later relink.
+  try {
+    const qrFills = (Array.isArray(album.pages) ? album.pages : [])
+      .flatMap((pg: any) => (Array.isArray(pg?.qrFills) ? pg.qrFills : []));
+    if (qrFills.length) await ensureMemoriesForFills(qrFills);
+  } catch (e) {
+    console.error('QR memories ensure (order) failed:', e);
+  }
+
   return data as CreatedOrder;
 }
 
