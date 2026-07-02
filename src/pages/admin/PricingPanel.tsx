@@ -11,7 +11,6 @@ const SHEET = 26.5;      // ₱2.50 paper + ₱24 print (2 sides)
 const SOFT_COVER = 50;   // est: thick paper + print + ₱16 lamination
 const SOFT_BIND = 100;
 const MIN_PAGES = 40;
-const QR_COST = 10;      // ₱ to produce one QR — FREE to the customer, absorbed by margin
 
 type Binding = 'soft' | 'hard';
 interface SizeDef { label: string; pps: number; hb: number }
@@ -42,12 +41,9 @@ export default function PricingPanel() {
   const [bind, setBind] = useState<Binding>('soft');
   const [pages, setPages] = useState(40);
   const [mult, setMult] = useState(3);
-  const [qrs, setQrs] = useState(1);
 
-  const baseCost = costOf(size, bind, pages);
-  const qrCost = QR_COST * qrs;
-  const cost = baseCost + qrCost;   // full production cost
-  const price = baseCost * mult;    // QRs are free → they never raise the customer's price
+  const cost = costOf(size, bind, pages);
+  const price = cost * mult;
   const profit = price - cost;
   const cpp = SHEET / SIZES[size].pps;
   const marginPct = Math.round((1 - cost / price) * 100);
@@ -134,15 +130,6 @@ export default function PricingPanel() {
                 : 'Between their sale and regular price — solid premium room.'}
             </p>
           </div>
-          <div>
-            <div className="flex justify-between items-baseline mb-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wide text-[#9B9B9B]">Free QRs included</label>
-              <span className="font-mono text-sm font-semibold tabular-nums text-[#2D2D2D]">{qrs}</span>
-            </div>
-            <input type="range" min={0} max={6} step={1} value={qrs}
-              onChange={(e) => setQrs(+e.target.value)} className="w-full accent-[#BF5E3E]" />
-            <p className="text-xs text-[#9B9B9B] mt-1">₱10 each to produce · free to the customer · comes out of margin</p>
-          </div>
         </div>
 
         {/* Result */}
@@ -169,11 +156,6 @@ export default function PricingPanel() {
               </div>
             ))}
           </div>
-          {qrs > 0 && (
-            <p className="text-xs text-[#9B9B9B] mt-2.5">
-              Cost includes <b className="text-[#8B6F47]">{qrs} free QR</b> ({peso(qrCost)} to produce) — it comes out of your margin, not the customer's price. The album total stays <span className="font-mono tabular-nums">{peso(price)}</span>.
-            </p>
-          )}
 
           {size === '8x8' ? (
             <div className="mt-4 rounded-xl border border-[#EAD3CB] bg-[#F6E7E2] px-4 py-3 text-sm">
@@ -241,11 +223,10 @@ export default function PricingPanel() {
           <QrCode size={16} className="text-[#E8A598]" /> Living-memory QR — free with every album
         </h4>
         <p className="text-sm text-[#41392F] mt-1.5">
-          Not billed per code. At <b>~₱10 to produce</b>, a QR is a rounding error against a four-figure album —
-          so giving it away barely dents margin, while charging for it would tax the best growth lever we have
-          (every scan is a free impression and a potential customer). The value is <b>priced into the album</b>,
-          which justifies sitting at the <b>upper end of the margin band (3.5–5×)</b> — and it's a headline
-          selling point: <i>"free living-memory QR with every album."</i>
+          Not billed per code. Charging per QR would tax the best growth lever we have — every scan is a free
+          impression and a potential customer — and put friction on our differentiator. The value is
+          <b> priced into the album</b>, which justifies sitting at the <b>upper end of the margin band
+          (3.5–5×)</b> — and it's a headline selling point: <i>"free living-memory QR with every album."</i>
         </p>
       </div>
 
