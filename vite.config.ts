@@ -42,7 +42,14 @@ export default defineConfig({
         // new asset hashes load right away; fall back to cache only when offline.
         runtimeCaching: [
           {
-            urlPattern: ({ request }) => request.mode === 'navigate',
+            // App-shell navigations only. CRUCIAL: exclude server-rendered routes
+            // (/m/:code QR resolver + /api/*) — the SPA uses HashRouter, so those
+            // real paths have NO client route; if the SW served the app shell for
+            // them the page rendered BLANK. These must always go to the network.
+            urlPattern: ({ request, url }) =>
+              request.mode === 'navigate' &&
+              !url.pathname.startsWith('/m/') &&
+              !url.pathname.startsWith('/api/'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'app-shell',
