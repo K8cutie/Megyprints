@@ -13,6 +13,8 @@ import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import AddQrModal from './AddQrModal';
+import type { QrFill } from './types';
 
 export default function MobileReview({ actions, onDone }: { actions: BuilderContextValue; onDone: () => void }) {
   const pages = actions.albumPages;
@@ -24,6 +26,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [replaceSlot, setReplaceSlot] = useState<number | null>(null); // tap-to-replace target
   const [editSlot, setEditSlot] = useState<number | null>(null); // tap-to-edit-text target
   const [editTextId, setEditTextId] = useState<string | null>(null); // tap-to-edit free text (theme title)
+  const [qrEditSlot, setQrEditSlot] = useState<number | null>(null); // tap-to-add/edit QR memory
 
   // Seed the editor from a FREE text element (e.g. the theme title) by id.
   const buildTextInitial = (textId: string): BoxTextContent => {
@@ -122,7 +125,8 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onAddToSlot={(slotIndex) => setReplaceSlot(slotIndex)}
               onRemoveFromSlot={(slotIndex) => actions.clearSlot(slotIndex)}
               onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)}
-              onTextTap={(textId) => setEditTextId(textId)} />}
+              onTextTap={(textId) => setEditTextId(textId)}
+              onQrSlotTap={(slot) => setQrEditSlot(slot)} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -201,6 +205,14 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           initial={buildTextInitial(editTextId)}
           onSave={(content) => actions.updateTextElement(editTextId, content)}
           onClose={() => setEditTextId(null)}
+        />
+      )}
+      {qrEditSlot !== null && (
+        <AddQrModal
+          initial={page?.qrFills?.[qrEditSlot] ?? null}
+          onSave={(fill: QrFill) => { actions.setQrFill(qrEditSlot, fill, idx); setQrEditSlot(null); }}
+          onRemove={() => { actions.setQrFill(qrEditSlot, null, idx); setQrEditSlot(null); }}
+          onClose={() => setQrEditSlot(null)}
         />
       )}
     </div>

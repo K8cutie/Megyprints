@@ -9,6 +9,7 @@ import type {
   AlbumBackground,
   PhotoFilters,
   SlotGeometryOverride,
+  QrFill,
   PageTemplate,
   FrameStyle,
 } from './types';
@@ -55,6 +56,7 @@ function normalizePage(p: any): any {
     slotOffsetsX: get('slotOffsetsX', 'slot_offsets_x') ?? [],
     slotOffsetsY: get('slotOffsetsY', 'slot_offsets_y') ?? [],
     slotGeometries: get('slotGeometries', 'slot_geometries') ?? [],
+    qrFills: get('qrFills', 'qr_fills') ?? [],
     textElements: get('textElements', 'text_elements') ?? [],
     templateId: get('templateId', 'template_id') ?? null,
     photos: p.photos ?? [],
@@ -288,6 +290,7 @@ export interface BuilderActions {
   setSlotScale: (slotIndex: number, scale: number) => void;
   setSlotOffset: (slotIndex: number, dx: number, dy: number) => void;
   updateSlotGeometry: (slotIndex: number, geometry: SlotGeometryOverride) => void;
+  setQrFill: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
 
   // Canvas photos (freeform)
   addPhotoToCanvas: (photoIndex: number, x: number, y: number) => void;
@@ -1246,6 +1249,26 @@ export function useBuilderState(): BuilderActions {
     });
   }, [updateCurrentPage]);
 
+  /** Set (or clear, with null) the QR living-memory fill for a template QR slot.
+   *  pageIndex defaults to the current page; the preview spread passes it explicitly. */
+  const setQrFill = useCallback((slotIndex: number, fill: QrFill | null, pageIndex?: number) => {
+    pushSnapshot();
+    const apply = (page: AlbumPage): AlbumPage => {
+      const qrFills = [...(page.qrFills ?? [])];
+      qrFills[slotIndex] = fill;
+      return { ...page, qrFills };
+    };
+    if (pageIndex == null) {
+      updateCurrentPage(apply);
+    } else {
+      setAlbumPages((prev) => {
+        const next = [...prev];
+        if (next[pageIndex]) next[pageIndex] = apply(next[pageIndex]);
+        return next;
+      });
+    }
+  }, [updateCurrentPage]);
+
   /* ── Auto-fill ── */
   const autoFillSlots = useCallback(() => {
     pushSnapshot();
@@ -1824,6 +1847,7 @@ export function useBuilderState(): BuilderActions {
     setSlotScale,
     setSlotOffset,
     updateSlotGeometry,
+    setQrFill,
     addPhotoToCanvas,
     updatePhotoTransform,
     updatePhotoFilters,

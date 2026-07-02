@@ -13,6 +13,10 @@ export type LayoutStyle =
 
 export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star';
 
+/** Slot purpose. Absent/'photo' = normal photo slot (default; back-compat).
+ *  'qr' = QR living-memory slot — filled by page.qrFills[idx], not slotFills. */
+export type SlotKind = 'photo' | 'qr';
+
 /** Template margin definition — expressed as 0–1 proportions of page dimensions.
  *  e.g. { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 } = 4% margin on all sides */
 export interface TemplateMargin {
@@ -42,6 +46,9 @@ export interface TemplateSlot {
   borderWidth?: number;
   /** Border color for overlapping templates */
   borderColor?: string;
+  /** Slot purpose. Absent/'photo' = normal photo slot. 'qr' = QR living-memory
+   *  slot, filled by page.qrFills[idx] (positional, parallel to slotFills). */
+  kind?: SlotKind;
 }
 
 /** A text box region within a template (proportions of the SAFE AREA, like photo
@@ -245,6 +252,25 @@ export interface SlotGeometryOverride {
   rotation?: number;
 }
 
+/** Fill data for a QR ('kind: qr') slot. Positional: qrFills[i] pairs with
+ *  template.slots[i] exactly like slotFills[i]. Null = empty QR slot.
+ *  The printed QR ALWAYS encodes `${MEMORY_BASE}/m/${code}` — never the raw
+ *  destination — so re-pointing the memory never requires a reprint. */
+export interface QrFill {
+  /** Stable short code, minted client-side. Primary key in qr_memories. */
+  code: string;
+  /** Current destination URL (echo of the DB row; DB is source of truth). */
+  destination: string;
+  /** Print-crisp QR raster (PNG data-URL, ≥2× target px). Encodes /m/:code.
+   *  PNG (not SVG): an SVG drawn via new Image()→drawImage does NOT rasterize
+   *  at canvas resolution and prints blurry/unscannable. */
+  qrPngDataUrl: string;
+  /** The exact minted memory URL, frozen at add-time so a later MEMORY_BASE
+   *  change can't desync the management thumbnail from the physical print. */
+  memoryUrl: string;
+  createdAt: number;
+}
+
 export interface AlbumPage {
   id: string;
   layout: LayoutStyle;
@@ -255,6 +281,10 @@ export interface AlbumPage {
   slotOffsetsY?: number[];
   /** User-modified slot container geometries */
   slotGeometries?: SlotGeometryOverride[];
+  /** QR living-memory fills. Positional, parallel to template.slots — index i
+   *  is used only when slots[i].kind === 'qr'. Serializes as-is (local, cloud,
+   *  order snapshot). */
+  qrFills?: (QrFill | null)[];
   background: AlbumBackground;
   photos: CanvasPhoto[];
   textElements: TextElement[];

@@ -21,6 +21,7 @@ import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import AddQrModal from './AddQrModal';
 import { getTemplateById } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
@@ -146,6 +147,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       if (containerMode) return;
       setTextEditSlot(slotIndex);
     }, [containerMode]),
+    onQrSlotClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
+      setQrEditSlot(slotIndex);
+    }, [containerMode]),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {
@@ -168,6 +173,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   // Which template textbox slot is being edited (its caption). Opens the same
   // editor the mobile review + preview use, so editing is identical everywhere.
   const [textEditSlot, setTextEditSlot] = useState<number | null>(null);
+  const [qrEditSlot, setQrEditSlot] = useState<number | null>(null);
   const buildBoxInitial = useCallback((slot: number): BoxTextContent => {
     const page = actions.currentPage;
     const existing = page?.textElements?.find((t) => t.boxIndex === slot);
@@ -644,6 +650,14 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           initial={buildBoxInitial(textEditSlot)}
           onSave={(content) => { actions.setBoxText(textEditSlot, content); setTextEditSlot(null); }}
           onClose={() => setTextEditSlot(null)}
+        />
+      )}
+      {qrEditSlot !== null && (
+        <AddQrModal
+          initial={actions.currentPage?.qrFills?.[qrEditSlot] ?? null}
+          onSave={(fill) => { actions.setQrFill(qrEditSlot, fill); setQrEditSlot(null); }}
+          onRemove={() => { actions.setQrFill(qrEditSlot, null); setQrEditSlot(null); }}
+          onClose={() => setQrEditSlot(null)}
         />
       )}
 

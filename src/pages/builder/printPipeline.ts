@@ -8,6 +8,8 @@ import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
+import { qrRect } from '../../lib/qrMemory';
+import type { QrFill } from './types';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -99,27 +101,35 @@ async function renderPageManually(
   // keep-out on the inner (spine) edge, then place each slot as a fraction of
   // that safe area. (Slot coords are fractions 0–1, not percentages.)
   const template = page.templateId ? getTemplateById(page.templateId) : null;
-  if (template && page.slotFills) {
+  // NOTE: `|| page.qrFills` so a QR-only page (no photo fills) still renders.
+  if (template && (page.slotFills || page.qrFills)) {
     const adapted = adaptTemplateToOrientation(template, W, H);
     const m = marginForTemplate(adapted, adapted.margin, albumSize, pageIndex);
     const safeX = W * m.left;
     const safeY = H * m.top;
     const safeW = W * (1 - m.left - m.right);
     const safeH = H * (1 - m.top - m.bottom);
-    const fills = dedupeSlotFills(page.slotFills);
+    const fills = dedupeSlotFills(page.slotFills ?? []);
 
     for (let i = 0; i < adapted.slots.length; i++) {
       const slot = adapted.slots[i];
+      const sx = safeX + slot.x * safeW;
+      const sy = safeY + slot.y * safeH;
+      const sw = slot.width * safeW;
+      const sh = slot.height * safeH;
+
+      // QR slots first — they use qrFills[i], not slotFills[i].
+      if (slot.kind === 'qr') {
+        const qr = page.qrFills?.[i] ?? null;
+        if (qr) await renderSlotQr(ctx, qr, sx, sy, sw, sh);
+        continue;
+      }
+
       const photoIdx = fills[i];
       if (photoIdx == null || photoIdx < 0) continue;
 
       const photo = photos[photoIdx];
       if (!photo) continue;
-
-      const sx = safeX + slot.x * safeW;
-      const sy = safeY + slot.y * safeH;
-      const sw = slot.width * safeW;
-      const sh = slot.height * safeH;
 
       await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false);
     }
@@ -239,6 +249,22 @@ async function renderBackground(
     ctx.fillStyle = `rgba(255, 251, 247, ${(100 - opacity) / 100})`;
     ctx.fillRect(0, 0, W, H);
   }
+}
+
+/** Render a QR living-memory slot at print resolution: a centered square QR
+ *  (PNG, already crisp) on a white backing for reliable scanning. */
+async function renderSlotQr(
+  ctx: CanvasRenderingContext2D,
+  qr: QrFill,
+  sx: number, sy: number, sw: number, sh: number,
+) {
+  const { dx, dy, side } = qrRect(sx, sy, sw, sh);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(dx, dy, side, side);
+  try {
+    const img = await loadImage(qr.qrPngDataUrl);
+    ctx.drawImage(img, dx, dy, side, side);
+  } catch { /* QR failed to load — leave the white square (still prints clean) */ }
 }
 
 /** Render a single slot photo at print resolution */

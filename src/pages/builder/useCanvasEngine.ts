@@ -7,6 +7,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { qrRect } from '../../lib/qrMemory';
+import type { QrFill } from './types';
 import type {
   FabricCanvas,
   FabricObject,
@@ -85,6 +87,8 @@ export interface UseCanvasEngineOptions {
   /** Click on a template textbox region (empty placeholder or bound caption) →
    *  open the shared text editor for that slot. */
   onTextSlotClick?: (slotIndex: number) => void;
+  /** Click on a QR living-memory slot (empty → add; filled → edit/relink). */
+  onQrSlotClick?: (slotIndex: number) => void;
   actions: BuilderActions;
   /** When true, slot containers become selectable and resizable */
   containerMode?: boolean;
@@ -129,7 +133,9 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
     `:${t.width ?? ''}:${t.scaleX ?? ''}:${t.scaleY ?? ''}`
   ).join('|');
   const slotGeoms = page.slotGeometries ? page.slotGeometries.map((g) => `${g?.x ?? ''}:${g?.y ?? ''}:${g?.width ?? ''}:${g?.height ?? ''}`).join('|') : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}`;
+  // QR fills — so adding/relinking/removing a QR memory repaints the canvas.
+  const qrData = page.qrFills ? page.qrFills.map((q) => q ? `${q.code}:${q.destination}` : '').join('|') : '';
+  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -144,6 +150,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     albumSize,
     onSlotClick,
     onTextSlotClick,
+    onQrSlotClick,
     actions,
     containerMode = false,
     onContainerModified,
@@ -189,6 +196,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   onSlotClickRef.current = onSlotClick;
   const onTextSlotClickRef = useRef<(slotIndex: number) => void>(() => {});
   onTextSlotClickRef.current = onTextSlotClick ?? (() => {});
+  const onQrSlotClickRef = useRef<(slotIndex: number) => void>(() => {});
+  onQrSlotClickRef.current = onQrSlotClick ?? (() => {});
   const containerModeRef = useRef(containerMode);
   containerModeRef.current = containerMode;
   const onContainerModifiedRef = useRef(onContainerModified);
@@ -489,7 +498,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -628,7 +637,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -954,6 +963,8 @@ function renderTemplateSlots(
   frameWidth?: number,
   borderStyle?: 'solid' | 'dashed' | 'dotted',
   frameStyle?: FrameStyle,
+  qrFills?: (QrFill | null)[],
+  onQrSlotClick: (slotIndex: number) => void = () => {},
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
@@ -978,6 +989,46 @@ function renderTemplateSlots(
     const sy = safeY + slot.y * safeH;
     const sw = slot.width * safeW;
     const sh = slot.height * safeH;
+
+    // QR living-memory slots use qrFills[i] (NOT slotFills[i]). Handle first so
+    // an empty QR slot never falls into the empty-photo → photo-picker branch.
+    if (slot.kind === 'qr') {
+      const qr = qrFills?.[i] ?? null;
+      const { dx, dy, side } = qrRect(sx, sy, sw, sh);
+      if (qr) {
+        const backing = new fab.Rect({ left: dx, top: dy, width: side, height: side, fill: '#ffffff', selectable: false, evented: false });
+        backing.slotId = `${SLOT_ID}-qrbg-${i}`;
+        canvas.add(backing);
+        fab.Image.fromURL(qr.qrPngDataUrl, (img: any) => {
+          if (renderId !== currentRenderId) return;
+          img.set({ left: dx, top: dy, selectable: false, evented: true, hoverCursor: 'pointer' });
+          img.scaleToWidth(side);
+          img.slotId = `${SLOT_ID}-qr-${i}`;
+          img.slotIndex = i;
+          img.on('mousedown', () => onQrSlotClick(i));
+          canvas.add(img);
+          canvas.renderAll();
+        });
+      } else {
+        const rect = new fab.Rect({
+          left: sx, top: sy, width: sw, height: sh,
+          fill: 'rgba(244,194,161,0.08)', stroke: '#E8A598', strokeDashArray: [8, 6],
+          strokeWidth: 1.5, rx: 10, ry: 10, selectable: false, hoverCursor: 'pointer',
+        });
+        rect.slotId = `${SLOT_ID}-qrempty-${i}`;
+        rect.slotIndex = i;
+        canvas.add(rect);
+        const label = new fab.Text('▦  ＋ Add QR code', {
+          left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center',
+          fontSize: Math.max(11, Math.min(sw, sh) * 0.11), fontFamily: '"DM Sans", sans-serif',
+          fontWeight: '600', fill: '#8B6F47', textAlign: 'center', selectable: false, evented: false,
+        });
+        label.slotId = `${SLOT_ID}-qrlabel-${i}`;
+        canvas.add(label);
+        rect.on('mousedown', () => onQrSlotClick(i));
+      }
+      return;
+    }
 
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
       const photoUrl = uploadedPhotos[photoIndex].previewUrl;
@@ -1339,6 +1390,7 @@ function renderScene(
   pageIndex: number = 0,
   onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void,
   onTextSlotClick: (slotIndex: number) => void = () => {},
+  onQrSlotClick: (slotIndex: number) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1363,7 +1415,7 @@ function renderScene(
 
   const geoms = page.slotGeometries;
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick);
   }
 
   // 3b. Decorative theme corners (one set, all four corners), locked + on top.

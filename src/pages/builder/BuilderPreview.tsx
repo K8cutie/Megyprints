@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, QrCode } from 'lucide-react';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
 import { dedupeSlotFills } from './slotUtils';
@@ -11,6 +11,9 @@ import { PREVIEW_DIMS } from './PreviewSizeConstants';
 import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import AddQrModal from './AddQrModal';
+import type { QrFill } from './types';
+import { qrRect } from '../../lib/qrMemory';
 
 /* ══════════════════════════════════════════════════════════════════════════
    BuilderPreview — Spread-only view with side arrows
@@ -74,12 +77,14 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, editable, onAddToSlot, onRemoveFromSlot }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, editable, onAddToSlot, onRemoveFromSlot }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
   /** Tap a FREE text element (e.g. the auto-placed theme title) to edit it by id. */
   onTextTap?: (id: string) => void;
+  /** Tap a QR living-memory slot (empty → add; filled → edit). Present only in editable contexts. */
+  onQrSlotTap?: (slotIndex: number) => void;
   // Mobile edit mode: empty frames show a "+" to add a photo; filled frames show
   // a trashcan to remove it.
   editable?: boolean;
@@ -181,6 +186,40 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           </div>
         );
       })}
+      {/* QR living-memory slots — filled by page.qrFills (not slotFills). */}
+      {template?.slots.map((slot, idx) => {
+        if (slot.kind !== 'qr') return null;
+        const qr = page.qrFills?.[idx] ?? null;
+        const cellLeft = safeX + slot.x * safeW;
+        const cellTop = safeY + slot.y * safeH;
+        const cellW = slot.width * safeW;
+        const cellH = slot.height * safeH;
+        if (qr) {
+          const { dx, dy, side } = qrRect(cellLeft, cellTop, cellW, cellH);
+          return (
+            <div key={`qr-${idx}`} className="absolute"
+              onClick={onQrSlotTap ? (e) => { e.stopPropagation(); onQrSlotTap(idx); } : undefined}
+              style={{ zIndex: 2, left: dx, top: dy, width: side, height: side, background: '#fff', cursor: onQrSlotTap ? 'pointer' : undefined }}>
+              <img src={qr.qrPngDataUrl} alt="QR memory" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            </div>
+          );
+        }
+        // Empty QR slot: interactive "add" placeholder only in editable contexts.
+        if (!onQrSlotTap) return null;
+        return (
+          <div key={`qr-${idx}`} className="absolute flex flex-col items-center justify-center text-center"
+            onClick={(e) => { e.stopPropagation(); onQrSlotTap(idx); }}
+            style={{
+              zIndex: 2, left: cellLeft, top: cellTop, width: cellW, height: cellH, boxSizing: 'border-box',
+              border: `${Math.max(1, 1.25 * sx)}px dashed rgba(232,165,152,0.85)`, borderRadius: `${8 * sx}px`,
+              background: 'rgba(253,232,228,0.5)', color: 'rgba(139,111,71,0.95)', cursor: 'pointer',
+              gap: `${4 * sx}px`, padding: `${6 * sx}px`,
+            }}>
+            <QrCode size={Math.max(16, Math.min(cellW, cellH) * 0.32)} />
+            <span style={{ fontSize: `${Math.max(9, 11 * sx)}px`, fontWeight: 600, lineHeight: 1.1 }}>＋ Add QR code</span>
+          </div>
+        );
+      })}
       {page.textElements?.filter((t) => t.boxIndex == null).map((t, i) => (
         <div key={`txt-${i}`}
           className={`absolute ${onTextTap ? 'cursor-pointer' : 'pointer-events-none'}`}
@@ -270,11 +309,12 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
   const total = pages.length;
-  const { setBoxText, updateTextElement } = useBuilderContext();
+  const { setBoxText, updateTextElement, setQrFill } = useBuilderContext();
 
   // Tap a textbox in the preview → open the formatting editor for THAT page.
   // `slot` = a template caption box; `textId` = a free element (e.g. the theme title).
   const [edit, setEdit] = useState<{ pageIndex: number; slot?: number; textId?: string } | null>(null);
+  const [qrEdit, setQrEdit] = useState<{ pageIndex: number; slot: number } | null>(null);
   const buildTextInitial = (pageIndex: number, textId: string): BoxTextContent => {
     const el = pages[pageIndex]?.textElements?.find((t) => t.id === textId);
     return {
@@ -409,7 +449,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
                 <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex}
                   onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
-                  onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })} />
+                  onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
+                  onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
               </div>
 
               {/* Right Page — flush against the left page (no center gap/spine;
@@ -418,7 +459,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                 <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
                   <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })}
-                    onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })} />
+                    onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })}
+                    onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex + 1, slot })} />
                 </div>
               )}
             </div>
@@ -470,6 +512,14 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             else setBoxText(edit.slot!, content, edit.pageIndex);
           }}
           onClose={() => setEdit(null)}
+        />
+      )}
+      {qrEdit && (
+        <AddQrModal
+          initial={pages[qrEdit.pageIndex]?.qrFills?.[qrEdit.slot] ?? null}
+          onSave={(fill: QrFill) => { setQrFill(qrEdit.slot, fill, qrEdit.pageIndex); setQrEdit(null); }}
+          onRemove={() => { setQrFill(qrEdit.slot, null, qrEdit.pageIndex); setQrEdit(null); }}
+          onClose={() => setQrEdit(null)}
         />
       )}
     </div>
