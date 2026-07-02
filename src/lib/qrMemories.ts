@@ -34,10 +34,25 @@ export async function tryCreateMemory(fill: QrFill): Promise<'ok' | 'conflict' |
   return 'error';
 }
 
-/** Re-point an existing memory (relink). Owner-only via RLS. Best-effort. */
+/** Re-point an existing memory (relink). Owner-only via RLS. Best-effort.
+ *  If no row matches (the QR was added while signed out, so it was never
+ *  inserted), fall back to an INSERT so the relink lands immediately instead of
+ *  silently no-op'ing until the checkout belt. */
 export async function updateMemoryDestination(code: string, destination: string): Promise<boolean> {
-  const { error } = await supabase.from('qr_memories').update({ destination }).eq('code', code);
+  const { data, error } = await supabase
+    .from('qr_memories')
+    .update({ destination })
+    .eq('code', code)
+    .select('code');
   if (error) { console.error('QR relink failed:', error.message); return false; }
+  if (data && data.length > 0) return true;
+  // No matching row → create it now (owner-scoped).
+  const uid = await currentUserId();
+  if (!uid) return false;
+  const { error: insErr } = await supabase
+    .from('qr_memories')
+    .insert({ code, user_id: uid, destination });
+  if (insErr) { console.error('QR relink-insert failed:', insErr.message); return false; }
   return true;
 }
 

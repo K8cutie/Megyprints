@@ -7,6 +7,7 @@ import { MATERIALS, COVERS, ALBUM_SIZES, PRICE_CONFIG } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { createOrderFromLatestAlbum, uploadOrderPrintPdf } from '../lib/orders';
 import { getPendingPrintJob } from '../lib/printQueue';
+import { ensureMemoriesForFills } from '../lib/qrMemories';
 import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, validateAddress, EMPTY_ADDRESS, type AddressValue } from '../lib/contact';
 import AddressPicker from '../components/AddressPicker';
 
@@ -98,6 +99,18 @@ export default function Order() {
           await uploadOrderPrintPdf(order.id, job);
         } catch (e) {
           console.error('Print PDF upload failed:', e);
+        }
+        // Reliability belt: ensure every QR "living memory" we're about to PRINT
+        // has a resolvable row. Runs over the exact print-job pages — the same
+        // source the PDF is built from — so a QR added just before checkout can't
+        // ship with a dead /m/:code even if the throttled cloud save hasn't
+        // flushed the qrFill to the DB album yet. INSERT-only; never clobbers a
+        // relink. Best-effort — the order still stands if this hiccups.
+        try {
+          const qrFills = job.pages.flatMap((p) => p.qrFills ?? []);
+          if (qrFills.length) await ensureMemoriesForFills(qrFills);
+        } catch (e) {
+          console.error('QR memories ensure (print job) failed:', e);
         }
         setPrepMsg('');
       }

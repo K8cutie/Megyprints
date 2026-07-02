@@ -1679,6 +1679,13 @@ export function hasQrSlot(t: PageTemplate): boolean {
   return t.slots.some((s) => s.kind === 'qr');
 }
 
+/** Count of PHOTO slots (excludes QR slots). Used for the Templates-tab count
+ *  label + the slot-count filter, so a 'Photo + QR Memory' template presents and
+ *  filters as a 1-photo template. Equals slotCount for non-QR templates. */
+export function photoSlotCount(t: PageTemplate): number {
+  return t.slots.reduce((n, s) => (s.kind === 'qr' ? n : n + 1), 0);
+}
+
 /** Get templates filtered by album size (auto-generation + layout picker). QR
  *  templates are excluded here on purpose — see hasQrSlot. */
 export function getTemplatesForAlbum(albumSize: AlbumSizePreset): PageTemplate[] {

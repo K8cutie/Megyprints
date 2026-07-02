@@ -2,7 +2,7 @@ import { useMemo, useCallback } from 'react';
 import { Check, ChevronLeft, Sparkles, EyeOff } from 'lucide-react';
 import type { TemplateType } from './types';
 import { THEMES } from './types';
-import { PAGE_TEMPLATES } from './pageTemplates';
+import { PAGE_TEMPLATES, hasQrSlot, photoSlotCount } from './pageTemplates';
 
 interface BuilderTemplateProps {
   selected: TemplateType;
@@ -156,7 +156,7 @@ function PageTemplatePreview({
         {template.name}
       </p>
       <p className="text-[9px] text-[#9B9B9B] text-center">
-        {template.slotCount} photo{template.slotCount > 1 ? 's' : ''}
+        {photoSlotCount(template)} photo{photoSlotCount(template) > 1 ? 's' : ''}{hasQrSlot(template) ? ' + QR' : ''}
       </p>
     </div>
   );
@@ -180,7 +180,7 @@ export default function BuilderTemplate({
   // Filter templates by slot count preference
   const filteredTemplates = useMemo(() => {
     if (preferredSlotCount === undefined || preferredSlotCount === null) return PAGE_TEMPLATES;
-    return PAGE_TEMPLATES.filter((t) => t.slotCount === preferredSlotCount);
+    return PAGE_TEMPLATES.filter((t) => photoSlotCount(t) === preferredSlotCount);
   }, [preferredSlotCount]);
 
   // Slot count options

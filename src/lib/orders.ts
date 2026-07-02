@@ -11,7 +11,6 @@ import { supabase } from './supabase';
 import { generateAlbumPdf } from '../pages/builder/generateAlbumPdf';
 import type { PrintJob } from './printQueue';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
-import { ensureMemoriesForFills } from './qrMemories';
 
 export interface ShippingDetails {
   name: string;
@@ -104,16 +103,10 @@ export async function createOrderFromLatestAlbum(opts: {
 
   if (error) throw new Error(`Could not place your order: ${error.message}`);
 
-  // Reliability belt: ensure every QR "living memory" in the album has a
-  // resolvable row so the printed /m/:code always works (best-effort; the user
-  // is signed in here). INSERT-only — never clobbers a later relink.
-  try {
-    const qrFills = (Array.isArray(album.pages) ? album.pages : [])
-      .flatMap((pg: any) => (Array.isArray(pg?.qrFills) ? pg.qrFills : []));
-    if (qrFills.length) await ensureMemoriesForFills(qrFills);
-  } catch (e) {
-    console.error('QR memories ensure (order) failed:', e);
-  }
+  // NOTE: the QR "living memory" reliability belt runs in Order.handlePay over
+  // the LOCAL print job (getPendingPrintJob) — the exact pages that get printed —
+  // rather than this frozen DB album, which can lag behind a QR added moments
+  // before checkout (throttled cloud save). See ensureMemoriesForFills there.
 
   return data as CreatedOrder;
 }

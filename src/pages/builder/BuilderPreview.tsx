@@ -106,9 +106,13 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   return (
     <>
       <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
-      {template && dedupeSlotFills(page.slotFills).map((photoIdx, idx) => {
-        const slot = template.slots[idx];
+      {template && template.slots.map((slot, idx) => {
         if (!slot) return null;
+        // QR slots are rendered by the qrFills map below — never as a photo slot.
+        // Iterating template.slots (not slotFills) also means a freshly-picked
+        // template shows a tappable "+" for every empty photo slot immediately.
+        if (slot.kind === 'qr') return null;
+        const photoIdx = dedupeSlotFills(page.slotFills)[idx] ?? null;
         const uploaded = photoIdx != null ? photos[photoIdx] : undefined;
 
         // Empty frame → in edit mode, a tappable dashed frame with a "+" to add.

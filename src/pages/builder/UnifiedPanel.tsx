@@ -8,7 +8,7 @@ import {
 import type {
   UploadedPhoto, AlbumPage, CanvasPhoto, TextElement, AlbumBackground, PhotoFilters,
 } from './types';
-import { PAGE_TEMPLATES, TEMPLATE_CATEGORIES } from './pageTemplates';
+import { PAGE_TEMPLATES, TEMPLATE_CATEGORIES, hasQrSlot, photoSlotCount } from './pageTemplates';
 import PropertiesPanel from './PropertiesPanel';
 import { getPersistedSidebarTab, setPersistedSidebarTab } from './sidebarTabStore';
 
@@ -108,7 +108,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
       ? PAGE_TEMPLATES
       : PAGE_TEMPLATES.filter((t) => t.category === templateCategory);
     if (photosPerPage !== undefined) {
-      result = result.filter((t) => t.slotCount === photosPerPage);
+      result = result.filter((t) => photoSlotCount(t) === photosPerPage);
     }
     return result;
   })();
@@ -220,7 +220,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-[10px] font-semibold text-[#2D2D2D] uppercase tracking-wider">Slot Count</h4>
                         <span className="text-[9px] text-[#9B9B9B]">
-                          {PAGE_TEMPLATES.filter(t => photosPerPage === undefined ? true : t.slotCount === photosPerPage).length} match
+                          {PAGE_TEMPLATES.filter(t => photosPerPage === undefined ? true : photoSlotCount(t) === photosPerPage).length} match
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1 mb-3">
@@ -350,7 +350,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                           </div>
                           <div className="absolute bottom-0 left-0 right-0 bg-white/90 px-1.5 py-1">
                             <span className="text-[8px] text-[#6B6B6B] font-medium truncate block">{tmpl.name}</span>
-                            <span className="text-[7px] text-[#9B9B9B]">({tmpl.slotCount})</span>
+                            <span className="text-[7px] text-[#9B9B9B]">({photoSlotCount(tmpl)}{hasQrSlot(tmpl) ? '+QR' : ''})</span>
                           </div>
                         </button>
                       ))}
