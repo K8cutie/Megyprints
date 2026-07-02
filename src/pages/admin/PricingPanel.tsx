@@ -5,6 +5,7 @@
    builder/types.ts until we lock these numbers).
    ══════════════════════════════════════════════════════════════════════════ */
 import { useState } from 'react';
+import { QrCode } from 'lucide-react';
 
 const SHEET = 26.5;      // ₱2.50 paper + ₱24 print (2 sides)
 const SOFT_COVER = 50;   // est: thick paper + print + ₱16 lamination
@@ -214,6 +215,19 @@ export default function PricingPanel() {
           <RivalCard title="14×10 Landscape Hardcover" meta="Imagewrap hardcover · 64 pages (20 + 44)"
             lines={[['Base · 20 pages', '₱3,000', ''], ['+44 pages @ ₱60', '₱2,640', 'rival'], ['Regular', '₱5,640', 'rule'], ['After voucher', '₱3,462', 'pay']]} />
         </div>
+      </div>
+
+      {/* QR strategy — decided: free inclusion, value priced into the album */}
+      <div className="rounded-xl border border-[#F4C2A1]/70 bg-[#FBEDE7] px-5 py-4">
+        <h4 className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
+          <QrCode size={16} className="text-[#E8A598]" /> Living-memory QR — free with every album
+        </h4>
+        <p className="text-sm text-[#41392F] mt-1.5">
+          Not billed per code. Charging per QR would tax the best growth lever we have — every scan is a
+          free impression and a potential customer — and put friction on our differentiator. Instead the
+          value is <b>priced into the album</b>: a free QR is the reason to sit at the <b>upper end of the
+          margin band (3.5–5×)</b>, and a headline selling point — <i>"free living-memory QR with every album."</i>
+        </p>
       </div>
 
       {/* Assumptions */}
