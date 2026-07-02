@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, LogOut, LayoutDashboard } from 'lucide-react';
+import { User, LogOut, LayoutDashboard, QrCode } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { resolveRole } from '../lib/roles';
 import LoginModal from '../pages/auth/LoginModal';
@@ -35,6 +35,14 @@ export default function AuthNav() {
               <span className="hidden sm:inline">Admin</span>
             </Link>
           )}
+          <Link
+            to="/memories"
+            className="flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-[#2D2D2D] hover:text-[#E8A598] transition-colors rounded-lg hover:bg-[#FDE8E4]"
+            title="My QR Memories"
+          >
+            <QrCode size={16} className="shrink-0 text-[#E8A598]" />
+            <span className="hidden md:inline">Memories</span>
+          </Link>
           <Link
             to="/profile"
             className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#2D2D2D] hover:text-[#E8A598] transition-colors rounded-lg hover:bg-[#FDE8E4] min-w-0"

@@ -9,6 +9,7 @@ import Templates from './pages/Templates';
 import Contact from './pages/Contact';
 import Order from './pages/Order';
 import Profile from './pages/Profile';
+import MyMemories from './pages/MyMemories';
 import Admin from './pages/Admin';
 import ProtectedRoute from './components/ProtectedRoute';
 import BuilderErrorBoundary from './pages/builder/BuilderErrorBoundary';
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/order" element={<Order />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />
         </Route>
         {/* Builder — a full-screen app with its own chrome. Kept OUTSIDE Layout so the
             marketing Lenis smooth-scroll (which hijacks the mouse wheel and scrolls the
