@@ -10,6 +10,7 @@ import MobileReview from './builder/MobileReview';
 import LayoutPicker from './builder/LayoutPicker';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
 import MegyAssistant from '../assistant/MegyAssistant';
+import SoftAuthGate from '../components/SoftAuthGate';
 import { useIsMobile } from '../hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -157,6 +158,7 @@ export default function Builder() {
 
   const content = (
     <BuilderErrorBoundary key={errorKey} onReset={handleReset}>
+      <SoftAuthGate />
       <div className={`fixed inset-0 z-[60] bg-white flex flex-col transition-[padding] duration-300 ${panelCollapsed ? 'lg:pl-[60px]' : 'lg:pl-[340px]'}`}>
         {/* Step Indicator */}
         <div className="h-12 bg-white border-b border-[#E8E8E8] flex items-center px-4 gap-1 shrink-0">

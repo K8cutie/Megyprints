@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { X, QrCode, Trash2, Loader2 } from 'lucide-react';
+import { X, QrCode, Trash2, Loader2, LogIn } from 'lucide-react';
 import type { QrFill } from './types';
 import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination } from '../../lib/qrMemory';
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
 import { useAuth } from '../../lib/authContext';
+import { useAuthModal } from '../../components/AuthModalProvider';
 
 /* Add / edit a QR "living memory" for a template QR slot. New: mints a stable
    code, generates a print-crisp QR encoding /m/:code, and returns the fill.
@@ -16,6 +17,7 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
   onClose: () => void;
 }) {
   const { user } = useAuth();
+  const { openLogin } = useAuthModal();
   const [url, setUrl] = useState(initial?.destination ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -111,12 +113,21 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
               <Trash2 size={14} /> Remove
             </button>
           ) : <span />}
-          <button
-            onClick={confirm} disabled={busy}
-            className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold hover:brightness-105 disabled:opacity-60 flex items-center gap-2"
-          >
-            {busy ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : (initial ? 'Save' : 'Generate QR')}
-          </button>
+          {!user ? (
+            <button
+              onClick={openLogin}
+              className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold hover:brightness-105 flex items-center gap-2"
+            >
+              <LogIn size={15} /> Log In to continue
+            </button>
+          ) : (
+            <button
+              onClick={confirm} disabled={busy}
+              className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold hover:brightness-105 disabled:opacity-60 flex items-center gap-2"
+            >
+              {busy ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : (initial ? 'Save' : 'Generate QR')}
+            </button>
+          )}
         </div>
       </div>
     </div>

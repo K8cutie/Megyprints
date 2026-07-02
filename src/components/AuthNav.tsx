@@ -3,14 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { User, LogOut, LayoutDashboard, QrCode } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { resolveRole } from '../lib/roles';
-import LoginModal from '../pages/auth/LoginModal';
-import SignupModal from '../pages/auth/SignupModal';
+import { useAuthModal } from './AuthModalProvider';
 
 export default function AuthNav() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [showLogin, setShowLogin] = useState(false);
-  const [showSignup, setShowSignup] = useState(false);
+  const { openLogin, openSignup } = useAuthModal();
 
   // Show the Admin entry for ANY operator (owner or fulfillment), not just owners.
   const [isOperator, setIsOperator] = useState(false);
@@ -65,30 +63,19 @@ export default function AuthNav() {
       ) : (
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowLogin(true)}
+            onClick={openLogin}
             className="px-3 py-1.5 text-xs font-medium text-[#E8A598] border border-[#F4C2A1] rounded-lg hover:bg-[#FDE8E4] transition-colors"
           >
             Log In
           </button>
           <button
-            onClick={() => setShowSignup(true)}
+            onClick={openSignup}
             className="px-3 py-1.5 text-xs font-medium text-white bg-[#E8A598] rounded-lg hover:brightness-105 transition-all"
           >
             Sign Up
           </button>
         </div>
       )}
-
-      <LoginModal
-        isOpen={showLogin}
-        onClose={() => setShowLogin(false)}
-        onSwitchToSignup={() => { setShowLogin(false); setShowSignup(true); }}
-      />
-      <SignupModal
-        isOpen={showSignup}
-        onClose={() => setShowSignup(false)}
-        onSwitchToLogin={() => { setShowSignup(false); setShowLogin(true); }}
-      />
     </>
   );
 }

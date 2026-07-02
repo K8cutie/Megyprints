@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package } from 'lucide-react';
 import { MATERIALS, COVERS, ALBUM_SIZES, PRICE_CONFIG } from './builder/types';
 import { useAuth } from '../lib/authContext';
+import { useAuthModal } from '../components/AuthModalProvider';
 import { createOrderFromLatestAlbum, uploadOrderPrintPdf } from '../lib/orders';
 import { getPendingPrintJob } from '../lib/printQueue';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
@@ -24,6 +25,7 @@ const TRACK_STAGES = [
 export default function Order() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { openLogin } = useAuthModal();
   const [material, setMaterial] = useState<MaterialType>('matte');
   const [cover, setCover] = useState<CoverType>('softcover');
   const [size, setSize] = useState<AlbumSizePreset>('8x8');
@@ -66,7 +68,8 @@ export default function Order() {
     setPhone(formatPHPhoneDisplay(canonicalPhone!));
 
     if (!user) {
-      setErrorMsg('Please sign in to place your order — that\'s how we tie it to your album and contact you.');
+      setErrorMsg('You must be signed in to check out — it ties the order to your album and lets us contact you.');
+      openLogin();
       return;
     }
     setStep('payment');

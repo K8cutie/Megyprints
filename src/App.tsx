@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Outlet } from 'react-router-dom';
 import { AuthProvider } from './lib/authContext';
+import { AuthModalProvider } from './components/AuthModalProvider';
 import { BuilderProvider } from './pages/builder/BuilderContext';
 import Layout from './components/Layout';
 import Home from './pages/Home';
@@ -22,6 +23,7 @@ export default function App() {
 
   return (
     <AuthProvider>
+      <AuthModalProvider>
       <InstallPrompt />
       <Routes>
         <Route element={<Layout><Outlet /></Layout>}>
@@ -49,6 +51,7 @@ export default function App() {
         {/* Operator console — outside the customer Layout (its own chrome) */}
         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
       </Routes>
+      </AuthModalProvider>
     </AuthProvider>
   );
 }
