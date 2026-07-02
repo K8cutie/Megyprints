@@ -1509,7 +1509,28 @@ const T8x8_TILE_C: PageTemplate = {
   textSlots: [{ id: 'cap', x: 0.4375, y: 0.5625, width: 0.5625, height: 0.4375, align: 'center', placeholder: 'Tap to add text' }],
 };
 
+/* ══════════════════════════════════════════════════════════════════════════
+   QR "LIVING MEMORY" TEMPLATES — a full 1:1 hero photo + a corner QR slot.
+   Square-only for now: a 1:1 photo fills a 1:1 canvas with NO crop and NO
+   whitespace, so strict ratio-matching still holds while the QR sits in the
+   bottom-right corner on its own white backing (drawn AFTER the photo in all
+   three renderers, so it stays scannable on top). OPT-IN ONLY — excluded from
+   album generation + the layout picker (see hasQrSlot in getTemplatesForAlbum /
+   getTemplatesForRatio) so a photo is never auto-placed into the QR slot; the
+   user picks these from the Templates tab.
+   ══════════════════════════════════════════════════════════════════════════ */
+function qrHeroSquare(id: string, size: AlbumSizePreset): PageTemplate {
+  return tmpl(id, 'Photo + QR Memory', 'duo', STD, 'square', '1:1', [size], [
+    rsBox(0, 0, '1:1', 1.0, 1.0, size),
+    { id: `${id}-qr`, x: 0.70, y: 0.70, width: 0.26, height: 0.26, kind: 'qr' },
+  ]);
+}
+const T_QR_66 = qrHeroSquare('tqr-66', S66);
+const T_QR_88 = qrHeroSquare('tqr-88', S88);
+const T_QR_99 = qrHeroSquare('tqr-99', S99);
+
 const PAGE_TEMPLATES_BASE: PageTemplate[] = [
+  T_QR_66, T_QR_88, T_QR_99,
   T8x8_TILE_C,
   // 6×4 (6 templates)
   T6x4_01, T6x4_02, T6x4_03, T6x4_04, T6x4_05, T6x4_06,
@@ -1650,9 +1671,18 @@ function isActive(t: PageTemplate): boolean {
   return !INACTIVE_TEMPLATE_IDS.has(t.id);
 }
 
-/** Get templates filtered by album size */
+/** A template that carries a QR "living memory" slot. These are OPT-IN ONLY:
+ *  excluded from album generation + the "Change layout" picker so a photo is
+ *  never auto-placed into a QR slot. Reachable only via the Templates tab
+ *  (which browses PAGE_TEMPLATES directly). */
+export function hasQrSlot(t: PageTemplate): boolean {
+  return t.slots.some((s) => s.kind === 'qr');
+}
+
+/** Get templates filtered by album size (auto-generation + layout picker). QR
+ *  templates are excluded here on purpose — see hasQrSlot. */
 export function getTemplatesForAlbum(albumSize: AlbumSizePreset): PageTemplate[] {
-  return PAGE_TEMPLATES.filter(t => isActive(t) && t.albumSizes.includes(albumSize));
+  return PAGE_TEMPLATES.filter(t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize));
 }
 
 /** Get templates filtered by album size AND target ratio */
@@ -1661,7 +1691,7 @@ export function getTemplatesForRatio(
   targetRatio: PhotoRatio,
 ): PageTemplate[] {
   return PAGE_TEMPLATES.filter(
-    t => isActive(t) && t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio,
+    t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio,
   );
 }
 

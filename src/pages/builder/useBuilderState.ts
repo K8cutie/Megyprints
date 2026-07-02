@@ -1273,11 +1273,13 @@ export function useBuilderState(): BuilderActions {
   const autoFillSlots = useCallback(() => {
     pushSnapshot();
     updateCurrentPage((page) => {
+      const tmplForFill = PAGE_TEMPLATES.find((t) => t.id === page.templateId);
       const slotCount = page.slotFills?.length ?? 0;
       if (slotCount === 0) return page;
       const fills = [...(page.slotFills ?? [])];
       let photoIdx = 0;
       for (let i = 0; i < slotCount; i++) {
+        if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
         if (fills[i] === null && photoIdx < uploadedPhotos.length) {
           while (photoIdx < uploadedPhotos.length && fills.includes(photoIdx)) {
             photoIdx++;
