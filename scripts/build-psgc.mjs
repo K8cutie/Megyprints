@@ -28,8 +28,28 @@ const barangays = read('barangays.json');
 write(path.join(OUT, 'regions.json'),
   regions.map((r) => ({ code: r.regCode, name: clean(r.regionName) })).sort(byName));
 
-write(path.join(OUT, 'provinces.json'),
-  provinces.map((p) => ({ code: p.regCode + p.provCode, regCode: p.regCode, name: clean(p.provName) })).sort(byName));
+// Base provinces from source.
+const provList = provinces.map((p) => ({ code: p.regCode + p.provCode, regCode: p.regCode, name: clean(p.provName) }));
+const provCodes = new Set(provList.map((p) => p.code));
+
+// Some PSGC municipalities are PROVINCE-LEVEL units with no parent-province row —
+// independent cities / HUCs (e.g. Isabela City), lone NCR municipality (Pateros),
+// and the BARMM Special Geographic Area. Without a synthesized province they'd be
+// unreachable in the cascade (= undeliverable). Add a selectable entry for each.
+const SPECIAL_PROV_NAMES = { '09901': 'Isabela City', '13817': 'Pateros', '19999': 'Special Geographic Area' };
+const orphans = new Map(); // provKey -> { regCode, cities: [] }
+for (const m of muncities) {
+  const key = m.regCode + m.provCode;
+  if (provCodes.has(key)) continue;
+  if (!orphans.has(key)) orphans.set(key, { regCode: m.regCode, cities: [] });
+  orphans.get(key).cities.push(clean(m.munCityName));
+}
+for (const [key, info] of orphans) {
+  const name = SPECIAL_PROV_NAMES[key] || (info.cities.length === 1 ? info.cities[0] : 'Independent Areas');
+  provList.push({ code: key, regCode: info.regCode, name });
+}
+
+write(path.join(OUT, 'provinces.json'), provList.sort(byName));
 
 write(path.join(OUT, 'muncities.json'),
   muncities.map((m) => ({ code: m.regCode + m.munCityCode, provKey: m.regCode + m.provCode, name: clean(m.munCityName) })).sort(byName));
