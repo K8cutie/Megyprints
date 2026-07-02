@@ -82,20 +82,20 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, onTa
   sx: number; showList: boolean; onTap: () => void; zIndex: number;
 }) {
   const cell = Math.min(width, height);
-  const fs = Math.max(9, Math.min(13, cell * 0.1));
+  const fs = Math.max(12, Math.min(28, cell * 0.15));
   return (
     <div key={rectKey} className="absolute flex flex-col items-center justify-center text-center"
       onClick={(e) => { e.stopPropagation(); onTap(); }}
       style={{
         zIndex, left, top, width, height,
-        border: '2px dashed rgba(232,165,152,0.85)', borderRadius: 10,
+        border: '2px dashed rgba(232,165,152,0.9)', borderRadius: 10,
         background: 'rgba(253,232,228,0.5)', cursor: 'pointer', boxSizing: 'border-box',
-        color: '#B5674F', padding: 6, gap: `${3 * sx}px`, overflow: 'hidden',
+        color: '#A0562F', padding: 6, gap: `${5 * sx}px`, overflow: 'hidden',
       }}>
       {showList ? (
         <>
-          <span style={{ fontWeight: 700, fontSize: fs * 1.08, whiteSpace: 'nowrap' }}>Click to add:</span>
-          <div style={{ fontSize: fs, fontWeight: 600, lineHeight: 1.55, textAlign: 'left' }}>
+          <span style={{ fontWeight: 800, fontSize: fs * 1.15, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>Click to add:</span>
+          <div style={{ fontSize: fs, fontWeight: 700, lineHeight: 1.5, textAlign: 'left' }}>
             <div>•&nbsp; Photo</div>
             <div>•&nbsp; Text</div>
             <div>•&nbsp; QR</div>

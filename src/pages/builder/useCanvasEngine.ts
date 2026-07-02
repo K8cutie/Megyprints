@@ -1424,8 +1424,8 @@ function renderTemplateSlots(
       const hint = cell >= 120
         ? new fab.Text('Click to add:\n•  Photo\n•  Text\n•  QR', {
             left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center',
-            fontSize: Math.max(11, Math.min(15, cell * 0.085)),
-            fontFamily: '"DM Sans", sans-serif', fontWeight: '600', fill: '#C4826A',
+            fontSize: Math.max(13, Math.min(30, cell * 0.13)),
+            fontFamily: '"DM Sans", sans-serif', fontWeight: '700', fill: '#A0562F',
             textAlign: 'center', lineHeight: 1.4, selectable: false, evented: false,
           })
         : new fab.Text('+', {
@@ -1666,14 +1666,14 @@ function renderScene(
     const label = r.height >= 78
       ? new fab.Text('Click to add:\n•  Photo\n•  Text\n•  QR', {
           left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
-          fontSize: Math.max(11, Math.min(15, Math.min(r.width, r.height) * 0.085)),
-          fill: '#8B6F47', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.35,
+          fontSize: Math.max(13, Math.min(28, Math.min(r.width, r.height) * 0.13)),
+          fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700', textAlign: 'center', lineHeight: 1.35,
           selectable: false, evented: false,
         })
       : new fab.Text('＋  Add: Photo · Text · QR', {
           left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
-          fontSize: Math.max(10, Math.min(r.height * 0.42, r.width * 0.055)),
-          fill: '#8B6F47', fontFamily: '"DM Sans", sans-serif',
+          fontSize: Math.max(12, Math.min(r.height * 0.5, r.width * 0.07)),
+          fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700',
           selectable: false, evented: false,
         });
     label.slotId = `${SLOT_ID}-textbox-label-${i}`;
