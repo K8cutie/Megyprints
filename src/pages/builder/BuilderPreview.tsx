@@ -72,12 +72,70 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
   }
 }
 
+/** Empty-slot "content chooser" affordance — the tappable dashed box that
+ *  either spells out "Click to add: Photo/Text/QR" (when the 3-way chooser is
+ *  wired and the cell is big enough) or falls back to a bare "+" bubble.
+ *  ONE definition shared by photo slots AND caption boxes so the two never
+ *  drift (previously copy-pasted, which the duplication gate flagged). */
+function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, onTap, zIndex }: {
+  rectKey: string; left: number; top: number; width: number; height: number;
+  sx: number; showList: boolean; onTap: () => void; zIndex: number;
+}) {
+  const cell = Math.min(width, height);
+  const fs = Math.max(9, Math.min(13, cell * 0.1));
+  return (
+    <div key={rectKey} className="absolute flex flex-col items-center justify-center text-center"
+      onClick={(e) => { e.stopPropagation(); onTap(); }}
+      style={{
+        zIndex, left, top, width, height,
+        border: '2px dashed rgba(232,165,152,0.85)', borderRadius: 10,
+        background: 'rgba(253,232,228,0.5)', cursor: 'pointer', boxSizing: 'border-box',
+        color: '#B5674F', padding: 6, gap: `${3 * sx}px`, overflow: 'hidden',
+      }}>
+      {showList ? (
+        <>
+          <span style={{ fontWeight: 700, fontSize: fs * 1.08, whiteSpace: 'nowrap' }}>Click to add:</span>
+          <div style={{ fontSize: fs, fontWeight: 600, lineHeight: 1.55, textAlign: 'left' }}>
+            <div>•&nbsp; Photo</div>
+            <div>•&nbsp; Text</div>
+            <div>•&nbsp; QR</div>
+          </div>
+        </>
+      ) : (
+        <div style={{
+          width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
+        }}>
+          <Plus size={26} color="white" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** QR living-memory square — white backing + the QR png, sized/positioned via
+ *  qrRect() inside a cell. Shared by photo slots AND caption boxes. */
+function QrSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zIndex }: {
+  rectKey: string; cellLeft: number; cellTop: number; cellW: number; cellH: number;
+  dataUrl: string; onTap?: () => void; zIndex: number;
+}) {
+  const { dx, dy, side } = qrRect(cellLeft, cellTop, cellW, cellH);
+  return (
+    <div key={rectKey} className="absolute"
+      onClick={onTap ? (e) => { e.stopPropagation(); onTap(); } : undefined}
+      style={{ zIndex, left: dx, top: dy, width: side, height: side, background: '#fff', cursor: onTap ? 'pointer' : undefined }}>
+      <img src={dataUrl} alt="QR memory" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+    </div>
+  );
+}
+
 /** Page renderer — always renders from LIVE page data so Preview matches the
  *  real pages. (Cached canvas snapshots were unreliable: only captured for
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onTextSlotPhotoTap, onTextSlotQrTap }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -95,6 +153,12 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   editable?: boolean;
   onAddToSlot?: (slotIndex: number) => void;
   onRemoveFromSlot?: (slotIndex: number) => void;
+  /** Tap an EMPTY caption box → open the content chooser (photo / text / QR). */
+  onChooseTextSlot?: (slotIndex: number) => void;
+  /** Tap a caption box FILLED with a photo → re-open the photo picker. */
+  onTextSlotPhotoTap?: (slotIndex: number) => void;
+  /** Tap a caption box FILLED with a QR → re-open the QR editor. */
+  onTextSlotQrTap?: (slotIndex: number) => void;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -160,37 +224,11 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           // enough, spell out what the box can hold ("Click to add: Photo/Text/QR")
           // instead of a bare "+"; otherwise fall back to the "+" bubble.
           const cell = Math.min(slotW, slotH);
-          const showList = !!onChooseSlot && cell >= 84;
-          const fs = Math.max(9, Math.min(13, cell * 0.1));
           return (
-            <div key={`slot-${idx}`} className="absolute flex flex-col items-center justify-center text-center"
-              onClick={(e) => { e.stopPropagation(); onEmptyTap(idx); }}
-              style={{
-                zIndex: 1, left: slotLeft, top: slotTop,
-                width: slotW, height: slotH,
-                border: '2px dashed rgba(232,165,152,0.85)', borderRadius: 10,
-                background: 'rgba(253,232,228,0.5)', cursor: 'pointer', boxSizing: 'border-box',
-                color: '#B5674F', padding: 6, gap: `${3 * sx}px`, overflow: 'hidden',
-              }}>
-              {showList ? (
-                <>
-                  <span style={{ fontWeight: 700, fontSize: fs * 1.08, whiteSpace: 'nowrap' }}>Click to add:</span>
-                  <div style={{ fontSize: fs, fontWeight: 600, lineHeight: 1.55, textAlign: 'left' }}>
-                    <div>•&nbsp; Photo</div>
-                    <div>•&nbsp; Text</div>
-                    <div>•&nbsp; QR</div>
-                  </div>
-                </>
-              ) : (
-                <div style={{
-                  width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
-                }}>
-                  <Plus size={26} color="white" />
-                </div>
-              )}
-            </div>
+            <EmptyChooserBox key={`slot-${idx}`} rectKey={`slot-${idx}`}
+              left={slotLeft} top={slotTop} width={slotW} height={slotH} sx={sx} zIndex={1}
+              showList={!!onChooseSlot && cell >= 84}
+              onTap={() => onEmptyTap(idx)} />
           );
         }
 
@@ -252,17 +290,12 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
       {template?.slots.map((slot, idx) => {
         const qr = page.qrFills?.[idx] ?? null;
         if (!qr) return null;
-        const cellLeft = safeX + slot.x * safeW;
-        const cellTop = safeY + slot.y * safeH;
-        const cellW = slot.width * safeW;
-        const cellH = slot.height * safeH;
-        const { dx, dy, side } = qrRect(cellLeft, cellTop, cellW, cellH);
         return (
-          <div key={`qr-${idx}`} className="absolute"
-            onClick={onQrSlotTap ? (e) => { e.stopPropagation(); onQrSlotTap(idx); } : undefined}
-            style={{ zIndex: 2, left: dx, top: dy, width: side, height: side, background: '#fff', cursor: onQrSlotTap ? 'pointer' : undefined }}>
-            <img src={qr.qrPngDataUrl} alt="QR memory" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          </div>
+          <QrSquare key={`qr-${idx}`} rectKey={`qr-${idx}`} zIndex={2}
+            cellLeft={safeX + slot.x * safeW} cellTop={safeY + slot.y * safeH}
+            cellW={slot.width * safeW} cellH={slot.height * safeH}
+            dataUrl={qr.qrPngDataUrl}
+            onTap={onQrSlotTap ? () => onQrSlotTap(idx) : undefined} />
         );
       })}
       {page.textElements?.filter((t) => t.boxIndex == null).map((t, i) => (
@@ -283,19 +316,36 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
       {/* Template text boxes. Filled → formatted text clipped to the box; empty →
           faint tap hint. Tapping opens the text editor (onTextSlotTap). */}
       {template?.textSlots?.map((ts, i) => {
+        // Content precedence per caption box: qr → text → photo → empty.
+        const boxLeft = safeX + ts.x * safeW;
+        const boxTop = safeY + ts.y * safeH;
+        const boxW = ts.width * safeW;
+        const boxH = ts.height * safeH;
+
+        // (1) QR — drawn as a qrRect square + white backing, like the photo-slot QR.
+        const tqr = page.textSlotQr?.[i] ?? null;
+        if (tqr) {
+          return (
+            <QrSquare key={`tslot-${i}`} rectKey={`tslot-${i}`} zIndex={5}
+              cellLeft={boxLeft} cellTop={boxTop} cellW={boxW} cellH={boxH}
+              dataUrl={tqr.qrPngDataUrl}
+              onTap={onTextSlotQrTap ? () => onTextSlotQrTap(i) : undefined} />
+          );
+        }
+
         const boxed = page.textElements?.find((t) => t.boxIndex === i);
         const align = boxed?.alignment ?? ts.align ?? 'center';
-        return (
-          <div key={`tslot-${i}`} className="absolute flex items-center"
-            onClick={onTextSlotTap ? (e) => { e.stopPropagation(); onTextSlotTap(i); } : undefined}
-            style={{
-              // Above theme corner art (zIndex 4) so the box is never buried.
-              zIndex: 5, left: safeX + ts.x * safeW, top: safeY + ts.y * safeH,
-              width: ts.width * safeW, height: ts.height * safeH, overflow: 'hidden',
-              justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
-              cursor: onTextSlotTap ? 'pointer' : undefined,
-            }}>
-            {boxed ? (
+
+        // (2) TEXT — a bound caption (unchanged rendering).
+        if (boxed) {
+          return (
+            <div key={`tslot-${i}`} className="absolute flex items-center"
+              onClick={onTextSlotTap ? (e) => { e.stopPropagation(); onTextSlotTap(i); } : undefined}
+              style={{
+                zIndex: 5, left: boxLeft, top: boxTop, width: boxW, height: boxH, overflow: 'hidden',
+                justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
+                cursor: onTextSlotTap ? 'pointer' : undefined,
+              }}>
               <span style={{
                 width: '100%', textAlign: align as any,
                 fontFamily: boxed.fontFamily || 'serif', fontSize: (boxed.fontSize || 24) * sx,
@@ -303,19 +353,68 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
                 lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}>{boxed.text}</span>
-            ) : (
-              // Empty: a clear, tappable text field that fills the box.
-              <div style={{
-                width: '100%', height: '100%', boxSizing: 'border-box',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: `${4 * sx}px`,
-                border: `${Math.max(1, 1.25 * sx)}px dashed rgba(232,165,152,0.85)`, borderRadius: `${6 * sx}px`,
-                background: 'rgba(253,232,228,0.45)',
-                color: 'rgba(139,111,71,0.9)', fontSize: `${11 * sx}px`, fontWeight: 500,
+            </div>
+          );
+        }
+
+        // (3) PHOTO — object-cover fill of the caption box rect.
+        const tPhotoIdx = page.textSlotFills?.[i] ?? null;
+        const tPhoto = tPhotoIdx != null ? photos[tPhotoIdx] : undefined;
+        if (tPhoto) {
+          return (
+            <div key={`tslot-${i}`} className="absolute"
+              onClick={onTextSlotPhotoTap ? (e) => { e.stopPropagation(); onTextSlotPhotoTap(i); } : undefined}
+              style={{
+                zIndex: 5, left: boxLeft, top: boxTop, width: boxW, height: boxH, overflow: 'hidden',
+                cursor: onTextSlotPhotoTap ? 'pointer' : undefined,
               }}>
-                <span style={{ fontSize: `${12 * sx}px` }}>✎</span>
-                {ts.placeholder || 'Tap to add text'}
-              </div>
-            )}
+              <img src={tPhoto.previewUrl} alt="" draggable={false}
+                className="object-cover" style={{ width: '100%', height: '100%' }} />
+            </div>
+          );
+        }
+
+        // (4) EMPTY — tapping adds text/content.
+        //
+        // The full 3-way chooser ("Click to add: Photo/Text/QR") is an EDIT-mode
+        // affordance and is gated on `editable && onChooseTextSlot`.
+        //
+        // But a plain tap-to-add-caption (onTextSlotTap) must NOT be gated on
+        // `editable`: the BuilderPreview spread wires onTextSlotTap (to open the
+        // MobileTextEditor) WITHOUT passing `editable`. Gating the tap on
+        // `editable` made empty caption boxes dead on that surface — a regression.
+        // So: chooser needs editable; the legacy tap-to-add only needs onTextSlotTap.
+        const cell = Math.min(boxW, boxH);
+        if (editable && onChooseTextSlot) {
+          return (
+            <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}
+              left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
+              showList={cell >= 84}
+              onTap={() => onChooseTextSlot(i)} />
+          );
+        }
+        // Fallback: faint tap hint. Interactive whenever a plain tap-to-add
+        // handler is provided (onChooseTextSlot in non-editable contexts, or
+        // onTextSlotTap on surfaces like the BuilderPreview spread); otherwise
+        // read-only.
+        const onEmptyTap = onChooseTextSlot ?? (onTextSlotTap ? () => onTextSlotTap(i) : undefined);
+        return (
+          <div key={`tslot-${i}`} className="absolute flex items-center"
+            onClick={onEmptyTap ? (e) => { e.stopPropagation(); onEmptyTap(i); } : undefined}
+            style={{
+              zIndex: 5, left: boxLeft, top: boxTop, width: boxW, height: boxH, overflow: 'hidden',
+              justifyContent: 'center', cursor: onEmptyTap ? 'pointer' : undefined,
+            }}>
+            <div style={{
+              width: '100%', height: '100%', boxSizing: 'border-box',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: `${4 * sx}px`,
+              border: `${Math.max(1, 1.25 * sx)}px dashed rgba(232,165,152,0.85)`, borderRadius: `${6 * sx}px`,
+              background: 'rgba(253,232,228,0.45)',
+              color: 'rgba(139,111,71,0.9)', fontSize: `${11 * sx}px`, fontWeight: 500,
+            }}>
+              <span style={{ fontSize: `${12 * sx}px` }}>✎</span>
+              {ts.placeholder || 'Tap to add text'}
+            </div>
           </div>
         );
       })}

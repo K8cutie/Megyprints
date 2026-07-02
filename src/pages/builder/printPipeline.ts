@@ -180,6 +180,48 @@ async function renderPageManually(
     renderTextElement(ctx, text, W, H, slot);
   }
 
+  // ── Caption-box CONTENT (photo / QR) ──
+  // Mirrors the photo-slot content pass but keyed to template.textSlots. TEXT
+  // captions already printed via the boxIndex branch above; here we draw QR and
+  // photo with precedence qr → (text already drawn) → photo. Drawn last so the
+  // caption layer sits above the photos (consistent with DOM/Fabric z-order).
+  if (textTpl && tm && (page.textSlotFills || page.textSlotQr)) {
+    const sX = W * tm.left, sY = H * tm.top, sW = W * (1 - tm.left - tm.right), sH = H * (1 - tm.top - tm.bottom);
+    const textSlots = textTpl.textSlots ?? [];
+    for (let j = 0; j < textSlots.length; j++) {
+      const ts = textSlots[j];
+      const bx = sX + ts.x * sW;
+      const by = sY + ts.y * sH;
+      const bw = ts.width * sW;
+      const bh = ts.height * sH;
+      // (1) QR — reuse the photo-slot QR renderer.
+      const tqr = page.textSlotQr?.[j] ?? null;
+      if (tqr) {
+        await renderSlotQr(ctx, tqr, bx, by, bw, bh);
+        continue;
+      }
+      // (2) TEXT already handled by the boxIndex branch — never overdraw it.
+      if ((page.textElements || []).some((t) => t.boxIndex === j)) continue;
+      // (3) PHOTO — cover-fit clipped to the box rect (no frame).
+      const tPhotoIdx = page.textSlotFills?.[j] ?? null;
+      if (tPhotoIdx == null || tPhotoIdx < 0) continue;
+      const tPhoto = photos[tPhotoIdx];
+      if (!tPhoto) continue;
+      try {
+        const img = await loadImage(tPhoto.previewUrl);
+        const coverScale = Math.max(bw / img.width, bh / img.height);
+        const drawW = img.width * coverScale;
+        const drawH = img.height * coverScale;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(bx, by, bw, bh);
+        ctx.clip();
+        ctx.drawImage(img, bx + (bw - drawW) / 2, by + (bh - drawH) / 2, drawW, drawH);
+        ctx.restore();
+      } catch { /* photo failed to load — leave the box empty */ }
+    }
+  }
+
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob!), 'image/png', 1);
   });

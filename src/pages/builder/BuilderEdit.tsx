@@ -156,6 +156,22 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       if (containerMode) return;
       setSlotTextEditSlot(slotIndex);
     }, [containerMode]),
+    onTextSlotEmptyClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
+      // Empty caption box → open the 3-way chooser (photo / text / QR).
+      setChooserTextSlot(slotIndex);
+    }, [containerMode]),
+    onTextSlotPhotoClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
+      // Filled-with-photo caption box → re-open the photo picker for it.
+      setPickerIsTextSlot(true);
+      setSelectedSlotForPicker(slotIndex);
+      setShowPhotoPicker(true);
+    }, [containerMode]),
+    onTextSlotQrClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
+      setTextSlotQrEditSlot(slotIndex);
+    }, [containerMode]),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {
@@ -183,6 +199,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   // Per-slot text (chooser "Add Text") target — distinct from the caption box above.
   const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null);
   const [qrEditSlot, setQrEditSlot] = useState<number | null>(null);
+  // Empty caption-box chooser + QR target, and a flag routing the photo picker
+  // to a caption box (setTextSlotPhoto) instead of a photo slot (fillSlot).
+  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null);
+  const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null);
+  const [pickerIsTextSlot, setPickerIsTextSlot] = useState(false);
   const buildSlotTextInitial = useCallback((slot: number): BoxTextContent => {
     const existing = actions.currentPage?.slotTexts?.[slot];
     if (existing) return { ...existing };
@@ -593,7 +614,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-            onClick={() => setShowPhotoPicker(false)}
+            onClick={() => { setShowPhotoPicker(false); setPickerIsTextSlot(false); }}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
@@ -631,8 +652,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     <button
                       key={photo.id}
                       onClick={() => {
-                        actions.fillSlot(selectedSlotForPicker, idx);
+                        if (pickerIsTextSlot) actions.setTextSlotPhoto(selectedSlotForPicker, idx);
+                        else actions.fillSlot(selectedSlotForPicker, idx);
                         setShowPhotoPicker(false);
+                        setPickerIsTextSlot(false);
                       }}
                       className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-[#F4C2A1] transition-all"
                     >
@@ -648,7 +671,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               )}
               <div className="mt-4 flex justify-end">
                 <button
-                  onClick={() => setShowPhotoPicker(false)}
+                  onClick={() => { setShowPhotoPicker(false); setPickerIsTextSlot(false); }}
                   className="px-4 py-2 text-sm text-[#6B6B6B] hover:text-[#2D2D2D]"
                 >
                   Cancel
@@ -694,6 +717,27 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           initial={buildSlotTextInitial(slotTextEditSlot)}
           onSave={(content) => { actions.setSlotText(slotTextEditSlot, content.text.trim() ? content : null); setSlotTextEditSlot(null); }}
           onClose={() => setSlotTextEditSlot(null)}
+        />
+      )}
+
+      {/* Empty caption-box content chooser — Photo / Text / QR (desktop modal).
+          Text reuses the existing caption path (setTextEditSlot → setBoxText). */}
+      {chooserTextSlot !== null && (
+        <SlotChooser
+          onPhoto={() => { setPickerIsTextSlot(true); setSelectedSlotForPicker(chooserTextSlot); setShowPhotoPicker(true); }}
+          onText={() => setTextEditSlot(chooserTextSlot)}
+          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
+          onClose={() => setChooserTextSlot(null)}
+        />
+      )}
+
+      {/* Caption-box QR add/edit */}
+      {textSlotQrEditSlot !== null && (
+        <AddQrModal
+          initial={actions.currentPage?.textSlotQr?.[textSlotQrEditSlot] ?? null}
+          onSave={(fill) => { actions.setTextSlotQr(textSlotQrEditSlot, fill); setTextSlotQrEditSlot(null); }}
+          onRemove={() => { actions.setTextSlotQr(textSlotQrEditSlot, null); setTextSlotQrEditSlot(null); }}
+          onClose={() => setTextSlotQrEditSlot(null)}
         />
       )}
 

@@ -30,6 +30,9 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null); // per-slot text (chooser)
   const [editTextId, setEditTextId] = useState<string | null>(null); // tap-to-edit free text (theme title)
   const [qrEditSlot, setQrEditSlot] = useState<number | null>(null); // tap-to-add/edit QR memory
+  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser
+  const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null); // caption-box photo target
+  const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null); // caption-box QR target
 
   // Seed the editor from a FREE text element (e.g. the theme title) by id.
   const buildTextInitial = (textId: string): BoxTextContent => {
@@ -140,7 +143,10 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onSlotTextTap={(slotIndex) => setSlotTextEditSlot(slotIndex)}
               onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)}
               onTextTap={(textId) => setEditTextId(textId)}
-              onQrSlotTap={(slot) => setQrEditSlot(slot)} />}
+              onQrSlotTap={(slot) => setQrEditSlot(slot)}
+              onChooseTextSlot={(slotIndex) => setChooserTextSlot(slotIndex)}
+              onTextSlotPhotoTap={(slotIndex) => setTextReplaceSlot(slotIndex)}
+              onTextSlotQrTap={(slot) => setTextSlotQrEditSlot(slot)} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -180,13 +186,14 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         />
       )}
 
-      {/* Tap-to-replace photo picker — bottom sheet */}
+      {/* Tap-to-replace photo picker — bottom sheet. Targets a photo SLOT
+          (replaceSlot → fillSlot) or a CAPTION BOX (textReplaceSlot → setTextSlotPhoto). */}
       <AnimatePresence>
-        {replaceSlot !== null && (
+        {(replaceSlot !== null || textReplaceSlot !== null) && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="absolute inset-0 z-50 bg-black/40 flex items-end"
-            onClick={() => setReplaceSlot(null)}
+            onClick={() => { setReplaceSlot(null); setTextReplaceSlot(null); }}
           >
             <motion.div
               initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
@@ -196,7 +203,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
                 <span className="text-sm font-semibold text-[#2D2D2D]">Add a photo</span>
-                <button onClick={() => setReplaceSlot(null)} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+                <button onClick={() => { setReplaceSlot(null); setTextReplaceSlot(null); }} className="text-[#9B9B9B] p-1"><X size={18} /></button>
               </div>
               {actions.uploadedPhotos.length === 0 ? (
                 <p className="p-6 text-center text-sm text-[#9B9B9B]">No photos uploaded yet.</p>
@@ -204,7 +211,11 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                 <div className="overflow-y-auto p-3 grid grid-cols-3 gap-2">
                   {actions.uploadedPhotos.map((p, i) => (
                     <button key={i}
-                      onClick={() => { if (replaceSlot !== null) actions.fillSlot(replaceSlot, i); setReplaceSlot(null); }}
+                      onClick={() => {
+                        if (replaceSlot !== null) actions.fillSlot(replaceSlot, i);
+                        else if (textReplaceSlot !== null) actions.setTextSlotPhoto(textReplaceSlot, i, idx);
+                        setReplaceSlot(null); setTextReplaceSlot(null);
+                      }}
                       className="aspect-square rounded-lg overflow-hidden bg-[#F0F0F0] active:scale-95 transition-transform">
                       <img src={p.previewUrl} alt="" className="w-full h-full object-cover" draggable={false} />
                     </button>
@@ -215,6 +226,28 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Empty caption-box content chooser — Photo / Text / QR (bottom sheet).
+          Text reuses the existing setBoxText path (setEditSlot). */}
+      {chooserTextSlot !== null && (
+        <SlotChooser
+          mobile
+          onPhoto={() => setTextReplaceSlot(chooserTextSlot)}
+          onText={() => setEditSlot(chooserTextSlot)}
+          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
+          onClose={() => setChooserTextSlot(null)}
+        />
+      )}
+
+      {/* Caption-box QR add/edit */}
+      {textSlotQrEditSlot !== null && (
+        <AddQrModal
+          initial={page?.textSlotQr?.[textSlotQrEditSlot] ?? null}
+          onSave={(fill: QrFill) => { actions.setTextSlotQr(textSlotQrEditSlot, fill, idx); setTextSlotQrEditSlot(null); }}
+          onRemove={() => { actions.setTextSlotQr(textSlotQrEditSlot, null, idx); setTextSlotQrEditSlot(null); }}
+          onClose={() => setTextSlotQrEditSlot(null)}
+        />
+      )}
 
       {/* Tap-to-edit text — the floating-bar editor above the keyboard */}
       {editSlot !== null && (

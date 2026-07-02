@@ -302,6 +302,16 @@ export interface AlbumPage {
    *  rendered when neither qrFills[i] nor slotFills[i] claims the slot.
    *  Serializes as-is (local, cloud, order snapshot). */
   slotTexts?: (SlotText | null)[];
+  /** Per-CAPTION-BOX photo fills. Positional, parallel to template.textSlots[j]
+   *  (NOT template.slots) — mirrors slotFills but for the caption/text boxes.
+   *  Null = no photo in caption box j. A caption box holds PHOTO/TEXT/QR mutually
+   *  exclusively: TEXT stays on TextElement.boxIndex (unchanged), photo lives here,
+   *  QR in textSlotQr. Renderer precedence: qr → text → photo → empty. */
+  textSlotFills?: (number | null)[];
+  /** Per-CAPTION-BOX QR fills. Positional, parallel to template.textSlots[j]
+   *  (mirrors qrFills for the caption boxes). Mutually exclusive with the box's
+   *  TextElement.boxIndex caption and textSlotFills[j]. */
+  textSlotQr?: (QrFill | null)[];
   background: AlbumBackground;
   photos: CanvasPhoto[];
   textElements: TextElement[];

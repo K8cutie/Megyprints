@@ -32,6 +32,29 @@ const SNAP_THRESHOLD = 12;
 const BG_ID = 'page-background';
 const SLOT_ID = 'template-slot';
 
+/** Shared Fabric config for a placed slot/caption-box PHOTO: selectable (so it
+ *  can be deleted/replaced via Megy) but fully locked — never manually moved,
+ *  scaled, or rotated — with the red selection border and pixel-accurate hit
+ *  testing. ONE definition so the photo-slot and caption-box renderers can't
+ *  drift (previously copy-pasted, which the duplication gate flagged). */
+const SLOT_IMAGE_LOCK = {
+  selectable: true,
+  evented: true,
+  hasControls: false,
+  hasBorders: true,
+  borderColor: '#EF4444',
+  borderScaleFactor: 2,
+  lockMovementX: true,
+  lockMovementY: true,
+  lockScalingX: true,
+  lockScalingY: true,
+  lockRotation: true,
+  hoverCursor: 'pointer',
+  /* Only register clicks on visible (clipped) pixels — prevents bounding-box
+     overlap from blocking adjacent slots. */
+  perPixelTargetFind: true,
+} as const;
+
 /** Monotonic render ID — increments on every renderScene call.
  *  Used to cancel stale async image callbacks from previous renders. */
 let currentRenderId = 0;
@@ -91,6 +114,12 @@ export interface UseCanvasEngineOptions {
   onQrSlotClick?: (slotIndex: number) => void;
   /** Click on a filled per-slot TEXT → re-open the shared text editor for it. */
   onSlotTextClick?: (slotIndex: number) => void;
+  /** Click on an EMPTY caption box → open the 3-way content chooser. */
+  onTextSlotEmptyClick?: (slotIndex: number) => void;
+  /** Click on a caption box FILLED with a photo → re-open the photo picker. */
+  onTextSlotPhotoClick?: (slotIndex: number) => void;
+  /** Click on a caption box FILLED with a QR → re-open the QR editor. */
+  onTextSlotQrClick?: (slotIndex: number) => void;
   actions: BuilderActions;
   /** When true, slot containers become selectable and resizable */
   containerMode?: boolean;
@@ -146,7 +175,12 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
         ? `${s.text.slice(0,20)}:${s.fontSize}:${s.fontFamily ?? ''}:${s.color ?? ''}:${s.bold ? 1 : 0}:${s.italic ? 1 : 0}:${s.underline ? 1 : 0}:${s.alignment ?? ''}`
         : '').join('|')
     : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}`;
+  // Caption-box photo/QR content (page.textSlotFills / textSlotQr) — so placing
+  // or removing a photo/QR in a caption box repaints the Fabric editor without a
+  // page-nav (same desync class as slotTextData above).
+  const textSlotFillData = page.textSlotFills ? page.textSlotFills.join(',') : '';
+  const textSlotQrData = page.textSlotQr ? page.textSlotQr.map((q) => q ? `${q.code}:${q.destination}` : '').join('|') : '';
+  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -163,6 +197,9 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     onTextSlotClick,
     onQrSlotClick,
     onSlotTextClick,
+    onTextSlotEmptyClick,
+    onTextSlotPhotoClick,
+    onTextSlotQrClick,
     actions,
     containerMode = false,
     onContainerModified,
@@ -212,6 +249,12 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   onQrSlotClickRef.current = onQrSlotClick ?? (() => {});
   const onSlotTextClickRef = useRef<(slotIndex: number) => void>(() => {});
   onSlotTextClickRef.current = onSlotTextClick ?? (() => {});
+  const onTextSlotEmptyClickRef = useRef<(slotIndex: number) => void>(() => {});
+  onTextSlotEmptyClickRef.current = onTextSlotEmptyClick ?? (() => {});
+  const onTextSlotPhotoClickRef = useRef<(slotIndex: number) => void>(() => {});
+  onTextSlotPhotoClickRef.current = onTextSlotPhotoClick ?? (() => {});
+  const onTextSlotQrClickRef = useRef<(slotIndex: number) => void>(() => {});
+  onTextSlotQrClickRef.current = onTextSlotQrClick ?? (() => {});
   const containerModeRef = useRef(containerMode);
   containerModeRef.current = containerMode;
   const onContainerModifiedRef = useRef(onContainerModified);
@@ -512,7 +555,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -651,7 +694,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -699,7 +742,18 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
         fabricRef.current?.discardActiveObject();
         fabricRef.current?.requestRenderAll();
       } else if (selectedPhotoId) {
-        latestActions.deletePhotoFromCanvas(selectedPhotoId);
+        // A caption-box photo is a locked slot object tagged `text-slot-photo-<i>`,
+        // not a free canvas photo — route its delete to setTextSlotPhoto (else
+        // deletePhotoFromCanvas is a dead no-op + a phantom undo snapshot).
+        const capMatch = /^text-slot-photo-(\d+)$/.exec(selectedPhotoId);
+        if (capMatch) {
+          latestActions.setTextSlotPhoto(Number(capMatch[1]), null);
+          setSelectedPhotoId(null);
+          fabricRef.current?.discardActiveObject();
+          fabricRef.current?.requestRenderAll();
+        } else {
+          latestActions.deletePhotoFromCanvas(selectedPhotoId);
+        }
       } else if (selectedTextId) {
         latestActions.deleteTextElement(selectedTextId);
       }
@@ -1079,24 +1133,10 @@ function renderTemplateSlots(
           scaleX: finalScale,
           scaleY: finalScale,
           angle: slot.rotation ?? 0,
-          /* Megy is the sole orchestrator. The canvas is a RENDERER:
-             a slot photo can be selected (to delete/replace via Megy) but
-             never manually moved, scaled, or rotated. */
-          selectable: true,
-          evented: true,
-          hasControls: false,
-          hasBorders: true,
-          borderColor: '#EF4444',
-          borderScaleFactor: 2,
-          lockMovementX: true,
-          lockMovementY: true,
-          lockScalingX: true,
-          lockScalingY: true,
-          lockRotation: true,
-          hoverCursor: 'pointer',
-          /* Only register clicks on visible (clipped) pixels —
-             prevents bounding box overlap from blocking adjacent slots */
-          perPixelTargetFind: true,
+          /* Megy is the sole orchestrator. The canvas is a RENDERER: a slot
+             photo can be selected (to delete/replace via Megy) but never
+             manually moved, scaled, or rotated. See SLOT_IMAGE_LOCK. */
+          ...SLOT_IMAGE_LOCK,
         });
         img.slotId = `${SLOT_ID}-photo-${i}`;
         img.photoIndex = photoIndex;
@@ -1423,6 +1463,9 @@ function renderScene(
   onTextSlotClick: (slotIndex: number) => void = () => {},
   onQrSlotClick: (slotIndex: number) => void = () => {},
   onSlotTextClick: (slotIndex: number) => void = () => {},
+  onTextSlotEmptyClick: (slotIndex: number) => void = () => {},
+  onTextSlotPhotoClick: (slotIndex: number) => void = () => {},
+  onTextSlotQrClick: (slotIndex: number) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1494,6 +1537,63 @@ function renderScene(
     return { left: tSafe.x + ts.x * tSafe.w, top: tSafe.y + ts.y * tSafe.h, width: ts.width * tSafe.w, height: ts.height * tSafe.h, placeholder: ts.placeholder };
   };
 
+  // ── Caption-box CONTENT (photo / QR) — mirrors the photo-slot precedence.
+  // A caption box holds QR → text → photo → empty (mutually exclusive). TEXT is
+  // drawn by the text-elements loop below; QR + photo are drawn here. Precedence
+  // is enforced so a box never shows two kinds even if state somehow set both.
+  (template?.textSlots ?? []).forEach((_ts, i) => {
+    const r = textSlotRect(i);
+    if (!r) return;
+    // (1) QR — white backing + qr image at qrRect(box), mirrors the photo-slot QR.
+    const tqr = page.textSlotQr?.[i] ?? null;
+    if (tqr) {
+      const { dx, dy, side } = qrRect(r.left, r.top, r.width, r.height);
+      const backing = new fab.Rect({ left: dx, top: dy, width: side, height: side, fill: '#ffffff', selectable: false, evented: false });
+      backing.slotId = `${SLOT_ID}-textqrbg-${i}`;
+      canvas.add(backing);
+      fab.Image.fromURL(tqr.qrPngDataUrl, (img: any) => {
+        if (thisRenderId !== currentRenderId) return;
+        img.set({ left: dx, top: dy, selectable: false, evented: true, hoverCursor: 'pointer' });
+        img.scaleToWidth(side);
+        img.slotId = `${SLOT_ID}-textqr-${i}`;
+        img.on('mousedown', () => onTextSlotQrClick(i));
+        canvas.add(img);
+        canvas.renderAll();
+      });
+      return;
+    }
+    // Text wins over photo: skip drawing a caption-box photo if a caption exists.
+    if (page.textElements.some((t) => t.boxIndex === i)) return;
+    // (3) PHOTO — simplified cover-fit clipped to the box rect (no frame/shape).
+    const tPhotoIdx = page.textSlotFills?.[i] ?? null;
+    if (tPhotoIdx != null && uploadedPhotos[tPhotoIdx]) {
+      const photoUrl = uploadedPhotos[tPhotoIdx].previewUrl;
+      fab.Image.fromURL(photoUrl, (img: any) => {
+        if (thisRenderId !== currentRenderId) return;
+        const imgW = img.width || r.width;
+        const imgH = img.height || r.height;
+        const coverScale = Math.max(r.width / imgW, r.height / imgH);
+        img.set({
+          left: r.left + r.width / 2,
+          top: r.top + r.height / 2,
+          originX: 'center',
+          originY: 'center',
+          scaleX: coverScale,
+          scaleY: coverScale,
+          ...SLOT_IMAGE_LOCK,
+        });
+        const clip = new fab.Rect({ width: r.width, height: r.height, left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center' });
+        clip.absolutePositioned = true;
+        img.set('clipPath', clip);
+        img.slotId = `${SLOT_ID}-textphoto-${i}`;
+        img.photoId = `text-slot-photo-${i}`;
+        img.on('mousedown', () => onTextSlotPhotoClick(i));
+        canvas.add(img);
+        canvas.renderAll();
+      });
+    }
+  });
+
   // 4. Add text elements — use saved width/scale if available
   // Text is collected first, added to canvas, then brought to front.
   // Slot images load async via fab.Image.fromURL — they may be added
@@ -1549,6 +1649,8 @@ function renderScene(
   // any slot that already has a caption.
   (template?.textSlots ?? []).forEach((_ts, i) => {
     if (page.textElements.some((t) => t.boxIndex === i)) return;
+    // Skip boxes occupied by a caption-box photo/QR (drawn above).
+    if (page.textSlotFills?.[i] != null || page.textSlotQr?.[i]) return;
     const r = textSlotRect(i);
     if (!r) return;
     const box = new fab.Rect({
@@ -1558,17 +1660,27 @@ function renderScene(
       selectable: false, evented: true, hoverCursor: 'pointer',
     });
     box.slotId = `${SLOT_ID}-textbox-${i}`;
-    const label = new fab.Text('✎  Tap to add text', {
-      left: r.left + r.width / 2, top: r.top + r.height / 2,
-      originX: 'center', originY: 'center',
-      fontSize: Math.max(12, Math.min(r.width, r.height) * 0.085),
-      fill: '#8B6F47', fontFamily: '"DM Sans", sans-serif',
-      selectable: false, evented: false,
-    });
+    // Empty caption box opens the 3-way chooser (photo/text/QR) — spell that out
+    // to match the photo slots. Caption boxes are often wide/short, so fall back
+    // to a single line when there isn't room for the bulleted list.
+    const label = r.height >= 78
+      ? new fab.Text('Click to add:\n•  Photo\n•  Text\n•  QR', {
+          left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
+          fontSize: Math.max(11, Math.min(15, Math.min(r.width, r.height) * 0.085)),
+          fill: '#8B6F47', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.35,
+          selectable: false, evented: false,
+        })
+      : new fab.Text('＋  Add: Photo · Text · QR', {
+          left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
+          fontSize: Math.max(10, Math.min(r.height * 0.42, r.width * 0.055)),
+          fill: '#8B6F47', fontFamily: '"DM Sans", sans-serif',
+          selectable: false, evented: false,
+        });
     label.slotId = `${SLOT_ID}-textbox-label-${i}`;
     canvas.add(box);
     canvas.add(label);
-    box.on('mousedown', () => onTextSlotClick(i));
+    // Empty caption box → open the 3-way chooser (photo / text / QR).
+    box.on('mousedown', () => onTextSlotEmptyClick(i));
   });
 
   // Ensure text stays on top even when slot images load async

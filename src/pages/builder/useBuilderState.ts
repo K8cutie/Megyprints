@@ -59,6 +59,8 @@ function normalizePage(p: any): any {
     slotGeometries: get('slotGeometries', 'slot_geometries') ?? [],
     qrFills: get('qrFills', 'qr_fills') ?? [],
     slotTexts: get('slotTexts', 'slot_texts') ?? [],
+    textSlotFills: get('textSlotFills', 'text_slot_fills') ?? [],
+    textSlotQr: get('textSlotQr', 'text_slot_qr') ?? [],
     textElements: get('textElements', 'text_elements') ?? [],
     templateId: get('templateId', 'template_id') ?? null,
     photos: p.photos ?? [],
@@ -98,11 +100,18 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
   const slotCount = template.slots.length;
   const carriedQr = (page.qrFills ?? []).slice(0, slotCount);
   const carriedText = (page.slotTexts ?? []).slice(0, slotCount);
+  // Caption-box content (photo/QR) is keyed to template.textSlots, which the new
+  // template also owns — carry through, trimmed to the new textSlots length.
+  const textSlotCount = template.textSlots?.length ?? 0;
+  const carriedTextSlotFills = (page.textSlotFills ?? []).slice(0, textSlotCount);
+  const carriedTextSlotQr = (page.textSlotQr ?? []).slice(0, textSlotCount);
   return {
     ...page,
     templateId: template.id,
     qrFills: carriedQr,
     slotTexts: carriedText,
+    textSlotFills: carriedTextSlotFills,
+    textSlotQr: carriedTextSlotQr,
     slotFills: reflowFills(existingFills, slotCount, carriedQr, carriedText),
     slotScales: new Array(slotCount).fill(1),
     slotOffsetsX: new Array(slotCount).fill(0),
@@ -246,6 +255,10 @@ function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
     const filled = new Set<number>(
       page.textElements.filter((t) => t.boxIndex != null).map((t) => t.boxIndex as number),
     );
+    // A caption box occupied by a photo/QR is FILLED — never bind a stray caption
+    // into it (would break mutual exclusivity).
+    (page.textSlotFills ?? []).forEach((f, i) => { if (f != null) filled.add(i); });
+    (page.textSlotQr ?? []).forEach((q, i) => { if (q) filled.add(i); });
     let changed = false;
     const textElements = page.textElements.map((t) => {
       if (t.boxIndex != null || t.id.startsWith('theme-quote')) return t;
@@ -359,6 +372,12 @@ export interface BuilderActions {
   /** Set (or clear, with null) the per-slot text fill for slot i. Mirrors
    *  setQrFill; clears any photo/QR at the same slot when content is non-null. */
   setSlotText: (slotIndex: number, content: SlotText | null, pageIndex?: number) => void;
+  /** Place (or clear) a PHOTO in caption box j (template.textSlots[j]). Clears
+   *  the box's QR + bound caption (mutual exclusivity). */
+  setTextSlotPhoto: (slotIndex: number, photoIndex: number | null, pageIndex?: number) => void;
+  /** Set (or clear) a QR in caption box j (template.textSlots[j]). Clears the
+   *  box's photo + bound caption (mutual exclusivity). */
+  setTextSlotQr: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
 
   // Canvas photos (freeform)
   addPhotoToCanvas: (photoIndex: number, x: number, y: number) => void;
@@ -963,6 +982,8 @@ export function useBuilderState(): BuilderActions {
         slotScales: [...(page.slotScales ?? [])],
         slotOffsetsX: [...(page.slotOffsetsX ?? [])],
         slotOffsetsY: [...(page.slotOffsetsY ?? [])],
+        textSlotFills: [...(page.textSlotFills ?? [])],
+        textSlotQr: [...(page.textSlotQr ?? [])],
         photos: page.photos.map((p) => ({ ...p, id: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
         textElements: page.textElements.map((t) => ({ ...t, id: `text-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
       };
@@ -1067,6 +1088,10 @@ export function useBuilderState(): BuilderActions {
         // Carry chooser-placed QR / text forward so a regenerate doesn't drop them.
         qrFills: (page.qrFills ?? []).slice(0, slotCount),
         slotTexts: (page.slotTexts ?? []).slice(0, slotCount),
+        // Caption-box photo/QR belong to template.textSlots, not template.slots —
+        // preserve them so a regenerate never drops a claimed caption box.
+        textSlotFills: page.textSlotFills,
+        textSlotQr: page.textSlotQr,
         slotFills: new Array(slotCount).fill(null),
         slotScales: new Array(slotCount).fill(1),
         slotOffsetsX: new Array(slotCount).fill(0),
@@ -1356,6 +1381,69 @@ export function useBuilderState(): BuilderActions {
     }
   }, [updateCurrentPage]);
 
+  /** Place (or clear, with null) a PHOTO into caption box `slotIndex`
+   *  (template.textSlots[slotIndex]). Mirrors fillSlot/setQrFill: setting a photo
+   *  clears the box's QR (textSlotQr) AND evicts any bound caption TextElement
+   *  (boxIndex===slotIndex) — mutual exclusivity. pageIndex defaults to current. */
+  const setTextSlotPhoto = useCallback((slotIndex: number, photoIndex: number | null, pageIndex?: number) => {
+    pushSnapshot();
+    const apply = (page: AlbumPage): AlbumPage => {
+      const textSlotFills = [...(page.textSlotFills ?? [])];
+      textSlotFills[slotIndex] = photoIndex;
+      if (photoIndex != null) {
+        const textSlotQr = [...(page.textSlotQr ?? [])];
+        textSlotQr[slotIndex] = null;
+        return {
+          ...page,
+          textSlotFills,
+          textSlotQr,
+          textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex),
+        };
+      }
+      return { ...page, textSlotFills };
+    };
+    if (pageIndex == null) {
+      updateCurrentPage(apply);
+    } else {
+      setAlbumPages((prev) => {
+        const next = [...prev];
+        if (next[pageIndex]) next[pageIndex] = apply(next[pageIndex]);
+        return next;
+      });
+    }
+  }, [updateCurrentPage]);
+
+  /** Set (or clear, with null) a QR into caption box `slotIndex`
+   *  (template.textSlots[slotIndex]). Mirrors setQrFill: setting a QR clears the
+   *  box's photo (textSlotFills) AND evicts any bound caption TextElement. */
+  const setTextSlotQr = useCallback((slotIndex: number, fill: QrFill | null, pageIndex?: number) => {
+    pushSnapshot();
+    const apply = (page: AlbumPage): AlbumPage => {
+      const textSlotQr = [...(page.textSlotQr ?? [])];
+      textSlotQr[slotIndex] = fill;
+      if (fill) {
+        const textSlotFills = [...(page.textSlotFills ?? [])];
+        textSlotFills[slotIndex] = null;
+        return {
+          ...page,
+          textSlotQr,
+          textSlotFills,
+          textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex),
+        };
+      }
+      return { ...page, textSlotQr };
+    };
+    if (pageIndex == null) {
+      updateCurrentPage(apply);
+    } else {
+      setAlbumPages((prev) => {
+        const next = [...prev];
+        if (next[pageIndex]) next[pageIndex] = apply(next[pageIndex]);
+        return next;
+      });
+    }
+  }, [updateCurrentPage]);
+
   /* ── Auto-fill ── */
   const autoFillSlots = useCallback(() => {
     pushSnapshot();
@@ -1539,7 +1627,12 @@ export function useBuilderState(): BuilderActions {
     const cur = albumPages[currentPageIndex];
     const curTemplate = cur?.templateId ? getTemplateById(cur.templateId) : null;
     const slots = curTemplate?.textSlots ?? [];
-    const emptyBox = slots.findIndex((_s, i) => !(cur?.textElements ?? []).some((t) => t.boxIndex === i));
+    // Skip caption boxes already claimed by a photo/QR so "Add text" never lands
+    // on top of one (mutual exclusivity).
+    const emptyBox = slots.findIndex((_s, i) =>
+      !(cur?.textElements ?? []).some((t) => t.boxIndex === i) &&
+      cur?.textSlotFills?.[i] == null &&
+      !cur?.textSlotQr?.[i]);
     updateCurrentPage((page) => {
       if (slots.length > 0 && emptyBox >= 0) {
         const newText: TextElement = {
@@ -1642,9 +1735,17 @@ export function useBuilderState(): BuilderActions {
           ? { ...page, textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex) }
           : page;
       }
+      // Mutual exclusivity (third leg): writing a caption evicts a photo/QR
+      // occupying the same caption box.
+      const textSlotFills = [...(page.textSlotFills ?? [])];
+      const textSlotQr = [...(page.textSlotQr ?? [])];
+      textSlotFills[slotIndex] = null;
+      textSlotQr[slotIndex] = null;
       if (existing) {
         return {
           ...page,
+          textSlotFills,
+          textSlotQr,
           textElements: page.textElements.map((t) =>
             t.boxIndex === slotIndex ? { ...t, ...content, text: trimmed } : t),
         };
@@ -1665,7 +1766,7 @@ export function useBuilderState(): BuilderActions {
         opacity: 100,
         boxIndex: slotIndex,
       };
-      return { ...page, textElements: [...page.textElements, newText] };
+      return { ...page, textSlotFills, textSlotQr, textElements: [...page.textElements, newText] };
     };
     // Default: the current page. The preview spread passes an explicit pageIndex
     // so it can edit either of the two pages on screen.
@@ -1939,6 +2040,8 @@ export function useBuilderState(): BuilderActions {
     updateSlotGeometry,
     setQrFill,
     setSlotText,
+    setTextSlotPhoto,
+    setTextSlotQr,
     addPhotoToCanvas,
     updatePhotoTransform,
     updatePhotoFilters,
