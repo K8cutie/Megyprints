@@ -141,12 +141,10 @@ const SQUARE_RECIPES: Recipe[] = [
       { x: 0, y: 0.5, w: 0.5, h: 0.5, ratio: '1:1' }, { x: 0.5, y: 0.5, w: 0.5, h: 0.5, ratio: '1:1' },
     ] },
 
-  // dense — only valid on the larger square albums (8×8, 9×9); 6×6 drops these
-  // automatically because each frame would print under 2".
-  { key: 'nine-sq', name: 'Nine squares', category: 'sextet',
-    photos: Array.from({ length: 9 }, (_v, i) => ({
-      x: (i % 3) / 3, y: Math.floor(i / 3) / 3, w: 1 / 3, h: 1 / 3, ratio: '1:1' as PhotoRatio,
-    })) },
+  // dense (6-up) — only valid on the larger square albums (8×8, 9×9); 6×6 drops it
+  // automatically because each frame would print under 2". A 9-up "Nine squares"
+  // recipe was intentionally removed: per-size MAX photos/page is capped at
+  // 2 / 4 / 6 / 6 for 6×4 / 6×6 / 8×8·9×9 / landscape·portrait respectively.
   { key: 'six-sq-text', name: 'Six squares + caption', category: 'sextet',
     photos: Array.from({ length: 6 }, (_v, i) => ({
       x: (i % 3) / 3, y: Math.floor(i / 3) / 3, w: 1 / 3, h: 1 / 3, ratio: '1:1' as PhotoRatio,
