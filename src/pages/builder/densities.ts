@@ -6,14 +6,18 @@
  * from here, so the size guidance and the density options can never drift apart.
  */
 
-/** Photos-per-page options offered for each album-size preset. */
+/** Photos-per-page options offered for each album-size preset. Max per size
+ *  MATCHES the generator's tiled-template cap (2 / 4 / 6 / 6 for 6×4 / 6×6 /
+ *  8×8·9×9 / landscape·portrait) — the print 2" floor is why small albums cap
+ *  lower. Keep these two in lockstep so the manual picker never offers a density
+ *  the generator won't actually produce for that size. */
 export const DENSITY_BY_SIZE: Record<string, number[]> = {
   '6x4': [1, 2],
-  '6x6': [1, 2],
-  '8x8': [1, 2, 3, 4],
-  '9x9': [1, 2, 3, 4],
-  '11.5x8': [1, 2, 3, 4, 5],
-  '8.5x11': [1, 2, 3, 4, 5],
+  '6x6': [1, 2, 3, 4],
+  '8x8': [1, 2, 3, 4, 5, 6],
+  '9x9': [1, 2, 3, 4, 5, 6],
+  '11.5x8': [1, 2, 3, 4, 5, 6],
+  '8.5x11': [1, 2, 3, 4, 5, 6],
 };
 
 /** Friendly name for each density count. */
@@ -23,6 +27,7 @@ export const DENSITY_LABELS: Record<number, string> = {
   3: 'Nice balance',
   4: 'Collage',
   5: 'Packed',
+  6: 'Photo grid',
 };
 
 /** Fallback when a size isn't in the map (keeps callers crash-proof). */
