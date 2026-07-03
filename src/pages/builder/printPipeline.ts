@@ -227,12 +227,26 @@ async function renderPageManually(
     }
   }
 
-  // JPEG (not PNG): a 300-DPI full-page PHOTO as lossless PNG is 10–50 MB/page →
-  // a 40+ page album exceeds Supabase Storage's file-size limit and the upload is
-  // rejected. JPEG q0.92 at 300 DPI is visually identical for photographic pages
-  // at a fraction of the size. The white base fill above keeps it artifact-free.
+  // Fit Supabase Storage's upload cap. We composite at full 300 DPI above (crisp
+  // text / QR / edges), then downscale + JPEG-compress the ENCODED image so a
+  // whole album PDF stays well under the limit. Lossless PNG was 10–50 MB/PAGE
+  // (→ hundreds of MB / rejected). ~1800 px longest side ≈ 225 DPI at 8–9" —
+  // solid photo-book quality — keeps a ~50-page album under ~40 MB. Raise
+  // MAX_SIDE / quality once the storage plan allows bigger uploads.
+  const MAX_SIDE = 1800;
+  const scale = Math.min(1, MAX_SIDE / Math.max(W, H));
+  let out: HTMLCanvasElement = canvas;
+  if (scale < 1) {
+    out = document.createElement('canvas');
+    out.width = Math.round(W * scale);
+    out.height = Math.round(H * scale);
+    const octx = out.getContext('2d')!;
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = 'high';
+    octx.drawImage(canvas, 0, 0, out.width, out.height);
+  }
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.92);
+    out.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.82);
   });
 }
 
