@@ -658,8 +658,6 @@ export const DEFAULT_ALBUM_SIZE: AlbumSizePreset = '8x8';
 export const DEFAULT_MATERIAL: MaterialType = 'matte';
 export const DEFAULT_COVER: CoverType = 'softcover';
 
-export const PRICE_CONFIG = { basePrice: 500 };
-
 /* ───────────────────────────────────────────────────────────────────────────
    BORDER + FRAME STYLE REGISTRIES (single source of truth)
 

@@ -3,11 +3,13 @@ import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package } from 'lucide-react';
-import { MATERIALS, COVERS, ALBUM_SIZES, PRICE_CONFIG } from './builder/types';
+import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_ALBUM_SIZE } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
 import { createOrderFromLatestAlbum, uploadOrderPrintPdf } from '../lib/orders';
 import { getPendingPrintJob } from '../lib/printQueue';
+import { priceBreakdown, MIN_PAGES, type Binding } from '../lib/pricing';
+import { getPriceMultiple } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
 import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, validateAddress, EMPTY_ADDRESS, type AddressValue } from '../lib/contact';
 import AddressPicker from '../components/AddressPicker';
@@ -41,12 +43,21 @@ export default function Order() {
   const [trackStage, setTrackStage] = useState(0);
   const [prepMsg, setPrepMsg] = useState('');
 
-  const totalPrice = useMemo(() => {
-    const mat = MATERIALS.find((m) => m.type === material)?.priceFactor ?? 1;
-    const cov = COVERS.find((c) => c.type === cover)?.priceFactor ?? 1;
-    const base = PRICE_CONFIG.basePrice;
-    return Math.round(base * mat * cov);
-  }, [material, cover]);
+  // Price the ACTUAL album the customer built. Size + page count come from the
+  // print job (set at "ORDER ALBUM"); fall back sensibly if someone hits /order
+  // directly. Cover choice maps to binding (non-softcover → hardbound).
+  const job = getPendingPrintJob();
+  const albumSize: AlbumSizePreset = job?.albumSize ?? size ?? DEFAULT_ALBUM_SIZE;
+  const pageCount = job?.pages.length ?? MIN_PAGES;
+  const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
+  const hasJob = job != null;
+  const multiple = getPriceMultiple(); // persisted store multiple (loaded on app start)
+
+  const breakdown = useMemo(
+    () => priceBreakdown(albumSize, binding, pageCount, multiple),
+    [albumSize, binding, pageCount, multiple],
+  );
+  const totalPrice = breakdown.total;
 
   // ── Form → Payment ──
   const handleProceedToPayment = () => {
@@ -84,7 +95,7 @@ export default function Order() {
       await new Promise((r) => setTimeout(r, 1200));
       const order = await createOrderFromLatestAlbum({
         userId: user!.id,
-        specs: { material, cover, size },
+        specs: { material, cover, size: albumSize },
         // createOrderFromLatestAlbum normalizes name/phone + composes the address
         // from these structured PSGC parts (single source of truth).
         shipping: { name, phone, address },
@@ -95,7 +106,6 @@ export default function Order() {
       // it to the private fulfillment bucket. Only Megyprints can download it —
       // the customer never gets the file. Best-effort: the order still stands if
       // this hiccups (we log it so it can be regenerated from a re-opened album).
-      const job = getPendingPrintJob();
       if (job && job.pages.length > 0) {
         setPrepMsg('Preparing your album for printing…');
         try {
@@ -197,8 +207,14 @@ export default function Order() {
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <div className="flex items-center gap-2 text-[#6B6B6B] mb-4"><CreditCard size={18} /> <span className="text-sm font-medium">Pay for your album</span></div>
             <div className="space-y-2 text-sm border-y border-[#F0F0F0] py-4 mb-4">
-              <div className="flex justify-between gap-3"><span className="text-[#6B6B6B] shrink-0">Album</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === size)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
-              <div className="flex justify-between items-baseline pt-1"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-[#6B6B6B] shrink-0">Album</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
+              {breakdown.items.map((item) => (
+                <div key={item.label} className="flex justify-between gap-3">
+                  <span className="text-[#6B6B6B]">{item.label}</span>
+                  <span className="font-medium text-[#2D2D2D] text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
+                </div>
+              ))}
+              <div className="flex justify-between items-baseline pt-1 border-t border-[#F0F0F0]"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice.toLocaleString('en-PH')}</span></div>
             </div>
             <button
               onClick={handlePay}
@@ -255,18 +271,25 @@ export default function Order() {
               </div>
             </div>
 
-            {/* Size */}
+            {/* Size — locked to the album you built when a design is in progress */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
               <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4 flex items-center gap-2"><BookOpen size={18} /> Album Size</h3>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                {ALBUM_SIZES.map((s) => (
-                  <button key={s.preset} onClick={() => setSize(s.preset)}
-                    className="py-2.5 px-3 rounded-xl border-2 text-center transition-all text-sm"
-                    style={{ borderColor: size === s.preset ? '#F4C2A1' : '#E8E8E8', backgroundColor: size === s.preset ? '#FFF8F0' : '#fff' }}>
-                    {s.name}
-                  </button>
-                ))}
-              </div>
+              {hasJob ? (
+                <div className="flex items-center justify-between rounded-xl border-2 border-[#F4C2A1] bg-[#FFF8F0] px-4 py-3">
+                  <span className="text-sm text-[#6B6B6B]">From your design</span>
+                  <span className="text-sm font-semibold text-[#2D2D2D]">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                  {ALBUM_SIZES.map((s) => (
+                    <button key={s.preset} onClick={() => setSize(s.preset)}
+                      className="py-2.5 px-3 rounded-xl border-2 text-center transition-all text-sm"
+                      style={{ borderColor: size === s.preset ? '#F4C2A1' : '#E8E8E8', backgroundColor: size === s.preset ? '#FFF8F0' : '#fff' }}>
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Form */}
@@ -311,10 +334,15 @@ export default function Order() {
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Material</span><span className="font-semibold text-[#E8A598] text-right">{MATERIALS.find((m) => m.type === material)?.name}</span></div>
                 <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Cover</span><span className="font-semibold text-[#E8A598] text-right">{COVERS.find((c) => c.type === cover)?.name}</span></div>
-                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Size</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === size)?.name}</span></div>
-                <div className="border-t border-[#F0F0F0] pt-3 mt-3">
-                  <div className="flex justify-between items-baseline"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice}</span></div>
-                  <p className="text-[10px] text-[#9B9B9B] mt-1">*Sample pricing. Actual price may vary.</p>
+                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Size</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span></div>
+                <div className="border-t border-[#F0F0F0] pt-3 mt-3 space-y-2">
+                  {breakdown.items.map((item) => (
+                    <div key={item.label} className="flex justify-between gap-3 text-[13px]">
+                      <span className="text-[#6B6B6B]">{item.label}</span>
+                      <span className="font-medium text-[#2D2D2D] text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-baseline pt-2 border-t border-[#F0F0F0]"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice.toLocaleString('en-PH')}</span></div>
                 </div>
               </div>
               <button onClick={handleProceedToPayment}

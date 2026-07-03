@@ -16,10 +16,11 @@ import ProtectedRoute from './components/ProtectedRoute';
 import BuilderErrorBoundary from './pages/builder/BuilderErrorBoundary';
 import InstallPrompt from './components/InstallPrompt';
 import { loadTemplateSettings } from './lib/templateSettings';
+import { loadStoreSettings } from './lib/storeSettings';
 
 export default function App() {
-  // Load operator template overrides once, then apply them to generation.
-  useEffect(() => { void loadTemplateSettings(); }, []);
+  // Load operator template overrides + the store price multiple once on start.
+  useEffect(() => { void loadTemplateSettings(); void loadStoreSettings(); }, []);
 
   return (
     <AuthProvider>

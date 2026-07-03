@@ -1,46 +1,46 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Pricing model — operator reference + live calculator. Cost basis is real
-   (paper + print + binding); a few inputs are ESTIMATES flagged below. This is
-   a decision tool, not the live checkout price (that's still the placeholder in
-   builder/types.ts until we lock these numbers).
+   (paper + print + binding); a few inputs are ESTIMATES flagged below. The
+   "Store price multiple" here drives the LIVE checkout price (cost × multiple,
+   via lib/pricing + storeSettings); the calculator underneath is an explore
+   tool. Raw cost figures are admin-only — never rendered to customers.
    ══════════════════════════════════════════════════════════════════════════ */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { QrCode } from 'lucide-react';
+import type { AlbumSizePreset } from '../builder/types';
+import { SHEET, SIZES, costOf, sheetsFor, type Binding } from '../../lib/pricing';
+import { getPriceMultiple, setPriceMultiple } from '../../lib/storeSettings';
 
-const SHEET = 26.5;      // ₱2.50 paper + ₱24 print (2 sides)
-const SOFT_COVER = 50;   // est: thick paper + print + ₱16 lamination
-const SOFT_BIND = 100;
-const MIN_PAGES = 40;
+const ORDER: AlbumSizePreset[] = ['6x4', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
 
-type Binding = 'soft' | 'hard';
-interface SizeDef { label: string; pps: number; hb: number }
-
-// pps = album pages per 12.5×19 sheet (6×4 confirmed at 16; ≥8×8 estimated at 4).
-// hb  = hardbound cost incl. cover (estimated across the ₱250–500 range).
-const SIZES: Record<string, SizeDef> = {
-  '6x4':    { label: '6×4',    pps: 16, hb: 250 },
-  '6x6':    { label: '6×6',    pps: 12, hb: 280 },
-  '8x8':    { label: '8×8',    pps: 4,  hb: 350 },
-  '9x9':    { label: '9×9',    pps: 4,  hb: 380 },
-  '11.5x8': { label: '11.5×8', pps: 4,  hb: 450 },
-  '8.5x11': { label: '8.5×11', pps: 4,  hb: 500 },
-};
-const ORDER = ['6x4', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
-
-const sheetsFor = (k: string, p: number) => Math.ceil(Math.max(MIN_PAGES, p) / SIZES[k].pps);
-const costOf = (k: string, bind: Binding, p: number) => {
-  const interior = sheetsFor(k, p) * SHEET;
-  return bind === 'hard' ? interior + SIZES[k].hb : interior + SOFT_COVER + SOFT_BIND;
-};
 const peso = (n: number) => '₱' + Math.round(n).toLocaleString('en-PH');
 // Competitor 8×8: ₱3,000 base (20 pages) + ₱30/pg; voucher ≈ 51% of regular.
 const rival8 = (p: number) => { const reg = 3000 + Math.max(0, p - 20) * 30; return { reg, vou: Math.round(reg * 0.51) }; };
 
 export default function PricingPanel() {
-  const [size, setSize] = useState('8x8');
+  const [size, setSize] = useState<AlbumSizePreset>('8x8');
   const [bind, setBind] = useState<Binding>('soft');
   const [pages, setPages] = useState(40);
   const [mult, setMult] = useState(3);
+
+  // ── Persisted store price multiple (drives the LIVE checkout price) ──
+  const [storeMult, setStoreMult] = useState(getPriceMultiple());
+  const [savingMult, setSavingMult] = useState(false);
+  const [savedMult, setSavedMult] = useState(false);
+  const [saveErr, setSaveErr] = useState('');
+
+  // Seed from the loaded cache once on mount (App loads it on start).
+  useEffect(() => { setStoreMult(getPriceMultiple()); }, []);
+
+  const saveStoreMult = async () => {
+    setSavingMult(true);
+    setSavedMult(false);
+    setSaveErr('');
+    const err = await setPriceMultiple(storeMult);
+    setSavingMult(false);
+    if (err) setSaveErr(err);
+    else { setSavedMult(true); setTimeout(() => setSavedMult(false), 2500); }
+  };
 
   const cost = costOf(size, bind, pages);
   const price = cost * mult;
@@ -59,6 +59,39 @@ export default function PricingPanel() {
           under the competition's sale price, with the margin still in your favor. A few inputs are estimates
           (flagged below); confirm them and we lock these into checkout.
         </p>
+      </div>
+
+      {/* Store price multiple — the PERSISTED setting that drives live checkout */}
+      <div className="rounded-2xl border-2 border-[#BF5E3E]/40 bg-[#FBF6F1] px-5 py-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h3 className="font-display text-lg font-semibold text-[#2D2D2D]">Store price multiple</h3>
+            <p className="text-sm text-[#6B6B6B] mt-0.5 max-w-lg">
+              This drives the <b>live checkout price</b> customers pay (production cost × this number).
+              Customers never see it. Distinct from the explore slider below.
+            </p>
+          </div>
+          <div className="flex items-end gap-3">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[#9B9B9B] block mb-1">Multiple</label>
+              <input
+                type="number" min={1} max={10} step={0.25} value={storeMult}
+                onChange={(e) => { setStoreMult(+e.target.value); setSavedMult(false); }}
+                className="w-24 border border-[#DED5C9] rounded-lg px-3 py-2 text-sm font-mono tabular-nums text-[#2D2D2D] bg-white"
+              />
+            </div>
+            <button
+              onClick={saveStoreMult}
+              disabled={savingMult || storeMult <= 0}
+              className="py-2 px-4 text-sm font-semibold rounded-lg text-white transition-colors disabled:opacity-60"
+              style={{ background: '#BF5E3E' }}
+            >
+              {savingMult ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+        {savedMult && <p className="text-xs text-[#2E7D4A] mt-2 font-semibold">✓ Saved — live checkout now uses {storeMult}×.</p>}
+        {saveErr && <p className="text-xs text-[#B0503A] mt-2">Couldn't save: {saveErr}</p>}
       </div>
 
       {/* Thesis strip */}
