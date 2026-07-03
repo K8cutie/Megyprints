@@ -216,8 +216,12 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                         else if (textReplaceSlot !== null) actions.setTextSlotPhoto(textReplaceSlot, i, idx);
                         setReplaceSlot(null); setTextReplaceSlot(null);
                       }}
-                      className="aspect-square rounded-lg overflow-hidden bg-[#F0F0F0] active:scale-95 transition-transform">
-                      <img src={p.previewUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+                      // Square cell via the padding-bottom technique (NOT CSS aspect-ratio,
+                      // which older Android/Samsung browsers don't support → cells collapse
+                      // and thumbnails overlap). h-0 + pb-[100%] forces height = width on any
+                      // browser; the image is absolutely positioned to fill it.
+                      className="relative h-0 pb-[100%] rounded-lg overflow-hidden bg-[#F0F0F0] active:scale-95 transition-transform">
+                      <img src={p.previewUrl} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
                     </button>
                   ))}
                 </div>
