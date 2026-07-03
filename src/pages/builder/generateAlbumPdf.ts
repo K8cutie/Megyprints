@@ -46,7 +46,8 @@ export async function generateAlbumPdf(
     const dataUrl = await blobToDataURL(rendered[i].blob);
     const pw = doc.internal.pageSize.getWidth();
     const ph = doc.internal.pageSize.getHeight();
-    doc.addImage(dataUrl, 'PNG', 0, 0, pw, ph, undefined, 'FAST');
+    // Pages are JPEG (see printPipeline) so the PDF stays small enough to upload.
+    doc.addImage(dataUrl, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
   }
 
   return doc.output('blob');

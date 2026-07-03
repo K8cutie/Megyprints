@@ -92,6 +92,11 @@ async function renderPageManually(
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
 
+  // Paper is white — fill the whole canvas first so the JPEG export (no alpha
+  // channel) can never turn an uncovered/transparent area black.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
   // ── Background ──
   await renderBackground(ctx, page, W, H, photos);
 
@@ -222,8 +227,12 @@ async function renderPageManually(
     }
   }
 
+  // JPEG (not PNG): a 300-DPI full-page PHOTO as lossless PNG is 10–50 MB/page →
+  // a 40+ page album exceeds Supabase Storage's file-size limit and the upload is
+  // rejected. JPEG q0.92 at 300 DPI is visually identical for photographic pages
+  // at a fraction of the size. The white base fill above keeps it artifact-free.
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob!), 'image/png', 1);
+    canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.92);
   });
 }
 
@@ -691,7 +700,7 @@ export async function renderAlbumForPrint(
     results.push({
       pageIndex: i,
       blob,
-      filename: `megyprints-page-${String(i + 1).padStart(2, '0')}.png`,
+      filename: `megyprints-page-${String(i + 1).padStart(2, '0')}.jpg`,
     });
     onProgress?.(i + 1, pages.length);
   }
