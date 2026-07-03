@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package } from 'lucide-react';
+import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package, QrCode } from 'lucide-react';
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_ALBUM_SIZE } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
@@ -344,6 +344,12 @@ export default function Order() {
                   ))}
                   <div className="flex justify-between items-baseline pt-2 border-t border-[#F0F0F0]"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice.toLocaleString('en-PH')}</span></div>
                 </div>
+              </div>
+              <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#FBEDE7] border border-[#F4C2A1]/60 px-3 py-2.5">
+                <QrCode size={16} className="text-[#E8A598] shrink-0 mt-0.5" />
+                <p className="text-xs text-[#8B6F47] leading-snug">
+                  <b className="text-[#2D2D2D]">Free living-memory QR included</b> — add a video that plays when anyone scans your printed album.
+                </p>
               </div>
               <button onClick={handleProceedToPayment}
                 className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2">
