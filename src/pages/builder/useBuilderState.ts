@@ -28,6 +28,7 @@ import { useIndexedDBPhotos } from '../../lib/useIndexedDBPhotos';
 import { detectFaceCenter, computeFaceOffset, initFaceApi } from './faceDetection';
 import { templateTracker } from './varietyTracker';
 import { readCaptureTime } from './exif';
+import { normalizeStoredPageFields } from './pageNormalize';
 
 /* ══════════════════════════════════════════════════════════════════════════
    useBuilderState — All builder state + localStorage persistence
@@ -42,30 +43,13 @@ type AlbumType = 'standard';
 
 /** Normalize a page object from cloud storage.
     Supabase JSONB may store camelCase as snake_case.
-    This helper checks both naming conventions. */
+    Shares normalizeStoredPageFields() with printJobRebuild so the two can't
+    drift; only templateId's default differs (null here, undefined there). */
 function normalizePage(p: any): any {
   if (!p || typeof p !== 'object') return p;
-  const get = (camel: string, snake: string) => {
-    if (p[camel] !== undefined) return p[camel];
-    if (p[snake] !== undefined) return p[snake];
-    return undefined;
-  };
   return {
-    ...p,
-    slotFills: get('slotFills', 'slot_fills') ?? [],
-    slotScales: get('slotScales', 'slot_scales') ?? [],
-    slotOffsetsX: get('slotOffsetsX', 'slot_offsets_x') ?? [],
-    slotOffsetsY: get('slotOffsetsY', 'slot_offsets_y') ?? [],
-    slotGeometries: get('slotGeometries', 'slot_geometries') ?? [],
-    qrFills: get('qrFills', 'qr_fills') ?? [],
-    slotTexts: get('slotTexts', 'slot_texts') ?? [],
-    textSlotFills: get('textSlotFills', 'text_slot_fills') ?? [],
-    textSlotQr: get('textSlotQr', 'text_slot_qr') ?? [],
-    textElements: get('textElements', 'text_elements') ?? [],
-    templateId: get('templateId', 'template_id') ?? null,
-    photos: p.photos ?? [],
-    background: p.background ?? { type: 'solid', solid: '#FFFBF7' },
-    layout: p.layout ?? 'freeform',
+    ...normalizeStoredPageFields(p),
+    templateId: (p.templateId ?? p.template_id) ?? null,
   };
 }
 

@@ -12,6 +12,7 @@ import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
 import { fetchAllOrders, type AdminOrder } from '../lib/adminOrders';
+import { supabase } from '../lib/supabase';
 import OverviewPanel from './admin/OverviewPanel';
 import OrdersPanel from './admin/OrdersPanel';
 import TemplatesPanel from './admin/TemplatesPanel';
@@ -35,6 +36,10 @@ export default function Admin() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersErr, setOrdersErr] = useState<string | null>(null);
+  // Order ids that HAVE a "<id>.pdf" in the private print-pdfs bucket. Operators
+  // already hold SELECT on that bucket (migration 0008), so we can observe print
+  // readiness with zero schema/RLS/RPC change and flag any order missing its file.
+  const [printReadyIds, setPrintReadyIds] = useState<Set<string>>(new Set());
 
   // Resolve the signed-in user's role, then land on a sensible default tab.
   useEffect(() => {
@@ -54,6 +59,20 @@ export default function Admin() {
     try { setOrders(await fetchAllOrders()); }
     catch (e) { setOrdersErr(e instanceof Error ? e.message : 'Failed to load orders'); }
     finally { setOrdersLoading(false); }
+
+    // Batch-probe the print-pdfs bucket ONCE (not N signed-URL calls) to learn
+    // which orders have their print file. Best-effort: a failure just leaves the
+    // set empty (badges show "missing"), never blocks the orders list.
+    try {
+      const { data: files } = await supabase.storage.from('print-pdfs').list('', { limit: 1000 });
+      const ready = new Set<string>();
+      for (const f of files ?? []) {
+        if (f.name.endsWith('.pdf')) ready.add(f.name.slice(0, -'.pdf'.length));
+      }
+      setPrintReadyIds(ready);
+    } catch {
+      setPrintReadyIds(new Set());
+    }
   }, []);
 
   useEffect(() => { if (role) void loadOrders(); }, [role, loadOrders]);
@@ -112,7 +131,7 @@ export default function Admin() {
           </p>
         )}
         {tab === 'overview' && isOwner && (ordersLoading ? <Spinner /> : <OverviewPanel orders={orders} />)}
-        {tab === 'orders' && (ordersLoading ? <Spinner /> : <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} />)}
+        {tab === 'orders' && (ordersLoading ? <Spinner /> : <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} />)}
         {tab === 'templates' && isOwner && <TemplatesPanel />}
         {tab === 'pricing' && isOwner && <PricingPanel />}
         {tab === 'team' && isOwner && <TeamPanel />}

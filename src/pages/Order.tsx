@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -8,6 +8,8 @@ import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
 import { createOrderFromLatestAlbum, uploadOrderPrintPdf } from '../lib/orders';
 import { getPendingPrintJob } from '../lib/printQueue';
+import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
+import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, MIN_PAGES, type Binding } from '../lib/pricing';
 import { getPriceMultiple } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
@@ -28,6 +30,10 @@ export default function Order() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { openLogin } = useAuthModal();
+  const idbPhotos = useIndexedDBPhotos();
+  // Remembers a created order across retries so a second Pay tap (e.g. after a
+  // transient upload failure) reuses the same order row instead of duplicating it.
+  const createdOrderRef = useRef<{ id: string; order_number: string } | null>(null);
   const [material, setMaterial] = useState<MaterialType>('matte');
   const [cover, setCover] = useState<CoverType>('softcover');
   const [size, setSize] = useState<AlbumSizePreset>('8x8');
@@ -86,50 +92,75 @@ export default function Order() {
     setStep('payment');
   };
 
-  // ── Placeholder payment → create order → tracking ──
+  // ── Placeholder payment → create order → REQUIRED print-PDF upload → tracking ──
+  // The print-ready PDF is generated on THIS device (the photos live only in
+  // this browser's IndexedDB) and uploaded to the private fulfillment bucket. It
+  // is a BLOCKING step: an order must never reach the "Sent to print" screen
+  // without its PDF in the bucket. On any failure we surface a clear error and
+  // leave the user on the Pay button to retry.
   const handlePay = async () => {
     setErrorMsg('');
     setSubmitting(true);
     try {
       // Simulated payment — no real gateway. (Xendit slots in here later.)
       await new Promise((r) => setTimeout(r, 1200));
-      const order = await createOrderFromLatestAlbum({
-        userId: user!.id,
-        specs: { material, cover, size: albumSize },
-        // createOrderFromLatestAlbum normalizes name/phone + composes the address
-        // from these structured PSGC parts (single source of truth).
-        shipping: { name, phone, address },
-        amount: totalPrice,
-      });
-      setOrderNumber(order.order_number);
-      // Build the print-ready PDF NOW (the photos live in THIS browser) and send
-      // it to the private fulfillment bucket. Only Megyprints can download it —
-      // the customer never gets the file. Best-effort: the order still stands if
-      // this hiccups (we log it so it can be regenerated from a re-opened album).
-      if (job && job.pages.length > 0) {
-        setPrepMsg('Preparing your album for printing…');
-        try {
-          await uploadOrderPrintPdf(order.id, job);
-        } catch (e) {
-          console.error('Print PDF upload failed:', e);
-        }
-        // Reliability belt: ensure every QR "living memory" we're about to PRINT
-        // has a resolvable row. Runs over the exact print-job pages — the same
-        // source the PDF is built from — so a QR added just before checkout can't
-        // ship with a dead /m/:code even if the throttled cloud save hasn't
-        // flushed the qrFill to the DB album yet. INSERT-only; never clobbers a
-        // relink. Best-effort — the order still stands if this hiccups.
-        try {
-          const qrFills = job.pages.flatMap((p) => p.qrFills ?? []);
-          if (qrFills.length) await ensureMemoriesForFills(qrFills);
-        } catch (e) {
-          console.error('QR memories ensure (print job) failed:', e);
-        }
-        setPrepMsg('');
+
+      // 1. Create the order — but only once. A retry after a failed upload reuses
+      //    the same order row (no duplicate) since the storage upload upserts.
+      let order = createdOrderRef.current;
+      if (!order) {
+        const created = await createOrderFromLatestAlbum({
+          userId: user!.id,
+          specs: { material, cover, size: albumSize },
+          // createOrderFromLatestAlbum normalizes name/phone + composes the address
+          // from these structured PSGC parts (single source of truth).
+          shipping: { name, phone, address },
+          amount: totalPrice,
+        });
+        order = { id: created.id, order_number: created.order_number };
+        createdOrderRef.current = order;
       }
+      setOrderNumber(order.order_number);
+
+      // 2. Resolve the print job durably. The in-memory job (getPendingPrintJob)
+      //    is wiped by any full reload — most commonly the Google sign-in redirect
+      //    at checkout — so when it's gone we rebuild it from the SAME latest album
+      //    the order snapshots + the photo blobs in this browser's IndexedDB.
+      setPrepMsg('Preparing your album for printing…');
+      let printJob = getPendingPrintJob();
+      if (!printJob || printJob.pages.length === 0) {
+        printJob = await rebuildPrintJobFromLatestAlbum(user!.id, idbPhotos.get);
+      }
+      if (!printJob || printJob.pages.length === 0) {
+        throw new Error(
+          "We couldn't prepare your album for printing on this device. Please open your album in the builder on the device where you created it, then order again — your photos live only in that browser.",
+        );
+      }
+
+      // 3. REQUIRED: build + upload the print PDF. If gen throws or the upload
+      //    errors it propagates to the outer catch, the order does NOT advance,
+      //    and the user stays on Pay to retry. (upsert:true → re-upload is safe.)
+      await uploadOrderPrintPdf(order.id, printJob);
+
+      // 4. Reliability belt (best-effort, non-blocking): ensure every QR "living
+      //    memory" we're about to PRINT has a resolvable row. Runs AFTER the
+      //    required upload so a QR hiccup can't block the PDF. Runs over the exact
+      //    print-job pages — the same source the PDF is built from — so a QR added
+      //    just before checkout can't ship with a dead /m/:code even if the
+      //    throttled cloud save hasn't flushed it. INSERT-only; never clobbers a relink.
+      try {
+        const qrFills = printJob.pages.flatMap((p) => p.qrFills ?? []);
+        if (qrFills.length) await ensureMemoriesForFills(qrFills);
+      } catch (e) {
+        console.error('QR memories ensure (print job) failed:', e);
+      }
+      setPrepMsg('');
+
+      // 5. Only NOW — with the PDF safely in the bucket — advance to tracking.
       setTrackStage(0);
       setStep('tracking');
     } catch (err) {
+      setPrepMsg('');
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong placing your order.');
     } finally {
       setSubmitting(false);

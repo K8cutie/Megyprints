@@ -3,29 +3,32 @@
    render when canSeeFinancials (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
-import { Loader2, Check, Download } from 'lucide-react';
+import { Loader2, Check, Download, AlertTriangle } from 'lucide-react';
 import {
   type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus,
 } from '../../lib/adminOrders';
 import { supabase } from '../../lib/supabase';
 
-export default function OrdersPanel({ orders, onChanged, canSeeFinancials }: {
+export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds }: {
   orders: AdminOrder[];
   onChanged: () => Promise<void>;
   canSeeFinancials: boolean;
+  /** Order ids that have a "<id>.pdf" in the private print-pdfs bucket. Any
+   *  order NOT in this set is missing its print file and must not be fulfilled blind. */
+  printReadyIds: Set<string>;
 }) {
   if (orders.length === 0) {
     return <p className="text-sm text-[#9B9B9B] py-16 text-center">No orders yet.</p>;
   }
   return (
     <div className="space-y-3">
-      {orders.map((o) => <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} />)}
+      {orders.map((o) => <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReadyIds.has(o.id)} />)}
     </div>
   );
 }
 
-function OrderRow({ o, onChanged, canSeeFinancials }: {
-  o: AdminOrder; onChanged: () => Promise<void>; canSeeFinancials: boolean;
+function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
+  o: AdminOrder; onChanged: () => Promise<void>; canSeeFinancials: boolean; printReady: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [price, setPrice] = useState(o.amount != null ? String(o.amount) : '');
@@ -64,6 +67,12 @@ function OrderRow({ o, onChanged, canSeeFinancials }: {
             <span className={`text-xs px-2 py-0.5 rounded-full ${paid ? 'bg-[#E6F4EA] text-[#2E7D4A]' : 'bg-[#FFF3E0] text-[#B8791F]'}`}>
               {paid ? 'Paid' : 'Unpaid'}
             </span>
+            {!printReady && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1"
+                title="No print-ready PDF is in the fulfillment bucket for this order. Do not print until the customer re-orders from the device that holds the photos.">
+                <AlertTriangle size={12} /> Print file missing
+              </span>
+            )}
           </div>
           <div className="text-xs text-[#9B9B9B] mt-1">
             {o.ship_name || '—'}{o.ship_phone ? ` · ${o.ship_phone}` : ''} · {date}
