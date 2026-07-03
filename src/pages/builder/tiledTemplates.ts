@@ -125,6 +125,32 @@ const SQUARE_RECIPES: Recipe[] = [
   { key: 'portrait-pair-cap', name: 'Portrait pair + caption', category: 'duo',
     photos: [{ x: 0, y: 0, w: 0.5, h: 0.6667, ratio: '3:4' }, { x: 0.5, y: 0, w: 0.5, h: 0.6667, ratio: '3:4' }],
     texts: [cap(0, 0.6667, 1, 0.3333)] },
+  // ── VARIETY additions: widen the thin phone-portrait (3:4) / landscape (4:3)
+  //    square pools so templateTracker(5) has distinct layouts to rotate. ──
+  // Two portraits with the caption on TOP (distinct from the bottom-cap pair).
+  { key: 'twin-port-topcap', name: 'Caption + portrait pair', category: 'duo',
+    photos: [{ x: 0, y: 0.3333, w: 0.5, h: 0.6667, ratio: '3:4' }, { x: 0.5, y: 0.3333, w: 0.5, h: 0.6667, ratio: '3:4' }],
+    texts: [cap(0, 0, 1, 0.3333)] },
+  // One 3:4 hero centered with a caption band beneath — a new single-photo 3:4
+  // arrangement distinct from the side-caption portraits.
+  { key: 'portrait-capC', name: 'Portrait + caption below', category: 'single',
+    photos: [{ x: 0.25, y: 0, w: 0.5, h: 0.6667, ratio: '3:4' }], texts: [cap(0, 0.6667, 1, 0.3333)] },
+  // Big 4:3 hero with a thin caption band ABOVE and BELOW — new single 4:3 look.
+  { key: 'land-hero-splitcap', name: 'Landscape hero + captions', category: 'single',
+    photos: [{ x: 0, y: 0.15, w: 1, h: 0.75, ratio: '4:3' }], texts: [cap(0, 0, 1, 0.15), cap(0, 0.9, 1, 0.1)] },
+  // (A 2-up 4:3 "twin landscape" recipe was dropped: two 4:3 frames are too
+  // wide/short to tile a SQUARE page without a large empty band — 4:3 photos get
+  // single-hero layouts instead, which also spread across more pages.)
+  // L-frame: one big square + two small squares (auto-drops on 6×6 via floor).
+  // L-frame: one big square + two small squares. The leftover bottom band
+  // (y 0.6667..1 across the full width) is absorbed by a caption, so the layout
+  // still tiles edge-to-edge per the header invariant.
+  { key: 'l-frame-1x1', name: 'L-frame squares', category: 'trio',
+    photos: [
+      { x: 0, y: 0, w: 0.6667, h: 0.6667, ratio: '1:1' },
+      { x: 0.6667, y: 0, w: 0.3333, h: 0.3333, ratio: '1:1' },
+      { x: 0.6667, y: 0.3333, w: 0.3333, h: 0.3333, ratio: '1:1' },
+    ], texts: [cap(0, 0.6667, 1, 0.3333)] },
 
   // 3 photos
   { key: 'trio-text-br', name: 'Trio + textbox', category: 'trio',
@@ -174,6 +200,19 @@ function nearestRatio(v: number): PhotoRatio {
   }
   return best.r;
 }
+/** Log-distance from a true cell ratio to the phone ratio it would be tagged with.
+ *  Used to auto-reject grid cells too far from any phone-native shape (they'd force
+ *  a heavy object-cover crop on matched photos). Baseline grids all sit ≤ ~0.15. */
+function ratioMismatch(v: number): number {
+  let bd = Infinity;
+  for (const s of PHONE_RATIOS) bd = Math.min(bd, Math.abs(Math.log(s.v) - Math.log(v)));
+  return bd;
+}
+// Max log-distance a grid cell may sit from its nearest phone ratio before we drop
+// the whole grid. Baseline grids top out ~0.148 (6×4 2×1 landscape cells); 0.2 keeps
+// every real grid while rejecting sliver cells (1×3 → 0.448, 3×1 → 0.553) that would
+// cover-crop 36–42% off a matched phone photo.
+const MAX_CELL_RATIO_MISMATCH = 0.2;
 const CATEGORY: PageTemplate['category'][] = ['single', 'single', 'duo', 'trio', 'quad', 'quint', 'sextet'];
 const catFor = (n: number): PageTemplate['category'] => CATEGORY[Math.min(n, 6)];
 const orientFor = (a: number): PageTemplate['orientation'] => (a > 1.05 ? 'landscape' : a < 0.95 ? 'portrait' : 'square');
@@ -193,7 +232,11 @@ function gridTemplate(spec: GridSpec): PageTemplate | null {
 
   const cw = 1 / cols, ch = 1 / rows;
   if (Math.min((cw - gx) * safeWin, (ch - gy) * safeHin) < MIN_FRAME_INCHES) return null; // print floor
-  const ratio = nearestRatio((cw / ch) * A);
+  const realCellRatio = (cw / ch) * A;
+  // Reject cells too far from any phone-native ratio: a matched photo would be
+  // heavily object-cover cropped (mirrors how the 2" floor auto-rejects tiny cells).
+  if (ratioMismatch(realCellRatio) > MAX_CELL_RATIO_MISMATCH) return null;
+  const ratio = nearestRatio(realCellRatio);
 
   const slots: TemplateSlot[] = [];
   let n = 0;
@@ -235,6 +278,9 @@ const GRID_SPECS: GridSpec[] = [
   { size: '11.5x8', rows: 2, cols: 3, name: 'Six frames' },
   { size: '11.5x8', rows: 2, cols: 2, caption: true, name: 'Two + caption' },
   { size: '11.5x8', rows: 3, cols: 3, caption: true, name: 'Six + caption' },
+  // (Dropped VARIETY 11.5×8 1×3 'Three portraits': its cells are ~1:2 slivers, log-
+  //  distance 0.448 from the 3:4 they'd be tagged — 36% cover-crop on a matched
+  //  photo, well past MAX_CELL_RATIO_MISMATCH. gridTemplate() would reject it anyway.)
   // 8.5×11 portrait (A = 0.77)
   { size: '8.5x11', rows: 1, cols: 1, name: 'Full portrait' },
   { size: '8.5x11', rows: 2, cols: 1, name: 'Two stacked' },
@@ -242,6 +288,10 @@ const GRID_SPECS: GridSpec[] = [
   { size: '8.5x11', rows: 3, cols: 2, name: 'Six frames' },
   { size: '8.5x11', rows: 2, cols: 2, caption: true, name: 'Two + caption' },
   { size: '8.5x11', rows: 3, cols: 2, caption: true, name: 'Four + caption' },
+  // (Dropped VARIETY 8.5×11 3×1 'Three stacked' / 'Two stacked + caption': their
+  //  cells are ~2.3:1 letterboxes, log-distance 0.553 from the 4:3 they'd be tagged
+  //  — 42% cover-crop on a matched photo, past MAX_CELL_RATIO_MISMATCH. Rejected by
+  //  gridTemplate() regardless. Widen the 4:3 pool with cells that land near 4:3.)
 ];
 
 /* ── CUSTOM explicit-region templates (any size) ─────────────────────────────

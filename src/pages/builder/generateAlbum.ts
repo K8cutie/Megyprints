@@ -95,6 +95,12 @@ export function generateAlbum(
   const border = options?.border;
   const cornerBase = options?.cornerBase;
 
+  // Reset anti-repeat history at the START of every generation so a prior
+  // album's tail doesn't bias the first pages of this one (cross-album carry).
+  // Only templateTracker is consumed here (themeTracker/backgroundTracker are
+  // used by other builder actions, not this function), so scope the clear to it.
+  templateTracker.clear();
+
   // FILL MODE: on AUTO, if there aren't enough photos for the natural look to fill
   // the album (which is what leaves blank pages), drop to the LOWEST density that
   // still fills MIN_PAGES — i.e. 1 photo/page for 40–79 photos. Photo-rich albums
@@ -133,9 +139,25 @@ export function generateAlbum(
 
   const pages: AlbumPage[] = [];
   let pageIdx = 0;
+  // De-cluster guard: remember the last page's photo-count so consecutive pages
+  // can be biased to differ in slotCount too (not just template id). -1 = none yet.
+  let lastSlotCount = -1;
+
+  // Bias a candidate list so back-to-back pages differ in photo-count: if the
+  // candidates span >1 distinct slotCount, drop those equal to the previous
+  // page's count WHEN a non-empty subset remains. Pure bias — if every candidate
+  // shares one slotCount (e.g. fill mode), the list is returned unchanged.
+  const declusterBySlotCount = <T extends { slotCount: number }>(list: T[]): T[] => {
+    if (list.length <= 1 || lastSlotCount < 0) return list;
+    const distinct = new Set(list.map((t) => t.slotCount));
+    if (distinct.size <= 1) return list;
+    const differ = list.filter((t) => t.slotCount !== lastSlotCount);
+    return differ.length ? differ : list;
+  };
 
   const pushPage = (template: PageTemplate, fills: number[]) => {
     const slotCount = template.slots.length;
+    lastSlotCount = slotCount;
     const page = createEmptyPage(pageIdx, albumSize, background, border, cornerBase);
     page.templateId = template.id;
     page.slotFills = new Array(slotCount).fill(null);
@@ -201,9 +223,15 @@ export function generateAlbum(
         // handle these photos with its larger, varied homogeneous pool.
         if (!randomize && ids.length === 1 && templateTracker.getRecent().includes(ids[0])) break;
 
+        // De-cluster by photo-count: prefer a mixed template whose slotCount
+        // differs from the previous page's (bias only — no-op if all share one).
+        const biased = randomize
+          ? fillable
+          : declusterBySlotCount(fillable.map((x) => ({ ...x, slotCount: x.t.slots.length })));
+        const biasedIds = biased.map((x) => x.t.id);
         const id = randomize
           ? ids[Math.floor(Math.random() * ids.length)]
-          : (templateTracker.pick(ids) ?? ids[Math.floor(Math.random() * ids.length)]);
+          : (templateTracker.pick(biasedIds) ?? biasedIds[Math.floor(Math.random() * biasedIds.length)]);
         const chosen = fillable.find((x) => x.t.id === id) ?? fillable[0];
         pushPage(chosen.t, chosen.fills);
         const usedSet = new Set(chosen.fills);
@@ -212,14 +240,26 @@ export function generateAlbum(
       }
     }
 
-    // ── 3b. Remaining photos → ratio by ratio. ──
+    // ── 3b. Remaining photos → ratio by ratio, but INTERLEAVED. ──
     const byRatio: Partial<Record<PhotoRatio, number[]>> = {};
     for (const i of remaining) {
       const r = ratioOf[i] ?? dominantRatio;
       (byRatio[r] ??= []).push(i);
     }
 
-    for (const ratio of Object.keys(byRatio) as PhotoRatio[]) {
+    // Precompute each ratio's queue + its multi/onePhoto/full candidate sets once,
+    // then ROUND-ROBIN: emit ONE page per non-empty ratio per pass and cycle until
+    // every queue is drained. Draining one ratio fully (the old behaviour) parked
+    // all same-ratio → same-thin-pool pages consecutively, which is exactly the
+    // visible "grouping". Interleaving pulls a DIFFERENT pool page-to-page so the
+    // thin-pool repeats are spread apart instead of clustered.
+    interface RatioState {
+      queue: number[];
+      ratioTemplates: PageTemplate[];
+      onePhoto: PageTemplate[];
+      multi: PageTemplate[];
+    }
+    const states: RatioState[] = (Object.keys(byRatio) as PhotoRatio[]).map((ratio) => {
       const queue = byRatio[ratio]!;
       const ratioTemplates = templatesForRatio(ratio);
       const onePhoto = ratioTemplates.filter((t) => t.slotCount === 1);
@@ -238,25 +278,44 @@ export function generateAlbum(
           : ratioTemplates.filter((t) => t.slotCount > 1);
       if (multi.length === 0 && effPerPage !== 1) multi = ratioTemplates.filter((t) => t.slotCount > 1);
       if (multi.length === 0 && effPerPage !== 1) multi = ratioTemplates;
+      return { queue, ratioTemplates, onePhoto, multi };
+    });
 
-      while (queue.length > 0) {
-        // Prefer a multi-slot template that fits the remaining photos. For a
-        // leftover smaller than any multi-slot, drop to a single-photo full-page
-        // of this ratio — the leftover fix.
-        let candidates = multi.filter((t) => t.slotCount <= queue.length);
-        if (candidates.length === 0) {
-          candidates = onePhoto.length
-            ? onePhoto
-            : ratioTemplates.filter((t) => t.slotCount <= queue.length);
-          if (candidates.length === 0) candidates = ratioTemplates;
+    // Emit exactly one page from a ratio's queue (drains 1..slotCount photos).
+    const emitOnePage = (st: RatioState) => {
+      const { queue, ratioTemplates, onePhoto, multi } = st;
+      // Prefer a multi-slot template that fits the remaining photos. For a
+      // leftover smaller than any multi-slot, drop to a single-photo full-page
+      // of this ratio — the leftover fix.
+      let candidates = multi.filter((t) => t.slotCount <= queue.length);
+      if (candidates.length === 0) {
+        candidates = onePhoto.length
+          ? onePhoto
+          : ratioTemplates.filter((t) => t.slotCount <= queue.length);
+        if (candidates.length === 0) candidates = ratioTemplates;
+      }
+      // De-cluster by photo-count too (bias only — no-op if all share one count,
+      // e.g. fill mode where every candidate is single-photo).
+      const pickPool = randomize ? candidates : declusterBySlotCount(candidates);
+      const id = randomize
+        ? pickPool[Math.floor(Math.random() * pickPool.length)].id
+        : (templateTracker.pick(pickPool.map((t) => t.id))
+          ?? pickPool[Math.floor(Math.random() * pickPool.length)].id);
+      const template = pickPool.find((t) => t.id === id) ?? pickPool[0];
+      const take = Math.min(template.slots.length, queue.length);
+      pushPage(template, queue.splice(0, take));
+    };
+
+    // Round-robin until every queue is empty — never exits early, so no photo is
+    // ever left unplaced (blanks regression guard).
+    let anyLeft = states.some((s) => s.queue.length > 0);
+    while (anyLeft) {
+      anyLeft = false;
+      for (const st of states) {
+        if (st.queue.length > 0) {
+          emitOnePage(st);
+          if (st.queue.length > 0) anyLeft = true;
         }
-        const id = randomize
-          ? candidates[Math.floor(Math.random() * candidates.length)].id
-          : (templateTracker.pick(candidates.map((t) => t.id))
-            ?? candidates[Math.floor(Math.random() * candidates.length)].id);
-        const template = candidates.find((t) => t.id === id) ?? candidates[0];
-        const take = Math.min(template.slots.length, queue.length);
-        pushPage(template, queue.splice(0, take));
       }
     }
   }
