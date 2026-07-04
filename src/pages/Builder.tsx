@@ -8,6 +8,7 @@ import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
 import MobileReview from './builder/MobileReview';
 import LayoutPicker from './builder/LayoutPicker';
+import BuilderBackGuard from './builder/BuilderBackGuard';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
 import MegyAssistant from '../assistant/MegyAssistant';
 import SoftAuthGate from '../components/SoftAuthGate';
@@ -159,6 +160,12 @@ export default function Builder() {
   const content = (
     <BuilderErrorBoundary key={errorKey} onReset={handleReset}>
       <SoftAuthGate />
+      {/* Stop the mobile Back button from closing the app + losing the draft. */}
+      <BuilderBackGuard
+        flush={actions.saveDraftNow}
+        phase={actions.phase}
+        onStepBack={() => actions.setPhase('edit')}
+      />
       <div className={`fixed inset-0 z-[60] bg-white flex flex-col transition-[padding] duration-300 ${panelCollapsed ? 'lg:pl-[60px]' : 'lg:pl-[340px]'}`}>
         {/* Step Indicator */}
         <div className="h-12 bg-white border-b border-[#E8E8E8] flex items-center px-4 gap-1 shrink-0">

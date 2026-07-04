@@ -428,6 +428,8 @@ export interface BuilderActions {
   lastSavedAt: Date | null;
   isLoadingCloud: boolean;
   manualSave: () => Promise<void>;
+  /** Synchronous localStorage flush of the current draft (see return note). */
+  saveDraftNow: () => void;
 
   // ── Phase 1: Photo URL resolution ──
   getPhotoUrl: (photoOrId: UploadedPhoto | string) => string;
@@ -2067,6 +2069,10 @@ export function useBuilderState(): BuilderActions {
     lastSavedAt,
     isLoadingCloud,
     manualSave,
+    /** Synchronous localStorage flush of the current draft. Reliable during page
+     *  teardown (unlike the async cloud save) — used by the mobile back-button
+     *  guard so an accidental Back never loses work in the 30s debounce window. */
+    saveDraftNow: flushLocal,
     getPhotoUrl,
     user,
     loadAlbum,
