@@ -17,7 +17,10 @@ export interface AuthState {
 
 export interface AuthActions {
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, metadata?: { full_name?: string }) => Promise<void>;
+  /** Resolves true when the account still needs email confirmation (no session
+   *  was created); false when auto-confirm is on and the user is already signed
+   *  in — so the UI must NOT tell them to check a (never-sent) email. */
+  signup: (email: string, password: string, metadata?: { full_name?: string }) => Promise<boolean>;
   logout: () => Promise<void>;
   signInWithOAuth: (provider: Provider) => Promise<void>;
   clearError: () => void;
@@ -117,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       setError(null);
       try {
-        const { error: signUpError } = await supabase.auth.signUp({
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -127,6 +130,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (signUpError) {
           throw signUpError;
         }
+        // With email auto-confirm ON (this project), signUp returns a live
+        // session and the user is signed in immediately — no email is sent, so
+        // the caller must NOT tell them to check their inbox. Only when there's
+        // no session (email confirmation required) is a mail actually sent.
+        return !data.session;
       } catch (err: unknown) {
         const message = err instanceof AuthError ? err.message : 'Failed to sign up. Please try again.';
         setError(message);

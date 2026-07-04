@@ -87,14 +87,22 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
       if (!validate()) return;
 
       try {
-        await signup(email, password, { full_name: fullName.trim() });
-        setSuccessMessage('Account created! Check your email to confirm your account.');
-        // Don't close immediately — let user see the success message
+        const needsEmailConfirm = await signup(email, password, { full_name: fullName.trim() });
+        if (needsEmailConfirm) {
+          setSuccessMessage('Account created! Check your email to confirm your account.');
+          // Don't close — the user must confirm via email first.
+        } else {
+          // Auto-confirm is on: the account is created AND signed in, no email
+          // sent. Confirm success and close so they can keep going (never tell
+          // them to check an inbox that will stay empty).
+          setSuccessMessage("You're all set — you're signed in!");
+          setTimeout(() => onClose(), 1100);
+        }
       } catch {
         // Error is handled by auth context — displayed below
       }
     },
-    [clearError, validate, signup, email, password, fullName]
+    [clearError, validate, signup, email, password, fullName, onClose]
   );
 
   const handleSwitch = useCallback(() => {
