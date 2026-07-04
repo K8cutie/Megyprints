@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, ChevronRight, Sparkles,
-  Wand2, Upload, Home, PanelLeftOpen,
+  Wand2, Upload, Home, PanelLeftOpen, QrCode,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -203,6 +203,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   // to a caption box (setTextSlotPhoto) instead of a photo slot (fillSlot).
   const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null);
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null);
+  const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
   const [pickerIsTextSlot, setPickerIsTextSlot] = useState(false);
   const buildSlotTextInitial = useCallback((slot: number): BoxTextContent => {
     const existing = actions.currentPage?.slotTexts?.[slot];
@@ -701,6 +702,17 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
+      {/* New living-memory: convert this single-photo page to a corner badge.
+          (Editing/removing an existing badge is via tapping the chip → qrEditSlot.) */}
+      {memoryOpen && (
+        <AddQrModal
+          initial={null}
+          onSave={(fill) => { void actions.applyMemoryQr(fill); setMemoryOpen(false); }}
+          onRemove={() => setMemoryOpen(false)}
+          onClose={() => setMemoryOpen(false)}
+        />
+      )}
+
       {/* Empty-slot content chooser — Photo / Text / QR (desktop modal) */}
       {chooserSlot !== null && (
         <SlotChooser
@@ -924,6 +936,18 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     </button>
                   )}
                 </>
+              )}
+
+              {/* Living-memory QR — offered on a single full-photo page; turns it
+                  into a full-bleed photo with a scannable corner badge. */}
+              {actions.canAddMemoryQr && (
+                <button
+                  onClick={() => setMemoryOpen(true)}
+                  title="Add a scannable video QR to this photo"
+                  className="px-3 py-1.5 bg-white border border-[#F4C2A1] text-[#B0714E] text-xs font-semibold rounded-lg hover:bg-[#FDF3EC] flex items-center gap-1 transition-all"
+                >
+                  <QrCode size={12} /> Add memory video
+                </button>
               )}
             </div>
           </div>
