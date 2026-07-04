@@ -1612,6 +1612,23 @@ const SIZE_ORIENTATION: { size: AlbumSizePreset; orientation: PageTemplate['orie
   { size: S8511, orientation: 'portrait' },
 ];
 
+/** Physical safe-area inches per size (album inches × the 0.04 margin each side). */
+const GAP_SAFE_IN: Record<string, [number, number]> = {
+  '6x4': [6 * 0.92, 4 * 0.92], '6x6': [6 * 0.92, 6 * 0.92], '8x8': [8 * 0.92, 8 * 0.92],
+  '9x9': [9 * 0.92, 9 * 0.92], '11.5x8': [11.5 * 0.92, 8 * 0.92], '8.5x11': [8.5 * 0.92, 11 * 0.92],
+};
+/** Would a ratio-fit frame inside a [maxW×maxH] fraction of the safe area print
+ *  at least 2" on its short side? (Mirrors rsBox's fit math so gap variants
+ *  can't silently drop below the print floor on small albums.) */
+function gapFloorOk(size: AlbumSizePreset, maxW: number, maxH: number, ratio: PhotoRatio): boolean {
+  const [sw, sh] = GAP_SAFE_IN[size];
+  const intrinsic = RATIOS[ratio] / (sw / sh);
+  const hAtMaxW = maxW / intrinsic;
+  const slotW = hAtMaxW <= maxH ? maxW : maxH * intrinsic;
+  const slotH = hAtMaxW <= maxH ? hAtMaxW : maxH;
+  return Math.min(slotW * sw, slotH * sh) >= 2;
+}
+
 const GAP_FILLERS: PageTemplate[] = [];
 /** Templates that must EXIST (persisted albums reference their ids — a missing
  *  id silently blanks those pages in BOTH the preview and the print PDF) but
@@ -1699,6 +1716,23 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
         rsBox(0, 0.25, ratio, 0.34, 0.5, size),
         rsBox(0.37, 0, ratio, 0.63, 1.0, size),
       ]));
+    } else if (!wide) {
+      // Small albums (6×4 / 6×6), tall/square ratios: add caption-FREE duos so
+      // that once the caption cadence restricts a page to box-free layouts,
+      // there's more than one to deal. Each is floor-gated — dropped on any
+      // size where it would print under 2" (6×4 has little room; 6×6 has more).
+      if (gapFloorOk(size, 1.0, 0.485, ratio)) {
+        GAP_FILLERS.push(tmpl(`gap-${key}-2s`, `Stacked ${ratio}`, 'duo', STD, orientation, ratio, [size], [
+          rsBox(0, 0, ratio, 1.0, 0.485, size),
+          rsBox(0, 0.515, ratio, 1.0, 0.485, size),
+        ]));
+      }
+      if (gapFloorOk(size, 0.42, 1.0, ratio)) {
+        GAP_FILLERS.push(tmpl(`gap-${key}-2x`, `Wide + Narrow ${ratio}`, 'duo', STD, orientation, ratio, [size], [
+          rsBox(0, 0, ratio, 0.56, 1.0, size),
+          rsBox(0.58, 0, ratio, 0.42, 1.0, size),
+        ]));
+      }
     }
   }
 }

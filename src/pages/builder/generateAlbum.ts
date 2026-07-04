@@ -163,6 +163,22 @@ export function generateAlbum(
   // recent-history check).
   let lastTemplateId: string | null = null;
 
+  // ── Caption cadence ── A template's caption / text band (the "combo box") is
+  // dead space when the customer leaves it empty — which is most of the time —
+  // so cap box-bearing templates to ~1 in 4 pages. After one is placed, the
+  // next 3 pages are restricted to box-FREE layouts, WHEN any exist for that
+  // ratio (else the box is allowed through so no photo is ever stranded).
+  // Starts mid-cycle so page 1 isn't always a box.
+  const hasBox = (t: PageTemplate): boolean => (t.textSlots?.length ?? 0) > 0;
+  let captionCooldown = Math.floor(Math.random() * 4);
+  // Prefer box-free layouts while the cadence cooldown is active (no-op once it
+  // elapses, or when the ratio has no box-free layout at all).
+  const boxAware = (list: PageTemplate[]): PageTemplate[] => {
+    if (captionCooldown <= 0) return list;
+    const noBox = list.filter((t) => !hasBox(t));
+    return noBox.length ? noBox : list;
+  };
+
   // ── Full-bleed crop safety ── A full-bleed single renders the photo
   // object-cover across the WHOLE page, so an off-orientation photo is hard
   // cropped (a 3:4 phone photo on a 3:2 page shows only ~50% of its height —
@@ -185,6 +201,9 @@ export function generateAlbum(
     lastTemplateId = template.id;
     nextHeroIn -= 1;
     if (slotCount === 1) nextHeroIn = Math.max(nextHeroIn, 4 + Math.floor(Math.random() * 4));
+    // A box page re-arms the cooldown (next 3 pages box-free); any other page
+    // ticks it down toward the next allowed box.
+    captionCooldown = hasBox(template) ? 3 : Math.max(0, captionCooldown - 1);
     const page = createEmptyPage(pageIdx, albumSize, background, border, cornerBase);
     page.templateId = template.id;
     page.slotFills = new Array(slotCount).fill(null);
@@ -250,8 +269,11 @@ export function generateAlbum(
         // handle these photos with its larger, varied homogeneous pool.
         if (!randomize && fillable.length === 1 && fillable[0].t.id === lastTemplateId) break;
 
-        // Deal from the mixed bag, restricted to what's fillable right now.
-        const okIds = new Set(fillable.map((x) => x.t.id));
+        // Deal from the mixed bag, restricted to what's fillable right now AND
+        // (while on cooldown) to box-free layouts, so the caption cadence holds
+        // on mixed pages too.
+        const eligiblePool = boxAware(fillable.map((x) => x.t));
+        const okIds = new Set(eligiblePool.map((t) => t.id));
         const id = mixedBag.draw((x) => okIds.has(x));
         const chosen = fillable.find((x) => x.t.id === id)
           ?? fillable[Math.floor(Math.random() * fillable.length)];
@@ -330,11 +352,18 @@ export function generateAlbum(
       // (<3 distinct even after widening) as the variety emergency valve.
       // Thin-pool heroes fire in FILL MODE too: a 1-photo page only ADDS
       // pages, so it can never underfill toward blank padding.
-      const heroAllowed = singles.length > 0 &&
+      // A hero page whose only crop-safe single carries a caption would spend
+      // the hero on a BOX page during the cooldown — which is exactly what the
+      // cadence is trying to hold down. In that case skip the hero and let a
+      // (box-free) multi page carry this slot instead.
+      const heroPool = boxAware(singles);
+      const heroWouldBox = captionCooldown > 0 && heroPool.every(hasBox);
+      const heroAllowed = singles.length > 0 && !heroWouldBox &&
         ((photosPerPage == null && !fillMode) || multi.length < 3);
       if (heroAllowed && fits.length > 0 && nextHeroIn <= 0) {
-        const id = bagFor(`${key}:single`, singles.map((t) => t.id)).draw();
-        const hero = singles.find((t) => t.id === id) ?? singles[0];
+        const ok = new Set(heroPool.map((t) => t.id));
+        const id = bagFor(`${key}:single`, singles.map((t) => t.id)).draw((x) => ok.has(x));
+        const hero = singles.find((t) => t.id === id) ?? heroPool[0] ?? singles[0];
         pushPage(hero, queue.splice(0, 1));
         // ADAPTIVE cadence (set AFTER pushPage — its natural-single reset would
         // otherwise max() this away): a THIN multi pool (2 layouts) can only
@@ -349,16 +378,19 @@ export function generateAlbum(
       let template: PageTemplate | undefined;
       if (fits.length > 0) {
         // Deal from this ratio's multi bag, restricted to layouts that still
-        // fit the remaining photos. The bag spreads slot-counts too, so the
-        // old de-cluster bias is subsumed.
-        const ok = new Set(fits.map((t) => t.id));
+        // fit the remaining photos AND (while on cooldown) to box-free ones.
+        // The bag spreads slot-counts too, so the old de-cluster bias is subsumed.
+        const pool = boxAware(fits);
+        const ok = new Set(pool.map((t) => t.id));
         const id = bagFor(`${key}:multi`, multi.map((t) => t.id)).draw((x) => ok.has(x));
         template = fits.find((t) => t.id === id)
-          ?? fits[Math.floor(Math.random() * fits.length)];
+          ?? pool[Math.floor(Math.random() * pool.length)] ?? fits[0];
       } else if (singles.length > 0) {
         // Leftover smaller than any multi-slot → a dealt single-photo page.
-        const id = bagFor(`${key}:single`, singles.map((t) => t.id)).draw();
-        template = singles.find((t) => t.id === id) ?? singles[0];
+        const pool = boxAware(singles);
+        const ok = new Set(pool.map((t) => t.id));
+        const id = bagFor(`${key}:single`, singles.map((t) => t.id)).draw((x) => ok.has(x));
+        template = singles.find((t) => t.id === id) ?? pool[0] ?? singles[0];
       } else {
         const rest = ratioTemplates.filter((t) => t.slotCount <= queue.length);
         const pool = rest.length ? rest : ratioTemplates;
