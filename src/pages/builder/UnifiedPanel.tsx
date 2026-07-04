@@ -11,6 +11,7 @@ import type {
 import { PAGE_TEMPLATES, TEMPLATE_CATEGORIES, hasQrSlot, photoSlotCount } from './pageTemplates';
 import PropertiesPanel from './PropertiesPanel';
 import { getPersistedSidebarTab, setPersistedSidebarTab } from './sidebarTabStore';
+import { TEXTURE_NAMES, textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ══════════════════════════════════════════════════════════════════════════
    UnifiedPanel — Vertical icon sidebar on the LEFT with collapsible content
@@ -369,11 +370,14 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                       <div>
                         <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Type</p>
                         <div className="flex gap-1">
-                          {(['solid', 'gradient', 'pattern', 'image'] as const).map((type) => (
-                            <button key={type} onClick={() => onUpdateBackground?.({ ...background, type })}
+                          {(['solid', 'gradient', 'texture', 'image'] as const).map((type) => (
+                            <button key={type}
+                              onClick={() => onUpdateBackground?.(type === 'texture'
+                                ? { ...background, type, texture: background.texture ?? TEXTURE_NAMES[0] }
+                                : { ...background, type })}
                               className="flex-1 py-1.5 text-[10px] rounded-full font-medium capitalize transition-colors"
                               style={{ backgroundColor: background.type === type ? '#F4C2A1' : '#F0F0F0', color: background.type === type ? '#fff' : '#6B6B6B' }}>
-                              {type}
+                              {type === 'texture' ? 'Textures' : type}
                             </button>
                           ))}
                         </div>
@@ -419,19 +423,23 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                         </div>
                       )}
 
-                      {background.type === 'pattern' && (
+                      {background.type === 'texture' && (
                         <div>
-                          <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Patterns</p>
+                          <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Textures</p>
                           <div className="grid grid-cols-3 gap-1.5">
-                            {['dots', 'stripes', 'diagonal', 'chevron', 'grid', 'floral', 'geometric', 'watercolor', 'marble', 'wood', 'confetti', 'stars', 'hearts', 'polka', 'waves'].map((p) => (
-                              <button key={p} onClick={() => onUpdateBackground?.({ ...background, type: 'pattern', pattern: p })}
-                                className="py-2 rounded-lg text-[9px] font-medium capitalize transition-colors border"
+                            {TEXTURE_NAMES.map((p) => (
+                              <button key={p} onClick={() => onUpdateBackground?.({ ...background, type: 'texture', texture: p })}
+                                title={p}
+                                className="relative aspect-square rounded-lg overflow-hidden transition-transform hover:scale-[1.03] border-2"
                                 style={{
-                                  backgroundColor: background.pattern === p ? '#FDE8E4' : '#fff',
-                                  borderColor: background.pattern === p ? '#F4C2A1' : '#E8E8E8',
-                                  color: background.pattern === p ? '#E8A598' : '#6B6B6B',
+                                  backgroundImage: `url("${textureDataUri(p)}")`,
+                                  backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
+                                  backgroundRepeat: 'repeat',
+                                  borderColor: background.texture === p ? '#F4C2A1' : 'transparent',
                                 }}>
-                                {p}
+                                <span className="absolute bottom-0 inset-x-0 text-[8px] font-semibold capitalize text-stone-700 bg-white/70 py-0.5 text-center">
+                                  {p}
+                                </span>
                               </button>
                             ))}
                           </div>

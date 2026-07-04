@@ -10,6 +10,7 @@ import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import type { QrFill, SlotText } from './types';
+import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -308,6 +309,47 @@ async function renderBackground(
         ctx.fillRect(0, 0, W, H);
       }
       break;
+    }
+
+    case 'texture': {
+      // Material texture — tile the procedural SVG data URI across the page.
+      // PARITY: the tile is TEXTURE_TILE_PX on the on-screen UI canvas; the
+      // print canvas is 300 DPI (W ≫ UI width), so we upscale the tile by the
+      // same DPI ratio onto an offscreen canvas before createPattern, else the
+      // material would read far denser in print than on screen.
+      // OPACITY: applied via ctx.globalAlpha (true layer-alpha, matching screen)
+      // — NOT the white-overlay trick below, which we skip for texture.
+      try {
+        const tile = await loadImage(textureDataUri((bg as any).texture));
+        const dpiScale = W / getUISize(page.size).width;
+        const tilePx = Math.max(1, Math.round(TEXTURE_TILE_PX * dpiScale));
+        // Pre-scale one tile onto an offscreen canvas at the print tile size so
+        // createPattern repeats it at the correct on-page scale.
+        const off = document.createElement('canvas');
+        off.width = tilePx;
+        off.height = tilePx;
+        const octx = off.getContext('2d');
+        let pat: CanvasPattern | null = null;
+        if (octx) {
+          octx.drawImage(tile, 0, 0, tilePx, tilePx);
+          pat = ctx.createPattern(off, 'repeat');
+        }
+        if (pat) {
+          ctx.save();
+          ctx.globalAlpha = (bg.opacity ?? 100) / 100;
+          ctx.fillStyle = pat;
+          ctx.fillRect(0, 0, W, H);
+          ctx.restore();
+        } else {
+          ctx.fillStyle = '#FFFBF7';
+          ctx.fillRect(0, 0, W, H);
+        }
+      } catch {
+        ctx.fillStyle = '#FFFBF7';
+        ctx.fillRect(0, 0, W, H);
+      }
+      // Opacity already applied via globalAlpha → skip the white-overlay block.
+      return;
     }
 
     default:

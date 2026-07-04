@@ -96,7 +96,7 @@ export interface FilledSlot {
   photoIndex: number | null;
 }
 
-export type BackgroundType = 'solid' | 'gradient' | 'pattern' | 'image';
+export type BackgroundType = 'solid' | 'gradient' | 'texture' | 'image';
 
 export type AlbumSizePreset =
   | '6x6' | '8x8' | '9x9' | '6x4' | '11.5x8' | '8.5x11';
@@ -143,7 +143,7 @@ export interface AlbumBackground {
     angle: number;
     stops: { offset: number; color: string }[];
   };
-  pattern?: string;
+  texture?: string;
   image?: string;
   /** When the background image comes from one of the user's uploaded album
    *  photos, we store its photo id. The blob URL in `image` is transient (it's
@@ -421,11 +421,9 @@ export const FILTER_PRESETS: { name: string; filters: Partial<PhotoFilters> }[] 
   { name: 'Dramatic', filters: { grayscale: 0, brightness: 90, contrast: 130, saturate: 110 } },
 ];
 
-export const PATTERNS = [
-  'dots', 'stripes', 'diagonal', 'chevron', 'grid',
-  'floral', 'geometric', 'watercolor', 'marble', 'wood',
-  'confetti', 'stars', 'hearts', 'polka', 'waves',
-];
+// Geometric PATTERNS were replaced by material TEXTURES — the single source of
+// truth now lives in ./textures.ts. Re-exported here for any legacy importer.
+export { TEXTURE_NAMES as TEXTURES } from './textures';
 
 export const GRADIENT_PRESETS = [
   { name: 'Sunset', stops: [{ offset: 0, color: '#FF6B6B' }, { offset: 0.5, color: '#FFE66D' }, { offset: 1, color: '#FF8E53' }] },

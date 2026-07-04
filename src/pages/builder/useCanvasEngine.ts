@@ -20,6 +20,7 @@ import type {
 import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset, FrameStyle, SlotText } from './types';
 import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
 import { dedupeSlotFills } from './slotUtils';
+import { textureDataUri } from './textures';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
 import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
@@ -999,8 +1000,31 @@ function createBackgroundObject(
       });
     }
     addBg(new fab.Rect({ ...baseProps, width: w, height: h, fill: gradFill }));
+  } else if (bg.type === 'texture') {
+    // Material texture — load the procedural SVG data URI (a native 80x80 tile)
+    // and TILE it across the canvas via a repeating Fabric Pattern fill, exactly
+    // like PageView (backgroundRepeat 'repeat', backgroundSize 80px) and the
+    // print path (ctx.createPattern(off, 'repeat')). We must NOT stretch a single
+    // tile to fill the page — that magnifies one 80px tile ~5.75x and the material
+    // reads completely differently in the editor than in preview/print, breaking
+    // 3-renderer parity. baseProps.opacity (= opacity/100) applies to the Rect →
+    // opacity parity preserved. onerror falls back to a neutral rect so a
+    // malformed tile never blanks the page.
+    const htmlImg = new Image();
+    htmlImg.onload = () => {
+      addBg(new fab.Rect({
+        ...baseProps,
+        width: w,
+        height: h,
+        fill: new fab.Pattern({ source: htmlImg, repeat: 'repeat' }),
+      }));
+    };
+    htmlImg.onerror = () => {
+      addBg(new fab.Rect({ ...baseProps, width: w, height: h, fill: '#FFFBF7' }));
+    };
+    htmlImg.src = textureDataUri((bg as any).texture);
   } else {
-    const fill = bg.type === 'pattern' && (bg as any).pattern ? (bg as any).pattern : ((bg as any).solid || '#FFFBF7');
+    const fill = (bg as any).solid || '#FFFBF7';
     addBg(new fab.Rect({ ...baseProps, width: w, height: h, fill }));
   }
 }

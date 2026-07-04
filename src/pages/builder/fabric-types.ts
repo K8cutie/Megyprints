@@ -1002,12 +1002,12 @@ export interface GradientBackground {
   gradient: AlbumGradient;
 }
 
-/** Background fill using a repeating pattern image. */
-export interface PatternBackground {
-  type: 'pattern';
+/** Background fill using a repeating material texture tile. */
+export interface TextureBackground {
+  type: 'texture';
 
-  /** URL or data-URL of the pattern image tile. */
-  pattern: string;
+  /** Material texture name (e.g. 'leather', 'linen') — see ./textures.ts. */
+  texture: string;
 }
 
 /** Background fill using a full-bleed photo image. */
@@ -1053,7 +1053,7 @@ export interface ImageBackground {
 export type AlbumBackground =
   | SolidBackground
   | GradientBackground
-  | PatternBackground
+  | TextureBackground
   | ImageBackground;
 
 /* ==============================================================================

@@ -1,10 +1,10 @@
-import { useState, useId, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   PaintBucket,
   Image,
   Blend,
-  LayoutGrid,
+  Layers,
   Check,
   Droplets,
   Upload,
@@ -12,19 +12,17 @@ import {
 } from 'lucide-react';
 import type { AlbumPage, UploadedPhoto } from './types';
 import { resolveBgImageSrc } from './types';
+import { TEXTURE_NAMES, textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ─── Tabs ─── */
-type BgTab = 'solid' | 'gradient' | 'image' | 'pattern';
+type BgTab = 'solid' | 'gradient' | 'image' | 'texture';
 
 const TABS: { key: BgTab; label: string; icon: React.ReactNode; title: string }[] = [
   { key: 'solid', label: 'Solid', title: 'Solid Color', icon: <PaintBucket size={20} /> },
   { key: 'gradient', label: 'Gradient', title: 'Gradient', icon: <Blend size={20} /> },
   { key: 'image', label: 'Image', title: 'Image Background', icon: <Image size={20} /> },
-  { key: 'pattern', label: 'Pattern', title: 'Pattern', icon: <LayoutGrid size={20} /> },
+  { key: 'texture', label: 'Textures', title: 'Material Textures', icon: <Layers size={20} /> },
 ];
-
-/* ─── Pattern definitions ─── */
-const PATTERN_NAMES = ['dots', 'stripes', 'grid', 'diagonal', 'circles', 'chevron'] as const;
 
 /* ─── Live-preview CSS for a background (so opacity etc. is visible) ─── */
 function bgPreviewStyle(bg: AlbumPage['background'], photos: UploadedPhoto[]): React.CSSProperties {
@@ -45,7 +43,13 @@ function bgPreviewStyle(bg: AlbumPage['background'], photos: UploadedPhoto[]): R
     const stops = g.stops.map((s: { color: string; offset: number }) => `${s.color} ${Math.round((s.offset ?? 0) * 100)}%`).join(', ');
     return { background: g.type === 'radial' ? `radial-gradient(circle, ${stops})` : `linear-gradient(${g.angle ?? 0}deg, ${stops})` };
   }
-  if (bg.type === 'pattern') return { backgroundColor: '#F1EFEC' };
+  if (bg.type === 'texture') {
+    return {
+      backgroundImage: `url("${textureDataUri(b.texture)}")`,
+      backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
+      backgroundRepeat: 'repeat',
+    };
+  }
   return { backgroundColor: '#FFFBF7' };
 }
 
@@ -294,27 +298,31 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
           </motion.div>
         )}
 
-        {/* ─── PATTERN ─── */}
-        {activeTab === 'pattern' && (
+        {/* ─── TEXTURES ─── */}
+        {activeTab === 'texture' && (
           <motion.div
-            key="pattern"
+            key="texture"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             className="space-y-3"
           >
             <div className="grid grid-cols-3 gap-1.5">
-              {PATTERN_NAMES.map((name) => (
+              {TEXTURE_NAMES.map((name) => (
                 <button
                   key={name}
-                  onClick={() => onChange({ type: 'pattern', pattern: name })}
-                  className={`w-full aspect-square rounded-lg border-2 overflow-hidden transition-all ${
-                    background.type === 'pattern' && background.pattern === name
+                  onClick={() => onChange({ type: 'texture', texture: name, opacity: background.opacity ?? 100 })}
+                  title={name}
+                  className={`relative w-full aspect-square rounded-lg border-2 overflow-hidden transition-all ${
+                    background.type === 'texture' && background.texture === name
                       ? 'border-rose-400 shadow'
                       : 'border-transparent hover:scale-105'
                   }`}
                 >
-                  <PatternPreview name={name} color="#A8A29E" />
+                  <TextureSwatch name={name} />
+                  <span className="absolute bottom-0 inset-x-0 text-[9px] font-semibold capitalize text-stone-700 bg-white/70 py-0.5 text-center">
+                    {name}
+                  </span>
                 </button>
               ))}
             </div>
@@ -326,77 +334,18 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
   );
 }
 
-/* ─── PatternPreview ─── */
-function PatternPreview({ name, color }: { name: string; color: string }) {
-  // BUG FIX: Use React 18's useId() to generate unique pattern IDs so multiple
-  // PatternPreview instances on the same page don't have colliding SVG ids.
-  const uniqueId = useId();
-  const patternId = `${name}-${uniqueId}`;
-
-  const svgContent = () => {
-    switch (name) {
-      case 'dots':
-        return (
-          <svg width="100%" height="100%">
-            <pattern id={patternId} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-              <circle cx="10" cy="10" r="2" fill={color} opacity="0.3" />
-            </pattern>
-            <rect width="100%" height="100%" fill={`url(#${patternId})`} />
-          </svg>
-        );
-      case 'stripes':
-        return (
-          <svg width="100%" height="100%">
-            <pattern id={patternId} x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
-              <rect x="0" y="0" width="5" height="10" fill={color} opacity="0.3" />
-            </pattern>
-            <rect width="100%" height="100%" fill={`url(#${patternId})`} />
-          </svg>
-        );
-      case 'grid':
-        return (
-          <svg width="100%" height="100%">
-            <pattern id={patternId} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-              <path d="M 20 0 L 0 0 0 20" fill="none" stroke={color} strokeWidth="1" opacity="0.3" />
-            </pattern>
-            <rect width="100%" height="100%" fill={`url(#${patternId})`} />
-          </svg>
-        );
-      case 'diagonal':
-        return (
-          <svg width="100%" height="100%">
-            <pattern id={patternId} x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
-              <path d="M 0 10 L 10 0" stroke={color} strokeWidth="1" opacity="0.3" />
-            </pattern>
-            <rect width="100%" height="100%" fill={`url(#${patternId})`} />
-          </svg>
-        );
-      case 'circles':
-        return (
-          <svg width="100%" height="100%">
-            <pattern id={patternId} x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
-              <circle cx="15" cy="15" r="8" fill="none" stroke={color} strokeWidth="1" opacity="0.3" />
-            </pattern>
-            <rect width="100%" height="100%" fill={`url(#${patternId})`} />
-          </svg>
-        );
-      case 'chevron':
-        return (
-          <svg width="100%" height="100%">
-            <pattern id={patternId} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-              <path d="M 0 10 L 10 0 L 20 10" fill="none" stroke={color} strokeWidth="1" opacity="0.3" />
-            </pattern>
-            <rect width="100%" height="100%" fill={`url(#${patternId})`} />
-          </svg>
-        );
-      default:
-        return null;
-    }
-  };
-
+/* ─── TextureSwatch ─── */
+/* Renders the REAL material texture (same procedural data URI the page uses),
+ * so the swatch is a faithful preview of what lands on the page. */
+function TextureSwatch({ name }: { name: string }) {
   return (
-    <div className="w-full h-full">
-      {svgContent()}
-    </div>
+    <div
+      className="w-full h-full"
+      style={{
+        backgroundImage: `url("${textureDataUri(name)}")`,
+        backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
+        backgroundRepeat: 'repeat',
+      }}
+    />
   );
 }

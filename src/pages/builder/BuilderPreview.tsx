@@ -14,6 +14,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
+import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ══════════════════════════════════════════════════════════════════════════
    BuilderPreview — Spread-only view with side arrows
@@ -63,10 +64,15 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
         ? { background: img }
         : { backgroundImage: `url("${img}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
     }
-    case 'pattern': {
-      // pattern is a name string ('dots', etc.); SVG patterns aren't rendered
-      // in the DOM preview yet — show a light tint so the page isn't blank.
-      return { backgroundColor: '#F1EFEC' };
+    case 'texture': {
+      // Material texture — a procedural, tileable SVG data URI (leather, linen,
+      // …). Opacity is applied by the wrapping layer div (see PageView) so we do
+      // NOT bake it in here → screen/print parity. Tiled at the shared px size.
+      return {
+        backgroundImage: `url("${textureDataUri(bg.texture)}")`,
+        backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
+        backgroundRepeat: 'repeat',
+      };
     }
     default: return { backgroundColor: '#FFFBF7' };
   }
