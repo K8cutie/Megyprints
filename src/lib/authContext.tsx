@@ -161,6 +161,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
+      // Remember the route we're leaving so we can return here after the OAuth
+      // round-trip. redirectTo CANNOT carry a #hash (OAuth providers reject
+      // fragments), so on a HashRouter SPA the return lands on a bare path →
+      // Home, silently dropping an in-progress builder. App.tsx restores this.
+      try { sessionStorage.setItem('megy-auth-return', window.location.hash || '#/'); } catch { /* ignore */ }
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

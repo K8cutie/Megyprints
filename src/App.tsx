@@ -22,6 +22,21 @@ export default function App() {
   // Load operator template overrides + the store price multiple once on start.
   useEffect(() => { void loadTemplateSettings(); void loadStoreSettings(); }, []);
 
+  // Return to where the user was after an OAuth round-trip. redirectTo can't
+  // carry a #hash, so Google sends us back to a bare path (→ Home on this
+  // HashRouter app). signInWithOAuth stashed the route it left from; restore it
+  // so a sign-in from the builder lands back in the builder, not on Home (the
+  // "signing in threw away my album" bug). The draft itself survives in
+  // localStorage (flushed on the OAuth navigation), so restoring the route
+  // brings the whole in-progress album back.
+  useEffect(() => {
+    let ret: string | null = null;
+    try { ret = sessionStorage.getItem('megy-auth-return'); } catch { /* ignore */ }
+    if (!ret) return;
+    try { sessionStorage.removeItem('megy-auth-return'); } catch { /* ignore */ }
+    if (ret !== '#/' && window.location.hash !== ret) window.location.hash = ret;
+  }, []);
+
   return (
     <AuthProvider>
       <AuthModalProvider>

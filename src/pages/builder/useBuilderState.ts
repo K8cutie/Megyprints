@@ -490,7 +490,26 @@ export function useBuilderState(): BuilderActions {
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState().currentPageIndex);
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState().rejectedTemplateIds);
   const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState().photosPerPage);
-  const [phase, setPhase] = useState('setup');
+  // Resume at the working phase, not the setup/size screen, when a restored
+  // album already has content (photos / filled slots / text / a QR). Without
+  // this, any reload — most visibly the OAuth sign-in round-trip — drops the
+  // user back on the "pick a size" step even though their album is intact in
+  // localStorage. A genuine fresh start (getInitialState honours the
+  // megy-fresh-start signal → empty state) still opens on 'setup'.
+  const [phase, setPhase] = useState<string>(() => {
+    try {
+      const init = getInitialState();
+      // Resume at the editor ONLY for a real generated album — pages that carry
+      // a templateId AND photos to fill them. That is the safe signal: such an
+      // album came from generateAlbum, so every page is fully normalized and the
+      // editor can render it. A partial / legacy / hand-seeded album has no
+      // templateId → stay on 'setup' rather than risk crashing the editor on a
+      // malformed page (the ErrorBoundary's reset would then lose the album).
+      const generated = init.uploadedPhotos.length > 0
+        && init.albumPages.some((p) => !!p.templateId);
+      return generated ? 'edit' : 'setup';
+    } catch { return 'setup'; }
+  });
   // ── Layout picker (the "Change layout" sheet/modal) — shared so the mobile
   //    review and the desktop panel both open the same picker ──
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
