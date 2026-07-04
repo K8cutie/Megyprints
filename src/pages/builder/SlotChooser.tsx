@@ -1,38 +1,42 @@
 /* ══════════════════════════════════════════════════════════════════════════
    SlotChooser — the per-slot content chooser.
-   Tapping an EMPTY box in the builder opens this 3-way chooser: Add Photo /
-   Add Text / Add QR. The picked kind becomes the slot's content (photo →
-   slotFills, text → slotTexts, QR → qrFills), on EVERY template + album size.
+   Tapping an EMPTY box in the builder opens this chooser: Add Photo / Add Text.
+   The picked kind becomes the slot's content (photo → slotFills, text →
+   slotTexts), on EVERY template + album size.
+
+   (QR living-memory is NO LONGER here — it's added as a full-bleed corner badge
+   via the "Add memory video" button on a single-photo page, so it never sits in
+   a box as dead space.)
 
    On mobile it renders as a bottom sheet (matching the "Add a photo" sheet in
    MobileReview); on desktop as a small centered modal.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon, Type, QrCode, X } from 'lucide-react';
+import { Image as ImageIcon, Type, X } from 'lucide-react';
 
 interface SlotChooserProps {
   onPhoto: () => void;
   onText: () => void;
-  onQr: () => void;
+  /** Deprecated: QR moved to the corner-badge flow. Kept optional for callers. */
+  onQr?: () => void;
   onClose: () => void;
   /** Render as a bottom sheet (phone) instead of a centered modal (desktop). */
   mobile?: boolean;
 }
 
 interface Option {
-  key: 'photo' | 'text' | 'qr';
+  key: 'photo' | 'text';
   label: string;
   desc: string;
   Icon: typeof ImageIcon;
   run: () => void;
 }
 
-export default function SlotChooser({ onPhoto, onText, onQr, onClose, mobile }: SlotChooserProps) {
+export default function SlotChooser({ onPhoto, onText, onClose, mobile }: SlotChooserProps) {
   const options: Option[] = [
     { key: 'photo', label: 'Add Photo', desc: 'Place one of your photos here', Icon: ImageIcon, run: onPhoto },
     { key: 'text', label: 'Add Text', desc: 'Type a caption or title in this box', Icon: Type, run: onText },
-    { key: 'qr', label: 'Add QR', desc: 'A scannable living-memory code', Icon: QrCode, run: onQr },
   ];
 
   const pick = (run: () => void) => { run(); onClose(); };

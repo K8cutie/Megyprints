@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type {
   AlbumSizePreset,
   AlbumPage,
@@ -14,7 +14,7 @@ import type {
   PageTemplate,
   FrameStyle,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, photoSlotCount, qrBadgeTemplate, qrCornerAwayFromFace } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES } from './types';
@@ -369,6 +369,12 @@ export interface BuilderActions {
   setSlotOffset: (slotIndex: number, dx: number, dy: number) => void;
   updateSlotGeometry: (slotIndex: number, geometry: SlotGeometryOverride) => void;
   setQrFill: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
+  /** True when the current page is a single-photo page a living-memory QR badge
+   *  can be applied to. */
+  canAddMemoryQr: boolean;
+  /** Convert the current single-photo page into a full-bleed QR memory badge,
+   *  corner chosen by face-avoidance. Resolves true on success. */
+  applyMemoryQr: (fill: QrFill) => Promise<boolean>;
   /** Set (or clear, with null) the per-slot text fill for slot i. Mirrors
    *  setQrFill; clears any photo/QR at the same slot when content is non-null. */
   setSlotText: (slotIndex: number, content: SlotText | null, pageIndex?: number) => void;
@@ -1333,6 +1339,61 @@ export function useBuilderState(): BuilderActions {
     }
   }, [updateCurrentPage]);
 
+  // Live snapshot for the async memory-QR action (face detection awaits, so the
+  // callback must read the CURRENT page/photos/size, not a stale closure).
+  const stateRefForQr = useRef<{ page: AlbumPage | null; photos: UploadedPhoto[]; size: AlbumSizePreset }>({ page: null, photos: [], size: albumSize });
+  stateRefForQr.current = { page: currentPage ?? null, photos: uploadedPhotos, size: albumSize };
+
+  /** Is the current page a plain single-photo page that a living-memory QR
+   *  badge can be applied to? (Exactly one photo slot, with a photo in it.) */
+  const canAddMemoryQr = useMemo(() => {
+    const t = currentPage?.templateId ? getTemplateById(currentPage.templateId) : null;
+    if (!t) return false;
+    const filled = (currentPage?.slotFills ?? []).some((f) => f != null);
+    return photoSlotCount(t) === 1 && filled && !t.slots.some((s) => s.kind === 'qr');
+  }, [currentPage]);
+
+  /** Turn the current single-photo page into a full-bleed QR living-memory
+   *  badge: keep the photo full-bleed, tuck the scannable QR chip into the
+   *  corner farthest from the detected face (fallback bottom-right). `fill` is
+   *  the minted QrFill from AddQrModal. Returns false if the page isn't a
+   *  single-photo page (the button is gated on canAddMemoryQr, so that's rare). */
+  const applyMemoryQr = useCallback(async (fill: QrFill): Promise<boolean> => {
+    const page = stateRefForQr.current.page;
+    const photos = stateRefForQr.current.photos;
+    const size = stateRefForQr.current.size;
+    if (!page) return false;
+    const photoIdx = (page.slotFills ?? []).find((f): f is number => f != null);
+    if (photoIdx == null) return false;
+    const photo = photos[photoIdx];
+    let face: { x: number; y: number } | null = null;
+    if (photo?.previewUrl) {
+      try { face = await detectFaceCenter(photo.previewUrl); } catch { face = null; }
+    }
+    const corner = qrCornerAwayFromFace(face);
+    const template = qrBadgeTemplate(size, corner);
+    if (!template) return false;
+    const qrIdx = template.slots.findIndex((s) => s.kind === 'qr');
+    pushSnapshot();
+    updateCurrentPage((p) => {
+      const slotFills = new Array(template.slots.length).fill(null);
+      slotFills[0] = photoIdx;
+      const qrFills = new Array(template.slots.length).fill(null);
+      qrFills[qrIdx] = fill;
+      return {
+        ...p,
+        templateId: template.id,
+        slotFills,
+        qrFills,
+        slotTexts: new Array(template.slots.length).fill(null),
+        slotScales: [p.slotScales?.[0] ?? 1, 1],
+        slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
+        slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
+      };
+    });
+    return true;
+  }, [updateCurrentPage, pushSnapshot]);
+
   /** Set (or clear, with null) the per-slot text fill for slot `slotIndex`.
    *  Mirrors setQrFill: pageIndex defaults to the current page. Setting a
    *  non-null text clears any photo/QR at the same slot (mutual exclusivity). */
@@ -2019,6 +2080,8 @@ export function useBuilderState(): BuilderActions {
     setSlotOffset,
     updateSlotGeometry,
     setQrFill,
+    canAddMemoryQr,
+    applyMemoryQr,
     setSlotText,
     setTextSlotPhoto,
     setTextSlotQr,

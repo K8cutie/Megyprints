@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, QrCode } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -33,6 +33,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser
   const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null); // caption-box photo target
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null); // caption-box QR target
+  const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
 
   // Seed the editor from a FREE text element (e.g. the theme title) by id.
   const buildTextInitial = (textId: string): BoxTextContent => {
@@ -167,6 +168,14 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             <ChevronRight size={22} />
           </button>
         </div>
+        {/* Living-memory QR — offered on a single full photo page; turns it into
+            a full-bleed photo with a scannable corner badge (face-picked corner). */}
+        {actions.canAddMemoryQr && (
+          <button onClick={() => setMemoryOpen(true)}
+            className="w-full mt-3 h-11 rounded-xl bg-white border-2 border-[#F4C2A1] text-[#B0714E] font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+            <QrCode size={17} /> Add memory video
+          </button>
+        )}
         {isLast && (
           <button onClick={handleDone}
             className="w-full mt-3 h-12 rounded-xl bg-[#2E7D4A] text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
@@ -284,6 +293,16 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           onSave={(fill: QrFill) => { actions.setQrFill(qrEditSlot, fill, idx); setQrEditSlot(null); }}
           onRemove={() => { actions.setQrFill(qrEditSlot, null, idx); setQrEditSlot(null); }}
           onClose={() => setQrEditSlot(null)}
+        />
+      )}
+      {/* New living-memory: convert this single-photo page to a corner badge.
+          (Editing/removing an existing badge is via tapping the chip → qrEditSlot.) */}
+      {memoryOpen && (
+        <AddQrModal
+          initial={null}
+          onSave={(fill: QrFill) => { void actions.applyMemoryQr(fill); setMemoryOpen(false); }}
+          onRemove={() => setMemoryOpen(false)}
+          onClose={() => setMemoryOpen(false)}
         />
       )}
     </div>
