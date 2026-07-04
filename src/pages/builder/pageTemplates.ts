@@ -1753,9 +1753,15 @@ export type QrCorner = typeof QR_CORNERS[number];
 const QR_BADGE_IN = 1.2;   // printed QR side — comfortably scannable at arm's length
 const QR_PAD_IN = 0.35;    // inset from the trimmed page edge
 const ZERO_MARGIN_PT: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
+// FULL album inches (NOT the 0.92 safe area): these templates are fullBleed with
+// a zero margin, so their slot fractions are of the WHOLE page — dividing by the
+// safe area would over-size the chip by ~9%.
+const QR_FULL_IN: Record<string, [number, number]> = {
+  '6x4': [6, 4], '6x6': [6, 6], '8x8': [8, 8], '9x9': [9, 9], '11.5x8': [11.5, 8], '8.5x11': [8.5, 11],
+};
 const QR_BADGE_TEMPLATES: PageTemplate[] = [];
 for (const { size, orientation } of SIZE_ORIENTATION) {
-  const [sw, sh] = GAP_SAFE_IN[size];
+  const [sw, sh] = QR_FULL_IN[size];
   // A square chip: set both fractions so slotW·sw == slotH·sh == QR_BADGE_IN.
   const w = QR_BADGE_IN / sw, h = QR_BADGE_IN / sh;
   const px = QR_PAD_IN / sw, py = QR_PAD_IN / sh;

@@ -1707,13 +1707,20 @@ function renderScene(
     box.on('mousedown', () => onTextSlotEmptyClick(i));
   });
 
-  // Ensure text stays on top even when slot images load async
-  const bringTextToFront = () => {
+  // Ensure text AND the QR chip stay on top even when slot images load async.
+  // (A full-bleed photo slot can otherwise resolve after the QR and paint over
+  // it, hiding the badge in the editor until the next re-render.)
+  const bringOverlaysToFront = () => {
+    canvas.getObjects().forEach((o: any) => {
+      if (typeof o.slotId === 'string' && (o.slotId.includes('-qr-') || o.slotId.includes('-qrbg-'))) {
+        canvas.bringToFront(o);
+      }
+    });
     textObjects.forEach((t) => { if (canvas.contains(t)) canvas.bringToFront(t); });
   };
-  bringTextToFront();
-  setTimeout(bringTextToFront, 50);
-  setTimeout(bringTextToFront, 150);
+  bringOverlaysToFront();
+  setTimeout(bringOverlaysToFront, 50);
+  setTimeout(bringOverlaysToFront, 150);
 
   // 5. Layflat crease guide
   if (albumType === 'layflat') {

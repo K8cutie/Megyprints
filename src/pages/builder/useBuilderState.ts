@@ -1350,7 +1350,14 @@ export function useBuilderState(): BuilderActions {
     const t = currentPage?.templateId ? getTemplateById(currentPage.templateId) : null;
     if (!t) return false;
     const filled = (currentPage?.slotFills ?? []).some((f) => f != null);
-    return photoSlotCount(t) === 1 && filled && !t.slots.some((s) => s.kind === 'qr');
+    // Gate on an ACTIVE QR (a filled qrFill), not merely a qr SLOT: a badge page
+    // whose QR was removed has an empty qr slot but should re-offer the button
+    // (otherwise removing a memory strands the page). Exclude caption-bearing
+    // pages — the badge template has no textSlots, so a bound caption would be
+    // orphaned (invisible) after the swap.
+    const hasActiveQr = (currentPage?.qrFills ?? []).some((q) => q != null)
+      || (currentPage?.textSlotQr ?? []).some((q) => q != null);
+    return photoSlotCount(t) === 1 && filled && !hasActiveQr && !(t.textSlots?.length);
   }, [currentPage]);
 
   /** Turn the current single-photo page into a full-bleed QR living-memory
@@ -1389,6 +1396,9 @@ export function useBuilderState(): BuilderActions {
         slotScales: [p.slotScales?.[0] ?? 1, 1],
         slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
         slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
+        // Drop any theme decorative corners — they sit in all four corners and
+        // would overlay (and in print obscure) the QR chip.
+        cornerBase: undefined,
       };
     });
     return true;
