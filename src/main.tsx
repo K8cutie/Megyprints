@@ -14,6 +14,20 @@ createRoot(document.getElementById('root')!).render(
 // the page, firing `controllerchange` — without this, the already-open app keeps
 // serving the old cached bundle until it's fully closed (the "my fixes don't show
 // up" problem). Guarded against reload loops.
+// Ask the browser to KEEP our local data durable. Album photos live only in
+// IndexedDB (never uploaded, by design) and are hundreds of MB for a big trip —
+// far larger than the tiny localStorage album JSON. Without a persistence grant,
+// storage is "best-effort": the browser can evict the heavy IndexedDB photo
+// blobs under storage pressure while the small album layout survives, leaving an
+// album full of EMPTY frames ("it didn't save"). persist() flips storage to
+// "persistent" so it's only cleared by an explicit user action. Best-effort,
+// idempotent, safe to call on every load.
+if (navigator.storage?.persist) {
+  navigator.storage.persisted()
+    .then((already) => { if (!already) return navigator.storage.persist(); })
+    .catch(() => { /* not supported / denied — nothing we can do */ });
+}
+
 if ('serviceWorker' in navigator) {
   let reloading = false
   navigator.serviceWorker.addEventListener('controllerchange', () => {
