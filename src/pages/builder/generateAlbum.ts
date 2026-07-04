@@ -1,7 +1,7 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate } from './types';
 import { getTemplatesForRatio, getTemplatesForAlbum } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
-import { templateTracker } from './varietyTracker';
+import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -139,25 +139,52 @@ export function generateAlbum(
 
   const pages: AlbumPage[] = [];
   let pageIdx = 0;
-  // De-cluster guard: remember the last page's photo-count so consecutive pages
-  // can be biased to differ in slotCount too (not just template id). -1 = none yet.
-  let lastSlotCount = -1;
 
-  // Bias a candidate list so back-to-back pages differ in photo-count: if the
-  // candidates span >1 distinct slotCount, drop those equal to the previous
-  // page's count WHEN a non-empty subset remains. Pure bias — if every candidate
-  // shares one slotCount (e.g. fill mode), the list is returned unchanged.
-  const declusterBySlotCount = <T extends { slotCount: number }>(list: T[]): T[] => {
-    if (list.length <= 1 || lastSlotCount < 0) return list;
-    const distinct = new Set(list.map((t) => t.slotCount));
-    if (distinct.size <= 1) return list;
-    const differ = list.filter((t) => t.slotCount !== lastSlotCount);
-    return differ.length ? differ : list;
+  // ── Dealt randomness (see ShuffleBag): one bag per template pool, persisted
+  // across moment groups so the spread guarantee holds album-wide, not per
+  // group. Keyed by pool identity (ratio + kind) — the id lists are stable for
+  // one generation, so the same bag keeps dealing across groups.
+  const bags = new Map<string, ShuffleBag>();
+  const bagFor = (key: string, ids: readonly string[]): ShuffleBag => {
+    let b = bags.get(key);
+    if (!b) { b = new ShuffleBag(ids); bags.set(key, b); }
+    return b;
   };
+
+  // ── Hero sprinkle: structural variety. Even a perfect deal of five DUOS is
+  // still a duo on every page — so in AUTO layout (no explicit photos-per-page),
+  // or when curation/geometry leaves under 3 distinct multi layouts, deal an
+  // occasional full-page hero between multi-photo pages (cadence 4–7 pages,
+  // jittered; a naturally-occurring 1-photo page resets the clock). Heroes only
+  // ADD pages (fewer photos on a page ⇒ more sheets) — never shrink the album.
+  // Fill mode is excluded (it is already 1/page by design).
+  let nextHeroIn = 2 + Math.floor(Math.random() * 4);
+  // The one-page monotony guard for the mixed-template path (replaces the old
+  // recent-history check).
+  let lastTemplateId: string | null = null;
+
+  // ── Full-bleed crop safety ── A full-bleed single renders the photo
+  // object-cover across the WHOLE page, so an off-orientation photo is hard
+  // cropped (a 3:4 phone photo on a 3:2 page shows only ~50% of its height —
+  // heads/feet chopped). Single-photo pages therefore only deal full-bleed
+  // templates whose ratio ≈ the page's aspect; otherwise the framed/caption
+  // singles (exact-ratio slots, zero crop) carry the hero role.
+  const PAGE_ASPECT: Record<string, number> = {
+    '6x4': 6 / 4, '6x6': 1, '8x8': 1, '9x9': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
+  };
+  const RATIO_VALUE: Record<string, number> = {
+    '4:3': 4 / 3, '3:4': 3 / 4, '3:2': 3 / 2, '2:3': 2 / 3, '1:1': 1, '16:9': 16 / 9, '9:16': 9 / 16,
+  };
+  const pageAspect = PAGE_ASPECT[albumSize] ?? 1;
+  const cropSafe = (t: PageTemplate): boolean =>
+    !t.fullBleed ||
+    Math.abs(Math.log((RATIO_VALUE[t.targetRatio] ?? 1) / pageAspect)) < 0.12;
 
   const pushPage = (template: PageTemplate, fills: number[]) => {
     const slotCount = template.slots.length;
-    lastSlotCount = slotCount;
+    lastTemplateId = template.id;
+    nextHeroIn -= 1;
+    if (slotCount === 1) nextHeroIn = Math.max(nextHeroIn, 4 + Math.floor(Math.random() * 4));
     const page = createEmptyPage(pageIdx, albumSize, background, border, cornerBase);
     page.templateId = template.id;
     page.slotFills = new Array(slotCount).fill(null);
@@ -209,6 +236,7 @@ export function generateAlbum(
     //       recently, stop forcing mixed here and let the more-varied
     //       ratio-by-ratio path take these photos instead. ──
     if (mixedTemplates.length > 0 && !fillMode) {
+      const mixedBag = bagFor('mixed', mixedTemplates.map((t) => t.id));
       let placed = true;
       while (placed) {
         placed = false;
@@ -218,21 +246,15 @@ export function generateAlbum(
           .filter((x): x is { t: PageTemplate; fills: number[] } => x.fills !== null);
         if (fillable.length === 0) break;
 
-        const ids = fillable.map((x) => x.t.id);
-        // Single mixed option that we just used → break the monotony: let 3b
+        // Single mixed option that we just placed → break the monotony: let 3b
         // handle these photos with its larger, varied homogeneous pool.
-        if (!randomize && ids.length === 1 && templateTracker.getRecent().includes(ids[0])) break;
+        if (!randomize && fillable.length === 1 && fillable[0].t.id === lastTemplateId) break;
 
-        // De-cluster by photo-count: prefer a mixed template whose slotCount
-        // differs from the previous page's (bias only — no-op if all share one).
-        const biased = randomize
-          ? fillable
-          : declusterBySlotCount(fillable.map((x) => ({ ...x, slotCount: x.t.slots.length })));
-        const biasedIds = biased.map((x) => x.t.id);
-        const id = randomize
-          ? ids[Math.floor(Math.random() * ids.length)]
-          : (templateTracker.pick(biasedIds) ?? biasedIds[Math.floor(Math.random() * biasedIds.length)]);
-        const chosen = fillable.find((x) => x.t.id === id) ?? fillable[0];
+        // Deal from the mixed bag, restricted to what's fillable right now.
+        const okIds = new Set(fillable.map((x) => x.t.id));
+        const id = mixedBag.draw((x) => okIds.has(x));
+        const chosen = fillable.find((x) => x.t.id === id)
+          ?? fillable[Math.floor(Math.random() * fillable.length)];
         pushPage(chosen.t, chosen.fills);
         const usedSet = new Set(chosen.fills);
         remaining = remaining.filter((i) => !usedSet.has(i));
@@ -254,64 +276,106 @@ export function generateAlbum(
     // visible "grouping". Interleaving pulls a DIFFERENT pool page-to-page so the
     // thin-pool repeats are spread apart instead of clustered.
     interface RatioState {
+      key: string;
       queue: number[];
       ratioTemplates: PageTemplate[];
       onePhoto: PageTemplate[];
+      /** Single-photo pool with crop-unsafe full-bleeds filtered out (falls
+       *  back to every single when nothing crop-safe exists — a leftover photo
+       *  must always land somewhere). */
+      singles: PageTemplate[];
       multi: PageTemplate[];
     }
     const states: RatioState[] = (Object.keys(byRatio) as PhotoRatio[]).map((ratio) => {
       const queue = byRatio[ratio]!;
       const ratioTemplates = templatesForRatio(ratio);
       const onePhoto = ratioTemplates.filter((t) => t.slotCount === 1);
-      // Honor the photos-per-page target, but allow ±1 slot so there are enough
-      // DISTINCT templates to rotate between. A strict exact-count filter often
-      // leaves just one active template for a ratio (worse after curation),
-      // which is what made many pages land on the same layout. A little density
-      // variation also reads more naturally than every page being identical.
-      // In randomize mode, ignore the target entirely so layouts vary the most.
-      // Fill mode at 1/page → single-photo full-page templates (multi stays empty,
-      // so the loop falls to `onePhoto`). Otherwise honor the density target ±1.
-      let multi = (effPerPage === 1 && !randomize)
-        ? []
-        : (effPerPage && !randomize)
-          ? ratioTemplates.filter((t) => t.slotCount >= Math.max(2, effPerPage - 1) && t.slotCount <= effPerPage + 1)
-          : ratioTemplates.filter((t) => t.slotCount > 1);
-      if (multi.length === 0 && effPerPage !== 1) multi = ratioTemplates.filter((t) => t.slotCount > 1);
-      if (multi.length === 0 && effPerPage !== 1) multi = ratioTemplates;
-      return { queue, ratioTemplates, onePhoto, multi };
+      const safeSingles = onePhoto.filter(cropSafe);
+      const singles = safeSingles.length > 0 ? safeSingles : onePhoto;
+      const allMulti = ratioTemplates.filter((t) => t.slotCount > 1);
+      // Fill mode at 1/page → single-photo full-page templates (multi stays
+      // empty, so the loop falls to `onePhoto`). Explicit/fill density → the
+      // target is a CEILING: the window may only widen DOWNWARD (sparser
+      // layouts only ADD pages — revenue-safe, and never denser than what the
+      // density picker offered for this size). Fill mode caps at exactly the
+      // computed budget: denser pages would underfill MIN_PAGES and pad the
+      // album with blanks, breaking fill mode's no-surprise-blanks contract.
+      // A pool still thin after widening is handled by the hero valve — NEVER
+      // by densification. No allMulti fallback here for the same reason: an
+      // empty window falls through to single-photo pages (more pages, no
+      // crops). AUTO/randomize → every multi layout of this ratio.
+      let multi: PageTemplate[];
+      if (effPerPage === 1 && !randomize) {
+        multi = [];
+      } else if (effPerPage && !randomize) {
+        const hi = fillMode ? effPerPage : effPerPage + 1;
+        let win = 1;
+        do {
+          multi = allMulti.filter((t) =>
+            t.slotCount >= Math.max(2, effPerPage - win) && t.slotCount <= hi);
+          win++;
+        } while (multi.length < 3 && effPerPage - win >= 2);
+      } else {
+        multi = allMulti;
+      }
+      return { key: ratio, queue, ratioTemplates, onePhoto, singles, multi };
     });
 
     // Emit exactly one page from a ratio's queue (drains 1..slotCount photos).
     const emitOnePage = (st: RatioState) => {
-      const { queue, ratioTemplates, onePhoto, multi } = st;
-      // Prefer a multi-slot template that fits the remaining photos. For a
-      // leftover smaller than any multi-slot, drop to a single-photo full-page
-      // of this ratio — the leftover fix.
-      let candidates = multi.filter((t) => t.slotCount <= queue.length);
-      if (candidates.length === 0) {
-        candidates = onePhoto.length
-          ? onePhoto
-          : ratioTemplates.filter((t) => t.slotCount <= queue.length);
-        if (candidates.length === 0) candidates = ratioTemplates;
+      const { key, queue, ratioTemplates, singles, multi } = st;
+      const fits = multi.filter((t) => t.slotCount <= queue.length);
+
+      // Hero sprinkle (see cadence note above): AUTO mode, or a thin pool
+      // (<3 distinct even after widening) as the variety emergency valve.
+      // Thin-pool heroes fire in FILL MODE too: a 1-photo page only ADDS
+      // pages, so it can never underfill toward blank padding.
+      const heroAllowed = singles.length > 0 &&
+        ((photosPerPage == null && !fillMode) || multi.length < 3);
+      if (heroAllowed && fits.length > 0 && nextHeroIn <= 0) {
+        const id = bagFor(`${key}:single`, singles.map((t) => t.id)).draw();
+        const hero = singles.find((t) => t.id === id) ?? singles[0];
+        pushPage(hero, queue.splice(0, 1));
+        // ADAPTIVE cadence (set AFTER pushPage — its natural-single reset would
+        // otherwise max() this away): a THIN multi pool (2 layouts) can only
+        // alternate A/B between heroes, so heroes must come often (every 2–4
+        // pages) to break the rhythm; rich pools only need one every 4–7.
+        nextHeroIn = multi.length < 3
+          ? 2 + Math.floor(Math.random() * 3)
+          : 4 + Math.floor(Math.random() * 4);
+        return;
       }
-      // De-cluster by photo-count too (bias only — no-op if all share one count,
-      // e.g. fill mode where every candidate is single-photo).
-      const pickPool = randomize ? candidates : declusterBySlotCount(candidates);
-      const id = randomize
-        ? pickPool[Math.floor(Math.random() * pickPool.length)].id
-        : (templateTracker.pick(pickPool.map((t) => t.id))
-          ?? pickPool[Math.floor(Math.random() * pickPool.length)].id);
-      const template = pickPool.find((t) => t.id === id) ?? pickPool[0];
+
+      let template: PageTemplate | undefined;
+      if (fits.length > 0) {
+        // Deal from this ratio's multi bag, restricted to layouts that still
+        // fit the remaining photos. The bag spreads slot-counts too, so the
+        // old de-cluster bias is subsumed.
+        const ok = new Set(fits.map((t) => t.id));
+        const id = bagFor(`${key}:multi`, multi.map((t) => t.id)).draw((x) => ok.has(x));
+        template = fits.find((t) => t.id === id)
+          ?? fits[Math.floor(Math.random() * fits.length)];
+      } else if (singles.length > 0) {
+        // Leftover smaller than any multi-slot → a dealt single-photo page.
+        const id = bagFor(`${key}:single`, singles.map((t) => t.id)).draw();
+        template = singles.find((t) => t.id === id) ?? singles[0];
+      } else {
+        const rest = ratioTemplates.filter((t) => t.slotCount <= queue.length);
+        const pool = rest.length ? rest : ratioTemplates;
+        template = pool[Math.floor(Math.random() * pool.length)];
+      }
       const take = Math.min(template.slots.length, queue.length);
       pushPage(template, queue.splice(0, take));
     };
 
     // Round-robin until every queue is empty — never exits early, so no photo is
-    // ever left unplaced (blanks regression guard).
+    // ever left unplaced (blanks regression guard). The per-pass order is
+    // SHUFFLED: a fixed order makes two ratios strictly alternate, which is
+    // itself a visible macro-pattern.
     let anyLeft = states.some((s) => s.queue.length > 0);
     while (anyLeft) {
       anyLeft = false;
-      for (const st of states) {
+      for (const st of shuffleArray(states)) {
         if (st.queue.length > 0) {
           emitOnePage(st);
           if (st.queue.length > 0) anyLeft = true;

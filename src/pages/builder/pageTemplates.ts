@@ -1613,6 +1613,11 @@ const SIZE_ORIENTATION: { size: AlbumSizePreset; orientation: PageTemplate['orie
 ];
 
 const GAP_FILLERS: PageTemplate[] = [];
+/** Templates that must EXIST (persisted albums reference their ids — a missing
+ *  id silently blanks those pages in BOTH the preview and the print PDF) but
+ *  must never be SELECTED again. Folded into isActive alongside the operator's
+ *  hidden set; getTemplateById still resolves them so old drafts render. */
+const RETIRED_TEMPLATE_IDS = new Set<string>();
 // A caption band template slot (spread onto tmpl() with `...`, since tmpl has no
 // text param). Kept terse for the several caption-bearing variants below.
 const gapCap = (y: number, h: number): TextSlot =>
@@ -1622,18 +1627,16 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
   // small albums (6×4, 6×6) can't, so they keep only the 1- and 2-photo variants.
   const roomy = size === S88 || size === S99 || size === S1158 || size === S8511;
   for (const ratio of ALL_RATIOS) {
-    const covered = PAGE_TEMPLATES_BASE.some(
-      (t) => t.albumSizes.includes(size) && t.targetRatio === ratio,
-    );
-    if (covered) continue;
+    // NOTE: gap variants are emitted for EVERY (size × ratio) — including combos
+    // the hand-made base covers. They used to be skipped for covered combos,
+    // which meant operator curation could starve a combo down to ONE active
+    // multi layout (the literal A,A,A,A album: no selection algorithm can deal
+    // variety from a deck of one). These low-density variants are the pool
+    // FLOOR: always present, individually hideable in /admin like any template.
     const key = `${size}-${ratio}`.replace(/[:.]/g, '');
     const wide = WIDE_RATIOS.has(ratio);
 
-    // Historically GAP only emitted a lone 1-photo + 1-photo duo per uncovered
-    // (size × ratio) — so CROSS-ORIENTATION combos (portrait photos on a
-    // landscape book, etc.) had just ~2 layouts and the generator could only
-    // A/B/A/B them. These extra distinct variants give the variety tracker real
-    // options to rotate through. Every slot is exact-ratio (rsBox), so no crop.
+    // Every slot is exact-ratio (rsBox), so no crop — the hard product rule.
 
     // 1-photo full page (also the landing spot for leftover "hero" photos).
     GAP_FILLERS.push(tmpl(`gap-${key}-1`, `Full Page ${ratio}`, 'single', STD, orientation, ratio, [size], [
@@ -1644,22 +1647,38 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
     GAP_FILLERS.push({ ...tmpl(`gap-${key}-1c`, `Hero ${ratio} + Caption`, 'single', STD, orientation, ratio, [size], [
       rsBox(0, 0, ratio, 1.0, 0.76, size),
     ]), textSlots: [gapCap(0.8, 0.2)] });
-    // 2-photo duo — stack wide ratios; side-by-side for tall/square.
-    GAP_FILLERS.push(tmpl(`gap-${key}-2`, `Duo ${ratio}`, 'duo', STD, orientation, ratio, [size], wide ? [
+    // 2-photo duo — stack wide ratios; side-by-side for tall/square. EXCEPT on
+    // 6×4: stacking any wide ratio there caps the frame height at ~1.79" (the
+    // safe height is only 3.68"), under the 2" print floor — so 4:3 and 3:2 go
+    // SIDE-BY-SIDE (4:3 prints 2.68×2.01", compliant; 3:2 prints 2.68×1.79",
+    // parity with the hand-made t6x4-05 — no compliant 3:2 duo exists on 6×4
+    // at all). 16:9 stays stacked: side-by-side would print shorter (1.51").
+    const stackWide = wide && !(size === S64 && (ratio === '4:3' || ratio === '3:2'));
+    GAP_FILLERS.push(tmpl(`gap-${key}-2`, `Duo ${ratio}`, 'duo', STD, orientation, ratio, [size], stackWide ? [
       rsBox(0, 0, ratio, 1.0, 0.485, size),
       rsBox(0, 0.515, ratio, 1.0, 0.485, size),
     ] : [
       rsBox(0, 0, ratio, 0.485, 1.0, size),
       rsBox(0.515, 0, ratio, 0.485, 1.0, size),
     ]));
-    // 2-photo duo + caption — same pairing, different composition.
-    GAP_FILLERS.push({ ...tmpl(`gap-${key}-2c`, `Duo ${ratio} + Caption`, 'duo', STD, orientation, ratio, [size], wide ? [
+    // 2-photo duo + caption — same pairing, different composition. On 6×4 its
+    // frames print under the 2" floor, so it is never SELECTABLE there — but
+    // the three ids that shipped BEFORE this gate (2:3/16:9/9:16 were uncovered
+    // combos at the time) must stay RESOLVABLE: albums persisted with them
+    // would otherwise render + print BLANK pages. Those are emitted as retired.
+    const t2c: PageTemplate = { ...tmpl(`gap-${key}-2c`, `Duo ${ratio} + Caption`, 'duo', STD, orientation, ratio, [size], wide ? [
       rsBox(0, 0, ratio, 1.0, 0.37, size),
       rsBox(0, 0.39, ratio, 1.0, 0.37, size),
     ] : [
       rsBox(0, 0, ratio, 0.485, 0.76, size),
       rsBox(0.515, 0, ratio, 0.485, 0.76, size),
-    ]), textSlots: [gapCap(0.8, 0.2)] });
+    ]), textSlots: [gapCap(0.8, 0.2)] };
+    if (size !== S64) {
+      GAP_FILLERS.push(t2c);
+    } else if (ratio === '2:3' || ratio === '16:9' || ratio === '9:16') {
+      GAP_FILLERS.push(t2c);
+      RETIRED_TEMPLATE_IDS.add(t2c.id);
+    }
 
     if (roomy) {
       // 2-photo asymmetric big + small — a different rhythm from the even duo.
@@ -1716,7 +1735,40 @@ export function setInactiveTemplateIds(ids: Set<string>): void {
   INACTIVE_TEMPLATE_IDS = ids;
 }
 function isActive(t: PageTemplate): boolean {
-  return !INACTIVE_TEMPLATE_IDS.has(t.id);
+  return !INACTIVE_TEMPLATE_IDS.has(t.id) && !RETIRED_TEMPLATE_IDS.has(t.id);
+}
+
+/* ── Geometry dedupe ─────────────────────────────────────────────────────────
+   The generated gap variants intentionally overlap some hand-made layouts —
+   they exist as a pool FLOOR against operator curation. When BOTH twins are
+   active, selection must treat them as ONE layout: two ids with identical
+   pixels would let the dealer place "different" templates on consecutive
+   pages that LOOK identical, and would satisfy the ≥3-distinct variety checks
+   with fake variety. The hand-made id wins; the gap twin only surfaces when
+   curation hides its counterpart. */
+const geoSigCache = new WeakMap<PageTemplate, string>();
+function geoSig(t: PageTemplate): string {
+  let sig = geoSigCache.get(t);
+  if (!sig) {
+    const slots = t.slots
+      .map((s) => `${s.x.toFixed(3)},${s.y.toFixed(3)},${s.width.toFixed(3)},${s.height.toFixed(3)},${s.ratio ?? ''},${(s as { shape?: string }).shape ?? ''}`)
+      .join(';');
+    const texts = (t.textSlots ?? [])
+      .map((s) => `${s.x.toFixed(2)},${s.y.toFixed(2)},${s.width.toFixed(2)},${s.height.toFixed(2)}`)
+      .join(';');
+    sig = `${t.fullBleed ? 'FB|' : ''}${slots}|T:${texts}`;
+    geoSigCache.set(t, sig);
+  }
+  return sig;
+}
+function dedupeByGeometry(list: PageTemplate[]): PageTemplate[] {
+  const keeper = new Map<string, PageTemplate>();
+  for (const t of list) {
+    const k = geoSig(t);
+    const cur = keeper.get(k);
+    if (!cur || (cur.id.startsWith('gap-') && !t.id.startsWith('gap-'))) keeper.set(k, t);
+  }
+  return list.filter((t) => keeper.get(geoSig(t)) === t);
 }
 
 /** A template that carries a QR "living memory" slot. These are OPT-IN ONLY:
@@ -1737,7 +1789,7 @@ export function photoSlotCount(t: PageTemplate): number {
 /** Get templates filtered by album size (auto-generation + layout picker). QR
  *  templates are excluded here on purpose — see hasQrSlot. */
 export function getTemplatesForAlbum(albumSize: AlbumSizePreset): PageTemplate[] {
-  return PAGE_TEMPLATES.filter(t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize));
+  return dedupeByGeometry(PAGE_TEMPLATES.filter(t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize)));
 }
 
 /** Get templates filtered by album size AND target ratio */
@@ -1745,9 +1797,9 @@ export function getTemplatesForRatio(
   albumSize: AlbumSizePreset,
   targetRatio: PhotoRatio,
 ): PageTemplate[] {
-  return PAGE_TEMPLATES.filter(
+  return dedupeByGeometry(PAGE_TEMPLATES.filter(
     t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio,
-  );
+  ));
 }
 
 /** Get templates filtered by album size, ratio, AND photo count */
@@ -1756,9 +1808,9 @@ export function getTemplatesForCount(
   targetRatio: PhotoRatio,
   slotCount: number,
 ): PageTemplate[] {
-  return PAGE_TEMPLATES.filter(
+  return dedupeByGeometry(PAGE_TEMPLATES.filter(
     t => isActive(t) && t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio && t.slotCount === slotCount,
-  );
+  ));
 }
 
 export function getTemplateById(id: string): PageTemplate | undefined {
