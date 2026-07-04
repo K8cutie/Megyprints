@@ -124,7 +124,14 @@ const embedPage = (emb, watchHref, title) => {
   const heading = title ? esc(title) : 'Your memory';
   const ratio = emb.portrait ? '160%' : '56.25%';
   const maxW = emb.portrait ? 340 : 760;
-  const src = esc(`${emb.src}?rel=0&playsinline=1&modestbranding=1`);
+  // Autoplay MUTED — mobile browsers block autoplay WITH sound, so the video
+  // starts on its own silent and the viewer taps the player to unmute. YouTube
+  // uses mute=1, Vimeo uses muted=1.
+  const isYT = emb.src.includes('youtube');
+  const params = isYT
+    ? 'rel=0&playsinline=1&modestbranding=1&autoplay=1&mute=1'
+    : 'autoplay=1&muted=1&playsinline=1';
+  const src = esc(`${emb.src}?${params}`);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Megy Prints — Memory</title>
@@ -139,13 +146,15 @@ const embedPage = (emb, watchHref, title) => {
   .player{width:100%;max-width:${maxW}px;position:relative;padding-top:${ratio};
     border-radius:16px;overflow:hidden;background:#000;box-shadow:0 24px 60px rgba(0,0,0,.55)}
   .player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-  a.alt{color:#F4C2A1;font-size:13px;text-decoration:none;opacity:.9}
+  .hint{font-size:13px;color:#E0CDBE;opacity:.9;display:flex;align-items:center;gap:6px}
+  a.alt{color:#F4C2A1;font-size:12.5px;text-decoration:none;opacity:.85}
   .foot{font-size:12px;color:#8a7d74;margin-top:2px}
 </style></head><body>
   <div class="brand">Megy<span>Prints</span><span class="dot"></span></div>
   <div class="ttl">${heading}</div>
   <div class="player"><iframe src="${src}" title="Memory video"
-    allow="accelerometer; encrypted-media; fullscreen; picture-in-picture" allowfullscreen loading="eager"></iframe></div>
+    allow="autoplay; accelerometer; encrypted-media; fullscreen; picture-in-picture" allowfullscreen loading="eager"></iframe></div>
+  <div class="hint">🔇 Playing on mute — tap the video for sound</div>
   <a class="alt" href="${esc(watchHref)}" rel="noopener noreferrer">Trouble playing? Open the original ↗</a>
   <div class="foot">✨ An enhanced memory, made with Megyprints</div>
 </body></html>`;
