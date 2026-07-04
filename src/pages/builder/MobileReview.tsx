@@ -34,6 +34,15 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null); // caption-box photo target
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null); // caption-box QR target
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
+  // Pulse the button until it's been clicked once (discovery, not a nag).
+  const [memoryDiscovered, setMemoryDiscovered] = useState(() => {
+    try { return localStorage.getItem('megy-memory-discovered') === '1'; } catch { return false; }
+  });
+  const openMemory = () => {
+    setMemoryDiscovered(true);
+    try { localStorage.setItem('megy-memory-discovered', '1'); } catch { /* ignore */ }
+    setMemoryOpen(true);
+  };
 
   // Seed the editor from a FREE text element (e.g. the theme title) by id.
   const buildTextInitial = (textId: string): BoxTextContent => {
@@ -171,8 +180,12 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         {/* Living-memory QR — offered on a single full photo page; turns it into
             a full-bleed photo with a scannable corner badge (face-picked corner). */}
         {actions.canAddMemoryQr && (
-          <button onClick={() => setMemoryOpen(true)}
-            className="w-full mt-3 h-11 rounded-xl bg-white border-2 border-[#F4C2A1] text-[#B0714E] font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+          <button onClick={openMemory}
+            className={`w-full mt-3 h-11 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform ${
+              memoryDiscovered
+                ? 'bg-white border-2 border-[#F4C2A1] text-[#B0714E]'
+                : 'bg-[#E8A598] text-white memory-pulse'
+            }`}>
             <QrCode size={17} /> Add memory video
           </button>
         )}

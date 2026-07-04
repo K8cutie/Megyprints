@@ -204,6 +204,15 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null);
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
+  // Pulse the button until the customer has clicked it once (feature discovery,
+  // not a nag). Persisted so it stays discovered across sessions/devices-local.
+  const [memoryDiscovered, setMemoryDiscovered] = useState(() => {
+    try { return localStorage.getItem('megy-memory-discovered') === '1'; } catch { return false; }
+  });
+  const markMemoryDiscovered = () => {
+    setMemoryDiscovered(true);
+    try { localStorage.setItem('megy-memory-discovered', '1'); } catch { /* ignore */ }
+  };
   const [pickerIsTextSlot, setPickerIsTextSlot] = useState(false);
   const buildSlotTextInitial = useCallback((slot: number): BoxTextContent => {
     const existing = actions.currentPage?.slotTexts?.[slot];
@@ -942,9 +951,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                   into a full-bleed photo with a scannable corner badge. */}
               {actions.canAddMemoryQr && (
                 <button
-                  onClick={() => setMemoryOpen(true)}
-                  title="Add a scannable video QR to this photo"
-                  className="px-3 py-1.5 bg-white border border-[#F4C2A1] text-[#B0714E] text-xs font-semibold rounded-lg hover:bg-[#FDF3EC] flex items-center gap-1 transition-all"
+                  onClick={() => { markMemoryDiscovered(); setMemoryOpen(true); }}
+                  title="Add a scannable video that plays when this page is scanned"
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all ${
+                    memoryDiscovered
+                      ? 'bg-white border border-[#F4C2A1] text-[#B0714E] hover:bg-[#FDF3EC]'
+                      : 'bg-[#E8A598] text-white memory-pulse hover:brightness-105'
+                  }`}
                 >
                   <QrCode size={12} /> Add memory video
                 </button>

@@ -4,6 +4,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Attention pulse for the "Add memory video" button — a soft expanding halo
+   (not a harsh blink) that draws the eye to an easy-to-miss feature. It's
+   applied only until the customer has clicked the button once (see the
+   memory-discovered flag), so it never nags in the long run. Honors
+   prefers-reduced-motion. */
+@keyframes megyMemoryPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(232, 165, 152, 0.55); }
+  70%  { box-shadow: 0 0 0 9px rgba(232, 165, 152, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(232, 165, 152, 0); }
+}
+.memory-pulse { animation: megyMemoryPulse 1.8s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .memory-pulse { animation: none; } }
+
 @layer base {
   :root {
     --background: 30 100% 97%;
