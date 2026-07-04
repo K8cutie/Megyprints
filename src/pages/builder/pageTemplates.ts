@@ -1,4 +1,4 @@
-import type { PageTemplate, TemplateSlot, TemplateMargin, AlbumSizePreset } from './types';
+import type { PageTemplate, TemplateSlot, TextSlot, TemplateMargin, AlbumSizePreset } from './types';
 import type { PhotoRatio } from './photoAnalyzer';
 import { TILED_TEMPLATES } from './tiledTemplates';
 
@@ -1613,7 +1613,14 @@ const SIZE_ORIENTATION: { size: AlbumSizePreset; orientation: PageTemplate['orie
 ];
 
 const GAP_FILLERS: PageTemplate[] = [];
+// A caption band template slot (spread onto tmpl() with `...`, since tmpl has no
+// text param). Kept terse for the several caption-bearing variants below.
+const gapCap = (y: number, h: number): TextSlot =>
+  ({ id: 'cap', x: 0, y, width: 1, height: h, align: 'center', placeholder: 'Tap to add text' });
 for (const { size, orientation } of SIZE_ORIENTATION) {
+  // ROOMY sizes (short side ≥ 8") can print a 3-across / big+small frame ≥ 2";
+  // small albums (6×4, 6×6) can't, so they keep only the 1- and 2-photo variants.
+  const roomy = size === S88 || size === S99 || size === S1158 || size === S8511;
   for (const ratio of ALL_RATIOS) {
     const covered = PAGE_TEMPLATES_BASE.some(
       (t) => t.albumSizes.includes(size) && t.targetRatio === ratio,
@@ -1621,11 +1628,23 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
     if (covered) continue;
     const key = `${size}-${ratio}`.replace(/[:.]/g, '');
     const wide = WIDE_RATIOS.has(ratio);
-    // 1-photo full page (also the landing spot for leftover "hero" photos)
+
+    // Historically GAP only emitted a lone 1-photo + 1-photo duo per uncovered
+    // (size × ratio) — so CROSS-ORIENTATION combos (portrait photos on a
+    // landscape book, etc.) had just ~2 layouts and the generator could only
+    // A/B/A/B them. These extra distinct variants give the variety tracker real
+    // options to rotate through. Every slot is exact-ratio (rsBox), so no crop.
+
+    // 1-photo full page (also the landing spot for leftover "hero" photos).
     GAP_FILLERS.push(tmpl(`gap-${key}-1`, `Full Page ${ratio}`, 'single', STD, orientation, ratio, [size], [
       rsBox(0, 0, ratio, 1.0, 1.0, size),
     ]));
-    // 2-photo: stack wide ratios; place tall/square ratios side-by-side
+    // 1-photo hero + caption band — a distinct single-photo look (keeps its
+    // margin + caption, so it is NOT collapsed to full-bleed).
+    GAP_FILLERS.push({ ...tmpl(`gap-${key}-1c`, `Hero ${ratio} + Caption`, 'single', STD, orientation, ratio, [size], [
+      rsBox(0, 0, ratio, 1.0, 0.76, size),
+    ]), textSlots: [gapCap(0.8, 0.2)] });
+    // 2-photo duo — stack wide ratios; side-by-side for tall/square.
     GAP_FILLERS.push(tmpl(`gap-${key}-2`, `Duo ${ratio}`, 'duo', STD, orientation, ratio, [size], wide ? [
       rsBox(0, 0, ratio, 1.0, 0.485, size),
       rsBox(0, 0.515, ratio, 1.0, 0.485, size),
@@ -1633,6 +1652,35 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
       rsBox(0, 0, ratio, 0.485, 1.0, size),
       rsBox(0.515, 0, ratio, 0.485, 1.0, size),
     ]));
+    // 2-photo duo + caption — same pairing, different composition.
+    GAP_FILLERS.push({ ...tmpl(`gap-${key}-2c`, `Duo ${ratio} + Caption`, 'duo', STD, orientation, ratio, [size], wide ? [
+      rsBox(0, 0, ratio, 1.0, 0.37, size),
+      rsBox(0, 0.39, ratio, 1.0, 0.37, size),
+    ] : [
+      rsBox(0, 0, ratio, 0.485, 0.76, size),
+      rsBox(0.515, 0, ratio, 0.485, 0.76, size),
+    ]), textSlots: [gapCap(0.8, 0.2)] });
+
+    if (roomy) {
+      // 2-photo asymmetric big + small — a different rhythm from the even duo.
+      // (Kept at 2 photos on purpose: more DISTINCT low-density layouts give
+      // variety AND more pages; a 3-up would pack photos and shrink the album.)
+      GAP_FILLERS.push(tmpl(`gap-${key}-2a`, `Big + Small ${ratio}`, 'duo', STD, orientation, ratio, [size], wide ? [
+        rsBox(0, 0, ratio, 1.0, 0.63, size),
+        rsBox(0.28, 0.66, ratio, 0.44, 0.34, size),
+      ] : [
+        rsBox(0, 0, ratio, 0.63, 1.0, size),
+        rsBox(0.66, 0.25, ratio, 0.34, 0.5, size),
+      ]));
+      // 2-photo big + small, mirrored — small photo top-left, hero bottom/right.
+      GAP_FILLERS.push(tmpl(`gap-${key}-2b`, `Small + Big ${ratio}`, 'duo', STD, orientation, ratio, [size], wide ? [
+        rsBox(0.28, 0, ratio, 0.44, 0.34, size),
+        rsBox(0, 0.37, ratio, 1.0, 0.63, size),
+      ] : [
+        rsBox(0, 0.25, ratio, 0.34, 0.5, size),
+        rsBox(0.37, 0, ratio, 0.63, 1.0, size),
+      ]));
+    }
   }
 }
 
