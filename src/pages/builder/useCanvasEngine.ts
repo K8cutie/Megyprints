@@ -1022,7 +1022,7 @@ function createBackgroundObject(
     htmlImg.onerror = () => {
       addBg(new fab.Rect({ ...baseProps, width: w, height: h, fill: '#FFFBF7' }));
     };
-    htmlImg.src = textureDataUri((bg as any).texture);
+    htmlImg.src = textureDataUri((bg as any).texture, (bg as any).textureColor);
   } else {
     const fill = (bg as any).solid || '#FFFBF7';
     addBg(new fab.Rect({ ...baseProps, width: w, height: h, fill }));

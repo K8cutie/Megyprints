@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import type { AlbumPage, UploadedPhoto } from './types';
 import { resolveBgImageSrc } from './types';
-import { TEXTURE_NAMES, textureDataUri, TEXTURE_TILE_PX } from './textures';
+import { TEXTURE_NAMES, TEXTURE_COLORS, DEFAULT_TEXTURE_COLORS, textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ─── Tabs ─── */
 type BgTab = 'solid' | 'gradient' | 'image' | 'texture';
@@ -45,7 +45,7 @@ function bgPreviewStyle(bg: AlbumPage['background'], photos: UploadedPhoto[]): R
   }
   if (bg.type === 'texture') {
     return {
-      backgroundImage: `url("${textureDataUri(b.texture)}")`,
+      backgroundImage: `url("${textureDataUri(b.texture, b.textureColor)}")`,
       backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
       backgroundRepeat: 'repeat',
     };
@@ -307,24 +307,49 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
             exit={{ opacity: 0, y: -8 }}
             className="space-y-3"
           >
-            <div className="grid grid-cols-3 gap-1.5">
-              {TEXTURE_NAMES.map((name) => (
-                <button
-                  key={name}
-                  onClick={() => onChange({ type: 'texture', texture: name, opacity: background.opacity ?? 100 })}
-                  title={name}
-                  className={`relative w-full aspect-square rounded-lg border-2 overflow-hidden transition-all ${
-                    background.type === 'texture' && background.texture === name
-                      ? 'border-rose-400 shadow'
-                      : 'border-transparent hover:scale-105'
-                  }`}
-                >
-                  <TextureSwatch name={name} />
-                  <span className="absolute bottom-0 inset-x-0 text-[9px] font-semibold capitalize text-stone-700 bg-white/70 py-0.5 text-center">
-                    {name}
-                  </span>
-                </button>
-              ))}
+            {/* Material */}
+            <div>
+              <p className="text-[10px] text-stone-400 mb-1.5 uppercase tracking-wider font-semibold">Material</p>
+              <div className="grid grid-cols-4 gap-1.5">
+                {TEXTURE_NAMES.map((name) => (
+                  <button
+                    key={name}
+                    onClick={() => onChange({ type: 'texture', texture: name, textureColor: background.textureColor, opacity: background.opacity ?? 100 })}
+                    title={name}
+                    className={`relative w-full aspect-square rounded-lg border-2 overflow-hidden transition-all ${
+                      background.type === 'texture' && background.texture === name
+                        ? 'border-rose-400 shadow'
+                        : 'border-transparent hover:scale-105'
+                    }`}
+                  >
+                    <TextureSwatch name={name} color={background.textureColor} />
+                    <span className="absolute bottom-0 inset-x-0 text-[8px] font-semibold capitalize text-stone-700 bg-white/70 py-0.5 text-center">
+                      {name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Color — applies to the chosen material */}
+            <div>
+              <p className="text-[10px] text-stone-400 mb-1.5 uppercase tracking-wider font-semibold">Color</p>
+              <div className="grid grid-cols-4 gap-1.5">
+                {TEXTURE_COLORS.map((c) => {
+                  const mat = (background.type === 'texture' && background.texture) ? background.texture : TEXTURE_NAMES[0];
+                  const active = background.type === 'texture'
+                    && (background.textureColor ?? DEFAULT_TEXTURE_COLORS[mat as keyof typeof DEFAULT_TEXTURE_COLORS]).toLowerCase() === c.hex.toLowerCase();
+                  return (
+                    <button
+                      key={c.hex}
+                      onClick={() => onChange({ type: 'texture', texture: mat, textureColor: c.hex, opacity: background.opacity ?? 100 })}
+                      title={c.name}
+                      className={`relative w-full aspect-square rounded-lg border-2 overflow-hidden transition-all ${active ? 'border-rose-400 shadow' : 'border-transparent hover:scale-105'}`}
+                    >
+                      <TextureSwatch name={mat} color={c.hex} />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </motion.div>
         )}
@@ -337,12 +362,12 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
 /* ─── TextureSwatch ─── */
 /* Renders the REAL material texture (same procedural data URI the page uses),
  * so the swatch is a faithful preview of what lands on the page. */
-function TextureSwatch({ name }: { name: string }) {
+function TextureSwatch({ name, color }: { name: string; color?: string }) {
   return (
     <div
       className="w-full h-full"
       style={{
-        backgroundImage: `url("${textureDataUri(name)}")`,
+        backgroundImage: `url("${textureDataUri(name, color)}")`,
         backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
         backgroundRepeat: 'repeat',
       }}

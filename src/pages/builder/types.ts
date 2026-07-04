@@ -144,6 +144,9 @@ export interface AlbumBackground {
     stops: { offset: number; color: string }[];
   };
   texture?: string;
+  /** Optional tint applied to the texture (a hex from TEXTURE_COLORS). Falls
+   *  back to the material's natural colour when absent. */
+  textureColor?: string;
   image?: string;
   /** When the background image comes from one of the user's uploaded album
    *  photos, we store its photo id. The blob URL in `image` is transient (it's

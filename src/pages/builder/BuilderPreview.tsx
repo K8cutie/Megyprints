@@ -69,7 +69,7 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
       // …). Opacity is applied by the wrapping layer div (see PageView) so we do
       // NOT bake it in here → screen/print parity. Tiled at the shared px size.
       return {
-        backgroundImage: `url("${textureDataUri(bg.texture)}")`,
+        backgroundImage: `url("${textureDataUri(bg.texture, bg.textureColor)}")`,
         backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
         backgroundRepeat: 'repeat',
       };

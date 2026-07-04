@@ -320,7 +320,7 @@ async function renderBackground(
       // OPACITY: applied via ctx.globalAlpha (true layer-alpha, matching screen)
       // — NOT the white-overlay trick below, which we skip for texture.
       try {
-        const tile = await loadImage(textureDataUri((bg as any).texture));
+        const tile = await loadImage(textureDataUri((bg as any).texture, (bg as any).textureColor));
         const dpiScale = W / getUISize(page.size).width;
         const tilePx = Math.max(1, Math.round(TEXTURE_TILE_PX * dpiScale));
         // Pre-scale one tile onto an offscreen canvas at the print tile size so

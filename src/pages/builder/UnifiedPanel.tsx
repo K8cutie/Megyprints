@@ -11,7 +11,7 @@ import type {
 import { PAGE_TEMPLATES, TEMPLATE_CATEGORIES, hasQrSlot, photoSlotCount } from './pageTemplates';
 import PropertiesPanel from './PropertiesPanel';
 import { getPersistedSidebarTab, setPersistedSidebarTab } from './sidebarTabStore';
-import { TEXTURE_NAMES, textureDataUri, TEXTURE_TILE_PX } from './textures';
+import { TEXTURE_NAMES, TEXTURE_COLORS, DEFAULT_TEXTURE_COLORS, textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ══════════════════════════════════════════════════════════════════════════
    UnifiedPanel — Vertical icon sidebar on the LEFT with collapsible content
@@ -424,24 +424,46 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                       )}
 
                       {background.type === 'texture' && (
-                        <div>
-                          <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Textures</p>
-                          <div className="grid grid-cols-3 gap-1.5">
-                            {TEXTURE_NAMES.map((p) => (
-                              <button key={p} onClick={() => onUpdateBackground?.({ ...background, type: 'texture', texture: p })}
-                                title={p}
-                                className="relative aspect-square rounded-lg overflow-hidden transition-transform hover:scale-[1.03] border-2"
-                                style={{
-                                  backgroundImage: `url("${textureDataUri(p)}")`,
-                                  backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
-                                  backgroundRepeat: 'repeat',
-                                  borderColor: background.texture === p ? '#F4C2A1' : 'transparent',
-                                }}>
-                                <span className="absolute bottom-0 inset-x-0 text-[8px] font-semibold capitalize text-stone-700 bg-white/70 py-0.5 text-center">
-                                  {p}
-                                </span>
-                              </button>
-                            ))}
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Material</p>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {TEXTURE_NAMES.map((p) => (
+                                <button key={p} onClick={() => onUpdateBackground?.({ ...background, type: 'texture', texture: p, textureColor: background.textureColor })}
+                                  title={p}
+                                  className="relative aspect-square rounded-lg overflow-hidden transition-transform hover:scale-[1.03] border-2"
+                                  style={{
+                                    backgroundImage: `url("${textureDataUri(p, background.textureColor)}")`,
+                                    backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
+                                    backgroundRepeat: 'repeat',
+                                    borderColor: background.texture === p ? '#F4C2A1' : 'transparent',
+                                  }}>
+                                  <span className="absolute bottom-0 inset-x-0 text-[7px] font-semibold capitalize text-stone-700 bg-white/70 py-0.5 text-center">
+                                    {p}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Color</p>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {TEXTURE_COLORS.map((c) => {
+                                const mat = background.texture || TEXTURE_NAMES[0];
+                                const active = (background.textureColor ?? DEFAULT_TEXTURE_COLORS[mat as keyof typeof DEFAULT_TEXTURE_COLORS]).toLowerCase() === c.hex.toLowerCase();
+                                return (
+                                  <button key={c.hex} onClick={() => onUpdateBackground?.({ ...background, type: 'texture', texture: mat, textureColor: c.hex })}
+                                    title={c.name}
+                                    className="relative aspect-square rounded-lg overflow-hidden transition-transform hover:scale-[1.03] border-2"
+                                    style={{
+                                      backgroundImage: `url("${textureDataUri(mat, c.hex)}")`,
+                                      backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
+                                      backgroundRepeat: 'repeat',
+                                      borderColor: active ? '#F4C2A1' : 'transparent',
+                                    }} />
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       )}
