@@ -19,7 +19,12 @@
  * ══════════════════════════════════════════════════════════════════════════ */
 
 export const TEXTURE_NAMES = [
-  'leather', 'linen', 'canvas', 'denim', 'rug', 'kraft', 'cork', 'wood',
+  // Fabrics & organic
+  'leather', 'linen', 'canvas', 'denim', 'rug', 'cork', 'kraft',
+  // Woods
+  'wood', 'oak', 'walnut', 'mahogany',
+  // Stones & sand
+  'marble', 'granite', 'slate', 'sandstone', 'sand',
 ] as const;
 
 export type TextureName = typeof TEXTURE_NAMES[number];
@@ -32,7 +37,9 @@ const T = TEXTURE_TILE_PX;
 /** Each material's natural/default base colour (used when no tint is chosen). */
 export const DEFAULT_TEXTURE_COLORS: Record<TextureName, string> = {
   leather: '#8a6a4f', linen: '#efe9df', canvas: '#e4dcc9', denim: '#3b5a7a',
-  rug: '#a9553f', kraft: '#b79b74', cork: '#c9a877', wood: '#a9855c',
+  rug: '#a9553f', cork: '#c9a877', kraft: '#b79b74',
+  wood: '#a9855c', oak: '#bf9a67', walnut: '#5c4632', mahogany: '#7a3b2e',
+  marble: '#e6e4df', granite: '#8c8a86', slate: '#4a4d50', sandstone: '#c2a06f', sand: '#dcc7a0',
 };
 
 /** Curated tint palette — versatile tones that read well as a textured
@@ -126,6 +133,37 @@ function weave(base: string, thread: string, step: number, width: number, opacit
   );
 }
 
+/** Sinuous veins (marble): a turbulence field thresholded into thin filaments of
+ *  `vein` colour over the base. `thin` (gamma exponent > 1) shrinks the veins to
+ *  fine lines; the vein colour is contrast-adaptive so it stays visible at any
+ *  tint. stitchTiles keeps it seamless. */
+function veined(base: string, vein: string, freq: string, seed: number, alpha: number, thin: number): string {
+  const n = parseInt(vein.slice(1), 16);
+  const r = (((n >> 16) & 255) / 255).toFixed(3);
+  const g = (((n >> 8) & 255) / 255).toFixed(3);
+  const b = ((n & 255) / 255).toFixed(3);
+  return (
+    svgOpen() +
+      `<defs><filter id="mv" x="0" y="0" width="100%" height="100%">` +
+        `<feTurbulence type="turbulence" baseFrequency="${freq}" numOctaves="2" ` +
+          `seed="${seed}" stitchTiles="stitch" result="n"/>` +
+        `<feColorMatrix in="n" type="matrix" values="` +
+          `0 0 0 0 ${r}  0 0 0 0 ${g}  0 0 0 0 ${b}  0 0 0 ${alpha} 0"/>` +
+        `<feComponentTransfer><feFuncA type="gamma" amplitude="1" exponent="${thin}" offset="0"/></feComponentTransfer>` +
+      `</filter></defs>` +
+      `<rect width="${T}" height="${T}" fill="${base}"/>` +
+      `<rect width="${T}" height="${T}" filter="url(#mv)"/>` +
+    `</svg>`
+  );
+}
+
+/** Deterministic scattered specks (granite / sand mineral flecks). */
+function flecks(specs: readonly (readonly [number, number, number])[], color: string, opacity: number): string {
+  return specs
+    .map(([cx, cy, r]) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" opacity="${opacity}"/>`)
+    .join('');
+}
+
 /* ─── Per-material recipes → a raw SVG string for a given base colour ─── */
 
 const TEXTURE_SVG: Record<TextureName, (color: string) => string> = {
@@ -171,6 +209,29 @@ const TEXTURE_SVG: Record<TextureName, (color: string) => string> = {
 
   // Long horizontal grain streaks (turbulence stretched on X), no hard seams.
   wood: (c) => grained(c, '0.014 0.85', 3, 9, 0.55, 0.4),
+
+  /* ── Woods — distinct grain characters (colour is the tint axis) ── */
+  // Open, straight, golden grain.
+  oak: (c) => grained(c, '0.02 0.72', 3, 41, 0.5, 0.4),
+  // Fine, dark, tighter grain.
+  walnut: (c) => grained(c, '0.03 0.92', 3, 43, 0.6, 0.34),
+  // Fine straight red-brown grain.
+  mahogany: (c) => grained(c, '0.018 0.88', 3, 47, 0.52, 0.38),
+
+  /* ── Stones & sand ── */
+  // Polished stone with sinuous contrast veins.
+  marble: (c) => veined(c, threadFor(c, 0.34), '0.02 0.028', 17, 0.9, 3),
+  // Crystalline speckle: fine 2-tone grain + scattered darker + lighter flecks.
+  granite: (c) => grained(c, '1.2', 2, 23, 0.5, 0.5,
+    flecks([[14, 20, 1.6], [58, 12, 1.3], [38, 46, 1.8], [70, 58, 1.4], [22, 64, 1.5], [50, 30, 1.2], [8, 44, 1.3], [64, 34, 1.5]], darken(c, 0.4), 0.4)
+    + flecks([[26, 10, 1.2], [46, 60, 1.3], [12, 54, 1], [72, 22, 1.2], [34, 72, 1.1]], lighten(c, 0.45), 0.4)),
+  // Dark layered stone: fine, faintly horizontal cleavage grain.
+  slate: (c) => grained(c, '0.06 0.7', 3, 29, 0.5, 0.3),
+  // Warm sedimentary stone: medium grain with subtle bedding.
+  sandstone: (c) => grained(c, '0.12 0.6', 3, 31, 0.46, 0.42),
+  // Loose fine granular grains: fine speckle + tiny darker specks.
+  sand: (c) => grained(c, '1.5', 2, 37, 0.4, 0.5,
+    flecks([[18, 24, 1.2], [54, 16, 1], [40, 50, 1.3], [68, 62, 1.1], [26, 68, 1], [10, 40, 1.2], [60, 36, 1]], darken(c, 0.28), 0.3)),
 };
 
 /** Resolve a (possibly stale/unknown) name to a valid texture name. */
