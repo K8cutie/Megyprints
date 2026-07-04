@@ -6,7 +6,7 @@
 
 export interface PsgcItem { code: string; name: string; }
 interface Region extends PsgcItem {}
-interface Province extends PsgcItem { regCode: string; }
+export interface ProvinceItem extends PsgcItem { regCode: string; }
 interface Muncity extends PsgcItem { provKey: string; }
 interface Barangay extends PsgcItem { cityKey: string; }
 
@@ -33,9 +33,14 @@ export const loadRegions = () => loadJson<Region[]>('regions.json');
 
 /** Provinces within a region (regCode, e.g. "13"). */
 export async function loadProvinces(regionCode: string): Promise<PsgcItem[]> {
-  const all = await loadJson<Province[]>('provinces.json');
+  const all = await loadJson<ProvinceItem[]>('provinces.json');
   return all.filter((p) => p.regCode === regionCode);
 }
+
+/** Every province across all regions — each carries its regCode so the region
+ *  can be derived once a province is chosen (the picker asks for province, not
+ *  region). */
+export const loadAllProvinces = () => loadJson<ProvinceItem[]>('provinces.json');
 
 /** Cities/municipalities within a province (provinceCode = regCode+provCode). */
 export async function loadCities(provinceCode: string): Promise<PsgcItem[]> {

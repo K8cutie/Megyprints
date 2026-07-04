@@ -1,34 +1,41 @@
 import { useEffect, useState } from 'react';
-import { loadRegions, loadProvinces, loadCities, loadBarangays, type PsgcItem } from '../lib/psgc';
+import { loadRegions, loadAllProvinces, loadCities, loadBarangays, type PsgcItem, type ProvinceItem } from '../lib/psgc';
 import type { AddressValue } from '../lib/contact';
 
 type Errors = Partial<Record<keyof AddressValue, string>>;
 
-/* Cascading PH address picker (Region → Province → City/Municipality → Barangay)
-   + street line + ZIP. Selecting a level resets everything deeper. Each list is
-   fetched on demand from public/psgc/ and cached. */
+/* Cascading PH address picker (Province → City/Municipality → Barangay) + street
+   line + ZIP. There's no Region field: a PH delivery is routed by province → city
+   → barangay (the region is redundant on the label), so we DERIVE the region from
+   the chosen province and store it silently. Selecting a level resets everything
+   deeper. Each list is fetched on demand from public/psgc/ and cached. */
 export default function AddressPicker({ value, onChange, errors }: {
   value: AddressValue;
   onChange: (v: AddressValue) => void;
   errors?: Errors;
 }) {
-  const [regions, setRegions] = useState<PsgcItem[]>([]);
-  const [provinces, setProvinces] = useState<PsgcItem[]>([]);
+  const [provinces, setProvinces] = useState<ProvinceItem[]>([]);
+  const [regionByCode, setRegionByCode] = useState<Record<string, string>>({});
   const [cities, setCities] = useState<PsgcItem[]>([]);
   const [barangays, setBarangays] = useState<PsgcItem[]>([]);
-  const [loading, setLoading] = useState<{ prov?: boolean; city?: boolean; brgy?: boolean }>({});
+  const [loading, setLoading] = useState<{ prov?: boolean; city?: boolean; brgy?: boolean }>({ prov: true });
 
-  useEffect(() => { loadRegions().then(setRegions).catch(() => setRegions([])); }, []);
-
+  // Load every province once (sorted), plus a regCode → region-name map so a
+  // picked province fills in its region behind the scenes.
   useEffect(() => {
-    if (!value.regionCode) { setProvinces([]); return; }
-    let ok = true; setLoading((l) => ({ ...l, prov: true }));
-    loadProvinces(value.regionCode)
-      .then((p) => { if (ok) setProvinces(p); })
+    let ok = true;
+    Promise.all([loadAllProvinces(), loadRegions()])
+      .then(([provs, regions]) => {
+        if (!ok) return;
+        setProvinces([...provs].sort((a, b) => a.name.localeCompare(b.name)));
+        const map: Record<string, string> = {};
+        regions.forEach((r) => { map[r.code] = r.name; });
+        setRegionByCode(map);
+      })
       .catch(() => { if (ok) setProvinces([]); })
       .finally(() => { if (ok) setLoading((l) => ({ ...l, prov: false })); });
     return () => { ok = false; };
-  }, [value.regionCode]);
+  }, []);
 
   useEffect(() => {
     if (!value.provinceCode) { setCities([]); return; }
@@ -50,13 +57,15 @@ export default function AddressPicker({ value, onChange, errors }: {
     return () => { ok = false; };
   }, [value.provinceCode, value.cityCode]);
 
-  const pickRegion = (code: string) => {
-    const r = regions.find((x) => x.code === code);
-    onChange({ ...value, regionCode: code, regionName: r?.name ?? '', provinceCode: '', provinceName: '', cityCode: '', cityName: '', barangayCode: '', barangayName: '' });
-  };
   const pickProvince = (code: string) => {
     const p = provinces.find((x) => x.code === code);
-    onChange({ ...value, provinceCode: code, provinceName: p?.name ?? '', cityCode: '', cityName: '', barangayCode: '', barangayName: '' });
+    onChange({
+      ...value,
+      provinceCode: code, provinceName: p?.name ?? '',
+      // Region derived from the province — stored, never asked for.
+      regionCode: p?.regCode ?? '', regionName: p ? (regionByCode[p.regCode] ?? '') : '',
+      cityCode: '', cityName: '', barangayCode: '', barangayName: '',
+    });
   };
   const pickCity = (code: string) => {
     const c = cities.find((x) => x.code === code);
@@ -77,24 +86,13 @@ export default function AddressPicker({ value, onChange, errors }: {
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-[#6B6B6B] mb-1 block">Region</label>
-          <select value={value.regionCode} onChange={(e) => pickRegion(e.target.value)} aria-invalid={!!errors?.regionCode} className={selCls(errors?.regionCode)}>
-            <option value="">Select region…</option>
-            {regions.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
-          </select>
-          {errText('regionCode')}
-        </div>
-        <div>
           <label className="text-xs text-[#6B6B6B] mb-1 block">Province</label>
-          <select value={value.provinceCode} onChange={(e) => pickProvince(e.target.value)} disabled={!value.regionCode || loading.prov} aria-invalid={!!errors?.provinceCode} className={selCls(errors?.provinceCode)}>
+          <select value={value.provinceCode} onChange={(e) => pickProvince(e.target.value)} disabled={loading.prov} aria-invalid={!!errors?.provinceCode} className={selCls(errors?.provinceCode)}>
             <option value="">{loading.prov ? 'Loading…' : 'Select province…'}</option>
             {provinces.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
           </select>
           {errText('provinceCode')}
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-xs text-[#6B6B6B] mb-1 block">City / Municipality</label>
           <select value={value.cityCode} onChange={(e) => pickCity(e.target.value)} disabled={!value.provinceCode || loading.city} aria-invalid={!!errors?.cityCode} className={selCls(errors?.cityCode)}>
@@ -103,14 +101,15 @@ export default function AddressPicker({ value, onChange, errors }: {
           </select>
           {errText('cityCode')}
         </div>
-        <div>
-          <label className="text-xs text-[#6B6B6B] mb-1 block">Barangay</label>
-          <select value={value.barangayCode} onChange={(e) => pickBarangay(e.target.value)} disabled={!value.cityCode || loading.brgy} aria-invalid={!!errors?.barangayCode} className={selCls(errors?.barangayCode)}>
-            <option value="">{loading.brgy ? 'Loading…' : 'Select barangay…'}</option>
-            {barangays.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
-          </select>
-          {errText('barangayCode')}
-        </div>
+      </div>
+
+      <div>
+        <label className="text-xs text-[#6B6B6B] mb-1 block">Barangay</label>
+        <select value={value.barangayCode} onChange={(e) => pickBarangay(e.target.value)} disabled={!value.cityCode || loading.brgy} aria-invalid={!!errors?.barangayCode} className={selCls(errors?.barangayCode)}>
+          <option value="">{loading.brgy ? 'Loading…' : 'Select barangay…'}</option>
+          {barangays.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+        </select>
+        {errText('barangayCode')}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_110px] gap-3">

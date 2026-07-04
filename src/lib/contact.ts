@@ -78,7 +78,8 @@ export const isValidZip = (zip: string): boolean => /^\d{4}$/.test((zip || '').t
 /** Per-field validation for the UI. Empty object = valid. */
 export function validateAddress(a: AddressValue): Partial<Record<keyof AddressValue, string>> {
   const e: Partial<Record<keyof AddressValue, string>> = {};
-  if (!a.regionCode) e.regionCode = 'Select a region.';
+  // Region is not asked for — it's derived from the chosen province (see
+  // AddressPicker) — so only the province onward is required from the user.
   if (!a.provinceCode) e.provinceCode = 'Select a province.';
   if (!a.cityCode) e.cityCode = 'Select a city / municipality.';
   if (!a.barangayCode) e.barangayCode = 'Select a barangay.';
