@@ -1737,6 +1737,68 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
   }
 }
 
+/* ── QR living-memory corner badge ─────────────────────────────────────────
+   A full-bleed photo with a small scannable QR chip tucked into a corner (the
+   corner is chosen by face-avoidance when the memory is added). The QR slot is
+   kind:'qr', so:
+     • these are OPT-IN — hasQrSlot() excludes them from auto-generation, so a
+       photo is never dealt onto the QR slot;
+     • the QR renders through the SAME shared qrRect() path (white quiet-zone
+       chip + centered code) in all three renderers — zero renderer changes.
+   Four corner variants per size = the "same photo, different corner" assortment.
+   The chip is sized to a fixed PRINTED inch, so it stays scannable on every
+   album size (qrRect squares it to the smaller dimension). */
+export const QR_CORNERS = ['tl', 'tr', 'bl', 'br'] as const;
+export type QrCorner = typeof QR_CORNERS[number];
+const QR_BADGE_IN = 1.2;   // printed QR side — comfortably scannable at arm's length
+const QR_PAD_IN = 0.35;    // inset from the trimmed page edge
+const ZERO_MARGIN_PT: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
+const QR_BADGE_TEMPLATES: PageTemplate[] = [];
+for (const { size, orientation } of SIZE_ORIENTATION) {
+  const [sw, sh] = GAP_SAFE_IN[size];
+  // A square chip: set both fractions so slotW·sw == slotH·sh == QR_BADGE_IN.
+  const w = QR_BADGE_IN / sw, h = QR_BADGE_IN / sh;
+  const px = QR_PAD_IN / sw, py = QR_PAD_IN / sh;
+  for (const corner of QR_CORNERS) {
+    const x = corner === 'tl' || corner === 'bl' ? px : 1 - px - w;
+    const y = corner === 'tl' || corner === 'tr' ? py : 1 - py - h;
+    QR_BADGE_TEMPLATES.push({
+      id: `qr-badge-${size}-${corner}`.replace(/[.]/g, ''),
+      name: `Full photo + QR (${corner.toUpperCase()})`,
+      category: 'single',
+      slotCount: 2,          // photo + QR chip (kind:'qr' → filled from qrFills)
+      margin: ZERO_MARGIN_PT,
+      orientation,
+      targetRatio: '1:1',
+      albumSizes: [size],
+      fullBleed: true,
+      slots: [
+        { id: `qrb-${size}-${corner}-photo`, x: 0, y: 0, width: 1, height: 1 },
+        { id: `qrb-${size}-${corner}-qr`, x, y, width: w, height: h, kind: 'qr' },
+      ],
+    });
+  }
+}
+
+/** The full-bleed + QR-badge template for a size and corner (or undefined). */
+export function qrBadgeTemplate(size: AlbumSizePreset, corner: QrCorner): PageTemplate | undefined {
+  return QR_BADGE_TEMPLATES.find((t) => t.id === `qr-badge-${size}-${corner}`.replace(/[.]/g, ''));
+}
+
+/** Pick the corner FARTHEST from a detected face center (normalized 0–1), so
+ *  the QR chip tucks into the emptiest corner and never lands on a face. Falls
+ *  back to bottom-right when no face was found. */
+export function qrCornerAwayFromFace(face: { x: number; y: number } | null): QrCorner {
+  if (!face) return 'br';
+  const d: Record<QrCorner, number> = {
+    tl: Math.hypot(face.x, face.y),
+    tr: Math.hypot(1 - face.x, face.y),
+    bl: Math.hypot(face.x, 1 - face.y),
+    br: Math.hypot(1 - face.x, 1 - face.y),
+  };
+  return (Object.keys(d) as QrCorner[]).reduce((best, c) => (d[c] > d[best] ? c : best), 'br');
+}
+
 /** Single-photo page rule: a template with exactly ONE photo slot and NO textbox
  *  renders full bleed — the photo runs edge to edge with no inner margin and no
  *  frame. Templates that carry a textbox keep their margin (the caption needs the
@@ -1756,7 +1818,10 @@ function applySinglePicFullBleed(t: PageTemplate): PageTemplate {
 }
 
 export const PAGE_TEMPLATES: PageTemplate[] =
-  [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS].map(applySinglePicFullBleed);
+  // QR-badge templates are already full-bleed 2-slot layouts, so they pass
+  // through applySinglePicFullBleed untouched (it only promotes lone photo slots).
+  [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS, ...QR_BADGE_TEMPLATES]
+    .map(applySinglePicFullBleed);
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 
