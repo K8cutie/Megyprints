@@ -257,6 +257,22 @@ function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
   });
 }
 
+/** Remove the auto-placed themed cover title (e.g. "Our Story") from loaded
+ *  albums. The builder no longer forces a title onto page 1, but albums
+ *  generated before that change still carry the relic — strip it on load.
+ *  Only removes `theme-title-*` elements whose text is still an UNTOUCHED
+ *  default; a title the user personalised (custom text) is left alone. */
+const DEFAULT_THEME_TITLE_SET = new Set<string>(Object.values(THEME_TITLES));
+function stripDefaultThemeTitles(pages: AlbumPage[]): AlbumPage[] {
+  return pages.map((page) => {
+    if (!page.textElements?.length) return page;
+    const kept = page.textElements.filter(
+      (t) => !(t.id.startsWith('theme-title') && DEFAULT_THEME_TITLE_SET.has(t.text)),
+    );
+    return kept.length === page.textElements.length ? page : { ...page, textElements: kept };
+  });
+}
+
 function getInitialState(): SerializedState {
   // ── LEAK FIX #1a: Check for explicit fresh-start signal ──
   // Home.tsx sets this when user clicks "Create New Album"
@@ -300,7 +316,7 @@ function getInitialState(): SerializedState {
     albumSize: effectiveSaved?.albumSize ?? defaultSize,
     selectedTemplate: effectiveSaved?.selectedTemplate ?? 'classic',
     uploadedPhotos: effectiveSaved?.uploadedPhotos ?? [],
-    albumPages: bindStrandedCaptions(effectiveSaved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, defaultSize))),
+    albumPages: bindStrandedCaptions(stripDefaultThemeTitles(effectiveSaved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, defaultSize)))),
     currentPageIndex: effectiveSaved?.currentPageIndex ?? 0,
     rejectedTemplateIds: effectiveSaved?.rejectedTemplateIds ?? [],
     photosPerPage: effectiveSaved?.photosPerPage ?? undefined,
@@ -731,7 +747,7 @@ export function useBuilderState(): BuilderActions {
                 };
               }
             );
-            setAlbumPages(bindStrandedCaptions(restoredPages));
+            setAlbumPages(bindStrandedCaptions(stripDefaultThemeTitles(restoredPages)));
           }
           // Rehydrate photo metadata from cloud + restore from IndexedDB
           if (albumData.photos && albumData.photos.length > 0) {
@@ -1007,31 +1023,9 @@ export function useBuilderState(): BuilderActions {
         ...(wFrame ? { frameStyle: wFrame } : {}),
       }));
     }
-    // Auto-place a themed title on page 1 (theme font + accent color) so the
-    // theme's typography + palette are visible without the user adding text.
-    // Tagged `theme-title-*` so re-theming can restyle it (restyleThemedTitles).
-    if (newPages[0] && uploadedPhotos.length > 0) {
-      const { width: cw, height: ch } = getCanvasDimensions(albumSize);
-      const t = getThemedTitle(selectedTemplate);
-      const titleW = Math.round(cw * 0.7);
-      const title: TextElement = {
-        id: `theme-title-${Date.now()}`,
-        text: t.text,
-        x: Math.round((cw - titleW) / 2),
-        y: Math.round(ch * 0.05),
-        fontSize: Math.round(cw * 0.075),
-        fontFamily: t.fontFamily,
-        color: t.color,
-        bold: true,
-        italic: false,
-        underline: false,
-        alignment: 'center',
-        rotation: 0,
-        opacity: 100,
-        width: titleW,
-      };
-      newPages[0] = { ...newPages[0], textElements: [...newPages[0].textElements, title] };
-    }
+    // NOTE: no auto-placed cover title. The builder used to drop a themed title
+    // ("Our Story" etc.) onto page 1, but that forced unwanted text over the
+    // user's photos — removed. Users add their own title/text if they want one.
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
   }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate]);
@@ -1958,7 +1952,7 @@ export function useBuilderState(): BuilderActions {
               };
             }
           );
-          setAlbumPages(restoredPages);
+          setAlbumPages(stripDefaultThemeTitles(restoredPages));
         }
         // Restore uploaded photos from cloud
         // Rehydrate photo metadata from cloud + restore actual files from IndexedDB
