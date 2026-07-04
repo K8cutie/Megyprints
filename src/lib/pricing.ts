@@ -44,6 +44,27 @@ export function perPageCost(size: AlbumSizePreset): number {
   return SHEET / SIZES[size].pps;
 }
 
+/** Value premium (PURE PROFIT) added to the customer price for the larger
+ *  formats. They cost the SAME to produce as 8×8 (all pps=4 → identical interior
+ *  sheets) but are worth more, so this is a flat peso premium on top of
+ *  cost × multiple, applied to BOTH bindings. Admin-tunable here — this is the
+ *  single source the checkout and the operator panel both read. */
+export const SIZE_SURCHARGE: Record<AlbumSizePreset, number> = {
+  '6x4': 0, '6x6': 0, '8x8': 0, '9x9': 150, '11.5x8': 300, '8.5x11': 300,
+};
+
+/** Final customer price = marked-up cost + the size premium. SINGLE SOURCE for
+ *  both the checkout (priceBreakdown) and the operator Pricing panel, so the
+ *  number a customer pays and the number the operator sees can never diverge. */
+export function priceOf(
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  multiple: number,
+): number {
+  return Math.round(costOf(size, binding, pages) * multiple) + SIZE_SURCHARGE[size];
+}
+
 export interface PriceLine { label: string; amount: number }
 export interface PriceBreakdown { items: PriceLine[]; total: number }
 
@@ -57,7 +78,9 @@ export function priceBreakdown(
   multiple: number,
 ): PriceBreakdown {
   const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
-  const total = Math.round(costOf(size, binding, pages) * multiple);
+  // Includes the size premium — it folds into the base album line below (the
+  // base is reconciled as total − extra), so it never surfaces as its own line.
+  const total = priceOf(size, binding, pages, multiple);
 
   const extra = Math.max(0, pages - MIN_PAGES);
   const items: PriceLine[] = [];

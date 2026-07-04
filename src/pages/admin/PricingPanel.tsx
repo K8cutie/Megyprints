@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
-import { SHEET, SIZES, costOf, sheetsFor, type Binding } from '../../lib/pricing';
+import { SHEET, SIZES, costOf, sheetsFor, priceOf, SIZE_SURCHARGE, type Binding } from '../../lib/pricing';
 import { getPriceMultiple, setPriceMultiple } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
@@ -43,10 +43,12 @@ export default function PricingPanel() {
   };
 
   const cost = costOf(size, bind, pages);
-  const price = cost * mult;
+  const surcharge = SIZE_SURCHARGE[size];
+  const price = priceOf(size, bind, pages, mult); // marked-up cost + size premium
   const profit = price - cost;
   const cpp = SHEET / SIZES[size].pps;
   const marginPct = Math.round((1 - cost / price) * 100);
+  const effMult = price / cost; // effective markup once the size premium is added
   const r = rival8(pages);
 
   return (
@@ -171,9 +173,14 @@ export default function PricingPanel() {
             <div>
               <div className="text-xs uppercase tracking-wide text-[#9B9B9B]">Your price</div>
               <div className="font-mono text-4xl font-semibold tabular-nums text-[#2D2D2D] leading-none mt-1">{peso(price)}</div>
+              {surcharge > 0 && (
+                <div className="text-[11px] text-[#8B6F47] mt-1">
+                  incl. +{peso(surcharge)} size premium ({mult.toFixed(2).replace(/0$/, '')}× base)
+                </div>
+              )}
             </div>
             <span className="font-mono text-xs font-semibold px-2.5 py-1 rounded-full bg-[#E7F1EA] text-[#2E7D4A] whitespace-nowrap">
-              {mult.toFixed(2).replace(/0$/, '')}× · {marginPct}% margin
+              {effMult.toFixed(2).replace(/0$/, '')}× · {marginPct}% margin
             </span>
           </div>
           <div className="grid grid-cols-2 gap-px bg-[#E8E8E8] border border-[#E8E8E8] rounded-xl overflow-hidden">
@@ -219,6 +226,7 @@ export default function PricingPanel() {
         <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-1">Reference sheet — the 40-page floor</h3>
         <p className="text-sm text-[#6B6B6B] mb-3">
           <b>3×</b> is the recommended baseline (under their sale); <b>5×</b> is the ceiling (their regular price) — worth holding on premium hardbound where the QR living-memory sells it.
+          The <b>3×/5×</b> columns include the flat <b>size premium</b> (marked beside the size): <b>+₱150</b> on 9×9, <b>+₱300</b> on 11.5×8 &amp; 8.5×11 — pure margin, since those cost the same to print as 8×8.
         </p>
         <div className="overflow-x-auto border border-[#DED5C9] rounded-xl">
           <table className="w-full min-w-[560px] text-sm">
@@ -287,12 +295,16 @@ function PricingGroup({ bind }: { bind: Binding }) {
       {ORDER.map((k) => {
         const c = costOf(k, bind, 40);
         const cpp = SHEET / SIZES[k].pps;
+        const prem = SIZE_SURCHARGE[k];
         return (
           <tr key={k} className="border-t border-[#EEE7DE]">
-            <td className="px-4 py-2.5 text-left font-sans text-[#2D2D2D]">{SIZES[k].label}</td>
+            <td className="px-4 py-2.5 text-left font-sans text-[#2D2D2D]">
+              {SIZES[k].label}
+              {prem > 0 && <span className="ml-1.5 text-[10px] font-sans text-[#8B6F47]">+{peso(prem)}</span>}
+            </td>
             <td className="px-4 py-2.5 text-right text-[#2D2D2D]">{peso(c)}</td>
-            <td className="px-4 py-2.5 text-right text-[#2E7D4A]">{peso(c * 3)}</td>
-            <td className="px-4 py-2.5 text-right text-[#BF5E3E]">{peso(c * 5)}</td>
+            <td className="px-4 py-2.5 text-right text-[#2E7D4A]">{peso(priceOf(k, bind, 40, 3))}</td>
+            <td className="px-4 py-2.5 text-right text-[#BF5E3E]">{peso(priceOf(k, bind, 40, 5))}</td>
             <td className="px-4 py-2.5 text-right text-[#6B6B6B]">₱{cpp.toFixed(2)}</td>
           </tr>
         );
