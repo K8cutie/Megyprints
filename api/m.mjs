@@ -78,14 +78,77 @@ a.btn{display:inline-block;margin-top:16px;background:#F4C2A1;color:#fff;text-de
 <p class="spin">Opens an external site — tap only if you trust it.</p>`);
 };
 
-const send = (res, status, html) => {
+const send = (res, status, html, frameSrc) => {
   res.statusCode = status;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+  // frameSrc is added ONLY for the video-embed page (a scoped allowlist of the
+  // player hosts), so nothing else can ever be iframed into the resolver.
+  res.setHeader('Content-Security-Policy',
+    "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; "
+    + (frameSrc ? `frame-src ${frameSrc}; ` : '')
+    + "frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
   res.end(html);
+};
+
+// Recognize a YouTube/Vimeo destination and return its player-embed src (+ a
+// portrait flag for Shorts). Returns null for anything not safely embeddable.
+const FRAME_SRC = 'https://www.youtube-nocookie.com https://player.vimeo.com';
+function videoEmbed(u) {
+  const host = u.hostname.toLowerCase().replace(/^www\.|^m\./, '');
+  const yt = (id, portrait) => (/^[\w-]{6,15}$/.test(id)
+    ? { src: `https://www.youtube-nocookie.com/embed/${id}`, portrait } : null);
+  if (host === 'youtu.be') return yt(u.pathname.slice(1).split('/')[0], false);
+  if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    const m = u.pathname.match(/^\/(embed|shorts|v)\/([\w-]{6,15})/);
+    if (m) return yt(m[2], m[1] === 'shorts');
+    return yt(u.searchParams.get('v') || '', false);
+  }
+  if (host === 'vimeo.com') {
+    const id = (u.pathname.match(/\/(\d{6,})/) || [])[1];
+    if (id) return { src: `https://player.vimeo.com/video/${id}`, portrait: false };
+  }
+  if (host === 'player.vimeo.com') {
+    const id = (u.pathname.match(/\/video\/(\d{6,})/) || [])[1];
+    if (id) return { src: `https://player.vimeo.com/video/${id}`, portrait: false };
+  }
+  return null;
+}
+
+// The premium path: the video plays INSIDE a branded Megyprints page (no dump to
+// the YouTube app). Portrait ratio for Shorts. A fallback link covers videos
+// whose owner disabled embedding.
+const embedPage = (emb, watchHref, title) => {
+  const heading = title ? esc(title) : 'Your memory';
+  const ratio = emb.portrait ? '160%' : '56.25%';
+  const maxW = emb.portrait ? 340 : 760;
+  const src = esc(`${emb.src}?rel=0&playsinline=1&modestbranding=1`);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Megy Prints — Memory</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:#1b1613;color:#FFFBF7;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:14px}
+  .brand{font-size:19px;font-weight:700}.brand span{color:#F4C2A1}
+  .brand .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#F4C2A1;margin-left:2px;vertical-align:middle}
+  .ttl{font-size:15px;color:#E7D8CC;text-align:center;max-width:${maxW}px;line-height:1.4}
+  .player{width:100%;max-width:${maxW}px;position:relative;padding-top:${ratio};
+    border-radius:16px;overflow:hidden;background:#000;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+  .player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  a.alt{color:#F4C2A1;font-size:13px;text-decoration:none;opacity:.9}
+  .foot{font-size:12px;color:#8a7d74;margin-top:2px}
+</style></head><body>
+  <div class="brand">Megy<span>Prints</span><span class="dot"></span></div>
+  <div class="ttl">${heading}</div>
+  <div class="player"><iframe src="${src}" title="Memory video"
+    allow="accelerometer; encrypted-media; fullscreen; picture-in-picture" allowfullscreen loading="eager"></iframe></div>
+  <a class="alt" href="${esc(watchHref)}" rel="noopener noreferrer">Trouble playing? Open the original ↗</a>
+  <div class="foot">✨ An enhanced memory, made with Megyprints</div>
+</body></html>`;
 };
 
 export default async function handler(req, res) {
@@ -107,5 +170,11 @@ export default async function handler(req, res) {
   let u;
   try { u = new URL(row.destination); } catch { return send(res, 200, memoryPage('', 'an unknown site', row.title, false)); }
   const trusted = u.protocol === 'https:' && allowed(u.hostname.toLowerCase().replace(/^www\./, ''));
+  // Video platforms (YouTube/Vimeo) PLAY on the branded page; other trusted
+  // hosts (Spotify, Drive, socials) still forward; untrusted → manual click.
+  if (trusted) {
+    const emb = videoEmbed(u);
+    if (emb) return send(res, 200, embedPage(emb, u.href, row.title), FRAME_SRC);
+  }
   return send(res, 200, memoryPage(u.href, u.hostname, row.title, trusted));
 }
