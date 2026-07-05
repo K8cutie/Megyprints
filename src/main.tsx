@@ -2,11 +2,28 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { initSentry } from './lib/sentry'
+import { reportError } from './lib/report'
+
+// Initialize Sentry before anything renders. No-op unless VITE_SENTRY_DSN is set.
+initSentry()
+
+// Global safety nets — route uncaught errors + unhandled promise rejections
+// through the single reportError sink (console + optional endpoint + Sentry).
+window.addEventListener('unhandledrejection', (e) => {
+  reportError(e.reason, { kind: 'unhandledrejection' })
+})
+window.addEventListener('error', (e) => {
+  reportError(e.error ?? e.message, { kind: 'error' })
+})
 
 createRoot(document.getElementById('root')!).render(
-  <HashRouter>
-    <App />
-  </HashRouter>,
+  <ErrorBoundary>
+    <HashRouter>
+      <App />
+    </HashRouter>
+  </ErrorBoundary>,
 )
 
 // Auto-refresh an OPEN tab the moment a freshly deployed service worker takes
