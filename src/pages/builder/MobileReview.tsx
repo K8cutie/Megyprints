@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, QrCode } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Youtube } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -182,7 +182,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         {actions.canAddMemoryQr && (
           <button onClick={openMemory}
             className={`w-full mt-3 h-11 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform bg-[#E8A598] text-white shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}>
-            <QrCode size={17} /> Add memory video
+            <Youtube size={18} /> Add YouTube Memory
           </button>
         )}
         {isLast && (
