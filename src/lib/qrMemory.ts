@@ -14,6 +14,32 @@ export const MEMORY_BASE: string =
 /** The stable, printable memory URL for a code. */
 export const memoryUrl = (code: string): string => `${MEMORY_BASE}/m/${code}`;
 
+/** For a YouTube/Vimeo destination, the player-embed URL (+ a portrait flag for
+ *  Shorts) — used to PREVIEW the attached video inline in the builder. Mirrors
+ *  the resolver's parser (api/m.mjs). null when not an embeddable video link. */
+export function videoEmbedInfo(raw: string): { src: string; portrait: boolean } | null {
+  let u: URL;
+  try { u = new URL(raw.trim()); } catch { return null; }
+  const host = u.hostname.toLowerCase().replace(/^www\.|^m\./, '');
+  const yt = (id: string, portrait: boolean) =>
+    (/^[\w-]{6,15}$/.test(id) ? { src: `https://www.youtube-nocookie.com/embed/${id}`, portrait } : null);
+  if (host === 'youtu.be') return yt(u.pathname.slice(1).split('/')[0], false);
+  if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    const m = u.pathname.match(/^\/(embed|shorts|v)\/([\w-]{6,15})/);
+    if (m) return yt(m[2], m[1] === 'shorts');
+    return yt(u.searchParams.get('v') || '', false);
+  }
+  if (host === 'vimeo.com') {
+    const id = (u.pathname.match(/\/(\d{6,})/) || [])[1];
+    if (id) return { src: `https://player.vimeo.com/video/${id}`, portrait: false };
+  }
+  if (host === 'player.vimeo.com') {
+    const id = (u.pathname.match(/\/video\/(\d{6,})/) || [])[1];
+    if (id) return { src: `https://player.vimeo.com/video/${id}`, portrait: false };
+  }
+  return null;
+}
+
 // Unambiguous lowercase alphabet (a–z minus l/o) + digits 2–9 — matches the
 // resolver's ^[a-z2-9]{4,32}$ guard and avoids visually confusable characters.
 const ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';

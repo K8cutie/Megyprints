@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { X, QrCode, Trash2, Loader2, LogIn } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { X, Youtube, Trash2, Loader2, LogIn, Play } from 'lucide-react';
 import type { QrFill } from './types';
-import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination } from '../../lib/qrMemory';
+import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination, videoEmbedInfo } from '../../lib/qrMemory';
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
@@ -21,6 +21,16 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
   const [url, setUrl] = useState(initial?.destination ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Live proof: the moment a valid YouTube/Vimeo link is entered, embed the real
+  // player so the user WATCHES the exact video their QR will open — no printing,
+  // no scanning needed to confirm it's attached. Autoplays muted (no surprise).
+  const embed = useMemo(() => videoEmbedInfo(url), [url]);
+  const previewSrc = embed
+    ? (embed.src.includes('player.vimeo.com')
+        ? `${embed.src}?autoplay=1&muted=1&title=0&byline=0&portrait=0`
+        : `${embed.src}?rel=0&playsinline=1&modestbranding=1&autoplay=1&mute=1`)
+    : '';
 
   const confirm = async () => {
     setError('');
@@ -72,7 +82,7 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8]">
           <span className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
-            <QrCode size={18} className="text-[#E8A598]" /> {initial ? 'Edit QR memory' : 'Add QR memory'}
+            <Youtube size={18} className="text-[#E8A598]" /> {initial ? 'Edit YouTube Memory' : 'Add a YouTube Memory'}
           </span>
           <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
         </div>
@@ -83,11 +93,14 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
               <span className="font-semibold">Sign in to add a QR.</span> The link is saved to your account so it opens for anyone who scans it — no app needed — and you can re-point it anytime.
             </div>
           )}
-          <p className="text-xs text-[#6B6B6B]">
-            <span className="font-medium text-[#8B6F47]">Bring your album to life</span> — add a video that plays when anyone scans the QR on your printed page.
-          </p>
+          <div className="rounded-xl bg-gradient-to-br from-[#FFF3EC] to-[#FDF6F1] border border-[#F4C2A1]/50 px-4 py-3">
+            <p className="text-sm font-bold text-[#2D2D2D]">Add a memory of this event 🎬</p>
+            <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
+              Paste a YouTube link — it plays the moment anyone scans the QR printed on this page. Your album stops being just photos and starts <span className="font-medium text-[#8B6F47]">reliving the day</span>.
+            </p>
+          </div>
           <div>
-            <label className="text-xs text-[#6B6B6B] mb-1 block">Video link</label>
+            <label className="text-xs text-[#6B6B6B] mb-1 block">YouTube link</label>
             <input
               value={url}
               onChange={(e) => { setUrl(e.target.value); if (error) setError(''); }}
@@ -98,6 +111,24 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
             />
             {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
           </div>
+          {embed && (
+            <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-2">
+              <div className={`relative overflow-hidden rounded-lg bg-black mx-auto ${embed.portrait ? 'w-[200px] aspect-[9/16]' : 'w-full aspect-video'}`}>
+                <iframe
+                  key={embed.src}
+                  src={previewSrc}
+                  title="Memory video preview"
+                  className="absolute inset-0 w-full h-full"
+                  allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                  allowFullScreen
+                />
+              </div>
+              <p className="text-[11px] text-[#6B6B6B] mt-2 flex items-center gap-1 justify-center text-center">
+                <Play size={11} className="text-[#E8A598] shrink-0" fill="currentColor" />
+                This is exactly what plays when someone scans your QR.
+              </p>
+            </div>
+          )}
           {initial && (
             <div className="flex items-center gap-3 rounded-lg bg-[#FAFAFA] p-2">
               <img src={initial.qrPngDataUrl} alt="QR preview" className="w-12 h-12 shrink-0" />
