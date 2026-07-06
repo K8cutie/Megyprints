@@ -16,12 +16,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Image as ImageIcon, Type, Sparkles, X } from 'lucide-react';
 
 interface SlotChooserProps {
-  onPhoto: () => void;
+  /** Open the photo picker. Optional — when omitted, the Photo option is hidden
+   *  (the combo/caption box offers Text + Ornament only, no Photo). */
+  onPhoto?: () => void;
   onText: () => void;
   /** Deprecated: QR moved to the corner-badge flow. Kept optional for callers. */
   onQr?: () => void;
   /** Open the themed-ornament picker for this box. Optional — when omitted, the
-   *  Ornament option is hidden (e.g. caption-box chooser doesn't offer it yet). */
+   *  Ornament option is hidden. */
   onOrnament?: () => void;
   onClose: () => void;
   /** Render as a bottom sheet (phone) instead of a centered modal (desktop). */
@@ -38,7 +40,7 @@ interface Option {
 
 export default function SlotChooser({ onPhoto, onText, onOrnament, onClose, mobile }: SlotChooserProps) {
   const options: Option[] = [
-    { key: 'photo', label: 'Add Photo', desc: 'Place one of your photos here', Icon: ImageIcon, run: onPhoto },
+    ...(onPhoto ? [{ key: 'photo' as const, label: 'Add Photo', desc: 'Place one of your photos here', Icon: ImageIcon, run: onPhoto }] : []),
     { key: 'text', label: 'Add Text', desc: 'Type a caption or title in this box', Icon: Type, run: onText },
     ...(onOrnament ? [{ key: 'ornament' as const, label: 'Add Ornament', desc: 'Pick a themed graphic — travel, love, kids…', Icon: Sparkles, run: onOrnament }] : []),
   ];

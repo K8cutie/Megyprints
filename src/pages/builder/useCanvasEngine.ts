@@ -124,6 +124,8 @@ export interface UseCanvasEngineOptions {
   onTextSlotPhotoClick?: (slotIndex: number) => void;
   /** Click on a caption box FILLED with a QR → re-open the QR editor. */
   onTextSlotQrClick?: (slotIndex: number) => void;
+  /** Click on a caption box FILLED with an ornament → re-open the ornament picker. */
+  onTextSlotOrnamentClick?: (slotIndex: number) => void;
   actions: BuilderActions;
   /** When true, slot containers become selectable and resizable */
   containerMode?: boolean;
@@ -184,10 +186,11 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   // page-nav (same desync class as slotTextData above).
   const textSlotFillData = page.textSlotFills ? page.textSlotFills.join(',') : '';
   const textSlotQrData = page.textSlotQr ? page.textSlotQr.map((q) => q ? `${q.code}:${q.destination}` : '').join('|') : '';
+  const textSlotOrnamentData = page.textSlotOrnament ? page.textSlotOrnament.map((o) => o ? `${o.pack}:${o.id}` : '').join('|') : '';
   // Ornament fills — so adding/changing/removing an ornament repaints the Fabric
   // editor without a page-nav (same desync class as slotTextData/qrData above).
   const ornamentData = page.ornamentFills ? page.ornamentFills.map((o) => o ? `${o.pack}:${o.id}` : '').join('|') : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}`;
+  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -208,6 +211,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     onTextSlotEmptyClick,
     onTextSlotPhotoClick,
     onTextSlotQrClick,
+    onTextSlotOrnamentClick,
     actions,
     containerMode = false,
     onContainerModified,
@@ -265,6 +269,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   onTextSlotPhotoClickRef.current = onTextSlotPhotoClick ?? (() => {});
   const onTextSlotQrClickRef = useRef<(slotIndex: number) => void>(() => {});
   onTextSlotQrClickRef.current = onTextSlotQrClick ?? (() => {});
+  const onTextSlotOrnamentClickRef = useRef<(slotIndex: number) => void>(() => {});
+  onTextSlotOrnamentClickRef.current = onTextSlotOrnamentClick ?? (() => {});
   const containerModeRef = useRef(containerMode);
   containerModeRef.current = containerMode;
   const onContainerModifiedRef = useRef(onContainerModified);
@@ -565,7 +571,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -704,7 +710,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -1471,11 +1477,11 @@ function renderTemplateSlots(
       slotRect.slotIndex = i;
       canvas.add(slotRect);
 
-      // Spell out what an empty box can hold (chooser: Photo/Text/QR) when the
-      // slot is big enough; fall back to a bare "+" in tight cells.
+      // Spell out what an empty photo slot can hold (chooser: Photo/Text/Ornament)
+      // when the slot is big enough; fall back to a bare "+" in tight cells.
       const cell = Math.min(sw, sh);
       const hint = cell >= 120
-        ? new fab.Text('Click to add:\n•  Photo\n•  Text\n•  QR', {
+        ? new fab.Text('Click to add:\n•  Photo\n•  Text\n•  Ornament', {
             left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center',
             fontSize: Math.max(13, Math.min(30, cell * 0.13)),
             fontFamily: '"DM Sans", sans-serif', fontWeight: '700', fill: '#A0562F',
@@ -1520,6 +1526,7 @@ function renderScene(
   onTextSlotPhotoClick: (slotIndex: number) => void = () => {},
   onTextSlotQrClick: (slotIndex: number) => void = () => {},
   onOrnamentSlotClick: (slotIndex: number) => void = () => {},
+  onTextSlotOrnamentClick: (slotIndex: number) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1616,6 +1623,21 @@ function renderScene(
       });
       return;
     }
+    // (1b) ORNAMENT — themed graphic contained (padded) in the box, transparent.
+    const torn = page.textSlotOrnament?.[i] ?? null;
+    if (torn) {
+      const { dx, dy, side } = ornamentFit(r.left, r.top, r.width, r.height);
+      fab.Image.fromURL(torn.pngDataUrl, (img: any) => {
+        if (thisRenderId !== currentRenderId) return;
+        img.set({ left: dx, top: dy, selectable: false, evented: true, hoverCursor: 'pointer' });
+        img.scaleToWidth(side);
+        img.slotId = `${SLOT_ID}-textornament-${i}`;
+        img.on('mousedown', () => onTextSlotOrnamentClick(i));
+        canvas.add(img);
+        canvas.renderAll();
+      });
+      return;
+    }
     // Text wins over photo: skip drawing a caption-box photo if a caption exists.
     if (page.textElements.some((t) => t.boxIndex === i)) return;
     // (3) PHOTO — simplified cover-fit clipped to the box rect (no frame/shape).
@@ -1703,8 +1725,8 @@ function renderScene(
   // any slot that already has a caption.
   (template?.textSlots ?? []).forEach((_ts, i) => {
     if (page.textElements.some((t) => t.boxIndex === i)) return;
-    // Skip boxes occupied by a caption-box photo/QR (drawn above).
-    if (page.textSlotFills?.[i] != null || page.textSlotQr?.[i]) return;
+    // Skip boxes occupied by a caption-box photo/QR/ornament (drawn above).
+    if (page.textSlotFills?.[i] != null || page.textSlotQr?.[i] || page.textSlotOrnament?.[i]) return;
     const r = textSlotRect(i);
     if (!r) return;
     const box = new fab.Rect({
@@ -1714,17 +1736,18 @@ function renderScene(
       selectable: false, evented: true, hoverCursor: 'pointer',
     });
     box.slotId = `${SLOT_ID}-textbox-${i}`;
-    // Empty caption box opens the 3-way chooser (photo/text/QR) — spell that out
-    // to match the photo slots. Caption boxes are often wide/short, so fall back
-    // to a single line when there isn't room for the bulleted list.
+    // Empty combo/caption box opens the Text-or-Ornament chooser — spell that out
+    // to match the DOM preview. Caption boxes are often wide/short, so fall back
+    // to a single line when there isn't room for the bulleted list. (No Photo:
+    // photos go in the real photo slots, not this accent box.)
     const label = r.height >= 78
-      ? new fab.Text('Click to add:\n•  Photo\n•  Text\n•  QR', {
+      ? new fab.Text('Click to add:\n•  Text\n•  Ornament', {
           left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
           fontSize: Math.max(13, Math.min(28, Math.min(r.width, r.height) * 0.13)),
           fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700', textAlign: 'center', lineHeight: 1.35,
           selectable: false, evented: false,
         })
-      : new fab.Text('＋  Add: Photo · Text · QR', {
+      : new fab.Text('＋  Add: Text · Ornament', {
           left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
           fontSize: Math.max(12, Math.min(r.height * 0.5, r.width * 0.07)),
           fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700',
@@ -1733,7 +1756,7 @@ function renderScene(
     label.slotId = `${SLOT_ID}-textbox-label-${i}`;
     canvas.add(box);
     canvas.add(label);
-    // Empty caption box → open the 3-way chooser (photo / text / QR).
+    // Empty combo/caption box → open the Text-or-Ornament chooser.
     box.on('mousedown', () => onTextSlotEmptyClick(i));
   });
 

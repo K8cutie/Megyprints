@@ -157,7 +157,7 @@ function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onT
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onTextSlotPhotoTap, onTextSlotQrTap }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -183,6 +183,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   onTextSlotPhotoTap?: (slotIndex: number) => void;
   /** Tap a caption box FILLED with a QR → re-open the QR editor. */
   onTextSlotQrTap?: (slotIndex: number) => void;
+  /** Tap a caption box FILLED with an ornament → re-open the ornament picker. */
+  onTextSlotOrnamentTap?: (slotIndex: number) => void;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -353,7 +355,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
       {/* Template text boxes. Filled → formatted text clipped to the box; empty →
           faint tap hint. Tapping opens the text editor (onTextSlotTap). */}
       {template?.textSlots?.map((ts, i) => {
-        // Content precedence per caption box: qr → text → photo → empty.
+        // Content precedence per caption box: qr → ornament → text → photo → empty.
         const boxLeft = safeX + ts.x * safeW;
         const boxTop = safeY + ts.y * safeH;
         const boxW = ts.width * safeW;
@@ -367,6 +369,17 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
               cellLeft={boxLeft} cellTop={boxTop} cellW={boxW} cellH={boxH}
               dataUrl={tqr.qrPngDataUrl}
               onTap={onTextSlotQrTap ? () => onTextSlotQrTap(i) : undefined} />
+          );
+        }
+
+        // (1b) ORNAMENT — the combo-box themed graphic (contained, transparent).
+        const torn = page.textSlotOrnament?.[i] ?? null;
+        if (torn) {
+          return (
+            <OrnamentSquare key={`tslot-${i}`} rectKey={`tslot-${i}`} zIndex={5}
+              cellLeft={boxLeft} cellTop={boxTop} cellW={boxW} cellH={boxH}
+              dataUrl={torn.pngDataUrl}
+              onTap={onTextSlotOrnamentTap ? () => onTextSlotOrnamentTap(i) : undefined} />
           );
         }
 
@@ -426,7 +439,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           return (
             <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}
               left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
-              showList={cell >= 84} options={['Photo', 'Text']}
+              showList={cell >= 84} options={['Text', 'Ornament']}
               onTap={() => onChooseTextSlot(i)} />
           );
         }

@@ -198,7 +198,7 @@ async function renderPageManually(
   // captions already printed via the boxIndex branch above; here we draw QR and
   // photo with precedence qr → (text already drawn) → photo. Drawn last so the
   // caption layer sits above the photos (consistent with DOM/Fabric z-order).
-  if (textTpl && tm && (page.textSlotFills || page.textSlotQr)) {
+  if (textTpl && tm && (page.textSlotFills || page.textSlotQr || page.textSlotOrnament)) {
     const sX = W * tm.left, sY = H * tm.top, sW = W * (1 - tm.left - tm.right), sH = H * (1 - tm.top - tm.bottom);
     const textSlots = textTpl.textSlots ?? [];
     for (let j = 0; j < textSlots.length; j++) {
@@ -211,6 +211,12 @@ async function renderPageManually(
       const tqr = page.textSlotQr?.[j] ?? null;
       if (tqr) {
         await renderSlotQr(ctx, tqr, bx, by, bw, bh);
+        continue;
+      }
+      // (1b) ORNAMENT — reuse the photo-slot ornament renderer.
+      const torn = page.textSlotOrnament?.[j] ?? null;
+      if (torn) {
+        await renderSlotOrnament(ctx, torn, bx, by, bw, bh);
         continue;
       }
       // (2) TEXT already handled by the boxIndex branch — never overdraw it.

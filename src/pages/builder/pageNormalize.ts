@@ -21,13 +21,15 @@ export function normalizeStoredPageFields(p: any): any {
     if (p[snake] !== undefined) return p[snake];
     return undefined;
   };
-  // Ornaments carry a rendered PNG data-URL. This is the UNTRUSTED cloud boundary,
-  // so drop any entry whose pngDataUrl isn't a local `data:image/…` URI — a tampered
-  // row can't turn an ornament into an external beacon or a foreign image load.
-  const rawOrn = get('ornamentFills', 'ornament_fills') ?? [];
-  const ornamentFills = Array.isArray(rawOrn)
-    ? rawOrn.map((o: any) => (o && typeof o.pngDataUrl === 'string' && o.pngDataUrl.startsWith('data:image/') ? o : null))
-    : [];
+  // Ornaments (photo-slot AND caption-box) carry a rendered PNG data-URL. This is
+  // the UNTRUSTED cloud boundary, so drop any entry whose pngDataUrl isn't a local
+  // `data:image/…` URI — a tampered row can't turn an ornament into an external
+  // beacon or a foreign image load.
+  const sanitizeOrn = (raw: any) => (Array.isArray(raw)
+    ? raw.map((o: any) => (o && typeof o.pngDataUrl === 'string' && o.pngDataUrl.startsWith('data:image/') ? o : null))
+    : []);
+  const ornamentFills = sanitizeOrn(get('ornamentFills', 'ornament_fills') ?? []);
+  const textSlotOrnament = sanitizeOrn(get('textSlotOrnament', 'text_slot_ornament') ?? []);
   return {
     ...p,
     slotFills: get('slotFills', 'slot_fills') ?? [],
@@ -40,6 +42,7 @@ export function normalizeStoredPageFields(p: any): any {
     ornamentFills,
     textSlotFills: get('textSlotFills', 'text_slot_fills') ?? [],
     textSlotQr: get('textSlotQr', 'text_slot_qr') ?? [],
+    textSlotOrnament,
     textElements: get('textElements', 'text_elements') ?? [],
     photos: p.photos ?? [],
     background: p.background ?? { type: 'solid', solid: '#FFFBF7' },

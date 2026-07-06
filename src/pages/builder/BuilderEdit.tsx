@@ -177,6 +177,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       if (containerMode) return;
       setTextSlotQrEditSlot(slotIndex);
     }, [containerMode]),
+    onTextSlotOrnamentClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
+      setTextSlotOrnamentEditSlot(slotIndex);
+    }, [containerMode]),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {
@@ -210,6 +214,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   // to a caption box (setTextSlotPhoto) instead of a photo slot (fillSlot).
   const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null);
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null);
+  // Combo/caption-box ornament picker target (chooser "Add Ornament" or tapping a placed one).
+  const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
   // Corner the user picks for a NEW memory badge (null = Auto, face-aware).
   const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null);
@@ -766,13 +772,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* Empty caption-box content chooser — Photo / Text / QR (desktop modal).
+      {/* Empty combo/caption-box chooser — Text or Ornament (desktop modal). No
+          Photo: photos go in the real photo slots, not this accent box.
           Text reuses the existing caption path (setTextEditSlot → setBoxText). */}
       {chooserTextSlot !== null && (
         <SlotChooser
-          onPhoto={() => { setPickerIsTextSlot(true); setSelectedSlotForPicker(chooserTextSlot); setShowPhotoPicker(true); }}
           onText={() => setTextEditSlot(chooserTextSlot)}
-          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
+          onOrnament={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
       )}
@@ -784,6 +790,16 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           onSave={(fill) => { actions.setTextSlotQr(textSlotQrEditSlot, fill); setTextSlotQrEditSlot(null); }}
           onRemove={() => { actions.setTextSlotQr(textSlotQrEditSlot, null); setTextSlotQrEditSlot(null); }}
           onClose={() => setTextSlotQrEditSlot(null)}
+        />
+      )}
+
+      {/* Combo/caption-box ornament picker */}
+      {textSlotOrnamentEditSlot !== null && (
+        <AddOrnamentModal
+          initial={actions.currentPage?.textSlotOrnament?.[textSlotOrnamentEditSlot] ?? null}
+          onSave={(fill) => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, fill); setTextSlotOrnamentEditSlot(null); }}
+          onRemove={() => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, null); setTextSlotOrnamentEditSlot(null); }}
+          onClose={() => setTextSlotOrnamentEditSlot(null)}
         />
       )}
 

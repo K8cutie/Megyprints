@@ -92,6 +92,7 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
   const textSlotCount = template.textSlots?.length ?? 0;
   const carriedTextSlotFills = (page.textSlotFills ?? []).slice(0, textSlotCount);
   const carriedTextSlotQr = (page.textSlotQr ?? []).slice(0, textSlotCount);
+  const carriedTextSlotOrnament = (page.textSlotOrnament ?? []).slice(0, textSlotCount);
   return {
     ...page,
     templateId: template.id,
@@ -100,6 +101,7 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
     ornamentFills: carriedOrnament,
     textSlotFills: carriedTextSlotFills,
     textSlotQr: carriedTextSlotQr,
+    textSlotOrnament: carriedTextSlotOrnament,
     slotFills: reflowFills(existingFills, slotCount, carriedQr, carriedText, carriedOrnament),
     slotScales: new Array(slotCount).fill(1),
     slotOffsetsX: new Array(slotCount).fill(0),
@@ -247,6 +249,7 @@ function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
     // into it (would break mutual exclusivity).
     (page.textSlotFills ?? []).forEach((f, i) => { if (f != null) filled.add(i); });
     (page.textSlotQr ?? []).forEach((q, i) => { if (q) filled.add(i); });
+    (page.textSlotOrnament ?? []).forEach((o, i) => { if (o) filled.add(i); });
     let changed = false;
     const textElements = page.textElements.map((t) => {
       if (t.boxIndex != null || t.id.startsWith('theme-quote')) return t;
@@ -394,6 +397,9 @@ export interface BuilderActions {
   /** Set (or clear) a QR in caption box j (template.textSlots[j]). Clears the
    *  box's photo + bound caption (mutual exclusivity). */
   setTextSlotQr: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
+  /** Set (or clear) an ORNAMENT in caption box j (template.textSlots[j]). Clears
+   *  the box's photo + QR + bound caption (mutual exclusivity). */
+  setTextSlotOrnament: (slotIndex: number, fill: OrnamentFill | null, pageIndex?: number) => void;
 
   // Canvas photos (freeform)
   addPhotoToCanvas: (photoIndex: number, x: number, y: number) => void;
@@ -1027,6 +1033,7 @@ export function useBuilderState(): BuilderActions {
         ornamentFills: [...(page.ornamentFills ?? [])],
         textSlotFills: [...(page.textSlotFills ?? [])],
         textSlotQr: [...(page.textSlotQr ?? [])],
+        textSlotOrnament: [...(page.textSlotOrnament ?? [])],
         photos: page.photos.map((p) => ({ ...p, id: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
         textElements: page.textElements.map((t) => ({ ...t, id: `text-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
       };
@@ -1114,6 +1121,7 @@ export function useBuilderState(): BuilderActions {
         // preserve them so a regenerate never drops a claimed caption box.
         textSlotFills: page.textSlotFills,
         textSlotQr: page.textSlotQr,
+        textSlotOrnament: page.textSlotOrnament,
         slotFills: new Array(slotCount).fill(null),
         slotScales: new Array(slotCount).fill(1),
         slotOffsetsX: new Array(slotCount).fill(0),
@@ -1560,11 +1568,14 @@ export function useBuilderState(): BuilderActions {
       textSlotFills[slotIndex] = photoIndex;
       if (photoIndex != null) {
         const textSlotQr = [...(page.textSlotQr ?? [])];
+        const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
         textSlotQr[slotIndex] = null;
+        textSlotOrnament[slotIndex] = null;
         return {
           ...page,
           textSlotFills,
           textSlotQr,
+          textSlotOrnament,
           textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex),
         };
       }
@@ -1591,15 +1602,53 @@ export function useBuilderState(): BuilderActions {
       textSlotQr[slotIndex] = fill;
       if (fill) {
         const textSlotFills = [...(page.textSlotFills ?? [])];
+        const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
         textSlotFills[slotIndex] = null;
+        textSlotOrnament[slotIndex] = null;
         return {
           ...page,
           textSlotQr,
           textSlotFills,
+          textSlotOrnament,
           textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex),
         };
       }
       return { ...page, textSlotQr };
+    };
+    if (pageIndex == null) {
+      updateCurrentPage(apply);
+    } else {
+      setAlbumPages((prev) => {
+        const next = [...prev];
+        if (next[pageIndex]) next[pageIndex] = apply(next[pageIndex]);
+        return next;
+      });
+    }
+  }, [updateCurrentPage]);
+
+  /** Set (or clear, with null) an ORNAMENT into caption box `slotIndex`
+   *  (template.textSlots[slotIndex]). Mirrors setTextSlotQr: setting an ornament
+   *  clears the box's photo (textSlotFills), QR (textSlotQr) AND any bound caption
+   *  TextElement — the combo box holds ONE thing. pageIndex defaults to current. */
+  const setTextSlotOrnament = useCallback((slotIndex: number, fill: OrnamentFill | null, pageIndex?: number) => {
+    pushSnapshot();
+    const apply = (page: AlbumPage): AlbumPage => {
+      const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
+      textSlotOrnament[slotIndex] = fill;
+      if (fill) {
+        const textSlotFills = [...(page.textSlotFills ?? [])];
+        const textSlotQr = [...(page.textSlotQr ?? [])];
+        textSlotFills[slotIndex] = null;
+        textSlotQr[slotIndex] = null;
+        return {
+          ...page,
+          textSlotOrnament,
+          textSlotFills,
+          textSlotQr,
+          textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex),
+        };
+      }
+      return { ...page, textSlotOrnament };
     };
     if (pageIndex == null) {
       updateCurrentPage(apply);
@@ -1800,7 +1849,8 @@ export function useBuilderState(): BuilderActions {
     const emptyBox = slots.findIndex((_s, i) =>
       !(cur?.textElements ?? []).some((t) => t.boxIndex === i) &&
       cur?.textSlotFills?.[i] == null &&
-      !cur?.textSlotQr?.[i]);
+      !cur?.textSlotQr?.[i] &&
+      !cur?.textSlotOrnament?.[i]);
     updateCurrentPage((page) => {
       if (slots.length > 0 && emptyBox >= 0) {
         const newText: TextElement = {
@@ -1903,17 +1953,20 @@ export function useBuilderState(): BuilderActions {
           ? { ...page, textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex) }
           : page;
       }
-      // Mutual exclusivity (third leg): writing a caption evicts a photo/QR
+      // Mutual exclusivity (third leg): writing a caption evicts a photo/QR/ornament
       // occupying the same caption box.
       const textSlotFills = [...(page.textSlotFills ?? [])];
       const textSlotQr = [...(page.textSlotQr ?? [])];
+      const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
       textSlotFills[slotIndex] = null;
       textSlotQr[slotIndex] = null;
+      textSlotOrnament[slotIndex] = null;
       if (existing) {
         return {
           ...page,
           textSlotFills,
           textSlotQr,
+          textSlotOrnament,
           textElements: page.textElements.map((t) =>
             t.boxIndex === slotIndex ? { ...t, ...content, text: trimmed } : t),
         };
@@ -1934,7 +1987,7 @@ export function useBuilderState(): BuilderActions {
         opacity: 100,
         boxIndex: slotIndex,
       };
-      return { ...page, textSlotFills, textSlotQr, textElements: [...page.textElements, newText] };
+      return { ...page, textSlotFills, textSlotQr, textSlotOrnament, textElements: [...page.textElements, newText] };
     };
     // Default: the current page. The preview spread passes an explicit pageIndex
     // so it can edit either of the two pages on screen.
@@ -2214,6 +2267,7 @@ export function useBuilderState(): BuilderActions {
     setOrnamentFill,
     setTextSlotPhoto,
     setTextSlotQr,
+    setTextSlotOrnament,
     addPhotoToCanvas,
     updatePhotoTransform,
     updatePhotoFilters,

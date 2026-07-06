@@ -35,6 +35,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser
   const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null); // caption-box photo target
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null); // caption-box QR target
+  const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null); // combo-box ornament target
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
   const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null); // corner for a NEW badge (null = Auto)
   // Pulse the button until it's been clicked once (discovery, not a nag).
@@ -161,7 +162,8 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onOrnamentSlotTap={(slot) => setOrnamentEditSlot(slot)}
               onChooseTextSlot={(slotIndex) => setChooserTextSlot(slotIndex)}
               onTextSlotPhotoTap={(slotIndex) => setTextReplaceSlot(slotIndex)}
-              onTextSlotQrTap={(slot) => setTextSlotQrEditSlot(slot)} />}
+              onTextSlotQrTap={(slot) => setTextSlotQrEditSlot(slot)}
+              onTextSlotOrnamentTap={(slot) => setTextSlotOrnamentEditSlot(slot)} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -254,14 +256,14 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         )}
       </AnimatePresence>
 
-      {/* Empty caption-box content chooser — Photo / Text / QR (bottom sheet).
+      {/* Empty combo/caption-box chooser — Text or Ornament (bottom sheet). No
+          Photo: photos go in the real photo slots, not this accent box.
           Text reuses the existing setBoxText path (setEditSlot). */}
       {chooserTextSlot !== null && (
         <SlotChooser
           mobile
-          onPhoto={() => setTextReplaceSlot(chooserTextSlot)}
           onText={() => setEditSlot(chooserTextSlot)}
-          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
+          onOrnament={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
       )}
@@ -273,6 +275,15 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           onSave={(fill: QrFill) => { actions.setTextSlotQr(textSlotQrEditSlot, fill, idx); setTextSlotQrEditSlot(null); }}
           onRemove={() => { actions.setTextSlotQr(textSlotQrEditSlot, null, idx); setTextSlotQrEditSlot(null); }}
           onClose={() => setTextSlotQrEditSlot(null)}
+        />
+      )}
+      {/* Combo/caption-box ornament picker */}
+      {textSlotOrnamentEditSlot !== null && (
+        <AddOrnamentModal
+          initial={page?.textSlotOrnament?.[textSlotOrnamentEditSlot] ?? null}
+          onSave={(fill) => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, fill, idx); setTextSlotOrnamentEditSlot(null); }}
+          onRemove={() => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, null, idx); setTextSlotOrnamentEditSlot(null); }}
+          onClose={() => setTextSlotOrnamentEditSlot(null)}
         />
       )}
 

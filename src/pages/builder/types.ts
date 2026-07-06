@@ -337,6 +337,11 @@ export interface AlbumPage {
    *  (mirrors qrFills for the caption boxes). Mutually exclusive with the box's
    *  TextElement.boxIndex caption and textSlotFills[j]. */
   textSlotQr?: (QrFill | null)[];
+  /** Per-CAPTION-BOX ornament fills. Positional, parallel to template.textSlots[j]
+   *  (mirrors textSlotQr). The combo/caption box holds a caption TextElement OR a
+   *  themed ornament — mutually exclusive with the bound caption, textSlotFills[j]
+   *  and textSlotQr[j]. Serializes as-is (local, cloud, order snapshot). */
+  textSlotOrnament?: (OrnamentFill | null)[];
   background: AlbumBackground;
   photos: CanvasPhoto[];
   textElements: TextElement[];
