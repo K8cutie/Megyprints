@@ -1791,6 +1791,14 @@ export function qrBadgeTemplate(size: AlbumSizePreset, corner: QrCorner): PageTe
   return QR_BADGE_TEMPLATES.find((t) => t.id === `qr-badge-${size}-${corner}`.replace(/[.]/g, ''));
 }
 
+/** The corner a placed QR-badge page currently uses, parsed from its templateId
+ *  (`qr-badge-<size>-<corner>`). null when the page isn't a QR-badge page — used
+ *  to (a) gate the corner picker to badge pages and (b) highlight the active corner. */
+export function qrBadgeCornerOf(templateId?: string): QrCorner | null {
+  const m = templateId?.match(/-(tl|tr|bl|br)$/);
+  return m && templateId?.startsWith('qr-badge-') ? (m[1] as QrCorner) : null;
+}
+
 /** Pick the corner FARTHEST from a detected face center (normalized 0–1), so
  *  the QR chip tucks into the emptiest corner and never lands on a face. Falls
  *  back to bottom-right when no face was found. */

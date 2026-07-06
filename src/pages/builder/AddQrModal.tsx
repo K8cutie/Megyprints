@@ -1,20 +1,35 @@
 import { useMemo, useState } from 'react';
 import { X, Youtube, Trash2, Loader2, LogIn, Play } from 'lucide-react';
 import type { QrFill } from './types';
+import { QR_CORNERS, type QrCorner } from './pageTemplates';
 import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination, videoEmbedInfo } from '../../lib/qrMemory';
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
 
+const CORNER_LABELS: Record<QrCorner, string> = {
+  tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right',
+};
+const CORNER_POS: Record<QrCorner, React.CSSProperties> = {
+  tl: { top: 5, left: 5 }, tr: { top: 5, right: 5 },
+  bl: { bottom: 5, left: 5 }, br: { bottom: 5, right: 5 },
+};
+
 /* Add / edit a QR "living memory" for a template QR slot. New: mints a stable
    code, generates a print-crisp QR encoding /m/:code, and returns the fill.
    Edit: keeps the SAME code + printed QR image and only re-points the
-   destination — so the physical album never needs a reprint. */
-export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
+   destination — so the physical album never needs a reprint.
+   When `onCorner` is passed (the full-bleed memory-badge flow), a 4-corner
+   picker lets the user place the QR chip; `corner` is the current selection
+   (null = Auto, face-aware) and `allowAuto` shows the Auto option. */
+export default function AddQrModal({ initial, onSave, onRemove, onClose, corner, onCorner, allowAuto }: {
   initial: QrFill | null;
   onSave: (fill: QrFill) => void;
   onRemove: () => void;
   onClose: () => void;
+  corner?: QrCorner | null;
+  onCorner?: (corner: QrCorner | null) => void;
+  allowAuto?: boolean;
 }) {
   const { user } = useAuth();
   const { openLogin } = useAuthModal();
@@ -127,6 +142,36 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose }: {
                 <Play size={11} className="text-[#E8A598] shrink-0" fill="currentColor" />
                 This is exactly what plays when someone scans your QR.
               </p>
+            </div>
+          )}
+          {onCorner && (
+            <div>
+              <label className="text-xs text-[#6B6B6B] mb-1.5 block">Which corner should the QR sit in?</label>
+              <div className="flex items-center gap-3">
+                {allowAuto && (
+                  <button type="button" onClick={() => onCorner(null)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition ${corner == null ? 'bg-[#F4C2A1] text-white' : 'bg-[#FFF8F0] text-[#8B6F47] hover:bg-[#FDE8E4]'}`}
+                    title="Auto — tuck it into the corner away from the face">
+                    ✨ Auto
+                  </button>
+                )}
+                <div className="relative rounded-lg border-2 border-dashed border-[#E8D9CC] bg-[#FBF6F1] shrink-0" style={{ width: 92, height: 68 }}>
+                  {QR_CORNERS.map((c) => {
+                    const active = corner === c;
+                    return (
+                      <button key={c} type="button" onClick={() => onCorner(c)}
+                        aria-label={CORNER_LABELS[c]} title={CORNER_LABELS[c]}
+                        className={`absolute w-6 h-6 rounded-[5px] flex items-center justify-center transition ${active ? 'bg-[#E8A598] ring-2 ring-[#F4C2A1]' : 'bg-white border border-[#E0D3C6] hover:bg-[#FDE8E4]'}`}
+                        style={CORNER_POS[c]}>
+                        {active && <span className="w-2.5 h-2.5 rounded-[2px] bg-white" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="text-[11px] text-[#9B9B9B] leading-snug">
+                  {corner == null ? 'Auto places it away from the face.' : `Placed in the ${CORNER_LABELS[corner].toLowerCase()} corner.`}
+                </span>
+              </div>
             </div>
           )}
           {initial && (

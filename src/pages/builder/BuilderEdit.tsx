@@ -24,7 +24,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import AddOrnamentModal from './AddOrnamentModal';
 import SlotChooser from './SlotChooser';
-import { getTemplateById } from './pageTemplates';
+import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
 import { CloudSaveStatus } from '../../components/CloudSaveStatus';
@@ -211,6 +211,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null);
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
+  // Corner the user picks for a NEW memory badge (null = Auto, face-aware).
+  const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null);
   // Pulse the button until the customer has clicked it once (feature discovery,
   // not a nag). Persisted so it stays discovered across sessions/devices-local.
   const [memoryDiscovered, setMemoryDiscovered] = useState(() => {
@@ -715,6 +717,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           onSave={(fill) => { actions.setQrFill(qrEditSlot, fill); setQrEditSlot(null); }}
           onRemove={() => { actions.setQrFill(qrEditSlot, null); setQrEditSlot(null); }}
           onClose={() => setQrEditSlot(null)}
+          corner={qrBadgeCornerOf(actions.currentPage?.templateId)}
+          onCorner={qrBadgeCornerOf(actions.currentPage?.templateId) ? ((c) => { if (c) actions.setMemoryQrCorner(c); }) : undefined}
+          allowAuto={false}
         />
       )}
 
@@ -723,9 +728,12 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {memoryOpen && (
         <AddQrModal
           initial={null}
-          onSave={(fill) => { void actions.applyMemoryQr(fill); setMemoryOpen(false); }}
-          onRemove={() => setMemoryOpen(false)}
-          onClose={() => setMemoryOpen(false)}
+          onSave={(fill) => { void actions.applyMemoryQr(fill, memoryCorner ?? undefined); setMemoryOpen(false); setMemoryCorner(null); }}
+          onRemove={() => { setMemoryOpen(false); setMemoryCorner(null); }}
+          onClose={() => { setMemoryOpen(false); setMemoryCorner(null); }}
+          corner={memoryCorner}
+          onCorner={setMemoryCorner}
+          allowAuto
         />
       )}
 

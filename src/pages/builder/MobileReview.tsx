@@ -11,7 +11,7 @@ import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Youtube } fro
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
-import { getTemplateById } from './pageTemplates';
+import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import AddOrnamentModal from './AddOrnamentModal';
@@ -36,6 +36,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null); // caption-box photo target
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null); // caption-box QR target
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
+  const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null); // corner for a NEW badge (null = Auto)
   // Pulse the button until it's been clicked once (discovery, not a nag).
   const [memoryDiscovered, setMemoryDiscovered] = useState(() => {
     try { return localStorage.getItem('megy-memory-discovered') === '1'; } catch { return false; }
@@ -43,6 +44,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const openMemory = () => {
     setMemoryDiscovered(true);
     try { localStorage.setItem('megy-memory-discovered', '1'); } catch { /* ignore */ }
+    setMemoryCorner(null); // fresh badge starts on Auto
     setMemoryOpen(true);
   };
 
@@ -305,6 +307,9 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           onSave={(fill: QrFill) => { actions.setQrFill(qrEditSlot, fill, idx); setQrEditSlot(null); }}
           onRemove={() => { actions.setQrFill(qrEditSlot, null, idx); setQrEditSlot(null); }}
           onClose={() => setQrEditSlot(null)}
+          corner={qrBadgeCornerOf(page?.templateId)}
+          onCorner={qrBadgeCornerOf(page?.templateId) ? ((c) => { if (c) actions.setMemoryQrCorner(c); }) : undefined}
+          allowAuto={false}
         />
       )}
       {ornamentEditSlot !== null && (
@@ -320,9 +325,12 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
       {memoryOpen && (
         <AddQrModal
           initial={null}
-          onSave={(fill: QrFill) => { void actions.applyMemoryQr(fill); setMemoryOpen(false); }}
-          onRemove={() => setMemoryOpen(false)}
-          onClose={() => setMemoryOpen(false)}
+          onSave={(fill: QrFill) => { void actions.applyMemoryQr(fill, memoryCorner ?? undefined); setMemoryOpen(false); setMemoryCorner(null); }}
+          onRemove={() => { setMemoryOpen(false); setMemoryCorner(null); }}
+          onClose={() => { setMemoryOpen(false); setMemoryCorner(null); }}
+          corner={memoryCorner}
+          onCorner={setMemoryCorner}
+          allowAuto
         />
       )}
     </div>

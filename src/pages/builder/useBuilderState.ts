@@ -15,7 +15,7 @@ import type {
   PageTemplate,
   FrameStyle,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, photoSlotCount, qrBadgeTemplate, qrCornerAwayFromFace } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, type QrCorner } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES } from './types';
@@ -378,7 +378,10 @@ export interface BuilderActions {
   canAddMemoryQr: boolean;
   /** Convert the current single-photo page into a full-bleed QR memory badge,
    *  corner chosen by face-avoidance. Resolves true on success. */
-  applyMemoryQr: (fill: QrFill) => Promise<boolean>;
+  applyMemoryQr: (fill: QrFill, corner?: QrCorner) => Promise<boolean>;
+  /** Move an already-placed QR memory badge to a chosen corner (tl/tr/bl/br).
+   *  No-op unless the current page is a QR-badge page. */
+  setMemoryQrCorner: (corner: QrCorner) => void;
   /** Set (or clear, with null) the per-slot text fill for slot i. Mirrors
    *  setQrFill; clears any photo/QR at the same slot when content is non-null. */
   setSlotText: (slotIndex: number, content: SlotText | null, pageIndex?: number) => void;
@@ -1402,7 +1405,7 @@ export function useBuilderState(): BuilderActions {
    *  corner farthest from the detected face (fallback bottom-right). `fill` is
    *  the minted QrFill from AddQrModal. Returns false if the page isn't a
    *  single-photo page (the button is gated on canAddMemoryQr, so that's rare). */
-  const applyMemoryQr = useCallback(async (fill: QrFill): Promise<boolean> => {
+  const applyMemoryQr = useCallback(async (fill: QrFill, corner?: QrCorner): Promise<boolean> => {
     const page = stateRefForQr.current.page;
     const photos = stateRefForQr.current.photos;
     const size = stateRefForQr.current.size;
@@ -1410,12 +1413,20 @@ export function useBuilderState(): BuilderActions {
     const photoIdx = (page.slotFills ?? []).find((f): f is number => f != null);
     if (photoIdx == null) return false;
     const photo = photos[photoIdx];
-    let face: { x: number; y: number } | null = null;
-    if (photo?.previewUrl) {
-      try { face = await detectFaceCenter(photo.previewUrl); } catch { face = null; }
+    // A caller-chosen corner wins; otherwise auto-pick the corner away from the
+    // detected face (the smart default). Skipping face detection when the user
+    // picked a corner keeps the placement instant + exactly where they asked.
+    let chosen: QrCorner;
+    if (corner) {
+      chosen = corner;
+    } else {
+      let face: { x: number; y: number } | null = null;
+      if (photo?.previewUrl) {
+        try { face = await detectFaceCenter(photo.previewUrl); } catch { face = null; }
+      }
+      chosen = qrCornerAwayFromFace(face);
     }
-    const corner = qrCornerAwayFromFace(face);
-    const template = qrBadgeTemplate(size, corner);
+    const template = qrBadgeTemplate(size, chosen);
     if (!template) return false;
     const qrIdx = template.slots.findIndex((s) => s.kind === 'qr');
     pushSnapshot();
@@ -1442,6 +1453,40 @@ export function useBuilderState(): BuilderActions {
       };
     });
     return true;
+  }, [updateCurrentPage, pushSnapshot]);
+
+  /** Move an EXISTING QR-badge to a different corner. Swaps the badge template to
+   *  the same size + new corner, preserving the full-bleed photo (slot 0, with its
+   *  pan) and the QR fill. No face detection — the user is choosing explicitly.
+   *  No-op unless the current page is already a QR-badge page. */
+  const setMemoryQrCorner = useCallback((corner: QrCorner) => {
+    const page = stateRefForQr.current.page;
+    const size = stateRefForQr.current.size;
+    if (!page || !qrBadgeCornerOf(page.templateId)) return;
+    const template = qrBadgeTemplate(size, corner);
+    if (!template) return;
+    const qrIdx = template.slots.findIndex((s) => s.kind === 'qr');
+    const photoIdx = (page.slotFills ?? []).find((f): f is number => f != null) ?? null;
+    const existingQr = (page.qrFills ?? []).find((q) => q != null) ?? null;
+    pushSnapshot();
+    updateCurrentPage((p) => {
+      const slotFills = new Array(template.slots.length).fill(null);
+      slotFills[0] = photoIdx;
+      const qrFills = new Array(template.slots.length).fill(null);
+      qrFills[qrIdx] = existingQr;
+      return {
+        ...p,
+        templateId: template.id,
+        slotFills,
+        qrFills,
+        slotTexts: new Array(template.slots.length).fill(null),
+        ornamentFills: new Array(template.slots.length).fill(null),
+        slotScales: [p.slotScales?.[0] ?? 1, 1],
+        slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
+        slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
+        cornerBase: undefined,
+      };
+    });
   }, [updateCurrentPage, pushSnapshot]);
 
   /** Set (or clear, with null) the per-slot text fill for slot `slotIndex`.
@@ -2164,6 +2209,7 @@ export function useBuilderState(): BuilderActions {
     setQrFill,
     canAddMemoryQr,
     applyMemoryQr,
+    setMemoryQrCorner,
     setSlotText,
     setOrnamentFill,
     setTextSlotPhoto,
