@@ -84,9 +84,9 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
  *  wired and the cell is big enough) or falls back to a bare "+" bubble.
  *  ONE definition shared by photo slots AND caption boxes so the two never
  *  drift (previously copy-pasted, which the duplication gate flagged). */
-function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, onTap, zIndex }: {
+function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex }: {
   rectKey: string; left: number; top: number; width: number; height: number;
-  sx: number; showList: boolean; onTap: () => void; zIndex: number;
+  sx: number; showList: boolean; options: string[]; onTap: () => void; zIndex: number;
 }) {
   const cell = Math.min(width, height);
   const fs = Math.max(12, Math.min(28, cell * 0.15));
@@ -103,9 +103,7 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, onTa
         <>
           <span style={{ fontWeight: 800, fontSize: fs * 1.15, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>Click to add:</span>
           <div style={{ fontSize: fs, fontWeight: 700, lineHeight: 1.5, textAlign: 'left' }}>
-            <div>•&nbsp; Photo</div>
-            <div>•&nbsp; Text</div>
-            <div>•&nbsp; Ornament</div>
+            {options.map((o) => <div key={o}>•&nbsp; {o}</div>)}
           </div>
         </>
       ) : (
@@ -254,7 +252,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           return (
             <EmptyChooserBox key={`slot-${idx}`} rectKey={`slot-${idx}`}
               left={slotLeft} top={slotTop} width={slotW} height={slotH} sx={sx} zIndex={1}
-              showList={!!onChooseSlot && cell >= 84}
+              showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Text', 'Ornament']}
               onTap={() => onEmptyTap(idx)} />
           );
         }
@@ -428,7 +426,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           return (
             <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}
               left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
-              showList={cell >= 84}
+              showList={cell >= 84} options={['Photo', 'Text']}
               onTap={() => onChooseTextSlot(i)} />
           );
         }
