@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, Smartphone } from 'lucide-react';
+import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
 import { dedupeSlotFills } from './slotUtils';
@@ -505,6 +506,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const total = pages.length;
   const { setBoxText, updateTextElement, setQrFill } = useBuilderContext();
 
+  // The preview is a TWO-PAGE spread — wider than a phone screen. In portrait it
+  // shrinks to a stamp, so nudge the user to rotate. Landscape already sizes the
+  // spread to fill the screen. Desktop never sees this. A quiet escape covers the
+  // rare "rotation is locked on my phone" case so no one gets trapped.
+  const isMobile = useIsMobile();
+  const isPortrait = useIsPortrait();
+  const [rotateDismissed, setRotateDismissed] = useState(false);
+  const showRotatePrompt = isMobile && isPortrait && !rotateDismissed;
+
   // Tap a textbox in the preview → open the formatting editor for THAT page.
   // `slot` = a template caption box; `textId` = a free element (e.g. the theme title).
   const [edit, setEdit] = useState<{ pageIndex: number; slot?: number; textId?: string } | null>(null);
@@ -585,6 +595,21 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
 
   return (
     <div className="flex flex-col h-full bg-[#F5F5F5] relative">
+      {showRotatePrompt && (
+        <div className="absolute inset-0 z-[80] bg-[#FFF8F0] flex flex-col items-center justify-center text-center px-8">
+          <div className="rotate-hint mb-7">
+            <Smartphone size={62} strokeWidth={1.5} className="text-[#E8A598]" />
+          </div>
+          <h3 className="text-lg font-semibold text-[#2D2D2D] mb-2">Turn your phone sideways</h3>
+          <p className="text-sm text-[#6B6B6B] max-w-[17rem] leading-relaxed">
+            Your album opens as a two-page spread — wider than your screen. Rotate to landscape to preview it full size.
+          </p>
+          <button onClick={() => setRotateDismissed(true)}
+            className="mt-8 text-xs text-[#9B9B9B] underline underline-offset-2 py-2 px-3">
+            Preview in portrait anyway
+          </button>
+        </div>
+      )}
       {/* Toolbar */}
       <div className="flex items-center justify-between px-5 py-2.5 border-b border-[#E8E4E0] bg-white">
         <span className="text-xs text-[#6B6B6B] font-medium tabular-nums">

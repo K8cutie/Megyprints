@@ -17,6 +17,16 @@
 .memory-pulse { animation: megyMemoryPulse 1.8s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .memory-pulse { animation: none; } }
 
+/* Rotate-your-phone hint: tilt the phone glyph to landscape and back, to show
+   the gesture. Used on the mobile Preview page (portrait). */
+@keyframes megyRotateHint {
+  0%, 28%  { transform: rotate(0deg); }
+  50%, 78% { transform: rotate(-90deg); }
+  100%     { transform: rotate(0deg); }
+}
+.rotate-hint { display: inline-block; animation: megyRotateHint 3s ease-in-out infinite; transform-origin: center; }
+@media (prefers-reduced-motion: reduce) { .rotate-hint { animation: none; } }
+
 @layer base {
   :root {
     --background: 30 100% 97%;

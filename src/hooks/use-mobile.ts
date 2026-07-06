@@ -20,3 +20,26 @@ export function useIsMobile() {
 
   return !!isMobile
 }
+
+// True when the viewport is taller than it is wide. Used to nudge the user to
+// rotate on views that need the width (e.g. the two-page Preview spread). Updates
+// live on orientation change / resize.
+export function useIsPortrait() {
+  const [isPortrait, setIsPortrait] = React.useState<boolean>(
+    typeof window !== "undefined" ? window.innerHeight >= window.innerWidth : true,
+  )
+
+  React.useEffect(() => {
+    const mql = window.matchMedia("(orientation: portrait)")
+    const onChange = () => setIsPortrait(window.innerHeight >= window.innerWidth)
+    mql.addEventListener("change", onChange)
+    window.addEventListener("resize", onChange)
+    onChange()
+    return () => {
+      mql.removeEventListener("change", onChange)
+      window.removeEventListener("resize", onChange)
+    }
+  }, [])
+
+  return isPortrait
+}
