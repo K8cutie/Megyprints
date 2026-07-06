@@ -953,11 +953,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 <button
                   onClick={() => { markMemoryDiscovered(); setMemoryOpen(true); }}
                   title="Add a scannable video that plays when this page is scanned"
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all ${
-                    memoryDiscovered
-                      ? 'bg-white border border-[#F4C2A1] text-[#B0714E] hover:bg-[#FDF3EC]'
-                      : 'bg-[#E8A598] text-white memory-pulse hover:brightness-105'
-                  }`}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all bg-[#E8A598] text-white hover:brightness-105 shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}
                 >
                   <QrCode size={12} /> Add memory video
                 </button>

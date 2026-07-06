@@ -181,11 +181,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             a full-bleed photo with a scannable corner badge (face-picked corner). */}
         {actions.canAddMemoryQr && (
           <button onClick={openMemory}
-            className={`w-full mt-3 h-11 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform ${
-              memoryDiscovered
-                ? 'bg-white border-2 border-[#F4C2A1] text-[#B0714E]'
-                : 'bg-[#E8A598] text-white memory-pulse'
-            }`}>
+            className={`w-full mt-3 h-11 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform bg-[#E8A598] text-white shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}>
             <QrCode size={17} /> Add memory video
           </button>
         )}
