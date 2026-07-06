@@ -14,8 +14,10 @@ export type LayoutStyle =
 export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star';
 
 /** Slot purpose. Absent/'photo' = normal photo slot (default; back-compat).
- *  'qr' = QR living-memory slot — filled by page.qrFills[idx], not slotFills. */
-export type SlotKind = 'photo' | 'qr';
+ *  'qr' = QR living-memory slot — filled by page.qrFills[idx], not slotFills.
+ *  'ornament' = themed vector SVG, filled by page.ornamentFills[idx]. Dispatch is
+ *  content-driven (which fills array is set), NOT this tag — kept for semantics. */
+export type SlotKind = 'photo' | 'qr' | 'ornament';
 
 /** Template margin definition — expressed as 0–1 proportions of page dimensions.
  *  e.g. { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 } = 4% margin on all sides */
@@ -280,6 +282,21 @@ export interface QrFill {
   createdAt: number;
 }
 
+/** Fill data for an ORNAMENT slot — a themed vector SVG placed into a combo-box
+ *  slot via the content chooser. Positional: ornamentFills[i] pairs with
+ *  template.slots[i] exactly like slotFills[i]/qrFills[i]. Null = no ornament.
+ *  `pack`+`id` reference the asset in ornaments.ts (for re-edit + versioning).
+ *  `pngDataUrl` is the SVG rasterized to a crisp square PNG at pick-time — we
+ *  store the PNG (not the SVG string) because an SVG drawn via new Image()→
+ *  drawImage does NOT rasterize at canvas resolution and prints blurry (the same
+ *  reason QrFill stores a PNG). ONE PNG is drawn identically by all 3 renderers. */
+export interface OrnamentFill {
+  pack: string;
+  id: string;
+  pngDataUrl: string;
+  appliedAt: number;
+}
+
 /** Per-slot text content injected into a PHOTO slot via the content chooser.
  *  Positional, parallel to template.slots — index i pairs with slots[i] exactly
  *  like slotFills[i]/qrFills[i]. Null = no text at that slot. DISTINCT from the
@@ -305,6 +322,11 @@ export interface AlbumPage {
    *  rendered when neither qrFills[i] nor slotFills[i] claims the slot.
    *  Serializes as-is (local, cloud, order snapshot). */
   slotTexts?: (SlotText | null)[];
+  /** Per-slot ornament fills. Positional, parallel to template.slots — index i
+   *  is rendered when none of qrFills[i]/slotTexts[i]/slotFills[i] claims the
+   *  slot. Mutually exclusive with them (enforced by the state setters).
+   *  Serializes as-is (local, cloud, order snapshot). */
+  ornamentFills?: (OrnamentFill | null)[];
   /** Per-CAPTION-BOX photo fills. Positional, parallel to template.textSlots[j]
    *  (NOT template.slots) — mirrors slotFills but for the caption/text boxes.
    *  Null = no photo in caption box j. A caption box holds PHOTO/TEXT/QR mutually

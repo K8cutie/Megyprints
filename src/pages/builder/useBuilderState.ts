@@ -10,6 +10,7 @@ import type {
   PhotoFilters,
   SlotGeometryOverride,
   QrFill,
+  OrnamentFill,
   SlotText,
   PageTemplate,
   FrameStyle,
@@ -62,11 +63,12 @@ function reflowFills(
   slotCount: number,
   qrFills?: (unknown | null)[],
   slotTexts?: (unknown | null)[],
+  ornamentFills?: (unknown | null)[],
 ): (number | null)[] {
   const out: (number | null)[] = new Array(slotCount).fill(null);
   let ptr = 0;
   for (let i = 0; i < slotCount && ptr < existingFills.length; i++) {
-    if (qrFills?.[i] || slotTexts?.[i]) continue; // slot claimed by QR/text
+    if (qrFills?.[i] || slotTexts?.[i] || ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
     out[i] = existingFills[ptr];
     ptr++;
   }
@@ -84,6 +86,7 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
   const slotCount = template.slots.length;
   const carriedQr = (page.qrFills ?? []).slice(0, slotCount);
   const carriedText = (page.slotTexts ?? []).slice(0, slotCount);
+  const carriedOrnament = (page.ornamentFills ?? []).slice(0, slotCount);
   // Caption-box content (photo/QR) is keyed to template.textSlots, which the new
   // template also owns — carry through, trimmed to the new textSlots length.
   const textSlotCount = template.textSlots?.length ?? 0;
@@ -94,9 +97,10 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
     templateId: template.id,
     qrFills: carriedQr,
     slotTexts: carriedText,
+    ornamentFills: carriedOrnament,
     textSlotFills: carriedTextSlotFills,
     textSlotQr: carriedTextSlotQr,
-    slotFills: reflowFills(existingFills, slotCount, carriedQr, carriedText),
+    slotFills: reflowFills(existingFills, slotCount, carriedQr, carriedText, carriedOrnament),
     slotScales: new Array(slotCount).fill(1),
     slotOffsetsX: new Array(slotCount).fill(0),
     slotOffsetsY: new Array(slotCount).fill(0),
@@ -378,6 +382,9 @@ export interface BuilderActions {
   /** Set (or clear, with null) the per-slot text fill for slot i. Mirrors
    *  setQrFill; clears any photo/QR at the same slot when content is non-null. */
   setSlotText: (slotIndex: number, content: SlotText | null, pageIndex?: number) => void;
+  /** Set (or clear, with null) the ornament fill for slot i. Mirrors setQrFill;
+   *  clears any photo/QR/text at the same slot when fill is non-null. */
+  setOrnamentFill: (slotIndex: number, fill: OrnamentFill | null, pageIndex?: number) => void;
   /** Place (or clear) a PHOTO in caption box j (template.textSlots[j]). Clears
    *  the box's QR + bound caption (mutual exclusivity). */
   setTextSlotPhoto: (slotIndex: number, photoIndex: number | null, pageIndex?: number) => void;
@@ -1009,6 +1016,12 @@ export function useBuilderState(): BuilderActions {
         slotScales: [...(page.slotScales ?? [])],
         slotOffsetsX: [...(page.slotOffsetsX ?? [])],
         slotOffsetsY: [...(page.slotOffsetsY ?? [])],
+        // Deep-copy the remaining positional fills too, so the duplicate owns its
+        // own arrays (the `...page` spread would share the references). qrFills +
+        // slotTexts were a pre-existing gap; ornamentFills is new.
+        qrFills: [...(page.qrFills ?? [])],
+        slotTexts: [...(page.slotTexts ?? [])],
+        ornamentFills: [...(page.ornamentFills ?? [])],
         textSlotFills: [...(page.textSlotFills ?? [])],
         textSlotQr: [...(page.textSlotQr ?? [])],
         photos: page.photos.map((p) => ({ ...p, id: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
@@ -1090,9 +1103,10 @@ export function useBuilderState(): BuilderActions {
         photoBorderWidth: page.photoBorderWidth,
         cornerBase: page.cornerBase,
         textElements: page.textElements,
-        // Carry chooser-placed QR / text forward so a regenerate doesn't drop them.
+        // Carry chooser-placed QR / text / ornament forward so a regenerate doesn't drop them.
         qrFills: (page.qrFills ?? []).slice(0, slotCount),
         slotTexts: (page.slotTexts ?? []).slice(0, slotCount),
+        ornamentFills: (page.ornamentFills ?? []).slice(0, slotCount),
         // Caption-box photo/QR belong to template.textSlots, not template.slots —
         // preserve them so a regenerate never drops a claimed caption box.
         textSlotFills: page.textSlotFills,
@@ -1112,7 +1126,7 @@ export function useBuilderState(): BuilderActions {
       // Fewer slots: excess photos are freed back to pool
       let preserveIdx = 0;
       for (let i = 0; i < slotCount && preserveIdx < existingFills.length; i++) {
-        if (newPage.qrFills?.[i] || newPage.slotTexts?.[i]) continue;
+        if (newPage.qrFills?.[i] || newPage.slotTexts?.[i] || newPage.ornamentFills?.[i]) continue;
         newPage.slotFills[i] = existingFills[preserveIdx];
         preserveIdx++;
       }
@@ -1129,7 +1143,7 @@ export function useBuilderState(): BuilderActions {
       // Walk actual empty slots (skipping QR/text-claimed ones) and place unused photos.
       const emptySlots: number[] = [];
       for (let i = 0; i < slotCount; i++) {
-        if (newPage.qrFills?.[i] || newPage.slotTexts?.[i]) continue;
+        if (newPage.qrFills?.[i] || newPage.slotTexts?.[i] || newPage.ornamentFills?.[i]) continue;
         if (newPage.slotFills[i] === null) emptySlots.push(i);
       }
       let emptyPtr = 0;
@@ -1241,11 +1255,13 @@ export function useBuilderState(): BuilderActions {
     pushSnapshot();
     updateCurrentPage((page) => {
       const fills = [...(page.slotFills ?? [])];
-      // Mutual exclusivity: a photo claims this slot → clear any QR/text there.
+      // Mutual exclusivity: a photo claims this slot → clear any QR/text/ornament there.
       const qrFills = [...(page.qrFills ?? [])];
       const slotTexts = [...(page.slotTexts ?? [])];
+      const ornamentFills = [...(page.ornamentFills ?? [])];
       qrFills[slotIndex] = null;
       slotTexts[slotIndex] = null;
+      ornamentFills[slotIndex] = null;
       const other = fills.indexOf(photoIndex);
       if (other !== -1 && other !== slotIndex) {
         // This photo is already on the page → SWAP the two slots (taking their
@@ -1258,10 +1274,10 @@ export function useBuilderState(): BuilderActions {
         [scales[other], scales[slotIndex]] = [scales[slotIndex], scales[other]];
         [offsetsX[other], offsetsX[slotIndex]] = [offsetsX[slotIndex], offsetsX[other]];
         [offsetsY[other], offsetsY[slotIndex]] = [offsetsY[slotIndex], offsetsY[other]];
-        return { ...page, slotFills: fills, slotScales: scales, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY, qrFills, slotTexts };
+        return { ...page, slotFills: fills, slotScales: scales, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY, qrFills, slotTexts, ornamentFills };
       }
       fills[slotIndex] = photoIndex;
-      return { ...page, slotFills: fills, qrFills, slotTexts };
+      return { ...page, slotFills: fills, qrFills, slotTexts, ornamentFills };
     });
 
     // ── Face-centered auto-pan ──
@@ -1337,13 +1353,15 @@ export function useBuilderState(): BuilderActions {
     const apply = (page: AlbumPage): AlbumPage => {
       const qrFills = [...(page.qrFills ?? [])];
       qrFills[slotIndex] = fill;
-      // Mutual exclusivity: setting a QR clears any photo/text at this slot.
+      // Mutual exclusivity: setting a QR clears any photo/text/ornament at this slot.
       if (fill) {
         const fills = [...(page.slotFills ?? [])];
         const slotTexts = [...(page.slotTexts ?? [])];
+        const ornamentFills = [...(page.ornamentFills ?? [])];
         fills[slotIndex] = null;
         slotTexts[slotIndex] = null;
-        return { ...page, qrFills, slotFills: fills, slotTexts };
+        ornamentFills[slotIndex] = null;
+        return { ...page, qrFills, slotFills: fills, slotTexts, ornamentFills };
       }
       return { ...page, qrFills };
     };
@@ -1412,6 +1430,9 @@ export function useBuilderState(): BuilderActions {
         slotFills,
         qrFills,
         slotTexts: new Array(template.slots.length).fill(null),
+        // Reset ornaments to the new (badge) slot count so a stale array can't
+        // ghost an ornament onto the QR corner (mirrors the slotTexts reset).
+        ornamentFills: new Array(template.slots.length).fill(null),
         slotScales: [p.slotScales?.[0] ?? 1, 1],
         slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
         slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
@@ -1434,11 +1455,43 @@ export function useBuilderState(): BuilderActions {
       if (content) {
         const fills = [...(page.slotFills ?? [])];
         const qrFills = [...(page.qrFills ?? [])];
+        const ornamentFills = [...(page.ornamentFills ?? [])];
         fills[slotIndex] = null;
         qrFills[slotIndex] = null;
-        return { ...page, slotTexts, slotFills: fills, qrFills };
+        ornamentFills[slotIndex] = null;
+        return { ...page, slotTexts, slotFills: fills, qrFills, ornamentFills };
       }
       return { ...page, slotTexts };
+    };
+    if (pageIndex == null) {
+      updateCurrentPage(apply);
+    } else {
+      setAlbumPages((prev) => {
+        const next = [...prev];
+        if (next[pageIndex]) next[pageIndex] = apply(next[pageIndex]);
+        return next;
+      });
+    }
+  }, [updateCurrentPage]);
+
+  /** Set (or clear, with null) the ornament fill for slot `slotIndex`. Mirrors
+   *  setQrFill/setSlotText: setting a non-null ornament clears any photo/QR/text
+   *  at the same slot (mutual exclusivity). pageIndex defaults to current page. */
+  const setOrnamentFill = useCallback((slotIndex: number, fill: OrnamentFill | null, pageIndex?: number) => {
+    pushSnapshot();
+    const apply = (page: AlbumPage): AlbumPage => {
+      const ornamentFills = [...(page.ornamentFills ?? [])];
+      ornamentFills[slotIndex] = fill;
+      if (fill) {
+        const fills = [...(page.slotFills ?? [])];
+        const qrFills = [...(page.qrFills ?? [])];
+        const slotTexts = [...(page.slotTexts ?? [])];
+        fills[slotIndex] = null;
+        qrFills[slotIndex] = null;
+        slotTexts[slotIndex] = null;
+        return { ...page, ornamentFills, slotFills: fills, qrFills, slotTexts };
+      }
+      return { ...page, ornamentFills };
     };
     if (pageIndex == null) {
       updateCurrentPage(apply);
@@ -1525,7 +1578,7 @@ export function useBuilderState(): BuilderActions {
       let photoIdx = 0;
       for (let i = 0; i < slotCount; i++) {
         if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
-        if (page.qrFills?.[i] || page.slotTexts?.[i]) continue; // slot claimed by QR/text
+        if (page.qrFills?.[i] || page.slotTexts?.[i] || page.ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
         if (fills[i] === null && photoIdx < uploadedPhotos.length) {
           while (photoIdx < uploadedPhotos.length && fills.includes(photoIdx)) {
             photoIdx++;
@@ -2112,6 +2165,7 @@ export function useBuilderState(): BuilderActions {
     canAddMemoryQr,
     applyMemoryQr,
     setSlotText,
+    setOrnamentFill,
     setTextSlotPhoto,
     setTextSlotQr,
     addPhotoToCanvas,

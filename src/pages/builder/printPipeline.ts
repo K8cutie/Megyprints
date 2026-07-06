@@ -9,7 +9,8 @@ import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
-import type { QrFill, SlotText } from './types';
+import { ornamentFit } from './ornaments';
+import type { QrFill, OrnamentFill, SlotText } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /** Print resolution in DPI (dots per inch) */
@@ -107,9 +108,9 @@ async function renderPageManually(
   // keep-out on the inner (spine) edge, then place each slot as a fraction of
   // that safe area. (Slot coords are fractions 0–1, not percentages.)
   const template = page.templateId ? getTemplateById(page.templateId) : null;
-  // NOTE: `|| page.qrFills || page.slotTexts` so a QR-only or text-only page
-  // (no photo fills) still renders its content-driven slots.
-  if (template && (page.slotFills || page.qrFills || page.slotTexts)) {
+  // NOTE: `|| page.qrFills || page.slotTexts || page.ornamentFills` so a QR-only,
+  // text-only or ornament-only page (no photo fills) still renders its content.
+  if (template && (page.slotFills || page.qrFills || page.slotTexts || page.ornamentFills)) {
     const adapted = adaptTemplateToOrientation(template, W, H);
     const m = marginForTemplate(adapted, adapted.margin, albumSize, pageIndex);
     const safeX = W * m.left;
@@ -125,11 +126,17 @@ async function renderPageManually(
       const sw = slot.width * safeW;
       const sh = slot.height * safeH;
 
-      // Content precedence is DRIVEN BY page data (not slot.kind): QR → text →
-      // photo. QR uses qrFills[i]; per-slot text uses slotTexts[i].
+      // Content precedence is DRIVEN BY page data (not slot.kind): QR → ornament
+      // → text → photo. QR uses qrFills[i]; ornament uses ornamentFills[i];
+      // per-slot text uses slotTexts[i].
       const qr = page.qrFills?.[i] ?? null;
       if (qr) {
         await renderSlotQr(ctx, qr, sx, sy, sw, sh);
+        continue;
+      }
+      const ornament = page.ornamentFills?.[i] ?? null;
+      if (ornament) {
+        await renderSlotOrnament(ctx, ornament, sx, sy, sw, sh);
         continue;
       }
       const st = page.slotTexts?.[i] ?? null;
@@ -379,6 +386,21 @@ async function renderSlotQr(
     const img = await loadImage(qr.qrPngDataUrl);
     ctx.drawImage(img, dx, dy, side, side);
   } catch { /* QR failed to load — leave the white square (still prints clean) */ }
+}
+
+/** Render a single slot ornament at print resolution. The stored pngDataUrl is a
+ *  crisp square PNG (rasterized at pick-time), so drawImage prints sharp — no
+ *  white backing (transparent accent), contained via ornamentFit like all renderers. */
+async function renderSlotOrnament(
+  ctx: CanvasRenderingContext2D,
+  ornament: OrnamentFill,
+  sx: number, sy: number, sw: number, sh: number,
+) {
+  const { dx, dy, side } = ornamentFit(sx, sy, sw, sh);
+  try {
+    const img = await loadImage(ornament.pngDataUrl);
+    ctx.drawImage(img, dx, dy, side, side);
+  } catch { /* ornament failed to load — leave the slot empty (clean) */ }
 }
 
 /** Render a single slot photo at print resolution */

@@ -14,6 +14,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
+import { ornamentFit } from './ornaments';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -104,7 +105,7 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, onTa
           <div style={{ fontSize: fs, fontWeight: 700, lineHeight: 1.5, textAlign: 'left' }}>
             <div>•&nbsp; Photo</div>
             <div>•&nbsp; Text</div>
-            <div>•&nbsp; QR</div>
+            <div>•&nbsp; Ornament</div>
           </div>
         </>
       ) : (
@@ -136,12 +137,29 @@ function QrSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zI
   );
 }
 
+/** Ornament square — the ornament PNG contained (with breathing-room padding)
+ *  inside a cell, sized/positioned via ornamentFit(). Transparent (no backing) so
+ *  it reads as a decorative accent on the page. Shares geometry with Fabric + print. */
+function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zIndex }: {
+  rectKey: string; cellLeft: number; cellTop: number; cellW: number; cellH: number;
+  dataUrl: string; onTap?: () => void; zIndex: number;
+}) {
+  const { dx, dy, side } = ornamentFit(cellLeft, cellTop, cellW, cellH);
+  return (
+    <div key={rectKey} className="absolute"
+      onClick={onTap ? (e) => { e.stopPropagation(); onTap(); } : undefined}
+      style={{ zIndex, left: dx, top: dy, width: side, height: side, cursor: onTap ? 'pointer' : undefined }}>
+      <img src={dataUrl} alt="Ornament" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+    </div>
+  );
+}
+
 /** Page renderer — always renders from LIVE page data so Preview matches the
  *  real pages. (Cached canvas snapshots were unreliable: only captured for
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onTextSlotPhotoTap, onTextSlotQrTap }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onTextSlotPhotoTap, onTextSlotQrTap }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -149,6 +167,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   onTextTap?: (id: string) => void;
   /** Tap a QR living-memory slot (empty → add; filled → edit). Present only in editable contexts. */
   onQrSlotTap?: (slotIndex: number) => void;
+  /** Tap a filled ornament slot → re-open the ornament picker. Present only in editable contexts. */
+  onOrnamentSlotTap?: (slotIndex: number) => void;
   /** Tap a filled per-slot TEXT to re-open its editor. Present only in editable contexts. */
   onSlotTextTap?: (slotIndex: number) => void;
   /** Tap an EMPTY slot's "+" → open the content chooser (photo / text / QR).
@@ -187,8 +207,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         //   qrFills[i] → QR (drawn by the qrFills map below) → skip here.
         //   slotTexts[i] → text rendered in this slot's rect.
         //   slotFills[i] → photo.
+        //   ornamentFills[i] → ornament (drawn by the ornamentFills map below) → skip here.
         //   else empty + editable → a "+" that opens the content chooser.
-        if (page.qrFills?.[idx]) return null;
+        if (page.qrFills?.[idx] || page.ornamentFills?.[idx]) return null;
         const slotLeft = safeX + slot.x * safeW;
         const slotTop = safeY + slot.y * safeH;
         const slotW = slot.width * safeW;
@@ -302,6 +323,18 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             cellW={slot.width * safeW} cellH={slot.height * safeH}
             dataUrl={qr.qrPngDataUrl}
             onTap={onQrSlotTap ? () => onQrSlotTap(idx) : undefined} />
+        );
+      })}
+      {/* Ornament content — content-driven by page.ornamentFills on ANY slot. */}
+      {template?.slots.map((slot, idx) => {
+        const ornament = page.ornamentFills?.[idx] ?? null;
+        if (!ornament) return null;
+        return (
+          <OrnamentSquare key={`ornament-${idx}`} rectKey={`ornament-${idx}`} zIndex={2}
+            cellLeft={safeX + slot.x * safeW} cellTop={safeY + slot.y * safeH}
+            cellW={slot.width * safeW} cellH={slot.height * safeH}
+            dataUrl={ornament.pngDataUrl}
+            onTap={onOrnamentSlotTap ? () => onOrnamentSlotTap(idx) : undefined} />
         );
       })}
       {page.textElements?.filter((t) => t.boxIndex == null).map((t, i) => (

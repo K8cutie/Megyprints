@@ -14,6 +14,7 @@ import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
+import AddOrnamentModal from './AddOrnamentModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
 
@@ -30,6 +31,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null); // per-slot text (chooser)
   const [editTextId, setEditTextId] = useState<string | null>(null); // tap-to-edit free text (theme title)
   const [qrEditSlot, setQrEditSlot] = useState<number | null>(null); // tap-to-add/edit QR memory
+  const [ornamentEditSlot, setOrnamentEditSlot] = useState<number | null>(null); // themed-ornament picker target
   const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser
   const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null); // caption-box photo target
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null); // caption-box QR target
@@ -154,6 +156,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)}
               onTextTap={(textId) => setEditTextId(textId)}
               onQrSlotTap={(slot) => setQrEditSlot(slot)}
+              onOrnamentSlotTap={(slot) => setOrnamentEditSlot(slot)}
               onChooseTextSlot={(slotIndex) => setChooserTextSlot(slotIndex)}
               onTextSlotPhotoTap={(slotIndex) => setTextReplaceSlot(slotIndex)}
               onTextSlotQrTap={(slot) => setTextSlotQrEditSlot(slot)} />}
@@ -193,13 +196,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         )}
       </div>
 
-      {/* Empty-slot content chooser — Photo / Text / QR (bottom sheet) */}
+      {/* Empty-slot content chooser — Photo / Text / Ornament (bottom sheet) */}
       {chooserSlot !== null && (
         <SlotChooser
           mobile
           onPhoto={() => setReplaceSlot(chooserSlot)}
           onText={() => setSlotTextEditSlot(chooserSlot)}
-          onQr={() => setQrEditSlot(chooserSlot)}
+          onOrnament={() => setOrnamentEditSlot(chooserSlot)}
           onClose={() => setChooserSlot(null)}
         />
       )}
@@ -302,6 +305,14 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           onSave={(fill: QrFill) => { actions.setQrFill(qrEditSlot, fill, idx); setQrEditSlot(null); }}
           onRemove={() => { actions.setQrFill(qrEditSlot, null, idx); setQrEditSlot(null); }}
           onClose={() => setQrEditSlot(null)}
+        />
+      )}
+      {ornamentEditSlot !== null && (
+        <AddOrnamentModal
+          initial={page?.ornamentFills?.[ornamentEditSlot] ?? null}
+          onSave={(fill) => { actions.setOrnamentFill(ornamentEditSlot, fill, idx); setOrnamentEditSlot(null); }}
+          onRemove={() => { actions.setOrnamentFill(ornamentEditSlot, null, idx); setOrnamentEditSlot(null); }}
+          onClose={() => setOrnamentEditSlot(null)}
         />
       )}
       {/* New living-memory: convert this single-photo page to a corner badge.

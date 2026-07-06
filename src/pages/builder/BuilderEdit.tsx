@@ -22,6 +22,7 @@ import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
+import AddOrnamentModal from './AddOrnamentModal';
 import SlotChooser from './SlotChooser';
 import { getTemplateById } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
@@ -152,6 +153,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       if (containerMode) return;
       setQrEditSlot(slotIndex);
     }, [containerMode]),
+    onOrnamentSlotClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
+      setOrnamentEditSlot(slotIndex);
+    }, [containerMode]),
     onSlotTextClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
       setSlotTextEditSlot(slotIndex);
@@ -199,6 +204,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   // Per-slot text (chooser "Add Text") target — distinct from the caption box above.
   const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null);
   const [qrEditSlot, setQrEditSlot] = useState<number | null>(null);
+  // Ornament picker target (main-slot chooser "Add Ornament", or tapping a placed ornament).
+  const [ornamentEditSlot, setOrnamentEditSlot] = useState<number | null>(null);
   // Empty caption-box chooser + QR target, and a flag routing the photo picker
   // to a caption box (setTextSlotPhoto) instead of a photo slot (fillSlot).
   const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null);
@@ -722,13 +729,23 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* Empty-slot content chooser — Photo / Text / QR (desktop modal) */}
+      {/* Empty-slot content chooser — Photo / Text / Ornament (desktop modal) */}
       {chooserSlot !== null && (
         <SlotChooser
           onPhoto={() => { setSelectedSlotForPicker(chooserSlot); setShowPhotoPicker(true); }}
           onText={() => setSlotTextEditSlot(chooserSlot)}
-          onQr={() => setQrEditSlot(chooserSlot)}
+          onOrnament={() => setOrnamentEditSlot(chooserSlot)}
           onClose={() => setChooserSlot(null)}
+        />
+      )}
+
+      {/* Ornament picker (chooser "Add Ornament", or tapping a placed ornament). */}
+      {ornamentEditSlot !== null && (
+        <AddOrnamentModal
+          initial={actions.currentPage?.ornamentFills?.[ornamentEditSlot] ?? null}
+          onSave={(fill) => { actions.setOrnamentFill(ornamentEditSlot, fill); setOrnamentEditSlot(null); }}
+          onRemove={() => { actions.setOrnamentFill(ornamentEditSlot, null); setOrnamentEditSlot(null); }}
+          onClose={() => setOrnamentEditSlot(null)}
         />
       )}
 
