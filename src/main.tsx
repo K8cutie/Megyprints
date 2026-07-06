@@ -52,10 +52,22 @@ if ('serviceWorker' in navigator) {
     reloading = true
     window.location.reload()
   })
-  // Proactively check for a newer SW on every load instead of waiting for the
-  // browser's periodic (up to 24h) check — so a fresh deploy is picked up on the
-  // next visit, not a day later.
-  navigator.serviceWorker.getRegistrations().then((regs) => {
-    for (const r of regs) r.update()
-  }).catch(() => { /* ignore */ })
+  // Proactively poll for a freshly deployed service worker so an ALREADY-OPEN app
+  // (and an installed PWA, which rarely does a full navigation) picks up a new
+  // build ON ITS OWN — not only on a cold load, and not a day later (the browser's
+  // own check can be up to 24h). When a newer SW is found it self-activates
+  // (skipWaiting + clientsClaim), fires `controllerchange`, and the handler above
+  // reloads into the fresh bundle. The in-progress album persists in localStorage,
+  // so the reload re-hydrates it — no lost work.
+  const checkForUpdate = () => {
+    navigator.serviceWorker.getRegistrations()
+      .then((regs) => { for (const r of regs) r.update() })
+      .catch(() => { /* offline / unsupported — just try again next tick */ })
+  }
+  checkForUpdate()                          // on this load
+  setInterval(checkForUpdate, 60_000)       // every minute while the app stays open
+  document.addEventListener('visibilitychange', () => {
+    // And the moment the user returns to the tab/PWA (e.g. after we shipped a fix).
+    if (document.visibilityState === 'visible') checkForUpdate()
+  })
 }
