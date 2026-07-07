@@ -95,6 +95,10 @@ interface BuilderSetupProps {
 }
 
 export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: BuilderSetupProps) {
+  // Album theme — powers the AI graphic picker (theme → keywords → vectors). Stored
+  // locally; no photos involved, so it stays private. Optional.
+  const [theme, setTheme] = useState(() => { try { return localStorage.getItem('megy-album-theme') || ''; } catch { return ''; } });
+  const onThemeChange = (v: string) => { setTheme(v); try { localStorage.setItem('megy-album-theme', v); } catch { /* ignore */ } };
   return (
     <div className="h-full flex flex-col items-center justify-center bg-[#FFFBF7] overflow-y-auto px-4 py-8">
       {/* Megy — center attraction */}
@@ -134,6 +138,22 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
               onSelect={() => onSizeChange(size.preset)}
             />
           ))}
+        </div>
+
+        {/* Album theme — optional; drives the AI graphic suggestions later */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-[#2D2D2D] mb-1.5 text-center">
+            Is there a specific theme for this album?
+          </label>
+          <input
+            value={theme}
+            onChange={(e) => onThemeChange(e.target.value)}
+            placeholder="e.g. beach trip, 1st birthday, wedding (optional)"
+            className="w-full border border-[#E8E8E8] rounded-xl px-4 py-3 text-sm text-center outline-none focus:border-[#F4C2A1] transition-colors"
+          />
+          <p className="text-[11px] text-[#9B9B9B] mt-1.5 text-center">
+            We'll suggest graphics that match — drop them into your pages.
+          </p>
         </div>
 
         {/* Start Creating */}

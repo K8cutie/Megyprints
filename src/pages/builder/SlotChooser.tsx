@@ -22,27 +22,27 @@ interface SlotChooserProps {
   onText: () => void;
   /** Deprecated: QR moved to the corner-badge flow. Kept optional for callers. */
   onQr?: () => void;
-  /** Open the themed-ornament picker for this box. Optional — when omitted, the
-   *  Ornament option is hidden. */
-  onOrnament?: () => void;
+  /** Open the AI graphic picker (Iconify vectors matched to the album theme).
+   *  Optional — when omitted, the Graphic option is hidden. */
+  onGraphic?: () => void;
   onClose: () => void;
   /** Render as a bottom sheet (phone) instead of a centered modal (desktop). */
   mobile?: boolean;
 }
 
 interface Option {
-  key: 'photo' | 'text' | 'ornament';
+  key: 'photo' | 'text' | 'graphic';
   label: string;
   desc: string;
   Icon: typeof ImageIcon;
   run: () => void;
 }
 
-export default function SlotChooser({ onPhoto, onText, onOrnament, onClose, mobile }: SlotChooserProps) {
+export default function SlotChooser({ onPhoto, onText, onGraphic, onClose, mobile }: SlotChooserProps) {
   const options: Option[] = [
     ...(onPhoto ? [{ key: 'photo' as const, label: 'Add Photo', desc: 'Place one of your photos here', Icon: ImageIcon, run: onPhoto }] : []),
     { key: 'text', label: 'Add Text', desc: 'Type a caption or title in this box', Icon: Type, run: onText },
-    ...(onOrnament ? [{ key: 'ornament' as const, label: 'Add Ornament', desc: 'Pick a themed graphic — travel, love, kids…', Icon: Sparkles, run: onOrnament }] : []),
+    ...(onGraphic ? [{ key: 'graphic' as const, label: 'Add Graphic', desc: 'A vector matched to your album’s theme', Icon: Sparkles, run: onGraphic }] : []),
   ];
 
   const pick = (run: () => void) => { run(); onClose(); };

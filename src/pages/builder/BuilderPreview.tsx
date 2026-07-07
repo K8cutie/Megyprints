@@ -257,7 +257,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           return (
             <EmptyChooserBox key={`slot-${idx}`} rectKey={`slot-${idx}`}
               left={slotLeft} top={slotTop} width={slotW} height={slotH} sx={sx} zIndex={1}
-              showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Text']}
+              showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Text', 'Graphic']}
               onTap={() => onEmptyTap(idx)} />
           );
         }

@@ -107,7 +107,11 @@ export function ornamentFit(sx: number, sy: number, sw: number, sh: number, pad 
  *  Called once when the user picks an ornament; the returned PNG is stored in
  *  the fill and drawn identically by every renderer. Rejects on load failure. */
 export function rasterizeOrnamentPng(svg: string, px = 1024): Promise<string> {
-  const sized = svg.replace('<svg ', `<svg width="${px}" height="${px}" `);
+  // Normalize the root <svg> to exactly px×px. STRIP any existing width/height first
+  // (fetched Iconify vectors ship their own) — otherwise we'd emit duplicate
+  // attributes and the SVG fails to load. viewBox is preserved so it scales crisply.
+  const sized = svg.replace(/<svg\b([^>]*)>/i, (_m, attrs) =>
+    `<svg width="${px}" height="${px}"${String(attrs).replace(/\s+(?:width|height)\s*=\s*"[^"]*"/gi, '')}>`);
   const src = `data:image/svg+xml;utf8,${encodeURIComponent(sized)}`;
   return new Promise((resolve, reject) => {
     const img = new Image();

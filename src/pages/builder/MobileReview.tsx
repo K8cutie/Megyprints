@@ -14,7 +14,7 @@ import { getCanvasDimensions } from './layouts';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
-import AddOrnamentModal from './AddOrnamentModal';
+import AiClipartModal from './AiClipartModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
 
@@ -34,7 +34,8 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [ornamentEditSlot, setOrnamentEditSlot] = useState<number | null>(null); // tap a placed ornament (editing older albums; adding retired)
   const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null); // caption-box photo target
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null); // caption-box QR target
-  const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null); // combo-box ornament target
+  const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null); // combo-box graphic target
+  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser (Text / Graphic)
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
   const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null); // corner for a NEW badge (null = Auto)
   // Pulse the button until it's been clicked once (discovery, not a nag).
@@ -161,7 +162,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onTextTap={(textId) => setEditTextId(textId)}
               onQrSlotTap={(slot) => setQrEditSlot(slot)}
               onOrnamentSlotTap={(slot) => setOrnamentEditSlot(slot)}
-              onChooseTextSlot={(slotIndex) => setEditSlot(slotIndex)}
+              onChooseTextSlot={(slotIndex) => setChooserTextSlot(slotIndex)}
               onTextSlotPhotoTap={(slotIndex) => setTextReplaceSlot(slotIndex)}
               onTextSlotQrTap={(slot) => setTextSlotQrEditSlot(slot)}
               onTextSlotOrnamentTap={(slot) => setTextSlotOrnamentEditSlot(slot)} />}
@@ -201,13 +202,24 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         )}
       </div>
 
-      {/* Empty-slot content chooser — Photo / Text / Ornament (bottom sheet) */}
+      {/* Empty-slot content chooser — Photo / Text / Graphic (bottom sheet) */}
       {chooserSlot !== null && (
         <SlotChooser
           mobile
           onPhoto={() => setReplaceSlot(chooserSlot)}
           onText={() => setSlotTextEditSlot(chooserSlot)}
+          onGraphic={() => setOrnamentEditSlot(chooserSlot)}
           onClose={() => setChooserSlot(null)}
+        />
+      )}
+
+      {/* Empty combo/caption-box chooser — Text or an AI-matched Graphic. */}
+      {chooserTextSlot !== null && (
+        <SlotChooser
+          mobile
+          onText={() => setEditSlot(chooserTextSlot)}
+          onGraphic={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
+          onClose={() => setChooserTextSlot(null)}
         />
       )}
 
@@ -267,7 +279,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
       )}
       {/* Combo/caption-box ornament picker */}
       {textSlotOrnamentEditSlot !== null && (
-        <AddOrnamentModal
+        <AiClipartModal
           initial={page?.textSlotOrnament?.[textSlotOrnamentEditSlot] ?? null}
           onSave={(fill) => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, fill, idx); setTextSlotOrnamentEditSlot(null); }}
           onRemove={() => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, null, idx); setTextSlotOrnamentEditSlot(null); }}
@@ -312,7 +324,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         />
       )}
       {ornamentEditSlot !== null && (
-        <AddOrnamentModal
+        <AiClipartModal
           initial={page?.ornamentFills?.[ornamentEditSlot] ?? null}
           onSave={(fill) => { actions.setOrnamentFill(ornamentEditSlot, fill, idx); setOrnamentEditSlot(null); }}
           onRemove={() => { actions.setOrnamentFill(ornamentEditSlot, null, idx); setOrnamentEditSlot(null); }}
