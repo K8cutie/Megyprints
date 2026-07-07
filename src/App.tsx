@@ -35,6 +35,11 @@ export default function App() {
     if (!ret) return;
     try { sessionStorage.removeItem('megy-auth-return'); } catch { /* ignore */ }
     if (ret !== '#/' && window.location.hash !== ret) window.location.hash = ret;
+    // OAuth lands us on a real path (redirectTo /profile) that the SPA fallback
+    // serves — tidy the URL bar back to the root so it isn't ".../profile#/…".
+    if (window.location.pathname !== '/') {
+      try { window.history.replaceState(null, '', '/' + (window.location.hash || '')); } catch { /* ignore */ }
+    }
   }, []);
 
   return (

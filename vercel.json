@@ -5,7 +5,8 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "rewrites": [
-    { "source": "/m/:code", "destination": "/api/m?code=:code" }
+    { "source": "/m/:code", "destination": "/api/m?code=:code" },
+    { "source": "/((?!api/|m/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

@@ -74,7 +74,8 @@ export function WelcomeBackModal({ onViewProjects }: WelcomeBackModalProps) {
 
   const handleCreateNew = useCallback(() => {
     handleClose();
-    window.location.href = '/builder';
+    // HashRouter route — a bare "/builder" path 404s on Vercel (and lands on Home).
+    window.location.hash = '#/builder';
   }, [handleClose]);
 
   const firstName = getDisplayName(user);
