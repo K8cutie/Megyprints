@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
+import { WORDART_SHADOW } from './wordArt';
 import type { QrFill, OrnamentFill } from './types';
 import type {
   FabricCanvas,
@@ -167,7 +168,7 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const textData = page.textElements.map((t) =>
     `${t.id}:${t.text.slice(0,20)}:${t.fontSize}:${Math.round(t.x)}:${Math.round(t.y)}:${t.rotation}` +
     `:${t.fontFamily ?? ''}:${t.color ?? ''}:${t.bold ? 1 : 0}:${t.italic ? 1 : 0}:${t.underline ? 1 : 0}:${t.alignment ?? ''}:${t.opacity ?? 100}:${t.backgroundColor ?? ''}` +
-    `:${t.width ?? ''}:${t.scaleX ?? ''}:${t.scaleY ?? ''}`
+    `:${t.width ?? ''}:${t.scaleX ?? ''}:${t.scaleY ?? ''}:${t.outlineColor ?? ''}:${t.outlineWidth ?? ''}:${t.shadow ? 1 : 0}`
   ).join('|');
   const slotGeoms = page.slotGeometries ? page.slotGeometries.map((g) => `${g?.x ?? ''}:${g?.y ?? ''}:${g?.width ?? ''}:${g?.height ?? ''}`).join('|') : '';
   // QR fills — so adding/relinking/removing a QR memory repaints the canvas.
@@ -178,7 +179,7 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   // and the editor desynced from PageView/print until a page-nav.
   const slotTextData = page.slotTexts
     ? page.slotTexts.map((s) => s
-        ? `${s.text.slice(0,20)}:${s.fontSize}:${s.fontFamily ?? ''}:${s.color ?? ''}:${s.bold ? 1 : 0}:${s.italic ? 1 : 0}:${s.underline ? 1 : 0}:${s.alignment ?? ''}`
+        ? `${s.text.slice(0,20)}:${s.fontSize}:${s.fontFamily ?? ''}:${s.color ?? ''}:${s.bold ? 1 : 0}:${s.italic ? 1 : 0}:${s.underline ? 1 : 0}:${s.alignment ?? ''}:${s.outlineColor ?? ''}:${s.outlineWidth ?? ''}:${s.shadow ? 1 : 0}`
         : '').join('|')
     : '';
   // Caption-box photo/QR content (page.textSlotFills / textSlotQr) — so placing
@@ -1158,6 +1159,10 @@ function renderTemplateSlots(
         fontStyle: st.italic ? 'italic' : 'normal',
         underline: st.underline,
         textAlign: st.alignment,
+        stroke: st.outlineWidth && st.outlineColor ? st.outlineColor : undefined,
+        strokeWidth: st.outlineWidth && st.outlineColor ? st.outlineWidth : 0,
+        paintFirst: 'stroke',
+        shadow: st.shadow ? new fab.Shadow({ color: WORDART_SHADOW.color, blur: WORDART_SHADOW.blur, offsetX: WORDART_SHADOW.offsetX, offsetY: WORDART_SHADOW.offsetY }) : undefined,
         selectable: false,
         evented: true,
         editable: false,
@@ -1691,6 +1696,10 @@ function renderScene(
       fontStyle: text.italic ? 'italic' : 'normal',
       underline: text.underline,
       textAlign: text.alignment,
+      stroke: text.outlineWidth && text.outlineColor ? text.outlineColor : undefined,
+      strokeWidth: text.outlineWidth && text.outlineColor ? text.outlineWidth : 0,
+      paintFirst: 'stroke',
+      shadow: text.shadow ? new fab.Shadow({ color: WORDART_SHADOW.color, blur: WORDART_SHADOW.blur, offsetX: WORDART_SHADOW.offsetX, offsetY: WORDART_SHADOW.offsetY }) : undefined,
       angle: text.rotation,
       opacity: text.opacity / 100,
       /* Free text (a title/quote) stays fully movable + inline-editable. A caption
@@ -1736,27 +1745,17 @@ function renderScene(
       selectable: false, evented: true, hoverCursor: 'pointer',
     });
     box.slotId = `${SLOT_ID}-textbox-${i}`;
-    // Empty combo/caption box opens the Text-or-Ornament chooser — spell that out
-    // to match the DOM preview. Caption boxes are often wide/short, so fall back
-    // to a single line when there isn't room for the bulleted list. (No Photo:
-    // photos go in the real photo slots, not this accent box.)
-    const label = r.height >= 78
-      ? new fab.Text('Click to add:\n•  Text\n•  Ornament', {
-          left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
-          fontSize: Math.max(13, Math.min(28, Math.min(r.width, r.height) * 0.13)),
-          fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700', textAlign: 'center', lineHeight: 1.35,
-          selectable: false, evented: false,
-        })
-      : new fab.Text('＋  Add: Text · Ornament', {
-          left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
-          fontSize: Math.max(12, Math.min(r.height * 0.5, r.width * 0.07)),
-          fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700',
-          selectable: false, evented: false,
-        });
+    // Empty combo/caption box is for text (ornaments retired) — tapping opens the
+    // caption editor directly.
+    const label = new fab.Text('Tap to add text', {
+      left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
+      fontSize: Math.max(12, Math.min(24, Math.min(r.width, r.height) * 0.12)),
+      fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700', textAlign: 'center',
+      selectable: false, evented: false,
+    });
     label.slotId = `${SLOT_ID}-textbox-label-${i}`;
     canvas.add(box);
     canvas.add(label);
-    // Empty combo/caption box → open the Text-or-Ornament chooser.
     box.on('mousedown', () => onTextSlotEmptyClick(i));
   });
 

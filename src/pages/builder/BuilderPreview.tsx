@@ -16,6 +16,7 @@ import AddQrModal from './AddQrModal';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
+import { wordArtDomStyle } from './wordArt';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -234,6 +235,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontWeight: st.bold ? 'bold' : 'normal', fontStyle: st.italic ? 'italic' : 'normal',
                 textDecoration: st.underline ? 'underline' : 'none', color: st.color || '#2D2D2D',
                 lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                ...wordArtDomStyle(st, sx),
               }}>{st.text}</span>
             </div>
           );
@@ -255,7 +257,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           return (
             <EmptyChooserBox key={`slot-${idx}`} rectKey={`slot-${idx}`}
               left={slotLeft} top={slotTop} width={slotW} height={slotH} sx={sx} zIndex={1}
-              showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Text', 'Ornament']}
+              showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Text']}
               onTap={() => onEmptyTap(idx)} />
           );
         }
@@ -351,6 +353,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           fontStyle: t.italic ? 'italic' : 'normal', color: t.color || '#2D2D2D',
           display: 'flex', alignItems: 'center', justifyContent: t.alignment || 'center',
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
+          ...wordArtDomStyle(t, sx),
         }}>{t.text}</div>
       ))}
       {/* Template text boxes. Filled → formatted text clipped to the box; empty →
@@ -403,6 +406,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontWeight: boxed.bold ? 'bold' : 'normal', fontStyle: boxed.italic ? 'italic' : 'normal',
                 textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
                 lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                ...wordArtDomStyle(boxed, sx),
               }}>{boxed.text}</span>
             </div>
           );
@@ -435,12 +439,11 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         // MobileTextEditor) WITHOUT passing `editable`. Gating the tap on
         // `editable` made empty caption boxes dead on that surface — a regression.
         // So: chooser needs editable; the legacy tap-to-add only needs onTextSlotTap.
-        const cell = Math.min(boxW, boxH);
         if (editable && onChooseTextSlot) {
           return (
             <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}
               left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
-              showList={cell >= 84} options={['Text', 'Ornament']}
+              showList={false} options={['Text']}
               onTap={() => onChooseTextSlot(i)} />
           );
         }
@@ -526,6 +529,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       fontFamily: el?.fontFamily ?? 'Georgia, "Times New Roman", serif',
       color: el?.color ?? '#2D2D2D', bold: el?.bold ?? false, italic: el?.italic ?? false,
       underline: el?.underline ?? false, alignment: el?.alignment ?? 'center',
+      outlineColor: el?.outlineColor, outlineWidth: el?.outlineWidth, shadow: el?.shadow,
     };
   };
   const buildBoxInitial = (pageIndex: number, slot: number): BoxTextContent => {
@@ -536,6 +540,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         text: existing.text, fontSize: existing.fontSize, fontFamily: existing.fontFamily,
         color: existing.color, bold: existing.bold, italic: existing.italic,
         underline: existing.underline, alignment: existing.alignment,
+        outlineColor: existing.outlineColor, outlineWidth: existing.outlineWidth, shadow: existing.shadow,
       };
     }
     const ts = (page?.templateId ? getTemplateById(page.templateId) : null)?.textSlots?.[slot];

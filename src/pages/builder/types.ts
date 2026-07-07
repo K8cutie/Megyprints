@@ -236,6 +236,14 @@ export interface TextStyle {
   italic: boolean;
   underline: boolean;
   alignment: 'left' | 'center' | 'right';
+  /** WordArt-style text effects (all optional, back-compat: absent = plain).
+   *  outline draws a contrasting stroke around the glyphs; shadow adds a soft
+   *  drop shadow. Rendered identically by all three renderers via lib/wordArt. */
+  outlineColor?: string;
+  /** Outline stroke width in DESIGN px (each renderer scales it like fontSize).
+   *  0/undefined = no outline. */
+  outlineWidth?: number;
+  shadow?: boolean;
 }
 
 export interface TextElement extends TextStyle {

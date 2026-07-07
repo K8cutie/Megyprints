@@ -10,6 +10,7 @@ import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
+import { drawWordArtText } from './wordArt';
 import type { QrFill, OrnamentFill, SlotText } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
@@ -681,13 +682,13 @@ function renderTextElement(
     // this, box-bound text (x=y=0) printed in the top-left corner.
     const pad = slot.w * 0.04;
     const cx = align === 'left' ? slot.x + pad : align === 'right' ? slot.x + slot.w - pad : slot.x + slot.w / 2;
-    ctx.fillText(text.text, cx, slot.y + slot.h / 2);
+    drawWordArtText(ctx, text.text, cx, slot.y + slot.h / 2, text, W / 576);
   } else if (text.rotation) {
     ctx.translate(text.x * (W / 576), text.y * (W / 576));
     ctx.rotate((text.rotation * Math.PI) / 180);
-    ctx.fillText(text.text, 0, 0);
+    drawWordArtText(ctx, text.text, 0, 0, text, W / 576);
   } else {
-    ctx.fillText(text.text, text.x * (W / 576), text.y * (W / 576));
+    drawWordArtText(ctx, text.text, text.x * (W / 576), text.y * (W / 576), text, W / 576);
   }
 
   ctx.restore();
@@ -722,7 +723,7 @@ function renderSlotText(
   const pad = w * 0.04;
   const cx = align === 'left' ? x + pad : align === 'right' ? x + w - pad : x + w / 2;
   const cy = y + h / 2;
-  ctx.fillText(st.text, cx, cy);
+  drawWordArtText(ctx, st.text, cx, cy, st, W / 576);
 
   if (st.underline) {
     const metrics = ctx.measureText(st.text);

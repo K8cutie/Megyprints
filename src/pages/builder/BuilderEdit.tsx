@@ -163,8 +163,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     }, [containerMode]),
     onTextSlotEmptyClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
-      // Empty caption box → open the 3-way chooser (photo / text / QR).
-      setChooserTextSlot(slotIndex);
+      // Empty combo/caption box is for text now (ornaments retired) → straight to
+      // the caption editor, no chooser step.
+      setTextEditSlot(slotIndex);
     }, [containerMode]),
     onTextSlotPhotoClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
@@ -208,11 +209,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   // Per-slot text (chooser "Add Text") target — distinct from the caption box above.
   const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null);
   const [qrEditSlot, setQrEditSlot] = useState<number | null>(null);
-  // Ornament picker target (main-slot chooser "Add Ornament", or tapping a placed ornament).
+  // Ornament picker target (kept for editing/removing ornaments in older albums;
+  // adding new ones is retired). Set by tapping a placed ornament.
   const [ornamentEditSlot, setOrnamentEditSlot] = useState<number | null>(null);
-  // Empty caption-box chooser + QR target, and a flag routing the photo picker
-  // to a caption box (setTextSlotPhoto) instead of a photo slot (fillSlot).
-  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null);
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null);
   // Combo/caption-box ornament picker target (chooser "Add Ornament" or tapping a placed one).
   const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null);
@@ -246,6 +245,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         text: existing.text, fontSize: existing.fontSize, fontFamily: existing.fontFamily,
         color: existing.color, bold: existing.bold, italic: existing.italic,
         underline: existing.underline, alignment: existing.alignment,
+        outlineColor: existing.outlineColor, outlineWidth: existing.outlineWidth, shadow: existing.shadow,
       };
     }
     return {
@@ -748,7 +748,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         <SlotChooser
           onPhoto={() => { setSelectedSlotForPicker(chooserSlot); setShowPhotoPicker(true); }}
           onText={() => setSlotTextEditSlot(chooserSlot)}
-          onOrnament={() => setOrnamentEditSlot(chooserSlot)}
           onClose={() => setChooserSlot(null)}
         />
       )}
@@ -769,17 +768,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           initial={buildSlotTextInitial(slotTextEditSlot)}
           onSave={(content) => { actions.setSlotText(slotTextEditSlot, content.text.trim() ? content : null); setSlotTextEditSlot(null); }}
           onClose={() => setSlotTextEditSlot(null)}
-        />
-      )}
-
-      {/* Empty combo/caption-box chooser — Text or Ornament (desktop modal). No
-          Photo: photos go in the real photo slots, not this accent box.
-          Text reuses the existing caption path (setTextEditSlot → setBoxText). */}
-      {chooserTextSlot !== null && (
-        <SlotChooser
-          onText={() => setTextEditSlot(chooserTextSlot)}
-          onOrnament={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
-          onClose={() => setChooserTextSlot(null)}
         />
       )}
 

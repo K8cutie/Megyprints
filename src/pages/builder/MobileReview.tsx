@@ -31,8 +31,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null); // per-slot text (chooser)
   const [editTextId, setEditTextId] = useState<string | null>(null); // tap-to-edit free text (theme title)
   const [qrEditSlot, setQrEditSlot] = useState<number | null>(null); // tap-to-add/edit QR memory
-  const [ornamentEditSlot, setOrnamentEditSlot] = useState<number | null>(null); // themed-ornament picker target
-  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser
+  const [ornamentEditSlot, setOrnamentEditSlot] = useState<number | null>(null); // tap a placed ornament (editing older albums; adding retired)
   const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null); // caption-box photo target
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null); // caption-box QR target
   const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null); // combo-box ornament target
@@ -57,6 +56,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
       fontFamily: el?.fontFamily ?? 'Georgia, "Times New Roman", serif',
       color: el?.color ?? '#2D2D2D', bold: el?.bold ?? false, italic: el?.italic ?? false,
       underline: el?.underline ?? false, alignment: el?.alignment ?? 'center',
+      outlineColor: el?.outlineColor, outlineWidth: el?.outlineWidth, shadow: el?.shadow,
     };
   };
 
@@ -69,6 +69,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         text: existing.text, fontSize: existing.fontSize, fontFamily: existing.fontFamily,
         color: existing.color, bold: existing.bold, italic: existing.italic,
         underline: existing.underline, alignment: existing.alignment,
+        outlineColor: existing.outlineColor, outlineWidth: existing.outlineWidth, shadow: existing.shadow,
       };
     }
     const ts = template?.textSlots?.[slotIndex];
@@ -160,7 +161,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onTextTap={(textId) => setEditTextId(textId)}
               onQrSlotTap={(slot) => setQrEditSlot(slot)}
               onOrnamentSlotTap={(slot) => setOrnamentEditSlot(slot)}
-              onChooseTextSlot={(slotIndex) => setChooserTextSlot(slotIndex)}
+              onChooseTextSlot={(slotIndex) => setEditSlot(slotIndex)}
               onTextSlotPhotoTap={(slotIndex) => setTextReplaceSlot(slotIndex)}
               onTextSlotQrTap={(slot) => setTextSlotQrEditSlot(slot)}
               onTextSlotOrnamentTap={(slot) => setTextSlotOrnamentEditSlot(slot)} />}
@@ -206,7 +207,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           mobile
           onPhoto={() => setReplaceSlot(chooserSlot)}
           onText={() => setSlotTextEditSlot(chooserSlot)}
-          onOrnament={() => setOrnamentEditSlot(chooserSlot)}
           onClose={() => setChooserSlot(null)}
         />
       )}
@@ -255,18 +255,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Empty combo/caption-box chooser — Text or Ornament (bottom sheet). No
-          Photo: photos go in the real photo slots, not this accent box.
-          Text reuses the existing setBoxText path (setEditSlot). */}
-      {chooserTextSlot !== null && (
-        <SlotChooser
-          mobile
-          onText={() => setEditSlot(chooserTextSlot)}
-          onOrnament={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
-          onClose={() => setChooserTextSlot(null)}
-        />
-      )}
 
       {/* Caption-box QR add/edit */}
       {textSlotQrEditSlot !== null && (

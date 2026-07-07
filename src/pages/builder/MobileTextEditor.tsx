@@ -12,13 +12,14 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Check, X, Minus, Plus, ChevronDown } from 'lucide-react';
 import type { TextElement } from './types';
+import { contrastOutline, WORDART_OUTLINE_WIDTH, WORDART_SHADOW } from './wordArt';
 
 export type BoxTextContent = Pick<
   TextElement,
-  'text' | 'fontSize' | 'fontFamily' | 'color' | 'bold' | 'italic' | 'underline' | 'alignment'
+  'text' | 'fontSize' | 'fontFamily' | 'color' | 'bold' | 'italic' | 'underline' | 'alignment' | 'outlineColor' | 'outlineWidth' | 'shadow'
 >;
 
-// 20 caption fonts (loaded in index.html, display=swap). A mix of serif, sans,
+// 27 caption fonts (loaded in index.html, display=swap). A mix of serif, sans,
 // script and display so any mood — elegant, playful, bold — has a fit.
 const FONTS = [
   { name: 'Georgia', family: 'Georgia, "Times New Roman", serif' },
@@ -27,6 +28,9 @@ const FONTS = [
   { name: 'Merriweather', family: '"Merriweather", Georgia, serif' },
   { name: 'Cormorant', family: '"Cormorant Garamond", Georgia, serif' },
   { name: 'Baskerville', family: '"Libre Baskerville", Georgia, serif' },
+  { name: 'Cinzel', family: '"Cinzel", Georgia, serif' },
+  { name: 'Yeseva One', family: '"Yeseva One", Georgia, serif' },
+  { name: 'Abril Fatface', family: '"Abril Fatface", Georgia, serif' },
   { name: 'DM Sans', family: '"DM Sans", system-ui, sans-serif' },
   { name: 'Montserrat', family: '"Montserrat", system-ui, sans-serif' },
   { name: 'Poppins', family: '"Poppins", system-ui, sans-serif' },
@@ -34,12 +38,16 @@ const FONTS = [
   { name: 'Nunito', family: '"Nunito", system-ui, sans-serif' },
   { name: 'Quicksand', family: '"Quicksand", system-ui, sans-serif' },
   { name: 'Work Sans', family: '"Work Sans", system-ui, sans-serif' },
+  { name: 'Fredoka', family: '"Fredoka", system-ui, sans-serif' },
   { name: 'Dancing Script', family: '"Dancing Script", cursive' },
   { name: 'Pacifico', family: '"Pacifico", cursive' },
   { name: 'Caveat', family: '"Caveat", cursive' },
   { name: 'Great Vibes', family: '"Great Vibes", cursive' },
   { name: 'Sacramento', family: '"Sacramento", cursive' },
+  { name: 'Parisienne', family: '"Parisienne", cursive' },
+  { name: 'Pinyon Script', family: '"Pinyon Script", cursive' },
   { name: 'Lobster', family: '"Lobster", cursive' },
+  { name: 'Shrikhand', family: '"Shrikhand", cursive' },
   { name: 'Bebas Neue', family: '"Bebas Neue", system-ui, sans-serif' },
 ];
 const COLORS = ['#2D2D2D', '#FFFFFF', '#E8A598', '#C9A24B', '#2E7D4A', '#3A6EA5', '#9B5DE5'];
@@ -57,6 +65,9 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
   const [italic, setItalic] = useState(initial.italic ?? false);
   const [underline, setUnderline] = useState(initial.underline ?? false);
   const [alignment, setAlignment] = useState<'left' | 'center' | 'right'>(initial.alignment ?? 'center');
+  // WordArt effects: outline (auto-contrast stroke) + soft shadow.
+  const [outline, setOutline] = useState<boolean>(!!initial.outlineWidth);
+  const [shadow, setShadow] = useState<boolean>(!!initial.shadow);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   // Size the editor to the VISIBLE viewport so the format bar sits above the
@@ -75,7 +86,12 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
   useEffect(() => { taRef.current?.focus(); }, []);
 
   const save = () => {
-    onSave({ text, fontSize, fontFamily, color, bold, italic, underline, alignment });
+    onSave({
+      text, fontSize, fontFamily, color, bold, italic, underline, alignment,
+      outlineColor: outline ? contrastOutline(color) : undefined,
+      outlineWidth: outline ? WORDART_OUTLINE_WIDTH : undefined,
+      shadow: shadow || undefined,
+    });
     onClose();
   };
 
@@ -109,6 +125,8 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
             fontStyle: italic ? 'italic' : 'normal',
             textDecoration: underline ? 'underline' : 'none',
             textAlign: alignment, lineHeight: 1.3,
+            ...(outline ? { WebkitTextStroke: `${WORDART_OUTLINE_WIDTH}px ${contrastOutline(color)}`, paintOrder: 'stroke fill' as any } : {}),
+            ...(shadow ? { textShadow: `${WORDART_SHADOW.offsetX}px ${WORDART_SHADOW.offsetY}px ${WORDART_SHADOW.blur}px ${WORDART_SHADOW.color}` } : {}),
           }}
         />
       </div>
@@ -153,6 +171,13 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
                 boxShadow: color === c ? '0 0 0 2px #FDE8E4' : undefined,
               }} />
           ))}
+          <Divider />
+          <button onClick={() => setOutline((v) => !v)}
+            className="px-3 h-9 rounded-lg text-sm shrink-0 active:scale-95 transition-transform"
+            style={{ background: outline ? '#FDE8E4' : '#F5F5F5', color: outline ? '#E8A598' : '#6B6B6B', fontWeight: 600 }}>Outline</button>
+          <button onClick={() => setShadow((v) => !v)}
+            className="px-3 h-9 rounded-lg text-sm shrink-0 active:scale-95 transition-transform"
+            style={{ background: shadow ? '#FDE8E4' : '#F5F5F5', color: shadow ? '#E8A598' : '#6B6B6B', fontWeight: 600 }}>Shadow</button>
           <Divider />
           <ToolBtn active={alignment === 'left'} onClick={() => setAlignment('left')}><AlignLeft size={18} /></ToolBtn>
           <ToolBtn active={alignment === 'center'} onClick={() => setAlignment('center')}><AlignCenter size={18} /></ToolBtn>
