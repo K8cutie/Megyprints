@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, Smartphone } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw } from 'lucide-react';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
@@ -509,14 +509,16 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const total = pages.length;
   const { setBoxText, updateTextElement, setQrFill } = useBuilderContext();
 
-  // The preview is a TWO-PAGE spread — wider than a phone screen. In portrait it
-  // shrinks to a stamp, so nudge the user to rotate. Landscape already sizes the
-  // spread to fill the screen. Desktop never sees this. A quiet escape covers the
-  // rare "rotation is locked on my phone" case so no one gets trapped.
+  // The preview is a TWO-PAGE spread — wider than a phone screen, so it shrinks to
+  // a stamp in portrait. Rather than ask the user to rotate (useless if their phone
+  // rotation is locked), we AUTO-ROTATE the whole preview 90° in mobile-portrait:
+  // the spread is laid out landscape and sized to the phone's LONG axis, so holding
+  // the phone sideways shows the album upright + full-size — no rotation-unlock
+  // needed. If the screen genuinely IS landscape (auto-rotate on), isPortrait is
+  // false and we render normally. Desktop never rotates.
   const isMobile = useIsMobile();
   const isPortrait = useIsPortrait();
-  const [rotateDismissed, setRotateDismissed] = useState(false);
-  const showRotatePrompt = isMobile && isPortrait && !rotateDismissed;
+  const landscapeRotate = isMobile && isPortrait;
 
   // Tap a textbox in the preview → open the formatting editor for THAT page.
   // `slot` = a template caption box; `textId` = a free element (e.g. the theme title).
@@ -599,20 +601,13 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   }, [hasNext, total]);
 
   return (
+    <div style={landscapeRotate
+      ? { position: 'fixed', top: 0, left: 0, width: '100vh', height: '100vw', transformOrigin: 'top left', transform: 'translateX(100vw) rotate(90deg)', zIndex: 70, overflow: 'hidden' }
+      : { height: '100%' }}>
     <div className="flex flex-col h-full bg-[#F5F5F5] relative">
-      {showRotatePrompt && (
-        <div className="absolute inset-0 z-[80] bg-[#FFF8F0] flex flex-col items-center justify-center text-center px-8">
-          <div className="rotate-hint mb-7">
-            <Smartphone size={62} strokeWidth={1.5} className="text-[#E8A598]" />
-          </div>
-          <h3 className="text-lg font-semibold text-[#2D2D2D] mb-2">Turn your phone sideways</h3>
-          <p className="text-sm text-[#6B6B6B] max-w-[17rem] leading-relaxed">
-            Your album opens as a two-page spread — wider than your screen. Rotate to landscape to preview it full size.
-          </p>
-          <button onClick={() => setRotateDismissed(true)}
-            className="mt-8 text-xs text-[#9B9B9B] underline underline-offset-2 py-2 px-3">
-            Preview in portrait anyway
-          </button>
+      {landscapeRotate && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-1.5 text-[11px] font-medium text-[#8B6F47] bg-white/85 rounded-full px-3 py-1 shadow-sm pointer-events-none">
+          <RotateCw size={12} /> Hold your phone sideways to view
         </div>
       )}
       {/* Toolbar */}
@@ -746,6 +741,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           onClose={() => setQrEdit(null)}
         />
       )}
+    </div>
     </div>
   );
 }
