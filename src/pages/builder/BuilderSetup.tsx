@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { ChevronRight, Sparkles } from 'lucide-react';
 import { ALBUM_SIZES } from './types';
 import type { AlbumSizePreset } from './types';
+import { loadStoreSettings, getDisabledSizes } from '../../lib/storeSettings';
 
 /* ═══════════════════════════════════════════════════════════
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
@@ -99,6 +100,22 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
   // locally; no photos involved, so it stays private. Optional.
   const [theme, setTheme] = useState(() => { try { return localStorage.getItem('megy-album-theme') || ''; } catch { return ''; } });
   const onThemeChange = (v: string) => { setTheme(v); try { localStorage.setItem('megy-album-theme', v); } catch { /* ignore */ } };
+  // Owner may hide sizes from the picker (e.g. 8.5x11). Re-load once so a cold
+  // direct-load to setup still reflects the setting, then filter the grid.
+  const [disabled, setDisabled] = useState<AlbumSizePreset[]>(() => getDisabledSizes());
+  useEffect(() => {
+    void loadStoreSettings().then(() => {
+      const d = getDisabledSizes();
+      setDisabled([...d]);
+      // If the current selection is now a hidden size, move it to the first offered one.
+      if (d.includes(selectedSize)) {
+        const first = ALBUM_SIZES.find((s) => !d.includes(s.preset));
+        if (first) onSizeChange(first.preset);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const sizes = ALBUM_SIZES.filter((s) => !disabled.includes(s.preset));
   return (
     <div className="h-full flex flex-col items-center justify-center bg-[#FFFBF7] overflow-y-auto px-4 py-8">
       {/* Megy — center attraction */}
@@ -130,7 +147,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
         className="w-full max-w-lg"
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-          {ALBUM_SIZES.map((size) => (
+          {sizes.map((size) => (
             <SizeCard
               key={size.preset}
               size={size}

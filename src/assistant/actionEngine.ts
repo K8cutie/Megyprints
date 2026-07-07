@@ -6,6 +6,7 @@
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AssistantIntent, ExecutedAction } from './types';
 import type { AlbumBackground, AlbumSizePreset, TemplateType, TextElement, FrameStyle } from '../pages/builder/types';
+import { getDisabledSizes } from '../lib/storeSettings';
 import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '../pages/builder/types';
 
 export class ActionEngine {
@@ -80,6 +81,9 @@ export class ActionEngine {
           const size = intent.payload?.size as AlbumSizePreset | undefined;
           if (!size) {
             return { intentType: intent.type, success: false, message: 'Which size? Say something like "8x8" or "11.5x8".' };
+          }
+          if (getDisabledSizes().includes(size)) {
+            return { intentType: intent.type, success: false, message: `Sorry, the ${size} size isn't available right now. Try another size.` };
           }
           this.builder.setAlbumSize(size);
           return { intentType: intent.type, success: true, message: `Album size changed to ${size}.` };

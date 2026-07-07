@@ -8,8 +8,9 @@
 import { useState, useEffect } from 'react';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
+import { ALBUM_SIZES } from '../builder/types';
 import { SHEET, SIZES, costOf, sheetsFor, priceOf, SIZE_SURCHARGE, type Binding } from '../../lib/pricing';
-import { getPriceMultiple, setPriceMultiple } from '../../lib/storeSettings';
+import { getPriceMultiple, setPriceMultiple, getDisabledSizes, setDisabledSizes } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
 
@@ -29,8 +30,14 @@ export default function PricingPanel() {
   const [savedMult, setSavedMult] = useState(false);
   const [saveErr, setSaveErr] = useState('');
 
+  // ── Persisted "sizes offered" toggle (drives the customer size picker) ──
+  const [disabledSizes, setDisabledSizesState] = useState<AlbumSizePreset[]>(getDisabledSizes());
+  const [savingSizes, setSavingSizes] = useState(false);
+  const [savedSizes, setSavedSizes] = useState(false);
+  const [sizeErr, setSizeErr] = useState('');
+
   // Seed from the loaded cache once on mount (App loads it on start).
-  useEffect(() => { setStoreMult(getPriceMultiple()); }, []);
+  useEffect(() => { setStoreMult(getPriceMultiple()); setDisabledSizesState(getDisabledSizes()); }, []);
 
   const saveStoreMult = async () => {
     setSavingMult(true);
@@ -40,6 +47,19 @@ export default function PricingPanel() {
     setSavingMult(false);
     if (err) setSaveErr(err);
     else { setSavedMult(true); setTimeout(() => setSavedMult(false), 2500); }
+  };
+
+  const toggleSize = (preset: AlbumSizePreset) => {
+    setDisabledSizesState((prev) => prev.includes(preset) ? prev.filter((p) => p !== preset) : [...prev, preset]);
+    setSavedSizes(false);
+  };
+  const saveSizes = async () => {
+    if (ALBUM_SIZES.length - disabledSizes.length < 1) { setSizeErr('Keep at least one size enabled.'); return; }
+    setSavingSizes(true); setSavedSizes(false); setSizeErr('');
+    const err = await setDisabledSizes(disabledSizes);
+    setSavingSizes(false);
+    if (err) setSizeErr(err);
+    else { setSavedSizes(true); setTimeout(() => setSavedSizes(false), 2500); }
   };
 
   const cost = costOf(size, bind, pages);
@@ -94,6 +114,46 @@ export default function PricingPanel() {
         </div>
         {savedMult && <p className="text-xs text-[#2E7D4A] mt-2 font-semibold">✓ Saved — live checkout now uses {storeMult}×.</p>}
         {saveErr && <p className="text-xs text-[#B0503A] mt-2">Couldn't save: {saveErr}</p>}
+      </div>
+
+      {/* Album sizes offered — hides sizes from the customer picker (owner-only) */}
+      <div className="rounded-2xl border-2 border-[#BF5E3E]/40 bg-[#FBF6F1] px-5 py-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h3 className="font-display text-lg font-semibold text-[#2D2D2D]">Album sizes offered</h3>
+            <p className="text-sm text-[#6B6B6B] mt-0.5 max-w-lg">
+              Turn a size on/off in the <b>customer size picker</b>. Existing albums and orders in a
+              hidden size still print fine — this only stops <i>new</i> albums at that size.
+            </p>
+          </div>
+          <button
+            onClick={saveSizes}
+            disabled={savingSizes}
+            className="py-2 px-4 text-sm font-semibold rounded-lg text-white transition-colors disabled:opacity-60"
+            style={{ background: '#BF5E3E' }}
+          >
+            {savingSizes ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4">
+          {ALBUM_SIZES.map((s) => {
+            const on = !disabledSizes.includes(s.preset);
+            return (
+              <button key={s.preset} onClick={() => toggleSize(s.preset)} aria-pressed={on}
+                className="py-2 px-3 text-sm font-semibold rounded-lg border transition-colors text-left flex items-center justify-between gap-2"
+                style={on
+                  ? { background: '#fff', borderColor: '#BF5E3E', color: '#2D2D2D' }
+                  : { background: '#F1EDE7', borderColor: '#DED5C9', color: '#B4A99A' }}>
+                <span className={on ? '' : 'line-through'}>{s.name}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: on ? '#2E7D4A' : '#9B9B9B' }}>
+                  {on ? 'On' : 'Off'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {savedSizes && <p className="text-xs text-[#2E7D4A] mt-2 font-semibold">✓ Saved — the size picker now offers {ALBUM_SIZES.length - disabledSizes.length} of {ALBUM_SIZES.length} sizes.</p>}
+        {sizeErr && <p className="text-xs text-[#B0503A] mt-2">{sizeErr}</p>}
       </div>
 
       {/* Thesis strip */}
