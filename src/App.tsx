@@ -8,6 +8,7 @@ import Home from './pages/Home';
 import Builder from './pages/Builder';
 import Templates from './pages/Templates';
 import Contact from './pages/Contact';
+import Privacy from './pages/Privacy';
 import Order from './pages/Order';
 import Profile from './pages/Profile';
 import MyMemories from './pages/MyMemories';
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="/order" element={<Order />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />

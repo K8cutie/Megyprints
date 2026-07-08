@@ -15,6 +15,7 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: ['megy-character.png'],
       manifest: {
+        id: '/',
         name: 'Megy Prints',
         short_name: 'Megy Prints',
         description: 'AI photo-album builder — Megy designs your album, you just approve.',
@@ -23,6 +24,8 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         start_url: '.',
+        scope: '/',
+        categories: ['photo', 'shopping', 'lifestyle'],
         icons: [
           { src: 'megy-character.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'megy-character.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
