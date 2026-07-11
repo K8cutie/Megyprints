@@ -9,7 +9,8 @@
 import jsPDF from 'jspdf';
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { ALBUM_SIZES } from './types';
-import { renderAlbumForPrint } from './printPipeline';
+import { renderAlbumForPrint, renderCoverWrapForPrint, type CoverPrintInput } from './printPipeline';
+import { coverWrapGeometry } from './coverGeometry';
 
 function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -50,6 +51,28 @@ export async function generateAlbumPdf(
     doc.addImage(dataUrl, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
   }
 
+  return doc.output('blob');
+}
+
+/**
+ * Compile the front·spine·back cover into its OWN print-ready PDF — a single
+ * page sized to the physical flat-wrap inches (NOT the album trim), so the
+ * operator prints the wrap at 1:1 scale. Separate from the interior PDF because
+ * the wrap is a different, wider size.
+ */
+export async function generateCoverWrapPdf(input: CoverPrintInput): Promise<Blob> {
+  const geom = coverWrapGeometry(input.albumSize, input.pageCount, input.cover);
+  const wIn = geom.wrap.wIn;
+  const hIn = geom.wrap.hIn;
+  const orientation: 'landscape' | 'portrait' = wIn >= hIn ? 'landscape' : 'portrait';
+
+  const blob = await renderCoverWrapForPrint(input);
+  const dataUrl = await blobToDataURL(blob);
+
+  const doc = new jsPDF({ orientation, unit: 'in', format: [wIn, hIn], compress: true });
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  doc.addImage(dataUrl, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
   return doc.output('blob');
 }
 

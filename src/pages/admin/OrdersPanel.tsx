@@ -55,6 +55,18 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
     window.open(data.signedUrl, '_blank');
   };
 
+  // Pull the front·spine·back cover wrap ("<order_id>-cover.pdf"), a separate
+  // print file from the interior pages. Operators only (same RLS as above).
+  const downloadCoverPdf = async () => {
+    setSaving(true); setErr(null);
+    const { data, error } = await supabase.storage
+      .from('print-pdfs')
+      .createSignedUrl(`${o.id}-cover.pdf`, 120, { download: `megyprints-${o.order_number}-cover.pdf` });
+    setSaving(false);
+    if (error || !data?.signedUrl) { setErr('Cover file not ready for this order yet.'); return; }
+    window.open(data.signedUrl, '_blank');
+  };
+
   const paid = o.payment_status === 'paid';
   const date = o.created_at.slice(0, 10);
 
@@ -105,6 +117,12 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
             <button onClick={downloadPrintPdf} disabled={saving}
               className="h-8 px-3 rounded-lg bg-[#FFF1E8] text-xs font-medium text-[#C98A5E] flex items-center gap-1 disabled:opacity-50">
               <Download size={13} /> Print PDF
+            </button>
+          )}
+          {paid && (
+            <button onClick={downloadCoverPdf} disabled={saving}
+              className="h-8 px-3 rounded-lg bg-[#F1ECFF] text-xs font-medium text-[#7A5EC9] flex items-center gap-1 disabled:opacity-50">
+              <Download size={13} /> Cover PDF
             </button>
           )}
           <select value={o.status} onChange={(e) => changeStatus(e.target.value as AdminOrder['status'])} disabled={saving}

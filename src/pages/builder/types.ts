@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 
-export type BuilderPhase = 'setup' | 'upload' | 'template' | 'edit' | 'preview';
+export type BuilderPhase = 'setup' | 'upload' | 'template' | 'edit' | 'cover' | 'preview';
 
 export type TemplateType =
   | 'wedding' | 'baby' | 'birthday' | 'family' | 'graduation'
@@ -312,6 +312,50 @@ export interface OrnamentFill {
  *  MobileTextEditor's exported content (BoxTextContent). */
 export type SlotText = TextStyle;
 
+/** A designed album COVER — front · spine · back — printed as ONE physical wrap
+ *  that folds around the book block (geometry in coverGeometry.ts). This is the
+ *  ARTWORK; it is DISTINCT from `CoverType` (the binding material/price factor).
+ *
+ *  • Text reuses TextStyle, so a cover title renders through the SAME wordArt
+ *    helpers as page text — no third text path to keep in sync.
+ *  • Photos are referenced by uploaded-photo id (like AlbumBackground.photoId),
+ *    so a hero photo re-resolves from IndexedDB after a reload (the blob URL dies
+ *    but the id doesn't). Resolve with resolveBgImageSrc({ photoId }).
+ *  • Every field is optional — an untouched cover renders as a clean branded
+ *    default (see DEFAULT_COVER_DESIGN). */
+export interface CoverPanelDesign {
+  /** Hero/background photo for the panel, by uploaded-photo id. object-cover fit. */
+  photoId?: string;
+  /** Solid colour behind/around the photo (and the whole panel when no photo). */
+  background?: string;
+}
+
+export interface CoverDesign {
+  front: CoverPanelDesign & {
+    /** Big album title. */
+    title?: TextStyle;
+    /** Secondary line — date / names / occasion. */
+    subtitle?: TextStyle;
+  };
+  spine: {
+    /** Spine text. Reads bottom→top on the book; the renderer rotates it 90°. */
+    text?: TextStyle;
+  };
+  back: CoverPanelDesign & {
+    /** Optional closing text on the back panel. */
+    blurb?: TextStyle;
+    /** Show the Megyprints mark + scan-to-reorder QR on the back. Opt-in
+     *  (default off) until the brand-mark treatment is confirmed. */
+    brandMark?: boolean;
+  };
+}
+
+export const DEFAULT_COVER_DESIGN: CoverDesign = {
+  front: { background: '#FFFBF7' },
+  spine: {},
+  back: { background: '#FFFBF7', brandMark: false },
+};
+
 export interface AlbumPage {
   id: string;
   layout: LayoutStyle;
@@ -413,6 +457,9 @@ export interface BuilderState {
   currentPageIndex: number;
   material: MaterialType;
   cover: CoverType;
+  /** Designed front·spine·back cover artwork (separate from `cover`, the
+   *  binding material). See CoverDesign. */
+  coverDesign: CoverDesign;
   size: AlbumSizePreset;
   customWidth?: number;
   customHeight?: number;

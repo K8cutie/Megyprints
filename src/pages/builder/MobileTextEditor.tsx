@@ -21,7 +21,7 @@ export type BoxTextContent = Pick<
 
 // 27 caption fonts (loaded in index.html, display=swap). A mix of serif, sans,
 // script and display so any mood — elegant, playful, bold — has a fit.
-const FONTS = [
+export const FONTS = [
   { name: 'Georgia', family: 'Georgia, "Times New Roman", serif' },
   { name: 'Playfair', family: '"Playfair Display", Georgia, serif' },
   { name: 'Lora', family: '"Lora", Georgia, serif' },
@@ -50,7 +50,7 @@ const FONTS = [
   { name: 'Shrikhand', family: '"Shrikhand", cursive' },
   { name: 'Bebas Neue', family: '"Bebas Neue", system-ui, sans-serif' },
 ];
-const COLORS = ['#2D2D2D', '#FFFFFF', '#E8A598', '#C9A24B', '#2E7D4A', '#3A6EA5', '#9B5DE5'];
+export const COLORS = ['#2D2D2D', '#FFFFFF', '#E8A598', '#C9A24B', '#2E7D4A', '#3A6EA5', '#9B5DE5'];
 
 export default function MobileTextEditor({ initial, onSave, onClose }: {
   initial: BoxTextContent;

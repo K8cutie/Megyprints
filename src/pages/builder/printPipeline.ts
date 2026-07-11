@@ -11,8 +11,10 @@ import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
 import { drawWordArtText } from './wordArt';
-import type { QrFill, OrnamentFill, SlotText } from './types';
+import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
+import { coverWrapGeometry } from './coverGeometry';
+import { coverLayout, type PositionedText } from './coverLayout';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -791,4 +793,150 @@ export async function renderAlbumForPrint(
   }
 
   return results;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   COVER WRAP (front · spine · back) — a SEPARATE print artifact.
+   Uses the SAME coverLayout the DOM preview uses, so what the customer
+   designs is what prints. Rendered at FULL 300 DPI — the MAX_SIDE=1800
+   page cap is NOT applied here: the cap exists to keep a ~50-page album
+   PDF under the storage cap, but the cover is ONE page, so a wide wrap
+   downscaled to 1800px would collapse the spine text to ~100 DPI. A
+   single full-res JPEG stays a few MB — well within budget.
+   ═══════════════════════════════════════════════════════════════ */
+
+/** Defensive canvas cap (a normal wrap is ~5–7k px; browsers dislike >~16k). */
+const MAX_COVER_SIDE = 8000;
+
+export interface CoverPrintInput {
+  albumSize: AlbumSizePreset;
+  /** Interior page count (drives spine thickness). */
+  pageCount: number;
+  /** Binding material chosen at checkout (softcover vs hardcover geometry). */
+  cover: CoverType;
+  coverDesign: CoverDesign;
+  photos: UploadedPhoto[];
+}
+
+/** Render the flat cover wrap to a full-resolution JPEG Blob. */
+export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<Blob> {
+  const { albumSize, pageCount, cover, coverDesign, photos } = input;
+  const geom = coverWrapGeometry(albumSize, pageCount, cover);
+  const layout = coverLayout(geom, coverDesign);
+  const W = geom.wrap.wPx;
+  const H = geom.wrap.hPx;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  // Full-bleed base so the wrap has NO white edges in the turn-in / bleed zone:
+  // the back colour bleeds everywhere left of the spine, the front colour right
+  // of it (the spine colour follows the front). Panels then paint on top.
+  const panelBg = (name: 'back' | 'front') => layout.panels.find((p) => p.panel === name)?.bg || '#FFFFFF';
+  const splitX = layout.foldXPx[0];
+  ctx.fillStyle = panelBg('back');
+  ctx.fillRect(0, 0, splitX, H);
+  ctx.fillStyle = panelBg('front');
+  ctx.fillRect(splitX, 0, W - splitX, H);
+
+  for (const p of layout.panels) {
+    if (p.bg) {
+      ctx.fillStyle = p.bg;
+      ctx.fillRect(p.rect.x, p.rect.y, p.rect.width, p.rect.height);
+    }
+    if (p.photoId) {
+      const src = resolveBgImageSrc({ photoId: p.photoId }, photos);
+      if (src) {
+        try {
+          const img = await loadImage(src);
+          const s = Math.max(p.rect.width / img.width, p.rect.height / img.height);
+          const dw = img.width * s;
+          const dh = img.height * s;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(p.rect.x, p.rect.y, p.rect.width, p.rect.height);
+          ctx.clip();
+          ctx.drawImage(img, p.rect.x + (p.rect.width - dw) / 2, p.rect.y + (p.rect.height - dh) / 2, dw, dh);
+          ctx.restore();
+        } catch { /* photo failed — the panel bg shows through */ }
+      }
+    }
+    for (const t of p.texts) drawCoverText(ctx, t);
+    if (p.brandMark) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `600 ${Math.round(p.brandMark.height * 0.62)}px Cinzel, Georgia, serif`;
+      ctx.fillText('Megy Prints', p.brandMark.x + p.brandMark.width / 2, p.brandMark.y + p.brandMark.height / 2);
+      ctx.restore();
+    }
+  }
+
+  let out: HTMLCanvasElement = canvas;
+  const cap = Math.min(1, MAX_COVER_SIDE / Math.max(W, H));
+  if (cap < 1) {
+    out = document.createElement('canvas');
+    out.width = Math.round(W * cap);
+    out.height = Math.round(H * cap);
+    const octx = out.getContext('2d')!;
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = 'high';
+    octx.drawImage(canvas, 0, 0, out.width, out.height);
+  }
+  return new Promise((resolve) => out.toBlob((b) => resolve(b!), 'image/jpeg', 0.9));
+}
+
+/** Simple greedy word-wrap to a pixel width (ctx.font must be preset). */
+function wrapCoverText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = (text || '').split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const lines: string[] = [];
+  let cur = words[0];
+  for (let i = 1; i < words.length; i++) {
+    const test = `${cur} ${words[i]}`;
+    if (ctx.measureText(test).width <= maxWidth) cur = test;
+    else { lines.push(cur); cur = words[i]; }
+  }
+  lines.push(cur);
+  return lines;
+}
+
+/** Draw one positioned cover text. fontSize/outlineWidth are already in wrap-px,
+ *  so WordArt scale = 1 (mirrors the DOM preview, which uses displayScale). */
+function drawCoverText(ctx: CanvasRenderingContext2D, t: PositionedText): void {
+  const st = t.style;
+  if (!st.text || !st.text.trim()) return;
+  const fontSize = st.fontSize || 24;
+  ctx.save();
+  ctx.font = `${st.italic ? 'italic' : 'normal'} ${st.bold ? 'bold' : 'normal'} ${fontSize}px ${st.fontFamily || 'serif'}`;
+  ctx.fillStyle = st.color || '#2D2D2D';
+  ctx.textBaseline = 'middle';
+
+  // Spine: rotate around the panel centre and draw one centred line.
+  if (t.rotateDeg) {
+    ctx.translate(t.rect.x + t.rect.width / 2, t.rect.y + t.rect.height / 2);
+    ctx.rotate((t.rotateDeg * Math.PI) / 180);
+    ctx.textAlign = 'center';
+    drawWordArtText(ctx, st.text, 0, 0, st, 1);
+    ctx.restore();
+    return;
+  }
+
+  const align = (st.alignment ?? 'center') as CanvasTextAlign;
+  ctx.textAlign = align;
+  const pad = t.rect.width * 0.02;
+  const anchorX = align === 'left' ? t.rect.x + pad : align === 'right' ? t.rect.x + t.rect.width - pad : t.rect.x + t.rect.width / 2;
+
+  const lines = wrapCoverText(ctx, st.text, t.rect.width - pad * 2);
+  const lineH = fontSize * 1.25;
+  const blockH = lines.length * lineH;
+  const startY =
+    t.valign === 'top' ? t.rect.y + lineH / 2
+    : t.valign === 'bottom' ? t.rect.y + t.rect.height - blockH + lineH / 2
+    : t.rect.y + t.rect.height / 2 - blockH / 2 + lineH / 2;
+
+  lines.forEach((line, i) => drawWordArtText(ctx, line, anchorX, startY + i * lineH, st, 1));
+  ctx.restore();
 }

@@ -11,12 +11,16 @@
 // state) so it survives the SPA navigation to /order.
 // ──────────────────────────────────────────────────────────────────────────
 
-import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from '../pages/builder/types';
+import type { AlbumPage, UploadedPhoto, AlbumSizePreset, CoverDesign } from '../pages/builder/types';
 
 export interface PrintJob {
   pages: AlbumPage[];
   photos: UploadedPhoto[];
   albumSize: AlbumSizePreset;
+  /** Designed front·spine·back cover artwork. Optional for back-compat with
+   *  jobs minted before covers existed; checkout falls back to DEFAULT_COVER_DESIGN.
+   *  The cover MATERIAL (soft/hard) is chosen at checkout, not stored here. */
+  coverDesign?: CoverDesign;
 }
 
 let pending: PrintJob | null = null;

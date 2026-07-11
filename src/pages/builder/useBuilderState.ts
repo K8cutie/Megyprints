@@ -18,7 +18,7 @@ import type {
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, type QrCorner } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
-import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES } from './types';
+import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
 import { generateAlbum } from './generateAlbum';
 // ── Phase 1: Cloud imports ──
@@ -154,6 +154,7 @@ interface SerializedState {
   currentPageIndex: number;
   rejectedTemplateIds: string[];
   photosPerPage: number | undefined;
+  coverDesign: CoverDesign;
 }
 
 /* ── Undo snapshot ── */
@@ -297,6 +298,7 @@ function getInitialState(): SerializedState {
       currentPageIndex: 0,
       rejectedTemplateIds: [],
       photosPerPage: undefined,
+      coverDesign: DEFAULT_COVER_DESIGN,
     };
   }
 
@@ -327,6 +329,7 @@ function getInitialState(): SerializedState {
     currentPageIndex: effectiveSaved?.currentPageIndex ?? 0,
     rejectedTemplateIds: effectiveSaved?.rejectedTemplateIds ?? [],
     photosPerPage: effectiveSaved?.photosPerPage ?? undefined,
+    coverDesign: effectiveSaved?.coverDesign ?? DEFAULT_COVER_DESIGN,
   };
 }
 
@@ -338,6 +341,13 @@ export interface BuilderActions {
   setAlbumSize: (s: AlbumSizePreset) => void;
   setAlbumType: (t: AlbumType) => void;
   setSelectedTemplate: (t: TemplateType) => void;
+
+  // Cover design (front·spine·back artwork — distinct from the binding material)
+  coverDesign: CoverDesign;
+  setCoverDesign: (d: CoverDesign | ((prev: CoverDesign) => CoverDesign)) => void;
+  setCoverFront: (patch: Partial<CoverDesign['front']>) => void;
+  setCoverSpine: (patch: Partial<CoverDesign['spine']>) => void;
+  setCoverBack: (patch: Partial<CoverDesign['back']>) => void;
 
   // Photos
   uploadedPhotos: UploadedPhoto[];
@@ -449,8 +459,8 @@ export interface BuilderActions {
   setPhase: (phase: string) => void;
 
   // Wizard
-  wizardStep: 'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize';
-  setWizardStep: (step: 'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize') => void;
+  wizardStep: 'welcome' | 'pick_size' | 'design_cover' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize';
+  setWizardStep: (step: 'welcome' | 'pick_size' | 'design_cover' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize') => void;
 
   // Undo / Redo
   undo: () => void;
@@ -506,6 +516,18 @@ export function useBuilderState(): BuilderActions {
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState().currentPageIndex);
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState().rejectedTemplateIds);
   const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState().photosPerPage);
+  // Designed front·spine·back cover artwork (see CoverDesign). Persisted with the
+  // album; the physical spine geometry is resolved at print time from the
+  // checkout's cover material + actual page count (coverGeometry.ts).
+  const [coverDesign, setCoverDesign] = useState<CoverDesign>(() => getInitialState().coverDesign);
+  // Panel-scoped merge helpers so the editor never has to hand-spread the nested
+  // front/spine/back shape (and can't accidentally drop a sibling panel).
+  const setCoverFront = useCallback((patch: Partial<CoverDesign['front']>) =>
+    setCoverDesign((d) => ({ ...d, front: { ...d.front, ...patch } })), []);
+  const setCoverSpine = useCallback((patch: Partial<CoverDesign['spine']>) =>
+    setCoverDesign((d) => ({ ...d, spine: { ...d.spine, ...patch } })), []);
+  const setCoverBack = useCallback((patch: Partial<CoverDesign['back']>) =>
+    setCoverDesign((d) => ({ ...d, back: { ...d.back, ...patch } })), []);
   // Resume at the working phase, not the setup/size screen, when a restored
   // album already has content (photos / filled slots / text / a QR). Without
   // this, any reload — most visibly the OAuth sign-in round-trip — drops the
@@ -530,7 +552,7 @@ export function useBuilderState(): BuilderActions {
   //    review and the desktop panel both open the same picker ──
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   // ── Wizard step tracking — assistant is the primary controller ──
-  const [wizardStep, setWizardStep] = useState<'welcome' | 'pick_size' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize'>('welcome');
+  const [wizardStep, setWizardStep] = useState<'welcome' | 'pick_size' | 'design_cover' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize'>('welcome');
 
   // ── Selection tracking ──
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -652,7 +674,7 @@ export function useBuilderState(): BuilderActions {
     justLoaded: () => boolean;
   } | null>(null);
   persistRef.current = {
-    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage },
+    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign },
     serializeAlbum,
     save: albumSync.save,
     userId: user?.id,
@@ -689,7 +711,7 @@ export function useBuilderState(): BuilderActions {
     if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(flushLocal, 30000);
     return () => { if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current); };
-  }, [albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, flushLocal]);
+  }, [albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, flushLocal]);
 
   // Cloud backup every 10 minutes (only if something changed).
   useEffect(() => {
@@ -2158,6 +2180,7 @@ export function useBuilderState(): BuilderActions {
     setCurrentPageIndex(0);
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
+    setCoverDesign(DEFAULT_COVER_DESIGN);
     pageSnapshotsRef.current = {};
     // ── Phase 1: Clear cloud state ──
     setCloudSaveStatus('idle');
@@ -2296,6 +2319,11 @@ export function useBuilderState(): BuilderActions {
     unhideAllTemplates,
     photosPerPage,
     setPhotosPerPage,
+    coverDesign,
+    setCoverDesign,
+    setCoverFront,
+    setCoverSpine,
+    setCoverBack,
     setPageSnapshot,
     getPageSnapshot,
     phase,

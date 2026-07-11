@@ -3,10 +3,10 @@ import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package, QrCode } from 'lucide-react';
-import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_ALBUM_SIZE } from './builder/types';
+import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_ALBUM_SIZE, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
-import { createOrderFromLatestAlbum, uploadOrderPrintPdf } from '../lib/orders';
+import { createOrderFromLatestAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } from '../lib/orders';
 import { getPendingPrintJob } from '../lib/printQueue';
 import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
@@ -141,6 +141,27 @@ export default function Order() {
       //    errors it propagates to the outer catch, the order does NOT advance,
       //    and the user stays on Pay to retry. (upsert:true → re-upload is safe.)
       await uploadOrderPrintPdf(order.id, printJob);
+
+      // 3b. BEST-EFFORT: build + upload the front·spine·back cover wrap as its own
+      //     "<id>-cover.pdf". Spine width is finalised HERE from the chosen cover
+      //     material + this print job's page count. Deliberately NON-blocking: it
+      //     requires migration 0017 (the RLS name gate) to be live, so if this
+      //     code deploys before 0017 is applied, a required upload would REJECT and
+      //     break EVERY checkout. Instead we fail loud but let the order proceed —
+      //     the interior PDF is already up, and the operator's "Cover PDF" button
+      //     visibly reports a missing cover. Flip to required once 0017 is
+      //     confirmed applied in prod.
+      try {
+        await uploadOrderCoverPdf(order.id, {
+          albumSize,
+          pageCount: printJob.pages.length,
+          cover,
+          coverDesign: printJob.coverDesign ?? DEFAULT_COVER_DESIGN,
+          photos: printJob.photos,
+        });
+      } catch (e) {
+        console.error('Cover PDF upload failed (order still placed; check migration 0017 is applied):', e);
+      }
 
       // 4. Reliability belt (best-effort, non-blocking): ensure every QR "living
       //    memory" we're about to PRINT has a resolvable row. Runs AFTER the

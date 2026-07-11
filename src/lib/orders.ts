@@ -8,7 +8,8 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 import { supabase } from './supabase';
-import { generateAlbumPdf } from '../pages/builder/generateAlbumPdf';
+import { generateAlbumPdf, generateCoverWrapPdf } from '../pages/builder/generateAlbumPdf';
+import type { CoverPrintInput } from '../pages/builder/printPipeline';
 import type { PrintJob } from './printQueue';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
 
@@ -124,4 +125,18 @@ export async function uploadOrderPrintPdf(orderId: string, job: PrintJob): Promi
     .from('print-pdfs')
     .upload(`${orderId}.pdf`, blob, { contentType: 'application/pdf', upsert: true });
   if (error) throw new Error(`Print file upload failed: ${error.message}`);
+}
+
+/**
+ * Build the front·spine·back cover wrap and upload it as its OWN object
+ * ("<order_id>-cover.pdf") next to the interior PDF. Same device constraint +
+ * operator-only read as uploadOrderPrintPdf. Requires migration 0017 (the RLS
+ * name gate) to be applied, or the upload is rejected. Throws on failure.
+ */
+export async function uploadOrderCoverPdf(orderId: string, input: CoverPrintInput): Promise<void> {
+  const blob = await generateCoverWrapPdf(input);
+  const { error } = await supabase.storage
+    .from('print-pdfs')
+    .upload(`${orderId}-cover.pdf`, blob, { contentType: 'application/pdf', upsert: true });
+  if (error) throw new Error(`Cover file upload failed: ${error.message}`);
 }

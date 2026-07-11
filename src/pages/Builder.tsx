@@ -6,6 +6,7 @@ import { useBuilderContext, type BuilderContextValue } from './builder/BuilderCo
 import BuilderSetup from './builder/BuilderSetup';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
+import CoverStep from './builder/CoverStep';
 import MobileReview from './builder/MobileReview';
 import LayoutPicker from './builder/LayoutPicker';
 import BuilderBackGuard from './builder/BuilderBackGuard';
@@ -26,9 +27,9 @@ const SetupPhase = memo(function SetupPhase({ actions }: { actions: BuilderConte
     <BuilderSetup
       selectedSize={actions.albumSize}
       onSizeChange={(size) => { void actions.dispatch({ type: 'change_size', payload: { size }, rawMessage: `change size to ${size}` }); }}
-      /* Option A: "Start Creating" advances Megy's wizard past the size step;
-         the center screen (phase) follows the wizard, so they move together. */
-      onNext={() => { actions.setWizardStep('pick_background'); actions.setPhase('edit'); }}
+      /* Option A: "Start Creating" advances Megy's wizard past the size step to
+         the cover step; the center screen (phase) follows the wizard. */
+      onNext={() => { actions.setWizardStep('design_cover'); actions.setPhase('cover'); }}
     />
   );
 });
@@ -200,7 +201,7 @@ export default function Builder() {
         </div>
 
         {/* Phase Content */}
-        <div className="flex-1 overflow-auto min-h-0">
+        <div className="flex-1 overflow-auto min-h-0 relative">
           <AnimatePresence mode="wait">
             {actions.phase === 'setup' && (
               <motion.div key="setup" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
@@ -234,10 +235,24 @@ export default function Builder() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Cover step — rendered OUTSIDE AnimatePresence. A CoverStep motion
+              child failed to complete its exit animation, deadlocking mode="wait"
+              for every subsequent phase change; a plain absolute-fill conditional
+              mounts/unmounts cleanly and can't stall the other transitions. */}
+          {actions.phase === 'cover' && (
+            <div className="absolute inset-0 bg-[#FFF8F0]">
+              <CoverStep
+                mode="step"
+                onNext={() => { actions.setWizardStep('pick_background'); actions.setPhase('edit'); }}
+                onBack={() => { actions.setWizardStep('pick_size'); actions.setPhase('setup'); }}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Megy Assistant ── */}
-        <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'preview')} />
+        <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'cover' || actions.phase === 'preview')} />
 
         {/* "Change layout" picker — shared by mobile review + desktop panel */}
         <LayoutPicker actions={actions} />

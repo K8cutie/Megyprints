@@ -13,6 +13,7 @@ import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
+import CoverStep from './CoverStep';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
@@ -507,7 +508,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
   const total = pages.length;
-  const { setBoxText, updateTextElement, setQrFill } = useBuilderContext();
+  const { setBoxText, updateTextElement, setQrFill, coverDesign } = useBuilderContext();
 
   // The preview is a TWO-PAGE spread — wider than a phone screen, so it shrinks to
   // a stamp in portrait. Rather than ask the user to rotate (useless if their phone
@@ -524,6 +525,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // `slot` = a template caption box; `textId` = a free element (e.g. the theme title).
   const [edit, setEdit] = useState<{ pageIndex: number; slot?: number; textId?: string } | null>(null);
   const [qrEdit, setQrEdit] = useState<{ pageIndex: number; slot: number } | null>(null);
+  const [coverOpen, setCoverOpen] = useState(false);
   const buildTextInitial = (pageIndex: number, textId: string): BoxTextContent => {
     const el = pages[pageIndex]?.textElements?.find((t) => t.id === textId);
     return {
@@ -703,9 +705,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 text-center">
             <div className="text-4xl mb-2">📦</div>
             <h3 className="font-display text-2xl font-semibold text-[#2D2D2D] mb-1">You've reached the end</h3>
-            <p className="text-sm text-[#6B6B6B] mb-6">Your album looks beautiful. Make it real.</p>
+            <p className="text-sm text-[#6B6B6B] mb-5">Your album looks beautiful. Give it a cover, then make it real.</p>
             <button
-              onClick={() => { setPendingPrintJob({ pages, photos, albumSize }); onOrder(); }}
+              onClick={() => setCoverOpen(true)}
+              className="w-full py-3 mb-3 bg-white border-2 border-[#E8A598] text-[#C56B4E] text-base font-semibold rounded-xl hover:bg-[#FDF3EF] active:scale-[0.98] transition-all"
+            >
+              🎨 Design your cover
+            </button>
+            <button
+              onClick={() => { setPendingPrintJob({ pages, photos, albumSize, coverDesign }); onOrder(); }}
               className="w-full py-4 bg-[#E8A598] text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md"
             >
               ORDER ALBUM
@@ -741,6 +749,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           onClose={() => setQrEdit(null)}
         />
       )}
+      {coverOpen && <CoverStep onClose={() => setCoverOpen(false)} />}
     </div>
     </div>
   );

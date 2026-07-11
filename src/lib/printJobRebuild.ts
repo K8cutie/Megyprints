@@ -23,9 +23,26 @@
 
 import { supabase } from './supabase';
 import type { PrintJob } from './printQueue';
-import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from '../pages/builder/types';
+import type { AlbumPage, UploadedPhoto, AlbumSizePreset, CoverDesign } from '../pages/builder/types';
 import type { StoredPhoto } from './useIndexedDBPhotos';
 import { normalizeStoredPageFields } from '../pages/builder/pageNormalize';
+
+// Same key useBuilderState persists the local draft under (STORAGE_KEY there).
+// The draft survives a full reload — unlike the in-memory print job — so it's
+// how we recover the DESIGNED COVER after the same-device OAuth round-trip at
+// checkout. (The cover isn't in the cloud album row; keeping it out of the DB
+// avoids a schema migration that could break album saves if unapplied.)
+const DRAFT_KEY = 'megy-album-v5';
+
+function draftCoverDesign(): CoverDesign | undefined {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return undefined;
+    return (JSON.parse(raw) as { coverDesign?: CoverDesign })?.coverDesign;
+  } catch {
+    return undefined;
+  }
+}
 
 /** Coalesce snake_case / camelCase JSONB fields into the builder AlbumPage
  *  shape — shares normalizeStoredPageFields() with useBuilderState.normalizePage
@@ -132,5 +149,5 @@ export async function rebuildPrintJobFromLatestAlbum(
     if (!photos[i]?.previewUrl) return null;
   }
 
-  return { pages, photos, albumSize };
+  return { pages, photos, albumSize, coverDesign: draftCoverDesign() };
 }

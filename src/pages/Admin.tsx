@@ -67,6 +67,10 @@ export default function Admin() {
       const { data: files } = await supabase.storage.from('print-pdfs').list('', { limit: 1000 });
       const ready = new Set<string>();
       for (const f of files ?? []) {
+        // The cover wrap is a SIBLING file "<id>-cover.pdf" — not an order-id key.
+        // Skip it so it can't pollute the set (→ bogus "<id>-cover" ids / a
+        // misfired "print file missing" badge). Only the interior "<id>.pdf" keys.
+        if (f.name.endsWith('-cover.pdf')) continue;
         if (f.name.endsWith('.pdf')) ready.add(f.name.slice(0, -'.pdf'.length));
       }
       setPrintReadyIds(ready);

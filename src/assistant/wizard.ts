@@ -23,6 +23,7 @@ const SIZE_CHOICES: { label: string; preset: string }[] = [
 export type WizardStep =
   | 'welcome'
   | 'pick_size'
+  | 'design_cover'
   | 'pick_background'
   | 'upload_photos'
   | 'review_pages'
@@ -43,6 +44,7 @@ export interface WizardState {
 export const WIZARD_ORDER: WizardStep[] = [
   'welcome',
   'pick_size',
+  'design_cover',
   'pick_background',
   'upload_photos',
   'review_pages',
@@ -52,8 +54,9 @@ export const WIZARD_ORDER: WizardStep[] = [
 
 /** Option A: the center screen (builder phase) follows the wizard step.
     One source of truth — the step — so the center and panel can't disagree. */
-export function phaseForStep(step: WizardStep): 'setup' | 'edit' | 'preview' {
+export function phaseForStep(step: WizardStep): 'setup' | 'edit' | 'cover' | 'preview' {
   if (step === 'welcome' || step === 'pick_size') return 'setup';
+  if (step === 'design_cover') return 'cover';
   if (step === 'finalize') return 'preview';
   return 'edit';
 }
@@ -61,6 +64,7 @@ export function phaseForStep(step: WizardStep): 'setup' | 'edit' | 'preview' {
 export const STEP_META: Record<WizardStep, { title: string; description: string; emoji: string }> = {
   welcome: { title: 'Welcome', description: 'Meet Megy and learn the basics', emoji: '👋' },
   pick_size: { title: 'Album Size', description: 'Choose your album dimensions', emoji: '📐' },
+  design_cover: { title: 'Cover', description: 'Design the front·spine·back cover', emoji: '📔' },
   pick_background: { title: 'Style', description: 'Background, border & frame', emoji: '🎨' },
   upload_photos: { title: 'Photos', description: 'Upload, then generate', emoji: '📸' },
   review_pages: { title: 'Review', description: 'Fine-tune each page', emoji: '🔍' },
@@ -118,7 +122,12 @@ export class WizardEngine {
       return 'upload_photos';
     }
 
-    // If user explicitly picked size → pick background
+    // Picked size but haven't passed the cover step yet → design the cover
+    if (this.state.completed.includes('pick_size') && !this.state.completed.includes('design_cover')) {
+      return 'design_cover';
+    }
+
+    // Cover done (or skipped) → pick background
     if (this.state.completed.includes('pick_size')) {
       return 'pick_background';
     }
@@ -162,6 +171,7 @@ export class WizardEngine {
     switch (step) {
       case 'welcome': return true; // Auto-complete
       case 'pick_size': return false; // Must click a size in wizard
+      case 'design_cover': return true; // Optional — always proceedable
       case 'pick_background': return false; // Must click a background
       // Combined upload + generate: "complete" only once the album is generated,
       // so Next can't skip past generation.
@@ -213,9 +223,19 @@ export class WizardEngine {
           tips: ["Fewer photos per page on a small album keeps each one crisp, not crowded", "You can change the size anytime"],
         };
 
+      case 'design_cover':
+        return {
+          title: "Step 2: Design Your Cover 📔",
+          body: `Give your ${builder.albumSize} album a cover — the front (title, subtitle, hero photo), the spine text, and the back. It prints as one wrap around the book. The hero photo goes on after you upload your photos, but you can set the title and style now. This step is optional — skip it and design the cover later from the Preview screen.`,
+          /* The cover editor renders on the center stage (phase 'cover'); its own
+             Continue/Back drive the wizard, so no panel actions here. */
+          actions: [],
+          tips: ["The spine width is set automatically from your page count at checkout", "You can revisit the cover any time from the Preview screen"],
+        };
+
       case 'pick_background':
         return {
-          title: "Step 2: Style Your Album 🎨",
+          title: "Step 3: Style Your Album 🎨",
           body: `Style your ${builder.albumSize} album — set the background, the photo border, and a decorative frame. Each choice applies to the whole album, and you can fine-tune anything later.`,
           /* Background / Border / Frame controls render on the center stage; each
              dispatches set_background / set_border / set_frame. No text actions. */
@@ -226,7 +246,7 @@ export class WizardEngine {
       case 'upload_photos':
         const photoCount = builder.uploadedPhotos.length;
         return {
-          title: photoCount > 0 ? `Step 3: Photos Uploaded (${photoCount}) 📸` : "Step 3: Upload Your Photos 📸",
+          title: photoCount > 0 ? `Step 4: Photos Uploaded (${photoCount}) 📸` : "Step 4: Upload Your Photos 📸",
           body: photoCount > 0
             ? `Great! You have **${photoCount}** photo${photoCount > 1 ? 's' : ''} ready. Upload more or let's generate your album!`
             : "Upload your photos and I'll auto-arrange them into beautiful layouts. You can upload as many as you want — I'll pick the best ones for each page.",
@@ -256,7 +276,7 @@ export class WizardEngine {
           };
         }
         return {
-          title: "Step 4: Review Each Page 🔍",
+          title: "Step 5: Review Each Page 🔍",
           body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then use the ‹ › arrows to move through your album.`,
           actions: ["Change layout"],
           tips: ["Go page by page — each can have its own layout", "Use the ‹ › arrows to move between pages", "When every page looks right, you'll order from the last page"],
@@ -265,7 +285,7 @@ export class WizardEngine {
 
       case 'add_text':
         return {
-          title: "Step 5: Add Text & Captions ✍️",
+          title: "Step 6: Add Text & Captions ✍️",
           body: "Personalize your album with captions, dates, quotes, or titles. Click any page to add text elements, then style them with fonts, colors, and effects.",
           actions: ["Add Text to This Page", "Add Date Stamp", "Skip to Finalize →"],
           tips: ["Script fonts look great for quotes", "Bold + large size = perfect titles"],
@@ -273,7 +293,7 @@ export class WizardEngine {
 
       case 'finalize':
         return {
-          title: "Step 6: Preview & Order 📦",
+          title: "Step 7: Preview & Order 📦",
           body: "Your album looks amazing! Preview the full album, make any final tweaks, then place your order. I'll save everything to the cloud so you can come back anytime.",
           actions: ["Preview Full Album", "Save to Cloud", "Place Order →"],
           tips: ["Albums are saved automatically", "You can reorder or reprint anytime"],

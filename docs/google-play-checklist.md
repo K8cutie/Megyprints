@@ -67,6 +67,20 @@ to a custom domain — see the last section).
 
 ---
 
+## Do at TWA time (code side)
+- **Real landscape for the album Preview.** Today the preview uses a CSS 90°
+  rotate ("hold your phone sideways") because a *browser tab* isn't allowed to
+  lock the device orientation. An installed app / TWA **is** allowed. So when we
+  package the TWA, upgrade the Preview page to a progressive enhancement:
+  try `screen.orientation.lock('landscape')` on enter and `.unlock()` on leave;
+  if it throws/rejects (plain browser tab) fall back to the existing CSS rotate.
+  This gives installed/Play users a *true* forced landscape — like a game —
+  that works **even when the phone's rotation is locked** (fixes the exact
+  problem where tilting a rotation-locked phone did nothing). Requires the
+  manifest `orientation` to allow landscape on that screen (currently hard
+  `'portrait'` in `vite.config.ts`) — loosen to `'any'` and lock per-screen, or
+  keep portrait as default and let the API override on Preview only.
+
 ## Notes
 - **Auto-update:** after launch, deploying a new web version updates Play users
   automatically. Resubmit to Play only for wrapper changes (icon/name/package).
