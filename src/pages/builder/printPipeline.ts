@@ -216,10 +216,26 @@ async function renderPageManually(
         await renderSlotQr(ctx, tqr, bx, by, bw, bh);
         continue;
       }
-      // (1b) ORNAMENT — reuse the photo-slot ornament renderer.
+      // (1b) ORNAMENT — a themed graphic. If the user free-transformed it (drag/
+      //      resize/rotate), draw it at that center-based, page-fraction transform;
+      //      otherwise fall back to the padded in-box fit. Matches the DOM preview.
       const torn = page.textSlotOrnament?.[j] ?? null;
       if (torn) {
-        await renderSlotOrnament(ctx, torn, bx, by, bw, bh);
+        const tg = page.textSlotOrnamentGeom?.[j] ?? null;
+        if (tg) {
+          const cw = tg.w * W;
+          const ch = tg.h * H;
+          try {
+            const img = await loadImage(torn.pngDataUrl);
+            ctx.save();
+            ctx.translate(tg.cx * W, tg.cy * H);
+            if (tg.rot) ctx.rotate((tg.rot * Math.PI) / 180);
+            ctx.drawImage(img, -cw / 2, -ch / 2, cw, ch);
+            ctx.restore();
+          } catch { /* graphic failed to load — leave the box empty */ }
+        } else {
+          await renderSlotOrnament(ctx, torn, bx, by, bw, bh);
+        }
         continue;
       }
       // (2) TEXT already handled by the boxIndex branch — never overdraw it.

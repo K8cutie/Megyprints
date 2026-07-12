@@ -11,6 +11,7 @@ import type {
   SlotGeometryOverride,
   QrFill,
   OrnamentFill,
+  OrnamentTransform,
   SlotText,
   PageTemplate,
   FrameStyle,
@@ -93,6 +94,7 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
   const carriedTextSlotFills = (page.textSlotFills ?? []).slice(0, textSlotCount);
   const carriedTextSlotQr = (page.textSlotQr ?? []).slice(0, textSlotCount);
   const carriedTextSlotOrnament = (page.textSlotOrnament ?? []).slice(0, textSlotCount);
+  const carriedTextSlotOrnamentGeom = (page.textSlotOrnamentGeom ?? []).slice(0, textSlotCount);
   return {
     ...page,
     templateId: template.id,
@@ -102,6 +104,7 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
     textSlotFills: carriedTextSlotFills,
     textSlotQr: carriedTextSlotQr,
     textSlotOrnament: carriedTextSlotOrnament,
+    textSlotOrnamentGeom: carriedTextSlotOrnamentGeom,
     slotFills: reflowFills(existingFills, slotCount, carriedQr, carriedText, carriedOrnament),
     slotScales: new Array(slotCount).fill(1),
     slotOffsetsX: new Array(slotCount).fill(0),
@@ -410,6 +413,7 @@ export interface BuilderActions {
   /** Set (or clear) an ORNAMENT in caption box j (template.textSlots[j]). Clears
    *  the box's photo + QR + bound caption (mutual exclusivity). */
   setTextSlotOrnament: (slotIndex: number, fill: OrnamentFill | null, pageIndex?: number) => void;
+  setTextSlotOrnamentGeom: (slotIndex: number, geom: OrnamentTransform | null, pageIndex?: number) => void;
 
   // Canvas photos (freeform)
   addPhotoToCanvas: (photoIndex: number, x: number, y: number) => void;
@@ -1056,6 +1060,7 @@ export function useBuilderState(): BuilderActions {
         textSlotFills: [...(page.textSlotFills ?? [])],
         textSlotQr: [...(page.textSlotQr ?? [])],
         textSlotOrnament: [...(page.textSlotOrnament ?? [])],
+        textSlotOrnamentGeom: [...(page.textSlotOrnamentGeom ?? [])],
         photos: page.photos.map((p) => ({ ...p, id: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
         textElements: page.textElements.map((t) => ({ ...t, id: `text-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
       };
@@ -1683,6 +1688,27 @@ export function useBuilderState(): BuilderActions {
     }
   }, [updateCurrentPage]);
 
+  /** Set (or clear, with null) the free-transform of a caption-box graphic
+   *  (textSlotOrnamentGeom[slotIndex]) — drag/resize/rotate persistence. No undo
+   *  snapshot per call: a transform fires many 'modified' events and one snapshot
+   *  each would flood undo (matches how slot-geometry edits behave). */
+  const setTextSlotOrnamentGeom = useCallback((slotIndex: number, geom: OrnamentTransform | null, pageIndex?: number) => {
+    const apply = (page: AlbumPage): AlbumPage => {
+      const textSlotOrnamentGeom = [...(page.textSlotOrnamentGeom ?? [])];
+      textSlotOrnamentGeom[slotIndex] = geom;
+      return { ...page, textSlotOrnamentGeom };
+    };
+    if (pageIndex == null) {
+      updateCurrentPage(apply);
+    } else {
+      setAlbumPages((prev) => {
+        const next = [...prev];
+        if (next[pageIndex]) next[pageIndex] = apply(next[pageIndex]);
+        return next;
+      });
+    }
+  }, [updateCurrentPage]);
+
   /* ── Auto-fill ── */
   const autoFillSlots = useCallback(() => {
     pushSnapshot();
@@ -2291,6 +2317,7 @@ export function useBuilderState(): BuilderActions {
     setMemoryQrCorner,
     setSlotText,
     setOrnamentFill,
+    setTextSlotOrnamentGeom,
     setTextSlotPhoto,
     setTextSlotQr,
     setTextSlotOrnament,

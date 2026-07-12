@@ -127,6 +127,7 @@ export interface UseCanvasEngineOptions {
   onTextSlotQrClick?: (slotIndex: number) => void;
   /** Click on a caption box FILLED with an ornament → re-open the ornament picker. */
   onTextSlotOrnamentClick?: (slotIndex: number) => void;
+  onTextSlotOrnamentModified?: (slotIndex: number, geom: import('./types').OrnamentTransform) => void;
   actions: BuilderActions;
   /** When true, slot containers become selectable and resizable */
   containerMode?: boolean;
@@ -188,10 +189,13 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const textSlotFillData = page.textSlotFills ? page.textSlotFills.join(',') : '';
   const textSlotQrData = page.textSlotQr ? page.textSlotQr.map((q) => q ? `${q.code}:${q.destination}` : '').join('|') : '';
   const textSlotOrnamentData = page.textSlotOrnament ? page.textSlotOrnament.map((o) => o ? `${o.pack}:${o.id}` : '').join('|') : '';
+  // Caption-box graphic TRANSFORMS — so a drag/resize/rotate (persisted geom)
+  // repaints the object at its new place (mirrors slotGeoms for photo slots).
+  const textSlotOrnamentGeomData = page.textSlotOrnamentGeom ? page.textSlotOrnamentGeom.map((g) => g ? `${g.cx.toFixed(3)},${g.cy.toFixed(3)},${g.w.toFixed(3)},${g.h.toFixed(3)},${Math.round(g.rot)}` : '').join('|') : '';
   // Ornament fills — so adding/changing/removing an ornament repaints the Fabric
   // editor without a page-nav (same desync class as slotTextData/qrData above).
   const ornamentData = page.ornamentFills ? page.ornamentFills.map((o) => o ? `${o.pack}:${o.id}` : '').join('|') : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}`;
+  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -213,6 +217,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     onTextSlotPhotoClick,
     onTextSlotQrClick,
     onTextSlotOrnamentClick,
+    onTextSlotOrnamentModified,
     actions,
     containerMode = false,
     onContainerModified,
@@ -272,6 +277,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   onTextSlotQrClickRef.current = onTextSlotQrClick ?? (() => {});
   const onTextSlotOrnamentClickRef = useRef<(slotIndex: number) => void>(() => {});
   onTextSlotOrnamentClickRef.current = onTextSlotOrnamentClick ?? (() => {});
+  const onTextSlotOrnamentModifiedRef = useRef<(slotIndex: number, geom: import('./types').OrnamentTransform) => void>(() => {});
+  onTextSlotOrnamentModifiedRef.current = onTextSlotOrnamentModified ?? (() => {});
   const containerModeRef = useRef(containerMode);
   containerModeRef.current = containerMode;
   const onContainerModifiedRef = useRef(onContainerModified);
@@ -572,7 +579,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -711,7 +718,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -1532,6 +1539,7 @@ function renderScene(
   onTextSlotQrClick: (slotIndex: number) => void = () => {},
   onOrnamentSlotClick: (slotIndex: number) => void = () => {},
   onTextSlotOrnamentClick: (slotIndex: number) => void = () => {},
+  onTextSlotOrnamentModified: (slotIndex: number, geom: import('./types').OrnamentTransform) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1628,17 +1636,55 @@ function renderScene(
       });
       return;
     }
-    // (1b) ORNAMENT — themed graphic contained (padded) in the box, transparent.
+    // (1b) ORNAMENT — a themed graphic. Unlike a caption (locked to its box), a
+    //      graphic is a FREE object: drag to move, corner handles to resize/rotate.
+    //      Its transform persists via textSlotOrnamentGeom (center-based page
+    //      fractions) so the DOM preview + print place it identically. Single tap
+    //      selects/moves; double-click re-opens the picker to swap/remove it.
     const torn = page.textSlotOrnament?.[i] ?? null;
     if (torn) {
-      const { dx, dy, side } = ornamentFit(r.left, r.top, r.width, r.height);
+      const tgeom = page.textSlotOrnamentGeom?.[i] ?? null;
       fab.Image.fromURL(torn.pngDataUrl, (img: any) => {
         if (thisRenderId !== currentRenderId) return;
-        img.set({ left: dx, top: dy, selectable: false, evented: true, hoverCursor: 'pointer' });
-        img.scaleToWidth(side);
+        const iw = img.width || 1;
+        const ih = img.height || 1;
+        if (tgeom) {
+          // Persisted transform: center-based page fractions → canvas px.
+          img.set({
+            originX: 'center', originY: 'center',
+            left: tgeom.cx * canvasW, top: tgeom.cy * canvasH,
+            scaleX: (tgeom.w * canvasW) / iw, scaleY: (tgeom.h * canvasH) / ih,
+            angle: tgeom.rot || 0,
+          });
+        } else {
+          // First placement: contained/padded in the box (as before), centred so a
+          // later drag/rotate pivots from the middle.
+          const { side } = ornamentFit(r.left, r.top, r.width, r.height);
+          img.set({
+            originX: 'center', originY: 'center',
+            left: r.left + r.width / 2, top: r.top + r.height / 2,
+            scaleX: side / iw, scaleY: side / ih, angle: 0,
+          });
+        }
+        img.set({
+          selectable: true, evented: true, hasControls: true, hasBorders: true,
+          lockUniScaling: true, // keep the vector proportional on a corner drag
+          cornerColor: '#F4C2A1', cornerSize: 10, transparentCorners: false,
+          borderColor: '#F4C2A1', hoverCursor: 'move',
+        });
         img.slotId = `${SLOT_ID}-textornament-${i}`;
-        img.on('mousedown', () => onTextSlotOrnamentClick(i));
+        img.on('modified', () => {
+          onTextSlotOrnamentModified(i, {
+            cx: img.left / canvasW,
+            cy: img.top / canvasH,
+            w: img.getScaledWidth() / canvasW,
+            h: img.getScaledHeight() / canvasH,
+            rot: img.angle || 0,
+          });
+        });
+        img.on('mousedblclick', () => onTextSlotOrnamentClick(i));
         canvas.add(img);
+        img.setCoords?.();
         canvas.renderAll();
       });
       return;
@@ -1771,6 +1817,14 @@ function renderScene(
       }
     });
     textObjects.forEach((t) => { if (canvas.contains(t)) canvas.bringToFront(t); });
+    // Free-transform caption-box GRAPHICS sit ON TOP — they can be dragged over a
+    // caption, so they must stay visible. (`-ornament-` above doesn't match the
+    // `-textornament-` id, so bring them last, above the text objects.)
+    canvas.getObjects().forEach((o: any) => {
+      if (typeof o.slotId === 'string' && o.slotId.includes('-textornament-')) {
+        canvas.bringToFront(o);
+      }
+    });
   };
   bringOverlaysToFront();
   setTimeout(bringOverlaysToFront, 50);

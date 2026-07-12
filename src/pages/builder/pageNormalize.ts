@@ -43,6 +43,7 @@ export function normalizeStoredPageFields(p: any): any {
     textSlotFills: get('textSlotFills', 'text_slot_fills') ?? [],
     textSlotQr: get('textSlotQr', 'text_slot_qr') ?? [],
     textSlotOrnament,
+    textSlotOrnamentGeom: get('textSlotOrnamentGeom', 'text_slot_ornament_geom') ?? [],
     textElements: get('textElements', 'text_elements') ?? [],
     photos: p.photos ?? [],
     background: p.background ?? { type: 'solid', solid: '#FFFBF7' },

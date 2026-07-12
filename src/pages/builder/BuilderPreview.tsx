@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw } from 'lucide-react';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
-import type { UploadedPhoto, AlbumPage, AlbumSizePreset } from './types';
+import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { setPendingPrintJob } from '../../lib/printQueue';
@@ -141,10 +141,28 @@ function QrSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zI
 /** Ornament square — the ornament PNG contained (with breathing-room padding)
  *  inside a cell, sized/positioned via ornamentFit(). Transparent (no backing) so
  *  it reads as a decorative accent on the page. Shares geometry with Fabric + print. */
-function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zIndex }: {
+function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zIndex, transform, pageW, pageH }: {
   rectKey: string; cellLeft: number; cellTop: number; cellW: number; cellH: number;
   dataUrl: string; onTap?: () => void; zIndex: number;
+  /** Free-transform for a dragged/resized/rotated graphic (center-based page
+   *  fractions). When present it overrides the in-box fit; needs pageW/pageH. */
+  transform?: OrnamentTransform | null; pageW?: number; pageH?: number;
 }) {
+  if (transform && pageW && pageH) {
+    const w = transform.w * pageW;
+    const h = transform.h * pageH;
+    return (
+      <div key={rectKey} className="absolute"
+        onClick={onTap ? (e) => { e.stopPropagation(); onTap(); } : undefined}
+        style={{
+          zIndex, left: transform.cx * pageW - w / 2, top: transform.cy * pageH - h / 2, width: w, height: h,
+          transform: transform.rot ? `rotate(${transform.rot}deg)` : undefined, transformOrigin: 'center center',
+          cursor: onTap ? 'pointer' : undefined,
+        }}>
+        <img src={dataUrl} alt="Ornament" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      </div>
+    );
+  }
   const { dx, dy, side } = ornamentFit(cellLeft, cellTop, cellW, cellH);
   return (
     <div key={rectKey} className="absolute"
@@ -384,6 +402,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             <OrnamentSquare key={`tslot-${i}`} rectKey={`tslot-${i}`} zIndex={5}
               cellLeft={boxLeft} cellTop={boxTop} cellW={boxW} cellH={boxH}
               dataUrl={torn.pngDataUrl}
+              transform={page.textSlotOrnamentGeom?.[i] ?? undefined} pageW={singleW} pageH={H}
               onTap={onTextSlotOrnamentTap ? () => onTextSlotOrnamentTap(i) : undefined} />
           );
         }

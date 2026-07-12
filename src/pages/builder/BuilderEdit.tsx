@@ -181,6 +181,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       if (containerMode) return;
       setTextSlotOrnamentEditSlot(slotIndex);
     }, [containerMode]),
+    // Free-transform: persist a graphic's drag/resize/rotate (see setTextSlotOrnamentGeom).
+    onTextSlotOrnamentModified: useCallback((slotIndex: number, geom: import('./types').OrnamentTransform) => {
+      actions.setTextSlotOrnamentGeom(slotIndex, geom);
+    }, [actions]),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {

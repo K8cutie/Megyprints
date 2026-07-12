@@ -271,6 +271,20 @@ export interface SlotGeometryOverride {
   rotation?: number;
 }
 
+/** Free-transform for a caption-box GRAPHIC (textSlotOrnament). Center-based and
+ *  in FULL-PAGE fractions so all three renderers (Fabric editor, DOM preview,
+ *  print) place it identically: draw a (w×h) box centred at (cx,cy), rotated by
+ *  `rot`. All fractions are 0–1 of the page's width/height; rot is degrees CW.
+ *  This lets a placed graphic be dragged, resized, and rotated anywhere on the
+ *  page — unlike text captions, which stay boxed. */
+export interface OrnamentTransform {
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  rot: number;
+}
+
 /** Fill data for a QR ('kind: qr') slot. Positional: qrFills[i] pairs with
  *  template.slots[i] exactly like slotFills[i]. Null = empty QR slot.
  *  The printed QR ALWAYS encodes `${MEMORY_BASE}/m/${code}` — never the raw
@@ -394,6 +408,12 @@ export interface AlbumPage {
    *  themed ornament — mutually exclusive with the bound caption, textSlotFills[j]
    *  and textSlotQr[j]. Serializes as-is (local, cloud, order snapshot). */
   textSlotOrnament?: (OrnamentFill | null)[];
+  /** Free-transform override for a caption-box graphic (textSlotOrnament[j]).
+   *  When present, the graphic is drawn at this center-based, full-page-fraction
+   *  transform instead of contained in the box — so a placed graphic can be
+   *  dragged/resized/rotated freely. Only applied when textSlotOrnament[j] exists
+   *  (a stale entry is ignored). Positional, parallel to template.textSlots[j]. */
+  textSlotOrnamentGeom?: (OrnamentTransform | null)[];
   background: AlbumBackground;
   photos: CanvasPhoto[];
   textElements: TextElement[];
