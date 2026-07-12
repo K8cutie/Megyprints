@@ -9,7 +9,7 @@
    the print pipeline uses — so what's designed here is what prints. */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Image as ImageIcon } from 'lucide-react';
+import { X, Upload } from 'lucide-react';
 import { useBuilderContext } from './BuilderContext';
 import { CoverWrapPreview } from './CoverWrapPreview';
 import { coverWrapGeometry, describeWrap } from './coverGeometry';
@@ -54,6 +54,17 @@ export default function CoverStep({ mode = 'modal', onClose, onNext, onBack }: P
   const patchText = (cur: TextStyle | undefined, role: 'title' | 'subtitle' | 'spine' | 'blurb', patch: Partial<TextStyle>): TextStyle =>
     ({ ...(cur ?? defaultCoverText(role, geom)), ...patch });
 
+  // Photo upload straight from the cover step — the cover comes BEFORE the
+  // upload step in the wizard, so without this the "add a cover photo" prompt
+  // would be a dead end. Routes through Megy's dispatch like every other add.
+  const fileRef = useRef<HTMLInputElement>(null);
+  const openUpload = () => fileRef.current?.click();
+  const onFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length) void b.dispatch({ type: 'add_photos', payload: { files }, rawMessage: 'add photos' });
+    e.target.value = '';
+  };
+
   const header = (
     <div className="flex items-center justify-between px-5 h-14 border-b border-[#EADFD3] shrink-0">
       <div>
@@ -68,6 +79,7 @@ export default function CoverStep({ mode = 'modal', onClose, onNext, onBack }: P
 
   const body = (
     <div className="flex-1 overflow-auto p-5 space-y-5">
+      <input ref={fileRef} type="file" accept="image/*" multiple onChange={onFiles} className="hidden" />
       {/* Live preview */}
       <div ref={wrapRef} className="w-full flex flex-col items-center">
         <CoverWrapPreview geometry={geom} coverDesign={d} photos={uploadedPhotos} width={Math.min(previewW, 820)} showGuides />
@@ -85,6 +97,7 @@ export default function CoverStep({ mode = 'modal', onClose, onNext, onBack }: P
           photos={uploadedPhotos}
           selectedId={d.front.photoId}
           onPick={(id) => setCoverFront({ photoId: d.front.photoId === id ? undefined : id })}
+          onUpload={openUpload}
           label="Hero photo"
         />
         <Field label="Title">
@@ -143,6 +156,7 @@ export default function CoverStep({ mode = 'modal', onClose, onNext, onBack }: P
           photos={uploadedPhotos}
           selectedId={d.back.photoId}
           onPick={(id) => setCoverBack({ photoId: d.back.photoId === id ? undefined : id })}
+          onUpload={openUpload}
           label="Back photo (optional)"
         />
         <Field label="Closing text (optional)">
@@ -164,7 +178,7 @@ export default function CoverStep({ mode = 'modal', onClose, onNext, onBack }: P
 
       {mode === 'step' && uploadedPhotos.length === 0 && (
         <p className="text-[12px] text-[#9B8B7A] text-center bg-[#FBF3EA] rounded-lg px-3 py-2.5">
-          Tip: your <b>hero photo</b> goes on once you upload photos in the next step — you can come back to the cover any time from the Preview screen.
+          Tip: add photos above to place a <b>hero photo</b> now — or skip it and drop one on later from the Preview screen.
         </p>
       )}
     </div>
@@ -257,11 +271,18 @@ function Swatches({ colors, value, onPick }: { colors: string[]; value?: string;
   );
 }
 
-function PhotoStrip({ photos, selectedId, onPick, label }: { photos: { id: string; previewUrl: string }[]; selectedId?: string; onPick: (id: string) => void; label: string }) {
+function PhotoStrip({ photos, selectedId, onPick, onUpload, label }: { photos: { id: string; previewUrl: string }[]; selectedId?: string; onPick: (id: string) => void; onUpload: () => void; label: string }) {
   if (!photos.length) {
     return (
-      <div className="flex items-center gap-2 text-[13px] text-[#9B8B7A] bg-[#FBF3EA] rounded-lg px-3 py-2.5">
-        <ImageIcon size={16} /> Upload photos first to place a cover photo.
+      <div>
+        <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">{label}</span>
+        <button
+          type="button"
+          onClick={onUpload}
+          className="w-full flex items-center justify-center gap-2 text-[13px] font-semibold text-[#C56B4E] bg-[#FBF3EA] hover:bg-[#F6E7D8] border border-dashed border-[#E3C9B3] rounded-lg px-3 py-3 transition-colors"
+        >
+          <Upload size={16} /> Upload photos
+        </button>
       </div>
     );
   }
@@ -279,6 +300,15 @@ function PhotoStrip({ photos, selectedId, onPick, label }: { photos: { id: strin
             <img src={p.previewUrl} alt="" className="w-full h-full object-cover" draggable={false} />
           </button>
         ))}
+        <button
+          type="button"
+          onClick={onUpload}
+          title="Upload more photos"
+          className="shrink-0 flex items-center justify-center rounded-lg border border-dashed border-[#E3C9B3] text-[#C56B4E] hover:bg-[#FBF3EA] transition-colors"
+          style={{ width: 56, height: 56 }}
+        >
+          <Upload size={18} />
+        </button>
       </div>
     </div>
   );
