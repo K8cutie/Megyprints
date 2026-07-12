@@ -41,7 +41,7 @@ function simpleSplit(theme: string): string[] {
    SUCCESSFUL proxy result is cached — a transient failure falls back to a local
    split WITHOUT caching, so the next open retries the proxy/Haiku. */
 const KW_CACHE_KEY = 'megy-theme-kw';
-const KW_CACHE_MAX = 50; // cap stored themes so localStorage can't grow unbounded
+const KW_CACHE_MAX = 10; // cap stored themes (~1-3 KB total) so localStorage can't grow unbounded
 const kwCache = new Map<string, string[]>();
 const kwInflight = new Map<string, Promise<string[]>>();
 let kwHydrated = false;
