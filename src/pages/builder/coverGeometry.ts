@@ -11,11 +11,11 @@
    The SPINE width is a PHYSICAL thickness that grows with the page count, so
    this module computes it from the interior page count and the paper caliper.
 
-   ⚠️  Every physical constant below is a PRINTER SPEC. The defaults are sane
-   industry values but WILL be slightly wrong for your specific bindery. When you
-   have the printer's spine-width chart + wrap/turn-in spec, edit ONLY the
-   `PRINTER_SPEC` block — the geometry recomputes correctly from it. Nothing else
-   in the app hardcodes these numbers.
+   The constants below are INDUSTRY-STANDARD defaults, so the cover works today.
+   The hardcover "allowances" (board, turn-in, hinge) are standard case
+   construction and rarely change. The one value that's stock-specific and worth
+   confirming from a real album is `paperCaliperIn`. Edit ONLY the `PRINTER_SPEC`
+   block — the whole wrap re-derives; nothing else hardcodes these numbers.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 import { ALBUM_SIZES, type AlbumSizePreset, type CoverType } from './types';
@@ -24,29 +24,32 @@ import { MIN_PAGES } from '../../lib/pricing';
 export const COVER_DPI = 300;
 
 /** ─────────────────────────────────────────────────────────────────────────
- *  PRINTER SPEC — ⚠️ CONFIRM WITH PRINTER before going to production.
- *  All values in INCHES. These are the only physical assumptions in the cover
- *  system; change them here and the whole wrap re-derives.
+ *  PRINTER SPEC — industry-standard defaults (all values in INCHES). The whole
+ *  wrap re-derives from these; nothing else hardcodes them.
  *  ───────────────────────────────────────────────────────────────────────── */
 export const PRINTER_SPEC = {
-  /** Thickness of ONE printed leaf (one physical sheet = 2 book pages/sides).
-   *  ~0.0045" is typical for a 150–170gsm photo-book text stock. */
-  paperCaliperIn: 0.0045,
-  /** How many builder "pages" (AlbumPage) print on one physical leaf. A leaf is
-   *  double-sided, so 2. Spine leaves = ceil(pages / sidesPerLeaf). */
+  /** Thickness of ONE printed leaf (one sheet = 2 book pages). 0.006" ≈ 0.15 mm
+   *  = a typical ~170gsm photo-book text stock. STOCK-SPECIFIC — the one value
+   *  to fine-tune from a real album (measured spine ÷ leaf count). */
+  paperCaliperIn: 0.006,
+  /** How many builder pages print on one physical leaf. Double-sided = 2.
+   *  Spine leaves = ceil(pages / sidesPerLeaf). */
   sidesPerLeaf: 2,
-  /** Grey-board thickness per cover board (hardcover only). ~2.5 mm ≈ 0.098". */
+  /** Grey-board thickness per cover board — HARDCOVER ALLOWANCE. Industry
+   *  standard 2.5 mm greyboard ≈ 0.098" (2 mm / 3 mm also common). */
   boardThicknessIn: 0.098,
-  /** Hinge / joint gap between the spine and each panel (hardcover only). The
-   *  case flexes here; art runs through it continuously but text must avoid it. */
-  hingeGapIn: 0.375,
-  /** Paper turn-in that folds around the board edges (hardcover). Softcover uses
-   *  plain bleed instead (see bleedIn). */
+  /** Joint / French-groove gap between the spine and each board — HARDCOVER
+   *  ALLOWANCE. Industry standard ~8 mm ≈ 0.315". Text must avoid this fold. */
+  hingeGapIn: 0.315,
+  /** Turn-in: paper that folds around the board edges and glues inside —
+   *  HARDCOVER ALLOWANCE. Industry standard ~16 mm ≈ 0.625" (5/8"). Softcover
+   *  uses plain bleed instead (bleedIn). */
   wrapTurnIn: 0.625,
-  /** Full-bleed margin on the outer edges (softcover) and the minimum art bleed
-   *  everywhere. Art must fill INTO this; it gets trimmed off. */
+  /** Bleed — art past the trim that gets cut off. Universal print standard
+   *  3 mm ≈ 0.125". */
   bleedIn: 0.125,
-  /** Keep-out from every trim edge & fold. Text / logos must stay inside this. */
+  /** Safe area — keep text / logos this far from every trim & fold. Standard
+   *  ~6 mm ≈ 0.25". */
   safeIn: 0.25,
 } as const;
 
