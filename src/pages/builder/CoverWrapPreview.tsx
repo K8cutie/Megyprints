@@ -6,11 +6,12 @@
 
 import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
-import { resolveBgImageSrc, type UploadedPhoto } from './types';
+import { resolveBgImageSrc, type UploadedPhoto, type AlbumPage } from './types';
 import type { CoverWrapGeometry } from './coverGeometry';
 import type { CoverDesign } from './types';
-import { coverLayout, type PanelLayout, type PositionedText } from './coverLayout';
+import { coverLayout, deriveSpine, solidOf, type PanelLayout, type PositionedText } from './coverLayout';
 import { wordArtDomStyle } from './wordArt';
+import { PageView } from './BuilderPreview';
 
 interface Props {
   geometry: CoverWrapGeometry;
@@ -21,18 +22,25 @@ interface Props {
   /** Draw dashed fold/crease guides at the spine edges. */
   showGuides?: boolean;
   className?: string;
+  /** Cover-as-pages: when both are present, render the ACTUAL front/back cover
+   *  PAGES (via PageView) + a spine DERIVED from the front page, mirroring the
+   *  print compositor. Falls back to the legacy CoverDesign layout otherwise. */
+  coverFront?: AlbumPage;
+  coverBack?: AlbumPage;
 }
 
-export function CoverWrapPreview({ geometry, coverDesign, photos, width, showGuides, className }: Props) {
+export function CoverWrapPreview({ geometry, coverDesign, photos, width, showGuides, className, coverFront, coverBack }: Props) {
   const layout = useMemo(() => coverLayout(geometry, coverDesign), [geometry, coverDesign]);
-  const scale = width / layout.wrap.wPx;
-  const height = layout.wrap.hPx * scale;
+  const scale = width / geometry.wrap.wPx;
+  const height = geometry.wrap.hPx * scale;
+  const usePages = !!(coverFront && coverBack);
   // Full-bleed base — mirrors the print renderer so preview and print both have
   // no white turn-in edges (back colour left of the spine, front colour right).
-  const backBg = layout.panels.find((p) => p.panel === 'back')?.bg || '#ffffff';
-  const frontBg = layout.panels.find((p) => p.panel === 'front')?.bg || '#ffffff';
+  const backBg = usePages ? solidOf(coverBack!.background) : (layout.panels.find((p) => p.panel === 'back')?.bg || '#ffffff');
+  const frontBg = usePages ? solidOf(coverFront!.background) : (layout.panels.find((p) => p.panel === 'front')?.bg || '#ffffff');
+  const spine = usePages ? deriveSpine(coverFront!, geometry) : null;
 
-  return (
+  const shell = (children: React.ReactNode) => (
     <div
       className={className}
       style={{
@@ -46,12 +54,10 @@ export function CoverWrapPreview({ geometry, coverDesign, photos, width, showGui
       }}
     >
       <div style={{ position: 'absolute', inset: 0, background: backBg }} />
-      <div style={{ position: 'absolute', top: 0, bottom: 0, left: layout.foldXPx[0] * scale, right: 0, background: frontBg }} />
-      {layout.panels.map((p) => (
-        <PanelView key={p.panel} p={p} scale={scale} photos={photos} />
-      ))}
+      <div style={{ position: 'absolute', top: 0, bottom: 0, left: geometry.foldXPx[0] * scale, right: 0, background: frontBg }} />
+      {children}
       {showGuides &&
-        layout.foldXPx.map((fx, i) => (
+        geometry.foldXPx.map((fx, i) => (
           <div
             key={i}
             style={{
@@ -65,6 +71,52 @@ export function CoverWrapPreview({ geometry, coverDesign, photos, width, showGui
             }}
           />
         ))}
+    </div>
+  );
+
+  if (usePages) {
+    const { back, front, spine: spineRect } = geometry.panels;
+    return shell(
+      <>
+        <PanelPage page={coverBack!} rect={back} scale={scale} photos={photos} />
+        <PanelPage page={coverFront!} rect={front} scale={scale} photos={photos} />
+        <div
+          style={{
+            position: 'absolute',
+            left: spineRect.x * scale,
+            top: spineRect.y * scale,
+            width: spineRect.width * scale,
+            height: spineRect.height * scale,
+            background: spine?.bg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+          }}
+        >
+          {spine?.text.text.trim() && (
+            <div style={{ ...textCss(spine.text, scale), width: 'auto', whiteSpace: 'nowrap', transform: 'rotate(-90deg)', transformOrigin: 'center center' }}>
+              {spine.text.text}
+            </div>
+          )}
+        </div>
+      </>,
+    );
+  }
+
+  return shell(
+    layout.panels.map((p) => <PanelView key={p.panel} p={p} scale={scale} photos={photos} />),
+  );
+}
+
+/** One cover panel rendered as a real PAGE (via PageView, coverMode), scaled into
+ *  the panel's trim rect. The panel is exactly the album trim, so the page fills it. */
+function PanelPage({ page, rect, scale, photos }: { page: AlbumPage; rect: { x: number; y: number; width: number; height: number }; scale: number; photos: UploadedPhoto[] }) {
+  const w = rect.width * scale;
+  const h = rect.height * scale;
+  return (
+    <div style={{ position: 'absolute', left: rect.x * scale, top: rect.y * scale, width: w, height: h, overflow: 'hidden' }}>
+      <PageView page={page} photos={photos} singleW={w} H={h} pageIndex={0} coverMode />
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
-import CoverStep from './CoverStep';
+import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
@@ -178,7 +178,7 @@ function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onT
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -206,6 +206,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   onTextSlotQrTap?: (slotIndex: number) => void;
   /** Tap a caption box FILLED with an ornament → re-open the ornament picker. */
   onTextSlotOrnamentTap?: (slotIndex: number) => void;
+  /** COVER panel: no interior binding gutter (its inner edge is the spine) and no
+   *  pink keep-out guide — see the cover-as-pages rework. */
+  coverMode?: boolean;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -213,7 +216,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   const template = page.templateId ? getTemplateById(page.templateId) : null;
   const baseMargin = template?.margin ?? { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
   // Reserve the binding keep-out on the inner edge so slots match the editor.
-  const margin = marginForTemplate(template, baseMargin, page.size, pageIndex);
+  // A cover panel skips it (noBinding) — its inner edge is the spine, not a gutter.
+  const margin = marginForTemplate(template, baseMargin, page.size, pageIndex, { noBinding: coverMode });
   const safeX = margin.left * singleW;
   const safeY = margin.top * H;
   const safeW = singleW * (1 - margin.left - margin.right);
@@ -506,8 +510,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             }} />
         );
       })}
-      {/* Binding (gutter) keep-out guide — 0.5" reserve on the inner edge */}
-      {(() => {
+      {/* Binding (gutter) keep-out guide — 0.5" reserve on the inner edge.
+          Hidden on cover panels (they have no interior gutter). */}
+      {!coverMode && (() => {
         const frac = bindingMarginFraction(page.size);
         const onLeft = bindingEdge(pageIndex) === 'left';
         return (
@@ -527,7 +532,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
   const total = pages.length;
-  const { setBoxText, updateTextElement, setQrFill, coverDesign } = useBuilderContext();
+  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, coverBack } = useBuilderContext();
 
   // The preview is a TWO-PAGE spread — wider than a phone screen, so it shrinks to
   // a stamp in portrait. Rather than ask the user to rotate (useless if their phone
@@ -732,7 +737,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               🎨 Design your cover
             </button>
             <button
-              onClick={() => { setPendingPrintJob({ pages, photos, albumSize, coverDesign }); onOrder(); }}
+              onClick={() => { setPendingPrintJob({ pages, photos, albumSize, coverDesign, coverFront, coverBack }); onOrder(); }}
               className="w-full py-4 bg-[#E8A598] text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md"
             >
               ORDER ALBUM
@@ -768,7 +773,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           onClose={() => setQrEdit(null)}
         />
       )}
-      {coverOpen && <CoverStep onClose={() => setCoverOpen(false)} />}
+      {coverOpen && <CoverEditor mode="modal" onClose={() => setCoverOpen(false)} />}
     </div>
     </div>
   );

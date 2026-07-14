@@ -437,6 +437,17 @@ export interface AlbumPage {
   cornerBase?: string;
 }
 
+/** The two cover PAGES — front & back covers edited with the SAME per-page
+ *  editor as interior pages (see the cover-as-pages rework). Each is a normal
+ *  AlbumPage sized to the album trim; the spine between them is DERIVED from the
+ *  front page (coverLayout.deriveSpine), never edited. Held in dedicated state
+ *  (coverFront/coverBack) OUTSIDE albumPages so page-count pricing, spine
+ *  thickness, and spread pairing stay driven purely by interior pages. */
+export interface CoverPages {
+  front: AlbumPage;
+  back: AlbumPage;
+}
+
 /** UploadedPhoto — photo stored locally in IndexedDB.  Only metadata
     travels to Supabase.  The actual File bytes stay in the browser. */
 export interface UploadedPhoto {

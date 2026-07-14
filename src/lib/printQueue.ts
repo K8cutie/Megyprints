@@ -17,10 +17,14 @@ export interface PrintJob {
   pages: AlbumPage[];
   photos: UploadedPhoto[];
   albumSize: AlbumSizePreset;
-  /** Designed front·spine·back cover artwork. Optional for back-compat with
-   *  jobs minted before covers existed; checkout falls back to DEFAULT_COVER_DESIGN.
+  /** LEGACY designed front·spine·back cover artwork (old drafts). Optional for
+   *  back-compat; the wrap falls back to this when cover PAGES are absent.
    *  The cover MATERIAL (soft/hard) is chosen at checkout, not stored here. */
   coverDesign?: CoverDesign;
+  /** Cover-as-pages: the front & back cover PAGES. When present, the checkout
+   *  cover wrap composites these actual page renders + a derived spine. */
+  coverFront?: AlbumPage;
+  coverBack?: AlbumPage;
 }
 
 let pending: PrintJob | null = null;

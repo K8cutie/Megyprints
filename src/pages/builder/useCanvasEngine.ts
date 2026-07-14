@@ -135,6 +135,9 @@ export interface UseCanvasEngineOptions {
   onContainerModified?: (slotIndex: number, geometry: import('./types').SlotGeometryOverride) => void;
   /** Called after renderScene completes — for canvas snapshot capture */
   onRenderComplete?: (canvas: FabricCanvas) => void;
+  /** COVER panel editor: no interior binding gutter + no pink keep-out guide (the
+   *  panel's inner edge is the spine, handled by the wrap compositor). */
+  coverMode?: boolean;
 }
 
 export interface UseCanvasEngineReturn {
@@ -222,6 +225,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     containerMode = false,
     onContainerModified,
     onRenderComplete,
+    coverMode = false,
   } = options;
 
   const dims = getCanvasDimensions((albumSize || '8x10') as AlbumSizePreset);
@@ -579,7 +583,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, coverMode);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -718,7 +722,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, coverMode);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -1084,6 +1088,7 @@ function renderTemplateSlots(
   onSlotTextClick: (slotIndex: number) => void = () => {},
   ornamentFills?: (OrnamentFill | null)[],
   onOrnamentSlotClick: (slotIndex: number) => void = () => {},
+  coverMode: boolean = false,
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
@@ -1091,8 +1096,9 @@ function renderTemplateSlots(
   const adaptedTemplate = adaptTemplateToOrientation(template, canvasW, canvasH);
 
   // Phase 1: compute safe area from template margins — with the binding keep-out
-  // added to the inner (spine) edge so slots never land in the gutter.
-  const m = marginForTemplate(adaptedTemplate, adaptedTemplate.margin, albumSize, pageIndex);
+  // added to the inner (spine) edge so slots never land in the gutter. A cover
+  // panel skips the gutter (noBinding) — its inner edge is the spine.
+  const m = marginForTemplate(adaptedTemplate, adaptedTemplate.margin, albumSize, pageIndex, { noBinding: coverMode });
   const safeX = canvasW * m.left;
   const safeY = canvasH * m.top;
   const safeW = canvasW * (1 - m.left - m.right);
@@ -1540,6 +1546,7 @@ function renderScene(
   onOrnamentSlotClick: (slotIndex: number) => void = () => {},
   onTextSlotOrnamentClick: (slotIndex: number) => void = () => {},
   onTextSlotOrnamentModified: (slotIndex: number, geom: import('./types').OrnamentTransform) => void = () => {},
+  coverMode: boolean = false,
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1564,7 +1571,7 @@ function renderScene(
 
   const geoms = page.slotGeometries;
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick, page.slotTexts, onSlotTextClick, page.ornamentFills, onOrnamentSlotClick);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick, page.slotTexts, onSlotTextClick, page.ornamentFills, onOrnamentSlotClick, coverMode);
   }
 
   // 3b. Decorative theme corners (one set, all four corners), locked + on top.
@@ -1600,7 +1607,7 @@ function renderScene(
   // canvas used to draw bound captions at their raw x/y — which is (0,0) for
   // box-bound text → the top-left corner — and never drew empty placeholders, so
   // the desktop editor lost the textbox (or showed it displaced in the corner).
-  const tMargin = template ? marginForTemplate(template, template.margin, albumSize, pageIndex) : null;
+  const tMargin = template ? marginForTemplate(template, template.margin, albumSize, pageIndex, { noBinding: coverMode }) : null;
   const tSafe = tMargin ? {
     x: canvasW * tMargin.left, y: canvasH * tMargin.top,
     w: canvasW * (1 - tMargin.left - tMargin.right), h: canvasH * (1 - tMargin.top - tMargin.bottom),
@@ -1860,7 +1867,8 @@ function renderScene(
   }
 
   // ── Binding (gutter) keep-out guide — the 0.5" spine reserve on the inner edge ──
-  {
+  // Skipped on cover panels (no interior gutter).
+  if (!coverMode) {
     const bFrac = bindingMarginFraction(albumSize);
     const onLeft = bindingEdge(pageIndex) === 'left';
     const zoneX = onLeft ? 0 : canvasW * (1 - bFrac);

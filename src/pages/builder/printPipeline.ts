@@ -13,8 +13,8 @@ import { ornamentFit } from './ornaments';
 import { drawWordArtText } from './wordArt';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
-import { coverWrapGeometry } from './coverGeometry';
-import { coverLayout, type PositionedText } from './coverLayout';
+import { coverWrapGeometry, insetRect } from './coverGeometry';
+import { coverLayout, deriveSpine, solidOf, type PositionedText } from './coverLayout';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -90,7 +90,9 @@ async function renderPageManually(
   photos: UploadedPhoto[],
   albumSize: AlbumSizePreset,
   pageIndex: number,
+  opts: { coverMode?: boolean; maxSide?: number } = {},
 ): Promise<Blob> {
+  const coverMode = opts.coverMode ?? false;
   const { width: W, height: H } = getPrintDimensions(albumSize);
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -115,7 +117,7 @@ async function renderPageManually(
   // text-only or ornament-only page (no photo fills) still renders its content.
   if (template && (page.slotFills || page.qrFills || page.slotTexts || page.ornamentFills)) {
     const adapted = adaptTemplateToOrientation(template, W, H);
-    const m = marginForTemplate(adapted, adapted.margin, albumSize, pageIndex);
+    const m = marginForTemplate(adapted, adapted.margin, albumSize, pageIndex, { noBinding: coverMode });
     const safeX = W * m.left;
     const safeY = H * m.top;
     const safeW = W * (1 - m.left - m.right);
@@ -178,7 +180,7 @@ async function renderPageManually(
   // its x/y. Each element's chosen font is loaded before drawing so the canvas
   // doesn't silently fall back to the default serif.
   const textTpl = template ? adaptTemplateToOrientation(template, W, H) : null;
-  const tm = textTpl ? marginForTemplate(textTpl, textTpl.margin, albumSize, pageIndex) : null;
+  const tm = textTpl ? marginForTemplate(textTpl, textTpl.margin, albumSize, pageIndex, { noBinding: coverMode }) : null;
   for (const text of page.textElements || []) {
     const fam = text.fontFamily || 'serif';
     const primary = fam.match(/"([^"]+)"/)?.[1];
@@ -266,7 +268,10 @@ async function renderPageManually(
   // (→ hundreds of MB / rejected). ~1800 px longest side ≈ 225 DPI at 8–9" —
   // solid photo-book quality — keeps a ~50-page album under ~40 MB. Raise
   // MAX_SIDE / quality once the storage plan allows bigger uploads.
-  const MAX_SIDE = 1800;
+  // Interior pages downscale to fit the storage cap; a cover PANEL passes
+  // maxSide=Infinity (no downscale) so it stays crisp when composited into the
+  // wrap, which applies its own MAX_COVER_SIDE cap at the end.
+  const MAX_SIDE = opts.maxSide ?? 1800;
   const scale = Math.min(1, MAX_SIDE / Math.max(W, H));
   let out: HTMLCanvasElement = canvas;
   if (scale < 1) {
@@ -832,13 +837,30 @@ export interface CoverPrintInput {
   cover: CoverType;
   coverDesign: CoverDesign;
   photos: UploadedPhoto[];
+  /** Cover-as-pages: when both are present, the wrap composites these ACTUAL
+   *  page renders (front/back) + a spine derived from the front page, instead of
+   *  the legacy CoverDesign layout. */
+  coverFront?: AlbumPage;
+  coverBack?: AlbumPage;
+}
+
+/** Render ONE cover panel PAGE (front/back) to an Image via the SAME per-page
+ *  renderer as interior pages (coverMode → no binding gutter, no downscale), so
+ *  the wrap composites exactly what the cover editor shows. */
+async function renderCoverPanelImage(page: AlbumPage, photos: UploadedPhoto[], albumSize: AlbumSizePreset): Promise<HTMLImageElement> {
+  const blob = await renderPageManually(page, photos, albumSize, 0, { coverMode: true, maxSide: Infinity });
+  const url = URL.createObjectURL(blob);
+  try {
+    return await loadImage(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 /** Render the flat cover wrap to a full-resolution JPEG Blob. */
 export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<Blob> {
-  const { albumSize, pageCount, cover, coverDesign, photos } = input;
+  const { albumSize, pageCount, cover, coverDesign, photos, coverFront, coverBack } = input;
   const geom = coverWrapGeometry(albumSize, pageCount, cover);
-  const layout = coverLayout(geom, coverDesign);
   const W = geom.wrap.wPx;
   const H = geom.wrap.hPx;
 
@@ -846,47 +868,77 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
-  // Full-bleed base so the wrap has NO white edges in the turn-in / bleed zone:
-  // the back colour bleeds everywhere left of the spine, the front colour right
-  // of it (the spine colour follows the front). Panels then paint on top.
-  const panelBg = (name: 'back' | 'front') => layout.panels.find((p) => p.panel === name)?.bg || '#FFFFFF';
-  const splitX = layout.foldXPx[0];
-  ctx.fillStyle = panelBg('back');
-  ctx.fillRect(0, 0, splitX, H);
-  ctx.fillStyle = panelBg('front');
-  ctx.fillRect(splitX, 0, W - splitX, H);
 
-  for (const p of layout.panels) {
-    if (p.bg) {
-      ctx.fillStyle = p.bg;
-      ctx.fillRect(p.rect.x, p.rect.y, p.rect.width, p.rect.height);
+  if (coverFront && coverBack) {
+    // ── COVER-AS-PAGES: composite the ACTUAL front/back page renders + a spine
+    //    DERIVED from the front page (text = front title, colour = front bg). ──
+    const spine = deriveSpine(coverFront, geom);
+    const frontBg = solidOf(coverFront.background);
+    const backBg = solidOf(coverBack.background);
+    // Full-bleed base (no white turn-in): back colour left of the spine, front right.
+    const splitX = geom.foldXPx[0];
+    ctx.fillStyle = backBg;
+    ctx.fillRect(0, 0, splitX, H);
+    ctx.fillStyle = frontBg;
+    ctx.fillRect(splitX, 0, W - splitX, H);
+    // Panel page renders (front & back), each drawn edge-to-edge into its trim rect.
+    const [backImg, frontImg] = await Promise.all([
+      renderCoverPanelImage(coverBack, photos, albumSize),
+      renderCoverPanelImage(coverFront, photos, albumSize),
+    ]);
+    const { back, front, spine: spineRect } = geom.panels;
+    ctx.drawImage(backImg, back.x, back.y, back.width, back.height);
+    ctx.drawImage(frontImg, front.x, front.y, front.width, front.height);
+    // Spine: fill + the derived front-page text, rotated up the spine.
+    ctx.fillStyle = spine.bg;
+    ctx.fillRect(spineRect.x, spineRect.y, spineRect.width, spineRect.height);
+    if (spine.text.text.trim()) {
+      const spineSafe = insetRect(spineRect, geom.safeInsetPx);
+      drawCoverText(ctx, { style: spine.text, rect: spineSafe, rotateDeg: -90, valign: 'middle' });
     }
-    if (p.photoId) {
-      const src = resolveBgImageSrc({ photoId: p.photoId }, photos);
-      if (src) {
-        try {
-          const img = await loadImage(src);
-          const s = Math.max(p.rect.width / img.width, p.rect.height / img.height);
-          const dw = img.width * s;
-          const dh = img.height * s;
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(p.rect.x, p.rect.y, p.rect.width, p.rect.height);
-          ctx.clip();
-          ctx.drawImage(img, p.rect.x + (p.rect.width - dw) / 2, p.rect.y + (p.rect.height - dh) / 2, dw, dh);
-          ctx.restore();
-        } catch { /* photo failed — the panel bg shows through */ }
+  } else {
+    // ── LEGACY fallback: the old CoverDesign form output (back-compat for drafts
+    //    without cover pages). ──
+    const layout = coverLayout(geom, coverDesign);
+    const panelBg = (name: 'back' | 'front') => layout.panels.find((p) => p.panel === name)?.bg || '#FFFFFF';
+    const splitX = layout.foldXPx[0];
+    ctx.fillStyle = panelBg('back');
+    ctx.fillRect(0, 0, splitX, H);
+    ctx.fillStyle = panelBg('front');
+    ctx.fillRect(splitX, 0, W - splitX, H);
+
+    for (const p of layout.panels) {
+      if (p.bg) {
+        ctx.fillStyle = p.bg;
+        ctx.fillRect(p.rect.x, p.rect.y, p.rect.width, p.rect.height);
       }
-    }
-    for (const t of p.texts) drawCoverText(ctx, t);
-    if (p.brandMark) {
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = `600 ${Math.round(p.brandMark.height * 0.62)}px Cinzel, Georgia, serif`;
-      ctx.fillText('Megy Prints', p.brandMark.x + p.brandMark.width / 2, p.brandMark.y + p.brandMark.height / 2);
-      ctx.restore();
+      if (p.photoId) {
+        const src = resolveBgImageSrc({ photoId: p.photoId }, photos);
+        if (src) {
+          try {
+            const img = await loadImage(src);
+            const s = Math.max(p.rect.width / img.width, p.rect.height / img.height);
+            const dw = img.width * s;
+            const dh = img.height * s;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(p.rect.x, p.rect.y, p.rect.width, p.rect.height);
+            ctx.clip();
+            ctx.drawImage(img, p.rect.x + (p.rect.width - dw) / 2, p.rect.y + (p.rect.height - dh) / 2, dw, dh);
+            ctx.restore();
+          } catch { /* photo failed — the panel bg shows through */ }
+        }
+      }
+      for (const t of p.texts) drawCoverText(ctx, t);
+      if (p.brandMark) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `600 ${Math.round(p.brandMark.height * 0.62)}px Cinzel, Georgia, serif`;
+        ctx.fillText('Megy Prints', p.brandMark.x + p.brandMark.width / 2, p.brandMark.y + p.brandMark.height / 2);
+        ctx.restore();
+      }
     }
   }
 

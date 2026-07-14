@@ -34,13 +34,19 @@ export function applyBindingMargin(margin: Margin, albumSize: string, pageIndex:
 
 /** Effective page margin for rendering. A full-bleed template runs the photo to
  *  ALL four edges (no safe margin, no binding gutter); everything else gets the
- *  binding reserve added to its inner edge. Use this everywhere a page renders. */
+ *  binding reserve added to its inner edge. Use this everywhere a page renders.
+ *
+ *  `opts.noBinding` — a COVER panel has no interior spine gutter (its inner edge
+ *  IS the spine, handled by the wrap compositor), so cover pages pass this to
+ *  keep the plain template margins and skip applyBindingMargin. */
 export function marginForTemplate(
   template: { fullBleed?: boolean } | null | undefined,
   baseMargin: Margin,
   albumSize: string,
   pageIndex: number,
+  opts?: { noBinding?: boolean },
 ): Margin {
   if (template?.fullBleed) return { top: 0, bottom: 0, left: 0, right: 0 };
+  if (opts?.noBinding) return { ...baseMargin };
   return applyBindingMargin(baseMargin, albumSize, pageIndex);
 }

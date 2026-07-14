@@ -6,7 +6,7 @@ import { useBuilderContext, type BuilderContextValue } from './builder/BuilderCo
 import BuilderSetup from './builder/BuilderSetup';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
-import CoverStep from './builder/CoverStep';
+import CoverEditor from './builder/CoverEditor';
 import MobileReview from './builder/MobileReview';
 import LayoutPicker from './builder/LayoutPicker';
 import BuilderBackGuard from './builder/BuilderBackGuard';
@@ -236,13 +236,13 @@ export default function Builder() {
             )}
           </AnimatePresence>
 
-          {/* Cover step — rendered OUTSIDE AnimatePresence. A CoverStep motion
+          {/* Cover editor — rendered OUTSIDE AnimatePresence. A cover-phase motion
               child failed to complete its exit animation, deadlocking mode="wait"
               for every subsequent phase change; a plain absolute-fill conditional
               mounts/unmounts cleanly and can't stall the other transitions. */}
           {actions.phase === 'cover' && (
             <div className="absolute inset-0 bg-[#FFF8F0]">
-              <CoverStep
+              <CoverEditor
                 mode="step"
                 onNext={() => { actions.setWizardStep('pick_background'); actions.setPhase('edit'); }}
                 onBack={() => { actions.setWizardStep('pick_size'); actions.setPhase('setup'); }}

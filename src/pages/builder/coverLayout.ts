@@ -11,7 +11,7 @@
    The DOM preview multiplies by a display scale; print draws at full px.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import type { CoverDesign, TextStyle } from './types';
+import type { AlbumBackground, AlbumPage, CoverDesign, TextStyle } from './types';
 import type { CoverWrapGeometry, Rect, CoverPanel } from './coverGeometry';
 import { insetRect } from './coverGeometry';
 import { contrastOutline } from './wordArt';
@@ -181,4 +181,74 @@ export function coverLayout(g: CoverWrapGeometry, d: CoverDesign): CoverLayout {
     safeInsetPx: inset,
     panels: [back, spine, front],
   };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COVER-AS-PAGES spine derivation.
+   ───────────────────────────────────────────────────────────────────────────
+   When the front/back covers are edited as PAGES, the spine is never edited —
+   it is DERIVED from the front cover page: its TEXT is the front page's title,
+   its COLOUR follows the front page background (same rule the legacy layout used:
+   spine.bg = front.background). `deriveSpine` is the SINGLE authority for this,
+   consumed by BOTH wrap renderers (print canvas + DOM preview) so they cannot
+   drift. It is intentionally NOT shown in the per-panel Fabric editor (that edits
+   one trim panel at a time), so the spine is a two-surface parity concern.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Flatten any background to a single solid colour for the spine + bleed base.
+ *  solid → its colour; gradient → first stop; image/texture → its solid backing
+ *  or a neutral default. Mirrors how the wrap fills the turn-in with a flat colour. */
+export function solidOf(bg?: AlbumBackground): string {
+  if (!bg) return '#FFFBF7';
+  if (bg.type === 'gradient') return bg.gradient?.stops?.[0]?.color ?? bg.solid ?? '#FFFBF7';
+  return bg.solid ?? '#FFFBF7';
+}
+
+/** Derive the spine's text + colour from the FRONT cover page.
+ *  TEXT selection (deterministic): (1) the bound-caption title (a TextElement on
+ *  textSlot 0 — the cover template's title box); else (2) the largest free
+ *  TextElement (lowest index wins ties) — the visual "title"; else (3) empty.
+ *  The chosen element's styling is copied but the SIZE is re-fit to the physical
+ *  spine (the front title size is in page-design space and must not be used raw).
+ *  COLOUR = solidOf(front.background). */
+export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry): { text: TextStyle; bg: string } {
+  const bg = solidOf(front.background);
+  const spineFontSize = Math.round(Math.min(g.panels.spine.width * 0.5, g.panels.front.height * 0.035));
+  const nonEmpty = (front.textElements ?? []).filter((t) => !!t.text && t.text.trim().length > 0);
+
+  let chosen = nonEmpty.find((t) => t.boxIndex === 0);
+  if (!chosen) {
+    for (const t of nonEmpty) {
+      if (t.boxIndex !== undefined) continue;        // free text only for the "largest" heuristic
+      if (!chosen || t.fontSize > chosen.fontSize) chosen = t;
+    }
+  }
+  if (!chosen) chosen = nonEmpty[0];                  // fall back to any caption (e.g. a subtitle)
+
+  const text: TextStyle = chosen
+    ? {
+        text: chosen.text.trim(),
+        fontSize: spineFontSize,
+        fontFamily: chosen.fontFamily,
+        color: chosen.color,
+        bold: chosen.bold,
+        italic: chosen.italic,
+        underline: false,
+        alignment: 'center',
+        outlineColor: chosen.outlineColor,
+        outlineWidth: chosen.outlineWidth,
+        shadow: chosen.shadow,
+      }
+    : {
+        text: '',
+        fontSize: spineFontSize,
+        fontFamily: 'Cinzel, Georgia, serif',
+        color: '#2D2D2D',
+        bold: false,
+        italic: false,
+        underline: false,
+        alignment: 'center',
+      };
+
+  return { text, bg };
 }

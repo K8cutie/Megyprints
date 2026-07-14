@@ -1839,6 +1839,55 @@ export const PAGE_TEMPLATES: PageTemplate[] =
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 
+/* ══════════════════════════════════════════════════════════════════════════
+   COVER templates — for the front/back cover PAGES (cover-as-pages rework).
+   ──────────────────────────────────────────────────────────────────────────
+   Deliberately kept OUT of PAGE_TEMPLATES so album generation and the interior
+   "Change layout" picker never surface them (a cover layout must not land on an
+   interior page, and vice-versa). They are resolvable by id via getTemplateById
+   (which falls back to this list). Each is full-bleed and rotation-invariant —
+   the lone hero slot is {0,0,1,1} (unchanged by adaptTemplateToOrientation) and
+   textSlots are never rotated — so ONE size-agnostic definition renders
+   correctly at every album aspect (square / portrait / landscape).
+   The TITLE is always textSlot index 0, which coverLayout.deriveSpine reads to
+   populate the spine. ══════════════════════════════════════════════════════ */
+const ALL_ALBUM_SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '11.5x8', '8.5x11'];
+
+/** Default cover layout: a full-bleed hero photo with a title box low-centre.
+ *  Leave the hero empty + set a background colour for a clean text-only cover. */
+const COVER_HERO: PageTemplate = {
+  id: 'cover-hero', name: 'Hero + Title', category: 'single', slotCount: 1,
+  margin: STD, orientation: 'square', targetRatio: '1:1', albumSizes: ALL_ALBUM_SIZES,
+  fullBleed: true,
+  slots: [{ id: 'coverhero', x: 0, y: 0, width: 1, height: 1, borderWidth: 0 }],
+  textSlots: [{ id: 'title', x: 0.08, y: 0.62, width: 0.84, height: 0.22, align: 'center', placeholder: 'Add a title' }],
+};
+
+/** Text-only cover: solid-colour panel with a centred title + subtitle, no photo. */
+const COVER_PLAIN: PageTemplate = {
+  id: 'cover-plain', name: 'Title Only', category: 'single', slotCount: 0,
+  margin: STD, orientation: 'square', targetRatio: '1:1', albumSizes: ALL_ALBUM_SIZES,
+  fullBleed: true,
+  slots: [],
+  textSlots: [
+    { id: 'title', x: 0.1, y: 0.4, width: 0.8, height: 0.2, align: 'center', placeholder: 'Add a title' },
+    { id: 'subtitle', x: 0.1, y: 0.63, width: 0.8, height: 0.1, align: 'center', placeholder: 'Add a subtitle' },
+  ],
+};
+
+export const COVER_TEMPLATES: PageTemplate[] = [COVER_HERO, COVER_PLAIN];
+export const DEFAULT_COVER_TEMPLATE_ID = 'cover-hero';
+
+/** Cover layouts offered in the cover editor's "Change layout" picker. */
+export function getCoverTemplates(albumSize: AlbumSizePreset): PageTemplate[] {
+  return COVER_TEMPLATES.filter((t) => t.albumSizes.includes(albumSize));
+}
+
+/** Is this a cover-page template id? (Interior nav/selection must ignore these.) */
+export function isCoverTemplateId(id?: string): boolean {
+  return !!id && COVER_TEMPLATES.some((t) => t.id === id);
+}
+
 /** Operator-hidden / soft-deleted template ids. Populated at app start from
  *  Supabase (see lib/templateSettings). These are excluded from SELECTION (album
  *  generation + the "Change" cycle) but NOT from getTemplateById — so an album
@@ -1927,7 +1976,7 @@ export function getTemplatesForCount(
 }
 
 export function getTemplateById(id: string): PageTemplate | undefined {
-  return PAGE_TEMPLATES.find(t => t.id === id);
+  return PAGE_TEMPLATES.find(t => t.id === id) ?? COVER_TEMPLATES.find(t => t.id === id);
 }
 
 export const TEMPLATE_CATEGORIES: { id: PageTemplate['category']; label: string }[] = [
