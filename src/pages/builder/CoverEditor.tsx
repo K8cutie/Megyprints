@@ -139,10 +139,11 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     </div>
   );
 
-  const tabs: { key: CoverTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'background', label: 'Background', icon: <Palette className="w-6 h-6" /> },
-    { key: 'text', label: 'Text', icon: <Type className="w-6 h-6" /> },
-    ...(isFront ? [{ key: 'spine' as const, label: 'Spine', icon: <BookOpen className="w-6 h-6" /> }] : []),
+  // Plain-language hints under each label — most customers won't know "spine".
+  const tabs: { key: CoverTab; label: string; hint: string; icon: React.ReactNode }[] = [
+    { key: 'background', label: 'Background', hint: 'colour or photo', icon: <Palette className="w-6 h-6" /> },
+    { key: 'text', label: 'Text', hint: 'cover title', icon: <Type className="w-6 h-6" /> },
+    ...(isFront ? [{ key: 'spine' as const, label: 'Spine', hint: 'the shelf edge', icon: <BookOpen className="w-6 h-6" /> }] : []),
   ];
 
   // Big card tabs — same treatment as Step 3's Background / Border / Frame.
@@ -154,14 +155,17 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex flex-col items-center justify-center gap-2 py-4 px-2 rounded-2xl border-2 text-sm sm:text-base font-semibold transition-all active:scale-[0.98] ${
+            className={`flex flex-col items-center justify-center gap-1.5 py-3.5 px-2 rounded-2xl border-2 transition-all active:scale-[0.98] ${
               open
                 ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-lg'
                 : 'bg-white text-[#2D2D2D] border-[#F4C2A1]/40 hover:border-[#F4C2A1] hover:bg-[#F4C2A1]/10 shadow-sm'
             }`}
           >
             <span className={open ? 'text-white' : 'text-[#E8A598]'}>{t.icon}</span>
-            <span>{t.label}</span>
+            <span className="text-center leading-tight">
+              <span className="block text-sm sm:text-base font-semibold">{t.label}</span>
+              <span className={`block text-[10px] font-normal ${open ? 'text-white/85' : 'text-[#9B8B7A]'}`}>{t.hint}</span>
+            </span>
           </button>
         );
       })}
@@ -219,7 +223,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
       {activeTab === 'spine' && isFront && (
         <div className="space-y-3">
           <p className="text-[12px] text-[#8B7E7A] bg-[#FBF3EA] rounded-lg px-3 py-2.5">
-            The spine automatically shows your <b>front cover title</b>{spineOverride?.text ? ' (currently overridden below)' : ''}. Type here only if you want different spine text.
+            The <b>spine</b> is the narrow bound edge of your album — the part you see when it stands on a shelf. It automatically shows your <b>front cover title</b>{spineOverride?.text ? ' (currently overridden below)' : ''}. Type here only if you want the spine to read differently.
           </p>
           <label className="block">
             <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Custom spine text</span>
