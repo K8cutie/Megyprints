@@ -140,23 +140,31 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   );
 
   const tabs: { key: CoverTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'background', label: 'Background', icon: <Palette size={18} /> },
-    { key: 'text', label: 'Text', icon: <Type size={18} /> },
-    ...(isFront ? [{ key: 'spine' as const, label: 'Spine', icon: <BookOpen size={18} /> }] : []),
+    { key: 'background', label: 'Background', icon: <Palette className="w-6 h-6" /> },
+    { key: 'text', label: 'Text', icon: <Type className="w-6 h-6" /> },
+    ...(isFront ? [{ key: 'spine' as const, label: 'Spine', icon: <BookOpen className="w-6 h-6" /> }] : []),
   ];
 
+  // Big card tabs — same treatment as Step 3's Background / Border / Frame.
   const tabBar = (
-    <div className="shrink-0 grid gap-2 px-4 pt-3" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0,1fr))` }}>
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          onClick={() => setTab(t.key)}
-          className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[12px] font-semibold transition-colors ${activeTab === t.key ? 'bg-[#F4C7A8] text-[#2D2D2D] border-[#EDB892]' : 'bg-white text-[#8B7E7A] border-[#EADFD3]'}`}
-        >
-          {t.icon}
-          {t.label}
-        </button>
-      ))}
+    <div className="shrink-0 grid gap-2.5 sm:gap-3 px-4 pt-3" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0,1fr))` }}>
+      {tabs.map((t) => {
+        const open = activeTab === t.key;
+        return (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex flex-col items-center justify-center gap-2 py-4 px-2 rounded-2xl border-2 text-sm sm:text-base font-semibold transition-all active:scale-[0.98] ${
+              open
+                ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-lg'
+                : 'bg-white text-[#2D2D2D] border-[#F4C2A1]/40 hover:border-[#F4C2A1] hover:bg-[#F4C2A1]/10 shadow-sm'
+            }`}
+          >
+            <span className={open ? 'text-white' : 'text-[#E8A598]'}>{t.icon}</span>
+            <span>{t.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 
