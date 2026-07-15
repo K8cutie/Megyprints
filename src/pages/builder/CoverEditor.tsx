@@ -217,6 +217,21 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               </div>
             </div>
           </div>
+          <label className="block">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-medium text-[#9B8B7A]">Size</span>
+              <span className="text-[11px] text-[#B9A992] tabular-nums">{title.fontSize}px</span>
+            </div>
+            <input
+              type="range"
+              min={16}
+              max={96}
+              step={1}
+              value={title.fontSize}
+              onChange={(e) => updateTitle({ fontSize: Number(e.target.value) })}
+              className="w-full accent-[#E8A598] cursor-pointer"
+            />
+          </label>
         </div>
       )}
 
