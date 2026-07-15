@@ -272,7 +272,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         // legacy add-photo picker (onAddToSlot).
         if (!uploaded) {
           const onEmptyTap = onChooseSlot ?? onAddToSlot;
-          if (!editable || !onEmptyTap) return null;
+          // Cover panels don't show the "Click to add: Photo/Text/Graphic" empty-slot
+          // chooser box (the cover approach is being reworked).
+          if (!editable || !onEmptyTap || coverMode) return null;
           // Where the 3-way chooser is wired (onChooseSlot) and the slot is big
           // enough, spell out what the box can hold ("Click to add: Photo/Text/QR")
           // instead of a bare "+"; otherwise fall back to the "+" bubble.
