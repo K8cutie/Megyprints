@@ -256,14 +256,18 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     );
 
   if (mode === 'step') {
+    // Centre the editor in a fixed-width column. Without this it spans the full
+    // wizard centre-stage on desktop, which balloons the background swatches.
     return (
-      <div className="h-full flex flex-col bg-[#FFF8F0] relative">
-        {header}
-        {faceToggle}
-        {preview}
-        {tabBar}
-        {controls}
-        {footer}
+      <div className="h-full bg-[#FFF8F0] relative flex justify-center">
+        <div className="w-full max-w-[560px] h-full flex flex-col">
+          {header}
+          {faceToggle}
+          {preview}
+          {tabBar}
+          {controls}
+          {footer}
+        </div>
       </div>
     );
   }
