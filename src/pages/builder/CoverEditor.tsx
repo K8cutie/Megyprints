@@ -19,14 +19,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, LayoutGrid } from 'lucide-react';
 import { useBuilderContext } from './BuilderContext';
 import { PageView } from './BuilderPreview';
-import { CoverWrapPreview } from './CoverWrapPreview';
 import { getCanvasDimensions } from './layouts';
 import { getCoverTemplates } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
+import { deriveSpine } from './coverLayout';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AiClipartModal from './AiClipartModal';
 import SlotChooser from './SlotChooser';
-import { DEFAULT_COVER, type AlbumPage } from './types';
+import { DEFAULT_COVER, type AlbumPage, type TextStyle } from './types';
+
+/** Display width of the spine strip shown beside the FRONT cover. Schematic (a
+ *  real spine is far thinner) — kept readable so the auto-derived title shows. */
+const SPINE_STRIP_W = 26;
 
 interface Props {
   mode?: 'step' | 'modal';
@@ -94,20 +98,20 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   };
 
   // Fit the single panel into the available space (both dimensions).
-  const [dims, setDims] = useState({ w: 260, h: 260, wrapW: 460 });
+  const [dims, setDims] = useState({ w: 300, h: 300 });
   useEffect(() => {
     const compute = () => {
       const c = getCanvasDimensions(albumSize);
       const aspect = c.width / Math.max(1, c.height);
-      // The full cover wrap is the front-and-centre hero.
-      const wrapW = Math.round(Math.min(window.innerWidth - 40, 600));
-      // The single-panel editor for the active side sits below it, sized to fit.
-      const availW = Math.min(window.innerWidth - 40, 400);
-      const availH = window.innerHeight - 500; // header + toggle + wrap + layout + footer
+      // One big panel (front or back) fills the screen; the front page also shows
+      // the spine strip beside it, so reserve its width for both (keeps the panel
+      // from jumping when you toggle Front↔Back).
+      const availW = Math.min(window.innerWidth - 40, 480) - (SPINE_STRIP_W + 8);
+      const availH = window.innerHeight - 300; // header + toggle + layout + footer
       let w = availW;
       let h = w / aspect;
       if (h > availH) { h = availH; w = h * aspect; }
-      setDims({ w: Math.round(Math.max(150, w)), h: Math.round(Math.max(150, h)), wrapW });
+      setDims({ w: Math.round(Math.max(150, w)), h: Math.round(Math.max(150, h)) });
     };
     compute();
     window.addEventListener('resize', compute);
@@ -116,6 +120,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
   const wrapGeom = useMemo(() => coverWrapGeometry(albumSize, albumPages.length, DEFAULT_COVER), [albumSize, albumPages.length]);
   const coverTemplates = useMemo(() => getCoverTemplates(albumSize), [albumSize]);
+  const spine = useMemo(() => deriveSpine(coverFront, wrapGeom), [coverFront, wrapGeom]);
 
   const toggle = (front: boolean) => setEditScope(front ? 'coverFront' : 'coverBack');
 
@@ -134,13 +139,13 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const frontBackToggle = (
     <div className="shrink-0 flex justify-center pt-3">
       <div className="inline-flex rounded-full bg-[#F1E7DA] p-1">
-        {([['Front', true], ['Back', false]] as const).map(([label, front]) => (
+        {([['Front & Spine', true], ['Back', false]] as const).map(([label, front]) => (
           <button
             key={label}
             onClick={() => toggle(front)}
-            className={`px-6 py-1.5 rounded-full text-sm font-semibold transition-colors ${isFront === front ? 'bg-white text-[#2D2D2D] shadow-sm' : 'text-[#9B8B7A]'}`}
+            className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-colors ${isFront === front ? 'bg-white text-[#2D2D2D] shadow-sm' : 'text-[#9B8B7A]'}`}
           >
-            {label} cover
+            {label}
           </button>
         ))}
       </div>
@@ -148,37 +153,14 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   );
 
   const body = (
-    <div className="flex-1 overflow-auto min-h-0 flex flex-col items-center px-4 pt-4 gap-5">
-      {/* The full cover wrap (back · spine · front) — FRONT AND CENTRE. */}
-      <div className="w-full flex flex-col items-center">
-        <CoverWrapPreview
-          geometry={wrapGeom}
-          coverDesign={b.coverDesign}
-          coverFront={coverFront}
-          coverBack={coverBack}
-          photos={uploadedPhotos}
-          width={dims.wrapW}
-          showGuides
-        />
-        <div className="flex justify-between mt-1.5 px-1 text-[10px] uppercase tracking-wide text-[#B9A992]" style={{ width: dims.wrapW }}>
-          <span>← Back</span><span>Spine</span><span>Front →</span>
-        </div>
-      </div>
-
-      {/* Edit the active side (Front/Back toggle above) + its layout options. */}
-      <div className="flex flex-col items-center gap-2.5">
-        <div className="flex items-center gap-2">
-          <LayoutGrid size={15} className="text-[#B9A992]" />
-          {coverTemplates.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => b.applyCoverLayout(t.id)}
-              className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${page.templateId === t.id ? 'bg-[#E8A598] text-white border-[#E8A598]' : 'bg-white text-[#6B5842] border-[#E4D8C9] hover:bg-[#FBF3EA]'}`}
-            >
-              {t.name}
-            </button>
-          ))}
-        </div>
+    <div className="flex-1 overflow-auto min-h-0 flex flex-col items-center px-4 pt-4 gap-4">
+      {/* ONE big panel at a time. FRONT & SPINE page = the front cover with the
+          spine strip beside it (the spine text auto-follows the front title);
+          BACK page = just the back cover. */}
+      <div className="flex items-start justify-center gap-2">
+        {isFront
+          ? <SpineStrip height={dims.h} spine={spine} />
+          : <div style={{ width: SPINE_STRIP_W }} aria-hidden /> /* mirror so the panel doesn't jump on toggle */}
         <AnimatePresence mode="wait">
           <motion.div
             key={editScope}
@@ -193,7 +175,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -24 }}
             transition={{ duration: 0.16 }}
-            className="bg-white shadow-lg shrink-0 relative overflow-hidden mb-4"
+            className="bg-white shadow-lg shrink-0 relative overflow-hidden"
             style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
           >
             <PageView
@@ -212,6 +194,20 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
             />
           </motion.div>
         </AnimatePresence>
+      </div>
+
+      {/* Layout options for the active side */}
+      <div className="flex items-center gap-2">
+        <LayoutGrid size={15} className="text-[#B9A992]" />
+        {coverTemplates.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => b.applyCoverLayout(t.id)}
+            className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${page.templateId === t.id ? 'bg-[#E8A598] text-white border-[#E8A598]' : 'bg-white text-[#6B5842] border-[#E4D8C9] hover:bg-[#FBF3EA]'}`}
+          >
+            {t.name}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -358,6 +354,33 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
         {footer}
         {modals}
       </div>
+    </div>
+  );
+}
+
+/** The spine shown beside the front cover — auto-derived from the front page
+ *  (title + colour), read-only. Reads bottom→top like the printed spine. */
+function SpineStrip({ height, spine }: { height: number; spine: { text: TextStyle; bg: string } }) {
+  return (
+    <div className="flex flex-col items-center shrink-0">
+      <div
+        className="shadow-sm"
+        style={{ width: SPINE_STRIP_W, height, background: spine.bg, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+      >
+        {spine.text.text.trim() && (
+          <span
+            style={{
+              transform: 'rotate(-90deg)', whiteSpace: 'nowrap',
+              fontSize: 12, lineHeight: 1, fontFamily: spine.text.fontFamily,
+              color: spine.text.color, fontWeight: spine.text.bold ? 700 : 400,
+              fontStyle: spine.text.italic ? 'italic' : 'normal',
+            }}
+          >
+            {spine.text.text}
+          </span>
+        )}
+      </div>
+      <span className="text-[9px] uppercase tracking-wide text-[#B9A992] mt-1">Spine</span>
     </div>
   );
 }
