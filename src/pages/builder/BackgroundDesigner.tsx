@@ -62,9 +62,12 @@ interface BackgroundDesignerProps {
   /** Hide the built-in "Page preview" (when the host already shows a preview,
    *  e.g. the cover editor's live panel). */
   hidePreview?: boolean;
+  /** Denser swatch grids (smaller swatches) — used by the cover editor so the
+   *  preview can be bigger. Leaves Step 3 at its normal sizes. */
+  compact?: boolean;
 }
 
-export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false }: BackgroundDesignerProps) {
+export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false, compact = false }: BackgroundDesignerProps) {
   const [activeTab, setActiveTab] = useState<BgTab>('solid');
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -167,7 +170,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
             exit={{ opacity: 0, y: -8 }}
             className="space-y-3"
           >
-            <div className="grid grid-cols-5 gap-2">
+            <div className={`grid gap-2 ${compact ? 'grid-cols-8' : 'grid-cols-5'}`}>
               {solidPresets.map((c) => (
                 <button
                   key={c}
@@ -202,7 +205,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
             exit={{ opacity: 0, y: -8 }}
             className="space-y-3"
           >
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className={`grid gap-1.5 ${compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
               {gradientPresets.map((g, i) => {
                 const css =
                   g.type === 'linear'
@@ -246,7 +249,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
             {/* ─── Your uploaded photos → use one as the page background ─── */}
             <p className="text-[10px] text-stone-400 font-medium uppercase tracking-wider">Your Photos</p>
             {photos.length > 0 ? (
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className={`grid gap-1.5 ${compact ? 'grid-cols-5' : 'grid-cols-3'}`}>
                 {photos.map((p) => {
                   const active = background.type === 'image' && background.photoId === p.id;
                   return (
@@ -316,7 +319,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
             {/* Material */}
             <div>
               <p className="text-[10px] text-stone-400 mb-1.5 uppercase tracking-wider font-semibold">Material</p>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className={`grid gap-1.5 ${compact ? 'grid-cols-6' : 'grid-cols-4'}`}>
                 {TEXTURE_NAMES.map((name) => (
                   <button
                     key={name}
@@ -339,7 +342,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
             {/* Color — applies to the chosen material */}
             <div>
               <p className="text-[10px] text-stone-400 mb-1.5 uppercase tracking-wider font-semibold">Color</p>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className={`grid gap-1.5 ${compact ? 'grid-cols-6' : 'grid-cols-4'}`}>
                 {TEXTURE_COLORS.map((c) => {
                   const mat = (background.type === 'texture' && background.texture) ? background.texture : TEXTURE_NAMES[0];
                   const active = background.type === 'texture'

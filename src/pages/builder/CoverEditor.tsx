@@ -58,8 +58,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     const compute = () => {
       const c = getCanvasDimensions(albumSize);
       const aspect = c.width / Math.max(1, c.height);
-      const availW = Math.min(window.innerWidth - 40, 320) - (SPINE_STRIP_W + 8);
-      const maxH = 200;
+      const availW = Math.min(window.innerWidth - 40, 440) - (SPINE_STRIP_W + 8);
+      const maxH = 320;
       let w = availW;
       let h = w / aspect;
       if (h > maxH) { h = maxH; w = h * aspect; }
@@ -175,7 +175,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const controls = (
     <div className="flex-1 overflow-auto min-h-0 px-4 pt-3 pb-4">
       {activeTab === 'background' && (
-        <BackgroundDesigner hidePreview background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
+        <BackgroundDesigner hidePreview compact background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
       )}
 
       {activeTab === 'text' && (
