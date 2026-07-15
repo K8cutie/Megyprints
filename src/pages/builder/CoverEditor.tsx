@@ -94,17 +94,20 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   };
 
   // Fit the single panel into the available space (both dimensions).
-  const [dims, setDims] = useState({ w: 300, h: 300 });
+  const [dims, setDims] = useState({ w: 260, h: 260, wrapW: 460 });
   useEffect(() => {
     const compute = () => {
       const c = getCanvasDimensions(albumSize);
       const aspect = c.width / Math.max(1, c.height);
-      const availW = Math.min(window.innerWidth - 40, 560);
-      const availH = window.innerHeight - 340; // header + toggle + wrap strip + footer
+      // The full cover wrap is the front-and-centre hero.
+      const wrapW = Math.round(Math.min(window.innerWidth - 40, 600));
+      // The single-panel editor for the active side sits below it, sized to fit.
+      const availW = Math.min(window.innerWidth - 40, 400);
+      const availH = window.innerHeight - 500; // header + toggle + wrap + layout + footer
       let w = availW;
       let h = w / aspect;
       if (h > availH) { h = availH; w = h * aspect; }
-      setDims({ w: Math.round(Math.max(160, w)), h: Math.round(Math.max(160, h)) });
+      setDims({ w: Math.round(Math.max(150, w)), h: Math.round(Math.max(150, h)), wrapW });
     };
     compute();
     window.addEventListener('resize', compute);
@@ -145,70 +148,70 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   );
 
   const body = (
-    <div className="flex-1 overflow-auto min-h-0 flex flex-col items-center px-4 pt-3">
-      {/* The active panel, edited exactly like a page */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={editScope}
-          drag="x"
-          dragConstraints={{ left: 0, right: 0 }}
-          dragElastic={0.2}
-          onDragEnd={(_e, info) => {
-            if (info.offset.x < -60) toggle(false);
-            else if (info.offset.x > 60) toggle(true);
-          }}
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -24 }}
-          transition={{ duration: 0.16 }}
-          className="bg-white shadow-xl shrink-0 relative overflow-hidden"
-          style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
-        >
-          <PageView
-            page={page} photos={uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={0}
-            editable
-            coverMode
-            onChooseSlot={(s) => setChooserSlot(s)}
-            onRemoveFromSlot={(s) => b.clearSlot(s)}
-            onSlotTextTap={(s) => setSlotTextEditSlot(s)}
-            onTextSlotTap={(s) => setEditSlot(s)}
-            onTextTap={(id) => setEditTextId(id)}
-            onOrnamentSlotTap={(s) => setOrnamentEditSlot(s)}
-            onChooseTextSlot={(s) => setChooserTextSlot(s)}
-            onTextSlotPhotoTap={(s) => setTextReplaceSlot(s)}
-            onTextSlotOrnamentTap={(s) => setTextSlotOrnamentEditSlot(s)}
-          />
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Layout options for this panel */}
-      <div className="flex items-center gap-2 mt-3">
-        <LayoutGrid size={15} className="text-[#B9A992]" />
-        {coverTemplates.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => b.applyCoverLayout(t.id)}
-            className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${page.templateId === t.id ? 'bg-[#E8A598] text-white border-[#E8A598]' : 'bg-white text-[#6B5842] border-[#E4D8C9] hover:bg-[#FBF3EA]'}`}
-          >
-            {t.name}
-          </button>
-        ))}
-      </div>
-
-      {/* Live wrap preview — shows the auto-spine (from the FRONT title) update as you type */}
-      <div className="w-full max-w-[520px] mt-4 mb-4 flex flex-col items-center">
+    <div className="flex-1 overflow-auto min-h-0 flex flex-col items-center px-4 pt-4 gap-5">
+      {/* The full cover wrap (back · spine · front) — FRONT AND CENTRE. */}
+      <div className="w-full flex flex-col items-center">
         <CoverWrapPreview
           geometry={wrapGeom}
           coverDesign={b.coverDesign}
           coverFront={coverFront}
           coverBack={coverBack}
           photos={uploadedPhotos}
-          width={Math.min(dims.w + 120, 500)}
+          width={dims.wrapW}
           showGuides
         />
-        <div className="flex justify-between w-full max-w-[500px] mt-1 px-1 text-[10px] uppercase tracking-wide text-[#B9A992]">
+        <div className="flex justify-between mt-1.5 px-1 text-[10px] uppercase tracking-wide text-[#B9A992]" style={{ width: dims.wrapW }}>
           <span>← Back</span><span>Spine</span><span>Front →</span>
         </div>
+      </div>
+
+      {/* Edit the active side (Front/Back toggle above) + its layout options. */}
+      <div className="flex flex-col items-center gap-2.5">
+        <div className="flex items-center gap-2">
+          <LayoutGrid size={15} className="text-[#B9A992]" />
+          {coverTemplates.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => b.applyCoverLayout(t.id)}
+              className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${page.templateId === t.id ? 'bg-[#E8A598] text-white border-[#E8A598]' : 'bg-white text-[#6B5842] border-[#E4D8C9] hover:bg-[#FBF3EA]'}`}
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={editScope}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.2}
+            onDragEnd={(_e, info) => {
+              if (info.offset.x < -60) toggle(false);
+              else if (info.offset.x > 60) toggle(true);
+            }}
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -24 }}
+            transition={{ duration: 0.16 }}
+            className="bg-white shadow-lg shrink-0 relative overflow-hidden mb-4"
+            style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
+          >
+            <PageView
+              page={page} photos={uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={0}
+              editable
+              coverMode
+              onChooseSlot={(s) => setChooserSlot(s)}
+              onRemoveFromSlot={(s) => b.clearSlot(s)}
+              onSlotTextTap={(s) => setSlotTextEditSlot(s)}
+              onTextSlotTap={(s) => setEditSlot(s)}
+              onTextTap={(id) => setEditTextId(id)}
+              onOrnamentSlotTap={(s) => setOrnamentEditSlot(s)}
+              onChooseTextSlot={(s) => setChooserTextSlot(s)}
+              onTextSlotPhotoTap={(s) => setTextReplaceSlot(s)}
+              onTextSlotOrnamentTap={(s) => setTextSlotOrnamentEditSlot(s)}
+            />
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
