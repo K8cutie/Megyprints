@@ -872,7 +872,7 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
   if (coverFront && coverBack) {
     // ── COVER-AS-PAGES: composite the ACTUAL front/back page renders + a spine
     //    DERIVED from the front page (text = front title, colour = front bg). ──
-    const spine = deriveSpine(coverFront, geom);
+    const spine = deriveSpine(coverFront, geom, coverDesign?.spine?.text);
     const frontBg = solidOf(coverFront.background);
     const backBg = solidOf(coverBack.background);
     // Full-bleed base (no white turn-in): back colour left of the spine, front right.

@@ -38,7 +38,7 @@ export function CoverWrapPreview({ geometry, coverDesign, photos, width, showGui
   // no white turn-in edges (back colour left of the spine, front colour right).
   const backBg = usePages ? solidOf(coverBack!.background) : (layout.panels.find((p) => p.panel === 'back')?.bg || '#ffffff');
   const frontBg = usePages ? solidOf(coverFront!.background) : (layout.panels.find((p) => p.panel === 'front')?.bg || '#ffffff');
-  const spine = usePages ? deriveSpine(coverFront!, geometry) : null;
+  const spine = usePages ? deriveSpine(coverFront!, geometry, coverDesign?.spine?.text) : null;
 
   const shell = (children: React.ReactNode) => (
     <div

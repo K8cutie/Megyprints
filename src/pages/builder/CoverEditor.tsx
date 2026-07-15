@@ -1,36 +1,32 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   CoverEditor — edit the FRONT and BACK covers as PAGES, one panel at a time,
-   with the SAME per-page canvas + tap wiring as interior pages (cover-as-pages).
-   The SPINE is never edited: its text is derived from the front cover page and
-   shown live in the wrap-preview strip (see coverLayout.deriveSpine).
+   CoverEditor — Step-3-style cover editor.
 
-   Reuses PageView + the shared content modals (SlotChooser / MobileTextEditor /
-   AiClipartModal). Every setter call OMITS pageIndex on purpose: that routes the
-   edit through the scope-aware updateCurrentPage, which writes to the ACTIVE
-   cover page (editScope) instead of an interior page.
+   Same format as the "Style Your Album" step: a live PREVIEW panel + inline
+   category TABS (Background / Text / Spine) + controls right below — no tap-a-box,
+   no bottom sheet, no separate modal. The front & back covers are edited one face
+   at a time (Front / Back toggle); the spine belongs to the front and auto-follows
+   the front title (overridable in the Spine tab).
 
-   Modes:
-   • 'step'  — embedded wizard step (after album size). Back / Continue drive nav.
-   • 'modal' — full-screen overlay opened from the Preview screen ("Design cover").
+   • Background — reuses the exact Step-3 picker (Solid/Gradient/Image/Textures +
+     opacity). Setting an Image here IS how you put a photo on the cover.
+   • Text — the cover title, typed inline (+ font / colour).
+   • Spine (front only) — a live spine preview; auto-uses the front title unless a
+     custom spine text is typed here.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, LayoutGrid } from 'lucide-react';
+import { X, Palette, Type, BookOpen } from 'lucide-react';
 import { useBuilderContext } from './BuilderContext';
 import { PageView } from './BuilderPreview';
+import BackgroundDesigner from './BackgroundDesigner';
 import { getCanvasDimensions } from './layouts';
-import { getCoverTemplates } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
 import { deriveSpine } from './coverLayout';
-import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
-import AiClipartModal from './AiClipartModal';
-import SlotChooser from './SlotChooser';
+import { FONTS, COLORS } from './MobileTextEditor';
 import { DEFAULT_COVER, type AlbumPage, type TextStyle } from './types';
 
-/** Display width of the spine strip shown beside the FRONT cover. Schematic (a
- *  real spine is far thinner) — kept readable so the auto-derived title shows. */
 const SPINE_STRIP_W = 26;
+type CoverTab = 'background' | 'text' | 'spine';
 
 interface Props {
   mode?: 'step' | 'modal';
@@ -41,10 +37,10 @@ interface Props {
 
 export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }: Props) {
   const b = useBuilderContext();
-  const { editScope, setEditScope, coverFront, coverBack, albumSize, albumPages, uploadedPhotos } = b;
+  const { editScope, setEditScope, coverFront, coverBack, albumSize, albumPages, uploadedPhotos, coverDesign } = b;
 
-  // Own the cover scope for the lifetime of the editor; always restore 'interior'
-  // on unmount so a stale cover scope can never corrupt the next interior edit.
+  // Own the cover scope for the editor's lifetime; always restore 'interior' on
+  // unmount so a stale cover scope can't corrupt the next interior edit.
   useEffect(() => {
     setEditScope('coverFront');
     return () => setEditScope('interior');
@@ -53,65 +49,21 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const isFront = editScope !== 'coverBack';
   const page: AlbumPage = isFront ? coverFront : coverBack;
 
-  // ── Content-editing modal state (mirrors MobileReview) ──
-  const [chooserSlot, setChooserSlot] = useState<number | null>(null);      // empty photo/hero slot
-  const [replaceSlot, setReplaceSlot] = useState<number | null>(null);      // photo picker for a slot
-  const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null);
-  const [editSlot, setEditSlot] = useState<number | null>(null);            // caption/title box text
-  const [editTextId, setEditTextId] = useState<string | null>(null);        // free text by id
-  const [ornamentEditSlot, setOrnamentEditSlot] = useState<number | null>(null);        // hero-slot graphic
-  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null);          // empty caption box
-  const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null);          // caption-box photo
-  const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null); // caption-box graphic
+  const [tab, setTab] = useState<CoverTab>('background');
+  const activeTab: CoverTab = tab === 'spine' && !isFront ? 'background' : tab; // spine tab is front-only
 
-  const template = page.templateId ? getCoverTemplates(albumSize).find((t) => t.id === page.templateId) : null;
-
-  const buildBoxInitial = (slotIndex: number): BoxTextContent => {
-    const existing = page.textElements?.find((t) => t.boxIndex === slotIndex);
-    if (existing) {
-      return {
-        text: existing.text, fontSize: existing.fontSize, fontFamily: existing.fontFamily,
-        color: existing.color, bold: existing.bold, italic: existing.italic,
-        underline: existing.underline, alignment: existing.alignment,
-        outlineColor: existing.outlineColor, outlineWidth: existing.outlineWidth, shadow: existing.shadow,
-      };
-    }
-    const ts = template?.textSlots?.[slotIndex];
-    return {
-      text: '', fontSize: 36, fontFamily: 'Cinzel, Georgia, serif',
-      color: '#2D2D2D', bold: true, italic: false, underline: false, alignment: ts?.align ?? 'center',
-    };
-  };
-  const buildSlotTextInitial = (slotIndex: number): BoxTextContent => {
-    const existing = page.slotTexts?.[slotIndex];
-    if (existing) return { ...existing };
-    return { text: '', fontSize: 32, fontFamily: 'Cinzel, Georgia, serif', color: '#2D2D2D', bold: true, italic: false, underline: false, alignment: 'center' };
-  };
-  const buildTextInitial = (textId: string): BoxTextContent => {
-    const el = page.textElements?.find((t) => t.id === textId);
-    return {
-      text: el?.text ?? '', fontSize: el?.fontSize ?? 36, fontFamily: el?.fontFamily ?? 'Cinzel, Georgia, serif',
-      color: el?.color ?? '#2D2D2D', bold: el?.bold ?? true, italic: el?.italic ?? false,
-      underline: el?.underline ?? false, alignment: el?.alignment ?? 'center',
-      outlineColor: el?.outlineColor, outlineWidth: el?.outlineWidth, shadow: el?.shadow,
-    };
-  };
-
-  // Fit the single panel into the available space (both dimensions).
-  const [dims, setDims] = useState({ w: 300, h: 300 });
+  // Live preview panel size — kept modest so the inline controls fit below it.
+  const [dims, setDims] = useState({ w: 200, h: 200 });
   useEffect(() => {
     const compute = () => {
       const c = getCanvasDimensions(albumSize);
       const aspect = c.width / Math.max(1, c.height);
-      // One big panel (front or back) fills the screen; the front page also shows
-      // the spine strip beside it, so reserve its width for both (keeps the panel
-      // from jumping when you toggle Front↔Back).
-      const availW = Math.min(window.innerWidth - 40, 480) - (SPINE_STRIP_W + 8);
-      const availH = window.innerHeight - 300; // header + toggle + layout + footer
+      const availW = Math.min(window.innerWidth - 40, 320) - (SPINE_STRIP_W + 8);
+      const maxH = 200;
       let w = availW;
       let h = w / aspect;
-      if (h > availH) { h = availH; w = h * aspect; }
-      setDims({ w: Math.round(Math.max(150, w)), h: Math.round(Math.max(150, h)) });
+      if (h > maxH) { h = maxH; w = h * aspect; }
+      setDims({ w: Math.round(Math.max(140, w)), h: Math.round(Math.max(140, h)) });
     };
     compute();
     window.addEventListener('resize', compute);
@@ -119,8 +71,31 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   }, [albumSize]);
 
   const wrapGeom = useMemo(() => coverWrapGeometry(albumSize, albumPages.length, DEFAULT_COVER), [albumSize, albumPages.length]);
-  const coverTemplates = useMemo(() => getCoverTemplates(albumSize), [albumSize]);
-  const spine = useMemo(() => deriveSpine(coverFront, wrapGeom), [coverFront, wrapGeom]);
+  const spineOverride = coverDesign?.spine?.text;
+  const spine = useMemo(() => deriveSpine(coverFront, wrapGeom, spineOverride), [coverFront, wrapGeom, spineOverride]);
+
+  // The cover title lives in the template's first text box (box 0) — the same box
+  // the spine reads. Keep a live content object so a font/colour change doesn't
+  // drop the text.
+  const titleEl = page.textElements?.find((t) => t.boxIndex === 0);
+  const title = {
+    text: titleEl?.text ?? '',
+    fontFamily: titleEl?.fontFamily ?? FONTS[6].family,
+    color: titleEl?.color ?? '#2D2D2D',
+    bold: titleEl?.bold ?? true,
+    italic: titleEl?.italic ?? false,
+    underline: titleEl?.underline ?? false,
+    alignment: (titleEl?.alignment ?? 'center') as 'left' | 'center' | 'right',
+    fontSize: titleEl?.fontSize ?? 32,
+  };
+  const updateTitle = (patch: Partial<typeof title>) => b.setBoxText(0, { ...title, ...patch });
+
+  // Spine override (Spine tab). Empty clears it → the spine reverts to auto-from-title.
+  const spineText = spineOverride?.text ?? '';
+  const setSpineOverride = (value: string) => {
+    if (value.trim()) b.setCoverSpine({ text: { ...spine.text, text: value } });
+    else b.setCoverSpine({ text: undefined });
+  };
 
   const toggle = (front: boolean) => setEditScope(front ? 'coverFront' : 'coverBack');
 
@@ -128,7 +103,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     <div className="flex items-center justify-between px-5 h-14 border-b border-[#EADFD3] shrink-0">
       <div>
         <h2 className="font-display text-lg font-semibold text-[#2D2D2D]">Design your cover</h2>
-        <p className="text-[11px] text-[#9B8B7A] -mt-0.5">Edit the front &amp; back like pages — the spine follows your front title</p>
+        <p className="text-[11px] text-[#9B8B7A] -mt-0.5">Style the front &amp; back — the spine follows your front title</p>
       </div>
       {mode === 'modal' && (
         <button onClick={onClose} className="p-2 rounded-full hover:bg-black/5 text-[#6B6B6B]"><X size={20} /></button>
@@ -136,14 +111,14 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     </div>
   );
 
-  const frontBackToggle = (
+  const faceToggle = (
     <div className="shrink-0 flex justify-center pt-3">
       <div className="inline-flex rounded-full bg-[#F1E7DA] p-1">
-        {([['Front & Spine', true], ['Back', false]] as const).map(([label, front]) => (
+        {([['Front', true], ['Back', false]] as const).map(([label, front]) => (
           <button
             key={label}
             onClick={() => toggle(front)}
-            className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-colors ${isFront === front ? 'bg-white text-[#2D2D2D] shadow-sm' : 'text-[#9B8B7A]'}`}
+            className={`px-6 py-1.5 rounded-full text-sm font-semibold transition-colors ${isFront === front ? 'bg-white text-[#2D2D2D] shadow-sm' : 'text-[#9B8B7A]'}`}
           >
             {label}
           </button>
@@ -152,63 +127,103 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     </div>
   );
 
-  const body = (
-    <div className="flex-1 overflow-auto min-h-0 flex flex-col items-center px-4 pt-4 gap-4">
-      {/* ONE big panel at a time. FRONT & SPINE page = the front cover with the
-          spine strip beside it (the spine text auto-follows the front title);
-          BACK page = just the back cover. */}
-      <div className="flex items-start justify-center gap-2">
-        {isFront
-          ? <SpineStrip height={dims.h} spine={spine} />
-          : <div style={{ width: SPINE_STRIP_W }} aria-hidden /> /* mirror so the panel doesn't jump on toggle */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={editScope}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.2}
-            onDragEnd={(_e, info) => {
-              if (info.offset.x < -60) toggle(false);
-              else if (info.offset.x > 60) toggle(true);
-            }}
-            initial={{ opacity: 0, x: 24 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -24 }}
-            transition={{ duration: 0.16 }}
-            className="bg-white shadow-lg shrink-0 relative overflow-hidden"
-            style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
-          >
-            <PageView
-              page={page} photos={uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={0}
-              editable
-              coverMode
-              onChooseSlot={(s) => setChooserSlot(s)}
-              onRemoveFromSlot={(s) => b.clearSlot(s)}
-              onSlotTextTap={(s) => setSlotTextEditSlot(s)}
-              onTextSlotTap={(s) => setEditSlot(s)}
-              onTextTap={(id) => setEditTextId(id)}
-              onOrnamentSlotTap={(s) => setOrnamentEditSlot(s)}
-              onChooseTextSlot={(s) => setChooserTextSlot(s)}
-              onTextSlotPhotoTap={(s) => setTextReplaceSlot(s)}
-              onTextSlotOrnamentTap={(s) => setTextSlotOrnamentEditSlot(s)}
-            />
-          </motion.div>
-        </AnimatePresence>
+  // Live preview of the active cover face (display-only; you edit via the tabs).
+  const preview = (
+    <div className="shrink-0 flex items-start justify-center gap-2 pt-3">
+      {isFront
+        ? <SpineStrip height={dims.h} spine={spine} />
+        : <div style={{ width: SPINE_STRIP_W }} aria-hidden />}
+      <div className="bg-white shadow-lg relative overflow-hidden" style={{ width: dims.w, height: dims.h }}>
+        <PageView page={page} photos={uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={0} coverMode />
       </div>
+    </div>
+  );
 
-      {/* Layout options for the active side */}
-      <div className="flex items-center gap-2">
-        <LayoutGrid size={15} className="text-[#B9A992]" />
-        {coverTemplates.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => b.applyCoverLayout(t.id)}
-            className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${page.templateId === t.id ? 'bg-[#E8A598] text-white border-[#E8A598]' : 'bg-white text-[#6B5842] border-[#E4D8C9] hover:bg-[#FBF3EA]'}`}
-          >
-            {t.name}
-          </button>
-        ))}
-      </div>
+  const tabs: { key: CoverTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'background', label: 'Background', icon: <Palette size={18} /> },
+    { key: 'text', label: 'Text', icon: <Type size={18} /> },
+    ...(isFront ? [{ key: 'spine' as const, label: 'Spine', icon: <BookOpen size={18} /> }] : []),
+  ];
+
+  const tabBar = (
+    <div className="shrink-0 grid gap-2 px-4 pt-3" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0,1fr))` }}>
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => setTab(t.key)}
+          className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[12px] font-semibold transition-colors ${activeTab === t.key ? 'bg-[#F4C7A8] text-[#2D2D2D] border-[#EDB892]' : 'bg-white text-[#8B7E7A] border-[#EADFD3]'}`}
+        >
+          {t.icon}
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const controls = (
+    <div className="flex-1 overflow-auto min-h-0 px-4 pt-3 pb-4">
+      {activeTab === 'background' && (
+        <BackgroundDesigner hidePreview background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
+      )}
+
+      {activeTab === 'text' && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">{isFront ? 'Front cover title' : 'Back cover text'}</span>
+            <input
+              value={title.text}
+              onChange={(e) => updateTitle({ text: e.target.value })}
+              placeholder={isFront ? 'e.g. The Cruz Family' : 'A note, quote, or thank-you'}
+              className="w-full px-3 py-2.5 rounded-xl border border-[#E4D8C9] bg-white text-[15px] text-[#2D2D2D] outline-none focus:border-[#E8A598]"
+              style={{ fontFamily: title.fontFamily }}
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Font</span>
+              <select
+                value={title.fontFamily}
+                onChange={(e) => updateTitle({ fontFamily: e.target.value })}
+                style={{ fontFamily: title.fontFamily }}
+                className="w-full px-3 py-2.5 rounded-xl border border-[#E4D8C9] bg-white text-[14px] outline-none focus:border-[#E8A598]"
+              >
+                {FONTS.map((f) => <option key={f.name} value={f.family} style={{ fontFamily: f.family }}>{f.name}</option>)}
+              </select>
+            </label>
+            <div>
+              <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Colour</span>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => updateTitle({ color: c })}
+                    className="w-7 h-7 rounded-full border transition-transform hover:scale-110"
+                    style={{ background: c, borderColor: title.color === c ? '#E8A598' : 'rgba(0,0,0,0.15)', boxShadow: title.color === c ? '0 0 0 2px #E8A598' : 'none' }}
+                    aria-label={c}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'spine' && isFront && (
+        <div className="space-y-3">
+          <p className="text-[12px] text-[#8B7E7A] bg-[#FBF3EA] rounded-lg px-3 py-2.5">
+            The spine automatically shows your <b>front cover title</b>{spineOverride?.text ? ' (currently overridden below)' : ''}. Type here only if you want different spine text.
+          </p>
+          <label className="block">
+            <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Custom spine text</span>
+            <input
+              value={spineText}
+              onChange={(e) => setSpineOverride(e.target.value)}
+              placeholder={title.text ? `Auto: ${title.text}` : 'Follows your front title'}
+              className="w-full px-3 py-2.5 rounded-xl border border-[#E4D8C9] bg-white text-[15px] text-[#2D2D2D] outline-none focus:border-[#E8A598]"
+            />
+          </label>
+        </div>
+      )}
     </div>
   );
 
@@ -228,131 +243,28 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
       </div>
     );
 
-  const modals = (
-    <>
-      {/* Empty hero slot → Photo / Text / Graphic */}
-      {chooserSlot !== null && (
-        <SlotChooser
-          mobile
-          onPhoto={() => setReplaceSlot(chooserSlot)}
-          onText={() => setSlotTextEditSlot(chooserSlot)}
-          onGraphic={() => setOrnamentEditSlot(chooserSlot)}
-          onClose={() => setChooserSlot(null)}
-        />
-      )}
-      {/* Empty caption/title box → Text or Graphic */}
-      {chooserTextSlot !== null && (
-        <SlotChooser
-          mobile
-          onText={() => setEditSlot(chooserTextSlot)}
-          onGraphic={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
-          onClose={() => setChooserTextSlot(null)}
-        />
-      )}
-      {/* Photo picker (slot OR caption box) */}
-      <AnimatePresence>
-        {(replaceSlot !== null || textReplaceSlot !== null) && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 bg-black/40 flex items-end"
-            onClick={() => { setReplaceSlot(null); setTextReplaceSlot(null); }}
-          >
-            <motion.div
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
-              className="w-full bg-white rounded-t-2xl max-h-[60vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
-                <span className="text-sm font-semibold text-[#2D2D2D]">Add a photo</span>
-                <button onClick={() => { setReplaceSlot(null); setTextReplaceSlot(null); }} className="text-[#9B9B9B] p-1"><X size={18} /></button>
-              </div>
-              {uploadedPhotos.length === 0 ? (
-                <p className="p-6 text-center text-sm text-[#9B9B9B]">No photos uploaded yet — add some from the next step, then come back to set a cover photo.</p>
-              ) : (
-                <div className="overflow-y-auto p-3 grid grid-cols-3 gap-2">
-                  {uploadedPhotos.map((p, i) => (
-                    <button key={i}
-                      onClick={() => {
-                        if (replaceSlot !== null) b.fillSlot(replaceSlot, i);
-                        else if (textReplaceSlot !== null) b.setTextSlotPhoto(textReplaceSlot, i);
-                        setReplaceSlot(null); setTextReplaceSlot(null);
-                      }}
-                      className="relative h-0 pb-[100%] rounded-lg overflow-hidden bg-[#F0F0F0] active:scale-95 transition-transform">
-                      <img src={p.previewUrl} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {/* Caption/title box text */}
-      {editSlot !== null && (
-        <MobileTextEditor
-          initial={buildBoxInitial(editSlot)}
-          onSave={(content) => b.setBoxText(editSlot, content)}
-          onClose={() => setEditSlot(null)}
-        />
-      )}
-      {/* Per-slot text (chooser "Add Text") */}
-      {slotTextEditSlot !== null && (
-        <MobileTextEditor
-          initial={buildSlotTextInitial(slotTextEditSlot)}
-          onSave={(content) => b.setSlotText(slotTextEditSlot, content.text.trim() ? content : null)}
-          onClose={() => setSlotTextEditSlot(null)}
-        />
-      )}
-      {/* Free text by id */}
-      {editTextId !== null && (
-        <MobileTextEditor
-          initial={buildTextInitial(editTextId)}
-          onSave={(content) => b.updateTextElement(editTextId, content)}
-          onClose={() => setEditTextId(null)}
-        />
-      )}
-      {/* Hero-slot graphic */}
-      {ornamentEditSlot !== null && (
-        <AiClipartModal
-          initial={page.ornamentFills?.[ornamentEditSlot] ?? null}
-          onSave={(fill) => { b.setOrnamentFill(ornamentEditSlot, fill); setOrnamentEditSlot(null); }}
-          onRemove={() => { b.setOrnamentFill(ornamentEditSlot, null); setOrnamentEditSlot(null); }}
-          onClose={() => setOrnamentEditSlot(null)}
-        />
-      )}
-      {/* Caption/title box graphic */}
-      {textSlotOrnamentEditSlot !== null && (
-        <AiClipartModal
-          initial={page.textSlotOrnament?.[textSlotOrnamentEditSlot] ?? null}
-          onSave={(fill) => { b.setTextSlotOrnament(textSlotOrnamentEditSlot, fill); setTextSlotOrnamentEditSlot(null); }}
-          onRemove={() => { b.setTextSlotOrnament(textSlotOrnamentEditSlot, null); setTextSlotOrnamentEditSlot(null); }}
-          onClose={() => setTextSlotOrnamentEditSlot(null)}
-        />
-      )}
-    </>
-  );
-
   if (mode === 'step') {
     return (
       <div className="h-full flex flex-col bg-[#FFF8F0] relative">
         {header}
-        {frontBackToggle}
-        {body}
+        {faceToggle}
+        {preview}
+        {tabBar}
+        {controls}
         {footer}
-        {modals}
       </div>
     );
   }
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-stretch sm:items-center justify-center sm:p-4">
-      <div className="bg-[#FFF8F0] w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden relative">
+      <div className="bg-[#FFF8F0] w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden relative">
         {header}
-        {frontBackToggle}
-        {body}
+        {faceToggle}
+        {preview}
+        {tabBar}
+        {controls}
         {footer}
-        {modals}
       </div>
     </div>
   );

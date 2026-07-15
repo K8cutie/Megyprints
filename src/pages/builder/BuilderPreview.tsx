@@ -465,6 +465,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         // MobileTextEditor) WITHOUT passing `editable`. Gating the tap on
         // `editable` made empty caption boxes dead on that surface — a regression.
         // So: chooser needs editable; the legacy tap-to-add only needs onTextSlotTap.
+        // Cover panels are a DISPLAY preview (edited via the Step-3-style tabs), so
+        // an empty caption box shows nothing at all — no chooser, no faint hint.
+        if (coverMode) return null;
         if (editable && onChooseTextSlot) {
           return (
             <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}

@@ -59,9 +59,12 @@ interface BackgroundDesignerProps {
   onChange: (bg: AlbumPage['background']) => void;
   /** The user's uploaded album photos — offered as background choices. */
   photos?: UploadedPhoto[];
+  /** Hide the built-in "Page preview" (when the host already shows a preview,
+   *  e.g. the cover editor's live panel). */
+  hidePreview?: boolean;
 }
 
-export default function BackgroundDesigner({ background, onChange, photos = [] }: BackgroundDesignerProps) {
+export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false }: BackgroundDesignerProps) {
   const [activeTab, setActiveTab] = useState<BgTab>('solid');
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,16 +97,19 @@ export default function BackgroundDesigner({ background, onChange, photos = [] }
   return (
     <div className="w-full flex flex-col h-full">
       {/* Live page preview — shows the real background WITH opacity over the
-          page base, so the user isn't guessing. */}
-      <div
-        className="relative w-full h-48 rounded-xl overflow-hidden border border-stone-200 shrink-0 mb-2.5"
-        style={{ backgroundColor: '#FFFBF7' }}
-      >
-        <div className="absolute inset-0" style={{ ...bgPreviewStyle(background, photos), opacity: (background.opacity ?? 100) / 100 }} />
-        <span className="absolute bottom-1.5 left-2 text-[10px] font-medium text-stone-500 bg-white/75 px-1.5 py-0.5 rounded">
-          Page preview · {Math.round(background.opacity ?? 100)}%
-        </span>
-      </div>
+          page base, so the user isn't guessing. Suppressed when the host already
+          shows its own preview (e.g. the cover editor). */}
+      {!hidePreview && (
+        <div
+          className="relative w-full h-48 rounded-xl overflow-hidden border border-stone-200 shrink-0 mb-2.5"
+          style={{ backgroundColor: '#FFFBF7' }}
+        >
+          <div className="absolute inset-0" style={{ ...bgPreviewStyle(background, photos), opacity: (background.opacity ?? 100) / 100 }} />
+          <span className="absolute bottom-1.5 left-2 text-[10px] font-medium text-stone-500 bg-white/75 px-1.5 py-0.5 rounded">
+            Page preview · {Math.round(background.opacity ?? 100)}%
+          </span>
+        </div>
+      )}
 
       {/* ─── OPACITY SLIDER — sits right under the live preview ─── */}
       <div className="shrink-0 mb-2.5 space-y-1.5">

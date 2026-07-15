@@ -211,9 +211,31 @@ export function solidOf(bg?: AlbumBackground): string {
  *  The chosen element's styling is copied but the SIZE is re-fit to the physical
  *  spine (the front title size is in page-design space and must not be used raw).
  *  COLOUR = solidOf(front.background). */
-export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry): { text: TextStyle; bg: string } {
+export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry, override?: TextStyle): { text: TextStyle; bg: string } {
   const bg = solidOf(front.background);
   const spineFontSize = Math.round(Math.min(g.panels.spine.width * 0.5, g.panels.front.height * 0.035));
+
+  // An explicit spine override (typed in the cover editor's Spine tab) wins over
+  // the auto-from-front-title default; its size is still re-fit to the spine.
+  if (override && override.text && override.text.trim()) {
+    return {
+      text: {
+        text: override.text.trim(),
+        fontSize: spineFontSize,
+        fontFamily: override.fontFamily,
+        color: override.color,
+        bold: override.bold,
+        italic: override.italic,
+        underline: false,
+        alignment: 'center',
+        outlineColor: override.outlineColor,
+        outlineWidth: override.outlineWidth,
+        shadow: override.shadow,
+      },
+      bg,
+    };
+  }
+
   const nonEmpty = (front.textElements ?? []).filter((t) => !!t.text && t.text.trim().length > 0);
 
   let chosen = nonEmpty.find((t) => t.boxIndex === 0);
