@@ -37,7 +37,7 @@ interface Props {
 
 export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }: Props) {
   const b = useBuilderContext();
-  const { editScope, setEditScope, coverFront, coverBack, albumSize, albumPages, uploadedPhotos, coverDesign } = b;
+  const { editScope, setEditScope, coverFront, coverBack, albumSize, albumPages, uploadedPhotos } = b;
 
   // Own the cover scope for the editor's lifetime; always restore 'interior' on
   // unmount so a stale cover scope can't corrupt the next interior edit.
@@ -71,8 +71,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   }, [albumSize]);
 
   const wrapGeom = useMemo(() => coverWrapGeometry(albumSize, albumPages.length, DEFAULT_COVER), [albumSize, albumPages.length]);
-  const spineOverride = coverDesign?.spine?.text;
-  const spine = useMemo(() => deriveSpine(coverFront, wrapGeom, spineOverride), [coverFront, wrapGeom, spineOverride]);
+  const spine = useMemo(() => deriveSpine(coverFront, wrapGeom), [coverFront, wrapGeom]);
 
   // The cover title lives in the template's first text box (box 0) — the same box
   // the spine reads. Keep a live content object so a font/colour change doesn't
@@ -90,12 +89,9 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   };
   const updateTitle = (patch: Partial<typeof title>) => b.setBoxText(0, { ...title, ...patch });
 
-  // Spine override (Spine tab). Empty clears it → the spine reverts to auto-from-title.
-  const spineText = spineOverride?.text ?? '';
-  const setSpineOverride = (value: string) => {
-    if (value.trim()) b.setCoverSpine({ text: { ...spine.text, text: value } });
-    else b.setCoverSpine({ text: undefined });
-  };
+  // The FRONT cover's title text IS the spine text — always. No separate spine
+  // field to keep in sync (see coverLayout.deriveSpine).
+  const frontTitle = coverFront.textElements?.find((t) => t.boxIndex === 0)?.text?.trim() ?? '';
 
   const toggle = (front: boolean) => setEditScope(front ? 'coverFront' : 'coverBack');
 
@@ -238,17 +234,27 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
       {activeTab === 'spine' && isFront && (
         <div className="space-y-3">
           <p className="text-[12px] text-[#8B7E7A] bg-[#FBF3EA] rounded-lg px-3 py-2.5">
-            The <b>spine</b> is the narrow bound edge of your album — the part you see when it stands on a shelf. It automatically shows your <b>front cover title</b>{spineOverride?.text ? ' (currently overridden below)' : ''}. Type here only if you want the spine to read differently.
+            The <b>spine</b> is the narrow bound edge of your album — the part you see when it stands on a shelf.
+            It always shows your <b>front cover text</b>, so there's nothing to fill in here.
           </p>
-          <label className="block">
-            <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Custom spine text</span>
-            <input
-              value={spineText}
-              onChange={(e) => setSpineOverride(e.target.value)}
-              placeholder={title.text ? `Auto: ${title.text}` : 'Follows your front title'}
-              className="w-full px-3 py-2.5 rounded-xl border border-[#E4D8C9] bg-white text-[15px] text-[#2D2D2D] outline-none focus:border-[#E8A598]"
-            />
-          </label>
+          <div>
+            <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">This is what your spine will read</span>
+            {frontTitle ? (
+              <div
+                className="w-full px-3 py-3 rounded-xl border border-[#E4D8C9] text-center truncate"
+                style={{ background: spine.bg, fontFamily: spine.text.fontFamily, color: spine.text.color, fontWeight: spine.text.bold ? 700 : 400 }}
+              >
+                {frontTitle}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#9B8B7A] text-center bg-white border border-dashed border-[#E4D8C9] rounded-xl px-3 py-3">
+                No cover text yet — add it in the <b>Text</b> tab and it'll appear here.
+              </p>
+            )}
+            <p className="text-[10px] text-[#B9A992] mt-1.5">
+              The spine width is set automatically from your page count at checkout, and the text is sized to fit it.
+            </p>
+          </div>
         </div>
       )}
     </div>
