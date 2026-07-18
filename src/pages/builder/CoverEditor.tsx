@@ -15,7 +15,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useMemo, useState } from 'react';
-import { X, Palette, Type, BookOpen } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useBuilderContext } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import BackgroundDesigner from './BackgroundDesigner';
@@ -26,7 +26,7 @@ import { FONTS, COLORS } from './MobileTextEditor';
 import { DEFAULT_COVER, type AlbumPage, type TextStyle } from './types';
 
 const SPINE_STRIP_W = 26;
-type CoverTab = 'background' | 'text' | 'spine';
+type CoverTab = 'background' | 'text';
 
 interface Props {
   mode?: 'step' | 'modal';
@@ -50,7 +50,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const page: AlbumPage = isFront ? coverFront : coverBack;
 
   const [tab, setTab] = useState<CoverTab>('background');
-  const activeTab: CoverTab = tab === 'spine' && !isFront ? 'background' : tab; // spine tab is front-only
+  const activeTab: CoverTab = tab;
 
   // Live preview panel size — kept modest so the inline controls fit below it.
   const [dims, setDims] = useState({ w: 200, h: 200 });
@@ -88,10 +88,6 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     fontSize: titleEl?.fontSize ?? 32,
   };
   const updateTitle = (patch: Partial<typeof title>) => b.setBoxText(0, { ...title, ...patch });
-
-  // The FRONT cover's title text IS the spine text — always. No separate spine
-  // field to keep in sync (see coverLayout.deriveSpine).
-  const frontTitle = coverFront.textElements?.find((t) => t.boxIndex === 0)?.text?.trim() ?? '';
 
   const toggle = (front: boolean) => setEditScope(front ? 'coverFront' : 'coverBack');
 
@@ -135,33 +131,28 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     </div>
   );
 
-  // Plain-language hints under each label — most customers won't know "spine".
-  const tabs: { key: CoverTab; label: string; hint: string; icon: React.ReactNode }[] = [
-    { key: 'background', label: 'Background', hint: 'colour or photo', icon: <Palette className="w-6 h-6" /> },
-    { key: 'text', label: 'Text', hint: 'cover title', icon: <Type className="w-6 h-6" /> },
-    ...(isFront ? [{ key: 'spine' as const, label: 'Spine', hint: 'the shelf edge', icon: <BookOpen className="w-6 h-6" /> }] : []),
+  const tabs: { key: CoverTab; label: string }[] = [
+    { key: 'background', label: 'Background' },
+    { key: 'text', label: 'Text' },
   ];
 
-  // Big card tabs — same treatment as Step 3's Background / Border / Frame.
+  // Compact, icon-free tabs — kept slim so the picture browser + upload box fit
+  // on screen without scrolling.
   const tabBar = (
-    <div className="shrink-0 grid gap-2.5 sm:gap-3 px-4 pt-3" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0,1fr))` }}>
+    <div className="shrink-0 grid grid-cols-2 gap-2.5 px-4 pt-3">
       {tabs.map((t) => {
         const open = activeTab === t.key;
         return (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex flex-col items-center justify-center gap-1.5 py-3.5 px-2 rounded-2xl border-2 transition-all active:scale-[0.98] ${
+            className={`py-2 px-3 rounded-xl border-2 text-sm font-semibold transition-all active:scale-[0.98] ${
               open
-                ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-lg'
-                : 'bg-white text-[#2D2D2D] border-[#F4C2A1]/40 hover:border-[#F4C2A1] hover:bg-[#F4C2A1]/10 shadow-sm'
+                ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow'
+                : 'bg-white text-[#2D2D2D] border-[#F4C2A1]/40 hover:border-[#F4C2A1] hover:bg-[#F4C2A1]/10'
             }`}
           >
-            <span className={open ? 'text-white' : 'text-[#E8A598]'}>{t.icon}</span>
-            <span className="text-center leading-tight">
-              <span className="block text-sm sm:text-base font-semibold">{t.label}</span>
-              <span className={`block text-[10px] font-normal ${open ? 'text-white/85' : 'text-[#9B8B7A]'}`}>{t.hint}</span>
-            </span>
+            {t.label}
           </button>
         );
       })}
@@ -231,32 +222,6 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
         </div>
       )}
 
-      {activeTab === 'spine' && isFront && (
-        <div className="space-y-3">
-          <p className="text-[12px] text-[#8B7E7A] bg-[#FBF3EA] rounded-lg px-3 py-2.5">
-            The <b>spine</b> is the narrow bound edge of your album — the part you see when it stands on a shelf.
-            It always shows your <b>front cover text</b>, so there's nothing to fill in here.
-          </p>
-          <div>
-            <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">This is what your spine will read</span>
-            {frontTitle ? (
-              <div
-                className="w-full px-3 py-3 rounded-xl border border-[#E4D8C9] text-center truncate"
-                style={{ background: spine.bg, fontFamily: spine.text.fontFamily, color: spine.text.color, fontWeight: spine.text.bold ? 700 : 400 }}
-              >
-                {frontTitle}
-              </div>
-            ) : (
-              <p className="text-[12px] text-[#9B8B7A] text-center bg-white border border-dashed border-[#E4D8C9] rounded-xl px-3 py-3">
-                No cover text yet — add it in the <b>Text</b> tab and it'll appear here.
-              </p>
-            )}
-            <p className="text-[10px] text-[#B9A992] mt-1.5">
-              The spine width is set automatically from your page count at checkout, and the text is sized to fit it.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 
