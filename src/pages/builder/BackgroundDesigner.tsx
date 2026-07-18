@@ -68,9 +68,11 @@ interface BackgroundDesignerProps {
   /** PHOTO-ONLY mode: hide the Solid/Gradient/Textures options and go straight to
    *  the picture browser. Used by the cover editor — a cover background is a photo. */
   imageOnly?: boolean;
+  /** Hide the opacity slider (not meaningful on a cover panel). */
+  hideOpacity?: boolean;
 }
 
-export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false, compact = false, imageOnly = false }: BackgroundDesignerProps) {
+export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false, compact = false, imageOnly = false, hideOpacity = false }: BackgroundDesignerProps) {
   const [activeTab, setActiveTab] = useState<BgTab>('solid');
   // In photo-only mode the picture browser is the whole panel.
   const effectiveTab: BgTab = imageOnly ? 'image' : activeTab;
@@ -119,8 +121,9 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
         </div>
       )}
 
-      {/* ─── OPACITY SLIDER — sits right under the live preview ─── */}
-      <div className="shrink-0 mb-2.5 space-y-1.5">
+      {/* ─── OPACITY SLIDER — sits right under the live preview.
+              Hidden on a cover panel, where opacity isn't meaningful. ─── */}
+      <div className={`shrink-0 mb-2.5 space-y-1.5 ${hideOpacity ? 'hidden' : ''}`}>
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
             <Droplets size={13} /> Opacity
