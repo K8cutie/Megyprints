@@ -255,8 +255,12 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
             transition={{ duration: 0.15 }}
             className="space-y-3"
           >
-            {/* ─── Your uploaded photos → use one as the page background ─── */}
-            <p className="text-[10px] text-stone-400 font-medium uppercase tracking-wider">Your Photos</p>
+            {/* ─── Your uploaded photos → use one as the page background ───
+                In photo-only mode the whole panel IS the picture browser, so the
+                "Your Photos" heading and the empty-state line are just noise. */}
+            {!imageOnly && (
+              <p className="text-[10px] text-stone-400 font-medium uppercase tracking-wider">Your Photos</p>
+            )}
             {photos.length > 0 ? (
               <div className={`grid gap-1.5 ${compact ? 'grid-cols-5' : 'grid-cols-3'}`}>
                 {photos.map((p) => {
@@ -281,12 +285,15 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
                 })}
               </div>
             ) : (
-              <p className="text-[11px] text-stone-400 text-center py-2 bg-stone-50 rounded-lg">
-                Upload photos first to use one as a background.
-              </p>
+              !imageOnly && (
+                <p className="text-[11px] text-stone-400 text-center py-2 bg-stone-50 rounded-lg">
+                  Upload photos first to use one as a background.
+                </p>
+              )
             )}
 
-            <div className="border-t border-stone-100" />
+            {/* No divider when there's nothing above it (photo-only, no photos yet). */}
+            {!(imageOnly && photos.length === 0) && <div className="border-t border-stone-100" />}
 
             {/* Upload button */}
             <input
