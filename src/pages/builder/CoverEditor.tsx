@@ -175,7 +175,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const controls = (
     <div className="flex-1 overflow-auto min-h-0 px-4 pt-3 pb-4">
       {activeTab === 'background' && (
-        <BackgroundDesigner hidePreview compact background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
+        <BackgroundDesigner hidePreview compact imageOnly background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
       )}
 
       {activeTab === 'text' && (

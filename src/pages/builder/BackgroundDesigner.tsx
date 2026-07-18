@@ -65,10 +65,15 @@ interface BackgroundDesignerProps {
   /** Denser swatch grids (smaller swatches) — used by the cover editor so the
    *  preview can be bigger. Leaves Step 3 at its normal sizes. */
   compact?: boolean;
+  /** PHOTO-ONLY mode: hide the Solid/Gradient/Textures options and go straight to
+   *  the picture browser. Used by the cover editor — a cover background is a photo. */
+  imageOnly?: boolean;
 }
 
-export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false, compact = false }: BackgroundDesignerProps) {
+export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false, compact = false, imageOnly = false }: BackgroundDesignerProps) {
   const [activeTab, setActiveTab] = useState<BgTab>('solid');
+  // In photo-only mode the picture browser is the whole panel.
+  const effectiveTab: BgTab = imageOnly ? 'image' : activeTab;
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -137,8 +142,9 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
         />
       </div>
 
-      {/* Tab cards — 2×2 on mobile, 4-across on wider screens */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+      {/* Tab cards — 2×2 on mobile, 4-across on wider screens.
+          Hidden in photo-only mode (the cover goes straight to the picture browser). */}
+      <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0 ${imageOnly ? 'hidden' : ''}`}>
         {TABS.map((t) => {
           const active = activeTab === t.key;
           return (
@@ -162,7 +168,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
       {/* Scrollable content area */}
       <div className="flex-1 overflow-y-auto min-h-0 py-3">
         <AnimatePresence mode="wait">
-        {activeTab === 'solid' && (
+        {effectiveTab === 'solid' && (
           <motion.div
             key="solid"
             initial={{ opacity: 0, y: 8 }}
@@ -197,7 +203,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
         )}
 
         {/* ─── GRADIENT ─── */}
-        {activeTab === 'gradient' && (
+        {effectiveTab === 'gradient' && (
           <motion.div
             key="gradient"
             initial={{ opacity: 0, y: 8 }}
@@ -237,7 +243,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
         )}
 
         {/* ─── IMAGE ─── */}
-        {activeTab === 'image' && (
+        {effectiveTab === 'image' && (
           <motion.div
             key="image"
             initial={{ opacity: 0, y: 8 }}
@@ -308,7 +314,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
         )}
 
         {/* ─── TEXTURES ─── */}
-        {activeTab === 'texture' && (
+        {effectiveTab === 'texture' && (
           <motion.div
             key="texture"
             initial={{ opacity: 0, y: 8 }}
