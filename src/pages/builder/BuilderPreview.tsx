@@ -35,7 +35,7 @@ interface BuilderPreviewProps {
   onOrder: () => void;
 }
 
-function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProperties {
+function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = false): React.CSSProperties {
   if (!bg) return {};
   switch (bg.type) {
     case 'solid': return { backgroundColor: bg.solid || '#FFFBF7' };
@@ -64,9 +64,25 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
       // user photo, a `photoId` we re-resolve to a live URL from the photos.
       const img = resolveBgImageSrc(bg, photos);
       if (!img) return { backgroundColor: '#FFFBF7' };
-      return String(img).includes('gradient(')
-        ? { background: img }
-        : { backgroundImage: `url("${img}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
+      if (String(img).includes('gradient(')) return { background: img };
+      // COVER panels honour the focal point + zoom (a cover can't be ratio-matched
+      // the way interior slots are, so the user picks what shows). `cover` +
+      // `background-position: fx% fy%` is exactly bgCoverFit's math, and the zoom
+      // scale is taken about the same focal point so print matches. Interior pages
+      // keep the original centred crop, untouched.
+      if (coverMode) {
+        const fx = Math.max(0, Math.min(1, bg.focusX ?? 0.5));
+        const fy = Math.max(0, Math.min(1, bg.focusY ?? 0.5));
+        const z = Math.max(1, bg.zoom ?? 1);
+        return {
+          backgroundImage: `url("${img}")`,
+          backgroundSize: 'cover',
+          backgroundPosition: `${fx * 100}% ${fy * 100}%`,
+          backgroundRepeat: 'no-repeat',
+          ...(z > 1 ? { transform: `scale(${z})`, transformOrigin: `${fx * 100}% ${fy * 100}%` } : {}),
+        };
+      }
+      return { backgroundImage: `url("${img}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
     }
     case 'texture': {
       // Material texture — a procedural, tileable SVG data URI (leather, linen,
@@ -225,7 +241,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
   return (
     <>
-      <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
+      <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos, coverMode), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
       {template && template.slots.map((slot, idx) => {
         if (!slot) return null;
         // Content precedence is DRIVEN BY page data, not slot.kind:

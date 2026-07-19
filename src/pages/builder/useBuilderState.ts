@@ -503,6 +503,8 @@ export interface BuilderActions {
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
+  /** COVER-only: reposition/zoom an image background (focal point + zoom). */
+  setBackgroundCrop: (crop: { focusX?: number; focusY?: number; zoom?: number }) => void;
   updateBackgroundTransform: (updates: Partial<Pick<AlbumBackground, 'x' | 'y' | 'width' | 'height' | 'rotation'>>) => void;
   updateBackgroundFilters: (filters: Partial<PhotoFilters>) => void;
   applyBackgroundToAllPages: (bg?: AlbumBackground) => void;
@@ -2159,6 +2161,13 @@ export function useBuilderState(): BuilderActions {
     updateCurrentPage((page) => ({ ...page, background: bg }));
   }, [updateCurrentPage]);
 
+  /** Set the COVER background's crop (focal point + zoom). Deliberately does NOT
+   *  push an undo snapshot: a drag fires many updates and one snapshot each would
+   *  flood undo (same rationale as setTextSlotOrnamentGeom). */
+  const setBackgroundCrop = useCallback((crop: { focusX?: number; focusY?: number; zoom?: number }) => {
+    updateCurrentPage((page) => ({ ...page, background: { ...page.background, ...crop } }));
+  }, [updateCurrentPage]);
+
   const updateBackgroundTransform = useCallback((updates: Partial<Pick<AlbumBackground, 'x' | 'y' | 'width' | 'height' | 'rotation'>>) => {
     pushSnapshot();
     updateCurrentPage((page) => ({
@@ -2437,6 +2446,7 @@ export function useBuilderState(): BuilderActions {
     deleteTextElement,
     setBoxText,
     setPageBackground,
+    setBackgroundCrop,
     updateBackgroundTransform,
     updateBackgroundFilters,
     applyBackgroundToAllPages,

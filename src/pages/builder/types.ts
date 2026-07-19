@@ -162,6 +162,41 @@ export interface AlbumBackground {
   rotation?: number;
   filters?: PhotoFilters;
   opacity?: number;
+  /** COVER-ONLY crop controls for an image background. A cover is one fixed-aspect
+   *  panel, so a photo can't be ratio-matched to it the way interior slots are —
+   *  these let the user choose which part shows.
+   *  focusX/focusY: 0–1 (0.5 = centred) — same semantics as CSS
+   *  `background-position: X% Y%`. zoom: 1 = exactly cover-fit, >1 zooms in.
+   *  Applied ONLY when a renderer is in coverMode; interior pages ignore them. */
+  focusX?: number;
+  focusY?: number;
+  zoom?: number;
+}
+
+/** Cover-fit an image into a panel with a focal point + zoom — the ONE place this
+ *  math lives, so the cover preview and the cover print agree exactly.
+ *
+ *  Returns the image's draw rect in panel px. This is deliberately equivalent to
+ *  CSS `background-size: cover` + `background-position: fx*100% fy*100%`, which
+ *  offsets by `(panel - drawn) * fraction` — so the DOM preview (which uses the
+ *  CSS form, since it can't know the intrinsic size) and the canvas print (which
+ *  uses this) produce identical crops. */
+export function bgCoverFit(
+  imgW: number,
+  imgH: number,
+  W: number,
+  H: number,
+  zoom = 1,
+  focusX = 0.5,
+  focusY = 0.5,
+): { x: number; y: number; width: number; height: number } {
+  const iw = imgW || 1;
+  const ih = imgH || 1;
+  const scale = Math.max(W / iw, H / ih) * Math.max(1, zoom || 1);
+  const width = iw * scale;
+  const height = ih * scale;
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0.5));
+  return { x: (W - width) * clamp01(focusX), y: (H - height) * clamp01(focusY), width, height };
 }
 
 export const DEFAULT_BACKGROUND: AlbumBackground = {

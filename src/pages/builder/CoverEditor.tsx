@@ -14,7 +14,7 @@
      custom spine text is typed here.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useBuilderContext } from './BuilderContext';
 import { PageView } from './BuilderPreview';
@@ -89,6 +89,33 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   };
   const updateTitle = (patch: Partial<typeof title>) => b.setBoxText(0, { ...title, ...patch });
 
+  // ── Cover photo crop: drag the preview to reposition, slider to zoom. A cover
+  //    is one fixed-aspect panel, so a photo can't be ratio-matched to it — the
+  //    user picks which part shows. Applies to covers only (coverMode). ──
+  const bg = page.background as { type?: string; focusX?: number; focusY?: number; zoom?: number } | undefined;
+  const bgIsImage = bg?.type === 'image';
+  const bgFocusX = bg?.focusX ?? 0.5;
+  const bgFocusY = bg?.focusY ?? 0.5;
+  const bgZoom = bg?.zoom ?? 1;
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const panRef = useRef<{ x: number; y: number; fx: number; fy: number } | null>(null);
+
+  const onPanStart = (e: React.PointerEvent) => {
+    if (!bgIsImage) return;
+    try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* capture is best-effort */ }
+    panRef.current = { x: e.clientX, y: e.clientY, fx: bgFocusX, fy: bgFocusY };
+  };
+  const onPanMove = (e: React.PointerEvent) => {
+    const d = panRef.current;
+    if (!d) return;
+    // Drag right → reveal more of the LEFT of the photo, so focus decreases.
+    b.setBackgroundCrop({
+      focusX: clamp01(d.fx - (e.clientX - d.x) / Math.max(1, dims.w)),
+      focusY: clamp01(d.fy - (e.clientY - d.y) / Math.max(1, dims.h)),
+    });
+  };
+  const onPanEnd = () => { panRef.current = null; };
+
   const toggle = (front: boolean) => setEditScope(front ? 'coverFront' : 'coverBack');
 
   const header = (
@@ -125,7 +152,14 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
       {isFront
         ? <SpineStrip height={dims.h} spine={spine} />
         : <div style={{ width: SPINE_STRIP_W }} aria-hidden />}
-      <div className="bg-white shadow-lg relative overflow-hidden" style={{ width: dims.w, height: dims.h }}>
+      <div
+        className="bg-white shadow-lg relative overflow-hidden"
+        style={{ width: dims.w, height: dims.h, cursor: bgIsImage ? 'move' : undefined, touchAction: bgIsImage ? 'none' : undefined }}
+        onPointerDown={onPanStart}
+        onPointerMove={onPanMove}
+        onPointerUp={onPanEnd}
+        onPointerCancel={onPanEnd}
+      >
         <PageView page={page} photos={uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={0} coverMode />
       </div>
     </div>
@@ -162,7 +196,33 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const controls = (
     <div className="flex-1 overflow-auto min-h-0 px-4 pt-3 pb-4">
       {activeTab === 'background' && (
-        <BackgroundDesigner hidePreview compact imageOnly hideOpacity background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
+        <div className="space-y-3">
+          {/* Crop controls — only meaningful once a photo is on the cover. */}
+          {bgIsImage && (
+            <div className="rounded-xl border border-[#E4D8C9] bg-white px-3 py-2.5">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-medium text-[#9B8B7A]">Zoom</span>
+                <button
+                  onClick={() => b.setBackgroundCrop({ focusX: 0.5, focusY: 0.5, zoom: 1 })}
+                  className="text-[11px] font-medium text-[#C56B4E] hover:underline"
+                >
+                  Reset
+                </button>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={bgZoom}
+                onChange={(e) => b.setBackgroundCrop({ zoom: Number(e.target.value) })}
+                className="w-full cursor-pointer accent-[#E8A598]"
+              />
+              <p className="text-[10px] text-[#B9A992] mt-1">Drag the cover above to reposition the photo.</p>
+            </div>
+          )}
+          <BackgroundDesigner hidePreview compact imageOnly hideOpacity background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
+        </div>
       )}
 
       {activeTab === 'text' && (

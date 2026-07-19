@@ -4,7 +4,7 @@
     ═══════════════════════════════════════════════════════════════ */
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
-import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
+import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
@@ -105,7 +105,7 @@ async function renderPageManually(
   ctx.fillRect(0, 0, W, H);
 
   // ── Background ──
-  await renderBackground(ctx, page, W, H, photos);
+  await renderBackground(ctx, page, W, H, photos, coverMode);
 
   // ── Slot Photos ──
   // Match the editor/preview geometry EXACTLY: adapt the template to the page
@@ -295,6 +295,7 @@ async function renderBackground(
   W: number,
   H: number,
   photos: UploadedPhoto[],
+  coverMode = false,
 ) {
   const bg = page.background;
   if (!bg) {
@@ -335,7 +336,15 @@ async function renderBackground(
       if (src && !src.includes('gradient(')) {
         try {
           const img = await loadImage(src);
-          ctx.drawImage(img, 0, 0, W, H);
+          if (coverMode) {
+            // COVER: aspect-preserving cover-fit at the user's focal point + zoom,
+            // matching the DOM preview exactly (see types.bgCoverFit). Interior
+            // pages keep their existing fill behaviour, untouched.
+            const r = bgCoverFit(img.width, img.height, W, H, bg.zoom, bg.focusX, bg.focusY);
+            ctx.drawImage(img, r.x, r.y, r.width, r.height);
+          } else {
+            ctx.drawImage(img, 0, 0, W, H);
+          }
         } catch {
           ctx.fillStyle = '#FFFBF7';
           ctx.fillRect(0, 0, W, H);
