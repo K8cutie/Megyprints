@@ -196,7 +196,13 @@ async function renderPageManually(
         // same fractions the DOM cover preview applies (see TextElement.offsetX).
         const offX = coverMode ? (text.offsetX ?? 0) * W : 0;
         const offY = coverMode ? (text.offsetY ?? 0) * H : 0;
-        slot = { x: sX + ts.x * sW + offX, y: sY + ts.y * sH + offY, w: ts.width * sW, h: ts.height * sH, align: ts.align };
+        // renderTextElement resolves align as `slot.align ?? text.alignment`, i.e.
+        // the TEMPLATE wins — the inverse of the DOM preview, which lets the
+        // element's own alignment win. On a COVER the user picks the alignment
+        // explicitly, so feed the element's choice in here or the print would
+        // ignore it. Interior pages keep the existing template-wins behaviour.
+        const align = coverMode ? (text.alignment ?? ts.align) : ts.align;
+        slot = { x: sX + ts.x * sW + offX, y: sY + ts.y * sH + offY, w: ts.width * sW, h: ts.height * sH, align };
       }
     }
     renderTextElement(ctx, text, W, H, slot);

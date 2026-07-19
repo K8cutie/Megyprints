@@ -15,7 +15,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, AlignLeft, AlignCenter, AlignRight, Bold, Italic } from 'lucide-react';
 import { useBuilderContext } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import BackgroundDesigner from './BackgroundDesigner';
@@ -90,7 +90,11 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     offsetX: titleEl?.offsetX ?? 0,
     offsetY: titleEl?.offsetY ?? 0,
   };
-  const updateTitle = (patch: Partial<typeof title>) => b.setBoxText(0, { ...title, ...patch });
+  // setBoxText MERGES into the existing caption, so send only the patch (plus the
+  // current text, which it needs — empty text clears the box). Spreading the whole
+  // `title` snapshot here would make two edits fired before a re-render clobber
+  // each other (last write wins), e.g. Bold then Italic in quick succession.
+  const updateTitle = (patch: Partial<typeof title>) => b.setBoxText(0, { text: title.text, ...patch });
 
   // ── Cover photo crop: drag the preview to reposition, slider to zoom. A cover
   //    is one fixed-aspect panel, so a photo can't be ratio-matched to it — the
@@ -319,6 +323,48 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               </div>
             </div>
           </div>
+          <div className="flex items-end gap-3 flex-wrap">
+            <div>
+              <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Alignment</span>
+              <div className="inline-flex rounded-xl border border-[#E4D8C9] bg-white overflow-hidden">
+                {(['left', 'center', 'right'] as const).map((a) => {
+                  const Icon = a === 'left' ? AlignLeft : a === 'center' ? AlignCenter : AlignRight;
+                  return (
+                    <button
+                      key={a}
+                      onClick={() => updateTitle({ alignment: a })}
+                      title={`Align ${a}`}
+                      className={`px-3 py-2 transition-colors ${title.alignment === a ? 'bg-[#F4C2A1] text-white' : 'text-[#8B7E7A] hover:bg-[#FBF3EA]'}`}
+                    >
+                      <Icon size={16} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Style</span>
+              <div className="inline-flex rounded-xl border border-[#E4D8C9] bg-white overflow-hidden">
+                {/* Bold + italic only: canvas printing goes through drawWordArtText,
+                    which has no underline, so an Underline control would preview
+                    underlined and print plain. */}
+                {([
+                  { key: 'bold' as const, Icon: Bold, label: 'Bold', on: title.bold },
+                  { key: 'italic' as const, Icon: Italic, label: 'Italic', on: title.italic },
+                ]).map(({ key, Icon, label, on }) => (
+                  <button
+                    key={key}
+                    onClick={() => updateTitle({ [key]: !on } as Partial<typeof title>)}
+                    title={label}
+                    className={`px-3 py-2 transition-colors ${on ? 'bg-[#F4C2A1] text-white' : 'text-[#8B7E7A] hover:bg-[#FBF3EA]'}`}
+                  >
+                    <Icon size={16} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <label className="block">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[11px] font-medium text-[#9B8B7A]">Size</span>
