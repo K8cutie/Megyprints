@@ -432,13 +432,18 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         const boxed = page.textElements?.find((t) => t.boxIndex === i);
         const align = boxed?.alignment ?? ts.align ?? 'center';
 
-        // (2) TEXT — a bound caption (unchanged rendering).
+        // (2) TEXT — a bound caption. On a COVER the caption can be nudged off its
+        // template slot (offsetX/offsetY, fractions of the panel) so the title can
+        // be placed anywhere; the print applies the same fractions. Interior pages
+        // ignore the offset.
         if (boxed) {
+          const offL = coverMode ? (boxed.offsetX ?? 0) * singleW : 0;
+          const offT = coverMode ? (boxed.offsetY ?? 0) * H : 0;
           return (
             <div key={`tslot-${i}`} className="absolute flex items-center"
               onClick={onTextSlotTap ? (e) => { e.stopPropagation(); onTextSlotTap(i); } : undefined}
               style={{
-                zIndex: 5, left: boxLeft, top: boxTop, width: boxW, height: boxH, overflow: 'hidden',
+                zIndex: 5, left: boxLeft + offL, top: boxTop + offT, width: boxW, height: boxH, overflow: 'hidden',
                 justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
                 cursor: onTextSlotTap ? 'pointer' : undefined,
               }}>

@@ -20,6 +20,7 @@ import { useBuilderContext } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import BackgroundDesigner from './BackgroundDesigner';
 import { getCanvasDimensions } from './layouts';
+import { getTemplateById } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
 import { deriveSpine } from './coverLayout';
 import { FONTS, COLORS } from './MobileTextEditor';
@@ -86,6 +87,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     underline: titleEl?.underline ?? false,
     alignment: (titleEl?.alignment ?? 'center') as 'left' | 'center' | 'right',
     fontSize: titleEl?.fontSize ?? 32,
+    offsetX: titleEl?.offsetX ?? 0,
+    offsetY: titleEl?.offsetY ?? 0,
   };
   const updateTitle = (patch: Partial<typeof title>) => b.setBoxText(0, { ...title, ...patch });
 
@@ -115,6 +118,41 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     });
   };
   const onPanEnd = () => { panRef.current = null; };
+
+  // ── Movable cover text: a transparent handle over the title box. Dragging it
+  //    nudges the caption (panel fractions, so print matches); the drag is stopped
+  //    from bubbling so it doesn't also pan the photo underneath. ──
+  const coverTmpl = page.templateId ? getTemplateById(page.templateId) : null;
+  const titleSlot = coverTmpl?.textSlots?.[0];
+  const tm = coverTmpl?.fullBleed
+    ? { top: 0, bottom: 0, left: 0, right: 0 }
+    : (coverTmpl?.margin ?? { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 });
+  const titleRect = titleSlot
+    ? {
+        left: tm.left * dims.w + titleSlot.x * (dims.w * (1 - tm.left - tm.right)) + title.offsetX * dims.w,
+        top: tm.top * dims.h + titleSlot.y * (dims.h * (1 - tm.top - tm.bottom)) + title.offsetY * dims.h,
+        width: titleSlot.width * (dims.w * (1 - tm.left - tm.right)),
+        height: titleSlot.height * (dims.h * (1 - tm.top - tm.bottom)),
+      }
+    : null;
+
+  const textDragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const clampOff = (v: number) => Math.max(-0.5, Math.min(0.5, v));
+  const onTextDragStart = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* best-effort */ }
+    textDragRef.current = { x: e.clientX, y: e.clientY, ox: title.offsetX, oy: title.offsetY };
+  };
+  const onTextDragMove = (e: React.PointerEvent) => {
+    const d = textDragRef.current;
+    if (!d) return;
+    e.stopPropagation();
+    b.setBoxTextOffset(0,
+      clampOff(d.ox + (e.clientX - d.x) / Math.max(1, dims.w)),
+      clampOff(d.oy + (e.clientY - d.y) / Math.max(1, dims.h)),
+    );
+  };
+  const onTextDragEnd = (e: React.PointerEvent) => { e.stopPropagation(); textDragRef.current = null; };
 
   const toggle = (front: boolean) => setEditScope(front ? 'coverFront' : 'coverBack');
 
@@ -161,6 +199,23 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
         onPointerCancel={onPanEnd}
       >
         <PageView page={page} photos={uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={0} coverMode />
+        {/* Drag handle over the title — only once there's text to move. */}
+        {title.text.trim() && titleRect && (
+          <div
+            onPointerDown={onTextDragStart}
+            onPointerMove={onTextDragMove}
+            onPointerUp={onTextDragEnd}
+            onPointerCancel={onTextDragEnd}
+            title="Drag to move the cover text"
+            style={{
+              position: 'absolute',
+              left: titleRect.left, top: titleRect.top, width: titleRect.width, height: titleRect.height,
+              zIndex: 10, cursor: 'move', touchAction: 'none',
+              border: '1px dashed rgba(232,165,152,0.85)', borderRadius: 4,
+              background: 'rgba(255,255,255,0.04)',
+            }}
+          />
+        )}
       </div>
     </div>
   );

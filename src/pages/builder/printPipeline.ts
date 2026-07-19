@@ -192,7 +192,11 @@ async function renderPageManually(
       const ts = textTpl.textSlots?.[text.boxIndex];
       if (ts) {
         const sX = W * tm.left, sY = H * tm.top, sW = W * (1 - tm.left - tm.right), sH = H * (1 - tm.top - tm.bottom);
-        slot = { x: sX + ts.x * sW, y: sY + ts.y * sH, w: ts.width * sW, h: ts.height * sH, align: ts.align };
+        // COVER: honour the caption's fractional nudge off its template slot, the
+        // same fractions the DOM cover preview applies (see TextElement.offsetX).
+        const offX = coverMode ? (text.offsetX ?? 0) * W : 0;
+        const offY = coverMode ? (text.offsetY ?? 0) * H : 0;
+        slot = { x: sX + ts.x * sW + offX, y: sY + ts.y * sH + offY, w: ts.width * sW, h: ts.height * sH, align: ts.align };
       }
     }
     renderTextElement(ctx, text, W, H, slot);

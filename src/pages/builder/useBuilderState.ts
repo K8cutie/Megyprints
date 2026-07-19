@@ -505,6 +505,8 @@ export interface BuilderActions {
   setPageBackground: (bg: AlbumBackground) => void;
   /** COVER-only: reposition/zoom an image background (focal point + zoom). */
   setBackgroundCrop: (crop: { focusX?: number; focusY?: number; zoom?: number }) => void;
+  /** COVER-only: move a bound caption off its template slot (panel fractions). */
+  setBoxTextOffset: (slotIndex: number, offsetX: number, offsetY: number) => void;
   updateBackgroundTransform: (updates: Partial<Pick<AlbumBackground, 'x' | 'y' | 'width' | 'height' | 'rotation'>>) => void;
   updateBackgroundFilters: (filters: Partial<PhotoFilters>) => void;
   applyBackgroundToAllPages: (bg?: AlbumBackground) => void;
@@ -2161,6 +2163,18 @@ export function useBuilderState(): BuilderActions {
     updateCurrentPage((page) => ({ ...page, background: bg }));
   }, [updateCurrentPage]);
 
+  /** COVER: nudge a bound caption off its template slot (fractions of the panel).
+   *  No undo snapshot per call — a drag fires many updates (see
+   *  setTextSlotOrnamentGeom). */
+  const setBoxTextOffset = useCallback((slotIndex: number, offsetX: number, offsetY: number) => {
+    updateCurrentPage((page) => ({
+      ...page,
+      textElements: (page.textElements ?? []).map((t) =>
+        t.boxIndex === slotIndex ? { ...t, offsetX, offsetY } : t,
+      ),
+    }));
+  }, [updateCurrentPage]);
+
   /** Set the COVER background's crop (focal point + zoom). Deliberately does NOT
    *  push an undo snapshot: a drag fires many updates and one snapshot each would
    *  flood undo (same rationale as setTextSlotOrnamentGeom). */
@@ -2447,6 +2461,7 @@ export function useBuilderState(): BuilderActions {
     setBoxText,
     setPageBackground,
     setBackgroundCrop,
+    setBoxTextOffset,
     updateBackgroundTransform,
     updateBackgroundFilters,
     applyBackgroundToAllPages,

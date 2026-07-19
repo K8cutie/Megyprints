@@ -293,6 +293,14 @@ export interface TextElement extends TextStyle {
   scaleY?: number;
   /** If set, this text fills template.textSlots[boxIndex] instead of free x/y. */
   boxIndex?: number;
+  /** COVER-ONLY: nudge a BOX-BOUND caption off its template slot, as a fraction
+   *  of the panel (0.1 = 10% of the width / height, positive = right / down).
+   *  Deliberately FRACTIONAL rather than reusing the free-text x/y: free text is
+   *  authored in the 750px design space but printed against a 576px one, so it
+   *  drifts ~1.3x, whereas fractions are applied identically by the DOM cover
+   *  preview and the cover print. Ignored on interior pages (coverMode only). */
+  offsetX?: number;
+  offsetY?: number;
 }
 
 /** Per-slot geometry overrides for container editing mode.
