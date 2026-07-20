@@ -1,5 +1,20 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate } from './types';
 import { getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio } from './pageTemplates';
+
+/* ── Ratio LOOSENING budget ───────────────────────────────────────────────────
+   Ratio matching is loosened, not removed: a photo still prefers its own ratio,
+   but may also use a NEIGHBOURING ratio of the same orientation. The budget is
+   the crop that costs — adjacent camera ratios are cheap, distant ones are not:
+     4:3 <-> 3:2  11.1%      3:2 <-> 16:9  15.6%      4:3 <-> 16:9  25.0%
+     3:4 <-> 2:3  11.1%      2:3 <-> 9:16  15.6%      3:4 <-> 9:16  25.0%
+   0.16 therefore admits the adjacent pairs and excludes the far ones. */
+const MAX_LOOSE_CROP = 0.16;
+const RATIO_VALUE: Record<string, number> = {
+  '4:3': 4 / 3, '3:4': 3 / 4, '3:2': 3 / 2, '2:3': 2 / 3, '1:1': 1, '16:9': 16 / 9, '9:16': 9 / 16,
+};
+/** Fraction of the photo lost when aspect `a` is object-cover fitted into `b`. */
+const cropBetween = (a: number, b: number) => 1 - Math.min(a, b) / Math.max(a, b);
+const ratioCrop = (a: string, b: string) => cropBetween(RATIO_VALUE[a] ?? 1, RATIO_VALUE[b] ?? 1);
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
@@ -139,7 +154,12 @@ export function generateAlbum(
   // portrait photo ended up hard-cropped in a landscape layout.)
   const templatesForRatio = (ratio: PhotoRatio): PageTemplate[] => {
     const sameOrientation = getTemplatesForOrientation(albumSize, orientationOfRatio(ratio));
-    if (sameOrientation.length) return sameOrientation;
+    // LOOSEN, don't remove: keep this photo's own ratio plus NEIGHBOURING ratios
+    // within the crop budget. That unlocks the layouts exact-matching locked out
+    // without letting a 4:3 land in a 16:9 slot (25%).
+    const near = sameOrientation.filter((t) => ratioCrop(t.targetRatio, ratio) <= MAX_LOOSE_CROP);
+    if (near.length) return near;
+    if (sameOrientation.length) return sameOrientation; // orientation stays strict
     const exact = getTemplatesForRatio(albumSize, ratio);
     return exact.length ? exact : getTemplatesForAlbum(albumSize);
   };
@@ -195,9 +215,6 @@ export function generateAlbum(
   const PAGE_ASPECT: Record<string, number> = {
     '6x4': 6 / 4, '6x6': 1, '8x8': 1, '9x9': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
   };
-  const RATIO_VALUE: Record<string, number> = {
-    '4:3': 4 / 3, '3:4': 3 / 4, '3:2': 3 / 2, '2:3': 2 / 3, '1:1': 1, '16:9': 16 / 9, '9:16': 9 / 16,
-  };
   const pageAspect = PAGE_ASPECT[albumSize] ?? 1;
   const cropSafe = (t: PageTemplate): boolean =>
     !t.fullBleed ||
@@ -245,9 +262,19 @@ export function generateAlbum(
       // Prefer the exact ratio, then LOOSEN to any photo of the same orientation
       // (never across it). Exact-only made mixed templates fail whenever the
       // moment lacked that precise ratio, so they were rarely used at all.
-      const pick =
-        pool.find((idx) => !used.has(idx) && (ratioOf[idx] ?? dominantRatio) === need)
-        ?? pool.find((idx) => !used.has(idx) && orientationOfRatio(ratioOf[idx] ?? dominantRatio) === needOrient);
+      // Exact ratio first; then the CLOSEST same-orientation photo (loosened, not
+      // removed) — never the first one that happens to share an orientation.
+      let pick = pool.find((idx) => !used.has(idx) && (ratioOf[idx] ?? dominantRatio) === need);
+      if (pick === undefined) {
+        let bestCrop = Infinity;
+        for (const idx of pool) {
+          if (used.has(idx)) continue;
+          const r = ratioOf[idx] ?? dominantRatio;
+          if (orientationOfRatio(r) !== needOrient) continue;
+          const c = ratioCrop(r, need);
+          if (c < bestCrop) { bestCrop = c; pick = idx; }
+        }
+      }
       if (pick === undefined) return null;
       used.add(pick);
       fills.push(pick);
@@ -498,11 +525,13 @@ export function shufflePageLayout(
     if (ratioQueues[targetRatio] && ratioQueues[targetRatio].length > 0) {
       bestPhotoIdx = ratioQueues[targetRatio].shift()!;
     } else {
-      // Loosen to any photo of the SAME orientation first; only cross orientation
-      // as a genuine last resort (better a cropped page than a dropped photo).
+      // Loosen to the CLOSEST same-orientation ratio (least crop), not merely the
+      // first one found; only cross orientation as a genuine last resort (better a
+      // cropped page than a dropped photo).
       const wantOrient = orientationOfRatio(targetRatio);
       const sameOrient = (Object.keys(ratioQueues) as PhotoRatio[])
-        .filter((r) => orientationOfRatio(r) === wantOrient && ratioQueues[r].length > 0);
+        .filter((r) => orientationOfRatio(r) === wantOrient && ratioQueues[r].length > 0)
+        .sort((a, b) => ratioCrop(a, targetRatio) - ratioCrop(b, targetRatio));
       if (sameOrient.length > 0) {
         bestPhotoIdx = ratioQueues[sameOrient[0]].shift()!;
       } else {
