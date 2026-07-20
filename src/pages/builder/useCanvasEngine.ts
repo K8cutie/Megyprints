@@ -1798,9 +1798,11 @@ function renderScene(
       selectable: false, evented: true, hoverCursor: 'pointer',
     });
     box.slotId = `${SLOT_ID}-textbox-${i}`;
-    // Empty combo/caption box is for text (ornaments retired) — tapping opens the
-    // caption editor directly.
-    const label = new fab.Text('Tap to add text', {
+    // Empty combo/caption box holds a quote, your own text, clipart or a QR —
+    // tapping opens the chooser. Keep this label in step with SlotChooser's
+    // caption-box options; the DOM hint (BuilderPreview EmptyChooserBox) and
+    // this Fabric label are SEPARATE and both drift silently.
+    const label = new fab.Text('Tap to add', {
       left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
       fontSize: Math.max(12, Math.min(24, Math.min(r.width, r.height) * 0.12)),
       fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700', textAlign: 'center',

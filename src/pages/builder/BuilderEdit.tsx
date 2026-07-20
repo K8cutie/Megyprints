@@ -24,6 +24,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
+import AiClipartModal from './AiClipartModal';
 import SlotChooser from './SlotChooser';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
@@ -762,11 +763,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* Empty combo/caption-box chooser — a themed Quote or your own Text. */}
+      {/* Empty combo/caption-box chooser — Quote / Your Text / Clipart / QR Code. */}
       {chooserTextSlot !== null && (
         <SlotChooser
           onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setTextEditSlot(chooserTextSlot)}
+          onClipart={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
+          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
       )}
@@ -821,9 +824,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* A caption-box graphic from a saved album — removable, not replaceable. */}
+      {/* Caption-box clipart picker (chooser "Clipart", or tapping a placed one). */}
       {textSlotOrnamentEditSlot !== null && (
-        <RemoveGraphicModal
+        <AiClipartModal
+          initial={actions.currentPage?.textSlotOrnament?.[textSlotOrnamentEditSlot] ?? null}
+          onSave={(fill) => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, fill); setTextSlotOrnamentEditSlot(null); }}
           onRemove={() => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, null); setTextSlotOrnamentEditSlot(null); }}
           onClose={() => setTextSlotOrnamentEditSlot(null)}
         />

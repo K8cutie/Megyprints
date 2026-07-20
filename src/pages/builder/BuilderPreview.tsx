@@ -298,7 +298,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           return (
             <EmptyChooserBox key={`slot-${idx}`} rectKey={`slot-${idx}`}
               left={slotLeft} top={slotTop} width={slotW} height={slotH} sx={sx} zIndex={1}
-              showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Text', 'Graphic']}
+              showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Quote', 'Text']}
               onTap={() => onEmptyTap(idx)} />
           );
         }
@@ -493,7 +493,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           return (
             <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}
               left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
-              showList={false} options={['Text']}
+              showList={!!onChooseTextSlot && Math.min(boxW, boxH) >= 84}
+              options={['Quote', 'Text', 'Clipart', 'QR']}
               onTap={() => onChooseTextSlot(i)} />
           );
         }
