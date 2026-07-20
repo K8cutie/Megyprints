@@ -213,7 +213,42 @@ const fbDuoExact = (id: string, name: string, axis: 'v' | 'h'): PageTemplate => 
 const T66_FB_DUO_EXACT_V = fbDuoExact('t66-fb-duo-exact-v', 'Two Portraits + Box', 'v');
 const T66_FB_DUO_EXACT_H = fbDuoExact('t66-fb-duo-exact-h', 'Two Landscapes + Box', 'h');
 
+/* ── 1 photo, full bleed ───────────────────────────────────────────────────
+   One photo, the whole 6×6 sheet, no margin. The simplest page here and the
+   only one that gives a single photo the entire page.
+
+   IT MUST BE 1:1, and that is enforced upstream, not a preference. cropSafe in
+   generateAlbum only deals a full-bleed SINGLE whose targetRatio matches the
+   page aspect within ~12%: a 6×6 page is aspect 1, so 4:3 (0.288 in log terms)
+   and 2:3 are both rejected. The reason is the same one that killed the
+   half-and-half 2-up — a full-bleed single object-covers the WHOLE page, so an
+   off-orientation photo loses a third of itself off the top and bottom.
+
+   Orientation matching then does the rest: a 1:1 template is 'square', and the
+   dealer never crosses orientation, so only square photos are ever placed here
+   and they land at 0.00% crop. Portrait and landscape photos are not stranded —
+   they keep the hero trios and the exact-ratio pair. If they ever want a page
+   to themselves it has to be a MARGINED single (photo at its true ratio inside
+   the safe area), which is a different family and not full bleed.
+
+   This is also what re-enables the generator's hero sprinkle: heroAllowed is
+   gated on singles.length > 0, which was permanently false for 6×6 while every
+   layout was a multi. */
+const T66_FB_SOLO: PageTemplate = {
+  id: 't66-fb-solo',
+  name: 'Full Page',
+  category: 'single',
+  slotCount: 1,
+  margin: ZERO,
+  orientation: 'square',
+  targetRatio: '1:1',
+  albumSizes: ['6x6'],
+  fullBleed: true,
+  slots: [fill(0, 0, 1, 1, '1:1')],
+};
+
 export const TEMPLATES_6X6: PageTemplate[] = [
+  T66_FB_SOLO,
   T66_FB_DUO_EXACT_V,
   T66_FB_DUO_EXACT_H,
   T66_FB_TRIO_HERO_LEFT,
