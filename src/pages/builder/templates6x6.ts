@@ -95,9 +95,47 @@ const T66_FB_TRIO_HERO_BOTTOM = fbTrio('t66-fb-trio-hero-bottom', 'Full Bleed Tr
   fill(1 / 2, 0, 1 / 2, 1 / 3, '3:2'),
 ]);
 
+/* ── 3 SQUARE photos + a combo box, full bleed ─────────────────────────────
+   A 2×2 grid with no gutters: three cells are photos, the fourth is the combo
+   box (quote / your text / clipart / QR).
+
+   This is how SQUARE photos get a 3-up on a 6×6 at all. Three squares cannot
+   tile a square — that dissection does not exist — so a pure 3-photo square
+   page is impossible. Giving the fourth cell to the combo box makes the grid
+   close, and the box earns its place instead of being dead margin.
+
+   Every cell is 3.00" × 3.00", exact 1:1, half an inch over the 2" floor —
+   the roomiest layout in the 6x6 set. The box is a full quadrant, so a quote
+   sits in real space rather than a thin caption band.
+
+   Four variants, one per corner: with no gutters the corner placement is the
+   only thing that changes the composition, and it changes it completely. */
+const fbSquareTrio = (id: string, name: string, boxCorner: 'tl' | 'tr' | 'bl' | 'br'): PageTemplate => {
+  const cells: Record<'tl' | 'tr' | 'bl' | 'br', [number, number]> = {
+    tl: [0, 0], tr: [1 / 2, 0], bl: [0, 1 / 2], br: [1 / 2, 1 / 2],
+  };
+  const order: ('tl' | 'tr' | 'bl' | 'br')[] = ['tl', 'tr', 'bl', 'br'];
+  const [bx, by] = cells[boxCorner];
+  return {
+    id, name, category: 'trio', slotCount: 3, margin: ZERO,
+    orientation: 'square', targetRatio: '1:1', albumSizes: ['6x6'], fullBleed: true,
+    slots: order.filter((c) => c !== boxCorner).map((c) => fill(cells[c][0], cells[c][1], 1 / 2, 1 / 2, '1:1')),
+    textSlots: [{ id: 'combo', x: bx, y: by, width: 1 / 2, height: 1 / 2, align: 'center', placeholder: 'Tap to add' }],
+  };
+};
+
+const T66_FB_SQ_BOX_TL = fbSquareTrio('t66-fb-sq-box-tl', 'Square Trio — Box Top Left', 'tl');
+const T66_FB_SQ_BOX_TR = fbSquareTrio('t66-fb-sq-box-tr', 'Square Trio — Box Top Right', 'tr');
+const T66_FB_SQ_BOX_BL = fbSquareTrio('t66-fb-sq-box-bl', 'Square Trio — Box Bottom Left', 'bl');
+const T66_FB_SQ_BOX_BR = fbSquareTrio('t66-fb-sq-box-br', 'Square Trio — Box Bottom Right', 'br');
+
 export const TEMPLATES_6X6: PageTemplate[] = [
   T66_FB_TRIO_HERO_LEFT,
   T66_FB_TRIO_HERO_RIGHT,
   T66_FB_TRIO_HERO_TOP,
   T66_FB_TRIO_HERO_BOTTOM,
+  T66_FB_SQ_BOX_TL,
+  T66_FB_SQ_BOX_TR,
+  T66_FB_SQ_BOX_BL,
+  T66_FB_SQ_BOX_BR,
 ];
