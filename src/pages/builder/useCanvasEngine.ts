@@ -11,6 +11,7 @@ import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
 import { WORDART_SHADOW } from './wordArt';
 import type { QrFill, OrnamentFill } from './types';
+import { clampQrGeom } from './types';
 import type {
   FabricCanvas,
   FabricObject,
@@ -128,6 +129,7 @@ export interface UseCanvasEngineOptions {
   /** Click on a caption box FILLED with an ornament → re-open the ornament picker. */
   onTextSlotOrnamentClick?: (slotIndex: number) => void;
   onTextSlotOrnamentModified?: (slotIndex: number, geom: import('./types').OrnamentTransform) => void;
+  onTextSlotQrModified?: (slotIndex: number, geom: import('./types').OrnamentTransform) => void;
   actions: BuilderActions;
   /** When true, slot containers become selectable and resizable */
   containerMode?: boolean;
@@ -195,10 +197,12 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   // Caption-box graphic TRANSFORMS — so a drag/resize/rotate (persisted geom)
   // repaints the object at its new place (mirrors slotGeoms for photo slots).
   const textSlotOrnamentGeomData = page.textSlotOrnamentGeom ? page.textSlotOrnamentGeom.map((g) => g ? `${g.cx.toFixed(3)},${g.cy.toFixed(3)},${g.w.toFixed(3)},${g.h.toFixed(3)},${Math.round(g.rot)}` : '').join('|') : '';
+  // Caption-box QR transform — same reason: a dragged/resized code must repaint.
+  const textSlotQrGeomData = page.textSlotQrGeom ? page.textSlotQrGeom.map((g) => g ? `${g.cx.toFixed(3)},${g.cy.toFixed(3)},${g.w.toFixed(3)},${g.h.toFixed(3)},${Math.round(g.rot)}` : '').join('|') : '';
   // Ornament fills — so adding/changing/removing an ornament repaints the Fabric
   // editor without a page-nav (same desync class as slotTextData/qrData above).
   const ornamentData = page.ornamentFills ? page.ornamentFills.map((o) => o ? `${o.pack}:${o.id}` : '').join('|') : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}`;
+  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}|${textSlotQrGeomData}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -221,6 +225,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     onTextSlotQrClick,
     onTextSlotOrnamentClick,
     onTextSlotOrnamentModified,
+    onTextSlotQrModified,
     actions,
     containerMode = false,
     onContainerModified,
@@ -283,6 +288,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   onTextSlotOrnamentClickRef.current = onTextSlotOrnamentClick ?? (() => {});
   const onTextSlotOrnamentModifiedRef = useRef<(slotIndex: number, geom: import('./types').OrnamentTransform) => void>(() => {});
   onTextSlotOrnamentModifiedRef.current = onTextSlotOrnamentModified ?? (() => {});
+  const onTextSlotQrModifiedRef = useRef<(slotIndex: number, geom: import('./types').OrnamentTransform) => void>(() => {});
+  onTextSlotQrModifiedRef.current = onTextSlotQrModified ?? (() => {});
   const containerModeRef = useRef(containerMode);
   containerModeRef.current = containerMode;
   const onContainerModifiedRef = useRef(onContainerModified);
@@ -327,6 +334,15 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
         setSelectedBg(false);
         setSelectedSlotIndex(null);
       };
+      // Free caption-box overlays (QR / graphic) are selectable but are not
+      // photos, slots, text or the background. Without this branch the previous
+      // selection survives, so pressing Delete destroys THAT object instead —
+      // the user selects the QR and loses an unrelated photo.
+      if (typeof obj.slotId === 'string' && (obj.slotId.includes('-textqr-') || obj.slotId.includes('-textornament-'))) {
+        clearAll();
+        savedSelectionRef.current = { type: null, id: null, slotIndex: null };
+        return;
+      }
       if (obj.photoId && obj.slotIndex === undefined) {
         clearAll(); setSelectedPhotoId(obj.photoId);
         savedSelectionRef.current = { type: 'photo', id: obj.photoId as string, slotIndex: null };
@@ -412,6 +428,10 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       const obj = e.target;
       if (!obj || !snapEnabledRef.current) return;
       if (obj.slotIndex !== undefined) return;
+      // Centre-origin overlays: this handler's maths (right = left + width) reads
+      // left/top as the TOP-LEFT corner, so snapping them lands the object off
+      // the guide it just drew.
+      if (typeof obj.slotId === 'string' && (obj.slotId.includes('-textqr-') || obj.slotId.includes('-textornament-'))) return;
 
       clearSnapGuides();
 
@@ -583,7 +603,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, coverMode);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -722,7 +742,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, coverMode);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -1546,6 +1566,7 @@ function renderScene(
   onOrnamentSlotClick: (slotIndex: number) => void = () => {},
   onTextSlotOrnamentClick: (slotIndex: number) => void = () => {},
   onTextSlotOrnamentModified: (slotIndex: number, geom: import('./types').OrnamentTransform) => void = () => {},
+  onTextSlotQrModified: (slotIndex: number, geom: import('./types').OrnamentTransform) => void = () => {},
   coverMode: boolean = false,
 ) {
   // Increment render ID — cancels stale async image callbacks
@@ -1631,14 +1652,99 @@ function renderScene(
       const { dx, dy, side } = qrRect(r.left, r.top, r.width, r.height);
       const backing = new fab.Rect({ left: dx, top: dy, width: side, height: side, fill: '#ffffff', selectable: false, evented: false });
       backing.slotId = `${SLOT_ID}-textqrbg-${i}`;
+      const qgeom = page.textSlotQrGeom?.[i] ?? null;
+      // A caption-box QR is a FREE object, like the graphic below: drag to move,
+      // corner handles to resize. The white backing is a sibling object, so it
+      // has to follow the code on every move — it IS the quiet zone. Scaling is
+      // uniform and the state setter re-clamps to square + the scannable floor.
+      if (qgeom) {
+        backing.set({
+          originX: 'center', originY: 'center',
+          left: qgeom.cx * canvasW, top: qgeom.cy * canvasH,
+          width: qgeom.w * canvasW, height: qgeom.h * canvasH,
+          angle: qgeom.rot || 0,
+        });
+      }
       canvas.add(backing);
       fab.Image.fromURL(tqr.qrPngDataUrl, (img: any) => {
         if (thisRenderId !== currentRenderId) return;
-        img.set({ left: dx, top: dy, selectable: false, evented: true, hoverCursor: 'pointer' });
-        img.scaleToWidth(side);
+        const iw = img.width || 1;
+        const ih = img.height || 1;
+        if (qgeom) {
+          img.set({
+            originX: 'center', originY: 'center',
+            left: qgeom.cx * canvasW, top: qgeom.cy * canvasH,
+            scaleX: (qgeom.w * canvasW) / iw, scaleY: (qgeom.h * canvasH) / ih,
+            angle: qgeom.rot || 0,
+          });
+        } else {
+          // First placement: the padded in-box square, centred so a later drag
+          // or rotate pivots from the middle.
+          img.set({
+            originX: 'center', originY: 'center',
+            left: dx + side / 2, top: dy + side / 2,
+            scaleX: side / iw, scaleY: side / ih, angle: 0,
+          });
+          backing.set({
+            originX: 'center', originY: 'center',
+            left: dx + side / 2, top: dy + side / 2,
+            width: side, height: side, angle: 0,
+          });
+        }
+        img.set({
+          selectable: true, evented: true, hasControls: true, hasBorders: true,
+          cornerColor: '#F4C2A1', cornerSize: 10, transparentCorners: false,
+          borderColor: '#F4C2A1', hoverCursor: 'move',
+        });
+        // A QR must stay SQUARE to scan. `lockUniScaling` is a fabric 3 property
+        // that no longer exists in the pinned fabric 5.3 — setting it does
+        // nothing. Hiding the four SIDE handles leaves only corner scaling,
+        // which fabric keeps uniform (canvas.uniformScaling defaults true).
+        img.setControlsVisibility?.({ ml: false, mr: false, mt: false, mb: false });
         img.slotId = `${SLOT_ID}-textqr-${i}`;
-        img.on('mousedown', () => onTextSlotQrClick(i));
+        // Keep the quiet-zone backing glued to the code while it is dragged.
+        const syncBacking = () => {
+          backing.set({
+            originX: 'center', originY: 'center',
+            left: img.left, top: img.top,
+            width: img.getScaledWidth(), height: img.getScaledHeight(),
+            scaleX: 1, scaleY: 1, angle: img.angle || 0,
+          });
+          backing.setCoords?.();
+        };
+        img.on('moving', syncBacking);
+        img.on('scaling', syncBacking);
+        img.on('rotating', syncBacking);
+        img.on('modified', () => {
+          const raw = {
+            cx: img.left / canvasW,
+            cy: img.top / canvasH,
+            w: img.getScaledWidth() / canvasW,
+            h: img.getScaledHeight() / canvasH,
+            rot: img.angle || 0,
+          };
+          // Clamp HERE too, and snap the object to the clamped result. The state
+          // setter clamps as well (it is the chokepoint), but its correction
+          // would otherwise never reach the canvas: a clamp that maps two
+          // different drags to the same stored value produces no state change,
+          // so no repaint, and the editor would keep showing an oversized or
+          // off-page code that prints somewhere else.
+          const fixed = clampQrGeom(raw, albumSize as AlbumSizePreset);
+          img.set({
+            left: fixed.cx * canvasW, top: fixed.cy * canvasH,
+            scaleX: (fixed.w * canvasW) / iw, scaleY: (fixed.h * canvasH) / ih,
+            angle: fixed.rot,
+          });
+          img.setCoords?.();
+          syncBacking();
+          canvas.renderAll();
+          onTextSlotQrModified(i, fixed);
+        });
+        // Single tap now moves, so the picker moves to double-click (matches the
+        // caption-box graphic).
+        img.on('mousedblclick', () => onTextSlotQrClick(i));
         canvas.add(img);
+        img.setCoords?.();
         canvas.renderAll();
       });
       return;
@@ -1830,7 +1936,7 @@ function renderScene(
     // caption, so they must stay visible. (`-ornament-` above doesn't match the
     // `-textornament-` id, so bring them last, above the text objects.)
     canvas.getObjects().forEach((o: any) => {
-      if (typeof o.slotId === 'string' && o.slotId.includes('-textornament-')) {
+      if (typeof o.slotId === 'string' && (o.slotId.includes('-textornament-') || o.slotId.includes('-textqr-') || o.slotId.includes('-textqrbg-'))) {
         canvas.bringToFront(o);
       }
     });

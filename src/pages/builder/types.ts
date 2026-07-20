@@ -328,6 +328,88 @@ export interface OrnamentTransform {
   rot: number;
 }
 
+/** Smallest side we will PRINT a QR at. The corner-badge flow uses 1.2" as
+ *  "comfortably scannable at arm's length" (see QR_BADGE_IN); 0.8" is the floor
+ *  below which a phone camera starts to struggle on paper. A free-transformed
+ *  QR is clamped to this — an unscannable code on a printed album is a defect
+ *  the customer only discovers after paying. */
+export const QR_MIN_PRINT_IN = 0.8;
+
+/** Normalise a free-transformed QR: keep it SQUARE on the printed page, keep it
+ *  scannable, and keep it on the page.
+ *
+ *  `w`/`h` are fractions of page WIDTH and HEIGHT respectively, so on a
+ *  non-square album equal fractions are NOT a square — the printed side is
+ *  w·pageWidthInches by h·pageHeightInches. We take the larger printed side
+ *  (never shrink what the user just dragged), floor it at QR_MIN_PRINT_IN, and
+ *  convert back to per-axis fractions. */
+export function clampQrGeom(g: OrnamentTransform, albumSize: AlbumSizePreset): OrnamentTransform {
+  const cfg = ALBUM_SIZES.find((s) => s.preset === albumSize);
+  // 300 DPI px → inches. Fall back to a square page rather than throwing.
+  const inW = (cfg?.width ?? 2400) / 300;
+  const inH = (cfg?.height ?? 2400) / 300;
+
+  // ONE printed side, derived once and bounded at BOTH ends before it is split
+  // into per-axis fractions. Capping w and h independently at 1 would silently
+  // break squareness: on a 6×4, a 5" code gives w=min(1,5/6)=0.833 (5.0") but
+  // h=min(1,5/4)=1 (4.0") — a stored 5×4" RECTANGLE that no scanner will read.
+  const wantedIn = Math.max(Number.isFinite(g.w) ? g.w * inW : 0, Number.isFinite(g.h) ? g.h * inH : 0);
+  const sideIn = Math.min(Math.max(QR_MIN_PRINT_IN, wantedIn), inW, inH);
+  const w = sideIn / inW;
+  const h = sideIn / inH;
+
+  // Keep the whole CODE on the page, not just its centre — a QR sliced by the
+  // trim loses a finder pattern and stops decoding entirely. Half-extents are
+  // the ROTATED bounding box, so a tilted code is bounded by what actually
+  // prints. If the code is wider than the page on an axis, centre it there.
+  const rot = Number.isFinite(g.rot) ? g.rot : 0;
+  const rad = (rot * Math.PI) / 180;
+  const c = Math.abs(Math.cos(rad));
+  const s = Math.abs(Math.sin(rad));
+  const hx = (w * c + h * s) / 2;
+  const hy = (w * s + h * c) / 2;
+  const bound = (v: number, half: number) => {
+    if (!Number.isFinite(v)) return 0.5;
+    if (half >= 0.5) return 0.5;
+    return Math.max(half, Math.min(1 - half, v));
+  };
+
+  return { cx: bound(g.cx, hx), cy: bound(g.cy, hy), w, h, rot };
+}
+
+/** The default transform for a QR newly placed in a caption box: a scannable
+ *  square centred on the box.
+ *
+ *  Every caption-box QR gets one at placement time, which buys three things:
+ *  the code is never smaller than QR_MIN_PRINT_IN (the untransformed in-box fit
+ *  could print well under it on a short caption band), all three renderers take
+ *  the SAME transformed path so there is no fit-mode divergence to keep in
+ *  sync, and a box that previously held a dragged QR cannot leak its old
+ *  transform onto a new one. */
+export function defaultQrGeom(
+  albumSize: AlbumSizePreset,
+  box: { x: number; y: number; width: number; height: number },
+  margin: TemplateMargin,
+): OrnamentTransform {
+  // Box fractions are of the SAFE area; the transform is of the WHOLE page.
+  const safeX = margin.left, safeY = margin.top;
+  const safeW = 1 - margin.left - margin.right;
+  const safeH = 1 - margin.top - margin.bottom;
+  const cx = safeX + (box.x + box.width / 2) * safeW;
+  const cy = safeY + (box.y + box.height / 2) * safeH;
+
+  // FIT INSIDE the box: the code is square, so it is bounded by the box's
+  // SHORTER printed side — a caption band is wide and shallow, and sizing off
+  // the wide side would put a page-tall QR on the page. Pass the already-square
+  // size through as equal printed sides so clampQrGeom's max() is a no-op and
+  // only its floor / page-fit rules apply.
+  const cfg = ALBUM_SIZES.find((s) => s.preset === albumSize);
+  const inW = (cfg?.width ?? 2400) / 300;
+  const inH = (cfg?.height ?? 2400) / 300;
+  const sideIn = Math.min(box.width * safeW * inW, box.height * safeH * inH) * 0.82;
+  return clampQrGeom({ cx, cy, w: sideIn / inW, h: sideIn / inH, rot: 0 }, albumSize);
+}
+
 /** Fill data for a QR ('kind: qr') slot. Positional: qrFills[i] pairs with
  *  template.slots[i] exactly like slotFills[i]. Null = empty QR slot.
  *  The printed QR ALWAYS encodes `${MEMORY_BASE}/m/${code}` — never the raw
@@ -457,6 +539,15 @@ export interface AlbumPage {
    *  dragged/resized/rotated freely. Only applied when textSlotOrnament[j] exists
    *  (a stale entry is ignored). Positional, parallel to template.textSlots[j]. */
   textSlotOrnamentGeom?: (OrnamentTransform | null)[];
+  /** Free-transform override for a caption-box QR (textSlotQr[j]) — the exact
+   *  mirror of textSlotOrnamentGeom, so a placed code can be dragged/resized/
+   *  rotated instead of sitting fixed in its box. Two differences from a
+   *  graphic, both because a QR is a SCANNABLE artifact rather than decoration:
+   *  it is kept SQUARE on the printed page, and it cannot be shrunk below
+   *  QR_MIN_PRINT_IN. Both are enforced by clampQrGeom at the state setter, so
+   *  every writer gets them. Rotation is free — QR finder patterns make the code
+   *  rotation-invariant. Positional, parallel to template.textSlots[j]. */
+  textSlotQrGeom?: (OrnamentTransform | null)[];
   background: AlbumBackground;
   photos: CanvasPhoto[];
   textElements: TextElement[];

@@ -222,10 +222,36 @@ async function renderPageManually(
       const by = sY + ts.y * sH;
       const bw = ts.width * sW;
       const bh = ts.height * sH;
-      // (1) QR — reuse the photo-slot QR renderer.
+      // (1) QR — free-transformed (drag/resize/rotate) if the user moved it,
+      //     otherwise the padded in-box fit. Mirrors the DOM preview and the
+      //     graphic branch below. The white quiet zone is drawn WITH the code at
+      //     the transformed size/rotation — without it a rotated code sits on
+      //     whatever is behind it and stops scanning.
       const tqr = page.textSlotQr?.[j] ?? null;
       if (tqr) {
-        await renderSlotQr(ctx, tqr, bx, by, bw, bh);
+        const qg = page.textSlotQrGeom?.[j] ?? null;
+        if (qg) {
+          const cw = qg.w * W;
+          const ch = qg.h * H;
+          // CONTAIN, never stretch — the DOM preview draws the code with
+          // objectFit:'contain', so stretching here would print a different
+          // shape from the one the customer approved. clampQrGeom keeps w/h
+          // square, so cw === ch in practice; this is the guard for geometry
+          // stored before that clamp existed. A stretched QR does not decode.
+          const side = Math.min(cw, ch);
+          ctx.save();
+          ctx.translate(qg.cx * W, qg.cy * H);
+          if (qg.rot) ctx.rotate((qg.rot * Math.PI) / 180);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(-cw / 2, -ch / 2, cw, ch);
+          try {
+            const img = await loadImage(tqr.qrPngDataUrl);
+            ctx.drawImage(img, -side / 2, -side / 2, side, side);
+          } catch { /* QR failed to load — the white square still prints clean */ }
+          ctx.restore();
+        } else {
+          await renderSlotQr(ctx, tqr, bx, by, bw, bh);
+        }
         continue;
       }
       // (1b) ORNAMENT — a themed graphic. If the user free-transformed it (drag/

@@ -187,6 +187,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     onTextSlotOrnamentModified: useCallback((slotIndex: number, geom: import('./types').OrnamentTransform) => {
       actions.setTextSlotOrnamentGeom(slotIndex, geom);
     }, [actions]),
+    onTextSlotQrModified: useCallback((slotIndex: number, geom: import('./types').OrnamentTransform) => {
+      actions.setTextSlotQrGeom(slotIndex, geom);
+    }, [actions]),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {

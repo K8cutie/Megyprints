@@ -20,7 +20,7 @@ import type {
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
-import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, type CoverDesign } from './types';
+import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
 import { generateAlbum } from './generateAlbum';
 // ── Phase 1: Cloud imports ──
@@ -96,6 +96,7 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
   const carriedTextSlotQr = (page.textSlotQr ?? []).slice(0, textSlotCount);
   const carriedTextSlotOrnament = (page.textSlotOrnament ?? []).slice(0, textSlotCount);
   const carriedTextSlotOrnamentGeom = (page.textSlotOrnamentGeom ?? []).slice(0, textSlotCount);
+  const carriedTextSlotQrGeom = (page.textSlotQrGeom ?? []).slice(0, textSlotCount);
   return {
     ...page,
     templateId: template.id,
@@ -106,6 +107,7 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
     textSlotQr: carriedTextSlotQr,
     textSlotOrnament: carriedTextSlotOrnament,
     textSlotOrnamentGeom: carriedTextSlotOrnamentGeom,
+    textSlotQrGeom: carriedTextSlotQrGeom,
     slotFills: reflowFills(existingFills, slotCount, carriedQr, carriedText, carriedOrnament),
     slotScales: new Array(slotCount).fill(1),
     slotOffsetsX: new Array(slotCount).fill(0),
@@ -480,6 +482,7 @@ export interface BuilderActions {
    *  the box's photo + QR + bound caption (mutual exclusivity). */
   setTextSlotOrnament: (slotIndex: number, fill: OrnamentFill | null, pageIndex?: number) => void;
   setTextSlotOrnamentGeom: (slotIndex: number, geom: OrnamentTransform | null, pageIndex?: number) => void;
+  setTextSlotQrGeom: (slotIndex: number, geom: OrnamentTransform | null, pageIndex?: number) => void;
 
   // Canvas photos (freeform)
   addPhotoToCanvas: (photoIndex: number, x: number, y: number) => void;
@@ -617,6 +620,21 @@ export function useBuilderState(): BuilderActions {
   useEffect(() => {
     setCoverFrontPage((p) => (p.size === albumSize ? p : { ...p, size: albumSize }));
     setCoverBackPage((p) => (p.size === albumSize ? p : { ...p, size: albumSize }));
+    // A QR transform is stored as per-axis page FRACTIONS, so changing the album
+    // aspect silently turns a square code into a rectangle (8x8 -> 6x4 stretches
+    // it 1.5:1) and can drop it under the scannable floor. Re-clamp against the
+    // new size — clampQrGeom is idempotent, so pages already correct are
+    // returned unchanged and no re-render is forced.
+    setAlbumPages((prev) => {
+      let touched = false;
+      const next = prev.map((page) => {
+        if (!page.textSlotQrGeom?.some(Boolean) || page.size === albumSize) return page;
+        const geoms = page.textSlotQrGeom.map((g) => (g ? clampQrGeom(g, albumSize) : g));
+        touched = true;
+        return { ...page, textSlotQrGeom: geoms };
+      });
+      return touched ? next : prev;
+    });
   }, [albumSize]);
   // Resume at the working phase, not the setup/size screen, when a restored
   // album already has content (photos / filled slots / text / a QR). Without
@@ -1165,6 +1183,7 @@ export function useBuilderState(): BuilderActions {
         textSlotQr: [...(page.textSlotQr ?? [])],
         textSlotOrnament: [...(page.textSlotOrnament ?? [])],
         textSlotOrnamentGeom: [...(page.textSlotOrnamentGeom ?? [])],
+        textSlotQrGeom: [...(page.textSlotQrGeom ?? [])],
         photos: page.photos.map((p) => ({ ...p, id: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
         textElements: page.textElements.map((t) => ({ ...t, id: `text-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
       };
@@ -1253,6 +1272,11 @@ export function useBuilderState(): BuilderActions {
         textSlotFills: page.textSlotFills,
         textSlotQr: page.textSlotQr,
         textSlotOrnament: page.textSlotOrnament,
+        // ...INCLUDING their free-transforms. Carrying the QR/graphic but not
+        // its geom snapped a dragged code back into its box on every
+        // regenerate, with no undo entry (the geom setters push no snapshot).
+        textSlotQrGeom: page.textSlotQrGeom,
+        textSlotOrnamentGeom: page.textSlotOrnamentGeom,
         slotFills: new Array(slotCount).fill(null),
         slotScales: new Array(slotCount).fill(1),
         slotOffsetsX: new Array(slotCount).fill(0),
@@ -1730,21 +1754,36 @@ export function useBuilderState(): BuilderActions {
     pushSnapshot();
     const apply = (page: AlbumPage): AlbumPage => {
       const textSlotQr = [...(page.textSlotQr ?? [])];
+      const textSlotQrGeom = [...(page.textSlotQrGeom ?? [])];
       textSlotQr[slotIndex] = fill;
       if (fill) {
         const textSlotFills = [...(page.textSlotFills ?? [])];
         const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
         textSlotFills[slotIndex] = null;
         textSlotOrnament[slotIndex] = null;
+        // A newly placed code gets an explicit, scannable transform rather than
+        // falling back to the in-box fit: the fit can print well under
+        // QR_MIN_PRINT_IN on a short caption band, and it is a SECOND geometry
+        // path for the three renderers to keep in step. Replacing a code keeps
+        // the placement the user already chose.
+        if (!textSlotQrGeom[slotIndex]) {
+          const box = (page.templateId ? getTemplateById(page.templateId) : null)?.textSlots?.[slotIndex];
+          const tmargin = (page.templateId ? getTemplateById(page.templateId) : null)?.margin;
+          if (box && tmargin) textSlotQrGeom[slotIndex] = defaultQrGeom(page.size, box, tmargin);
+        }
         return {
           ...page,
           textSlotQr,
+          textSlotQrGeom,
           textSlotFills,
           textSlotOrnament,
           textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex),
         };
       }
-      return { ...page, textSlotQr };
+      // Removed → drop the transform too, so a later code in this box starts
+      // centred in its box instead of inheriting a stale position.
+      textSlotQrGeom[slotIndex] = null;
+      return { ...page, textSlotQr, textSlotQrGeom };
     };
     if (pageIndex == null) {
       updateCurrentPage(apply);
@@ -1801,6 +1840,29 @@ export function useBuilderState(): BuilderActions {
       const textSlotOrnamentGeom = [...(page.textSlotOrnamentGeom ?? [])];
       textSlotOrnamentGeom[slotIndex] = geom;
       return { ...page, textSlotOrnamentGeom };
+    };
+    if (pageIndex == null) {
+      updateCurrentPage(apply);
+    } else {
+      setAlbumPages((prev) => {
+        const next = [...prev];
+        if (next[pageIndex]) next[pageIndex] = apply(next[pageIndex]);
+        return next;
+      });
+    }
+  }, [updateCurrentPage]);
+
+  /** Persist a caption-box QR's drag/resize/rotate. Mirrors
+   *  setTextSlotOrnamentGeom, but every incoming transform goes through
+   *  clampQrGeom first: this is the ONE chokepoint every writer funnels
+   *  through, so a QR can never be persisted non-square, below the scannable
+   *  print floor, or off the page. No undo snapshot — a drag would flood it
+   *  (same rationale as setTextSlotOrnamentGeom). */
+  const setTextSlotQrGeom = useCallback((slotIndex: number, geom: OrnamentTransform | null, pageIndex?: number) => {
+    const apply = (page: AlbumPage): AlbumPage => {
+      const textSlotQrGeom = [...(page.textSlotQrGeom ?? [])];
+      textSlotQrGeom[slotIndex] = geom ? clampQrGeom(geom, page.size) : null;
+      return { ...page, textSlotQrGeom };
     };
     if (pageIndex == null) {
       updateCurrentPage(apply);
@@ -2112,6 +2174,7 @@ export function useBuilderState(): BuilderActions {
       const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
       textSlotFills[slotIndex] = null;
       textSlotQr[slotIndex] = null;
+      const textSlotQrGeom = (page.textSlotQrGeom ?? []).map((g, k) => (k === slotIndex ? null : g));
       textSlotOrnament[slotIndex] = null;
       if (existing) {
         return {
@@ -2119,6 +2182,7 @@ export function useBuilderState(): BuilderActions {
           textSlotFills,
           textSlotQr,
           textSlotOrnament,
+          textSlotQrGeom,
           textElements: page.textElements.map((t) =>
             t.boxIndex === slotIndex ? { ...t, ...content, text: content.text } : t),
         };
@@ -2444,6 +2508,7 @@ export function useBuilderState(): BuilderActions {
     setSlotText,
     setOrnamentFill,
     setTextSlotOrnamentGeom,
+    setTextSlotQrGeom,
     setTextSlotPhoto,
     setTextSlotQr,
     setTextSlotOrnament,

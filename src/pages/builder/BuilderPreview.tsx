@@ -140,10 +140,30 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
 
 /** QR living-memory square — white backing + the QR png, sized/positioned via
  *  qrRect() inside a cell. Shared by photo slots AND caption boxes. */
-function QrSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zIndex }: {
+function QrSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zIndex, transform, pageW, pageH }: {
   rectKey: string; cellLeft: number; cellTop: number; cellW: number; cellH: number;
   dataUrl: string; onTap?: () => void; zIndex: number;
+  /** Free-transform for a dragged/resized/rotated caption-box QR (center-based
+   *  page fractions, already clamped square + scannable by clampQrGeom). When
+   *  present it overrides the in-box fit; needs pageW/pageH. */
+  transform?: OrnamentTransform | null; pageW?: number; pageH?: number;
 }) {
+  // The white backing IS the quiet zone — it travels with the code at every size.
+  if (transform && pageW && pageH) {
+    const w = transform.w * pageW;
+    const h = transform.h * pageH;
+    return (
+      <div key={rectKey} className="absolute"
+        onClick={onTap ? (e) => { e.stopPropagation(); onTap(); } : undefined}
+        style={{
+          zIndex, left: transform.cx * pageW - w / 2, top: transform.cy * pageH - h / 2, width: w, height: h,
+          transform: transform.rot ? `rotate(${transform.rot}deg)` : undefined, transformOrigin: 'center center',
+          background: '#fff', cursor: onTap ? 'pointer' : undefined,
+        }}>
+        <img src={dataUrl} alt="QR memory" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      </div>
+    );
+  }
   const { dx, dy, side } = qrRect(cellLeft, cellTop, cellW, cellH);
   return (
     <div key={rectKey} className="absolute"
@@ -413,6 +433,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             <QrSquare key={`tslot-${i}`} rectKey={`tslot-${i}`} zIndex={5}
               cellLeft={boxLeft} cellTop={boxTop} cellW={boxW} cellH={boxH}
               dataUrl={tqr.qrPngDataUrl}
+              transform={page.textSlotQrGeom?.[i] ?? undefined} pageW={singleW} pageH={H}
               onTap={onTextSlotQrTap ? () => onTextSlotQrTap(i) : undefined} />
           );
         }
