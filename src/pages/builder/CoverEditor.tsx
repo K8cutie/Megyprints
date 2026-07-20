@@ -140,8 +140,20 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
       }
     : null;
 
+  // Offset limits derived from the box's OWN base rect (all panel fractions), so
+  // the box can be dragged to every edge of the cover but never off it. A fixed
+  // ±0.5 clamp was wrong both ways: the title box starts at y≈0.62, so -0.5 could
+  // never reach the top, while +0.5 would have pushed it off the bottom.
+  const baseFx = tm.left + (titleSlot?.x ?? 0) * (1 - tm.left - tm.right);
+  const baseFy = tm.top + (titleSlot?.y ?? 0) * (1 - tm.top - tm.bottom);
+  const boxFw = (titleSlot?.width ?? 0) * (1 - tm.left - tm.right);
+  const boxFh = (titleSlot?.height ?? 0) * (1 - tm.top - tm.bottom);
+  const clampRange = (v: number, lo: number, hi: number) =>
+    Math.max(Math.min(lo, hi), Math.min(Math.max(lo, hi), v)); // tolerate a box wider/taller than the panel
+  const clampOx = (v: number) => clampRange(v, -baseFx, 1 - boxFw - baseFx);
+  const clampOy = (v: number) => clampRange(v, -baseFy, 1 - boxFh - baseFy);
+
   const textDragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
-  const clampOff = (v: number) => Math.max(-0.5, Math.min(0.5, v));
   const onTextDragStart = (e: React.PointerEvent) => {
     e.stopPropagation();
     try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* best-effort */ }
@@ -152,8 +164,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     if (!d) return;
     e.stopPropagation();
     b.setBoxTextOffset(0,
-      clampOff(d.ox + (e.clientX - d.x) / Math.max(1, dims.w)),
-      clampOff(d.oy + (e.clientY - d.y) / Math.max(1, dims.h)),
+      clampOx(d.ox + (e.clientX - d.x) / Math.max(1, dims.w)),
+      clampOy(d.oy + (e.clientY - d.y) / Math.max(1, dims.h)),
     );
   };
   const onTextDragEnd = (e: React.PointerEvent) => { e.stopPropagation(); textDragRef.current = null; };
