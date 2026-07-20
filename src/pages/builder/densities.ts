@@ -13,7 +13,12 @@
  *  the generator won't actually produce for that size. */
 export const DENSITY_BY_SIZE: Record<string, number[]> = {
   '6x4': [1, 2],
-  '6x6': [1, 2, 3, 4],
+  // 6x6 caps at 3: its authored deck has no 4-photo layout (a 6x6 can't print
+  // four photos above the 2" floor). Offering 4 ('Collage') let the customer
+  // pick a density the deck silently deals as 3, and the pre-gen estimate then
+  // under-counted pages and over-asked for photos. Re-add 4 only when a 4-up
+  // 6x6 layout exists.
+  '6x6': [1, 2, 3],
   '8x8': [1, 2, 3, 4, 5, 6],
   '9x9': [1, 2, 3, 4, 5, 6],
   '11.5x8': [1, 2, 3, 4, 5, 6],
@@ -49,7 +54,12 @@ export const MIN_ALBUM_PAGES = 40;
 /** Typical photos-per-page on AUTO (no explicit density) — the "natural" look
  *  when there are plenty of photos. ~2 (3 for the large landscape/portrait sizes). */
 const NATURAL_BY_SIZE: Record<string, number> = {
-  '6x4': 2, '6x6': 2, '8x8': 2, '9x9': 2, '11.5x8': 3, '8.5x11': 3,
+  // 6x6 is 3: its layout set deals at ~2.7 photos/page, so a natural of 2 put
+  // the fill-mode threshold at 80 photos (MIN_ALBUM_PAGES x 2) while the deck
+  // could not actually fill 40 pages until ~110 — leaving 80–109-photo albums
+  // padded with blanks. A natural of 3 moves the threshold to 120, so fill mode
+  // (which drops toward 1–2/page) covers that band and spreads the photos.
+  '6x4': 2, '6x6': 3, '8x8': 2, '9x9': 2, '11.5x8': 3, '8.5x11': 3,
 };
 export function naturalPerPage(albumSize: string): number {
   return NATURAL_BY_SIZE[albumSize] ?? 2;

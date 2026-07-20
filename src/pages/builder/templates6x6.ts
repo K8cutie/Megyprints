@@ -286,6 +286,24 @@ const T66_SOLO_LANDSCAPE: PageTemplate = {
   slots: [rsBox(0, 0, '3:2', 1, 1, '6x6')],
 };
 
+/* A MARGINED square single — a 5.52 x 5.52" framed print. Square photos need a
+   SECOND single-photo layout: t66-fb-solo is the only other one, so an album of
+   square photos at 1 photo/page would otherwise repeat the identical full-bleed
+   page on every sheet (the generator cannot vary a deck of one). This gives the
+   full-page / framed alternation, and it is the classic look full bleed cannot
+   produce. */
+const T66_SOLO_SQUARE: PageTemplate = {
+  id: 't66-solo-square',
+  name: 'Single Square',
+  category: 'single',
+  slotCount: 1,
+  margin: STD,
+  orientation: 'square',
+  targetRatio: '1:1',
+  albumSizes: ['6x6'],
+  slots: [rsBox(0, 0, '1:1', 1, 1, '6x6')],
+};
+
 /* ── 1 photo FULL BLEED at its own ratio + a combo box ─────────────────────
    The photo takes the part of the page that matches its ratio and bleeds off
    three edges; the combo box takes the strip that is left.
@@ -373,6 +391,7 @@ export const TEMPLATES_6X6: PageTemplate[] = [
   T66_FB_SOLO,
   T66_SOLO_PORTRAIT,
   T66_SOLO_LANDSCAPE,
+  T66_SOLO_SQUARE,
   T66_FB_SOLO_LS_BOX_BELOW,
   T66_FB_SOLO_LS_BOX_ABOVE,
   T66_FB_SOLO_PT_BOX_RIGHT,

@@ -16,6 +16,7 @@ const RATIO_VALUE: Record<string, number> = {
 const cropBetween = (a: number, b: number) => 1 - Math.min(a, b) / Math.max(a, b);
 const ratioCrop = (a: string, b: string) => cropBetween(RATIO_VALUE[a] ?? 1, RATIO_VALUE[b] ?? 1);
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
+import { PER_SIZE_AUTHORED } from './templateKit';
 import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
 
@@ -201,6 +202,55 @@ export function generateAlbum(
   // recent-history check).
   let lastTemplateId: string | null = null;
 
+  // Geometry signature of the PREVIOUS page, so no two adjacent (facing) pages
+  // share a layout even when the deck is thin. Two templates with the same slot
+  // + textSlot rects read as the same page to someone flipping the album; ids
+  // alone would let a near-identical twin sit beside its sibling. Updated in
+  // pushPage; consumed by dealSingle.
+  const geoSigOf = (t: PageTemplate): string =>
+    // full-bleed vs margin distinguishes a 0,0,1,1 photo that BLEEDS from the
+    // same fractions floating inside the safe area — they render differently and
+    // must not count as the same look (a full-page square beside a framed one).
+    (t.fullBleed ? 'FB' : `M${t.margin.top.toFixed(2)}`) + '|'
+    + t.slots.map((s) => `${s.x.toFixed(3)},${s.y.toFixed(3)},${s.width.toFixed(3)},${s.height.toFixed(3)}`).join(';')
+    + '|' + (t.textSlots ?? []).map((s) => `${s.x.toFixed(2)},${s.y.toFixed(2)},${s.width.toFixed(2)},${s.height.toFixed(2)}`).join(';');
+  let lastGeoSig: string | null = null;
+
+  /** Deal a single-photo template that does NOT repeat the previous page's
+   *  look. `boxFree` is the cadence-preferred subset (box-free while on
+   *  cooldown); `singles` is the full fallback. Order of preference:
+   *    1. box-free AND a different look   — honours the cadence and the guard
+   *    2. any single AND a different look — BREAKS the cadence to avoid a twin
+   *    3. box-free (repeat allowed)       — deck genuinely offers only one look
+   *    4. anything
+   *  Adjacency-distinctness is the hard rule; the caption cadence yields to it. */
+  const breakCadenceForAdjacency = PER_SIZE_AUTHORED.has(albumSize);
+  const dealSingle = (key: string, singles: PageTemplate[], boxFree: PageTemplate[]): PageTemplate => {
+    const bag = bagFor(`${key}:single`, singles.map((t) => t.id));
+    const byId = new Map(singles.map((t) => [t.id, t]));
+    const okSet = new Set(boxFree.map((t) => t.id));
+    const allSet = new Set(singles.map((t) => t.id));
+    const differs = (id: string): boolean => {
+      const t = byId.get(id);
+      return !!t && geoSigOf(t) !== lastGeoSig;
+    };
+    // Predicate 2 BREAKS the caption cadence to dodge a repeat, but only where
+    // that trade is worth it. On the five non-authored sizes every box-free
+    // single collapses to the SAME full-bleed geometry (applySinglePicFullBleed
+    // rewrites them all to 0,0,1,1), so the only "different look" is a caption
+    // single — and grabbing it every other page doubles empty caption bands
+    // (~25% -> ~50%). Those sizes therefore keep the cadence and tolerate the
+    // occasional adjacent full-bleed repeat, exactly as before this change. The
+    // per-size-authored sizes (6x6) DO have genuine box-free variety plus
+    // single+box layouts the customer wants, so there the break is a net win.
+    const id =
+      bag.draw((x) => okSet.has(x) && differs(x)) ??
+      (breakCadenceForAdjacency ? bag.draw((x) => allSet.has(x) && differs(x)) : null) ??
+      bag.draw((x) => okSet.has(x)) ??
+      bag.draw((x) => allSet.has(x));
+    return (id != null ? byId.get(id) : undefined) ?? boxFree[0] ?? singles[0];
+  };
+
   // ── Caption cadence ── A template's caption / text band (the "combo box") is
   // dead space when the customer leaves it empty — which is most of the time —
   // so cap box-bearing templates to ~1 in 4 pages. After one is placed, the
@@ -246,6 +296,7 @@ export function generateAlbum(
   const pushPage = (template: PageTemplate, fills: number[]) => {
     const slotCount = template.slots.length;
     lastTemplateId = template.id;
+    lastGeoSig = geoSigOf(template);
     nextHeroIn -= 1;
     if (slotCount === 1) nextHeroIn = Math.max(nextHeroIn, 4 + Math.floor(Math.random() * 4));
     // A box page re-arms the cooldown (next 3 pages box-free); any other page
@@ -424,9 +475,7 @@ export function generateAlbum(
       const heroAllowed = singles.length > 0 && !heroWouldBox &&
         ((photosPerPage == null && !fillMode) || multi.length < 3);
       if (heroAllowed && fits.length > 0 && nextHeroIn <= 0) {
-        const ok = new Set(heroPool.map((t) => t.id));
-        const id = bagFor(`${key}:single`, singles.map((t) => t.id)).draw((x) => ok.has(x));
-        const hero = singles.find((t) => t.id === id) ?? heroPool[0] ?? singles[0];
+        const hero = dealSingle(key, singles, heroPool);
         pushPage(hero, queue.splice(0, 1));
         // ADAPTIVE cadence (set AFTER pushPage — its natural-single reset would
         // otherwise max() this away): a THIN multi pool (2 layouts) can only
@@ -444,16 +493,34 @@ export function generateAlbum(
         // fit the remaining photos AND (while on cooldown) to box-free ones.
         // The bag spreads slot-counts too, so the old de-cluster bias is subsumed.
         const pool = boxAware(fits);
-        const ok = new Set(pool.map((t) => t.id));
-        const id = bagFor(`${key}:multi`, multi.map((t) => t.id)).draw((x) => ok.has(x));
-        template = fits.find((t) => t.id === id)
-          ?? pool[Math.floor(Math.random() * pool.length)] ?? fits[0];
+        const okSet = new Set(pool.map((t) => t.id));
+        const fitSet = new Set(fits.map((t) => t.id));
+        const byId = new Map(fits.map((t) => [t.id, t]));
+        const differs = (id: string): boolean => {
+          const t = byId.get(id);
+          return !!t && geoSigOf(t) !== lastGeoSig;
+        };
+        const bag = bagFor(`${key}:multi`, multi.map((t) => t.id));
+        const id =
+          bag.draw((x) => okSet.has(x) && differs(x)) ??
+          bag.draw((x) => fitSet.has(x) && differs(x));
+        if (id != null) {
+          template = byId.get(id) ?? pool[0] ?? fits[0];
+        } else if (singles.length > 0) {
+          // The multi pool can only REPEAT the previous page (a thin pool —
+          // e.g. the single portrait duo dealt at 2/page). Break to a distinct
+          // single rather than print the same duo twice. This only adds a page,
+          // which is always safe in fill mode.
+          template = dealSingle(key, singles, boxAware(singles));
+        } else {
+          const id2 = bag.draw((x) => okSet.has(x)) ?? bag.draw((x) => fitSet.has(x));
+          template = (id2 != null ? byId.get(id2) : undefined)
+            ?? pool[Math.floor(Math.random() * pool.length)] ?? fits[0];
+        }
       } else if (singles.length > 0) {
-        // Leftover smaller than any multi-slot → a dealt single-photo page.
-        const pool = boxAware(singles);
-        const ok = new Set(pool.map((t) => t.id));
-        const id = bagFor(`${key}:single`, singles.map((t) => t.id)).draw((x) => ok.has(x));
-        template = singles.find((t) => t.id === id) ?? pool[0] ?? singles[0];
+        // Leftover smaller than any multi-slot → a dealt single-photo page,
+        // chosen to not repeat the previous page's look.
+        template = dealSingle(key, singles, boxAware(singles));
       } else {
         const rest = ratioTemplates.filter((t) => t.slotCount <= queue.length);
         const pool = rest.length ? rest : ratioTemplates;
