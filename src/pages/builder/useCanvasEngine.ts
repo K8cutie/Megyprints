@@ -1273,9 +1273,19 @@ function renderTemplateSlots(
         // Fake shadow — dark semi-transparent rect behind photo.
         // NOT using Fabric.js shadow (unreliable with clipPath).
         // This is a plain visible shape that looks like a drop shadow.
+        //
+        // NEVER on a full-bleed page. The rect overhangs its slot by 8px on the
+        // right and bottom (the left/top offsets cancel to zero), which was
+        // harmless while full-bleed slots touched — the overhang hid under the
+        // neighbouring photo. A layout with an internal GUTTER exposes it: an
+        // 8px band lands in a ~4.9px gap and underlaps the next photo, so the
+        // editor shows a dirty grey seam where the DOM preview and the print
+        // both show a clean background hairline. Those two renderers already
+        // suppress all framing for fullBleed (BuilderPreview frameCss = {},
+        // printPipeline effFrameStyle = 'none'); this keeps Fabric in step.
         const shadowOff = 4;
         const shadowBlur = 8;
-        const fakeShadow = new fab.Rect({
+        const fakeShadow = template.fullBleed ? null : new fab.Rect({
           left: sx + shadowOff - shadowBlur / 2,
           top: sy + shadowOff - shadowBlur / 2,
           width: sw + shadowBlur,
@@ -1290,9 +1300,11 @@ function renderTemplateSlots(
           hasControls: false,
           hasBorders: false,
         });
-        fakeShadow.slotId = `${SLOT_ID}-shadow-${i}`;
-        canvas.add(fakeShadow);
-        fakeShadow.sendToBack();
+        if (fakeShadow) {
+          fakeShadow.slotId = `${SLOT_ID}-shadow-${i}`;
+          canvas.add(fakeShadow);
+          fakeShadow.sendToBack();
+        }
 
         // Slot border frame — THE CONTAINER. White outline normally,
         // becomes thick blue+selectable in container mode for resize/move.

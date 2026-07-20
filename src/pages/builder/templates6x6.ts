@@ -1,18 +1,23 @@
 import type { PageTemplate, TemplateMargin } from './types';
+import type { PhotoRatio } from './photoAnalyzer';
 import { fill } from './templateKit';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  6×6″ SQUARE — page layouts
  *
- *  CLEARED and being re-authored from scratch. This file is the SINGLE source
+ *  Being re-authored from scratch, one layout at a time. This file is the SINGLE source
  *  of truth for 6×6 interior layouts: '6x6' is listed in PER_SIZE_AUTHORED, so
  *  the legacy hand-made block, the generated gap-fillers and the tiled
  *  generator all emit nothing for this size. What is in this array is exactly
  *  what the builder can deal, cycle through, and print.
  *
- *  While the array is empty, 6×6 is not offered in the size picker (a size with
- *  no layouts cannot be chosen) — it reappears the moment the first layout below
- *  is authored. Covers are unaffected: they live in COVER_TEMPLATES.
+ *  A size with no layouts is not offered in the size picker, so 6×6 was hidden
+ *  until the first layout landed. Covers are unaffected: they live in
+ *  COVER_TEMPLATES.
+ *
+ *  STILL MISSING: 1-, 2- and 4-photo layouts. Everything here is a 3-up, which
+ *  leaves the density picker inert and strands remainder photos — see the
+ *  commit log. Those gaps close as the set is authored out.
  *
  *  ── House rules for a 6×6 layout ─────────────────────────────────────────
  *  • Ratio-true slots. Build frames with rsBox/rsBoxExact so a slot's PRINTED
@@ -21,9 +26,10 @@ import { fill } from './templateKit';
  *  • Orientation is strict, ratio is loose. Every slot in one template shares
  *    the template's `targetRatio`; the dealer will place a neighbouring ratio
  *    of the SAME orientation into it (≤16% crop budget), never across.
- *  • 2" print floor. 6×6's safe area is 5.52×5.52", so a frame narrower than
- *    ~0.36 of the page prints under 2" and reads as a thumbnail. Check with
- *    meetsPrintFloor(albumSize, w, h) before shipping a dense layout.
+ *  • 2" print floor. The safe area is 5.52×5.52" but a FULL-BLEED page spends
+ *    the whole 6.00", and that 8% decides whether a 1/3 column clears the
+ *    floor. Check with meetsPrintFloor('6x6', w, h, { fullBleed: true }) — omit
+ *    the flag on a full-bleed slot and it under-reports and falsely fails.
  *  • Distinct geometry. Templates are deduped by geometry signature, so a
  *    variant that differs only by name collapses into its twin and adds no
  *    variety.
@@ -51,49 +57,78 @@ const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
      top right   2.00" x 3.00"  = 2:3   (1/3 x 1/2)
      bottom rt   2.00" x 3.00"  = 2:3
 
-   The smallest side is 2.00" — the floor exactly, with nothing to spare. Do
-   not add gutters between these frames: any gap steals from the 1/3 column and
-   drops those two under the floor.
+   The smallest side is 2.00" — the floor exactly, with nothing to spare. That
+   is why the gutter variants below take their gap out of the HERO and never
+   out of the narrow column (see trioSlots).
 
    Phone portraits (3:4) land here at ~11% crop, inside the dealer's 16% loose
    budget, so this is a genuine home for portrait photos and not just DSLR ones. */
-/** Shared shape for the four full-bleed trios. The hero is always slots[0], so
- *  the lead photo of a moment lands in the big frame regardless of where that
- *  frame sits on the page. */
-const fbTrio = (
-  id: string, name: string, targetRatio: '2:3' | '3:2', slots: PageTemplate['slots'],
-): PageTemplate => ({
-  id, name, category: 'trio', slotCount: 3, margin: ZERO,
-  orientation: 'square', targetRatio, albumSizes: ['6x6'], fullBleed: true, slots,
+/** A 1mm gutter, as a fraction of the 6" page. "Full bleed with a gutter" means
+ *  the SEAMS between photos open up while the outer edges still run off the
+ *  page — so the gap shows the page background as a hairline, and nothing
+ *  gains an outer margin. */
+const GAP = (1 / 25.4) / 6;
+
+/** Slot geometry for the four hero trios, with or without the internal gutter.
+ *
+ *  WHERE THE GUTTER COMES FROM matters more than its size. The narrow column is
+ *  exactly 2.00" — the print floor, with nothing spare — so taking the gap out
+ *  of it would print a 1.96" frame, under the floor. The HERO absorbs the whole
+ *  gutter instead: it drops 4.00" -> 3.96", which costs it 0.98% of ratio
+ *  accuracy and nothing else. The pair keeps its floor-critical 2.00" edge and
+ *  only loses 0.66% on the other axis. */
+type TrioVariant = 'left' | 'right' | 'top' | 'bottom';
+
+function trioSlots(v: TrioVariant, gap: number): PageTemplate['slots'] {
+  const r: PhotoRatio = v === 'left' || v === 'right' ? '2:3' : '3:2';
+  const heroLong = 2 / 3 - gap;   // hero pays for the gutter
+  const pairShort = 1 / 3;        // untouched — this is the 2.00" edge
+  const pairLong = 1 / 2 - gap / 2;
+  const pairOff = 1 / 2 + gap / 2;
+  switch (v) {
+    case 'left': return [
+      fill(0, 0, heroLong, 1, r),
+      fill(2 / 3, 0, pairShort, pairLong, r),
+      fill(2 / 3, pairOff, pairShort, pairLong, r),
+    ];
+    case 'right': return [
+      fill(1 / 3 + gap, 0, heroLong, 1, r),
+      fill(0, 0, pairShort, pairLong, r),
+      fill(0, pairOff, pairShort, pairLong, r),
+    ];
+    case 'top': return [
+      fill(0, 0, 1, heroLong, r),
+      fill(0, 2 / 3, pairLong, pairShort, r),
+      fill(pairOff, 2 / 3, pairLong, pairShort, r),
+    ];
+    case 'bottom': return [
+      fill(0, 1 / 3 + gap, 1, heroLong, r),
+      fill(0, 0, pairLong, pairShort, r),
+      fill(pairOff, 0, pairLong, pairShort, r),
+    ];
+  }
+}
+
+/** The hero is always slots[0], so the lead photo of a moment lands in the big
+ *  frame regardless of where that frame sits on the page. */
+const fbTrio = (id: string, name: string, v: TrioVariant, gap: number): PageTemplate => ({
+  id, name, category: 'trio', slotCount: 3, margin: ZERO, orientation: 'square',
+  targetRatio: v === 'left' || v === 'right' ? '2:3' : '3:2',
+  albumSizes: ['6x6'], fullBleed: true, slots: trioSlots(v, gap),
 });
 
-/* PORTRAIT PAIR — vertical 2/3 split. Hero 4×6, pair 2×3, every slot 2:3. */
-const T66_FB_TRIO_HERO_LEFT = fbTrio('t66-fb-trio-hero-left', 'Full Bleed Trio — Hero Left', '2:3', [
-  fill(0, 0, 2 / 3, 1, '2:3'),
-  fill(2 / 3, 0, 1 / 3, 1 / 2, '2:3'),
-  fill(2 / 3, 1 / 2, 1 / 3, 1 / 2, '2:3'),
-]);
+/* PORTRAIT PAIR — vertical 2/3 split. Hero 4×6, pair 2×3, every slot 2:3.
+   LANDSCAPE PAIR — the same tiling rotated. Hero 6×4, pair 3×2, every slot 3:2
+   (the portrait pair's inches transposed, which is what keeps it exact). */
+const T66_FB_TRIO_HERO_LEFT = fbTrio('t66-fb-trio-hero-left', 'Hero Left', 'left', 0);
+const T66_FB_TRIO_HERO_RIGHT = fbTrio('t66-fb-trio-hero-right', 'Hero Right', 'right', 0);
+const T66_FB_TRIO_HERO_TOP = fbTrio('t66-fb-trio-hero-top', 'Hero Top', 'top', 0);
+const T66_FB_TRIO_HERO_BOTTOM = fbTrio('t66-fb-trio-hero-bottom', 'Hero Bottom', 'bottom', 0);
 
-const T66_FB_TRIO_HERO_RIGHT = fbTrio('t66-fb-trio-hero-right', 'Full Bleed Trio — Hero Right', '2:3', [
-  fill(1 / 3, 0, 2 / 3, 1, '2:3'),
-  fill(0, 0, 1 / 3, 1 / 2, '2:3'),
-  fill(0, 1 / 2, 1 / 3, 1 / 2, '2:3'),
-]);
-
-/* LANDSCAPE PAIR — horizontal 2/3 split. Hero 6×4, pair 3×2, every slot 3:2.
-   The same tiling rotated: the pair's inches are the portrait pair's
-   transposed (2×3 becomes 3×2), which is what keeps the ratio exact. */
-const T66_FB_TRIO_HERO_TOP = fbTrio('t66-fb-trio-hero-top', 'Full Bleed Trio — Hero Top', '3:2', [
-  fill(0, 0, 1, 2 / 3, '3:2'),
-  fill(0, 2 / 3, 1 / 2, 1 / 3, '3:2'),
-  fill(1 / 2, 2 / 3, 1 / 2, 1 / 3, '3:2'),
-]);
-
-const T66_FB_TRIO_HERO_BOTTOM = fbTrio('t66-fb-trio-hero-bottom', 'Full Bleed Trio — Hero Bottom', '3:2', [
-  fill(0, 1 / 3, 1, 2 / 3, '3:2'),
-  fill(0, 0, 1 / 2, 1 / 3, '3:2'),
-  fill(1 / 2, 0, 1 / 2, 1 / 3, '3:2'),
-]);
+const T66_FB_TRIO_HERO_LEFT_G = fbTrio('t66-fb-trio-hero-left-gap', 'Hero Left · Thin Gap', 'left', GAP);
+const T66_FB_TRIO_HERO_RIGHT_G = fbTrio('t66-fb-trio-hero-right-gap', 'Hero Right · Thin Gap', 'right', GAP);
+const T66_FB_TRIO_HERO_TOP_G = fbTrio('t66-fb-trio-hero-top-gap', 'Hero Top · Thin Gap', 'top', GAP);
+const T66_FB_TRIO_HERO_BOTTOM_G = fbTrio('t66-fb-trio-hero-bottom-gap', 'Hero Bottom · Thin Gap', 'bottom', GAP);
 
 /* ── 3 SQUARE photos + a combo box, full bleed ─────────────────────────────
    A 2×2 grid with no gutters: three cells are photos, the fourth is the combo
@@ -110,32 +145,51 @@ const T66_FB_TRIO_HERO_BOTTOM = fbTrio('t66-fb-trio-hero-bottom', 'Full Bleed Tr
 
    Four variants, one per corner: with no gutters the corner placement is the
    only thing that changes the composition, and it changes it completely. */
-const fbSquareTrio = (id: string, name: string, boxCorner: 'tl' | 'tr' | 'bl' | 'br'): PageTemplate => {
-  const cells: Record<'tl' | 'tr' | 'bl' | 'br', [number, number]> = {
-    tl: [0, 0], tr: [1 / 2, 0], bl: [0, 1 / 2], br: [1 / 2, 1 / 2],
+/*  The square grid takes the gutter EVENLY on both axes, so its cells shrink
+    from 3.00" to 2.980" and stay perfectly 1:1 — no ratio cost at all, and
+    still nearly an inch clear of the floor. */
+type Corner = 'tl' | 'tr' | 'bl' | 'br';
+
+const fbSquareTrio = (id: string, name: string, boxCorner: Corner, gap: number): PageTemplate => {
+  const near = 0, far = 1 / 2 + gap / 2, side = 1 / 2 - gap / 2;
+  const cells: Record<Corner, [number, number]> = {
+    tl: [near, near], tr: [far, near], bl: [near, far], br: [far, far],
   };
-  const order: ('tl' | 'tr' | 'bl' | 'br')[] = ['tl', 'tr', 'bl', 'br'];
+  const order: Corner[] = ['tl', 'tr', 'bl', 'br'];
   const [bx, by] = cells[boxCorner];
   return {
     id, name, category: 'trio', slotCount: 3, margin: ZERO,
     orientation: 'square', targetRatio: '1:1', albumSizes: ['6x6'], fullBleed: true,
-    slots: order.filter((c) => c !== boxCorner).map((c) => fill(cells[c][0], cells[c][1], 1 / 2, 1 / 2, '1:1')),
-    textSlots: [{ id: 'combo', x: bx, y: by, width: 1 / 2, height: 1 / 2, align: 'center', placeholder: 'Tap to add' }],
+    slots: order.filter((c) => c !== boxCorner).map((c) => fill(cells[c][0], cells[c][1], side, side, '1:1')),
+    textSlots: [{ id: 'combo', x: bx, y: by, width: side, height: side, align: 'center', placeholder: 'Tap to add' }],
   };
 };
 
-const T66_FB_SQ_BOX_TL = fbSquareTrio('t66-fb-sq-box-tl', 'Square Trio — Box Top Left', 'tl');
-const T66_FB_SQ_BOX_TR = fbSquareTrio('t66-fb-sq-box-tr', 'Square Trio — Box Top Right', 'tr');
-const T66_FB_SQ_BOX_BL = fbSquareTrio('t66-fb-sq-box-bl', 'Square Trio — Box Bottom Left', 'bl');
-const T66_FB_SQ_BOX_BR = fbSquareTrio('t66-fb-sq-box-br', 'Square Trio — Box Bottom Right', 'br');
+const T66_FB_SQ_BOX_TL = fbSquareTrio('t66-fb-sq-box-tl', 'Three Squares, Box Top Left', 'tl', 0);
+const T66_FB_SQ_BOX_TR = fbSquareTrio('t66-fb-sq-box-tr', 'Three Squares, Box Top Right', 'tr', 0);
+const T66_FB_SQ_BOX_BL = fbSquareTrio('t66-fb-sq-box-bl', 'Three Squares, Box Bottom Left', 'bl', 0);
+const T66_FB_SQ_BOX_BR = fbSquareTrio('t66-fb-sq-box-br', 'Three Squares, Box Bottom Right', 'br', 0);
+
+const T66_FB_SQ_BOX_TL_G = fbSquareTrio('t66-fb-sq-box-tl-gap', 'Three Squares, Box Top Left · Thin Gap', 'tl', GAP);
+const T66_FB_SQ_BOX_TR_G = fbSquareTrio('t66-fb-sq-box-tr-gap', 'Three Squares, Box Top Right · Thin Gap', 'tr', GAP);
+const T66_FB_SQ_BOX_BL_G = fbSquareTrio('t66-fb-sq-box-bl-gap', 'Three Squares, Box Bottom Left · Thin Gap', 'bl', GAP);
+const T66_FB_SQ_BOX_BR_G = fbSquareTrio('t66-fb-sq-box-br-gap', 'Three Squares, Box Bottom Right · Thin Gap', 'br', GAP);
 
 export const TEMPLATES_6X6: PageTemplate[] = [
   T66_FB_TRIO_HERO_LEFT,
   T66_FB_TRIO_HERO_RIGHT,
   T66_FB_TRIO_HERO_TOP,
   T66_FB_TRIO_HERO_BOTTOM,
+  T66_FB_TRIO_HERO_LEFT_G,
+  T66_FB_TRIO_HERO_RIGHT_G,
+  T66_FB_TRIO_HERO_TOP_G,
+  T66_FB_TRIO_HERO_BOTTOM_G,
   T66_FB_SQ_BOX_TL,
   T66_FB_SQ_BOX_TR,
   T66_FB_SQ_BOX_BL,
   T66_FB_SQ_BOX_BR,
+  T66_FB_SQ_BOX_TL_G,
+  T66_FB_SQ_BOX_TR_G,
+  T66_FB_SQ_BOX_BL_G,
+  T66_FB_SQ_BOX_BR_G,
 ];

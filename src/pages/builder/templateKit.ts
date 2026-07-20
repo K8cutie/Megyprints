@@ -64,21 +64,30 @@ export const ALBUM_INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
  *  rather than shipped. */
 export const MIN_FRAME_INCHES = 2;
 
-/** Printed size of a slot, in inches, on a STD-margin (safe-area) template. */
+/** Printed size of a slot, in inches.
+ *
+ *  Slot fractions are of the SAFE AREA on a normal template but of the WHOLE
+ *  TRIMMED PAGE on a full-bleed one, so the caller must say which. Measuring a
+ *  full-bleed slot against the safe area under-reports it by 8% — enough to
+ *  fail a compliant 2.00" frame and tempt an author into "fixing" a layout that
+ *  was already correct. */
 export function slotInches(
   albumSize: AlbumSizePreset, width: number, height: number,
+  opts: { fullBleed?: boolean } = {},
 ): { w: number; h: number } {
   const { w, h } = ALBUM_INCHES[albumSize];
-  const safeW = w * (1 - STD.left - STD.right);
-  const safeH = h * (1 - STD.top - STD.bottom);
-  return { w: width * safeW, h: height * safeH };
+  const spanW = opts.fullBleed ? w : w * (1 - STD.left - STD.right);
+  const spanH = opts.fullBleed ? h : h * (1 - STD.top - STD.bottom);
+  return { w: width * spanW, h: height * spanH };
 }
 
-/** Would this slot print at or above the 2" floor on this album size? */
+/** Would this slot print at or above the 2" floor on this album size?
+ *  Pass `{ fullBleed: true }` for a zero-margin template — see slotInches. */
 export function meetsPrintFloor(
   albumSize: AlbumSizePreset, width: number, height: number,
+  opts: { fullBleed?: boolean } = {},
 ): boolean {
-  const { w, h } = slotInches(albumSize, width, height);
+  const { w, h } = slotInches(albumSize, width, height, opts);
   return Math.min(w, h) >= MIN_FRAME_INCHES;
 }
 
