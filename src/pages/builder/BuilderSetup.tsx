@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { ChevronRight, Sparkles } from 'lucide-react';
 import { ALBUM_SIZES } from './types';
 import type { AlbumSizePreset } from './types';
-import { loadStoreSettings, getDisabledSizes } from '../../lib/storeSettings';
+import { loadStoreSettings } from '../../lib/storeSettings';
+import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
 
 /* ═══════════════════════════════════════════════════════════
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
@@ -100,22 +101,23 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
   // locally; no photos involved, so it stays private. Optional.
   const [theme, setTheme] = useState(() => { try { return localStorage.getItem('megy-album-theme') || ''; } catch { return ''; } });
   const onThemeChange = (v: string) => { setTheme(v); try { localStorage.setItem('megy-album-theme', v); } catch { /* ignore */ } };
-  // Owner may hide sizes from the picker (e.g. 8.5x11). Re-load once so a cold
-  // direct-load to setup still reflects the setting, then filter the grid.
-  const [disabled, setDisabled] = useState<AlbumSizePreset[]>(() => getDisabledSizes());
+  // A size is offered only if the owner hasn't hidden it AND it has layouts to
+  // build with (see albumSizeOptions). Re-load the store settings once so a cold
+  // direct-load to setup still reflects curation, then filter the grid.
+  // Bumped once the store settings resolve, to re-derive the grid below.
+  const [, onSettingsLoaded] = useState(0);
   useEffect(() => {
     void loadStoreSettings().then(() => {
-      const d = getDisabledSizes();
-      setDisabled([...d]);
-      // If the current selection is now a hidden size, move it to the first offered one.
-      if (d.includes(selectedSize)) {
-        const first = ALBUM_SIZES.find((s) => !d.includes(s.preset));
+      onSettingsLoaded((n) => n + 1);
+      // If the current selection is no longer offered, move to the first that is.
+      if (!isSizeOfferable(selectedSize)) {
+        const first = offerableAlbumSizes()[0];
         if (first) onSizeChange(first.preset);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const sizes = ALBUM_SIZES.filter((s) => !disabled.includes(s.preset));
+  const sizes = offerableAlbumSizes();
   return (
     <div className="h-full flex flex-col items-center justify-center bg-[#FFFBF7] overflow-y-auto px-4 py-8">
       {/* Megy — center attraction */}

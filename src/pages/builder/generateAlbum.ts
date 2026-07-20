@@ -101,6 +101,17 @@ export function generateAlbum(
   background?: AlbumPage['background'] | undefined,
   options?: { randomize?: boolean; border?: { color: string; width: number }; cornerBase?: string },
 ): AlbumPage[] {
+  // A size with no layouts cannot build an album. The size pickers already drop
+  // such a size (see albumSizeOptions), so reaching here means a stale draft or
+  // a direct call — fail LOUDLY rather than dealing pages that would render and
+  // print blank.
+  if (getTemplatesForAlbum(albumSize).length === 0) {
+    throw new Error(
+      `No page layouts are available for the ${albumSize} album size, so it cannot be generated. ` +
+      `(If this size is being re-authored, add layouts to its per-size template file.)`,
+    );
+  }
+
   const totalPhotos = photos.length;
   // Surprise Me mode: keep the photo sequence (chronological) but repackage it
   // into random templates + random slot counts so page breaks and photo
@@ -492,6 +503,10 @@ export function shufflePageLayout(
     : sameOrientationPool.length > 0
       ? sameOrientationPool
       : getTemplatesForAlbum(albumSize).filter(t => t.id !== page.templateId);
+
+  // Nothing else to deal (only layout for the size, or the size has none at all
+  // while it is re-authored) → keep the page exactly as it is.
+  if (!pool.length) return page;
 
   const templateId = templateTracker.pick(pool.map(t => t.id), page.templateId) ?? pool[Math.floor(Math.random() * pool.length)].id;
   const template = pool.find(t => t.id === templateId) ?? pool[0];

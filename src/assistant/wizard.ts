@@ -6,7 +6,7 @@
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AlbumSizePreset } from '../pages/builder/types';
 import { densityRangeLabel } from '../pages/builder/densities';
-import { getDisabledSizes } from '../lib/storeSettings';
+import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
 
 /* The size step's photos-per-page guidance is DERIVED from DENSITY_BY_SIZE
    (the single source of truth in densities.ts), so it can never disagree with
@@ -216,9 +216,10 @@ export class WizardEngine {
           title: "Step 1: Pick Your Album Size 📐",
           body: `What size fits your photos best? Bigger albums comfortably hold more photos per page — smaller ones look their best with just one or two, so they never turn into a wall of thumbnails. Right now it's **${builder.albumSize}**.`,
           /* Derived from DENSITY_BY_SIZE so the size step and the density step
-             can never disagree (see densities.ts). Owner-disabled sizes are hidden. */
+             can never disagree (see densities.ts). Sizes the store has switched
+             off — or that have no layouts to build with — are hidden. */
           actions: SIZE_CHOICES
-            .filter((s) => !getDisabledSizes().includes(s.preset as AlbumSizePreset))
+            .filter((s) => isSizeOfferable(s.preset as AlbumSizePreset))
             .map((s) => `${s.label} — ${densityRangeLabel(s.preset)} photos per page`),
           tips: ["Fewer photos per page on a small album keeps each one crisp, not crowded", "You can change the size anytime"],
         };

@@ -13,6 +13,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { PageTemplate, TemplateSlot, TextSlot, PhotoRatio, AlbumSizePreset, TemplateMargin } from './types';
+import { PER_SIZE_AUTHORED } from './templateKit';
 
 const MIN_FRAME_INCHES = 2;
 const GAP_MM = 5; // physical gutter between adjacent frames, for visual distinction
@@ -40,7 +41,10 @@ const INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '8.5x11': { w: 8.5,  h: 11 },
 };
 
-const SQUARE_SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9'];
+/** Square albums this generator serves. Sizes authored per-size own their whole
+ *  layout set (see PER_SIZE_AUTHORED), so nothing is generated underneath them. */
+const SQUARE_SIZES: AlbumSizePreset[] = (['6x6', '8x8', '9x9'] as AlbumSizePreset[])
+  .filter((s) => !PER_SIZE_AUTHORED.has(s));
 
 /** A photo region inside a recipe — 0–1 of the safe area, tagged with its ratio.
  *  For SQUARE pages the safe area is ~square, so width/height ≈ ratio value. */

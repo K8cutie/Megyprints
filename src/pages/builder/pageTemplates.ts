@@ -1,6 +1,10 @@
-import type { PageTemplate, TemplateSlot, TextSlot, TemplateMargin, AlbumSizePreset } from './types';
+import type { PageTemplate, TextSlot, TemplateMargin, AlbumSizePreset } from './types';
 import type { PhotoRatio } from './photoAnalyzer';
 import { TILED_TEMPLATES } from './tiledTemplates';
+import {
+  PER_SIZE_AUTHORED, STD, RATIOS, rs, rsBox, rsBoxExact, fill, tmpl,
+} from './templateKit';
+import { TEMPLATES_6X6 } from './templates6x6';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  87 SMART TEMPLATES — Ratio-locked, album-size-aware, phone-first
@@ -10,196 +14,6 @@ import { TILED_TEMPLATES } from './tiledTemplates';
  *
  *  Phone-first: 4:3 templates are the most numerous (phone cameras are 4:3).
  *  ══════════════════════════════════════════════════════════════════════════ */
-
-let slotCounter = 0;
-
-const STD: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
-
-/** Canvas dimensions for ratio calculations */
-const CANVAS_DIMS: Record<AlbumSizePreset, { w: number; h: number }> = {
-  '6x4':    { w: 1800, h: 1200 },
-  '6x6':    { w: 1800, h: 1800 },
-  '8x8':    { w: 2400, h: 2400 },
-  '9x9':    { w: 2700, h: 2700 },
-  '11.5x8': { w: 3450, h: 2400 },
-  '8.5x11': { w: 2550, h: 3300 },
-};
-
-/** Standard photo aspect ratios (width / height) */
-const RATIOS: Record<PhotoRatio, number> = {
-  '4:3':  4 / 3,   // 1.333  ← phone landscape (primary)
-  '3:4':  3 / 4,   // 0.750  ← phone portrait (primary)
-  '3:2':  3 / 2,   // 1.500  ← DSLR landscape
-  '2:3':  2 / 3,   // 0.667  ← DSLR portrait
-  '1:1':  1 / 1,   // 1.000  ← square
-  '16:9': 16 / 9,  // 1.778  ← panoramic
-  '9:16': 9 / 16,  // 0.563  ← portrait panoramic
-};
-
-/** Compute slot proportions for a target photo ratio on a specific album size.
- *
- *  The safe area has aspect ratio: safeW/safeH = canvasW/canvasH
- *  We want: (slotW * safeW) / (slotH * safeH) = targetRatio
- *  So: slotW/slotH = targetRatio / canvasRatio
- *
- *  fill='height' → slot fills full safe area height (slotH=1), slotW computed
- *  fill='width'  → slot fills full safe area width  (slotW=1), slotH computed
- */
-function rs(
-  x: number,
-  y: number,
-  targetRatio: PhotoRatio,
-  albumSize: AlbumSizePreset,
-  fill: 'height' | 'width',
-  opts: Partial<Omit<TemplateSlot, 'id' | 'x' | 'y' | 'width' | 'height'>> = {},
-): TemplateSlot {
-  slotCounter += 1;
-  const { w: cw, h: ch } = CANVAS_DIMS[albumSize];
-  const canvasRatio = cw / ch;
-  const t = RATIOS[targetRatio];
-
-  // slotW/slotH = targetRatio / canvasRatio
-  const proportionRatio = t / canvasRatio;
-
-  let sw: number, sh: number;
-  if (fill === 'height') {
-    sh = 1.0;
-    sw = Math.min(1.0, proportionRatio);
-  } else {
-    sw = 1.0;
-    sh = Math.min(1.0, 1.0 / proportionRatio);
-  }
-
-  // Center the slot if it doesn't fill the full dimension
-  const cx = x + (1.0 - sw) / 2;
-  const cy = y + (1.0 - sh) / 2;
-
-  return {
-    id: `s${slotCounter}`,
-    x: Math.round(cx * 10000) / 10000,
-    y: Math.round(cy * 10000) / 10000,
-    width: Math.round(sw * 10000) / 10000,
-    height: Math.round(sh * 10000) / 10000,
-    ratio: targetRatio,
-    ...opts,
-  };
-}
-
-/** Create a slot with exact targetRatio, constrained to fit within a bounding box.
- *  The slot is centered within the bounding box (x,y = top-left of bounding box).
- *  The slot's pixel ratio matches the target photo ratio exactly.
- *
- *  On non-square canvases, the intrinsic width/height ratio is adjusted by
- *  canvasRatio so the rendered pixel ratio equals targetRatio:
- *    intrinsicRatio = targetRatio / canvasRatio
- */
-function rsBox(
-  x: number,
-  y: number,
-  targetRatio: PhotoRatio,
-  maxW: number,
-  maxH: number,
-  albumSize: AlbumSizePreset,
-  opts: Partial<Omit<TemplateSlot, 'id' | 'x' | 'y' | 'width' | 'height'>> = {},
-): TemplateSlot {
-  slotCounter += 1;
-  const t = RATIOS[targetRatio];
-  const { w: cw, h: ch } = CANVAS_DIMS[albumSize];
-  const canvasRatio = cw / ch;
-
-  // The intrinsic ratio so that when rendered: (slotW/slotH) * canvasRatio = targetRatio
-  const intrinsicRatio = t / canvasRatio;
-
-  const hAtMaxW = maxW / intrinsicRatio;
-  const wAtMaxH = maxH * intrinsicRatio;
-
-  let width: number, height: number;
-  if (hAtMaxW <= maxH) {
-    width = maxW;
-    height = hAtMaxW;
-  } else {
-    width = wAtMaxH;
-    height = maxH;
-  }
-
-  // Center within the bounding box
-  const cx = x + (maxW - width) / 2;
-  const cy = y + (maxH - height) / 2;
-
-  return {
-    id: `s${slotCounter}`,
-    x: Math.round(cx * 10000) / 10000,
-    y: Math.round(cy * 10000) / 10000,
-    width: Math.round(width * 10000) / 10000,
-    height: Math.round(height * 10000) / 10000,
-    ratio: targetRatio,
-    ...opts,
-  };
-}
-
-/** Create a slot with exact targetRatio, placed at the top-left of the bounding box.
- *  x,y = top-left corner of the slot itself; maxW,maxH = maximum dimensions.
- *  The slot is NOT centered — it sits at the top-left of the bounding box.
- *  Use for creative overlapping layouts where precise positioning matters. */
-function rsBoxExact(
-  x: number,
-  y: number,
-  targetRatio: PhotoRatio,
-  maxW: number,
-  maxH: number,
-  albumSize: AlbumSizePreset,
-  opts: Partial<Omit<TemplateSlot, 'id' | 'x' | 'y' | 'width' | 'height'>> = {},
-): TemplateSlot {
-  slotCounter += 1;
-  const t = RATIOS[targetRatio];
-  const { w: cw, h: ch } = CANVAS_DIMS[albumSize];
-  const canvasRatio = cw / ch;
-  const intrinsicRatio = t / canvasRatio;
-
-  const hAtMaxW = maxW / intrinsicRatio;
-  const wAtMaxH = maxH * intrinsicRatio;
-
-  let width: number, height: number;
-  if (hAtMaxW <= maxH) {
-    width = maxW;
-    height = hAtMaxW;
-  } else {
-    width = wAtMaxH;
-    height = maxH;
-  }
-
-  return {
-    id: `s${slotCounter}`,
-    x: Math.round(x * 10000) / 10000,
-    y: Math.round(y * 10000) / 10000,
-    width: Math.round(width * 10000) / 10000,
-    height: Math.round(height * 10000) / 10000,
-    ratio: targetRatio,
-    ...opts,
-  };
-}
-
-/** Exact-fill slot: the photo fills the region [x,y,w,h] of the safe area edge to
- *  edge (object-cover, no centering). Use for tightly TILED templates — pick
- *  region shapes whose aspect ≈ the standard `ratio` so the matched photo fills
- *  with no whitespace and negligible crop. Coords are 0–1 of the safe area. */
-function fill(
-  x: number, y: number, width: number, height: number, ratio: PhotoRatio,
-  opts: Partial<Omit<TemplateSlot, 'id' | 'x' | 'y' | 'width' | 'height'>> = {},
-): TemplateSlot {
-  slotCounter += 1;
-  return { id: `s${slotCounter}`, x, y, width, height, ratio, ...opts };
-}
-
-/** Helper: create a template */
-function tmpl(
-  id: string, name: string, category: PageTemplate['category'],
-  margin: TemplateMargin, orientation: PageTemplate['orientation'],
-  targetRatio: PhotoRatio, albumSizes: AlbumSizePreset[],
-  slots: TemplateSlot[],
-): PageTemplate {
-  return { id, name, category, slotCount: slots.length, margin, orientation, targetRatio, albumSizes, slots };
-}
 
 /* ══════════════════════════════════════════════════════════════════════════
    6×4″ LANDSCAPE TEMPLATES (6 total) — 1-2 photos
@@ -412,105 +226,6 @@ const T6x4_21: PageTemplate = {
    ══════════════════════════════════════════════════════════════════════════ */
 
 const S66 = '6x6' as AlbumSizePreset;
-
-// ── 1-Photo (3) ──
-const T6x6_01 = tmpl('t6x6-01', 'Full Page Square', 'single', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 1.0, 1.0, S66),
-]);
-const T6x6_02 = tmpl('t6x6-02', 'Centered 4:3 Landscape', 'single', STD, 'square', '4:3', [S66], [
-  rsBox(0, 0, '4:3', 1.0, 1.0, S66),
-]);
-const T6x6_03 = tmpl('t6x6-03', 'Centered 3:4 Portrait', 'single', STD, 'square', '3:4', [S66], [
-  rsBox(0, 0, '3:4', 1.0, 1.0, S66),
-]);
-
-// ── 2-Photo (3 uniform + 2 creative) ──
-const T6x6_04 = tmpl('t6x6-04', 'Duo Square', 'duo', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 0.485, 1.0, S66),
-  rsBox(0.515, 0, '1:1', 0.485, 1.0, S66),
-]);
-const T6x6_05 = tmpl('t6x6-05', 'Stacked 4:3', 'duo', STD, 'square', '4:3', [S66], [
-  rsBox(0, 0, '4:3', 1.0, 0.485, S66),
-  rsBox(0, 0.515, '4:3', 1.0, 0.485, S66),
-]);
-const T6x6_06 = tmpl('t6x6-06', 'Duo Portrait', 'duo', STD, 'square', '3:4', [S66], [
-  rsBox(0, 0, '3:4', 0.485, 1.0, S66),
-  rsBox(0.515, 0, '3:4', 0.485, 1.0, S66),
-]);
-const T6x6_07 = tmpl('t6x6-07', 'Overlap', 'duo', STD, 'square', '1:1', [S66], [
-  rsBoxExact(0, 0, '1:1', 0.70, 0.70, S66),
-  rsBoxExact(0.55, 0.55, '1:1', 0.35, 0.35, S66, { rotation: 15 }),
-]);
-const T6x6_08 = tmpl('t6x6-08', 'Golden Split', 'duo', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 0.62, 0.62, S66),
-  rsBox(0.64, 0, '3:4', 0.36, 1.0, S66),
-]);
-
-// ── 3-Photo (3 uniform + 3 creative) ──
-const T6x6_09 = tmpl('t6x6-09', 'Triptych Landscape', 'trio', STD, 'square', '4:3', [S66], [
-  rsBox(0, 0, '4:3', 1.0, 0.313, S66),
-  rsBox(0, 0.343, '4:3', 1.0, 0.313, S66),
-  rsBox(0, 0.686, '4:3', 1.0, 0.313, S66),
-]);
-const T6x6_10 = tmpl('t6x6-10', 'Triptych Portrait', 'trio', STD, 'square', '3:4', [S66], [
-  rsBox(0, 0, '3:4', 0.313, 1.0, S66),
-  rsBox(0.343, 0, '3:4', 0.313, 1.0, S66),
-  rsBox(0.686, 0, '3:4', 0.313, 1.0, S66),
-]);
-const T6x6_11 = tmpl('t6x6-11', 'Hero Left', 'trio', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 0.60, 1.0, S66),
-  rsBox(0.625, 0, '1:1', 0.375, 0.485, S66),
-  rsBox(0.625, 0.515, '1:1', 0.375, 0.485, S66),
-]);
-const T6x6_12 = tmpl('t6x6-12', 'Hero Top', 'trio', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 1.0, 0.60, S66),
-  rsBox(0, 0.625, '1:1', 0.485, 0.375, S66),
-  rsBox(0.515, 0.625, '1:1', 0.485, 0.375, S66),
-]);
-const T6x6_13 = tmpl('t6x6-13', 'Cascade', 'trio', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '3:4', 0.40, 1.0, S66),
-  rsBox(0.44, 0, '4:3', 0.56, 0.48, S66),
-  rsBox(0.44, 0.52, '4:3', 0.56, 0.48, S66),
-]);
-
-// ── 4-Photo (3 uniform + 2 creative) ──
-const T6x6_14 = tmpl('t6x6-14', 'Grid 2×2 Square', 'quad', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 0.485, 0.485, S66),
-  rsBox(0.515, 0, '1:1', 0.485, 0.485, S66),
-  rsBox(0, 0.515, '1:1', 0.485, 0.485, S66),
-  rsBox(0.515, 0.515, '1:1', 0.485, 0.485, S66),
-]);
-const T6x6_15 = tmpl('t6x6-15', 'Grid 2×2 4:3', 'quad', STD, 'square', '4:3', [S66], [
-  rsBox(0, 0, '4:3', 0.485, 0.485, S66),
-  rsBox(0.515, 0, '4:3', 0.485, 0.485, S66),
-  rsBox(0, 0.515, '4:3', 0.485, 0.485, S66),
-  rsBox(0.515, 0.515, '4:3', 0.485, 0.485, S66),
-]);
-const T6x6_16 = tmpl('t6x6-16', 'Grid 2×2 3:4', 'quad', STD, 'square', '3:4', [S66], [
-  rsBox(0, 0, '3:4', 0.485, 0.485, S66),
-  rsBox(0.515, 0, '3:4', 0.485, 0.485, S66),
-  rsBox(0, 0.515, '3:4', 0.485, 0.485, S66),
-  rsBox(0.515, 0.515, '3:4', 0.485, 0.485, S66),
-]);
-const T6x6_17 = tmpl('t6x6-17', 'Mosaic', 'quad', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 0.62, 0.62, S66),
-  rsBox(0.64, 0, '1:1', 0.36, 0.30, S66),
-  rsBox(0.64, 0.32, '1:1', 0.36, 0.30, S66),
-  rsBox(0, 0.64, '1:1', 0.62, 0.36, S66),
-]);
-const T6x6_18 = tmpl('t6x6-18', 'Circle Hero', 'duo', STD, 'square', '1:1', [S66], [
-  rsBox(0.20, 0.20, '1:1', 0.60, 0.60, S66, { shape: 'circle' }),
-  rsBox(0.65, 0.65, '1:1', 0.35, 0.35, S66),
-]);
-
-// ── 5-Photo (1 creative) ──
-const T6x6_19 = tmpl('t6x6-19', 'Windowpane', 'quint', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 0.485, 0.485, S66),
-  rsBox(0.515, 0, '1:1', 0.485, 0.485, S66),
-  rsBox(0, 0.515, '1:1', 0.485, 0.485, S66),
-  rsBox(0.515, 0.515, '1:1', 0.485, 0.485, S66),
-  rsBox(0.2575, 0.2575, '1:1', 0.485, 0.485, S66, { shape: 'circle' }),
-]);
 
 /* ══════════════════════════════════════════════════════════════════════════
    11.5×8″ LANDSCAPE TEMPLATES (12 total) — 1-5 photos
@@ -1045,18 +760,6 @@ const T9x9_19 = tmpl('t9x9-19', 'Windowpane', 'quint', STD, 'square', '1:1', [S9
    6x6 / 8x8 / 9x9 NEW — square 4-photo mixed-ratio + caption band
    ══════════════════════════════════════════════════════════════════════════ */
 
-// Quad 2×2 4:3 + Caption — 4 photos in a strict 4:3 grid, caption fills leftover bottom band.
-// Square canvas (canvasRatio=1.0) → 4:3 intrinsic = 1.3333. Cell w=0.485 ⇒ h=0.485/1.3333=0.3638
-// → each rsBox fills exactly (offset 0). Two rows span y 0..0.76; caption owns the bottom band.
-const T6x6_20: PageTemplate = {
-  ...tmpl('t6x6-20', 'Frame Quad 4:3 + Caption', 'quad', STD, 'square', '4:3', [S66], [
-    rsBox(0, 0, '4:3', 0.485, 0.3638, S66),
-    rsBox(0.515, 0, '4:3', 0.485, 0.3638, S66),
-    rsBox(0, 0.39, '4:3', 0.485, 0.3638, S66),
-    rsBox(0.515, 0.39, '4:3', 0.485, 0.3638, S66),
-  ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.78, width: 1, height: 0.22, align: 'center', placeholder: 'Tap to add text' }],
-};
 const T8x8_20: PageTemplate = {
   ...tmpl('t8x8-20', 'Frame Quad 4:3 + Caption', 'quad', STD, 'square', '4:3', [S88], [
     rsBox(0, 0, '4:3', 0.485, 0.3638, S88),
@@ -1080,14 +783,6 @@ const T9x9_20: PageTemplate = {
    6x6 / 8x8 / 9x9 NEW — square 5-photo windowpane (no shapes) + 6-photo grid
    ══════════════════════════════════════════════════════════════════════════ */
 
-// Pinwheel Five — 5 photos: tall 1:1 hero left, four 1:1 satellites stacked right.
-const T6x6_21 = tmpl('t6x6-21', 'Pinwheel Five', 'quint', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 0.62, 1.0, S66),
-  rsBox(0.64, 0, '1:1', 0.36, 0.235, S66),
-  rsBox(0.64, 0.255, '1:1', 0.36, 0.235, S66),
-  rsBox(0.64, 0.51, '1:1', 0.36, 0.235, S66),
-  rsBox(0.64, 0.765, '1:1', 0.36, 0.235, S66),
-]);
 const T8x8_21 = tmpl('t8x8-21', 'Pinwheel Five', 'quint', STD, 'square', '1:1', [S88], [
   rsBox(0, 0, '1:1', 0.62, 1.0, S88),
   rsBox(0.64, 0, '1:1', 0.36, 0.235, S88),
@@ -1144,16 +839,6 @@ const T8x8_22 = tmpl('t8x8-22', 'Sextet Grid 2×3', 'sextet', STD, 'square', '1:
    box fills exactly (offset 0). Distinct from Strip Five (Inc 1).
    ══════════════════════════════════════════════════════════════════════════ */
 
-const T6x6_23: PageTemplate = {
-  ...tmpl('t6x6-23', 'Two-Top Three-Bottom + Caption', 'quint', STD, 'square', '4:3', [S66], [
-    rsBox(0.0075, 0.02, '4:3', 0.485, 0.3638, S66),
-    rsBox(0.5075, 0.02, '4:3', 0.485, 0.3638, S66),
-    rsBox(0, 0.41, '4:3', 0.313, 0.2348, S66),
-    rsBox(0.343, 0.41, '4:3', 0.313, 0.2348, S66),
-    rsBox(0.686, 0.41, '4:3', 0.313, 0.2348, S66),
-  ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.68, width: 1, height: 0.32, align: 'center', placeholder: 'Tap to add text' }],
-};
 const T8x8_24: PageTemplate = {
   ...tmpl('t8x8-24', 'Two-Top Three-Bottom + Caption', 'quint', STD, 'square', '4:3', [S88], [
     rsBox(0.0075, 0.02, '4:3', 0.485, 0.3638, S88),
@@ -1184,17 +869,6 @@ const T9x9_24: PageTemplate = {
    Cols x=0/0.343/0.686 (w=0.313); rows y=0.02/0.28 (h=0.2348).
    ══════════════════════════════════════════════════════════════════════════ */
 
-const T6x6_24: PageTemplate = {
-  ...tmpl('t6x6-24', 'Three-Top Three-Bottom + Caption', 'sextet', STD, 'square', '4:3', [S66], [
-    rsBox(0, 0.02, '4:3', 0.313, 0.2348, S66),
-    rsBox(0.343, 0.02, '4:3', 0.313, 0.2348, S66),
-    rsBox(0.686, 0.02, '4:3', 0.313, 0.2348, S66),
-    rsBox(0, 0.28, '4:3', 0.313, 0.2348, S66),
-    rsBox(0.343, 0.28, '4:3', 0.313, 0.2348, S66),
-    rsBox(0.686, 0.28, '4:3', 0.313, 0.2348, S66),
-  ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.55, width: 1, height: 0.45, align: 'center', placeholder: 'Tap to add text' }],
-};
 const T8x8_25: PageTemplate = {
   ...tmpl('t8x8-25', 'Three-Top Three-Bottom + Caption', 'sextet', STD, 'square', '4:3', [S88], [
     rsBox(0, 0.02, '4:3', 0.313, 0.2348, S88),
@@ -1227,14 +901,6 @@ const T9x9_25: PageTemplate = {
    Fills (4:3 × 6-photo × square) with a SECOND archetype.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const T6x6_25 = tmpl('t6x6-25', 'Hero + Five Satellites', 'sextet', STD, 'square', '4:3', [S66], [
-  rsBox(0, 0, '4:3', 0.62, 0.62, S66),
-  rsBox(0.64, 0, '4:3', 0.36, 0.30, S66),
-  rsBox(0.64, 0.32, '4:3', 0.36, 0.30, S66),
-  rsBox(0, 0.64, '4:3', 0.30, 0.36, S66),
-  rsBox(0.32, 0.64, '4:3', 0.30, 0.36, S66),
-  rsBox(0.64, 0.64, '4:3', 0.30, 0.36, S66),
-]);
 const T8x8_26 = tmpl('t8x8-26', 'Hero + Five Satellites', 'sextet', STD, 'square', '4:3', [S88], [
   rsBox(0, 0, '4:3', 0.62, 0.62, S88),
   rsBox(0.64, 0, '4:3', 0.36, 0.30, S88),
@@ -1269,16 +935,6 @@ const T9x9_26 = tmpl('t9x9-26', 'Hero + Five Satellites', 'sextet', STD, 'square
    Satellites w=0.235 ⇒ h=0.235/0.75=0.3133 (fill exactly, offset 0). All 5 slots '3:4'.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const T6x6_27: PageTemplate = {
-  ...tmpl('t6x6-27', 'Hero + Quad + Caption', 'quint', STD, 'square', '3:4', [S66], [
-    rsBox(0, 0.17, '3:4', 0.49, 0.6533, S66),
-    rsBox(0.51, 0.02, '3:4', 0.235, 0.3133, S66),
-    rsBox(0.765, 0.02, '3:4', 0.235, 0.3133, S66),
-    rsBox(0.51, 0.35, '3:4', 0.235, 0.3133, S66),
-    rsBox(0.765, 0.35, '3:4', 0.235, 0.3133, S66),
-  ]),
-  textSlots: [{ id: 'cap', x: 0.51, y: 0.68, width: 0.49, height: 0.32, align: 'center', placeholder: 'Tap to add text' }],
-};
 const T8x8_28: PageTemplate = {
   ...tmpl('t8x8-28', 'Hero + Quad + Caption', 'quint', STD, 'square', '3:4', [S88], [
     rsBox(0, 0.17, '3:4', 0.49, 0.6533, S88),
@@ -1308,14 +964,6 @@ const T9x9_28: PageTemplate = {
    Fills (3:4 × 6-photo × square).
    ══════════════════════════════════════════════════════════════════════════ */
 
-const T6x6_28 = tmpl('t6x6-28', 'Three-Top Three-Bottom Portrait', 'sextet', STD, 'square', '3:4', [S66], [
-  rsBox(0, 0, '3:4', 0.313, 0.485, S66),
-  rsBox(0.343, 0, '3:4', 0.313, 0.485, S66),
-  rsBox(0.686, 0, '3:4', 0.313, 0.485, S66),
-  rsBox(0, 0.515, '3:4', 0.313, 0.485, S66),
-  rsBox(0.343, 0.515, '3:4', 0.313, 0.485, S66),
-  rsBox(0.686, 0.515, '3:4', 0.313, 0.485, S66),
-]);
 const T8x8_29 = tmpl('t8x8-29', 'Three-Top Three-Bottom Portrait', 'sextet', STD, 'square', '3:4', [S88], [
   rsBox(0, 0, '3:4', 0.313, 0.485, S88),
   rsBox(0.343, 0, '3:4', 0.313, 0.485, S88),
@@ -1340,14 +988,6 @@ const T9x9_29 = tmpl('t9x9-29', 'Three-Top Three-Bottom Portrait', 'sextet', STD
    crop). A second sextet archetype for the square 6-photo cell (beyond the
    2×3 grid). No textSlot — packs edge-to-edge.
    ══════════════════════════════════════════════════════════════════════════ */
-const T6x6_29 = tmpl('t6x6-29', 'Hero + Five Satellites', 'sextet', STD, 'square', '1:1', [S66], [
-  rsBox(0, 0, '1:1', 0.62, 0.62, S66),
-  rsBox(0.64, 0, '1:1', 0.36, 0.30, S66),
-  rsBox(0.64, 0.32, '1:1', 0.36, 0.30, S66),
-  rsBox(0, 0.64, '1:1', 0.30, 0.36, S66),
-  rsBox(0.32, 0.64, '1:1', 0.30, 0.36, S66),
-  rsBox(0.64, 0.64, '1:1', 0.30, 0.36, S66),
-]);
 const T8x8_30 = tmpl('t8x8-30', 'Hero + Five Satellites', 'sextet', STD, 'square', '1:1', [S88], [
   rsBox(0, 0, '1:1', 0.62, 0.62, S88),
   rsBox(0.64, 0, '1:1', 0.36, 0.30, S88),
@@ -1372,16 +1012,6 @@ const T9x9_30 = tmpl('t9x9-30', 'Hero + Five Satellites', 'sextet', STD, 'square
    1:1: every slot carries '1:1' (zero crop). The caption textSlot absorbs the
    open inner-L corner (canvas-packing). Distinct from pinwheel/windowpane.
    ══════════════════════════════════════════════════════════════════════════ */
-const T6x6_30: PageTemplate = {
-  ...tmpl('t6x6-30', 'L-Frame + Caption', 'quint', STD, 'square', '1:1', [S66], [
-    rsBox(0, 0, '1:1', 0.313, 0.313, S66),
-    rsBox(0.343, 0, '1:1', 0.313, 0.313, S66),
-    rsBox(0.686, 0, '1:1', 0.313, 0.313, S66),
-    rsBox(0, 0.343, '1:1', 0.313, 0.313, S66),
-    rsBox(0, 0.686, '1:1', 0.313, 0.313, S66),
-  ]),
-  textSlots: [{ id: 'cap', x: 0.343, y: 0.343, width: 0.657, height: 0.657, align: 'center', placeholder: 'Tap to add text' }],
-};
 const T8x8_31: PageTemplate = {
   ...tmpl('t8x8-31', 'L-Frame + Caption', 'quint', STD, 'square', '1:1', [S88], [
     rsBox(0, 0, '1:1', 0.313, 0.313, S88),
@@ -1418,16 +1048,6 @@ const T9x9_31: PageTemplate = {
      • Hero + Trio 4:3: full-width 4:3 hero (1.0×0.75) on top + three 4:3 cells
        (0.32×0.24) filling the bottom row. Tessellates the full page, no caption.
    ══════════════════════════════════════════════════════════════════════════ */
-// Quad 2×2 4:3 + Caption
-const T6x6_31: PageTemplate = {
-  ...tmpl('t6x6-31', 'Quad 2×2 4:3 + Caption', 'quad', STD, 'square', '4:3', [S66], [
-    rsBox(0, 0, '4:3', 0.49, 0.3675, S66),
-    rsBox(0.51, 0, '4:3', 0.49, 0.3675, S66),
-    rsBox(0, 0.3775, '4:3', 0.49, 0.3675, S66),
-    rsBox(0.51, 0.3775, '4:3', 0.49, 0.3675, S66),
-  ]),
-  textSlots: [{ id: 'cap', x: 0, y: 0.755, width: 1, height: 0.245, align: 'center', placeholder: 'Tap to add text' }],
-};
 const T8x8_32: PageTemplate = {
   ...tmpl('t8x8-32', 'Quad 2×2 4:3 + Caption', 'quad', STD, 'square', '4:3', [S88], [
     rsBox(0, 0, '4:3', 0.49, 0.3675, S88),
@@ -1445,16 +1065,6 @@ const T9x9_32: PageTemplate = {
     rsBox(0.51, 0.3775, '4:3', 0.49, 0.3675, S99),
   ]),
   textSlots: [{ id: 'cap', x: 0, y: 0.755, width: 1, height: 0.245, align: 'center', placeholder: 'Tap to add text' }],
-};
-// Quad 2×2 3:4 + Caption
-const T6x6_32: PageTemplate = {
-  ...tmpl('t6x6-32', 'Quad 2×2 3:4 + Caption', 'quad', STD, 'square', '3:4', [S66], [
-    rsBox(0, 0, '3:4', 0.3675, 0.49, S66),
-    rsBox(0, 0.51, '3:4', 0.3675, 0.49, S66),
-    rsBox(0.3775, 0, '3:4', 0.3675, 0.49, S66),
-    rsBox(0.3775, 0.51, '3:4', 0.3675, 0.49, S66),
-  ]),
-  textSlots: [{ id: 'cap', x: 0.755, y: 0, width: 0.245, height: 1, align: 'center', placeholder: 'Tap to add text' }],
 };
 const T8x8_33: PageTemplate = {
   ...tmpl('t8x8-33', 'Quad 2×2 3:4 + Caption', 'quad', STD, 'square', '3:4', [S88], [
@@ -1474,13 +1084,6 @@ const T9x9_33: PageTemplate = {
   ]),
   textSlots: [{ id: 'cap', x: 0.755, y: 0, width: 0.245, height: 1, align: 'center', placeholder: 'Tap to add text' }],
 };
-// Hero + Trio 4:3 (full-page fill, no caption)
-const T6x6_33 = tmpl('t6x6-33', 'Hero + Trio 4:3', 'quad', STD, 'square', '4:3', [S66], [
-  rsBox(0, 0, '4:3', 1.0, 0.75, S66),
-  rsBox(0.02, 0.76, '4:3', 0.32, 0.24, S66),
-  rsBox(0.34, 0.76, '4:3', 0.32, 0.24, S66),
-  rsBox(0.66, 0.76, '4:3', 0.32, 0.24, S66),
-]);
 const T8x8_34 = tmpl('t8x8-34', 'Hero + Trio 4:3', 'quad', STD, 'square', '4:3', [S88], [
   rsBox(0, 0, '4:3', 1.0, 0.75, S88),
   rsBox(0.02, 0.76, '4:3', 0.32, 0.24, S88),
@@ -1546,37 +1149,35 @@ const PAGE_TEMPLATES_BASE: PageTemplate[] = [
   T6x4_18, T6x4_19, T6x4_20,
   // 6×4 INC5 (finish variety: trio row 3:2 + cap, hero + five 1:1, quad staggered 4:3 + cap)
   T6x4_21,
-  // 6×6 (19 templates)
-  T6x6_01, T6x6_02, T6x6_03, T6x6_04, T6x6_05, T6x6_06, T6x6_07, T6x6_08, T6x6_09,
-  T6x6_10, T6x6_11, T6x6_12, T6x6_13, T6x6_14, T6x6_15, T6x6_16, T6x6_17, T6x6_18, T6x6_19,
+  // 6×6 — authored per-size in templates6x6.ts (see PER_SIZE_AUTHORED).
   // 8×8 (19 templates)
   T8x8_01, T8x8_02, T8x8_03, T8x8_04, T8x8_05, T8x8_06, T8x8_07, T8x8_08, T8x8_09,
   T8x8_10, T8x8_11, T8x8_12, T8x8_13, T8x8_14, T8x8_15, T8x8_16, T8x8_17, T8x8_18, T8x8_19,
   // 9×9 (19 templates)
   T9x9_01, T9x9_02, T9x9_03, T9x9_04, T9x9_05, T9x9_06, T9x9_07, T9x9_08, T9x9_09,
   T9x9_10, T9x9_11, T9x9_12, T9x9_13, T9x9_14, T9x9_15, T9x9_16, T9x9_17, T9x9_18, T9x9_19,
-  // 6×6 / 8×8 / 9×9 NEW (square 4-photo + caption)
-  T6x6_20, T8x8_20, T9x9_20,
-  // 6×6 / 8×8 / 9×9 NEW (square 5-photo pinwheel + 6-photo 2×3 grid)
-  T6x6_21, T8x8_21, T9x9_21, T8x8_22,
-  // 6×6 / 8×8 / 9×9 NEW (Inc 2: 4:3 5-photo Two-Top Three-Bottom + Caption)
-  T6x6_23, T8x8_24, T9x9_24,
-  // 6×6 / 8×8 / 9×9 NEW (Inc 3: 4:3 6-photo Three-Top Three-Bottom sextet grid)
-  T6x6_24, T8x8_25, T9x9_25,
-  // 6×6 / 8×8 / 9×9 NEW (Inc 4: 4:3 6-photo Hero + Five Satellites sextet)
-  T6x6_25, T8x8_26, T9x9_26,
-  // 6×6 / 8×8 / 9×9 NEW (Inc 6: 3:4 5-photo Hero + Quad Strip + Caption)
-  T6x6_27, T8x8_28, T9x9_28,
-  // 6×6 / 8×8 / 9×9 NEW (Inc 7: 3:4 6-photo Three-Top Three-Bottom Portrait)
-  T6x6_28, T8x8_29, T9x9_29,
-  // 6×6 / 8×8 / 9×9 NEW (Inc 8a: 1:1 6-photo Hero + Five Satellites)
-  T6x6_29, T8x8_30, T9x9_30,
-  // 6×6 / 8×8 / 9×9 NEW (Inc 8b: 1:1 5-photo L-Frame + Caption)
-  T6x6_30, T8x8_31, T9x9_31,
-  // 6×6 / 8×8 / 9×9 NEW (Inc 7: FILL-correct square 4-photo — Quad 2×2 4:3 + Cap, 3:4 + Cap, Hero + Trio 4:3)
-  T6x6_31, T8x8_32, T9x9_32,
-  T6x6_32, T8x8_33, T9x9_33,
-  T6x6_33, T8x8_34, T9x9_34,
+  // 8×8 / 9×9 NEW (square 4-photo + caption)
+  T8x8_20, T9x9_20,
+  // 8×8 / 9×9 NEW (square 5-photo pinwheel + 6-photo 2×3 grid)
+  T8x8_21, T9x9_21, T8x8_22,
+  // 8×8 / 9×9 NEW (Inc 2: 4:3 5-photo Two-Top Three-Bottom + Caption)
+  T8x8_24, T9x9_24,
+  // 8×8 / 9×9 NEW (Inc 3: 4:3 6-photo Three-Top Three-Bottom sextet grid)
+  T8x8_25, T9x9_25,
+  // 8×8 / 9×9 NEW (Inc 4: 4:3 6-photo Hero + Five Satellites sextet)
+  T8x8_26, T9x9_26,
+  // 8×8 / 9×9 NEW (Inc 6: 3:4 5-photo Hero + Quad Strip + Caption)
+  T8x8_28, T9x9_28,
+  // 8×8 / 9×9 NEW (Inc 7: 3:4 6-photo Three-Top Three-Bottom Portrait)
+  T8x8_29, T9x9_29,
+  // 8×8 / 9×9 NEW (Inc 8a: 1:1 6-photo Hero + Five Satellites)
+  T8x8_30, T9x9_30,
+  // 8×8 / 9×9 NEW (Inc 8b: 1:1 5-photo L-Frame + Caption)
+  T8x8_31, T9x9_31,
+  // 8×8 / 9×9 NEW (Inc 7: FILL-correct square 4-photo — Quad 2×2 4:3 + Cap, 3:4 + Cap, Hero + Trio 4:3)
+  T8x8_32, T9x9_32,
+  T8x8_33, T9x9_33,
+  T8x8_34, T9x9_34,
   // 11.5×8 (12 templates)
   T1158_01, T1158_02, T1158_03, T1158_04, T1158_05, T1158_06, T1158_07, T1158_08, T1158_09, T1158_10, T1158_11, T1158_12,
   // 11.5×8 NEW (varied-ratio 3/4/5-photo)
@@ -1640,6 +1241,9 @@ const RETIRED_TEMPLATE_IDS = new Set<string>();
 const gapCap = (y: number, h: number): TextSlot =>
   ({ id: 'cap', x: 0, y, width: 1, height: h, align: 'center', placeholder: 'Tap to add text' });
 for (const { size, orientation } of SIZE_ORIENTATION) {
+  // A size that is authored per-size owns its whole layout set — no generated
+  // floor underneath it, so the file is the only thing that can deal.
+  if (PER_SIZE_AUTHORED.has(size)) continue;
   // ROOMY sizes (short side ≥ 8") can print a 3-across / big+small frame ≥ 2";
   // small albums (6×4, 6×6) can't, so they keep only the 1- and 2-photo variants.
   const roomy = size === S88 || size === S99 || size === S1158 || size === S8511;
@@ -1831,10 +1435,28 @@ function applySinglePicFullBleed(t: PageTemplate): PageTemplate {
   };
 }
 
+/** Strip a per-size-authored album size out of a legacy/generated template.
+ *  Belt-and-braces next to the generator guards: any template that still offers
+ *  an owned size (a hand-made definition, a stale id) loses that size here, so
+ *  the per-size file really is the only source. QR templates are EXEMPT — they
+ *  carry the QR living-memory feature, not a layout choice, and are opt-in only
+ *  (hasQrSlot keeps them out of generation + the layout picker regardless). */
+function withoutOwnedSizes(t: PageTemplate): PageTemplate | null {
+  if (hasQrSlot(t)) return t;
+  const sizes = t.albumSizes.filter((s) => !PER_SIZE_AUTHORED.has(s));
+  if (sizes.length === t.albumSizes.length) return t;
+  return sizes.length ? { ...t, albumSizes: sizes } : null;
+}
+
 export const PAGE_TEMPLATES: PageTemplate[] =
   // QR-badge templates are already full-bleed 2-slot layouts, so they pass
   // through applySinglePicFullBleed untouched (it only promotes lone photo slots).
   [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS, ...QR_BADGE_TEMPLATES]
+    .map(withoutOwnedSizes)
+    .filter((t): t is PageTemplate => t !== null)
+    // Per-size authored layouts are appended AFTER the filter — they are the
+    // whole supply for their size.
+    .concat(TEMPLATES_6X6)
     .map(applySinglePicFullBleed);
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
