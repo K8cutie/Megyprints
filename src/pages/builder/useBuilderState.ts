@@ -2120,12 +2120,12 @@ export function useBuilderState(): BuilderActions {
           textSlotQr,
           textSlotOrnament,
           textElements: page.textElements.map((t) =>
-            t.boxIndex === slotIndex ? { ...t, ...content, text: trimmed } : t),
+            t.boxIndex === slotIndex ? { ...t, ...content, text: content.text } : t),
         };
       }
       const newText: TextElement = {
         id: `box-${slotIndex}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        text: trimmed,
+        text: content.text,
         x: 0,
         y: 0,
         fontSize: content.fontSize ?? 28,
