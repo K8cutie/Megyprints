@@ -5,6 +5,8 @@ import {
   PER_SIZE_AUTHORED, STD, RATIOS, rs, rsBox, rsBoxExact, fill, tmpl,
 } from './templateKit';
 import { TEMPLATES_6X6 } from './templates6x6';
+import { TEMPLATES_8X8 } from './templates8x8';
+import { TEMPLATES_9X9 } from './templates9x9';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  87 SMART TEMPLATES — Ratio-locked, album-size-aware, phone-first
@@ -1241,9 +1243,11 @@ const RETIRED_TEMPLATE_IDS = new Set<string>();
 const gapCap = (y: number, h: number): TextSlot =>
   ({ id: 'cap', x: 0, y, width: 1, height: h, align: 'center', placeholder: 'Tap to add text' });
 for (const { size, orientation } of SIZE_ORIENTATION) {
-  // A size that is authored per-size owns its whole layout set — no generated
-  // floor underneath it, so the file is the only thing that can deal.
-  if (PER_SIZE_AUTHORED.has(size)) continue;
+  // NOTE: gap fillers are still GENERATED for per-size-authored sizes (6x6,
+  // 8x8, 9x9) so that an album SAVED before the size was cleared still resolves
+  // its old `gap-<size>-…` ids and renders. withoutOwnedSizes then strips the
+  // owned size from albumSizes, so they are RESOLVABLE but never SELECTED — the
+  // authored file remains the only source for new albums.
   // ROOMY sizes (short side ≥ 8") can print a 3-across / big+small frame ≥ 2";
   // small albums (6×4, 6×6) can't, so they keep only the 1- and 2-photo variants.
   const roomy = size === S88 || size === S99 || size === S1158 || size === S8511;
@@ -1440,12 +1444,19 @@ function applySinglePicFullBleed(t: PageTemplate): PageTemplate {
  *  an owned size (a hand-made definition, a stale id) loses that size here, so
  *  the per-size file really is the only source. QR templates are EXEMPT — they
  *  carry the QR living-memory feature, not a layout choice, and are opt-in only
- *  (hasQrSlot keeps them out of generation + the layout picker regardless). */
-function withoutOwnedSizes(t: PageTemplate): PageTemplate | null {
+ *  (hasQrSlot keeps them out of generation + the layout picker regardless).
+ *
+ *  A template whose ONLY sizes were owned keeps its slot in PAGE_TEMPLATES with
+ *  an EMPTY albumSizes — never returned to null. getTemplatesForAlbum filters by
+ *  `albumSizes.includes(size)`, so an empty list is never SELECTED; but
+ *  getTemplateById searches PAGE_TEMPLATES by id, so an ALBUM SAVED (or an ORDER
+ *  placed) before the size was cleared still resolves its template and renders —
+ *  removing it would blank those pages. Clearing a size hides its old layouts
+ *  from NEW albums without breaking OLD ones. */
+function withoutOwnedSizes(t: PageTemplate): PageTemplate {
   if (hasQrSlot(t)) return t;
   const sizes = t.albumSizes.filter((s) => !PER_SIZE_AUTHORED.has(s));
-  if (sizes.length === t.albumSizes.length) return t;
-  return sizes.length ? { ...t, albumSizes: sizes } : null;
+  return sizes.length === t.albumSizes.length ? t : { ...t, albumSizes: sizes };
 }
 
 export const PAGE_TEMPLATES: PageTemplate[] =
@@ -1453,7 +1464,6 @@ export const PAGE_TEMPLATES: PageTemplate[] =
   // through applySinglePicFullBleed untouched (it only promotes lone photo slots).
   [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS, ...QR_BADGE_TEMPLATES]
     .map(withoutOwnedSizes)
-    .filter((t): t is PageTemplate => t !== null)
     .map(applySinglePicFullBleed)
     // Per-size authored layouts are appended AFTER both the filter and the
     // full-bleed promotion — they are the whole supply for their size, and the
@@ -1462,7 +1472,7 @@ export const PAGE_TEMPLATES: PageTemplate[] =
     // single (a photo at its true ratio inside the safe area) into a full-bleed
     // one, which is the exact layout a square page cannot have without cropping
     // an off-orientation photo by a third.
-    .concat(TEMPLATES_6X6);
+    .concat(TEMPLATES_6X6, TEMPLATES_8X8, TEMPLATES_9X9);
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 
