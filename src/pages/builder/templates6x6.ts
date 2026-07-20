@@ -15,9 +15,10 @@ import { fill } from './templateKit';
  *  until the first layout landed. Covers are unaffected: they live in
  *  COVER_TEMPLATES.
  *
- *  STILL MISSING: 1-, 2- and 4-photo layouts. Everything here is a 3-up, which
- *  leaves the density picker inert and strands remainder photos — see the
- *  commit log. Those gaps close as the set is authored out.
+ *  STILL MISSING: 1- and 4-photo layouts. Until a 1-up exists the QR memory
+ *  badge and the generator's hero/variety valve stay unreachable here, and the
+ *  density picker cannot honour 'Big & bold'. Those gaps close as the set is
+ *  authored out.
  *
  *  ── House rules for a 6×6 layout ─────────────────────────────────────────
  *  • Ratio-true slots. Build frames with rsBox/rsBoxExact so a slot's PRINTED
@@ -175,7 +176,80 @@ const T66_FB_SQ_BOX_TR_G = fbSquareTrio('t66-fb-sq-box-tr-gap', 'Three Squares, 
 const T66_FB_SQ_BOX_BL_G = fbSquareTrio('t66-fb-sq-box-bl-gap', 'Three Squares, Box Bottom Left · Thin Gap', 'bl', GAP);
 const T66_FB_SQ_BOX_BR_G = fbSquareTrio('t66-fb-sq-box-br-gap', 'Three Squares, Box Bottom Right · Thin Gap', 'br', GAP);
 
+/* ── 2 photos, full bleed, maximum area ────────────────────────────────────
+   One straight cut down the middle. Each photo gets 18 sq in — half the sheet,
+   and the largest two photos can be on this page.
+
+   THIS FAMILY CANNOT BE RATIO-EXACT, and that is a property of the page, not a
+   shortcut. A rectangle splits into two rectangles only by a single cut, so the
+   two slot aspects must satisfy r1 + r2 = 1 (vertical cut) or 1/r1 + 1/r2 = 1
+   (horizontal). No pair of camera ratios does either — verified by exhaustive
+   search over the whole ratio set. Equal halves therefore land on 1:2 / 2:1,
+   which is not a camera ratio at all.
+
+   The cost, stated plainly: 9:16 is the closest real ratio, so a matched photo
+   is centre-cropped 11.1%. The declared targetRatio is 9:16 / 16:9 for
+   matching, but the RECT is 1:2 / 2:1, so the dealer's 16% loose budget stacks
+   on top of that gap — a 2:3 photo, which the budget admits at 15.6% from 9:16,
+   actually loses 25% here. Use these when the customer wants scale; the trios
+   and the exact-ratio families are where zero-crop lives.
+
+   Mirrors are pointless: swapping two equal halves is the same picture, and
+   dedupeByGeometry would collapse them anyway. So two layouts, plus gap twins. */
+const fbDuo = (id: string, name: string, axis: 'v' | 'h', gap: number): PageTemplate => {
+  const half = 1 / 2 - gap / 2, far = 1 / 2 + gap / 2;
+  const r: PhotoRatio = axis === 'v' ? '9:16' : '16:9';
+  return {
+    id, name, category: 'duo', slotCount: 2, margin: ZERO, orientation: 'square',
+    targetRatio: r, albumSizes: ['6x6'], fullBleed: true,
+    slots: axis === 'v'
+      ? [fill(0, 0, half, 1, r), fill(far, 0, half, 1, r)]
+      : [fill(0, 0, 1, half, r), fill(0, far, 1, half, r)],
+  };
+};
+
+const T66_FB_DUO_V = fbDuo('t66-fb-duo-split-v', 'Two Tall', 'v', 0);
+const T66_FB_DUO_H = fbDuo('t66-fb-duo-split-h', 'Two Wide', 'h', 0);
+const T66_FB_DUO_V_G = fbDuo('t66-fb-duo-split-v-gap', 'Two Tall · Thin Gap', 'v', GAP);
+const T66_FB_DUO_H_G = fbDuo('t66-fb-duo-split-h-gap', 'Two Wide · Thin Gap', 'h', GAP);
+
+/* ── 2 photos, exact ratio, combo box takes the remainder ──────────────────
+   The page is still fully spent — the photos just stop at the largest size
+   that keeps them ratio-true, and the combo box absorbs the leftover band
+   instead of the photos being stretched into it.
+
+     side by side  two 3.00 x 4.50" = 2:3 exact, box gets a 6.00 x 1.50" band
+     stacked       two 4.50 x 3.00" = 3:2 exact, box gets a 1.50 x 6.00" column
+
+   75% of the sheet is photo at ZERO crop, versus 100% at up to 25% crop in the
+   max-area pair above. Same trade the square trio makes, and the reason both
+   families exist. */
+const fbDuoExact = (id: string, name: string, axis: 'v' | 'h'): PageTemplate => {
+  const r: PhotoRatio = axis === 'v' ? '2:3' : '3:2';
+  const band = 1 / 4;                 // 1.50" — the combo box's share
+  const photo = 1 - band;             // 4.50"
+  return {
+    id, name, category: 'duo', slotCount: 2, margin: ZERO, orientation: 'square',
+    targetRatio: r, albumSizes: ['6x6'], fullBleed: true,
+    slots: axis === 'v'
+      ? [fill(0, 0, 1 / 2, photo, r), fill(1 / 2, 0, 1 / 2, photo, r)]
+      : [fill(0, 0, photo, 1 / 2, r), fill(0, 1 / 2, photo, 1 / 2, r)],
+    textSlots: axis === 'v'
+      ? [{ id: 'combo', x: 0, y: photo, width: 1, height: band, align: 'center', placeholder: 'Tap to add' }]
+      : [{ id: 'combo', x: photo, y: 0, width: band, height: 1, align: 'center', placeholder: 'Tap to add' }],
+  };
+};
+
+const T66_FB_DUO_EXACT_V = fbDuoExact('t66-fb-duo-exact-v', 'Two Portraits + Box', 'v');
+const T66_FB_DUO_EXACT_H = fbDuoExact('t66-fb-duo-exact-h', 'Two Landscapes + Box', 'h');
+
 export const TEMPLATES_6X6: PageTemplate[] = [
+  T66_FB_DUO_EXACT_V,
+  T66_FB_DUO_EXACT_H,
+  T66_FB_DUO_V,
+  T66_FB_DUO_H,
+  T66_FB_DUO_V_G,
+  T66_FB_DUO_H_G,
   T66_FB_TRIO_HERO_LEFT,
   T66_FB_TRIO_HERO_RIGHT,
   T66_FB_TRIO_HERO_TOP,
