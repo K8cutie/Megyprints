@@ -57,23 +57,47 @@ const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 
    Phone portraits (3:4) land here at ~11% crop, inside the dealer's 16% loose
    budget, so this is a genuine home for portrait photos and not just DSLR ones. */
-const T66_FB_TRIO_HERO_LEFT: PageTemplate = {
-  id: 't66-fb-trio-hero-left',
-  name: 'Full Bleed Trio — Hero Left',
-  category: 'trio',
-  slotCount: 3,
-  margin: ZERO,
-  orientation: 'square',
-  targetRatio: '2:3',
-  albumSizes: ['6x6'],
-  fullBleed: true,
-  slots: [
-    fill(0, 0, 2 / 3, 1, '2:3'),
-    fill(2 / 3, 0, 1 / 3, 1 / 2, '2:3'),
-    fill(2 / 3, 1 / 2, 1 / 3, 1 / 2, '2:3'),
-  ],
-};
+/** Shared shape for the four full-bleed trios. The hero is always slots[0], so
+ *  the lead photo of a moment lands in the big frame regardless of where that
+ *  frame sits on the page. */
+const fbTrio = (
+  id: string, name: string, targetRatio: '2:3' | '3:2', slots: PageTemplate['slots'],
+): PageTemplate => ({
+  id, name, category: 'trio', slotCount: 3, margin: ZERO,
+  orientation: 'square', targetRatio, albumSizes: ['6x6'], fullBleed: true, slots,
+});
+
+/* PORTRAIT PAIR — vertical 2/3 split. Hero 4×6, pair 2×3, every slot 2:3. */
+const T66_FB_TRIO_HERO_LEFT = fbTrio('t66-fb-trio-hero-left', 'Full Bleed Trio — Hero Left', '2:3', [
+  fill(0, 0, 2 / 3, 1, '2:3'),
+  fill(2 / 3, 0, 1 / 3, 1 / 2, '2:3'),
+  fill(2 / 3, 1 / 2, 1 / 3, 1 / 2, '2:3'),
+]);
+
+const T66_FB_TRIO_HERO_RIGHT = fbTrio('t66-fb-trio-hero-right', 'Full Bleed Trio — Hero Right', '2:3', [
+  fill(1 / 3, 0, 2 / 3, 1, '2:3'),
+  fill(0, 0, 1 / 3, 1 / 2, '2:3'),
+  fill(0, 1 / 2, 1 / 3, 1 / 2, '2:3'),
+]);
+
+/* LANDSCAPE PAIR — horizontal 2/3 split. Hero 6×4, pair 3×2, every slot 3:2.
+   The same tiling rotated: the pair's inches are the portrait pair's
+   transposed (2×3 becomes 3×2), which is what keeps the ratio exact. */
+const T66_FB_TRIO_HERO_TOP = fbTrio('t66-fb-trio-hero-top', 'Full Bleed Trio — Hero Top', '3:2', [
+  fill(0, 0, 1, 2 / 3, '3:2'),
+  fill(0, 2 / 3, 1 / 2, 1 / 3, '3:2'),
+  fill(1 / 2, 2 / 3, 1 / 2, 1 / 3, '3:2'),
+]);
+
+const T66_FB_TRIO_HERO_BOTTOM = fbTrio('t66-fb-trio-hero-bottom', 'Full Bleed Trio — Hero Bottom', '3:2', [
+  fill(0, 1 / 3, 1, 2 / 3, '3:2'),
+  fill(0, 0, 1 / 2, 1 / 3, '3:2'),
+  fill(1 / 2, 0, 1 / 2, 1 / 3, '3:2'),
+]);
 
 export const TEMPLATES_6X6: PageTemplate[] = [
   T66_FB_TRIO_HERO_LEFT,
+  T66_FB_TRIO_HERO_RIGHT,
+  T66_FB_TRIO_HERO_TOP,
+  T66_FB_TRIO_HERO_BOTTOM,
 ];
