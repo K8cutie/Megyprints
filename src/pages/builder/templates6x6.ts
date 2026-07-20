@@ -1,6 +1,6 @@
 import type { PageTemplate, TemplateMargin } from './types';
 import type { PhotoRatio } from './photoAnalyzer';
-import { fill } from './templateKit';
+import { fill, rsBox, STD } from './templateKit';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  6×6″ SQUARE — page layouts
@@ -18,10 +18,8 @@ import { fill } from './templateKit';
  *  NEVER re-add a half-and-half 2-up (two 3x6" or two 6x3"). It uses the whole
  *  sheet but crops a 2:3 photo 25% — beheading — and was deleted for that.
  *
- *  STILL MISSING: 1- and 4-photo layouts. Until a 1-up exists the QR memory
- *  badge and the generator's hero/variety valve stay unreachable here, and the
- *  density picker cannot honour 'Big & bold'. Those gaps close as the set is
- *  authored out.
+ *  STILL MISSING: a SQUARE 2-up and any 4-photo layout. Square having no 2-up
+ *  is why 80-104 square photos still leave blank pages — see the commit log.
  *
  *  ── House rules for a 6×6 layout ─────────────────────────────────────────
  *  • Ratio-true slots. Build frames with rsBox/rsBoxExact so a slot's PRINTED
@@ -247,8 +245,51 @@ const T66_FB_SOLO: PageTemplate = {
   slots: [fill(0, 0, 1, 1, '1:1')],
 };
 
+/* ── 1 photo, MARGINED ─────────────────────────────────────────────────────
+   One photo at its true ratio inside the 5.52" safe area, page background all
+   around it. The most traditional page in the set, and the only one here that
+   is not full bleed.
+
+   It exists because portrait and landscape photos CANNOT have a full-bleed
+   single on a square page — covering the whole 6×6 with a 2:3 photo throws away
+   a third of it off the top and bottom, and cropSafe rejects it for that
+   reason. Fitting instead of filling is the only way to give those photos a
+   page of their own without cutting them:
+
+     portrait   3.68 x 5.52" = 2:3 exact
+     landscape  5.52 x 3.68" = 3:2 exact
+
+   Both are far clear of the 2" floor. NOTE these must be appended to
+   PAGE_TEMPLATES after applySinglePicFullBleed, which would otherwise promote
+   any single-photo template to full bleed and undo exactly this. */
+const T66_SOLO_PORTRAIT: PageTemplate = {
+  id: 't66-solo-portrait',
+  name: 'Single Portrait',
+  category: 'single',
+  slotCount: 1,
+  margin: STD,
+  orientation: 'square',
+  targetRatio: '2:3',
+  albumSizes: ['6x6'],
+  slots: [rsBox(0, 0, '2:3', 1, 1, '6x6')],
+};
+
+const T66_SOLO_LANDSCAPE: PageTemplate = {
+  id: 't66-solo-landscape',
+  name: 'Single Landscape',
+  category: 'single',
+  slotCount: 1,
+  margin: STD,
+  orientation: 'square',
+  targetRatio: '3:2',
+  albumSizes: ['6x6'],
+  slots: [rsBox(0, 0, '3:2', 1, 1, '6x6')],
+};
+
 export const TEMPLATES_6X6: PageTemplate[] = [
   T66_FB_SOLO,
+  T66_SOLO_PORTRAIT,
+  T66_SOLO_LANDSCAPE,
   T66_FB_DUO_EXACT_V,
   T66_FB_DUO_EXACT_H,
   T66_FB_TRIO_HERO_LEFT,

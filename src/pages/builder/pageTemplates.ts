@@ -1454,10 +1454,15 @@ export const PAGE_TEMPLATES: PageTemplate[] =
   [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS, ...QR_BADGE_TEMPLATES]
     .map(withoutOwnedSizes)
     .filter((t): t is PageTemplate => t !== null)
-    // Per-size authored layouts are appended AFTER the filter — they are the
-    // whole supply for their size.
-    .concat(TEMPLATES_6X6)
-    .map(applySinglePicFullBleed);
+    .map(applySinglePicFullBleed)
+    // Per-size authored layouts are appended AFTER both the filter and the
+    // full-bleed promotion — they are the whole supply for their size, and the
+    // file is the single source of truth. Running them through
+    // applySinglePicFullBleed would silently rewrite a deliberately MARGINED
+    // single (a photo at its true ratio inside the safe area) into a full-bleed
+    // one, which is the exact layout a square page cannot have without cropping
+    // an off-orientation photo by a third.
+    .concat(TEMPLATES_6X6);
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 
