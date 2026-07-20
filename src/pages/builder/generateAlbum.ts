@@ -227,8 +227,20 @@ export function generateAlbum(
     '6x4': 6 / 4, '6x6': 1, '8x8': 1, '9x9': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
   };
   const pageAspect = PAGE_ASPECT[albumSize] ?? 1;
+  /** Does this single-photo template stretch its photo across the WHOLE sheet?
+   *  That — not the fullBleed flag — is the condition the crop rule is about.
+   *  A template can be full bleed and still be safe: a 2:3 photo occupying the
+   *  left 4x6" of a 6x6 page bleeds off three edges at ZERO crop, because the
+   *  slot is the photo's own ratio and a combo box takes the remainder. Testing
+   *  the flag instead of the geometry rejected those layouts for a problem they
+   *  do not have. */
+  const coversWholeSheet = (t: PageTemplate): boolean => {
+    if (!t.fullBleed) return false;
+    const s = t.slots[0];
+    return !!s && s.x <= 0.001 && s.y <= 0.001 && s.width >= 0.999 && s.height >= 0.999;
+  };
   const cropSafe = (t: PageTemplate): boolean =>
-    !t.fullBleed ||
+    !coversWholeSheet(t) ||
     Math.abs(Math.log((RATIO_VALUE[t.targetRatio] ?? 1) / pageAspect)) < 0.12;
 
   const pushPage = (template: PageTemplate, fills: number[]) => {

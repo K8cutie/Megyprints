@@ -286,10 +286,59 @@ const T66_SOLO_LANDSCAPE: PageTemplate = {
   slots: [rsBox(0, 0, '3:2', 1, 1, '6x6')],
 };
 
+/* ── 1 photo FULL BLEED at its own ratio + a combo box ─────────────────────
+   The photo takes the part of the page that matches its ratio and bleeds off
+   three edges; the combo box takes the strip that is left.
+
+     landscape  photo 6.00 x 4.00" = 3:2 exact, box gets 6.00 x 2.00"
+     portrait   photo 4.00 x 6.00" = 2:3 exact, box gets 2.00 x 6.00"
+
+   This is the better single for an off-orientation photo. Against the MARGINED
+   single (3.68 x 5.52" floating in the safe area) the photo is 24.0 sq in
+   instead of 20.3 — 18% larger — it bleeds instead of floating, AND the page
+   gains a box. Both stay because they look completely different: one is a
+   framed print, this one is a magazine spread.
+
+   Same move as the square trio and the exact-ratio duo: when the page shape
+   and the photo shape disagree, spend the difference on the combo box rather
+   than on cropping the photo.
+
+   NOTE this only reaches auto-generation because cropSafe now tests whether the
+   photo covers the WHOLE sheet rather than whether the template is full bleed
+   (see generateAlbum). By the flag alone these were rejected as if the photo
+   were being stretched across the page, which is the opposite of what they do. */
+const fbSoloBox = (
+  id: string, name: string, axis: 'landscape' | 'portrait', boxFirst: boolean,
+): PageTemplate => {
+  const r: PhotoRatio = axis === 'landscape' ? '3:2' : '2:3';
+  const photo = 2 / 3, box = 1 / 3;
+  const photoAt = boxFirst ? box : 0;
+  const boxAt = boxFirst ? 0 : photo;
+  return {
+    id, name, category: 'single', slotCount: 1, margin: ZERO, orientation: 'square',
+    targetRatio: r, albumSizes: ['6x6'], fullBleed: true,
+    slots: [axis === 'landscape'
+      ? fill(0, photoAt, 1, photo, r)
+      : fill(photoAt, 0, photo, 1, r)],
+    textSlots: [axis === 'landscape'
+      ? { id: 'combo', x: 0, y: boxAt, width: 1, height: box, align: 'center', placeholder: 'Tap to add' }
+      : { id: 'combo', x: boxAt, y: 0, width: box, height: 1, align: 'center', placeholder: 'Tap to add' }],
+  };
+};
+
+const T66_FB_SOLO_LS_BOX_BELOW = fbSoloBox('t66-fb-solo-ls-box-below', 'Landscape + Box Below', 'landscape', false);
+const T66_FB_SOLO_LS_BOX_ABOVE = fbSoloBox('t66-fb-solo-ls-box-above', 'Landscape + Box Above', 'landscape', true);
+const T66_FB_SOLO_PT_BOX_RIGHT = fbSoloBox('t66-fb-solo-pt-box-right', 'Portrait + Box Right', 'portrait', false);
+const T66_FB_SOLO_PT_BOX_LEFT = fbSoloBox('t66-fb-solo-pt-box-left', 'Portrait + Box Left', 'portrait', true);
+
 export const TEMPLATES_6X6: PageTemplate[] = [
   T66_FB_SOLO,
   T66_SOLO_PORTRAIT,
   T66_SOLO_LANDSCAPE,
+  T66_FB_SOLO_LS_BOX_BELOW,
+  T66_FB_SOLO_LS_BOX_ABOVE,
+  T66_FB_SOLO_PT_BOX_RIGHT,
+  T66_FB_SOLO_PT_BOX_LEFT,
   T66_FB_DUO_EXACT_V,
   T66_FB_DUO_EXACT_H,
   T66_FB_TRIO_HERO_LEFT,
