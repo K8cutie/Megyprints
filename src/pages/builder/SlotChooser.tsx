@@ -1,48 +1,51 @@
 /* ══════════════════════════════════════════════════════════════════════════
    SlotChooser — the per-slot content chooser.
-   Tapping an EMPTY box in the builder opens this chooser: Add Photo / Add Text.
-   The picked kind becomes the slot's content (photo → slotFills, text →
-   slotTexts), on EVERY template + album size.
+   Tapping an EMPTY box in the builder opens this chooser: Add Photo (photo
+   slots only) / Add Quote / Your Text. The picked kind becomes the slot's
+   content, on EVERY template + album size.
 
    (QR living-memory is NO LONGER here — it's added as a full-bleed corner badge
    via the "Add memory video" button on a single-photo page, so it never sits in
-   a box as dead space.)
+   a box as dead space. AI GRAPHICS are no longer here either: themed quotes
+   replaced them as what a caption box offers besides your own words. Graphics
+   already placed in saved albums still render and print — only the way to add a
+   NEW one is gone.)
 
    On mobile it renders as a bottom sheet (matching the "Add a photo" sheet in
    MobileReview); on desktop as a small centered modal.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon, Type, Sparkles, X } from 'lucide-react';
+import { Image as ImageIcon, Type, Quote, X } from 'lucide-react';
 
 interface SlotChooserProps {
   /** Open the photo picker. Optional — when omitted, the Photo option is hidden
-   *  (the combo/caption box offers Text + Ornament only, no Photo). */
+   *  (the combo/caption box offers Quote + Text only, no Photo). */
   onPhoto?: () => void;
   onText: () => void;
   /** Deprecated: QR moved to the corner-badge flow. Kept optional for callers. */
   onQr?: () => void;
-  /** Open the AI graphic picker (Iconify vectors matched to the album theme).
-   *  Optional — when omitted, the Graphic option is hidden. */
-  onGraphic?: () => void;
+  /** Open the themed-quote picker (AI lines for the album's theme, curated
+   *  lines as the fallback). Optional — when omitted, the Quote option is hidden. */
+  onQuote?: () => void;
   onClose: () => void;
   /** Render as a bottom sheet (phone) instead of a centered modal (desktop). */
   mobile?: boolean;
 }
 
 interface Option {
-  key: 'photo' | 'text' | 'graphic';
+  key: 'photo' | 'quote' | 'text';
   label: string;
   desc: string;
   Icon: typeof ImageIcon;
   run: () => void;
 }
 
-export default function SlotChooser({ onPhoto, onText, onGraphic, onClose, mobile }: SlotChooserProps) {
+export default function SlotChooser({ onPhoto, onText, onQuote, onClose, mobile }: SlotChooserProps) {
   const options: Option[] = [
     ...(onPhoto ? [{ key: 'photo' as const, label: 'Add Photo', desc: 'Place one of your photos here', Icon: ImageIcon, run: onPhoto }] : []),
-    { key: 'text', label: 'Add Text', desc: 'Type a caption or title in this box', Icon: Type, run: onText },
-    ...(onGraphic ? [{ key: 'graphic' as const, label: 'Add Graphic', desc: 'A vector matched to your album’s theme', Icon: Sparkles, run: onGraphic }] : []),
+    ...(onQuote ? [{ key: 'quote' as const, label: 'Add Quote', desc: 'A line written for your album’s theme', Icon: Quote, run: onQuote }] : []),
+    { key: 'text', label: 'Your Text', desc: 'Type your own caption or title', Icon: Type, run: onText },
   ];
 
   const pick = (run: () => void) => { run(); onClose(); };

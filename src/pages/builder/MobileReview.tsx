@@ -14,7 +14,8 @@ import { getCanvasDimensions } from './layouts';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
-import AiClipartModal from './AiClipartModal';
+import QuotePickerModal from './QuotePickerModal';
+import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
 
@@ -34,8 +35,11 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [ornamentEditSlot, setOrnamentEditSlot] = useState<number | null>(null); // tap a placed ornament (editing older albums; adding retired)
   const [textReplaceSlot, setTextReplaceSlot] = useState<number | null>(null); // caption-box photo target
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null); // caption-box QR target
-  const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null); // combo-box graphic target
-  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser (Text / Graphic)
+  const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null); // tap a caption-box graphic (removal only)
+  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser (Quote / Your Text)
+  // Themed-quote picker targets: a caption box (setBoxText) and a photo slot (setSlotText).
+  const [boxQuoteSlot, setBoxQuoteSlot] = useState<number | null>(null);
+  const [slotQuoteSlot, setSlotQuoteSlot] = useState<number | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
   const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null); // corner for a NEW badge (null = Auto)
   // Pulse the button until it's been clicked once (discovery, not a nag).
@@ -202,24 +206,47 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         )}
       </div>
 
-      {/* Empty-slot content chooser — Photo / Text / Graphic (bottom sheet) */}
+      {/* Empty-slot content chooser — Photo / Quote / Your Text (bottom sheet) */}
       {chooserSlot !== null && (
         <SlotChooser
           mobile
           onPhoto={() => setReplaceSlot(chooserSlot)}
+          onQuote={() => setSlotQuoteSlot(chooserSlot)}
           onText={() => setSlotTextEditSlot(chooserSlot)}
-          onGraphic={() => setOrnamentEditSlot(chooserSlot)}
           onClose={() => setChooserSlot(null)}
         />
       )}
 
-      {/* Empty combo/caption-box chooser — Text or an AI-matched Graphic. */}
+      {/* Empty combo/caption-box chooser — a themed Quote or your own Text. */}
       {chooserTextSlot !== null && (
         <SlotChooser
           mobile
+          onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setEditSlot(chooserTextSlot)}
-          onGraphic={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
+        />
+      )}
+
+      {/* Themed quote → a CAPTION BOX. setBoxText binds it to the box (no free-text
+          print drift) and evicts any photo/QR/graphic there — one box, one thing. */}
+      {boxQuoteSlot !== null && (
+        <QuotePickerModal
+          mobile
+          initial={page?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
+          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true }, idx); setBoxQuoteSlot(null); }}
+          onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }, idx); setBoxQuoteSlot(null); }}
+          onClose={() => setBoxQuoteSlot(null)}
+        />
+      )}
+
+      {/* Themed quote → a PHOTO slot (setSlotText evicts the photo/QR there). */}
+      {slotQuoteSlot !== null && (
+        <QuotePickerModal
+          mobile
+          initial={page?.slotTexts?.[slotQuoteSlot]?.text ?? null}
+          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true }, idx); setSlotQuoteSlot(null); }}
+          onRemove={() => { actions.setSlotText(slotQuoteSlot, null, idx); setSlotQuoteSlot(null); }}
+          onClose={() => setSlotQuoteSlot(null)}
         />
       )}
 
@@ -277,11 +304,10 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           onClose={() => setTextSlotQrEditSlot(null)}
         />
       )}
-      {/* Combo/caption-box ornament picker */}
+      {/* A caption-box graphic from a saved album — removable, not replaceable. */}
       {textSlotOrnamentEditSlot !== null && (
-        <AiClipartModal
-          initial={page?.textSlotOrnament?.[textSlotOrnamentEditSlot] ?? null}
-          onSave={(fill) => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, fill, idx); setTextSlotOrnamentEditSlot(null); }}
+        <RemoveGraphicModal
+          mobile
           onRemove={() => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, null, idx); setTextSlotOrnamentEditSlot(null); }}
           onClose={() => setTextSlotOrnamentEditSlot(null)}
         />
@@ -323,10 +349,10 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           allowAuto={false}
         />
       )}
+      {/* A photo-slot graphic from a saved album — removable, not replaceable. */}
       {ornamentEditSlot !== null && (
-        <AiClipartModal
-          initial={page?.ornamentFills?.[ornamentEditSlot] ?? null}
-          onSave={(fill) => { actions.setOrnamentFill(ornamentEditSlot, fill, idx); setOrnamentEditSlot(null); }}
+        <RemoveGraphicModal
+          mobile
           onRemove={() => { actions.setOrnamentFill(ornamentEditSlot, null, idx); setOrnamentEditSlot(null); }}
           onClose={() => setOrnamentEditSlot(null)}
         />

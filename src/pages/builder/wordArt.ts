@@ -49,6 +49,70 @@ export function wordArtDomStyle(s: WordArtStyle, scale: number): CSSProperties {
   return css;
 }
 
+/** Line spacing used by every renderer. The DOM preview hardcodes 1.25, so the
+ *  print path must wrap at the same rhythm or a two-line caption sits at a
+ *  different height on paper than it does on screen. */
+export const TEXT_LINE_HEIGHT = 1.25;
+
+/** Break `text` into lines that each fit `maxWidth` with the ctx's CURRENT font.
+ *  Greedy word wrap; a single word wider than the box is split by character,
+ *  matching the DOM's `word-break: break-word`. */
+export function wrapTextLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  const paragraphs = String(text ?? '').split('\n');
+  const lines: string[] = [];
+  const fits = (s: string) => ctx.measureText(s).width <= maxWidth;
+
+  for (const para of paragraphs) {
+    const words = para.split(/\s+/).filter(Boolean);
+    if (!words.length) { lines.push(''); continue; }
+    let line = '';
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (fits(candidate) || !line) {
+        // A lone word too wide for the box → split it by character.
+        if (!fits(candidate) && !line && !fits(word)) {
+          let chunk = '';
+          for (const ch of word) {
+            if (chunk && !fits(chunk + ch)) { lines.push(chunk); chunk = ch; } else { chunk += ch; }
+          }
+          line = chunk;
+          continue;
+        }
+        line = candidate;
+      } else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return lines.length ? lines : [''];
+}
+
+/** Draw WordArt text WRAPPED inside a box, vertically centred on `cy`. Returns
+ *  the drawn lines so a caller can underline them. ctx.font/fillStyle/textAlign
+ *  must already be set; `fontSize` is the already-scaled pixel size. */
+export function drawWrappedWordArtText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  cx: number,
+  cy: number,
+  maxWidth: number,
+  fontSize: number,
+  s: WordArtStyle,
+  scale: number,
+): string[] {
+  const lines = wrapTextLines(ctx, text, maxWidth);
+  const step = fontSize * TEXT_LINE_HEIGHT;
+  const top = cy - ((lines.length - 1) * step) / 2;
+  lines.forEach((line, i) => drawWordArtText(ctx, line, cx, top + i * step, s, scale));
+  return lines;
+}
+
 /** Draw one line of WordArt text onto a 2D canvas at (x, y) with the current
  *  ctx.font/textAlign already set. `scale` = the factor fontSize was scaled by.
  *  Fill color must be preset on ctx.fillStyle. Handles outline + shadow order so

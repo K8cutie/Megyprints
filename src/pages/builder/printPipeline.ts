@@ -10,7 +10,7 @@ import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { drawWordArtText } from './wordArt';
+import { drawWordArtText, drawWrappedWordArtText, TEXT_LINE_HEIGHT } from './wordArt';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 import { coverWrapGeometry, insetRect } from './coverGeometry';
@@ -722,9 +722,19 @@ function renderTextElement(
     // Caption bound to a textbox region — draw it INSIDE the slot (centred
     // vertically, aligned horizontally), matching the editor + preview. Without
     // this, box-bound text (x=y=0) printed in the top-left corner.
+    //
+    // WRAPPED + CLIPPED to the slot, because the DOM preview wraps (pre-wrap +
+    // break-word) and clips (overflow:hidden). Printing one unwrapped line let
+    // any caption longer than the box run off the page edge — which a themed
+    // QUOTE, being longer than a typical caption, hits routinely.
     const pad = slot.w * 0.04;
     const cx = align === 'left' ? slot.x + pad : align === 'right' ? slot.x + slot.w - pad : slot.x + slot.w / 2;
-    drawWordArtText(ctx, text.text, cx, slot.y + slot.h / 2, text, W / 576);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(slot.x, slot.y, slot.w, slot.h);
+    ctx.clip();
+    drawWrappedWordArtText(ctx, text.text, cx, slot.y + slot.h / 2, slot.w - pad * 2, fontSize, text, W / 576);
+    ctx.restore();
   } else if (text.rotation) {
     ctx.translate(text.x * (W / 576), text.y * (W / 576));
     ctx.rotate((text.rotation * Math.PI) / 180);
@@ -765,20 +775,32 @@ function renderSlotText(
   const pad = w * 0.04;
   const cx = align === 'left' ? x + pad : align === 'right' ? x + w - pad : x + w / 2;
   const cy = y + h / 2;
-  drawWordArtText(ctx, st.text, cx, cy, st, W / 576);
+
+  // Wrapped + clipped to the slot, mirroring the DOM preview (see the caption
+  // branch of renderTextElement). A themed quote is longer than a caption, so
+  // an unwrapped line would run past the slot and off the page.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  const lines = drawWrappedWordArtText(ctx, st.text, cx, cy, w - pad * 2, fontSize, st, W / 576);
 
   if (st.underline) {
-    const metrics = ctx.measureText(st.text);
-    const textW = metrics.width;
-    const ux = align === 'left' ? cx : align === 'right' ? cx - textW : cx - textW / 2;
-    const uy = cy + fontSize * 0.5;
+    const step = fontSize * TEXT_LINE_HEIGHT;
+    const top = cy - ((lines.length - 1) * step) / 2;
     ctx.strokeStyle = st.color || '#2D2D2D';
     ctx.lineWidth = Math.max(1, fontSize * 0.05);
-    ctx.beginPath();
-    ctx.moveTo(ux, uy);
-    ctx.lineTo(ux + textW, uy);
-    ctx.stroke();
+    lines.forEach((line, i) => {
+      const textW = ctx.measureText(line).width;
+      const ux = align === 'left' ? cx : align === 'right' ? cx - textW : cx - textW / 2;
+      const uy = top + i * step + fontSize * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(ux, uy);
+      ctx.lineTo(ux + textW, uy);
+      ctx.stroke();
+    });
   }
+  ctx.restore();
 
   ctx.restore();
 }
