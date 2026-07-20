@@ -331,6 +331,44 @@ const T66_FB_SOLO_LS_BOX_ABOVE = fbSoloBox('t66-fb-solo-ls-box-above', 'Landscap
 const T66_FB_SOLO_PT_BOX_RIGHT = fbSoloBox('t66-fb-solo-pt-box-right', 'Portrait + Box Right', 'portrait', false);
 const T66_FB_SOLO_PT_BOX_LEFT = fbSoloBox('t66-fb-solo-pt-box-left', 'Portrait + Box Left', 'portrait', true);
 
+/* ── 1 photo FULL BLEED + TWO combo boxes ──────────────────────────────────
+   The same page as above, but the leftover 1/3 strip is split into TWO combo
+   boxes instead of one — so the strip can hold two independent things (a quote
+   AND a QR, a caption AND clipart) rather than making the customer choose.
+
+     landscape  photo 6.00 x 4.00" = 3:2   two boxes each 3.00 x 2.00"
+     portrait   photo 4.00 x 6.00" = 2:3   two boxes each 2.00 x 3.00"
+
+   The photo and the empty footprint are IDENTICAL to the single-box version —
+   the strip is 1/3 of the page either way — so this costs nothing new and the
+   caption cadence (which throttles box pages, not box count) treats it the
+   same. It is a distinct composition, so dedupeByGeometry keeps it. */
+const fbSoloTwoBox = (
+  id: string, name: string, axis: 'landscape' | 'portrait', boxFirst: boolean,
+): PageTemplate => {
+  const r: PhotoRatio = axis === 'landscape' ? '3:2' : '2:3';
+  const photo = 2 / 3, strip = 1 / 3, half = 1 / 2;
+  const photoAt = boxFirst ? strip : 0;
+  const stripAt = boxFirst ? 0 : photo;
+  const cell = (i: number, x: number, y: number, w: number, h: number) =>
+    ({ id: `combo-${i}`, x, y, width: w, height: h, align: 'center' as const, placeholder: 'Tap to add' });
+  return {
+    id, name, category: 'single', slotCount: 1, margin: ZERO, orientation: 'square',
+    targetRatio: r, albumSizes: ['6x6'], fullBleed: true,
+    slots: [axis === 'landscape'
+      ? fill(0, photoAt, 1, photo, r)
+      : fill(photoAt, 0, photo, 1, r)],
+    textSlots: axis === 'landscape'
+      ? [cell(0, 0, stripAt, half, strip), cell(1, half, stripAt, half, strip)]
+      : [cell(0, stripAt, 0, strip, half), cell(1, stripAt, half, strip, half)],
+  };
+};
+
+const T66_FB_SOLO_LS_TWOBOX_BELOW = fbSoloTwoBox('t66-fb-solo-ls-twobox-below', 'Landscape + Two Boxes Below', 'landscape', false);
+const T66_FB_SOLO_LS_TWOBOX_ABOVE = fbSoloTwoBox('t66-fb-solo-ls-twobox-above', 'Landscape + Two Boxes Above', 'landscape', true);
+const T66_FB_SOLO_PT_TWOBOX_RIGHT = fbSoloTwoBox('t66-fb-solo-pt-twobox-right', 'Portrait + Two Boxes Right', 'portrait', false);
+const T66_FB_SOLO_PT_TWOBOX_LEFT = fbSoloTwoBox('t66-fb-solo-pt-twobox-left', 'Portrait + Two Boxes Left', 'portrait', true);
+
 export const TEMPLATES_6X6: PageTemplate[] = [
   T66_FB_SOLO,
   T66_SOLO_PORTRAIT,
@@ -339,6 +377,10 @@ export const TEMPLATES_6X6: PageTemplate[] = [
   T66_FB_SOLO_LS_BOX_ABOVE,
   T66_FB_SOLO_PT_BOX_RIGHT,
   T66_FB_SOLO_PT_BOX_LEFT,
+  T66_FB_SOLO_LS_TWOBOX_BELOW,
+  T66_FB_SOLO_LS_TWOBOX_ABOVE,
+  T66_FB_SOLO_PT_TWOBOX_RIGHT,
+  T66_FB_SOLO_PT_TWOBOX_LEFT,
   T66_FB_DUO_EXACT_V,
   T66_FB_DUO_EXACT_H,
   T66_FB_TRIO_HERO_LEFT,
