@@ -1,4 +1,5 @@
-import type { PageTemplate } from './types';
+import type { PageTemplate, TemplateMargin } from './types';
+import { fill } from './templateKit';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  6×6″ SQUARE — page layouts
@@ -30,4 +31,49 @@ import type { PageTemplate } from './types';
  *    except on fullBleed templates, where they are fractions of the whole page.
  *  ══════════════════════════════════════════════════════════════════════════ */
 
-export const TEMPLATES_6X6: PageTemplate[] = [];
+/** Full-bleed templates carry NO margin — their slot fractions are of the whole
+ *  trimmed page, not the safe area. */
+const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
+
+/* ── 3 photos, full bleed ──────────────────────────────────────────────────
+   A hero column with two stacked beside it, all three running to the page
+   edges with no gaps and no margin.
+
+   WHY THIS SHAPE. Full bleed spends the whole 6", not the 5.52" safe area, and
+   that difference is exactly what makes a 3-up possible here: three equal
+   columns inside the safe area print 1.77" and miss the 2" floor, while this
+   composition puts every frame at 2" or more. The proportions are not
+   arbitrary either — a 2/3 column and two 1/3 half-height blocks on a square
+   page are FORCED to 2:3, the DSLR portrait ratio, so every slot is an exact
+   ratio match with zero crop rather than a fitted approximation:
+
+     hero        4.00" x 6.00"  = 2:3   (2/3 x 1 of a 6" square)
+     top right   2.00" x 3.00"  = 2:3   (1/3 x 1/2)
+     bottom rt   2.00" x 3.00"  = 2:3
+
+   The smallest side is 2.00" — the floor exactly, with nothing to spare. Do
+   not add gutters between these frames: any gap steals from the 1/3 column and
+   drops those two under the floor.
+
+   Phone portraits (3:4) land here at ~11% crop, inside the dealer's 16% loose
+   budget, so this is a genuine home for portrait photos and not just DSLR ones. */
+const T66_FB_TRIO_HERO_LEFT: PageTemplate = {
+  id: 't66-fb-trio-hero-left',
+  name: 'Full Bleed Trio — Hero Left',
+  category: 'trio',
+  slotCount: 3,
+  margin: ZERO,
+  orientation: 'square',
+  targetRatio: '2:3',
+  albumSizes: ['6x6'],
+  fullBleed: true,
+  slots: [
+    fill(0, 0, 2 / 3, 1, '2:3'),
+    fill(2 / 3, 0, 1 / 3, 1 / 2, '2:3'),
+    fill(2 / 3, 1 / 2, 1 / 3, 1 / 2, '2:3'),
+  ],
+};
+
+export const TEMPLATES_6X6: PageTemplate[] = [
+  T66_FB_TRIO_HERO_LEFT,
+];
