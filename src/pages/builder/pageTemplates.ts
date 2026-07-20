@@ -1954,6 +1954,29 @@ export function getTemplatesForAlbum(albumSize: AlbumSizePreset): PageTemplate[]
   return dedupeByGeometry(PAGE_TEMPLATES.filter(t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize)));
 }
 
+/* ── ORIENTATION matching ─────────────────────────────────────────────────────
+   Ratio matching is LOOSE (any ratio within an orientation is an acceptable
+   home for a photo — e.g. a 4:3 in a 3:2 slot costs ~11%), but ORIENTATION is
+   STRICT: crossing it is what chops heads and feet (a 3:4 photo in a 3:2 slot
+   loses ~50%). So selection widens within an orientation and never across it. */
+export type PhotoOrientation = 'landscape' | 'portrait' | 'square';
+
+export function orientationOfRatio(r: PhotoRatio): PhotoOrientation {
+  const v = RATIOS[r] ?? 1;
+  return v > 1.02 ? 'landscape' : v < 0.98 ? 'portrait' : 'square';
+}
+
+/** Templates whose target ratio shares this orientation (ratio-agnostic). */
+export function getTemplatesForOrientation(
+  albumSize: AlbumSizePreset,
+  o: PhotoOrientation,
+): PageTemplate[] {
+  return dedupeByGeometry(PAGE_TEMPLATES.filter(
+    t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize)
+      && orientationOfRatio(t.targetRatio) === o,
+  ));
+}
+
 /** Get templates filtered by album size AND target ratio */
 export function getTemplatesForRatio(
   albumSize: AlbumSizePreset,

@@ -1,5 +1,5 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate } from './types';
-import { getTemplatesForRatio, getTemplatesForAlbum } from './pageTemplates';
+import { getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
@@ -130,11 +130,18 @@ export function generateAlbum(
     idxs.forEach((i) => { ratioOf[i] = ratio; });
   });
 
-  // Templates for a ratio at this size; fall back to any template for the size
-  // if that ratio has no dedicated template (a coverage gap).
+  // Templates for a photo at this size. RATIO matching is LOOSE — any layout of
+  // the same ORIENTATION is an acceptable home (a 4:3 in a 3:2 slot costs ~11%),
+  // which also unlocks layouts whose regions aren't exact camera ratios. But
+  // ORIENTATION is STRICT: putting a portrait photo in a landscape slot loses
+  // ~50% and chops heads/feet, so we never cross it. (The old fallback returned
+  // EVERY template for the size — orientation-blind — which is exactly how a
+  // portrait photo ended up hard-cropped in a landscape layout.)
   const templatesForRatio = (ratio: PhotoRatio): PageTemplate[] => {
-    const list = getTemplatesForRatio(albumSize, ratio);
-    return list.length ? list : getTemplatesForAlbum(albumSize);
+    const sameOrientation = getTemplatesForOrientation(albumSize, orientationOfRatio(ratio));
+    if (sameOrientation.length) return sameOrientation;
+    const exact = getTemplatesForRatio(albumSize, ratio);
+    return exact.length ? exact : getTemplatesForAlbum(albumSize);
   };
 
   const pages: AlbumPage[] = [];
@@ -234,7 +241,13 @@ export function generateAlbum(
     const fills: number[] = [];
     for (const slot of template.slots) {
       const need = slot.ratio ?? template.targetRatio;
-      const pick = pool.find((idx) => !used.has(idx) && (ratioOf[idx] ?? dominantRatio) === need);
+      const needOrient = orientationOfRatio(need);
+      // Prefer the exact ratio, then LOOSEN to any photo of the same orientation
+      // (never across it). Exact-only made mixed templates fail whenever the
+      // moment lacked that precise ratio, so they were rarely used at all.
+      const pick =
+        pool.find((idx) => !used.has(idx) && (ratioOf[idx] ?? dominantRatio) === need)
+        ?? pool.find((idx) => !used.has(idx) && orientationOfRatio(ratioOf[idx] ?? dominantRatio) === needOrient);
       if (pick === undefined) return null;
       used.add(pick);
       fills.push(pick);
@@ -443,9 +456,15 @@ export function shufflePageLayout(
   const matchingTemplates = getTemplatesForRatio(albumSize, dominantRatio)
     .filter(t => t.id !== page.templateId);
 
+  // Loosen the ratio to the whole same-ORIENTATION pool before ever falling back
+  // to every template (which would let a portrait photo land in a landscape page).
+  const sameOrientationPool = getTemplatesForOrientation(albumSize, orientationOfRatio(dominantRatio))
+    .filter(t => t.id !== page.templateId);
   const pool = matchingTemplates.length > 0
     ? matchingTemplates
-    : getTemplatesForAlbum(albumSize).filter(t => t.id !== page.templateId);
+    : sameOrientationPool.length > 0
+      ? sameOrientationPool
+      : getTemplatesForAlbum(albumSize).filter(t => t.id !== page.templateId);
 
   const templateId = templateTracker.pick(pool.map(t => t.id), page.templateId) ?? pool[Math.floor(Math.random() * pool.length)].id;
   const template = pool.find(t => t.id === templateId) ?? pool[0];
@@ -479,10 +498,19 @@ export function shufflePageLayout(
     if (ratioQueues[targetRatio] && ratioQueues[targetRatio].length > 0) {
       bestPhotoIdx = ratioQueues[targetRatio].shift()!;
     } else {
-      for (const queue of Object.values(ratioQueues)) {
-        if (queue.length > 0) {
-          bestPhotoIdx = queue.shift()!;
-          break;
+      // Loosen to any photo of the SAME orientation first; only cross orientation
+      // as a genuine last resort (better a cropped page than a dropped photo).
+      const wantOrient = orientationOfRatio(targetRatio);
+      const sameOrient = (Object.keys(ratioQueues) as PhotoRatio[])
+        .filter((r) => orientationOfRatio(r) === wantOrient && ratioQueues[r].length > 0);
+      if (sameOrient.length > 0) {
+        bestPhotoIdx = ratioQueues[sameOrient[0]].shift()!;
+      } else {
+        for (const queue of Object.values(ratioQueues)) {
+          if (queue.length > 0) {
+            bestPhotoIdx = queue.shift()!;
+            break;
+          }
         }
       }
     }
