@@ -5,10 +5,14 @@ import { inspectAttr } from 'plugin-inspect-react-code'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   base: './',
   plugins: [
-    inspectAttr(),
+    // Dev-only source inspector. Gated OUT of production builds: it is an
+    // anonymous, low-metadata third-party plugin that executes at build time
+    // (a dependency-confusion / slopsquat surface flagged by Kraken) and it
+    // stamps source-file paths into the DOM — neither belongs in a shipped app.
+    command === 'serve' && inspectAttr(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -80,4 +84,4 @@ export default defineConfig({
       transformMixedEsModules: true,
     },
   },
-});
+}));
