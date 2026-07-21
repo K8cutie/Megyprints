@@ -24,7 +24,7 @@ import type { PhotoRatio } from './photoAnalyzer';
  *
  *  Add a size here when you take over authoring it; it starts EMPTY, and a size
  *  with zero layouts is not offered in the size picker (see albumSizeOptions). */
-export const PER_SIZE_AUTHORED = new Set<AlbumSizePreset>(['6x6', '8x8', '9x9']);
+export const PER_SIZE_AUTHORED = new Set<AlbumSizePreset>(['6x6', '8x8', '9x9', '6x4']);
 
 export const STD: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
 

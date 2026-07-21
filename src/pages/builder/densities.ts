@@ -60,7 +60,11 @@ const NATURAL_BY_SIZE: Record<string, number> = {
   // photos (MIN_ALBUM_PAGES x 2) while the deck could not fill 40 pages until
   // ~110, leaving 80–109-photo albums padded with blanks. A natural of 3 moves
   // the threshold to 120 so fill mode covers that band and spreads the photos.
-  '6x4': 2, '6x6': 3, '8x8': 3, '9x9': 3, '11.5x8': 3, '8.5x11': 3,
+  // 6x4 is 3 for the same reason as the squares: its authored deck (whose
+  // densest layout is the 3-up square hero) padded 80-119-photo albums with
+  // blanks at natural=2 because the deck deals fewer pages than that threshold
+  // assumes. 6x4 stays capped at 3 photos/page — its page is only 4" tall.
+  '6x4': 3, '6x6': 3, '8x8': 3, '9x9': 3, '11.5x8': 3, '8.5x11': 3,
 };
 export function naturalPerPage(albumSize: string): number {
   return NATURAL_BY_SIZE[albumSize] ?? 2;
