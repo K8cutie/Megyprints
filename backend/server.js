@@ -34,7 +34,35 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '2mb' }));
-app.use(morgan('combined'));
+
+// Access log — CWE-117 hardened. The raw `morgan('combined')` copied the URL,
+// Referer and User-Agent (all attacker-controlled) into the log verbatim, so a
+// crafted header could inject CR/LF + a closing quote and forge whole log lines
+// (fake admin requests, spoofed IPs) that mislead an operator or a log pipeline.
+// Route those three fields through a sanitizer that drops control chars (CR/LF/
+// ESC/NUL — via char code, so no control-char regex) and escapes the backslash
+// + double-quote morgan uses as the field delimiter, so a payload can never
+// break out of its own quoted field. Benign traffic logs byte-for-byte as
+// 'combined' (missing values still render as '-').
+function sanitizeLogValue(v) {
+  if (v == null) return '-';
+  let out = '';
+  for (const ch of String(v)) {
+    const c = ch.charCodeAt(0);
+    if (c < 0x20 || c === 0x7f) continue; // drop control chars
+    if (ch === '\\') { out += '\\\\'; continue; }
+    if (ch === '"') { out += '\\"'; continue; }
+    out += ch;
+  }
+  return out;
+}
+morgan.token('url', (req) => sanitizeLogValue(req.originalUrl || req.url));
+morgan.token('referrer', (req) => sanitizeLogValue(req.headers.referer || req.headers.referrer));
+morgan.token('user-agent', (req) => sanitizeLogValue(req.headers['user-agent']));
+app.use(morgan(
+  ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version"'
+  + ' :status :res[content-length] ":referrer" ":user-agent"'
+));
 
 // Rate limiting
 const limiter = rateLimit({

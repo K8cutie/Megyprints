@@ -33,7 +33,14 @@ export default function Order() {
   const idbPhotos = useIndexedDBPhotos();
   // Remembers a created order across retries so a second Pay tap (e.g. after a
   // transient upload failure) reuses the same order row instead of duplicating it.
-  const createdOrderRef = useRef<{ id: string; order_number: string } | null>(null);
+  // Freeze the specs used to CREATE the order alongside its id. A retry reuses
+  // the same order row, whose material/cover/size were fixed at creation — so the
+  // print/cover PDF must be built from these frozen specs, not the live pickers
+  // (which the user may change between a failed attempt and the retry), or the
+  // stored order and the uploaded PDF silently diverge.
+  const createdOrderRef = useRef<
+    { id: string; order_number: string; material: MaterialType; cover: CoverType; albumSize: AlbumSizePreset } | null
+  >(null);
   const [material, setMaterial] = useState<MaterialType>('matte');
   const [cover, setCover] = useState<CoverType>('softcover');
   const [size, setSize] = useState<AlbumSizePreset>('8x8');
@@ -117,8 +124,11 @@ export default function Order() {
           shipping: { name, phone, address },
           amount: totalPrice,
         });
-        order = { id: created.id, order_number: created.order_number };
-        createdOrderRef.current = order;
+        createdOrderRef.current = {
+          id: created.id, order_number: created.order_number,
+          material, cover, albumSize, // freeze the specs the order row was built with
+        };
+        order = createdOrderRef.current;
       }
       setOrderNumber(order.order_number);
 
@@ -153,9 +163,12 @@ export default function Order() {
       //     confirmed applied in prod.
       try {
         await uploadOrderCoverPdf(order.id, {
-          albumSize,
+          // Frozen specs from order creation — NOT the live pickers — so the cover
+          // wrap always matches the material/cover/size stored on the order row,
+          // even on a retry after the user changed a selection.
+          albumSize: order.albumSize,
           pageCount: printJob.pages.length,
-          cover,
+          cover: order.cover,
           // Cover-as-pages: when the front/back cover PAGES are present the wrap
           // composites them + a derived spine; otherwise it falls back to the
           // legacy CoverDesign form output.

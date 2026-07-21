@@ -64,14 +64,24 @@ export default function Admin() {
     // which orders have their print file. Best-effort: a failure just leaves the
     // set empty (badges show "missing"), never blocks the orders list.
     try {
-      const { data: files } = await supabase.storage.from('print-pdfs').list('', { limit: 1000 });
+      // Page through the bucket — a single list() caps at 1000 objects, so once
+      // the shop passes ~1000 print files the tail would falsely show "print file
+      // missing / do not print". Accumulate every page until a short one.
       const ready = new Set<string>();
-      for (const f of files ?? []) {
-        // The cover wrap is a SIBLING file "<id>-cover.pdf" — not an order-id key.
-        // Skip it so it can't pollute the set (→ bogus "<id>-cover" ids / a
-        // misfired "print file missing" badge). Only the interior "<id>.pdf" keys.
-        if (f.name.endsWith('-cover.pdf')) continue;
-        if (f.name.endsWith('.pdf')) ready.add(f.name.slice(0, -'.pdf'.length));
+      const PAGE = 1000;
+      for (let offset = 0; ; offset += PAGE) {
+        const { data: files, error } = await supabase.storage
+          .from('print-pdfs').list('', { limit: PAGE, offset });
+        if (error) throw error;
+        const batch = files ?? [];
+        for (const f of batch) {
+          // The cover wrap is a SIBLING file "<id>-cover.pdf" — not an order-id key.
+          // Skip it so it can't pollute the set (→ bogus "<id>-cover" ids / a
+          // misfired "print file missing" badge). Only the interior "<id>.pdf" keys.
+          if (f.name.endsWith('-cover.pdf')) continue;
+          if (f.name.endsWith('.pdf')) ready.add(f.name.slice(0, -'.pdf'.length));
+        }
+        if (batch.length < PAGE) break;
       }
       setPrintReadyIds(ready);
     } catch {

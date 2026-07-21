@@ -84,7 +84,11 @@ export async function createOrderFromLatestAlbum(opts: {
       user_id: opts.userId,
       album_id: album.id,
       album_snapshot: album, // frozen copy
-      album_size: opts.specs.size,
+      // Price-driving size comes from the FROZEN album, not the client spec, so a
+      // tampered checkout can't under-declare a larger/costlier album than what
+      // was actually built. (Migration 0019 re-derives this from album_snapshot
+      // server-side too — this keeps the client-sent value consistent.)
+      album_size: album.album_size ?? opts.specs.size,
       material: opts.specs.material,
       cover: opts.specs.cover,
       page_count: pageCount,
