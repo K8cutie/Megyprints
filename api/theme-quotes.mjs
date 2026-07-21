@@ -8,6 +8,8 @@
 // so an empty `quotes` array here is a valid, expected answer: the caller shows
 // its curated set for the closest matching theme instead.
 
+import { rejectIfAbusive } from './_guard.mjs';
+
 const KEY = process.env.ANTHROPIC_API_KEY || '';
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
 
@@ -77,6 +79,8 @@ async function haikuQuotes(theme) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
+  // Abuse guard: this endpoint spends money per call, so throttle before we do.
+  if (rejectIfAbusive(req, res)) return;
   let theme = '';
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});

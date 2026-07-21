@@ -5,6 +5,8 @@
 // a dumb-but-useful word split so the feature still works for $0. Text-only —
 // NO photos ever touch this endpoint (photos stay on the device by design).
 
+import { rejectIfAbusive } from './_guard.mjs';
+
 const KEY = process.env.ANTHROPIC_API_KEY || '';
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
 
@@ -56,6 +58,8 @@ async function haikuKeywords(theme) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
+  // Abuse guard: this endpoint can spend money per call, so throttle before we do.
+  if (rejectIfAbusive(req, res)) return;
   let theme = '';
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
