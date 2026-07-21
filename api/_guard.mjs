@@ -9,10 +9,17 @@
 //
 //   1. body-size cap  — a theme is a short string; reject anything oversized
 //                        BEFORE it becomes Haiku input tokens.
-//   2. per-IP rate     — a burst guard. In-memory, so it is per warm serverless
-//      limit             instance (Vercel runs several) rather than a global
-//                        cap — a real first line, not a hard quota. Pair it with
-//                        a platform-level WAF / rate rule for a hard ceiling.
+//   2. per-IP rate     — a burst guard. It is NOT a hard ceiling, by two limits
+//      limit             the Kraken audit proved: the counter is in-memory (per
+//                        warm serverless instance, so N instances = N x the cap),
+//                        and per-IP throttling only bites callers who cannot
+//                        change their IP. We now key off the platform-set client
+//                        IP (x-real-ip) instead of the spoofable x-forwarded-for,
+//                        which stops trivial per-request IP rotation — but a
+//                        botnet / proxy pool still gets one bucket each. For a
+//                        real global ceiling, put a platform WAF / rate rule (or
+//                        a durable per-IP store like Upstash) in front. This
+//                        layer's job is to make casual scripted abuse annoying.
 //   3. origin allow-   — opt-in. When ALLOWED_ORIGINS is set, requests whose
 //      list              Origin/Referer is not on it are refused, which blocks
 //                        casual off-site scraping of the endpoint. OFF by
@@ -42,9 +49,15 @@ const MAX_TRACKED_IPS = 10_000;
 const hits = new Map();
 
 function ipOf(req) {
+  // Prefer the platform-set single-value headers, which the client cannot
+  // append to. `x-forwarded-for` is only a last resort: a caller can send their
+  // OWN x-forwarded-for, so its left-most entry is client-controlled and lets an
+  // abuser rotate a fresh "IP" per request to defeat a per-IP counter. On Vercel
+  // `x-real-ip` is the true client IP set by the edge.
+  const real = req.headers['x-real-ip'] || req.headers['x-vercel-forwarded-for'];
+  if (real) return String(Array.isArray(real) ? real[0] : real).split(',')[0].trim();
   const xff = req.headers['x-forwarded-for'];
-  const first = (Array.isArray(xff) ? xff[0] : xff || '').split(',')[0].trim();
-  return first || req.headers['x-real-ip'] || 'unknown';
+  return (Array.isArray(xff) ? xff[0] : xff || '').split(',')[0].trim() || 'unknown';
 }
 
 /** Comma-separated origins that may call this endpoint, e.g.
@@ -61,11 +74,18 @@ function allowedOrigins() {
  *  { status, error, retryAfter? } describing how to reject it. Pure w.r.t. the
  *  response — the caller sends the status so this stays easy to reason about. */
 export function guard(req) {
-  // 1. body size — check the declared length first (cheap), then the parsed body.
+  // 1. body size — check the declared length first (cheap), then the actual body.
+  // On Vercel a JSON request arrives ALREADY PARSED as an object, so a raw-string
+  // check alone never fires; measure the serialized object too so the cap is real
+  // even when Content-Length is absent or understated.
   const declared = Number(req.headers['content-length'] || 0);
   if (declared > MAX_BODY_BYTES) return { status: 413, error: 'request body too large' };
-  if (typeof req.body === 'string' && req.body.length > MAX_BODY_BYTES) {
-    return { status: 413, error: 'request body too large' };
+  if (typeof req.body === 'string') {
+    if (req.body.length > MAX_BODY_BYTES) return { status: 413, error: 'request body too large' };
+  } else if (req.body && typeof req.body === 'object') {
+    let n = 0;
+    try { n = JSON.stringify(req.body).length; } catch { n = MAX_BODY_BYTES + 1; }
+    if (n > MAX_BODY_BYTES) return { status: 413, error: 'request body too large' };
   }
 
   // 2. origin allow-list (opt-in via ALLOWED_ORIGINS).

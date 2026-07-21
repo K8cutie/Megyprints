@@ -6,6 +6,7 @@
 // hosts get a brief branded page then auto-forward; anything else gets a
 // manual-click interstitial — never an auto-redirect off the allowlist.
 import { createClient } from '@supabase/supabase-js';
+import { guard } from './_guard.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY;
@@ -161,6 +162,15 @@ const embedPage = (emb, watchHref, title) => {
 };
 
 export default async function handler(req, res) {
+  // Per-IP rate limit: resolve_memory bumps scan_count and is a code-enumeration
+  // oracle, so cap scripted hammering here (the sole legit auto-forward path).
+  // A human scanning printed QRs is nowhere near the limit; distinct scanners
+  // are distinct IPs. On throttle, show the branded "unavailable" page.
+  const g = guard(req);
+  if (g) {
+    if (g.retryAfter) res.setHeader('Retry-After', String(g.retryAfter));
+    return send(res, g.status === 429 ? 429 : g.status, unavailable());
+  }
   const code = String((req.query && req.query.code) || '').slice(0, 32);
   if (!/^[a-z2-9]{4,32}$/.test(code)) return send(res, 400, notFound());
   if (!SUPABASE_URL || !SUPABASE_ANON) return send(res, 500, unavailable());
