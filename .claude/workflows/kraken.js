@@ -84,6 +84,40 @@ const recon = await agent(
   { label: 'recon', phase: 'Recon', schema: RECON_SCHEMA })
 const ctx = `APP: ${recon?.appSummary}\nROLES: ${(recon?.roles||[]).join(', ')}\nFLOWS: ${(recon?.critical_flows||[]).join(' | ')}\nATTACK SURFACE: ${(recon?.attack_surface||[]).join(' | ')}`
 
+// ── POSITIVE CONTROL (L001) — prove the hunters can still FIRE before trusting any "clean" ──
+// A class that returns zero findings is only admissible as "clean" if, THIS run, the same
+// hunter pipeline (same model/config) caught a KNOWN planted vuln. We hand one hunter an inline
+// canary fixture with three blatant, unambiguous plants — a committed service_role key (secrets),
+// a raw-HTML sink fed user input (xss), and an ownership-free IDOR fetch (authz_rls) — and require
+// it to catch all three. If it doesn't, the detector is blind this run and every "0 findings"
+// below is reported as UNVERIFIED, not clean. (learning/finding-ledger.md L001, run as a gate.)
+const CANARY = [
+  '// SYNTHETIC CANARY FIXTURE — not real app code; three planted vulns the hunter MUST catch.',
+  'const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.PLANTED_service_role_secret_canary.sig"; // committed secret',
+  'export function Comment({ userInput }) {',
+  '  return <div dangerouslySetInnerHTML={{ __html: userInput }} />; // raw HTML sink fed user-controlled input',
+  '}',
+  "app.get('/api/orders/:id', async (req, res) => {",
+  '  // no ownership check — any authenticated user reads ANY order by guessable id (IDOR / broken authz)',
+  "  const { data } = await supabase.from('orders').select('*').eq('id', req.params.id);",
+  '  res.json(data);',
+  '});',
+].join('\n')
+const control = await agent(
+  `You are a Kraken hunter. Below is a SELF-CONTAINED code fixture (treat it as one file "canary.tsx"). Find every security vulnerability in it and return them as findings with file:line, the offending snippet as evidence, and an exploit_hypothesis. Do not skip anything obvious.\n\n\`\`\`tsx\n${CANARY}\n\`\`\``,
+  { label: 'positive-control', phase: 'Recon', schema: FINDINGS })
+const cf = (control?.findings || []).map((f) => `${f.title} ${f.evidence} ${f.exploit_hypothesis || ''}`.toLowerCase())
+const caught = {
+  secrets: cf.some((t) => t.includes('service_role') || t.includes('service role') || (t.includes('secret') && t.includes('key')) || t.includes('committed')),
+  xss: cf.some((t) => t.includes('dangerouslysetinnerhtml') || t.includes('innerhtml') || t.includes('xss')),
+  authz_rls: cf.some((t) => t.includes('idor') || t.includes('ownership') || t.includes('authoriz') || t.includes('any order') || t.includes('any authenticated')),
+}
+const controlFired = caught.secrets && caught.xss && caught.authz_rls
+const controlOutcome = { plant: 'canary: service_role key + dangerouslySetInnerHTML + IDOR fetch', fired: controlFired, caught, observed: `caught ${Object.entries(caught).filter(([,v])=>v).map(([k])=>k).join(', ') || 'nothing'} of secrets/xss/authz_rls` }
+log(controlFired
+  ? `✅ positive control FIRED — hunters proven this run (${controlOutcome.observed}); a "0 findings" class is admissible as clean`
+  : `❌ positive control DID NOT FIRE — ${controlOutcome.observed}. Detector unproven → every "0 findings" class is UNVERIFIED, not clean.`)
+
 // ── HUNT (static) × ── PROVE (dynamic cross-verify) per finding, pipelined ─────
 phase('Hunt')
 const hunts = await parallel(CLASSES.map((c) => () =>
@@ -138,8 +172,19 @@ const repairs = await parallel(confirmed.map((f) => () =>
 
 const order = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }
 const sevSort = (a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9)
+// L001 — which classes returned nothing? They are "clean" only if the control fired this run.
+const firedClasses = new Set(staticFindings.map((f) => f.cls))
+const cleanClasses = CLASSES.map((c) => c.key).filter((k) => !firedClasses.has(k))
 return {
   target: REPO, live: !!LIVE,
+  detector: {
+    verified: controlFired,
+    control: controlOutcome,
+    clean_classes: cleanClasses,
+    admissibility: controlFired
+      ? `positive control fired — the ${cleanClasses.length} class(es) with 0 findings are admissible as CLEAN`
+      : `⚠ positive control did NOT fire (${controlOutcome.observed}) — the ${cleanClasses.length} class(es) with 0 findings are UNVERIFIED, not clean; the hunt could not prove it can fire this run`,
+  },
   static_hunt: { candidates: staticFindings.length },
   findings: {
     live_confirmed: proven.filter((f) => f.proof === 'live-confirmed').sort(sevSort),
@@ -149,5 +194,6 @@ return {
     behavioral: behavioral.sort(sevSort),
   },
   repairs: repairs.filter(Boolean),
-  note: LIVE ? 'Dynamic proof ran: live-confirmed findings were demonstrated by executing the exploit as a real persona.' : 'STATIC-ONLY run — no live backend passed, so findings are code-flagged but NOT live-proven. Re-run with args.live={url,anonKey,serviceKey} against a local throwaway Supabase for dynamic proof.',
+  note: (controlFired ? '' : '⚠ DETECTOR UNVERIFIED THIS RUN (L001): the positive control did not fire, so any class reporting 0 findings is UNVERIFIED, not clean. ') +
+    (LIVE ? 'Dynamic proof ran: live-confirmed findings were demonstrated by executing the exploit as a real persona.' : 'STATIC-ONLY run — no live backend passed, so findings are code-flagged but NOT live-proven. Re-run with args.live={url,anonKey,serviceKey} against a local throwaway Supabase for dynamic proof.'),
 }

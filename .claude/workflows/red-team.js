@@ -120,6 +120,38 @@ for (const repo of REPOS) for (const cls of CLASSES) tasks.push({ repo, cls })
 
 log(`Red team scope: ${REPOS.map((r) => r.name).join(', ')} × ${CLASSES.map((c) => c.key).join(', ')} = ${tasks.length} hunters`)
 
+// ── POSITIVE CONTROL (L001) — prove the hunters can FIRE before trusting any "clean" repo/class ──
+// A repo/class that returns no findings is admissible as "clean" only if, this run, the same hunter
+// pipeline caught a KNOWN planted vuln. One hunter gets an inline canary with three unambiguous
+// plants (committed service_role key / raw-HTML sink fed user input / ownership-free IDOR fetch);
+// it must catch all three. If not, the detector is blind this run and clean results are UNVERIFIED.
+const CANARY = [
+  '// SYNTHETIC CANARY FIXTURE — not real app code; three planted vulns the hunter MUST catch.',
+  'const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.PLANTED_service_role_secret_canary.sig"; // committed secret',
+  'export function Comment({ userInput }) {',
+  '  return <div dangerouslySetInnerHTML={{ __html: userInput }} />; // raw HTML sink fed user-controlled input',
+  '}',
+  "app.get('/api/orders/:id', async (req, res) => {",
+  '  // no ownership check — any authenticated user reads ANY order by guessable id (IDOR / broken authz)',
+  "  const { data } = await supabase.from('orders').select('*').eq('id', req.params.id);",
+  '  res.json(data);',
+  '});',
+].join('\n')
+const control = await agent(
+  `You are an offensive security red-teamer. Below is a SELF-CONTAINED code fixture (treat it as one file "canary.tsx"). Find every security vulnerability in it and return findings with file:line, the offending snippet as evidence, and how an attacker would exploit it. Do not skip anything obvious.\n\n\`\`\`tsx\n${CANARY}\n\`\`\``,
+  { label: 'positive-control', phase: 'Hunt', schema: FINDINGS })
+const cf = (control?.findings || []).map((f) => `${f.title} ${f.description || ''} ${f.evidence} ${f.exploitability || ''}`.toLowerCase())
+const caught = {
+  secrets: cf.some((t) => t.includes('service_role') || t.includes('service role') || (t.includes('secret') && t.includes('key')) || t.includes('committed')),
+  xss: cf.some((t) => t.includes('dangerouslysetinnerhtml') || t.includes('innerhtml') || t.includes('xss')),
+  authz_rls: cf.some((t) => t.includes('idor') || t.includes('ownership') || t.includes('authoriz') || t.includes('any order') || t.includes('any authenticated')),
+}
+const controlFired = caught.secrets && caught.xss && caught.authz_rls
+const controlOutcome = { plant: 'canary: service_role key + dangerouslySetInnerHTML + IDOR fetch', fired: controlFired, caught, observed: `caught ${Object.entries(caught).filter(([,v])=>v).map(([k])=>k).join(', ') || 'nothing'} of secrets/xss/authz_rls` }
+log(controlFired
+  ? `✅ positive control FIRED — hunters proven this run (${controlOutcome.observed})`
+  : `❌ positive control DID NOT FIRE — ${controlOutcome.observed}. Detector unproven → a repo/class with 0 confirmed findings is UNVERIFIED, not clean.`)
+
 const results = await pipeline(
   tasks,
   // STAGE 1 — HUNT
@@ -184,4 +216,17 @@ flat.sort((a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9))
 const byRepo = {}
 for (const r of REPOS) byRepo[r.name] = flat.filter((f) => f.repo === r.name).length
 
-return { scope: REPOS.map((r) => r.name), confirmedCount: flat.length, byRepo, findings: flat }
+return {
+  scope: REPOS.map((r) => r.name),
+  detector: {
+    verified: controlFired,
+    control: controlOutcome,
+    admissibility: controlFired
+      ? 'positive control fired — a repo/class with 0 confirmed findings is admissible as CLEAN this run'
+      : `⚠ positive control did NOT fire (${controlOutcome.observed}) — any repo/class reporting 0 confirmed findings is UNVERIFIED, not clean`,
+  },
+  confirmedCount: flat.length,
+  byRepo,
+  findings: flat,
+  note: controlFired ? undefined : '⚠ DETECTOR UNVERIFIED THIS RUN (L001): the positive control did not fire; treat every "0 findings" result as unverified, not clean.',
+}
