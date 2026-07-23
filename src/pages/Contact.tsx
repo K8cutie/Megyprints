@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Phone, Mail, MapPin, ChevronDown, Send, ArrowRight } from 'lucide-react';
+import { Phone, Mail, MapPin, ChevronDown, Send, ArrowRight, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase, supabaseConfigured } from '../lib/supabase';
+import { reportError } from '../lib/report';
 
 const faqs = [
   { q: 'How long does printing take?', a: 'Most albums are printed and ready within 5-7 business days. Premium options may take 2-3 additional days.' },
@@ -17,11 +19,35 @@ export default function Contact() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [form, setForm] = useState({ name: '', email: '', subject: 'General Inquiry', message: '' });
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Previously this only flipped `sent` — the message was NEVER stored or sent,
+  // so every "Message Sent!" was a lie and the customer's note vanished. Now it
+  // persists to the contact_messages table (anon INSERT allowed by RLS); success
+  // is shown ONLY after the write resolves, and a real failure tells the customer
+  // to email directly instead of silently dropping their message.
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSent(true);
+    setError(null);
+    setSubmitting(true);
+    try {
+      if (!supabaseConfigured) throw new Error('messaging is not configured');
+      const { error: insErr } = await supabase.from('contact_messages').insert({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        subject: form.subject,
+        message: form.message.trim(),
+      });
+      if (insErr) throw insErr;
+      setSent(true);
+    } catch (err) {
+      reportError(err, { path: 'contact_submit' });
+      setError("We couldn't send your message right now. Please email us directly at hello@megyprints.com.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -71,9 +97,11 @@ export default function Contact() {
                 </select>
                 <textarea required value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })}
                   className="w-full border border-[#E8E8E8] rounded-lg px-3 py-2 text-sm h-24 resize-none" placeholder="Your message..." />
-                <button type="submit" className="w-full py-2.5 bg-[#F4C2A1] text-white font-medium rounded-lg hover:brightness-105 transition-all">
-                  Send Message
+                <button type="submit" disabled={submitting}
+                  className="w-full py-2.5 bg-[#F4C2A1] text-white font-medium rounded-lg hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
+                  {submitting ? <><Loader2 size={16} className="animate-spin" /> Sending…</> : 'Send Message'}
                 </button>
+                {error && <p className="text-xs text-[#C0392B] text-center">{error}</p>}
               </form>
             )}
           </div>

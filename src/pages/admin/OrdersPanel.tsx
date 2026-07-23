@@ -43,6 +43,19 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
   const saveFin = (patch: OrderPatch) => run(() => updateOrder(o.id, patch));
   const changeStatus = (status: AdminOrder['status']) => run(() => setOrderStatus(o.id, status));
 
+  // Commit the manually-typed price. The raw input is free text, so a comma,
+  // a peso sign, or a stray letter would make `Number(price)` NaN — which
+  // supabase-js serializes to null, leaving the order LOOKING priced (the input
+  // showed a number) while amount is actually null. Sanitize, then only save a
+  // finite positive amount; an empty field explicitly clears the price.
+  const commitPrice = () => {
+    const raw = price.trim().replace(/[₱,\s]/g, '');
+    if (raw === '') { saveFin({ amount: null }); return; }
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) { setErr('Enter a valid peso amount (numbers only).'); return; }
+    saveFin({ amount: n });
+  };
+
   // Pull the print-ready PDF (operators only — RLS blocks customers). Built on
   // the customer's device at order time and stored at "<order_id>.pdf".
   const downloadPrintPdf = async () => {
@@ -102,7 +115,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
                 <span className="text-sm text-[#9B9B9B]">₱</span>
                 <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="numeric" placeholder="price"
                   className="w-20 h-8 px-2 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1]" />
-                <button onClick={() => saveFin({ amount: price ? Number(price) : null })} disabled={saving}
+                <button onClick={commitPrice} disabled={saving}
                   className="h-8 px-2 rounded-lg bg-[#F5F5F5] text-xs text-[#6B6B6B] disabled:opacity-50">Set</button>
               </div>
               {!paid && (

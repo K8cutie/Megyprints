@@ -53,5 +53,27 @@ begin
   raise notice 'PASS: orders INSERT pricing/state lock intact';
 end $$;
 
+-- ── GUARD 3: set_order_status is still a paid-gated, ranked state machine ────
+-- Findings (0019-A / 0020-B, HIGH): a financials-walled `fulfillment` operator
+-- could once drive ANY order to paid/delivered/cancelled with no payment or
+-- transition check. The fix made it forward-only, adjacent-step, and paid-gated.
+-- This guard fails if a later migration reverts set_order_status to a body that
+-- no longer consults the payment gate or the lifecycle rank (the same silent-
+-- revert class GUARD 2 catches for the pricing lock).
+do $$
+declare src text;
+begin
+  select pg_get_functiondef(p.oid) into src
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'set_order_status';
+
+  if src is null then
+    raise exception 'REGRESSION (set_order_status): function is MISSING';
+  elsif src not ilike '%payment_status%' or src not ilike '%order_status_rank%' then
+    raise exception 'REGRESSION (set_order_status): payment-gate and/or lifecycle-rank check REMOVED from the state machine';
+  end if;
+  raise notice 'PASS: set_order_status payment-gated state machine intact';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;

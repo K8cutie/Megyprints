@@ -11,6 +11,7 @@ import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
 import { drawWordArtText, drawWrappedWordArtText, TEXT_LINE_HEIGHT } from './wordArt';
+import { getCanvasDimensions } from './layouts';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 import { coverWrapGeometry, insetRect } from './coverGeometry';
@@ -94,6 +95,13 @@ async function renderPageManually(
 ): Promise<Blob> {
   const coverMode = opts.coverMode ?? false;
   const { width: W, height: H } = getPrintDimensions(albumSize);
+  // Authoring width — text (fontSize + free x/y) is authored by the Fabric editor
+  // in getCanvasDimensions() space (longest side → 750px; ~580 for 8.5×11), NOT
+  // the stale 576 that this file's getUISize() reports. Scaling text by W/576
+  // enlarged every 750-authored size (6×6/8×8/6×4/11.5×8/9×9) by 750/576 ≈ 1.3×
+  // on the printed page vs. what the customer designed. Scale by W/uiW so print
+  // matches the WYSIWYG preview for every size.
+  const uiW = getCanvasDimensions(albumSize).width;
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -146,7 +154,7 @@ async function renderPageManually(
       }
       const st = page.slotTexts?.[i] ?? null;
       if (st) {
-        renderSlotText(ctx, st, sx, sy, sw, sh, W);
+        renderSlotText(ctx, st, sx, sy, sw, sh, W, uiW);
         continue;
       }
 
@@ -185,7 +193,7 @@ async function renderPageManually(
     const fam = text.fontFamily || 'serif';
     const primary = fam.match(/"([^"]+)"/)?.[1];
     if (primary) {
-      try { await document.fonts.load(`${(text.fontSize || 24) * (W / 576)}px "${primary}"`); } catch { /* ignore */ }
+      try { await document.fonts.load(`${(text.fontSize || 24) * (W / uiW)}px "${primary}"`); } catch { /* ignore */ }
     }
     let slot: { x: number; y: number; w: number; h: number; align?: 'left' | 'center' | 'right' } | null = null;
     if (text.boxIndex != null && textTpl && tm) {
@@ -205,7 +213,7 @@ async function renderPageManually(
         slot = { x: sX + ts.x * sW + offX, y: sY + ts.y * sH + offY, w: ts.width * sW, h: ts.height * sH, align };
       }
     }
-    renderTextElement(ctx, text, W, H, slot);
+    renderTextElement(ctx, text, W, H, slot, uiW);
   }
 
   // ── Caption-box CONTENT (photo / QR) ──
@@ -730,9 +738,10 @@ function renderTextElement(
   text: any,
   W: number,
   _H: number,
-  slot?: { x: number; y: number; w: number; h: number; align?: 'left' | 'center' | 'right' } | null,
+  slot: { x: number; y: number; w: number; h: number; align?: 'left' | 'center' | 'right' } | null,
+  uiW: number,
 ) {
-  const fontSize = (text.fontSize || 24) * (W / 576); // Scale relative to 8x8 reference
+  const fontSize = (text.fontSize || 24) * (W / uiW); // scale from the authoring width to print px
   const fontFamily = text.fontFamily || 'serif';
   const fontWeight = text.bold ? 'bold' : 'normal';
   const fontStyle = text.italic ? 'italic' : 'normal';
@@ -759,14 +768,14 @@ function renderTextElement(
     ctx.beginPath();
     ctx.rect(slot.x, slot.y, slot.w, slot.h);
     ctx.clip();
-    drawWrappedWordArtText(ctx, text.text, cx, slot.y + slot.h / 2, slot.w - pad * 2, fontSize, text, W / 576);
+    drawWrappedWordArtText(ctx, text.text, cx, slot.y + slot.h / 2, slot.w - pad * 2, fontSize, text, W / uiW);
     ctx.restore();
   } else if (text.rotation) {
-    ctx.translate(text.x * (W / 576), text.y * (W / 576));
+    ctx.translate(text.x * (W / uiW), text.y * (W / uiW));
     ctx.rotate((text.rotation * Math.PI) / 180);
-    drawWordArtText(ctx, text.text, 0, 0, text, W / 576);
+    drawWordArtText(ctx, text.text, 0, 0, text, W / uiW);
   } else {
-    drawWordArtText(ctx, text.text, text.x * (W / 576), text.y * (W / 576), text, W / 576);
+    drawWordArtText(ctx, text.text, text.x * (W / uiW), text.y * (W / uiW), text, W / uiW);
   }
 
   ctx.restore();
@@ -774,7 +783,7 @@ function renderTextElement(
 
 /** Render per-slot text (page.slotTexts[i]) centered inside its slot rect.
  *  Mirrors the caption-in-slot branch of renderTextElement byte-for-byte (same
- *  font-string, same W/576 scale, same centered-in-rect placement) so print
+ *  font-string, same W/uiW authoring-space scale, same centered-in-rect placement) so print
  *  matches the DOM + Fabric renderers. Underline is drawn manually (canvas has
  *  no native text underline). */
 function renderSlotText(
@@ -785,8 +794,9 @@ function renderSlotText(
   w: number,
   h: number,
   W: number,
+  uiW: number,
 ) {
-  const fontSize = (st.fontSize || 24) * (W / 576);
+  const fontSize = (st.fontSize || 24) * (W / uiW);
   const fontFamily = st.fontFamily || 'serif';
   const fontWeight = st.bold ? 'bold' : 'normal';
   const fontStyle = st.italic ? 'italic' : 'normal';
@@ -809,7 +819,7 @@ function renderSlotText(
   ctx.beginPath();
   ctx.rect(x, y, w, h);
   ctx.clip();
-  const lines = drawWrappedWordArtText(ctx, st.text, cx, cy, w - pad * 2, fontSize, st, W / 576);
+  const lines = drawWrappedWordArtText(ctx, st.text, cx, cy, w - pad * 2, fontSize, st, W / uiW);
 
   if (st.underline) {
     const step = fontSize * TEXT_LINE_HEIGHT;

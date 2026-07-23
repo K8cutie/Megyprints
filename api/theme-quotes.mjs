@@ -93,7 +93,10 @@ export default async function handler(req, res) {
   try {
     const quotes = await haikuQuotes(theme);
     res.status(200).json({ quotes, source: quotes.length ? 'haiku' : 'fallback' });
-  } catch {
+  } catch (e) {
+    // Degrade to the client's curated corpus (unchanged), but don't swallow the
+    // cause — an Anthropic outage / auth / rate-limit fault was otherwise silent.
+    console.error(JSON.stringify({ fn: 'theme-quotes', event: 'anthropic_failure', msg: e instanceof Error ? e.message : String(e) }));
     res.status(200).json({ quotes: [], source: 'fallback-after-error' });
   }
 }

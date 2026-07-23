@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { reportError } from '../../lib/report';
 
 interface Props {
   children: ReactNode;
@@ -22,8 +23,10 @@ export default class BuilderErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // eslint-disable-next-line no-console
-    console.error('[Megy Prints Builder Error]', error, errorInfo);
+    // Route builder crashes through the single sink (console + VITE_ERROR_ENDPOINT
+    // + Sentry captureException) so a crash mid-album is visible in production,
+    // not just in the local console. The componentStack rides along as context.
+    reportError(error, { boundary: 'builder', componentStack: errorInfo.componentStack });
   }
 
   render() {

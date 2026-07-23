@@ -173,15 +173,25 @@ export default async function handler(req, res) {
   }
   const code = String((req.query && req.query.code) || '').slice(0, 32);
   if (!/^[a-z2-9]{4,32}$/.test(code)) return send(res, 400, notFound());
-  if (!SUPABASE_URL || !SUPABASE_ANON) return send(res, 500, unavailable());
+  if (!SUPABASE_URL || !SUPABASE_ANON) {
+    // Log code only — NEVER the destination URL (a printed QR points at a private
+    // family memory). A scanned QR landing on the branded unavailable page is
+    // otherwise invisible; this is the only signal an env/DB fault ever happened.
+    console.error(JSON.stringify({ fn: 'm', event: 'missing_env', code }));
+    return send(res, 500, unavailable());
+  }
 
   let row;
   try {
     const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
     const { data, error } = await sb.rpc('resolve_memory', { p_code: code });
-    if (error) return send(res, 502, unavailable());
+    if (error) {
+      console.error(JSON.stringify({ fn: 'm', event: 'resolve_memory_error', code, msg: error.message }));
+      return send(res, 502, unavailable());
+    }
     row = data && data[0];
-  } catch {
+  } catch (e) {
+    console.error(JSON.stringify({ fn: 'm', event: 'resolve_exception', code, msg: e instanceof Error ? e.message : String(e) }));
     return send(res, 502, unavailable());
   }
   if (!row) return send(res, 404, notFound());
