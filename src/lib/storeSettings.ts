@@ -17,12 +17,24 @@ let priceMultiple = DEFAULT_MULTIPLE;
 // Default empty = every size offered; resilient to the 0016 column not existing.
 let disabledSizes: AlbumSizePreset[] = [];
 
+// Readiness gate. getPriceMultiple() returns the DEFAULT_MULTIPLE until the real
+// row loads; checkout must not price/store an album against the default if the
+// owner's multiple differs. `ready` flips true once loadStoreSettings settles
+// (success, error, or no-Supabase — in every case the current cache is now the
+// authoritative answer). Checkout awaits/gates on this before showing a price.
+let ready = false;
+let resolveReady: () => void;
+const readyPromise: Promise<void> = new Promise((r) => { resolveReady = r; });
+export function isStoreSettingsReady(): boolean { return ready; }
+export function storeSettingsReady(): Promise<void> { return readyPromise; }
+function markReady() { if (!ready) { ready = true; resolveReady(); } }
+
 /** Load the store-wide settings on app start. Fail-open to defaults on any error —
  *  a missing/blocked row (or an un-applied 0016 column) must never break checkout
  *  or hide every size. `select('*')` tolerates the disabled_sizes column being
  *  absent (pre-migration): it just won't be in the row. */
 export async function loadStoreSettings(): Promise<void> {
-  if (!supabaseConfigured) return;
+  if (!supabaseConfigured) { markReady(); return; }
   try {
     const { data, error } = await supabase
       .from('store_settings')
@@ -34,6 +46,9 @@ export async function loadStoreSettings(): Promise<void> {
     if (Array.isArray(data?.disabled_sizes)) disabledSizes = data.disabled_sizes as AlbumSizePreset[];
   } catch (e) {
     console.warn('store_settings load error:', e);
+  } finally {
+    // The cache is now the authoritative answer either way — release the gate.
+    markReady();
   }
 }
 

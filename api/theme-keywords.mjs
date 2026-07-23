@@ -75,7 +75,9 @@ export default async function handler(req, res) {
     // Merge AI keywords with the fallback (dedup) so we never return fewer.
     const merged = [...new Set([...kws, ...fallback])].slice(0, 12);
     res.status(200).json({ keywords: merged.length ? merged : fallback, source: 'haiku' });
-  } catch {
+  } catch (e) {
+    // Degrade to the keyword split (unchanged) but surface the cause.
+    console.error(JSON.stringify({ fn: 'theme-keywords', event: 'anthropic_failure', msg: e instanceof Error ? e.message : String(e) }));
     res.status(200).json({ keywords: fallback, source: 'fallback-after-error' });
   }
 }

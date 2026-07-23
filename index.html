@@ -12,7 +12,11 @@
   </head>
   <body>
     <div id="root"></div>
-    <script src="/fabric.min.js"></script>
+    <!-- `defer` so this 313 KB editor-only library no longer BLOCKS first paint on
+         every page. It still executes before the deferred module entry below (both
+         run in document order after parsing), so window.fabric is set before the
+         app — the builder's fabric-loader reads it exactly as before. -->
+    <script defer src="/fabric.min.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

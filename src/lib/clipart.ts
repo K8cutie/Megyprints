@@ -83,6 +83,7 @@ export async function fetchThemeKeywords(theme: string): Promise<string[]> {
     try {
       const r = await fetch('/api/theme-keywords', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ theme: t }),
+        signal: AbortSignal.timeout(8000), // a stalled proxy must not hang the picker
       });
       if (r.ok) {
         const d = await r.json();
@@ -102,7 +103,7 @@ export async function fetchThemeKeywords(theme: string): Promise<string[]> {
 async function searchIconify(keyword: string, limit = 12): Promise<string[]> {
   try {
     const url = `${ICONIFY}/search?query=${encodeURIComponent(keyword)}&prefixes=${PERMISSIVE_PREFIXES.join(',')}&limit=${limit}`;
-    const r = await fetch(url);
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return [];
     const d = await r.json();
     return Array.isArray(d.icons) ? d.icons : [];
@@ -114,7 +115,7 @@ async function fetchSvg(id: string): Promise<string | null> {
     const [prefix, name] = id.split(':');
     if (!prefix || !name) return null;
     const color = COLORFUL.has(prefix) ? '' : `&color=${encodeURIComponent(MONO_COLOR)}`;
-    const r = await fetch(`${ICONIFY}/${prefix}/${name}.svg?height=96${color}`);
+    const r = await fetch(`${ICONIFY}/${prefix}/${name}.svg?height=96${color}`, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return null;
     const svg = await r.text();
     return svg.trim().startsWith('<svg') ? svg : null;

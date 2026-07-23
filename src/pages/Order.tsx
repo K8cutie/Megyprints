@@ -11,8 +11,9 @@ import { getPendingPrintJob } from '../lib/printQueue';
 import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, MIN_PAGES, type Binding } from '../lib/pricing';
-import { getPriceMultiple } from '../lib/storeSettings';
+import { getPriceMultiple, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
+import { reportError } from '../lib/report';
 import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, validateAddress, EMPTY_ADDRESS, type AddressValue } from '../lib/contact';
 import AddressPicker from '../components/AddressPicker';
 
@@ -64,7 +65,20 @@ export default function Order() {
   const pageCount = job?.pages.length ?? MIN_PAGES;
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
   const hasJob = job != null;
-  const multiple = getPriceMultiple(); // persisted store multiple (loaded on app start)
+
+  // The store multiple loads async on app start. If checkout mounts before it
+  // resolves, getPriceMultiple() returns the DEFAULT (3×) — and this component
+  // would never re-price when the real value arrives. Track readiness so we
+  // re-read the multiple once loaded and BLOCK payment until then, so an album
+  // can never be priced/charged against the default multiple.
+  const [settingsReady, setSettingsReady] = useState(isStoreSettingsReady());
+  useEffect(() => {
+    if (settingsReady) return;
+    let alive = true;
+    void storeSettingsReady().then(() => { if (alive) setSettingsReady(true); });
+    return () => { alive = false; };
+  }, [settingsReady]);
+  const multiple = getPriceMultiple(); // re-read on each render; correct once settingsReady
 
   const breakdown = useMemo(
     () => priceBreakdown(albumSize, binding, pageCount, multiple),
@@ -179,6 +193,7 @@ export default function Order() {
         });
       } catch (e) {
         console.error('Cover PDF upload failed (order still placed; check migration 0017 is applied):', e);
+        reportError(e, { path: 'checkout', step: 'cover_pdf', orderId: order.id });
       }
 
       // 4. Reliability belt (best-effort, non-blocking): ensure every QR "living
@@ -192,6 +207,7 @@ export default function Order() {
         if (qrFills.length) await ensureMemoriesForFills(qrFills);
       } catch (e) {
         console.error('QR memories ensure (print job) failed:', e);
+        reportError(e, { path: 'checkout', step: 'qr_ensure', orderId: order.id });
       }
       setPrepMsg('');
 
@@ -200,6 +216,9 @@ export default function Order() {
       setStep('tracking');
     } catch (err) {
       setPrepMsg('');
+      // The money path must never fail silently in production — the customer sees
+      // the message, and the operator/owner sees the cause in Sentry/the endpoint.
+      reportError(err, { path: 'checkout', step: 'pay', orderId: createdOrderRef.current?.id });
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong placing your order.');
     } finally {
       setSubmitting(false);
@@ -288,10 +307,14 @@ export default function Order() {
             </div>
             <button
               onClick={handlePay}
-              disabled={submitting}
+              disabled={submitting || !settingsReady}
               className="w-full py-3.5 bg-[#E8A598] text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
             >
-              {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Processing payment…'}</> : <>Pay ₱{totalPrice}</>}
+              {submitting
+                ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Processing payment…'}</>
+                : !settingsReady
+                  ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
+                  : <>Pay ₱{totalPrice}</>}
             </button>
             <p className="mt-3 text-[11px] text-[#9B9B9B] text-center">🔒 Simulated payment — no real charge. (Xendit checkout goes here later.)</p>
             {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}
@@ -421,9 +444,9 @@ export default function Order() {
                   <b className="text-[#2D2D2D]">Free living-memory QR included</b> — add a video that plays when anyone scans your printed album.
                 </p>
               </div>
-              <button onClick={handleProceedToPayment}
-                className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2">
-                <ShoppingCart size={16} /> Proceed to Payment
+              <button onClick={handleProceedToPayment} disabled={!settingsReady}
+                className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
+                {settingsReady ? <><ShoppingCart size={16} /> Proceed to Payment</> : <><Loader2 size={16} className="animate-spin" /> Loading price…</>}
               </button>
               {errorMsg && (
                 <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>

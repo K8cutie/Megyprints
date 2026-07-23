@@ -1,20 +1,26 @@
-import { useEffect } from 'react';
-import { Routes, Route, Outlet } from 'react-router-dom';
+import { useEffect, lazy, Suspense } from 'react';
+import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { AuthProvider } from './lib/authContext';
 import { AuthModalProvider } from './components/AuthModalProvider';
-import { BuilderProvider } from './pages/builder/BuilderContext';
 import Layout from './components/Layout';
 import Home from './pages/Home';
-import Builder from './pages/Builder';
 import Templates from './pages/Templates';
+import About from './pages/About';
 import Contact from './pages/Contact';
 import Privacy from './pages/Privacy';
 import Order from './pages/Order';
 import Profile from './pages/Profile';
 import MyMemories from './pages/MyMemories';
-import Admin from './pages/Admin';
 import ProtectedRoute from './components/ProtectedRoute';
-import BuilderErrorBoundary from './pages/builder/BuilderErrorBoundary';
+
+// Code-split the two heavy routes so their weight never lands on Home or the
+// /order checkout path. BuilderRoute pulls in face-api.js + tfjs + the whole
+// editor + the assistant (~3 MB); Admin pulls in recharts. These MUST be the
+// only reference to the builder subtree from App — statically importing
+// BuilderProvider/BuilderErrorBoundary here would drag the same chain back into
+// the entry chunk (which is exactly why it wasn't splitting before).
+const BuilderRoute = lazy(() => import('./pages/builder/BuilderRoute'));
+const Admin = lazy(() => import('./pages/Admin'));
 import InstallPrompt from './components/InstallPrompt';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
@@ -47,10 +53,14 @@ export default function App() {
     <AuthProvider>
       <AuthModalProvider>
       <InstallPrompt />
+      <Suspense fallback={<div className="min-h-screen bg-[#FFF8F0]" aria-busy="true" />}>
       <Routes>
         <Route element={<Layout><Outlet /></Layout>}>
           <Route path="/" element={<Home />} />
           <Route path="/templates" element={<Templates />} />
+          {/* About page + Navbar/Footer both linked to /about, but the route was
+              never registered — the link blank-screened. Wired here. */}
+          <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/order" element={<Order />} />
@@ -61,19 +71,14 @@ export default function App() {
             marketing Lenis smooth-scroll (which hijacks the mouse wheel and scrolls the
             window instead of the editor/wizard's own overflow containers) is not active
             here. THIS is what broke wheel-scrolling in the builder. */}
-        <Route
-          path="/builder/*"
-          element={
-            <BuilderErrorBoundary onReset={() => window.location.reload()}>
-              <BuilderProvider>
-                <Builder />
-              </BuilderProvider>
-            </BuilderErrorBoundary>
-          }
-        />
+        <Route path="/builder/*" element={<BuilderRoute />} />
         {/* Operator console — outside the customer Layout (its own chrome) */}
         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+        {/* Catch-all: an unknown hash previously mounted nothing (blank screen).
+            Send it home instead of showing an empty page. */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
       </AuthModalProvider>
     </AuthProvider>
   );
