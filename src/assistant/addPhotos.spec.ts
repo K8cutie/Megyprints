@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { ActionEngine } from './actionEngine';
-import type { BuilderActions } from './actionEngine';
+
+/** The engine's builder dependency, without needing it exported from the module. */
+type Builder = ConstructorParameters<typeof ActionEngine>[0];
 
 /* ══════════════════════════════════════════════════════════════════════════
    The upload confirmation must report what was ACTUALLY added.
@@ -12,7 +14,7 @@ import type { BuilderActions } from './actionEngine';
    ══════════════════════════════════════════════════════════════════════════ */
 
 const engineWith = (added: number, skipped: number) => {
-  const builder = { addPhotos: () => ({ added, skipped }) } as unknown as BuilderActions;
+  const builder = { addPhotos: () => ({ added, skipped }) } as unknown as Builder;
   return new ActionEngine(builder);
 };
 

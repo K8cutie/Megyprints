@@ -22,10 +22,12 @@ export const DENSITY_BY_SIZE: Record<string, number[]> = {
   '6x6': [1, 2, 3],
   '8x8': [1, 2, 3],
   '9x9': [1, 2, 3],
-  // 8×6 / 6×8 (48 sq in landscape/portrait) fit up to a 6-up grid above the 2"
-  // floor — same tiled generator as the big landscape/portrait sizes.
-  '8x6': [1, 2, 3, 4, 6],
-  '6x8': [1, 2, 3, 4, 6],
+  // 8×6 / 6×8 are authored per-size (rectTemplates.ts) and their deck currently
+  // caps at 3 photos/page, so the picker must cap there too — offering a density
+  // the generator can't deal would silently deal fewer and throw off the
+  // pre-generation page estimate. Re-widen as denser layouts are authored.
+  '8x6': [1, 2, 3],
+  '6x8': [1, 2, 3],
   '11.5x8': [1, 2, 3, 4, 5, 6],
   '8.5x11': [1, 2, 3, 4, 5, 6],
 };
