@@ -2,7 +2,7 @@ import type { PageTemplate, TextSlot, TemplateMargin, AlbumSizePreset } from './
 import type { PhotoRatio } from './photoAnalyzer';
 import { TILED_TEMPLATES } from './tiledTemplates';
 import {
-  PER_SIZE_AUTHORED, STD, RATIOS, rs, rsBox, rsBoxExact, fill, tmpl,
+  PER_SIZE_AUTHORED, STD, RATIOS, ALBUM_INCHES, rs, rsBox, rsBoxExact, fill, tmpl,
 } from './templateKit';
 import { TEMPLATES_6X6 } from './templates6x6';
 import { TEMPLATES_8X8 } from './templates8x8';
@@ -1662,8 +1662,28 @@ export function adaptTemplateToOrientation(
   canvasW: number,
   canvasH: number,
 ): PageTemplate {
-  const isLandscapeTemplate = template.orientation === 'landscape';
+  // `orientation` describes the PHOTO this template is built around (it is
+  // derived from targetRatio), NOT the shape of the page. Treating it as the
+  // page's orientation transposed real layouts: "Two Tall" on an 8×6 holds two
+  // 2:3 PORTRAIT photos, so it is tagged `portrait`, and on the landscape
+  // canvas this rotated every slot — two side-by-side tall frames became two
+  // stacked 8:3 strips, and every photo in them was hacked to fit.
+  //
+  // A template's slot fractions are already expressed in the coordinate space
+  // of the page it was authored for. So if this template declares ANY album
+  // size with the same shape as the canvas, it is already correct here and must
+  // be drawn verbatim. (Retired templates declare no sizes; they were authored
+  // for a real page too, so they are likewise left alone.)
   const isLandscapeCanvas = canvasW > canvasH;
+  const authoredForThisPage =
+    template.albumSizes.length === 0 ||
+    template.albumSizes.some((s) => {
+      const d = ALBUM_INCHES[s];
+      return d ? (d.w > d.h) === isLandscapeCanvas : false;
+    });
+  if (authoredForThisPage) return template;
+
+  const isLandscapeTemplate = template.orientation === 'landscape';
   const needsRotation = isLandscapeTemplate !== isLandscapeCanvas;
 
   if (!needsRotation) return template;
