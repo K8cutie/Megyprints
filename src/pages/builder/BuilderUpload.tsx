@@ -61,7 +61,7 @@ export default function BuilderUpload({ photos, onAddPhotos, onRemovePhoto, onRe
           <p className="text-sm text-[#6B6B6B] font-medium">
             Drag & drop photos here or <label className="text-[#F4C2A1] cursor-pointer hover:underline"><input type="file" multiple accept="image/*" className="hidden" onChange={(e) => e.target.files && onAddPhotos(e.target.files)} />browse</label>
           </p>
-          <p className="text-xs text-[#9B9B9B] mt-1">JPG, PNG up to 100 photos</p>
+          <p className="text-xs text-[#9B9B9B] mt-1">JPG, PNG — add as many as you like</p>
         </div>
 
         {/* Photo grid */}

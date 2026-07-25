@@ -398,13 +398,17 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   };
 
   /* ── File upload ── */
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files; if (!files) return;
     const photoFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
-    if (photoFiles.length === 0) return;
-    void builder.dispatch({ type: 'add_photos', payload: { files: photoFiles }, rawMessage: 'add photos' });
-    showToast(`${photoFiles.length} photo${photoFiles.length > 1 ? 's' : ''} uploaded`);
+    // Clear the input FIRST so re-picking the same batch still fires onChange
+    // (a phone picker caps a selection, so re-picking is a normal move here).
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (photoFiles.length === 0) return;
+    // Report what was actually added, not what was selected — duplicates are
+    // skipped, so the selected count would overstate it.
+    const res = await builder.dispatch({ type: 'add_photos', payload: { files: photoFiles }, rawMessage: 'add photos' });
+    showToast(res.message);
   };
 
   /* ── Collapsible sections ── */

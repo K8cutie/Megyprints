@@ -597,7 +597,7 @@ const STEP_DETAILS: Record<
 > = {
   upload: {
     title: 'Upload Your Photos',
-    desc: 'Drag and drop 20 to 100 of your favorite photos. We support JPG and PNG formats with instant preview.',
+    desc: 'Drag and drop 20 or more of your favorite photos — as many as you like. We support JPG and PNG formats with instant preview.',
     features: [
       'Bulk upload with drag & drop',
       'Auto thumbnail generation',

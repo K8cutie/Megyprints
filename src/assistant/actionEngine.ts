@@ -179,8 +179,19 @@ export class ActionEngine {
           if (!files || count === 0) {
             return { intentType: intent.type, success: false, message: 'No photos to add.' };
           }
-          this.builder.addPhotos(files);
-          return { intentType: intent.type, success: true, message: `${count} photo${count > 1 ? 's' : ''} added.` };
+          // Report what was ACTUALLY added. addPhotos skips files already in the
+          // album (same name + size), which is exactly what happens when a phone
+          // picker caps a batch and the customer re-picks an overlapping set —
+          // saying "100 uploaded" there would be a lie.
+          const { added, skipped } = this.builder.addPhotos(files);
+          const parts: string[] = [];
+          if (added > 0) parts.push(`${added} photo${added > 1 ? 's' : ''} added`);
+          if (skipped > 0) parts.push(`${skipped} already in your album`);
+          return {
+            intentType: intent.type,
+            success: true, // an all-duplicates pick is a no-op, not a failure
+            message: parts.length ? `${parts.join(' · ')}.` : 'No photos to add.',
+          };
         }
 
         case 'set_photos_per_page': {

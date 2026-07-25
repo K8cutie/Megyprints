@@ -176,7 +176,7 @@ function HowItWorksSection() {
       numColor: 'text-[#F4C2A1]',
       img: '/step-upload.jpg',
       title: 'Upload Your Photos',
-      desc: 'Upload 20 to 100 of your favorite JPG or PNG photos. Preview and organize them before building.',
+      desc: 'Upload 20 or more of your favorite JPG or PNG photos — add as many as you like, any time. Preview and organize them before building.',
     },
     {
       num: '02',

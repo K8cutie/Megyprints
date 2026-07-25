@@ -76,7 +76,7 @@ const WIZARD_STEPS: WizardStep[] = [
     id: 'upload-photos',
     title: 'Upload Your Photos',
     subtitle: 'Step 1 — Photos',
-    body: 'Upload 20 to 100 of your favorite JPG or PNG photos. Drag and drop them onto the area, or click to browse your files. Your photos are automatically backed up to the cloud when you\'re logged in.',
+    body: 'Upload 20 or more of your favorite JPG or PNG photos — there\'s no limit, and you can add more at any time. Drag and drop them onto the area, or click to browse your files. If your phone limits how many you can pick at once, just upload again — repeats are skipped automatically.',
     tips: ['Drag & drop multiple files at once', 'Click a photo to remove or replace it', 'Photos are stored in the cloud when logged in'],
     icon: <Upload size={22} />,
     iconBg: 'bg-[#E8A598]',

@@ -422,7 +422,10 @@ export interface BuilderActions {
 
   // Photos
   uploadedPhotos: UploadedPhoto[];
-  addPhotos: (files: FileList | File[]) => void;
+  /** Appends files, skipping any already in the album (same name + size).
+   *  Returns what actually happened so callers can report an HONEST count —
+   *  reporting the selected count lies whenever a re-picked batch is deduped. */
+  addPhotos: (files: FileList | File[]) => { added: number; skipped: number };
   removePhoto: (id: string) => void;
   replacePhoto: (id: string, file: File) => void;
 
@@ -1057,7 +1060,7 @@ export function useBuilderState(): BuilderActions {
   }, [updateCurrentPage]);
 
   /* ── Photo handling (IndexedDB — zero cloud I/O) ── */
-  const addPhotos = useCallback((files: FileList | File[]) => {
+  const addPhotos = useCallback((files: FileList | File[]): { added: number; skipped: number } => {
     const fileArray = Array.from(files);
 
     // ── Dedup: never add the same photo twice. Skip files already uploaded
@@ -1071,7 +1074,7 @@ export function useBuilderState(): BuilderActions {
       seen.add(key);
       freshFiles.push(f);
     }
-    if (freshFiles.length === 0) return;
+    if (freshFiles.length === 0) return { added: 0, skipped: fileArray.length };
 
     // Create placeholder metadata with preview URLs
     const newPhotos: UploadedPhoto[] = freshFiles.map((file) => ({
@@ -1101,6 +1104,8 @@ export function useBuilderState(): BuilderActions {
         ),
       );
     });
+
+    return { added: freshFiles.length, skipped: fileArray.length - freshFiles.length };
   }, [idbPhotos]);
 
   const removePhoto = useCallback((id: string) => {

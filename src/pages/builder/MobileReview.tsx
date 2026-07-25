@@ -5,9 +5,9 @@
    the LAST page → a brief "Loading album preview…" beat → Preview.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Youtube } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Youtube, ImagePlus } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -28,6 +28,30 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const isLast = idx >= total - 1;
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
+
+  /* ── Add more photos, from the phone, mid-review ────────────────────────────
+     A phone's photo picker caps how many can be selected at once, so running out
+     mid-album is normal. Before this, the ONLY uploader lived on the pre-album
+     wizard step and in the desktop-only sidebar, leaving no way to add photos on
+     a phone once the album existed (short of Restart, which wipes everything). */
+  const uploadRef = useRef<HTMLInputElement>(null);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+
+  const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    const photoFiles = files ? Array.from(files).filter((f) => f.type.startsWith('image/')) : [];
+    // Reset FIRST so picking an overlapping batch again still fires onChange.
+    e.target.value = '';
+    if (photoFiles.length === 0) return;
+    const res = await actions.dispatch({ type: 'add_photos', payload: { files: photoFiles }, rawMessage: 'add photos' });
+    setUploadMsg(res.message); // honest count — duplicates are skipped, not added
+  };
+  // Auto-clear the confirmation so it never sticks over the page.
+  useEffect(() => {
+    if (!uploadMsg) return;
+    const t = setTimeout(() => setUploadMsg(null), 3500);
+    return () => clearTimeout(t);
+  }, [uploadMsg]);
   const [replaceSlot, setReplaceSlot] = useState<number | null>(null); // tap-to-replace target
   const [editSlot, setEditSlot] = useState<number | null>(null); // tap-to-edit-text target (template caption box)
   const [slotTextEditSlot, setSlotTextEditSlot] = useState<number | null>(null); // per-slot text (chooser)
@@ -177,10 +201,19 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
 
       {/* Bottom action bar */}
       <div className="shrink-0 px-4 pb-7 pt-3 bg-white border-t border-[#E8E8E8]">
+        {/* One hidden input serves both entry points (bar + "Add a photo" sheet). */}
+        <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} />
+        {uploadMsg && (
+          <p className="mb-2 text-center text-xs font-semibold text-[#2E7D4A]">{uploadMsg}</p>
+        )}
         <div className="flex items-center gap-3">
           <button onClick={goPrev} disabled={idx === 0}
             className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] disabled:opacity-30 transition-opacity">
             <ChevronLeft size={22} />
+          </button>
+          <button onClick={() => uploadRef.current?.click()} title="Add more photos"
+            className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] active:scale-95 transition-transform">
+            <ImagePlus size={20} />
           </button>
           <button onClick={() => actions.setLayoutPickerOpen(true)}
             className="flex-1 h-12 rounded-xl bg-[#F4C2A1] text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
@@ -271,6 +304,14 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
                 <span className="text-sm font-semibold text-[#2D2D2D]">Add a photo</span>
                 <button onClick={() => { setReplaceSlot(null); setTextReplaceSlot(null); }} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+              </div>
+              {/* Running out of photos is discovered HERE, so offer the uploader
+                  right where it's noticed rather than only in the action bar. */}
+              <div className="px-3 pt-3 shrink-0">
+                <button onClick={() => uploadRef.current?.click()}
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#F4C2A1] text-[#E8A598] text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.99] transition-transform">
+                  <ImagePlus size={16} /> Upload more photos
+                </button>
               </div>
               {actions.uploadedPhotos.length === 0 ? (
                 <p className="p-6 text-center text-sm text-[#9B9B9B]">No photos uploaded yet.</p>
