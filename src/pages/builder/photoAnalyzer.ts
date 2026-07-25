@@ -61,8 +61,17 @@ export function analyzePhotos(photos: UploadedPhoto[]): PhotoAnalysis {
   const assignments: Record<number, PhotoRatio> = {};
 
   photos.forEach((photo, idx) => {
-    const w = photo.width || 1200;
-    const h = photo.height || 1600;
+    // An UNMEASURED photo (width/height still 0) used to be guessed at
+    // 1200×1600 — i.e. asserted to be PORTRAIT. That guess is applied with the
+    // full force of a real measurement: it picks the template, and a real
+    // landscape photo then lands in a portrait frame and loses its sides.
+    // Generation now waits for measurements (see useBuilderState), so this path
+    // only survives for a photo that genuinely could not be decoded. Call it
+    // SQUARE: 1:1 is the least-wrong shape to guess, cropping a modest amount
+    // in either orientation instead of half of one of them.
+    const measured = photo.width > 0 && photo.height > 0;
+    const w = measured ? photo.width : 1;
+    const h = measured ? photo.height : 1;
     const ratio = detectRatio(w, h);
     groups[ratio].push(idx);
     assignments[idx] = ratio;

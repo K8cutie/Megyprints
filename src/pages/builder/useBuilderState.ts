@@ -439,7 +439,9 @@ export interface BuilderActions {
   duplicatePage: (index: number) => void;
 
   // Generation
-  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean }) => void;
+  /** Async: waits for any in-flight photo measurement before laying out, so a
+   *  photo is never placed by its fallback ratio. Callers may fire-and-forget. */
+  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean }) => Promise<void>;
   regeneratePage: () => void;
   shuffleLayout: () => void;
   cycleLayout: () => void;
@@ -592,6 +594,15 @@ export function useBuilderState(): BuilderActions {
   // (and same-tick repeats) without a stale closure.
   const uploadedPhotosRef = useRef<UploadedPhoto[]>(uploadedPhotos);
   uploadedPhotosRef.current = uploadedPhotos;
+  /** In-flight photo measurements (see addPhotos). A photo's width/height are 0
+   *  until its task settles, and a 0-dimension photo cannot be classified — so
+   *  generation WAITS on these instead of racing them. */
+  const pendingMeasureRef = useRef<Set<Promise<unknown>>>(new Set());
+  /** id → measured size, written the moment a measurement lands. Read directly
+   *  by generation: a React state update is not guaranteed to have been applied
+   *  by the time the measurement promise resolves, so the state (and the ref
+   *  mirroring it) can still say 0×0. This map cannot. */
+  const measuredRef = useRef<Map<string, { width: number; height: number }>>(new Map());
   const [albumPages, setAlbumPages] = useState<AlbumPage[]>(() => getInitialState().albumPages);
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState().currentPageIndex);
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState().rejectedTemplateIds);
@@ -1090,20 +1101,32 @@ export function useBuilderState(): BuilderActions {
     uploadedPhotosRef.current = [...uploadedPhotosRef.current, ...newPhotos];
     setUploadedPhotos((prev) => [...prev, ...newPhotos]);
 
-    // Store in IndexedDB; backfill real dimensions + EXIF capture time.
-    newPhotos.forEach(async (photo) => {
+    // Store in IndexedDB; backfill real dimensions + EXIF capture time. Each
+    // task is TRACKED so generation can wait for it: until a task settles the
+    // photo is still 0×0, and a 0×0 photo gets classified by guesswork, which
+    // is how photos landed in wrong-orientation frames and came out cropped.
+    for (const photo of newPhotos) {
       const file = freshFiles.find((f) => f.name === photo.name && f.size === photo.size);
-      if (!file) return;
-      const stored = await idbPhotos.store(file, photo.id);
-      const capturedAt = await readCaptureTime(file);
-      setUploadedPhotos((prev) =>
-        prev.map((p) =>
-          p.id === photo.id
-            ? { ...p, ...(stored ? { width: stored.width, height: stored.height } : {}), capturedAt }
-            : p,
-        ),
-      );
-    });
+      if (!file) continue;
+      const task = (async () => {
+        const stored = await idbPhotos.store(file, photo.id);
+        const capturedAt = await readCaptureTime(file);
+        // Record the size SYNCHRONOUSLY here — see measuredRef.
+        if (stored && stored.width > 0 && stored.height > 0) {
+          measuredRef.current.set(photo.id, { width: stored.width, height: stored.height });
+        }
+        setUploadedPhotos((prev) =>
+          prev.map((p) =>
+            p.id === photo.id
+              ? { ...p, ...(stored ? { width: stored.width, height: stored.height } : {}), capturedAt }
+              : p,
+          ),
+        );
+      })();
+      pendingMeasureRef.current.add(task);
+      void task.catch(() => { /* a failed measure must not block generation */ })
+        .finally(() => pendingMeasureRef.current.delete(task));
+    }
 
     return { added: freshFiles.length, skipped: fileArray.length - freshFiles.length };
   }, [idbPhotos]);
@@ -1204,7 +1227,26 @@ export function useBuilderState(): BuilderActions {
   const wizardBorderRef = useRef<{ color: string; width: number; style?: 'solid' | 'dashed' | 'dotted' } | null>(null);
   const wizardFrameRef = useRef<FrameStyle | null>(null);
 
-  const generateAlbumAction = useCallback((wizardBackground?: AlbumBackground, options?: { randomize?: boolean }) => {
+  /** Resolve once every in-flight photo measurement has settled. Drains in a
+   *  loop because waiting can overlap a fresh batch of uploads. */
+  const whenPhotosMeasured = useCallback(async () => {
+    while (pendingMeasureRef.current.size > 0) {
+      await Promise.allSettled([...pendingMeasureRef.current]);
+    }
+  }, []);
+
+  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean }) => {
+    // NEVER lay out unmeasured photos. Uploads are added optimistically at 0×0
+    // and measured in the background, so generating straight after a big upload
+    // (the normal move on a phone) used to classify every photo by the fallback
+    // guess — putting photos into frames of the wrong orientation and cropping
+    // heads off. Wait for the measurements, then read sizes from measuredRef,
+    // which is authoritative the instant a measurement lands.
+    await whenPhotosMeasured();
+    const photos = uploadedPhotosRef.current.map((p) => {
+      const m = measuredRef.current.get(p.id);
+      return m && (p.width !== m.width || p.height !== m.height) ? { ...p, ...m } : p;
+    });
     pushSnapshot();
     // Bake the active theme's photo frame + corner art onto every generated page.
     // A custom Border picked on the wizard overrides the theme's border here.
@@ -1214,7 +1256,7 @@ export function useBuilderState(): BuilderActions {
     // Fall back to the theme's own background so image-less palette themes
     // (e.g. baptism) don't generate as plain white when no bg is passed.
     const bg = wizardBackground ?? getThemedBackground(selectedTemplate, 0);
-    let newPages = generateAlbum(uploadedPhotos, albumSize, photosPerPage, bg, { ...options, border, cornerBase });
+    let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase });
     // createEmptyPage only carries border color/width — also apply the border STYLE
     // and the decorative FRAME (when chosen) onto every freshly generated page.
     const bStyle = border.style;

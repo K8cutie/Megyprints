@@ -87,7 +87,34 @@ async function withStore<T>(
 
 /* ── Image dimension helper ────────────────────────────────────────────── */
 
-function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+/** Measure a photo AS IT WILL BE SEEN — with any EXIF rotation already applied.
+ *
+ *  This is load-bearing, not a detail. A phone portrait shot is very often
+ *  stored as a LANDSCAPE bitmap plus an EXIF "rotate 90°" tag. If we record the
+ *  raw bitmap size, the album classifies that photo as landscape, hands it a
+ *  landscape frame, and then the browser draws it upright inside that frame —
+ *  object-cover crops the top and bottom off, which is how portraits came out
+ *  beheaded. Every downstream guarantee (orientation-strict placement, exact
+ *  ratios, the print floor) is applied faithfully to whatever we report here,
+ *  so a wrong measurement silently defeats all of them.
+ *
+ *  createImageBitmap(..., { imageOrientation: 'from-image' }) is the only way to
+ *  ask for the ORIENTED size explicitly, so it is the primary path. */
+async function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const { width, height } = bmp;
+      bmp.close?.();
+      if (width > 0 && height > 0) return { width, height };
+    } catch {
+      // Older Safari rejects the options bag — fall through to the <img> path.
+    }
+  }
+  // Fallback: an <img>'s intrinsic size. Deliberately NOT swapped by hand from
+  // the EXIF tag: `image-orientation: from-image` is the CSS initial value, so
+  // current engines already report the oriented size here, and swapping again
+  // would double-correct — worse than not correcting at all.
   return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
