@@ -46,7 +46,18 @@ export function marginForTemplate(
   pageIndex: number,
   opts?: { noBinding?: boolean },
 ): Margin {
-  if (template?.fullBleed) return { top: 0, bottom: 0, left: 0, right: 0 };
+  if (template?.fullBleed) {
+    // A full-bleed page bleeds off THREE edges — top, bottom and the OUTER
+    // edge — but still stops short of the spine. It used to run to all four,
+    // which meant the inner 0.5" of every photo was swallowed by the binding:
+    // a face near the gutter came out half-eaten. The keep-out guide warned
+    // about it, but nothing moved out of the way.
+    if (opts?.noBinding) return { top: 0, bottom: 0, left: 0, right: 0 };
+    const frac = bindingMarginFraction(albumSize);
+    return bindingEdge(pageIndex) === 'left'
+      ? { top: 0, bottom: 0, left: frac, right: 0 }
+      : { top: 0, bottom: 0, left: 0, right: frac };
+  }
   if (opts?.noBinding) return { ...baseMargin };
   return applyBindingMargin(baseMargin, albumSize, pageIndex);
 }

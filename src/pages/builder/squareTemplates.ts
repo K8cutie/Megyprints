@@ -1,6 +1,7 @@
 import type { PageTemplate, TemplateMargin, AlbumSizePreset } from './types';
 import type { PhotoRatio } from './photoAnalyzer';
-import { fill, rsBox, STD, ALBUM_INCHES, gutterFrac } from './templateKit';
+import { fill, rsBox, STD, ALBUM_INCHES, MIN_FRAME_INCHES, gutterFrac } from './templateKit';
+import { BINDING_INCHES } from './binding';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  SQUARE ALBUM LAYOUTS — one builder for every square size (6×6, 8×8, 9×9).
@@ -43,6 +44,15 @@ type Corner = 'tl' | 'tr' | 'bl' | 'br';
 export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
   const idp = PREFIX[size] ?? 't' + size.replace(/\D/g, '');
   const id = (suffix: string) => `${idp}-${suffix}`;
+
+  // A full-bleed page reserves the 0.5" spine gutter on its INNER edge, so the
+  // usable WIDTH is the page minus that; the height is untouched. The hero
+  // trios put their narrow 1/3 column on one of these axes, and 1/3 of the
+  // reduced width can fall under the 2" print floor (6×6: 5.5/3 = 1.83").
+  // Offer each orientation only where its own narrow column still prints.
+  const usableW = ALBUM_INCHES[size].w - BINDING_INCHES;
+  const sideTrioOk = usableW / 3 >= MIN_FRAME_INCHES - 1e-9;      // hero left/right
+  const stackTrioOk = ALBUM_INCHES[size].h / 3 >= MIN_FRAME_INCHES - 1e-9; // hero top/bottom
   // The shared photo gutter as a fraction of THIS page, so it prints at the
   // same physical width on every square size (see PHOTO_GUTTER_MM).
   const GAP = gutterFrac(ALBUM_INCHES[size].w);
@@ -206,10 +216,14 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
     //  gutterless counterpart to distinguish them from.)
     fbDuoExact('fb-duo-exact-v-gap', 'Two Portraits + Box', 'v', GAP),
     fbDuoExact('fb-duo-exact-h-gap', 'Two Landscapes + Box', 'h', GAP),
-    fbTrio('fb-trio-hero-left-gap', 'Hero Left', 'left', GAP),
-    fbTrio('fb-trio-hero-right-gap', 'Hero Right', 'right', GAP),
-    fbTrio('fb-trio-hero-top-gap', 'Hero Top', 'top', GAP),
-    fbTrio('fb-trio-hero-bottom-gap', 'Hero Bottom', 'bottom', GAP),
+    ...(sideTrioOk ? [
+      fbTrio('fb-trio-hero-left-gap', 'Hero Left', 'left', GAP),
+      fbTrio('fb-trio-hero-right-gap', 'Hero Right', 'right', GAP),
+    ] : []),
+    ...(stackTrioOk ? [
+      fbTrio('fb-trio-hero-top-gap', 'Hero Top', 'top', GAP),
+      fbTrio('fb-trio-hero-bottom-gap', 'Hero Bottom', 'bottom', GAP),
+    ] : []),
     fbSquareTrio('fb-sq-box-tl-gap', 'Three Squares, Box Top Left', 'tl', GAP),
     fbSquareTrio('fb-sq-box-tr-gap', 'Three Squares, Box Top Right', 'tr', GAP),
     fbSquareTrio('fb-sq-box-bl-gap', 'Three Squares, Box Bottom Left', 'bl', GAP),
