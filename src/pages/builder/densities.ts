@@ -22,6 +22,10 @@ export const DENSITY_BY_SIZE: Record<string, number[]> = {
   '6x6': [1, 2, 3],
   '8x8': [1, 2, 3],
   '9x9': [1, 2, 3],
+  // 8×6 / 6×8 (48 sq in landscape/portrait) fit up to a 6-up grid above the 2"
+  // floor — same tiled generator as the big landscape/portrait sizes.
+  '8x6': [1, 2, 3, 4, 6],
+  '6x8': [1, 2, 3, 4, 6],
   '11.5x8': [1, 2, 3, 4, 5, 6],
   '8.5x11': [1, 2, 3, 4, 5, 6],
 };
@@ -64,7 +68,7 @@ const NATURAL_BY_SIZE: Record<string, number> = {
   // densest layout is the 3-up square hero) padded 80-119-photo albums with
   // blanks at natural=2 because the deck deals fewer pages than that threshold
   // assumes. 6x4 stays capped at 3 photos/page — its page is only 4" tall.
-  '6x4': 3, '6x6': 3, '8x8': 3, '9x9': 3, '11.5x8': 3, '8.5x11': 3,
+  '6x4': 3, '8x6': 3, '6x8': 3, '6x6': 3, '8x8': 3, '9x9': 3, '11.5x8': 3, '8.5x11': 3,
 };
 export function naturalPerPage(albumSize: string): number {
   return NATURAL_BY_SIZE[albumSize] ?? 2;

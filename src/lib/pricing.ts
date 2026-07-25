@@ -24,6 +24,8 @@ export const MIN_PAGES = 40;
 export interface SizeDef { label: string; pps: number; hb: number }
 export const SIZES: Record<AlbumSizePreset, SizeDef> = {
   '6x4':    { label: '6×4',    pps: 16, hb: 250 },
+  '8x6':    { label: '8×6',    pps: 4,  hb: 350 },
+  '6x8':    { label: '6×8',    pps: 4,  hb: 350 },
   '6x6':    { label: '6×6',    pps: 12, hb: 280 },
   '8x8':    { label: '8×8',    pps: 4,  hb: 350 },
   '9x9':    { label: '9×9',    pps: 4,  hb: 380 },
@@ -50,7 +52,7 @@ export function perPageCost(size: AlbumSizePreset): number {
  *  cost × multiple, applied to BOTH bindings. Admin-tunable here — this is the
  *  single source the checkout and the operator panel both read. */
 export const SIZE_SURCHARGE: Record<AlbumSizePreset, number> = {
-  '6x4': 0, '6x6': 0, '8x8': 0, '9x9': 150, '11.5x8': 300, '8.5x11': 300,
+  '6x4': 0, '8x6': 0, '6x8': 0, '6x6': 0, '8x8': 0, '9x9': 150, '11.5x8': 300, '8.5x11': 300,
 };
 
 /** Final customer price = marked-up cost + the size premium. SINGLE SOURCE for

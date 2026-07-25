@@ -83,6 +83,8 @@ function SizeCard({ size, selected, onSelect }: {
         {size.preset === '8x8' && 'Great for travel & everyday memories'}
         {size.preset === '9x9' && 'Bold statement piece for special occasions'}
         {size.preset === '6x4' && 'Compact landscape for panoramas'}
+        {size.preset === '8x6' && 'Roomy landscape for scenery & prints'}
+        {size.preset === '6x8' && 'Tall portrait for people & keepsakes'}
         {size.preset === '11.5x8' && 'Wide format for events & weddings'}
         {size.preset === '8.5x11' && 'Classic portrait for portraits & families'}
       </p>

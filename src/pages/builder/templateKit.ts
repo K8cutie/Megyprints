@@ -31,6 +31,8 @@ export const STD: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right:
 /** Canvas dimensions for ratio calculations */
 export const CANVAS_DIMS: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x4':    { w: 1800, h: 1200 },
+  '8x6':    { w: 2400, h: 1800 },
+  '6x8':    { w: 1800, h: 2400 },
   '6x6':    { w: 1800, h: 1800 },
   '8x8':    { w: 2400, h: 2400 },
   '9x9':    { w: 2700, h: 2700 },
@@ -52,6 +54,8 @@ export const RATIOS: Record<PhotoRatio, number> = {
 /** Physical inches per album size — the FULL trim, not the safe area. */
 export const ALBUM_INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x4':    { w: 6,    h: 4  },
+  '8x6':    { w: 8,    h: 6  },
+  '6x8':    { w: 6,    h: 8  },
   '6x6':    { w: 6,    h: 6  },
   '8x8':    { w: 8,    h: 8  },
   '9x9':    { w: 9,    h: 9  },

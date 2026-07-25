@@ -33,6 +33,8 @@ function inset(x: number, y: number, w: number, h: number, gx: number, gy: numbe
 /** Physical album dimensions (inches). */
 const INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x4':    { w: 6,    h: 4  },
+  '8x6':    { w: 8,    h: 6  },
+  '6x8':    { w: 6,    h: 8  },
   '6x6':    { w: 6,    h: 6  },
   '8x8':    { w: 8,    h: 8  },
   '9x9':    { w: 9,    h: 9  },
@@ -275,6 +277,20 @@ const GRID_SPECS: GridSpec[] = [
   { size: '6x4', rows: 1, cols: 1, name: 'Full landscape' },
   { size: '6x4', rows: 1, cols: 2, name: 'Two portraits' },
   { size: '6x4', rows: 2, cols: 2, name: 'Four frames' },
+  // 8×6 landscape (A = 1.33) — mirrors the 11.5×8 grid family
+  { size: '8x6', rows: 1, cols: 1, name: 'Full landscape' },
+  { size: '8x6', rows: 1, cols: 2, name: 'Two portraits' },
+  { size: '8x6', rows: 2, cols: 2, name: 'Four frames' },
+  { size: '8x6', rows: 2, cols: 3, name: 'Six frames' },
+  { size: '8x6', rows: 2, cols: 2, caption: true, name: 'Two + caption' },
+  { size: '8x6', rows: 2, cols: 3, caption: true, name: 'Four + caption' },
+  // 6×8 portrait (A = 0.75) — mirrors the 8.5×11 grid family
+  { size: '6x8', rows: 1, cols: 1, name: 'Full portrait' },
+  { size: '6x8', rows: 2, cols: 1, name: 'Two stacked' },
+  { size: '6x8', rows: 2, cols: 2, name: 'Four frames' },
+  { size: '6x8', rows: 3, cols: 2, name: 'Six frames' },
+  { size: '6x8', rows: 2, cols: 2, caption: true, name: 'Two + caption' },
+  { size: '6x8', rows: 3, cols: 2, caption: true, name: 'Four + caption' },
   // 11.5×8 landscape (A = 1.44)
   { size: '11.5x8', rows: 1, cols: 1, name: 'Full landscape' },
   { size: '11.5x8', rows: 1, cols: 2, name: 'Two portraits' },

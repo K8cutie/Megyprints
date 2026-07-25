@@ -101,7 +101,7 @@ export interface FilledSlot {
 export type BackgroundType = 'solid' | 'gradient' | 'texture' | 'image';
 
 export type AlbumSizePreset =
-  | '6x6' | '8x8' | '9x9' | '6x4' | '11.5x8' | '8.5x11';
+  | '6x6' | '8x8' | '9x9' | '6x4' | '8x6' | '6x8' | '11.5x8' | '8.5x11';
 
 export type MaterialType = 'matte' | 'glossy' | 'semigloss' | 'pearl' | 'linen';
 export type CoverType = 'softcover' | 'hardboundLeather' | 'hardboundLinen' | 'premiumVelvet' | 'acrylicLayflat';
@@ -643,6 +643,8 @@ export const ALBUM_SIZES: AlbumSizeConfig[] = [
   { preset: '8x8', name: '8×8" Square', width: 2400, height: 2400, category: 'square' },
   { preset: '9x9', name: '9×9" Square', width: 2700, height: 2700, category: 'square' },
   { preset: '6x4', name: '6×4" Landscape', width: 1800, height: 1200, category: 'landscape' },
+  { preset: '8x6', name: '8×6" Landscape', width: 2400, height: 1800, category: 'landscape' },
+  { preset: '6x8', name: '6×8" Portrait', width: 1800, height: 2400, category: 'portrait' },
   { preset: '11.5x8', name: '11.5×8" Landscape', width: 3450, height: 2400, category: 'landscape' },
   { preset: '8.5x11', name: '8.5×11" Portrait', width: 2550, height: 3300, category: 'portrait' },
 ];

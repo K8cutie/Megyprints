@@ -12,7 +12,7 @@ import { ALBUM_SIZES } from '../builder/types';
 import { SHEET, SIZES, costOf, sheetsFor, priceOf, SIZE_SURCHARGE, type Binding } from '../../lib/pricing';
 import { getPriceMultiple, setPriceMultiple, getDisabledSizes, setDisabledSizes } from '../../lib/storeSettings';
 
-const ORDER: AlbumSizePreset[] = ['6x4', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
+const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
 
 const peso = (n: number) => '₱' + Math.round(n).toLocaleString('en-PH');
 // Competitor 8×8: ₱3,000 base (20 pages) + ₱30/pg; voucher ≈ 51% of regular.

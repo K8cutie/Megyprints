@@ -274,7 +274,7 @@ export function generateAlbum(
   // templates whose ratio ≈ the page's aspect; otherwise the framed/caption
   // singles (exact-ratio slots, zero crop) carry the hero role.
   const PAGE_ASPECT: Record<string, number> = {
-    '6x4': 6 / 4, '6x6': 1, '8x8': 1, '9x9': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
+    '6x4': 6 / 4, '8x6': 8 / 6, '6x8': 6 / 8, '6x6': 1, '8x8': 1, '9x9': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
   };
   const pageAspect = PAGE_ASPECT[albumSize] ?? 1;
   /** Does this single-photo template stretch its photo across the WHOLE sheet?

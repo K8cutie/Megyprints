@@ -16,6 +16,8 @@ const SIZE_CHOICES: { label: string; preset: string }[] = [
   { label: '8×8" Square', preset: '8x8' },
   { label: '9×9" Square', preset: '9x9' },
   { label: '6×4" Landscape', preset: '6x4' },
+  { label: '8×6" Landscape', preset: '8x6' },
+  { label: '6×8" Portrait', preset: '6x8' },
   { label: '11.5×8" Landscape', preset: '11.5x8' },
   { label: '8.5×11" Portrait', preset: '8.5x11' },
 ];

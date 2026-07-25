@@ -38,6 +38,8 @@ function getUISize(albumSize: AlbumSizePreset) {
     case '6x6': return { width: 432, height: 432 };
     case '8x8': return { width: 576, height: 576 };
     case '6x4': return { width: 432, height: 288 };
+    case '8x6': return { width: 576, height: 432 };
+    case '6x8': return { width: 432, height: 576 };
     case '11.5x8': return { width: 690, height: 480 };
     case '8.5x11': return { width: 510, height: 660 };
     default: return { width: 576, height: 576 };
