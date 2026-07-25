@@ -178,6 +178,14 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
     orientation: 'square', targetRatio: r, albumSizes: [size], slots: [rsBox(0, 0, r, 1, 1, size)],
   });
 
+  /** RETIRED — every layout with 2+ photos now carries the 1mm gutter, so the
+   *  edge-to-edge versions are no longer offered. They are still BUILT (with no
+   *  album sizes) purely so albums already saved against these ids keep
+   *  resolving and rendering; `getTemplatesForAlbum` filters them out, so they
+   *  can never be selected or dealt again. Do NOT delete these outright —
+   *  customer albums reference them. */
+  const retired = (t: PageTemplate): PageTemplate => ({ ...t, albumSizes: [] });
+
   return [
     fbSolo,
     marginedSingle('solo-portrait', 'Single Portrait', '2:3'),
@@ -191,25 +199,31 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
     fbSoloTwoBox('fb-solo-ls-twobox-above', 'Landscape + Two Boxes Above', 'landscape', true),
     fbSoloTwoBox('fb-solo-pt-twobox-right', 'Portrait + Two Boxes Right', 'portrait', false),
     fbSoloTwoBox('fb-solo-pt-twobox-left', 'Portrait + Two Boxes Left', 'portrait', true),
-    fbDuoExact('fb-duo-exact-v', 'Two Portraits + Box', 'v'),
-    fbDuoExact('fb-duo-exact-h', 'Two Landscapes + Box', 'h'),
-    fbDuoExact('fb-duo-exact-v-gap', 'Two Portraits + Box · Thin Gap', 'v', GAP),
-    fbDuoExact('fb-duo-exact-h-gap', 'Two Landscapes + Box · Thin Gap', 'h', GAP),
-    fbTrio('fb-trio-hero-left', 'Hero Left', 'left', 0),
-    fbTrio('fb-trio-hero-right', 'Hero Right', 'right', 0),
-    fbTrio('fb-trio-hero-top', 'Hero Top', 'top', 0),
-    fbTrio('fb-trio-hero-bottom', 'Hero Bottom', 'bottom', 0),
-    fbTrio('fb-trio-hero-left-gap', 'Hero Left · Thin Gap', 'left', GAP),
-    fbTrio('fb-trio-hero-right-gap', 'Hero Right · Thin Gap', 'right', GAP),
-    fbTrio('fb-trio-hero-top-gap', 'Hero Top · Thin Gap', 'top', GAP),
-    fbTrio('fb-trio-hero-bottom-gap', 'Hero Bottom · Thin Gap', 'bottom', GAP),
-    fbSquareTrio('fb-sq-box-tl', 'Three Squares, Box Top Left', 'tl', 0),
-    fbSquareTrio('fb-sq-box-tr', 'Three Squares, Box Top Right', 'tr', 0),
-    fbSquareTrio('fb-sq-box-bl', 'Three Squares, Box Bottom Left', 'bl', 0),
-    fbSquareTrio('fb-sq-box-br', 'Three Squares, Box Bottom Right', 'br', 0),
-    fbSquareTrio('fb-sq-box-tl-gap', 'Three Squares, Box Top Left · Thin Gap', 'tl', GAP),
-    fbSquareTrio('fb-sq-box-tr-gap', 'Three Squares, Box Top Right · Thin Gap', 'tr', GAP),
-    fbSquareTrio('fb-sq-box-bl-gap', 'Three Squares, Box Bottom Left · Thin Gap', 'bl', GAP),
-    fbSquareTrio('fb-sq-box-br-gap', 'Three Squares, Box Bottom Right · Thin Gap', 'br', GAP),
+    // ── Live set: every multi-photo layout carries the 1mm gutter ──────────
+    // (ids keep their `-gap` suffix — they are persisted in saved albums — but
+    //  the customer-facing names drop "· Thin Gap": there is no longer a
+    //  gutterless counterpart to distinguish them from.)
+    fbDuoExact('fb-duo-exact-v-gap', 'Two Portraits + Box', 'v', GAP),
+    fbDuoExact('fb-duo-exact-h-gap', 'Two Landscapes + Box', 'h', GAP),
+    fbTrio('fb-trio-hero-left-gap', 'Hero Left', 'left', GAP),
+    fbTrio('fb-trio-hero-right-gap', 'Hero Right', 'right', GAP),
+    fbTrio('fb-trio-hero-top-gap', 'Hero Top', 'top', GAP),
+    fbTrio('fb-trio-hero-bottom-gap', 'Hero Bottom', 'bottom', GAP),
+    fbSquareTrio('fb-sq-box-tl-gap', 'Three Squares, Box Top Left', 'tl', GAP),
+    fbSquareTrio('fb-sq-box-tr-gap', 'Three Squares, Box Top Right', 'tr', GAP),
+    fbSquareTrio('fb-sq-box-bl-gap', 'Three Squares, Box Bottom Left', 'bl', GAP),
+    fbSquareTrio('fb-sq-box-br-gap', 'Three Squares, Box Bottom Right', 'br', GAP),
+
+    // ── Retired (resolvable, never selectable) — the gutterless originals ──
+    retired(fbDuoExact('fb-duo-exact-v', 'Two Portraits + Box', 'v')),
+    retired(fbDuoExact('fb-duo-exact-h', 'Two Landscapes + Box', 'h')),
+    retired(fbTrio('fb-trio-hero-left', 'Hero Left', 'left', 0)),
+    retired(fbTrio('fb-trio-hero-right', 'Hero Right', 'right', 0)),
+    retired(fbTrio('fb-trio-hero-top', 'Hero Top', 'top', 0)),
+    retired(fbTrio('fb-trio-hero-bottom', 'Hero Bottom', 'bottom', 0)),
+    retired(fbSquareTrio('fb-sq-box-tl', 'Three Squares, Box Top Left', 'tl', 0)),
+    retired(fbSquareTrio('fb-sq-box-tr', 'Three Squares, Box Top Right', 'tr', 0)),
+    retired(fbSquareTrio('fb-sq-box-bl', 'Three Squares, Box Bottom Left', 'bl', 0)),
+    retired(fbSquareTrio('fb-sq-box-br', 'Three Squares, Box Bottom Right', 'br', 0)),
   ];
 }

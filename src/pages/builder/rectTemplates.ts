@@ -1,6 +1,6 @@
 import type { PageTemplate, TemplateMargin, AlbumSizePreset } from './types';
 import type { PhotoRatio } from './photoAnalyzer';
-import { fill } from './templateKit';
+import { fill, ALBUM_INCHES } from './templateKit';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  4:3 RECT ALBUM LAYOUTS — one builder for 8×6 (landscape) and 6×8 (portrait).
@@ -26,6 +26,11 @@ import { fill } from './templateKit';
  *
  *  A full-bleed SINGLE must match the page aspect (cropSafe tests whether the
  *  slot covers the whole sheet), which is why "Full Page" is 4:3 / 3:4.
+ *
+ *  Every layout with 2+ photos carries a 1mm printed gutter between them (house
+ *  rule). The cells above are quoted at their pre-gutter size; a gutter shaves
+ *  0.5mm off each neighbour, so a 4×6 cell prints 3.98×6" — a <1% drift off the
+ *  declared ratio, far inside the crop budget, and every frame stays ≥2".
  *  ══════════════════════════════════════════════════════════════════════════ */
 
 const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
@@ -60,6 +65,19 @@ export function buildRectTemplates(size: AlbumSizePreset): PageTemplate[] {
   const A = AXIS[size];
   if (!A) return [];
 
+  // House rule: adjacent photos are ALWAYS separated by a 1mm printed gutter.
+  // Taken as a fraction of the axis it runs along, so it prints 1mm on both the
+  // landscape and the portrait size. gA splits the page's LONG side (the duo
+  // cells + the trio hero), gB splits the SHORT side (the stacked trio pair).
+  const long = Math.max(ALBUM_INCHES[size].w, ALBUM_INCHES[size].h);
+  const short = Math.min(ALBUM_INCHES[size].w, ALBUM_INCHES[size].h);
+  const gA = (1 / 25.4) / long;
+  const gB = (1 / 25.4) / short;
+  const halfA = 1 / 2 - gA / 2;   // one cell of a long-side split
+  const halfB = 1 / 2 - gB / 2;   // one cell of a short-side split
+  const secondA = 1 / 2 + gA / 2; // where the second cell starts
+  const secondB = 1 / 2 + gB / 2;
+
   /** Place a rect in PAGE fractions, transposing for the portrait size so one
    *  set of numbers describes both. `a` runs along the page's LONG axis. */
   const rect = (a: number, b: number, aLen: number, bLen: number, ratio: PhotoRatio) =>
@@ -81,19 +99,19 @@ export function buildRectTemplates(size: AlbumSizePreset): PageTemplate[] {
   /* 2 photos — split the LONG side. Each cell is half the page and lands on an
      exact camera ratio; the other split (8×3 cells) has no camera ratio at all. */
   const duo = tmpl('fb-duo', A.landscape ? 'Two Portraits' : 'Two Landscapes', 'duo', A.half, [
-    rect(0, 0, 1 / 2, 1, A.half),
-    rect(1 / 2, 0, 1 / 2, 1, A.half),
+    rect(0, 0, halfA, 1, A.half),
+    rect(secondA, 0, halfA, 1, A.half),
   ]);
 
   /* 3 photos — a half-page hero beside two stacked quarters. Mixed-ratio by
      necessity, but every slot is exact: hero 4×6 (2:3), pair 4×3 (4:3). */
   const trio = (suffix: string, name: string, heroFirst: boolean) => {
-    const heroA = heroFirst ? 0 : 1 / 2;
-    const pairA = heroFirst ? 1 / 2 : 0;
+    const heroA = heroFirst ? 0 : secondA;
+    const pairA = heroFirst ? secondA : 0;
     return tmpl(suffix, name, 'trio', A.half, [
-      rect(heroA, 0, 1 / 2, 1, A.half),
-      rect(pairA, 0, 1 / 2, 1 / 2, A.quarter),
-      rect(pairA, 1 / 2, 1 / 2, 1 / 2, A.quarter),
+      rect(heroA, 0, halfA, 1, A.half),
+      rect(pairA, 0, halfA, halfB, A.quarter),
+      rect(pairA, secondB, halfA, halfB, A.quarter),
     ]);
   };
 

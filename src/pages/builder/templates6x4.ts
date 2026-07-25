@@ -42,7 +42,7 @@ const T64_FB_SOLO = fb('t64-fb-solo', 'Full Page', '3:2', [fill(0, 0, 1, 1, '3:2
 const duoTall = (id: string, name: string, gap: number) =>
   fb(id, name, '3:4', [fill(0, 0, 1 / 2 - gap / 2, 1, '3:4'), fill(1 / 2 + gap / 2, 0, 1 / 2 - gap / 2, 1, '3:4')]);
 const T64_FB_DUO_TALL = duoTall('t64-fb-duo-tall', 'Two Tall', 0);
-const T64_FB_DUO_TALL_G = duoTall('t64-fb-duo-tall-gap', 'Two Tall · Thin Gap', GAP);
+const T64_FB_DUO_TALL_G = duoTall('t64-fb-duo-tall-gap', 'Two Tall', GAP);
 
 /* 3 photos full bleed — a 4×4 square hero + two stacked 2×2 squares, all 1:1.
    The 2×2 cells sit exactly on the 2" floor, so this takes NO gutter. */
@@ -92,6 +92,18 @@ const T64_FB_PT_BOX_LEFT = fbPortraitBox('t64-fb-pt-box-left', 'Portrait + Box L
 const T64_FB_SQ_BOX_RIGHT = fbSquareBox('t64-fb-sq-box-right', 'Square + Box Right', false);
 const T64_FB_SQ_BOX_LEFT = fbSquareBox('t64-fb-sq-box-left', 'Square + Box Left', true);
 
+/** RETIRED — kept BUILT (with no album sizes) so albums already saved against
+ *  these ids still resolve and render, but never selectable again. Two reasons:
+ *   • `t64-fb-duo-tall` is the gutterless twin of `-gap`, and every multi-photo
+ *     layout now carries the 1mm gutter.
+ *   • the HERO TRIOS cannot carry one at all. Their 2×2 cells sit at EXACTLY the
+ *     2.00" floor (1/3 × 6" wide, 1/2 × 4" tall), and stacking two cells plus a
+ *     gutter needs 2+2+1mm = 4.04" on a page only 4.00" tall — so any gutter
+ *     puts a frame under the floor. A 3-up with gutters does not exist on a 6×4;
+ *     the size therefore caps at 2 photos/page. */
+const RETIRED_6X4: PageTemplate[] = [T64_FB_DUO_TALL, T64_FB_TRIO_HERO_LEFT, T64_FB_TRIO_HERO_RIGHT]
+  .map((t) => ({ ...t, albumSizes: [] as PageTemplate['albumSizes'] }));
+
 export const TEMPLATES_6X4: PageTemplate[] = [
   T64_FB_SOLO,
   T64_SOLO_LANDSCAPE,
@@ -101,8 +113,6 @@ export const TEMPLATES_6X4: PageTemplate[] = [
   T64_FB_PT_BOX_LEFT,
   T64_FB_SQ_BOX_RIGHT,
   T64_FB_SQ_BOX_LEFT,
-  T64_FB_DUO_TALL,
   T64_FB_DUO_TALL_G,
-  T64_FB_TRIO_HERO_LEFT,
-  T64_FB_TRIO_HERO_RIGHT,
+  ...RETIRED_6X4,
 ];

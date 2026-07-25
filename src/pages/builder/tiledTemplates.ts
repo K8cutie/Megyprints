@@ -15,7 +15,11 @@
 import type { PageTemplate, TemplateSlot, TextSlot, PhotoRatio, AlbumSizePreset, TemplateMargin } from './types';
 
 const MIN_FRAME_INCHES = 2;
-const GAP_MM = 5; // physical gutter between adjacent frames, for visual distinction
+// House rule: adjacent photos are separated by a 1mm printed gutter — the same
+// thin gutter the per-size authored sets use, so every size looks consistent.
+// (Was 5mm; narrowing it only makes frames larger, so nothing can fall under
+// the 2" print floor as a result.)
+const GAP_MM = 1;
 const MARGIN: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
 const ZERO_MARGIN: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 
