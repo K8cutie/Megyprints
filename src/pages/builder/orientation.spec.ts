@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateAlbum } from './generateAlbum';
-import { getTemplateById, orientationOfRatio } from './pageTemplates';
+import { getTemplateById, getTemplatesForAlbum, orientationOfRatio } from './pageTemplates';
+import { isSizeOfferable } from './albumSizeOptions';
 import { analyzePhotos } from './photoAnalyzer';
 import type { AlbumSizePreset, UploadedPhoto } from './types';
 
@@ -54,6 +55,13 @@ function crossings(pages: ReturnType<typeof generateAlbum>, photos: UploadedPhot
 describe('orientation is never crossed when placing photos', () => {
   for (const size of SIZES) {
     it(`${size}: a portrait photo never lands in a landscape frame (or vice versa)`, () => {
+      // A size being re-authored has no layouts; it is also not offered to
+      // customers, so there is nothing to place. Assert that pairing rather
+      // than failing on it (generateAlbum throws loudly by design).
+      if (getTemplatesForAlbum(size).length === 0) {
+        expect(isSizeOfferable(size)).toBe(false);
+        return;
+      }
       for (const n of [10, 40, 120]) {
         const photos = mixed(n);
         const bad = crossings(generateAlbum(photos, size, undefined), photos);
