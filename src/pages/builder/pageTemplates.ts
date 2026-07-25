@@ -8,6 +8,8 @@ import { TEMPLATES_6X6 } from './templates6x6';
 import { TEMPLATES_8X8 } from './templates8x8';
 import { TEMPLATES_9X9 } from './templates9x9';
 import { TEMPLATES_6X4 } from './templates6x4';
+import { TEMPLATES_8X6 } from './templates8x6';
+import { TEMPLATES_6X8 } from './templates6x8';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  87 SMART TEMPLATES — Ratio-locked, album-size-aware, phone-first
@@ -1476,7 +1478,7 @@ export const PAGE_TEMPLATES: PageTemplate[] =
     // single (a photo at its true ratio inside the safe area) into a full-bleed
     // one, which is the exact layout a square page cannot have without cropping
     // an off-orientation photo by a third.
-    .concat(TEMPLATES_6X6, TEMPLATES_8X8, TEMPLATES_9X9, TEMPLATES_6X4);
+    .concat(TEMPLATES_6X6, TEMPLATES_8X8, TEMPLATES_9X9, TEMPLATES_6X4, TEMPLATES_8X6, TEMPLATES_6X8);
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 

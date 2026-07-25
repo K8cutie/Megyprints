@@ -277,20 +277,9 @@ const GRID_SPECS: GridSpec[] = [
   { size: '6x4', rows: 1, cols: 1, name: 'Full landscape' },
   { size: '6x4', rows: 1, cols: 2, name: 'Two portraits' },
   { size: '6x4', rows: 2, cols: 2, name: 'Four frames' },
-  // 8×6 landscape (A = 1.33) — mirrors the 11.5×8 grid family
-  { size: '8x6', rows: 1, cols: 1, name: 'Full landscape' },
-  { size: '8x6', rows: 1, cols: 2, name: 'Two portraits' },
-  { size: '8x6', rows: 2, cols: 2, name: 'Four frames' },
-  { size: '8x6', rows: 2, cols: 3, name: 'Six frames' },
-  { size: '8x6', rows: 2, cols: 2, caption: true, name: 'Two + caption' },
-  { size: '8x6', rows: 2, cols: 3, caption: true, name: 'Four + caption' },
-  // 6×8 portrait (A = 0.75) — mirrors the 8.5×11 grid family
-  { size: '6x8', rows: 1, cols: 1, name: 'Full portrait' },
-  { size: '6x8', rows: 2, cols: 1, name: 'Two stacked' },
-  { size: '6x8', rows: 2, cols: 2, name: 'Four frames' },
-  { size: '6x8', rows: 3, cols: 2, name: 'Six frames' },
-  { size: '6x8', rows: 2, cols: 2, caption: true, name: 'Two + caption' },
-  { size: '6x8', rows: 3, cols: 2, caption: true, name: 'Four + caption' },
+  // (8×6 and 6×8 are PER_SIZE_AUTHORED — their layouts live in templates8x6.ts /
+  //  templates6x8.ts and are being authored from scratch. Deliberately NO grid
+  //  recipes here: mirroring the 11.5×8 / 8.5×11 families was rejected.)
   // 11.5×8 landscape (A = 1.44)
   { size: '11.5x8', rows: 1, cols: 1, name: 'Full landscape' },
   { size: '11.5x8', rows: 1, cols: 2, name: 'Two portraits' },
