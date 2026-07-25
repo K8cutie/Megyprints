@@ -107,16 +107,22 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
   /* ── 2 photos, exact ratio, combo box takes the remainder ───────────────
      Two ratio-true photos at the largest size that stays exact; the box
      absorbs the leftover band. (No half-and-half 2-up — it beheads.) */
-  const fbDuoExact = (suffix: string, name: string, axis: 'v' | 'h'): PageTemplate => {
+  const fbDuoExact = (suffix: string, name: string, axis: 'v' | 'h', gap = 0): PageTemplate => {
     const r: PhotoRatio = axis === 'v' ? '2:3' : '3:2';
     const band = 1 / 4;
     const photo = 1 - band;
+    // The gutter is taken from BETWEEN THE TWO PHOTOS only (each gives up half),
+    // so the pair still spans edge to edge and the combo box keeps its full band.
+    // Like the hero trios, this drifts the printed aspect off the declared ratio
+    // by <1% (1mm out of a ~3" frame) — far inside the crop budget.
+    const half = 1 / 2 - gap / 2;
+    const second = 1 / 2 + gap / 2;
     return {
       id: id(suffix), name, category: 'duo', slotCount: 2, margin: ZERO, orientation: 'square',
       targetRatio: r, albumSizes: [size], fullBleed: true,
       slots: axis === 'v'
-        ? [fill(0, 0, 1 / 2, photo, r), fill(1 / 2, 0, 1 / 2, photo, r)]
-        : [fill(0, 0, photo, 1 / 2, r), fill(0, 1 / 2, photo, 1 / 2, r)],
+        ? [fill(0, 0, half, photo, r), fill(second, 0, half, photo, r)]
+        : [fill(0, 0, photo, half, r), fill(0, second, photo, half, r)],
       textSlots: axis === 'v'
         ? [{ id: 'combo', x: 0, y: photo, width: 1, height: band, align: 'center', placeholder: 'Tap to add' }]
         : [{ id: 'combo', x: photo, y: 0, width: band, height: 1, align: 'center', placeholder: 'Tap to add' }],
@@ -187,6 +193,8 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
     fbSoloTwoBox('fb-solo-pt-twobox-left', 'Portrait + Two Boxes Left', 'portrait', true),
     fbDuoExact('fb-duo-exact-v', 'Two Portraits + Box', 'v'),
     fbDuoExact('fb-duo-exact-h', 'Two Landscapes + Box', 'h'),
+    fbDuoExact('fb-duo-exact-v-gap', 'Two Portraits + Box · Thin Gap', 'v', GAP),
+    fbDuoExact('fb-duo-exact-h-gap', 'Two Landscapes + Box · Thin Gap', 'h', GAP),
     fbTrio('fb-trio-hero-left', 'Hero Left', 'left', 0),
     fbTrio('fb-trio-hero-right', 'Hero Right', 'right', 0),
     fbTrio('fb-trio-hero-top', 'Hero Top', 'top', 0),
