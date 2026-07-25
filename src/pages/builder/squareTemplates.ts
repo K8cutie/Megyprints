@@ -1,6 +1,6 @@
 import type { PageTemplate, TemplateMargin, AlbumSizePreset } from './types';
 import type { PhotoRatio } from './photoAnalyzer';
-import { fill, rsBox, STD, ALBUM_INCHES } from './templateKit';
+import { fill, rsBox, STD, ALBUM_INCHES, gutterFrac } from './templateKit';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  SQUARE ALBUM LAYOUTS — one builder for every square size (6×6, 8×8, 9×9).
@@ -43,8 +43,9 @@ type Corner = 'tl' | 'tr' | 'bl' | 'br';
 export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
   const idp = PREFIX[size] ?? 't' + size.replace(/\D/g, '');
   const id = (suffix: string) => `${idp}-${suffix}`;
-  // 1mm as a fraction of THIS page, so the printed gutter is 1mm on every size.
-  const GAP = (1 / 25.4) / ALBUM_INCHES[size].w;
+  // The shared photo gutter as a fraction of THIS page, so it prints at the
+  // same physical width on every square size (see PHOTO_GUTTER_MM).
+  const GAP = gutterFrac(ALBUM_INCHES[size].w);
 
   /* ── 3 photos, full bleed — hero column + stacked pair ──────────────────
      A 2/3 column and two 1/3 half-height blocks on a square page are FORCED to

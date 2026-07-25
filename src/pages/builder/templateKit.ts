@@ -28,6 +28,21 @@ export const PER_SIZE_AUTHORED = new Set<AlbumSizePreset>(['6x6', '8x8', '9x9', 
 
 export const STD: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
 
+/** SINGLE SOURCE for the printed gutter between two adjacent PHOTOS.
+ *
+ *  House rule: every layout with 2+ photos separates them by this much — the
+ *  authored sets (squares, 6×4, 8×6/6×8) and the tiled generator all read it,
+ *  so the whole app changes together and no size can drift to its own gutter.
+ *  Boxes stay flush against photos: a combo box reads as part of the page, not
+ *  as a neighbouring photo.
+ *
+ *  Taken as a fraction of the axis it runs along, so it prints at this physical
+ *  width on every album size. Widening it shrinks frames — re-check the 2"
+ *  print floor (MIN_FRAME_INCHES) after any change. */
+export const PHOTO_GUTTER_MM = 1.5;
+/** The gutter as a fraction of a span of `inches` along the same axis. */
+export const gutterFrac = (inches: number) => (PHOTO_GUTTER_MM / 25.4) / inches;
+
 /** Canvas dimensions for ratio calculations */
 export const CANVAS_DIMS: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x4':    { w: 1800, h: 1200 },

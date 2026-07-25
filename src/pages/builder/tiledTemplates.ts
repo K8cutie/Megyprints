@@ -13,13 +13,15 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { PageTemplate, TemplateSlot, TextSlot, PhotoRatio, AlbumSizePreset, TemplateMargin } from './types';
+import { PHOTO_GUTTER_MM } from './templateKit';
 
 const MIN_FRAME_INCHES = 2;
-// House rule: adjacent photos are separated by a 1mm printed gutter — the same
-// thin gutter the per-size authored sets use, so every size looks consistent.
-// (Was 5mm; narrowing it only makes frames larger, so nothing can fall under
-// the 2" print floor as a result.)
-const GAP_MM = 1;
+// House rule: adjacent photos are separated by the shared printed gutter — the
+// same one the per-size authored sets use, so every size looks consistent.
+// (Was a local 5mm; it now tracks PHOTO_GUTTER_MM. WIDENING it shrinks frames,
+// so the 2" print floor is re-checked below and any recipe that misses is
+// dropped, exactly as before.)
+const GAP_MM = PHOTO_GUTTER_MM;
 const MARGIN: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
 const ZERO_MARGIN: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 

@@ -1,6 +1,6 @@
 import type { PageTemplate, TemplateMargin } from './types';
 import type { PhotoRatio } from './photoAnalyzer';
-import { fill, rsBox, STD } from './templateKit';
+import { fill, rsBox, STD, gutterFrac } from './templateKit';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  6×4″ LANDSCAPE — page layouts
@@ -25,7 +25,7 @@ import { fill, rsBox, STD } from './templateKit';
  *  ══════════════════════════════════════════════════════════════════════════ */
 
 const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
-const GAP = (1 / 25.4) / 6; // 1mm as a fraction of the 6" width
+const GAP = gutterFrac(6); // the shared photo gutter, as a fraction of the 6" width
 const orientOf = (r: PhotoRatio): PageTemplate['orientation'] =>
   r === '3:2' || r === '4:3' || r === '16:9' ? 'landscape' : r === '1:1' ? 'square' : 'portrait';
 

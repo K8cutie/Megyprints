@@ -1,6 +1,6 @@
 import type { PageTemplate, TemplateMargin, TextSlot, AlbumSizePreset } from './types';
 import type { PhotoRatio } from './photoAnalyzer';
-import { fill, ALBUM_INCHES } from './templateKit';
+import { fill, ALBUM_INCHES, gutterFrac } from './templateKit';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  4:3 RECT ALBUM LAYOUTS — one builder for 8×6 (landscape) and 6×8 (portrait).
@@ -55,9 +55,9 @@ export function buildRectTemplates(size: AlbumSizePreset): PageTemplate[] {
   const long = Math.max(ALBUM_INCHES[size].w, ALBUM_INCHES[size].h);   // 8"
   const short = Math.min(ALBUM_INCHES[size].w, ALBUM_INCHES[size].h);  // 6"
 
-  /** 1mm as a fraction of the axis it runs along, so it prints 1mm on both. */
-  const gA = (1 / 25.4) / long;
-  const gB = (1 / 25.4) / short;
+  /** The shared photo gutter, per axis, so it prints the same width on both. */
+  const gA = gutterFrac(long);
+  const gB = gutterFrac(short);
 
   const R = (r: PhotoRatio) => (landscape ? r : FLIP[r]);
   /** Place a rect in PAGE fractions. `a` runs along the LONG side of the page,
