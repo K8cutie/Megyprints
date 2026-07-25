@@ -17,7 +17,7 @@ import type {
   FrameStyle,
   TextStyle,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
@@ -379,7 +379,13 @@ function getInitialState(): SerializedState {
     albumSize: effectiveSaved?.albumSize ?? defaultSize,
     selectedTemplate: effectiveSaved?.selectedTemplate ?? 'classic',
     uploadedPhotos: effectiveSaved?.uploadedPhotos ?? [],
-    albumPages: bindStrandedCaptions(stripDefaultThemeTitles(effectiveSaved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, defaultSize)))),
+      // Heal pages laid out under a RETIRED template set (see migrateRetiredPages):
+    // their templateId still resolves, so without this they would keep rendering
+    // scrapped geometry forever.
+    albumPages: migrateRetiredPages(
+      bindStrandedCaptions(stripDefaultThemeTitles(effectiveSaved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, defaultSize)))),
+      (effectiveSaved?.albumSize ?? defaultSize) as AlbumSizePreset,
+    ),
     currentPageIndex: effectiveSaved?.currentPageIndex ?? 0,
     rejectedTemplateIds: effectiveSaved?.rejectedTemplateIds ?? [],
     photosPerPage: effectiveSaved?.photosPerPage ?? undefined,
@@ -2482,7 +2488,11 @@ export function useBuilderState(): BuilderActions {
               };
             }
           );
-          setAlbumPages(stripDefaultThemeTitles(restoredPages));
+          // Same healing as the local restore: a page laid out under a RETIRED
+          // template keeps rendering that scrapped geometry, because its id
+          // still resolves. Re-point it onto a current layout for this size.
+          const sizeForPages = (albumData.sizePreset as AlbumSizePreset) ?? albumSize;
+          setAlbumPages(migrateRetiredPages(stripDefaultThemeTitles(restoredPages), sizeForPages));
         }
         // Restore uploaded photos from cloud
         // Rehydrate photo metadata from cloud + restore actual files from IndexedDB

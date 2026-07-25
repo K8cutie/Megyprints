@@ -1706,3 +1706,63 @@ export function computeSlotPixels(
     height: slot.height * safeH,
   }));
 }
+
+/* ── Retired-template migration ────────────────────────────────────────────
+   A page stores its templateId, so a page laid out under an OLD template set
+   keeps rendering that old geometry forever — even after the set is replaced.
+   Retired templates stay RESOLVABLE on purpose (so a saved album never goes
+   blank), but that is exactly what let scrapped layouts keep showing up in
+   albums long after they stopped being offered.
+
+   These helpers heal such a page: if its template is no longer valid for the
+   album's size, swap in the closest CURRENT template and keep the photos. */
+
+/** Pick a current stand-in for a page that was laid out with `old`.
+ *  Matches on slot count first (so the photos still fit), then prefers the same
+ *  number of combo boxes and the same orientation. `seed` spreads the choice
+ *  across the deck so a whole album does not collapse onto one layout. */
+export function replacementTemplate(
+  old: PageTemplate | undefined,
+  albumSize: AlbumSizePreset,
+  seed = 0,
+): PageTemplate | undefined {
+  const pool = getTemplatesForAlbum(albumSize);
+  if (pool.length === 0) return undefined;
+  const want = old?.slotCount ?? 1;
+  const byCount = pool.filter((t) => t.slotCount === want);
+  let cands = byCount.length ? byCount : pool;
+  const boxes = old?.textSlots?.length ?? 0;
+  const byBoxes = cands.filter((t) => (t.textSlots?.length ?? 0) === boxes);
+  if (byBoxes.length) cands = byBoxes;
+  if (old) {
+    const sameOrient = cands.filter((t) => t.orientation === old.orientation);
+    if (sameOrient.length) cands = sameOrient;
+  }
+  return cands[Math.abs(seed) % cands.length];
+}
+
+/** Re-point any page whose template is no longer offered for this size onto a
+ *  current one, preserving slot fills (trimmed/padded to the new slot count).
+ *  Returns the SAME array when nothing needed migrating, so callers can skip
+ *  a state update. */
+export function migrateRetiredPages<T extends {
+  templateId?: string; slotFills?: (number | null)[];
+}>(pages: T[], albumSize: AlbumSizePreset): T[] {
+  let changed = false;
+  const out = pages.map((p, i) => {
+    if (!p.templateId) return p;
+    const cur = getTemplateById(p.templateId);
+    // Still offered for this size → leave it exactly as it is.
+    if (cur && cur.albumSizes.includes(albumSize)) return p;
+    const repl = replacementTemplate(cur, albumSize, i);
+    if (!repl || repl.id === p.templateId) return p;
+    const fills = p.slotFills ?? [];
+    const next: (number | null)[] = Array.from(
+      { length: repl.slotCount },
+      (_, s) => (s < fills.length ? fills[s] ?? null : null),
+    );
+    changed = true;
+    return { ...p, templateId: repl.id, slotFills: next };
+  });
+  return changed ? out : pages;
+}
