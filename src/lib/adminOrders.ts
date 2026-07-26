@@ -40,13 +40,31 @@ export interface AdminOrder {
   updated_at: string;
 }
 
-/** Every order the caller may see, newest first. Goes through the role-aware
- *  operator_orders() function — owners get the peso amount, fulfillment gets it
- *  NULLed. Fulfillment has no direct orders access; this is their only read. */
-export async function fetchAllOrders(): Promise<AdminOrder[]> {
-  const { data, error } = await supabase.rpc('operator_orders');
+/** Default page size for the console. Measured on a 10,000-order database:
+ *  returning every order cost 2,018 kB and a full scan + 3.9 MB sort PER LOAD,
+ *  per operator. A page costs 20 kB off an index. */
+export const ORDERS_PAGE_SIZE = 100;
+
+/** One PAGE of the orders the caller may see, newest first. Goes through the
+ *  role-aware operator_orders() function — owners get the peso amount,
+ *  fulfillment gets it NULLed. Fulfillment has no direct orders access; this is
+ *  their only read. The function clamps the limit server-side, so a caller
+ *  cannot ask for the whole table back. */
+export async function fetchAllOrders(
+  limit: number = ORDERS_PAGE_SIZE,
+  offset = 0,
+): Promise<AdminOrder[]> {
+  const { data, error } = await supabase.rpc('operator_orders', { p_limit: limit, p_offset: offset });
   if (error) throw new Error(error.message);
   return (data ?? []) as AdminOrder[];
+}
+
+/** How many orders exist in total, so the console can say what it is NOT
+ *  showing. A paginated list that hides the total is its own bug. */
+export async function fetchOrdersCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('operator_orders_count');
+  if (error) throw new Error(error.message);
+  return Number(data ?? 0);
 }
 
 /** Advance status (owner OR fulfillment) via the status-only DB function — the

@@ -11,7 +11,7 @@ import { BarChart3, ClipboardList, LayoutGrid, Users, Calculator, ArrowLeft, Log
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
-import { fetchAllOrders, type AdminOrder } from '../lib/adminOrders';
+import { fetchAllOrders, fetchOrdersCount, ORDERS_PAGE_SIZE, type AdminOrder } from '../lib/adminOrders';
 import { supabase } from '../lib/supabase';
 import OverviewPanel from './admin/OverviewPanel';
 import OrdersPanel from './admin/OrdersPanel';
@@ -36,6 +36,23 @@ export default function Admin() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersErr, setOrdersErr] = useState<string | null>(null);
+  /** Total orders on the server — the list shows a page of these. */
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  /** Append the next page. Kept explicit (a button, not infinite scroll) so an
+   *  operator always knows whether they are looking at everything. */
+  const loadMoreOrders = useCallback(async () => {
+    setLoadingMore(true);
+    try {
+      const next = await fetchAllOrders(ORDERS_PAGE_SIZE, orders.length);
+      setOrders((prev) => [...prev, ...next]);
+    } catch (e) {
+      setOrdersErr(e instanceof Error ? e.message : 'Failed to load more orders');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [orders.length]);
   // Order ids that HAVE a "<id>.pdf" in the private print-pdfs bucket. Operators
   // already hold SELECT on that bucket (migration 0008), so we can observe print
   // readiness with zero schema/RLS/RPC change and flag any order missing its file.
@@ -56,7 +73,14 @@ export default function Admin() {
 
   const loadOrders = useCallback(async () => {
     setOrdersErr(null);
-    try { setOrders(await fetchAllOrders()); }
+    try {
+      // ONE PAGE, newest first — not the whole table. Returning every order cost
+      // 2 MB and a full scan per load, per operator (measured at 10k orders).
+      // The total comes back separately so the footer can say what is hidden.
+      const [page, total] = await Promise.all([fetchAllOrders(), fetchOrdersCount()]);
+      setOrders(page);
+      setOrdersTotal(total);
+    }
     catch (e) { setOrdersErr(e instanceof Error ? e.message : 'Failed to load orders'); }
     finally { setOrdersLoading(false); }
 
@@ -145,7 +169,24 @@ export default function Admin() {
           </p>
         )}
         {tab === 'overview' && isOwner && (ordersLoading ? <Spinner /> : <OverviewPanel orders={orders} />)}
-        {tab === 'orders' && (ordersLoading ? <Spinner /> : <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} />)}
+        {tab === 'orders' && (ordersLoading ? <Spinner /> : (
+          <>
+            <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} />
+            {/* Never let the list imply it is showing everything. */}
+            {ordersTotal > orders.length && (
+              <div className="mt-4 flex items-center justify-center gap-3 text-sm">
+                <span className="text-[#9B9B9B]">
+                  Showing {orders.length} of {ordersTotal} orders
+                </span>
+                <button onClick={() => void loadMoreOrders()} disabled={loadingMore}
+                  className="px-4 py-2 rounded-lg font-semibold text-white disabled:opacity-60"
+                  style={{ background: '#BF5E3E' }}>
+                  {loadingMore ? 'Loading…' : `Load ${Math.min(ORDERS_PAGE_SIZE, ordersTotal - orders.length)} more`}
+                </button>
+              </div>
+            )}
+          </>
+        ))}
         {tab === 'templates' && isOwner && <TemplatesPanel />}
         {tab === 'pricing' && isOwner && <PricingPanel />}
         {tab === 'team' && isOwner && <TeamPanel />}
