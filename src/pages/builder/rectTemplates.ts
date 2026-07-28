@@ -16,7 +16,7 @@ import { fill, ALBUM_INCHES, gutterFrac } from './templateKit';
  *  a quarter of itself — pages of cropped faces and legs. If a tiling only
  *  works by introducing a panoramic slot, the tiling is wrong for this page.
  *
- *  ── How 28 layouts fit inside that rule ───────────────────────────────────
+ *  ── How 29 layouts fit inside that rule ───────────────────────────────────
  *  Naively, a 4:3 page has almost no valid tilings: halve the short side and
  *  you get 8×3" (8:3); take thirds and you get 2.67×6" (4:9). Both unusable.
  *
@@ -292,6 +292,21 @@ export function buildRectTemplates(size: AlbumSizePreset): PageTemplate[] {
       rect(col3 + gA, 1 - col23B, col3, col23B, '2:3'),
       rect(2 * (col3 + gA), 1 - col23B, col3, col23B, '2:3'),
     ], [box(0, 0, 1, 1 - col23B)]),
+
+    /* ── 4 photos ─────────────────────────────────────────────────────────
+       The full 2×2: the trio grids' quadrant fractions with a photo in the
+       fourth corner instead of the box. Quarters of a 4:3 page are 4:3
+       themselves, so this is the one dense page the geometry allows with NO
+       box — which also makes it the only multi layout the caption cadence
+       can deal for this ratio while a box is on cooldown. Cells clear the
+       2" floor even after the 0.5" binding reserve shaves the spine column
+       (3.72×2.97" on 8×6, 2.72×3.97" on 6×8). */
+    t('quad-grid', { land: 'Quad Grid', port: 'Quad Grid' }, 'quad', '4:3', [
+      rect(0, 0, halfA, halfB, '4:3'),
+      rect(secondA, 0, halfA, halfB, '4:3'),
+      rect(0, secondB, halfA, halfB, '4:3'),
+      rect(secondA, secondB, halfA, halfB, '4:3'),
+    ]),
 
     // Resolvable-but-unselectable ids from the scrapped panoramic set.
     ...retiredFirstSet(size),

@@ -7,10 +7,11 @@
  */
 
 /** Photos-per-page options offered for each album-size preset. Max per size
- *  MATCHES the generator's tiled-template cap (2 / 4 / 6 / 6 for 6×4 / 6×6 /
- *  8×8·9×9 / landscape·portrait) — the print 2" floor is why small albums cap
- *  lower. Keep these two in lockstep so the manual picker never offers a density
- *  the generator won't actually produce for that size. */
+ *  MATCHES the densest layout its deck actually deals (the per-size authored
+ *  files for 6×4/squares/8×6/6×8, the tiled generator for 11.5×8/8.5×11) — the
+ *  print 2" floor is why small albums cap lower. Keep these two in lockstep so
+ *  the manual picker never offers a density the generator won't actually
+ *  produce for that size. */
 export const DENSITY_BY_SIZE: Record<string, number[]> = {
   '6x4': [1, 2],
   // The three SQUARE sizes share one authored layout set (squareTemplates.ts)
@@ -22,12 +23,12 @@ export const DENSITY_BY_SIZE: Record<string, number[]> = {
   '6x6': [1, 2, 3],
   '8x8': [1, 2, 3],
   '9x9': [1, 2, 3],
-  // 8×6 / 6×8 are authored per-size (rectTemplates.ts) and their deck currently
-  // caps at 3 photos/page, so the picker must cap there too — offering a density
-  // the generator can't deal would silently deal fewer and throw off the
-  // pre-generation page estimate. Re-widen as denser layouts are authored.
-  '8x6': [1, 2, 3],
-  '6x8': [1, 2, 3],
+  // 8×6 / 6×8 are authored per-size (rectTemplates.ts); their densest layout is
+  // the box-free 2×2 quad-grid, so the picker caps at 4. Offering a density the
+  // deck can't deal would silently deal fewer and throw off the pre-generation
+  // page estimate — re-widen only alongside a denser authored layout.
+  '8x6': [1, 2, 3, 4],
+  '6x8': [1, 2, 3, 4],
   '11.5x8': [1, 2, 3, 4, 5, 6],
   '8.5x11': [1, 2, 3, 4, 5, 6],
 };
@@ -74,6 +75,9 @@ const NATURAL_BY_SIZE: Record<string, number> = {
   // 4.04" of stacking on a 4.00"-tall page once the 1mm gutter is mandatory, so
   // the deck now caps at 2 photos/page. A natural ABOVE the deck's max makes
   // autoDensity ask for a density the deck cannot deal.
+  // 8x6/6x8 deal up to 4 (quad-grid) but their natural stays 3: the 4-up is the
+  // opt-in "Collage" density, and a natural of 4 would move the fill-mode
+  // threshold to 160 photos — spreading today's 120-159-photo albums to 1/page.
   '6x4': 2,
   '8x6': 3, '6x8': 3, '6x6': 3, '8x8': 3, '9x9': 3, '11.5x8': 3, '8.5x11': 3,
 };
