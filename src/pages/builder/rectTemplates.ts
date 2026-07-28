@@ -16,7 +16,7 @@ import { fill, ALBUM_INCHES, gutterFrac } from './templateKit';
  *  a quarter of itself — pages of cropped faces and legs. If a tiling only
  *  works by introducing a panoramic slot, the tiling is wrong for this page.
  *
- *  ── How 20 layouts fit inside that rule ───────────────────────────────────
+ *  ── How 28 layouts fit inside that rule ───────────────────────────────────
  *  Naively, a 4:3 page has almost no valid tilings: halve the short side and
  *  you get 8×3" (8:3); take thirds and you get 2.67×6" (4:9). Both unusable.
  *
@@ -33,6 +33,12 @@ import { fill, ALBUM_INCHES, gutterFrac } from './templateKit';
  *  And the 3-up works because a 2:3 hero leaves EXACTLY a 4:3 pair beside it
  *  (both real ratios, no box needed) — while a 3:4 hero over a band leaves a
  *  3:2 pair. Two genuinely different 3-photo pages.
+ *
+ *  Those hero 3-ups MIX ratios, which routes them through the generator's
+ *  mixed-template pass — dealt at most once or twice per moment group, so an
+ *  album still reads as duos page after page. The SINGLE-ratio trios below
+ *  (grid-with-box + three-columns) are what the ratio-by-ratio dealer can
+ *  actually rotate into the 1/2/3 page rhythm.
  *
  *  Every frame ≥ 2.00" on its short side; every photo cell within 0.8% of a
  *  real ratio (most are exact); a PHOTO_GUTTER_MM gutter between adjacent
@@ -141,6 +147,9 @@ export function buildRectTemplates(size: AlbumSizePreset): PageTemplate[] {
   const wideB = (short === 0 ? 0 : (long / 1.5) / short); // 0.889 — 3:2 across the page
   const heroB = (long / 2) / 0.75 / short;   // 0.889 — a half-width 3:4 hero
   const pairB = (heroB - gB) / 2;            // 0.440 — the 3:2 pair beside it
+  const col3 = (1 - 2 * gA) / 3;             // 2.63" — a third of the long side
+  const col34B = (col3 * long / 0.75) / short;    // 0.584 — height of a 3:4 column
+  const col23B = (col3 * long / (2 / 3)) / short; // 0.657 — height of a 2:3 column
 
   return [
     /* ── 1 photo ──────────────────────────────────────────────────────────
@@ -232,6 +241,57 @@ export function buildRectTemplates(size: AlbumSizePreset): PageTemplate[] {
       rect(0, 0, 0.5 - gA, pairB, '3:2'),
       rect(0, pairB + gB, 0.5 - gA, pairB, '3:2'),
     ], [box(0, heroB, 1, 1 - heroB)]),
+
+    /* ── 3 photos, SINGLE ratio ───────────────────────────────────────────
+       Quarters of a 4:3 page are themselves 4:3 (within 0.25% once the house
+       gutter is taken), so a 2×2 grid with the combo box in one quadrant
+       holds three exact-ratio photos — and the box corner gives four
+       genuinely different looks. Three portrait columns across the long side
+       leave a real band for the box: 3:4 columns a deep one, 2:3 columns a
+       shallow one. These are the only same-ratio 3-ups the page geometry
+       allows (a box-free one would need a sub-floor or off-ratio cell). */
+    t('trio-grid-box-tl', { land: 'Trio Grid, Box Top Left', port: 'Trio Grid, Box Top Left' }, 'trio', '4:3', [
+      rect(secondA, 0, halfA, halfB, '4:3'),
+      rect(0, secondB, halfA, halfB, '4:3'),
+      rect(secondA, secondB, halfA, halfB, '4:3'),
+    ], [box(0, 0, secondA, secondB)]),
+    t('trio-grid-box-tr', { land: 'Trio Grid, Box Top Right', port: 'Trio Grid, Box Bottom Left' }, 'trio', '4:3', [
+      rect(0, 0, halfA, halfB, '4:3'),
+      rect(0, secondB, halfA, halfB, '4:3'),
+      rect(secondA, secondB, halfA, halfB, '4:3'),
+    ], [box(halfA, 0, 1 - halfA, secondB)]),
+    t('trio-grid-box-bl', { land: 'Trio Grid, Box Bottom Left', port: 'Trio Grid, Box Top Right' }, 'trio', '4:3', [
+      rect(0, 0, halfA, halfB, '4:3'),
+      rect(secondA, 0, halfA, halfB, '4:3'),
+      rect(secondA, secondB, halfA, halfB, '4:3'),
+    ], [box(0, halfB, secondA, 1 - halfB)]),
+    t('trio-grid-box-br', { land: 'Trio Grid, Box Bottom Right', port: 'Trio Grid, Box Bottom Right' }, 'trio', '4:3', [
+      rect(0, 0, halfA, halfB, '4:3'),
+      rect(secondA, 0, halfA, halfB, '4:3'),
+      rect(0, secondB, halfA, halfB, '4:3'),
+    ], [box(halfA, halfB, 1 - halfA, 1 - halfB)]),
+
+    t('trio-34-cols-b', { land: 'Three Portraits + Band Below', port: 'Three Landscapes + Band Right' }, 'trio', '3:4', [
+      rect(0, 0, col3, col34B, '3:4'),
+      rect(col3 + gA, 0, col3, col34B, '3:4'),
+      rect(2 * (col3 + gA), 0, col3, col34B, '3:4'),
+    ], [box(0, col34B, 1, 1 - col34B)]),
+    t('trio-34-cols-a', { land: 'Three Portraits + Band Above', port: 'Three Landscapes + Band Left' }, 'trio', '3:4', [
+      rect(0, 1 - col34B, col3, col34B, '3:4'),
+      rect(col3 + gA, 1 - col34B, col3, col34B, '3:4'),
+      rect(2 * (col3 + gA), 1 - col34B, col3, col34B, '3:4'),
+    ], [box(0, 0, 1, 1 - col34B)]),
+
+    t('trio-23-cols-b', { land: 'Three Tall + Band Below', port: 'Three Wide + Band Right' }, 'trio', '2:3', [
+      rect(0, 0, col3, col23B, '2:3'),
+      rect(col3 + gA, 0, col3, col23B, '2:3'),
+      rect(2 * (col3 + gA), 0, col3, col23B, '2:3'),
+    ], [box(0, col23B, 1, 1 - col23B)]),
+    t('trio-23-cols-a', { land: 'Three Tall + Band Above', port: 'Three Wide + Band Left' }, 'trio', '2:3', [
+      rect(0, 1 - col23B, col3, col23B, '2:3'),
+      rect(col3 + gA, 1 - col23B, col3, col23B, '2:3'),
+      rect(2 * (col3 + gA), 1 - col23B, col3, col23B, '2:3'),
+    ], [box(0, 0, 1, 1 - col23B)]),
 
     // Resolvable-but-unselectable ids from the scrapped panoramic set.
     ...retiredFirstSet(size),

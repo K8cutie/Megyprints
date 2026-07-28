@@ -232,6 +232,17 @@ export function generateAlbum(
     + t.slots.map((s) => `${s.x.toFixed(3)},${s.y.toFixed(3)},${s.width.toFixed(3)},${s.height.toFixed(3)}`).join(';')
     + '|' + (t.textSlots ?? []).map((s) => `${s.x.toFixed(2)},${s.y.toFixed(2)},${s.width.toFixed(2)},${s.height.toFixed(2)}`).join(';');
   let lastGeoSig: string | null = null;
+  /** Photos-per-page of the last two pages. Varying the LAYOUT is not enough:
+   *  two different 2-photo layouts both look "different" by geometry, so a run
+   *  of twenty 2-photo pages passes every other variety check while reading as
+   *  one long monotonous stretch. The RHYTHM — 3, 1, 2, 3 … — is what the eye
+   *  actually reads, so the count is steered too. */
+  const recentCounts: number[] = [];
+  const countRecentlyUsed = (n: number) => recentCounts.includes(n);
+  const noteCount = (n: number) => {
+    recentCounts.push(n);
+    if (recentCounts.length > 2) recentCounts.shift();
+  };
 
   /** Deal a single-photo template that does NOT repeat the previous page's
    *  look. `boxFree` is the cadence-preferred subset (box-free while on
@@ -314,6 +325,7 @@ export function generateAlbum(
     const slotCount = template.slots.length;
     lastTemplateId = template.id;
     lastGeoSig = geoSigOf(template);
+    noteCount(slotCount);
     nextHeroIn -= 1;
     if (slotCount === 1) nextHeroIn = Math.max(nextHeroIn, 4 + Math.floor(Math.random() * 4));
     // A box page re-arms the cooldown (next 3 pages box-free); any other page
@@ -402,7 +414,23 @@ export function generateAlbum(
         // on mixed pages too.
         const eligiblePool = boxAware(fillable.map((x) => x.t));
         const okIds = new Set(eligiblePool.map((t) => t.id));
-        const id = mixedBag.draw((x) => okIds.has(x));
+        // Same rhythm rule as the ratio path: prefer a page whose PHOTO COUNT
+        // is not one of the last two, so mixed pages break the run instead of
+        // extending it. Falls back to any eligible layout when the pool has
+        // nothing of a different count.
+        const countOf = new Map(fillable.map((x) => [x.t.id, x.t.slotCount]));
+        // If EVERY mixed option would repeat a photo-count we just used, stop
+        // placing mixed pages and hand these photos to the ratio-by-ratio path,
+        // which can deal a different count. Without this the loop drains photos
+        // into mixed pages back to back: on 8×6 every 3-photo layout is
+        // mixed-ratio, so the album came out as 45 consecutive 3-photo pages —
+        // varied frames, one flat rhythm. Breaking here is safe: the photos are
+        // simply laid out by 3b instead, and after a couple of pages of another
+        // count the mixed layouts become eligible again.
+        if (fillable.every((x) => countRecentlyUsed(x.t.slotCount))) break;
+        const id =
+          mixedBag.draw((x) => okIds.has(x) && !countRecentlyUsed(countOf.get(x) ?? -1)) ??
+          mixedBag.draw((x) => okIds.has(x));
         const chosen = fillable.find((x) => x.t.id === id)
           ?? fillable[Math.floor(Math.random() * fillable.length)];
         pushPage(chosen.t, chosen.fills);
@@ -495,7 +523,15 @@ export function generateAlbum(
         // otherwise max() this away): a THIN multi pool (2 layouts) can only
         // alternate A/B between heroes, so heroes must come often (every 2–4
         // pages) to break the rhythm; rich pools only need one every 4–7.
-        nextHeroIn = multi.length < 3
+        // Cadence keys off how many distinct PHOTO COUNTS this pool can deal,
+        // not how many layouts it has. A pool of seven 2-photo layouts still
+        // only ever says "2" — its frames vary while the rhythm does not — so
+        // the hero page is the ONLY thing that can break the run and has to
+        // come often. (8×6 is exactly this: all of its 3-photo layouts are
+        // mixed-ratio and therefore placed elsewhere, leaving the ratio path
+        // with nothing but duos.)
+        const distinctCounts = new Set(multi.map((t) => t.slotCount)).size;
+        nextHeroIn = (multi.length < 3 || distinctCounts < 2)
           ? 2 + Math.floor(Math.random() * 3)
           : 4 + Math.floor(Math.random() * 4);
         return;
@@ -514,8 +550,21 @@ export function generateAlbum(
           const t = byId.get(id);
           return !!t && geoSigOf(t) !== lastGeoSig;
         };
+        // A layout whose PHOTO COUNT is not one of the last two pages'. This is
+        // the rhythm control: without it a deck can serve twenty consecutive
+        // 2-photo pages, each a "different" layout and each passing `differs`,
+        // which reads as one flat stretch.
+        const freshCount = (id: string): boolean => {
+          const t = byId.get(id);
+          return !!t && !countRecentlyUsed(t.slotCount);
+        };
         const bag = bagFor(`${key}:multi`, multi.map((t) => t.id));
         const id =
+          // 1. different look AND a count we have not just used — the good case
+          bag.draw((x) => okSet.has(x) && differs(x) && freshCount(x)) ??
+          bag.draw((x) => fitSet.has(x) && differs(x) && freshCount(x)) ??
+          // 2. the deck cannot change the count right now → settle for a
+          //    different look (previous behaviour)
           bag.draw((x) => okSet.has(x) && differs(x)) ??
           bag.draw((x) => fitSet.has(x) && differs(x));
         if (id != null) {
