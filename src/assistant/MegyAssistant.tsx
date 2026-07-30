@@ -3,21 +3,21 @@
    The primary interface for the album builder. Replaces the sidebar.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
-import { useBuilderContext } from '../pages/builder/BuilderContext';
+import { useBuilderContext, type BuilderContextValue } from '../pages/builder/BuilderContext';
 import { parseIntent } from './intentParser';
-import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep } from './wizard';
+import { WizardEngine, WIZARD_STORAGE_KEY, phaseForStep, wizardMessage, wizardProgress } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
 import type { AssistantMessage } from './types';
-import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
+import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground, AlbumPage } from '../pages/builder/types';
 import { getThemeBackgroundVariants, BORDER_STYLES, FRAME_STYLES, frameStyleToCss } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import {
   Images, LayoutGrid, Palette, Type, ChevronUp, ChevronDown,
-  PanelLeft, Box, Shuffle, Plus, Minus, ArrowLeft, ArrowRight, Upload,
+  Box, Shuffle, Plus, Minus, ArrowLeft, ArrowRight, Upload,
   RefreshCw, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
   RotateCcw, Redo, Sparkles, Trash2, Sun, Moon, Contrast, Droplets,
   Frame, Search, Send, Home, ChevronLeft, ChevronRight,
@@ -31,14 +31,17 @@ const WELCOME: AssistantMessage = {
 
 /* Photos-per-page options valid for each album size (annexed A2). */
 
-/* Typewriter effect — gives Megy a "talking" personality (annexed A4). */
+/* Typewriter effect — gives Megy a "talking" personality (annexed A4).
+   The reveal ticks entirely inside the interval callback — no synchronous
+   setState in the effect body — and a changed `text` restarts the slice. */
 function TypeText({ text, speed = 22 }: { text: string; speed?: number }) {
   const [shown, setShown] = useState('');
   useEffect(() => {
-    setShown('');
     let i = 0;
     const t = setInterval(() => {
-      if (i < text.length) { setShown(text.slice(0, i + 1)); i++; } else clearInterval(t);
+      i += 1;
+      setShown(text.slice(0, i));
+      if (i >= text.length) clearInterval(t);
     }, speed);
     return () => clearInterval(t);
   }, [text, speed]);
@@ -140,20 +143,26 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   const builder = useBuilderContext();
 
-  /* ── Wizard state ── */
-  const isFirstTime = !localStorage.getItem(WIZARD_STORAGE_KEY);
-  const wizardRef = useRef(new WizardEngine(builder, isFirstTime));
-  // Keep the wizard's builder in sync DURING render (not in an effect) so
-  // getMessage() always reads the current page/state — otherwise the review
-  // message lags a render behind page navigation.
-  wizardRef.current.builder = builder;
-  const [showWizard, setShowWizard] = useState(isFirstTime || builder.phase === 'setup');
+  /* ── Wizard state ──
+     The engine is an external store; useSyncExternalStore is the ONLY way
+     render reads it (never through a ref during render). boot() resumes the
+     persisted journey, so a reload puts the user back on the step they left. */
+  const [wizardEngine] = useState(() => WizardEngine.boot(builder));
+  const wizard = useSyncExternalStore(wizardEngine.subscribe, wizardEngine.getState);
+  const wizardStep = wizard.step;
 
-  /* ── Auto-sync wizard when builder PHASE changes ──
-     Only sync when user explicitly transitions phases (setup→edit→preview).
-     During setup, the wizard stays at whatever step the user is on. */
-  const [wizardStep, setWizardStep] = useState(wizardRef.current.state.step);
-  const prevPhaseRef = useRef(builder.phase);
+  /* Wizard visibility — DERIVED from an explicit "hidden this session" flag
+     instead of a value captured once at mount. The old init-once flag
+     (`isFirstTime || phase === 'setup'`) went stale when the phase hydrated
+     from the persisted draft (or a cloud load) AFTER mount; now the journey
+     card always comes back on reload — at the resumed step — until the user
+     ✕-dismisses it again. */
+  const [wizardDismissed, setWizardDismissed] = useState(false);
+  const showWizard = !wizardDismissed;
+  const dismissWizard = useCallback(() => {
+    setWizardDismissed(true);
+    wizardEngine.persistNow();
+  }, [wizardEngine]);
 
   /* ── Option A: the wizard is the single source of truth for the journey.
      Mirror its step into the SHARED store AND derive the center screen (phase)
@@ -166,49 +175,31 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   }, [wizardStep]);
 
   /* External writes to the shared step (e.g. the center "Start Creating"
-     button) flow back into the wizard engine + panel. Forward jumps mark the
-     skipped-over steps complete so detectStep stays consistent. */
+     button) flow back into the wizard engine + panel. The ref compare skips
+     the mount pass — the store's initial placeholder value must not drag a
+     resumed journey backward — and our own mirror writes above. */
+  const lastSharedStepRef = useRef(builder.wizardStep);
   useEffect(() => {
-    const eng = wizardRef.current;
-    if (builder.wizardStep !== eng.state.step) {
-      const from = WIZARD_ORDER.indexOf(eng.state.step);
-      const to = WIZARD_ORDER.indexOf(builder.wizardStep);
-      if (to > from) {
-        for (let i = from; i < to; i++) {
-          if (!eng.state.completed.includes(WIZARD_ORDER[i])) eng.state.completed.push(WIZARD_ORDER[i]);
-        }
-      }
-      eng.state.step = builder.wizardStep;
-      setWizardStep(builder.wizardStep);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [builder.wizardStep]);
+    if (lastSharedStepRef.current === builder.wizardStep) return;
+    lastSharedStepRef.current = builder.wizardStep;
+    wizardEngine.syncFromShared(builder.wizardStep);
+  }, [builder.wizardStep, wizardEngine]);
+
   /* ── Option A: reconcile the wizard to reality (FORWARD only).
      Runs on mount and whenever the phase OR the generated-album state changes,
      so a returning user with a finished album lands on "Review" instead of the
      size step. Never yanks the user backward mid-setup. ── */
   useEffect(() => {
-    prevPhaseRef.current = builder.phase;
-    const detected = wizardRef.current.detectStep();
-    const current = wizardRef.current.state.step;
-    if (detected !== current) {
-      const currentIdx = WIZARD_ORDER.indexOf(current);
-      const detectedIdx = WIZARD_ORDER.indexOf(detected);
-      if (detectedIdx > currentIdx) {
-        for (let i = currentIdx; i < detectedIdx; i++) {
-          if (!wizardRef.current.state.completed.includes(WIZARD_ORDER[i])) {
-            wizardRef.current.state.completed.push(WIZARD_ORDER[i]);
-          }
-        }
-        wizardRef.current.state.step = detected;
-        setWizardStep(detected);
-      }
-    }
+    wizardEngine.reconcileForward(builder);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [builder.phase, builder.albumPages.length]);
 
-  // Force re-render when wizard step changes via key
+  // Remount the message card when the step changes (restarts the typewriter)
   const wizardKey = `wizard-${wizardStep}`;
+  /* Render data — pure functions of (wizard state, builder state), so the
+     card can never lag a render behind page navigation or photo uploads. */
+  const wizardMsg = wizardMessage(wizard, builder);
+  const wizardProg = wizardProgress(wizard);
 
   const page = builder.currentPage;
   const totalPhotos = builder.uploadedPhotos.length;
@@ -232,7 +223,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   /* ── Toast ── */
   const [toast, setToast] = useState<string | null>(null);
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
+  const showToast = useCallback((msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2000); }, []);
 
   /* ── Chat ── */
   const sendMessage = useCallback(async (text: string) => {
@@ -246,24 +237,23 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     const asst: AssistantMessage = { id: `a-${Date.now()}`, role: 'assistant', content: result.message, intent: parsed.intent, timestamp: new Date() };
     setIsThinking(false);
     setMessages((p) => [...p, asst]);
-  }, []);
+  }, [builder]);
   const handleSubmit = (e?: React.FormEvent) => { e?.preventDefault(); sendMessage(input); };
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } };
 
   /* ── Wizard action handler ── */
   const handleWizardAction = useCallback((action: string) => {
-    const step = wizardRef.current.state.step;
+    const step = wizardEngine.getState().step;
     switch (step) {
-      case 'welcome':
+      case 'welcome': {
         if (action.includes('Start')) {
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
+          wizardEngine.advance();
         } else if (action.includes('Skip')) {
-          setShowWizard(false);
-          localStorage.setItem(WIZARD_STORAGE_KEY, wizardRef.current.serialize());
+          dismissWizard();
         }
         break;
-      case 'pick_size':
+      }
+      case 'pick_size': {
         const sizes: Record<string, string> = {
           '6×6': '6x6', '8×8': '8x8', '9×9': '9x9',
           '6×4': '6x4', '8×6': '8x6', '6×8': '6x8', '11.5×8': '11.5x8', '8.5×11': '8.5x11',
@@ -271,12 +261,12 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         const size = Object.keys(sizes).find(k => action.includes(k));
         if (size) {
           void builder.dispatch({ type: 'change_size', payload: { size: sizes[size] }, rawMessage: `change size to ${sizes[size]}` });
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
+          wizardEngine.advance();
           showToast(`Size set: ${size}`);
         }
         break;
-      case 'pick_background':
+      }
+      case 'pick_background': {
         const bgColors: Record<string, string> = {
           'Warm White': '#FFFBF7', 'Soft Blush': '#FDE8E4', 'Light Lavender': '#E8E0F0',
           'Ocean Blue': '#E0E8F0', 'Cream Gold': '#F5E8D0', 'Clean White': '#FFFFFF',
@@ -284,22 +274,22 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         const bgName = Object.keys(bgColors).find(k => action.includes(k));
         if (bgName) {
           void builder.dispatch({ type: 'set_background', payload: { background: { type: 'solid', solid: bgColors[bgName] }, applyAll: true }, rawMessage: `set background ${bgName}` });
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
+          wizardEngine.advance();
           showToast(`Background: ${bgName}`);
         }
         break;
-      case 'upload_photos':
+      }
+      case 'upload_photos': {
         if (action.includes('Generate')) {
           // The upload step doubles as Generate — build the album, then jump to Review.
           void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' });
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
+          wizardEngine.advance();
           showToast('Album generated!');
         } else if (action.includes('Upload')) {
           fileInputRef.current?.click();
         }
         break;
+      }
       case 'review_pages': {
         if (/layout/i.test(action)) {
           builder.setLayoutPickerOpen(true);
@@ -323,29 +313,29 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         }
         break;
       }
-      case 'add_text':
+      case 'add_text': {
         if (action.includes('Text')) {
           void builder.dispatch({ type: 'add_text', rawMessage: 'add text' });
         } else if (action.includes('Skip') || action.includes('Finalize')) {
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
+          wizardEngine.advance();
         }
         break;
-      case 'finalize':
+      }
+      case 'finalize': {
         if (action.includes('Preview')) {
           void builder.dispatch({ type: 'preview_album', rawMessage: 'preview album' });
         } else if (action.includes('Save')) {
           builder.manualSave?.();
         }
         break;
+      }
     }
-  }, [builder, showToast]);
+  }, [builder, wizardEngine, dismissWizard, showToast]);
   const doRestartWizard = () => {
     if (!window.confirm('Restart from the beginning? Your current album and photos will be cleared.')) return;
     builder.reset();                              // wipe album + photos
-    wizardRef.current.restart();                  // engine → welcome, clear flags
-    setShowWizard(true);                          // re-show the guided centerpiece
-    setWizardStep(wizardRef.current.state.step);  // syncs store + phase via effects
+    wizardEngine.restart();                       // engine → welcome (store + phase follow via effects)
+    setWizardDismissed(false);                    // re-show the guided centerpiece
     try { localStorage.removeItem(WIZARD_STORAGE_KEY); } catch { /* ignore */ }
     showToast('Wizard restarted — back to the beginning');
   };
@@ -421,8 +411,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const centerStage = showWizard && ['welcome', 'pick_size', 'pick_background', 'upload_photos'].includes(wizardStep);
 
   if (centerStage) {
-    const msg = wizardRef.current.getMessage();
-    const prog = wizardRef.current.getProgress();
+    const msg = wizardMsg;
+    const prog = wizardProg;
     return (
       <div className="fixed inset-0 z-[95] bg-[#FFFBF7] flex flex-col items-center [justify-content:safe_center] p-6 overflow-auto">
         {/* Hidden file input so the Upload step works on the center stage too */}
@@ -439,9 +429,18 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
         <img src="/megy-character.png" alt="Megy" className="w-20 h-20 object-contain mb-4 drop-shadow-lg" draggable={false} />
 
-        <div className={`w-full ${wizardRef.current.state.step === 'pick_background' ? 'max-w-4xl' : 'max-w-lg'}`}>
-          <div className="flex items-center mb-1">
+        <div className={`w-full ${wizardStep === 'pick_background' ? 'max-w-4xl' : 'max-w-lg'}`}>
+          <div className="flex items-center justify-between mb-1">
             <span className="text-[11px] font-medium text-[#8B7E7A]">{prog.label}</span>
+            {/* Same session-dismiss as the side panel's ✕ — reload resumes the journey */}
+            <button
+              onClick={dismissWizard}
+              className="px-1.5 text-[12px] text-[#9B9B9B] hover:text-[#2D2D2D] transition-colors"
+              title="Hide the guide"
+              aria-label="Hide the guide"
+            >
+              ✕
+            </button>
           </div>
           <div className="w-full h-1.5 bg-[#F4C2A1]/20 rounded-full overflow-hidden mb-4">
             <div className="h-full bg-[#F4C2A1] rounded-full transition-all" style={{ width: `${prog.percent}%` }} />
@@ -449,7 +448,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
           <div className="p-6 bg-white rounded-2xl border border-[#F4C2A1]/20 shadow-xl" key={wizardKey}>
             <h3 className="font-display text-xl font-semibold text-[#2D2D2D] mb-2"><TypeText text={msg.title} /></h3>
-            {(wizardRef.current.state.step === 'upload_photos' && builder.uploadedPhotos.length > 0) ? (
+            {(wizardStep === 'upload_photos' && builder.uploadedPhotos.length > 0) ? (
               <div className="mb-4">
                 {/* Eye-catching photo count */}
                 <div className="flex items-baseline gap-2 mb-3">
@@ -501,7 +500,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             ) : (
               <p className="text-sm text-[#5A5A5A] leading-relaxed mb-4">{msg.body}</p>
             )}
-            {wizardRef.current.state.step === 'pick_background' ? (
+            {wizardStep === 'pick_background' ? (
               /* Step-2 customization page.
                  TOP: occasion themes as quick-pick PRESETS — each sets the whole
                  look (background + frames + corner art) via apply_theme.
@@ -639,15 +638,15 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             )}
             <div className="flex items-center justify-between mt-5 pt-3 border-t border-[#F0F0F0]">
               <button
-                onClick={() => { wizardRef.current.back(); setWizardStep(wizardRef.current.state.step); }}
-                disabled={wizardRef.current.state.step === 'welcome'}
+                onClick={() => wizardEngine.back()}
+                disabled={wizardStep === 'welcome'}
                 className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium text-[#8B7E7A] hover:bg-[#FFF8F0] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
                 ← Previous
               </button>
               <button
-                onClick={() => { wizardRef.current.advance(); setWizardStep(wizardRef.current.state.step); }}
-                disabled={wizardRef.current.state.step === 'finalize'}
+                onClick={() => wizardEngine.advance()}
+                disabled={wizardStep === 'finalize'}
                 className="flex items-center gap-1 px-5 py-2 rounded-lg text-sm font-medium bg-[#F4C2A1] text-white hover:bg-[#E8A598] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
                 Next →
@@ -730,12 +729,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <button onClick={() => setChatOpen(!chatOpen)} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat">
             <Send className="w-4 h-4" />
           </button>
-          {/* Legacy sidebar button hidden — Megy is the sole orchestrator (Ctrl+Shift+S still works) */}
-          {false && (
-          <button onClick={() => alert('Use Ctrl+Shift+S to open the legacy sidebar')} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Legacy sidebar (Ctrl+Shift+S)">
-            <PanelLeft className="w-4 h-4" />
-          </button>
-          )}
+          {/* Legacy sidebar button removed — Megy is the sole orchestrator (Ctrl+Shift+S still works) */}
         </div>
       </div>
 
@@ -752,10 +746,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         <div className="px-4 py-2 bg-[#FFF8F0] border-b border-[#F4C2A1]/10 shrink-0">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-medium text-[#8B7E7A]">
-              {wizardRef.current.getProgress().label}
+              {wizardProg.label}
             </span>
             <button
-              onClick={() => { setShowWizard(false); localStorage.setItem(WIZARD_STORAGE_KEY, wizardRef.current.serialize()); }}
+              onClick={dismissWizard}
               className="text-[10px] text-[#9B9B9B] hover:text-[#2D2D2D]"
             >
               ✕
@@ -764,20 +758,20 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <div className="w-full h-1.5 bg-[#F4C2A1]/20 rounded-full overflow-hidden">
             <div
               className="h-full bg-[#F4C2A1] rounded-full transition-all"
-              style={{ width: `${wizardRef.current.getProgress().percent}%` }}
+              style={{ width: `${wizardProg.percent}%` }}
             />
           </div>
 
           {/* Wizard Message Card */}
           <div className="mt-2 p-3 bg-white rounded-xl border border-[#F4C2A1]/20" key={wizardKey}>
             <h3 className="text-sm font-semibold text-[#2D2D2D] mb-1">
-              <TypeText text={wizardRef.current.getMessage().title} />
+              <TypeText text={wizardMsg.title} />
             </h3>
             <p className="text-[11px] text-[#5A5A5A] leading-relaxed mb-2">
-              {wizardRef.current.getMessage().body}
+              {wizardMsg.body}
             </p>
             <div className="flex flex-wrap gap-2">
-              {wizardRef.current.getMessage().actions.map((action) => (
+              {wizardMsg.actions.map((action) => (
                 <button
                   key={action}
                   onClick={() => handleWizardAction(action)}
@@ -794,23 +788,23 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             {/* Navigation: Previous / Next */}
             <div className="flex items-center justify-between mt-3 pt-2 border-t border-[#F0F0F0]">
               <button
-                onClick={() => { wizardRef.current.back(); setWizardStep(wizardRef.current.state.step); }}
-                disabled={wizardRef.current.state.step === 'welcome'}
+                onClick={() => wizardEngine.back()}
+                disabled={wizardStep === 'welcome'}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium text-[#8B7E7A] hover:bg-[#FFF8F0] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
                 ← Previous
               </button>
               <button
-                onClick={() => { wizardRef.current.advance(); setWizardStep(wizardRef.current.state.step); }}
-                disabled={wizardRef.current.state.step === 'finalize'}
+                onClick={() => wizardEngine.advance()}
+                disabled={wizardStep === 'finalize'}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[#F4C2A1] text-white hover:bg-[#E8A598] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
                 Next →
               </button>
             </div>
-            {wizardRef.current.getMessage().tips.length > 0 && (
+            {wizardMsg.tips.length > 0 && (
               <div className="mt-2 pt-2 border-t border-[#F0F0F0] space-y-0.5">
-                {wizardRef.current.getMessage().tips.map((tip) => (
+                {wizardMsg.tips.map((tip) => (
                   <p key={tip} className="text-[10px] text-[#9B9B9B] flex items-center gap-1">
                     <span className="text-[#F4C2A1]">💡</span> {tip}
                   </p>
@@ -1148,8 +1142,8 @@ function ToggleBtn({ active, onClick, children, title }: {
    TEXT ELEMENTS LIST — Show all text elements + add button
    ══════════════════════════════════════════════════════════════════════════ */
 
-function TextElementsList({ page, builder }: { page: any; builder: any }) {
-  const texts = page?.textElements ?? [];
+function TextElementsList({ page, builder }: { page: AlbumPage; builder: BuilderContextValue }) {
+  const texts = page.textElements ?? [];
 
   if (texts.length === 0) {
     return (

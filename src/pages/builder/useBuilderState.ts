@@ -250,23 +250,16 @@ function isDeadBlobUrl(url: string | undefined): boolean {
 }
 
 function isStateCorrupted(state: SerializedState): boolean {
-  // Check for common corruption patterns:
-  // 1. Pages with broken photo references (photo indices pointing nowhere)
-  // 2. All pages are empty but state claims to have photos
+  // Corruption means STRUCTURAL damage only: slot fills whose photo indices
+  // point nowhere. "Photos uploaded but every page empty" is NOT corruption —
+  // it's the normal mid-wizard draft (photos picked at the upload step, album
+  // not generated yet). The old heuristic that wiped storage on that pattern
+  // destroyed the draft on any reload taken between upload and generate.
   // NOTE: Dead blob URLs are NOT corruption — rehydration effect restores
   // them from IndexedDB on mount. Do NOT purge here.
   if (!state.albumPages || state.albumPages.length === 0) return false; // Clean slate
 
   const totalPhotos = state.uploadedPhotos?.length ?? 0;
-
-  const hasAnyContent = state.albumPages.some((p) =>
-    (p.photos?.length ?? 0) > 0 ||
-    (p.slotFills?.some((f) => f !== null) ?? false) ||
-    (p.textElements?.length ?? 0) > 0
-  );
-
-  // Has photos uploaded but no content anywhere = likely corrupted
-  if (totalPhotos > 0 && !hasAnyContent) return true;
 
   // Check for out-of-bounds photo indices in slot fills
   const maxPhotoIndex = totalPhotos - 1;
