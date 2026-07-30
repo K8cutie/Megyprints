@@ -16,7 +16,7 @@ import { fill, ALBUM_INCHES, gutterFrac } from './templateKit';
  *  a quarter of itself — pages of cropped faces and legs. If a tiling only
  *  works by introducing a panoramic slot, the tiling is wrong for this page.
  *
- *  ── How 29 layouts fit inside that rule ───────────────────────────────────
+ *  ── How 35 layouts fit inside that rule ───────────────────────────────────
  *  Naively, a 4:3 page has almost no valid tilings: halve the short side and
  *  you get 8×3" (8:3); take thirds and you get 2.67×6" (4:9). Both unusable.
  *
@@ -150,6 +150,11 @@ export function buildRectTemplates(size: AlbumSizePreset): PageTemplate[] {
   const col3 = (1 - 2 * gA) / 3;             // 2.63" — a third of the long side
   const col34B = (col3 * long / 0.75) / short;    // 0.584 — height of a 3:4 column
   const col23B = (col3 * long / (2 / 3)) / short; // 0.657 — height of a 2:3 column
+  const sqA = halfB * short / long;          // 0.371 — width of a half-short square
+  const sqBandX = 2 * sqA + gA;              // 0.750 — a square 2×2's full width
+  const ptA = halfB * 0.75 * short / long;   // 0.278 — width of a half-short 3:4 cell
+  const ptBandX = 2 * ptA + gA;              // 0.564 — a portrait 2×2's full width
+  const q32B = (halfA * long / 1.5) / short; // 0.441 — height of a half-long 3:2 cell
 
   return [
     /* ── 1 photo ──────────────────────────────────────────────────────────
@@ -307,6 +312,51 @@ export function buildRectTemplates(size: AlbumSizePreset): PageTemplate[] {
       rect(0, secondB, halfA, halfB, '4:3'),
       rect(secondA, secondB, halfA, halfB, '4:3'),
     ]),
+
+    /* The other three same-ratio 4-ups. Half-short cells (2.97") stacked two
+       high leave width over, so squares and portraits go 2×2 with a SIDE box
+       taking the remainder — 2.0" for squares, 3.5" for portraits (which is
+       what hands the 6×8's landscape queue its quad, since 3:4 flips to 4:3
+       there). 3:2 cells are the transpose: half-long wide (3.97"), two rows
+       fill all but a 0.65" strip — the same slim band the 3:2 solo uses. */
+    t('quad-sq-box-r', { land: 'Quad Squares + Box Right', port: 'Quad Squares + Box Below' }, 'quad', '1:1', [
+      rect(0, 0, sqA, halfB, '1:1'),
+      rect(sqA + gA, 0, sqA, halfB, '1:1'),
+      rect(0, secondB, sqA, halfB, '1:1'),
+      rect(sqA + gA, secondB, sqA, halfB, '1:1'),
+    ], [box(sqBandX, 0, 1 - sqBandX, 1)]),
+    t('quad-sq-box-l', { land: 'Quad Squares + Box Left', port: 'Quad Squares + Box Above' }, 'quad', '1:1', [
+      rect(1 - sqBandX, 0, sqA, halfB, '1:1'),
+      rect(1 - sqBandX + sqA + gA, 0, sqA, halfB, '1:1'),
+      rect(1 - sqBandX, secondB, sqA, halfB, '1:1'),
+      rect(1 - sqBandX + sqA + gA, secondB, sqA, halfB, '1:1'),
+    ], [box(0, 0, 1 - sqBandX, 1)]),
+
+    t('quad-34-box-r', { land: 'Quad Portraits + Box Right', port: 'Quad Landscapes + Box Below' }, 'quad', '3:4', [
+      rect(0, 0, ptA, halfB, '3:4'),
+      rect(ptA + gA, 0, ptA, halfB, '3:4'),
+      rect(0, secondB, ptA, halfB, '3:4'),
+      rect(ptA + gA, secondB, ptA, halfB, '3:4'),
+    ], [box(ptBandX, 0, 1 - ptBandX, 1)]),
+    t('quad-34-box-l', { land: 'Quad Portraits + Box Left', port: 'Quad Landscapes + Box Above' }, 'quad', '3:4', [
+      rect(1 - ptBandX, 0, ptA, halfB, '3:4'),
+      rect(1 - ptBandX + ptA + gA, 0, ptA, halfB, '3:4'),
+      rect(1 - ptBandX, secondB, ptA, halfB, '3:4'),
+      rect(1 - ptBandX + ptA + gA, secondB, ptA, halfB, '3:4'),
+    ], [box(0, 0, 1 - ptBandX, 1)]),
+
+    t('quad-32-band-b', { land: 'Quad Grid 3:2 + Band Below', port: 'Quad Grid 2:3 + Band Right' }, 'quad', '3:2', [
+      rect(0, 0, halfA, q32B, '3:2'),
+      rect(secondA, 0, halfA, q32B, '3:2'),
+      rect(0, q32B + gB, halfA, q32B, '3:2'),
+      rect(secondA, q32B + gB, halfA, q32B, '3:2'),
+    ], [box(0, 2 * q32B + gB, 1, 1 - 2 * q32B - gB)]),
+    t('quad-32-band-a', { land: 'Quad Grid 3:2 + Band Above', port: 'Quad Grid 2:3 + Band Left' }, 'quad', '3:2', [
+      rect(0, 1 - 2 * q32B - gB, halfA, q32B, '3:2'),
+      rect(secondA, 1 - 2 * q32B - gB, halfA, q32B, '3:2'),
+      rect(0, 1 - q32B, halfA, q32B, '3:2'),
+      rect(secondA, 1 - q32B, halfA, q32B, '3:2'),
+    ], [box(0, 0, 1, 1 - 2 * q32B - gB)]),
 
     // Resolvable-but-unselectable ids from the scrapped panoramic set.
     ...retiredFirstSet(size),
