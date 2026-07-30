@@ -461,6 +461,32 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   <span className="px-3 py-1.5 rounded-full bg-[#FDE8E4] text-[#E8A598] text-sm font-semibold">{builder.albumSize} album</span>
                   <span className="px-3 py-1.5 rounded-full bg-[#FDE8E4] text-[#E8A598] text-sm font-semibold capitalize">{builder.selectedTemplate} theme</span>
                 </div>
+                {/* Photos per page — the choice that decides how dense pages deal.
+                    Its only other home is the tool-tabs panel, which is switched
+                    off (SHOW_TOOL_TABS=false), so without this row a customer had
+                    NO way to reach the 3/4-photo layouts: AUTO spreads a small
+                    upload to 1/page and never deals them. The estimate below
+                    reads the same choice, so it updates live. */}
+                <div className="mt-3">
+                  <p className="text-sm text-[#5A5A5A] leading-relaxed mb-2">Photos per page:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(DENSITY_BY_SIZE[builder.albumSize] ?? [1, 2, 3, 4]).map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => { void builder.dispatch({ type: 'set_photos_per_page', payload: { count: n }, rawMessage: `${n} photos per page` }); }}
+                        className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-all ${builder.photosPerPage === n ? 'bg-[#F4C2A1] text-white border-[#F4C2A1]' : 'bg-white text-[#5A5A5A] border-[#E8E8E8] hover:border-[#F4C2A1]/60'}`}
+                      >
+                        {n} · {DENSITY_LABELS[n]}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => { void builder.dispatch({ type: 'set_photos_per_page', payload: { count: undefined }, rawMessage: 'surprise photos per page' }); }}
+                      className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-all ${builder.photosPerPage === undefined ? 'bg-[#F4C2A1] text-white border-[#F4C2A1]' : 'bg-white text-[#5A5A5A] border-[#E8E8E8] hover:border-[#F4C2A1]/60'}`}
+                    >
+                      ✨ Surprise
+                    </button>
+                  </div>
+                </div>
                 {(() => {
                   const est = estimateAlbumFill(builder.uploadedPhotos.length, builder.albumSize, builder.photosPerPage);
                   return est.fillsAlbum ? (
