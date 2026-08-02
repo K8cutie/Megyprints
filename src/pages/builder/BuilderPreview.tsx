@@ -515,7 +515,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}
               left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
               showList={!!onChooseTextSlot && Math.min(boxW, boxH) >= 84}
-              options={['Quote', 'Text', 'Clipart', 'QR']}
+              options={['Quote', 'Text', 'QR']}
               onTap={() => onChooseTextSlot(i)} />
           );
         }

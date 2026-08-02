@@ -16,7 +16,6 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
-import AiClipartModal from './AiClipartModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
 
@@ -251,13 +250,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         />
       )}
 
-      {/* Empty combo/caption-box chooser — Quote / Your Text / Clipart / QR Code. */}
+      {/* Empty combo/caption-box chooser — Quote / Your Text / QR Code.
+          (Clipart was sunset — old-phone drag; placed ones still render.) */}
       {chooserTextSlot !== null && (
         <SlotChooser
           mobile
           onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setEditSlot(chooserTextSlot)}
-          onClipart={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
           onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
@@ -348,11 +347,11 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           onClose={() => setTextSlotQrEditSlot(null)}
         />
       )}
-      {/* Caption-box clipart picker (chooser "Clipart", or tapping a placed one). */}
+      {/* A caption-box clipart from a saved album — removable, not replaceable
+          (the clipart picker was sunset; placed ones render from stored PNG). */}
       {textSlotOrnamentEditSlot !== null && (
-        <AiClipartModal
-          initial={page?.textSlotOrnament?.[textSlotOrnamentEditSlot] ?? null}
-          onSave={(fill) => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, fill, idx); setTextSlotOrnamentEditSlot(null); }}
+        <RemoveGraphicModal
+          mobile
           onRemove={() => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, null, idx); setTextSlotOrnamentEditSlot(null); }}
           onClose={() => setTextSlotOrnamentEditSlot(null)}
         />

@@ -4,9 +4,13 @@
    becomes the slot's content, on EVERY template + album size. Two shapes:
 
      COMBO / CAPTION box (template.textSlots) — the full content box:
-       Add Quote · Your Text · Clipart · QR Code
+       Add Quote · Your Text · QR Code
      PHOTO slot (template.slots) — a photo, or words instead of one:
        Add Photo · Add Quote · Your Text
+
+   (Clipart was SUNSET: the theme→Iconify fetch-and-rasterize pipeline dragged
+   on old phones. Already-placed cliparts still render from their stored PNG
+   and are removable via RemoveGraphicModal — see BuilderEdit/MobileReview.)
 
    Whatever is picked REPLACES whatever was there: the state setters null the
    sibling arrays at that index, so one box always holds exactly one thing.
@@ -20,11 +24,11 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon, Type, Quote, Sparkles, QrCode, X } from 'lucide-react';
+import { Image as ImageIcon, Type, Quote, QrCode, X } from 'lucide-react';
 
 interface SlotChooserProps {
   /** Open the photo picker. Optional — when omitted, the Photo option is hidden
-   *  (a combo/caption box takes words, clipart or a QR, not a photo). */
+   *  (a combo/caption box takes words or a QR, not a photo). */
   onPhoto?: () => void;
   onText: () => void;
   /** Put a QR "living memory" code inside this box. Optional — when omitted,
@@ -33,28 +37,24 @@ interface SlotChooserProps {
   /** Open the themed-quote picker (AI lines for the album's theme, curated
    *  lines as the fallback). Optional — when omitted, the Quote option is hidden. */
   onQuote?: () => void;
-  /** Open the AI clipart picker (theme → keywords → Iconify vectors).
-   *  Optional — when omitted, the Clipart option is hidden. */
-  onClipart?: () => void;
   onClose: () => void;
   /** Render as a bottom sheet (phone) instead of a centered modal (desktop). */
   mobile?: boolean;
 }
 
 interface Option {
-  key: 'photo' | 'quote' | 'text' | 'clipart' | 'qr';
+  key: 'photo' | 'quote' | 'text' | 'qr';
   label: string;
   desc: string;
   Icon: typeof ImageIcon;
   run: () => void;
 }
 
-export default function SlotChooser({ onPhoto, onText, onQuote, onClipart, onQr, onClose, mobile }: SlotChooserProps) {
+export default function SlotChooser({ onPhoto, onText, onQuote, onQr, onClose, mobile }: SlotChooserProps) {
   const options: Option[] = [
     ...(onPhoto ? [{ key: 'photo' as const, label: 'Add Photo', desc: 'Place one of your photos here', Icon: ImageIcon, run: onPhoto }] : []),
     ...(onQuote ? [{ key: 'quote' as const, label: 'Add Quote', desc: 'A line written for your album’s theme', Icon: Quote, run: onQuote }] : []),
     { key: 'text', label: 'Your Text', desc: 'Type your own caption or title', Icon: Type, run: onText },
-    ...(onClipart ? [{ key: 'clipart' as const, label: 'Clipart', desc: 'A graphic matched to your album’s theme', Icon: Sparkles, run: onClipart }] : []),
     ...(onQr ? [{ key: 'qr' as const, label: 'QR Code', desc: 'Link a video or message to this page', Icon: QrCode, run: onQr }] : []),
   ];
 

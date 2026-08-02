@@ -1,4 +1,5 @@
-// Shared abuse guard for the paid Anthropic proxies (theme-quotes, theme-keywords).
+// Shared abuse guard for the paid Anthropic proxies (theme-quotes; theme-keywords
+// was deleted along with the sunset clipart picker, its only caller).
 //
 // These endpoints are PUBLIC and UNAUTHENTICATED by design — the album builder
 // has no login — yet every reaching call spends money on a Haiku request. That

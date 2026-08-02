@@ -1,8 +1,8 @@
 // Serverless proxy: album theme text → short, ORIGINAL themed quote lines.
-// Same shape and guarantees as theme-keywords.mjs: the Anthropic key stays
-// server-side, the response is always HTTP 200 with a `source` discriminator,
-// and a missing key degrades instead of failing. Text-only — NO photos ever
-// touch this endpoint (photos stay on the device by design).
+// Guarantees: the Anthropic key stays server-side, the response is always
+// HTTP 200 with a `source` discriminator, and a missing key degrades instead
+// of failing. Text-only — NO photos ever touch this endpoint (photos stay on
+// the device by design).
 //
 // The client owns the FALLBACK (the 66 curated lines in builder/themeQuotes.ts),
 // so an empty `quotes` array here is a valid, expected answer: the caller shows

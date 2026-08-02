@@ -173,7 +173,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
             className="w-full border border-[#E8E8E8] rounded-xl px-4 py-3 text-sm text-center outline-none focus:border-[#F4C2A1] transition-colors"
           />
           <p className="text-[11px] text-[#9B9B9B] mt-1.5 text-center">
-            We'll suggest graphics that match — drop them into your pages.
+            We'll write quotes to match — drop them into your pages.
           </p>
         </div>
 

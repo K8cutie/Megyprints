@@ -24,7 +24,6 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
-import AiClipartModal from './AiClipartModal';
 import SlotChooser from './SlotChooser';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
@@ -766,12 +765,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* Empty combo/caption-box chooser — Quote / Your Text / Clipart / QR Code. */}
+      {/* Empty combo/caption-box chooser — Quote / Your Text / QR Code.
+          (Clipart was sunset: fetching + rasterizing icon packs dragged on old
+          phones. Placed cliparts still render — see textSlotOrnament below.) */}
       {chooserTextSlot !== null && (
         <SlotChooser
           onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setTextEditSlot(chooserTextSlot)}
-          onClipart={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
           onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
@@ -827,11 +827,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* Caption-box clipart picker (chooser "Clipart", or tapping a placed one). */}
+      {/* A caption-box clipart already placed in a saved album — removable, not
+          replaceable (the clipart picker was sunset; placed ones keep rendering
+          from their stored PNG). Same pattern as the photo-slot graphics above. */}
       {textSlotOrnamentEditSlot !== null && (
-        <AiClipartModal
-          initial={actions.currentPage?.textSlotOrnament?.[textSlotOrnamentEditSlot] ?? null}
-          onSave={(fill) => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, fill); setTextSlotOrnamentEditSlot(null); }}
+        <RemoveGraphicModal
           onRemove={() => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, null); setTextSlotOrnamentEditSlot(null); }}
           onClose={() => setTextSlotOrnamentEditSlot(null)}
         />

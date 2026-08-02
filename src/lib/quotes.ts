@@ -4,9 +4,9 @@
 // is unreachable (local dev has no /api), we fall back to the curated corpus in
 // builder/themeQuotes.ts — so the feature always produces something for $0.
 //
-// Mirrors the caching contract of clipart.ts on purpose: the SAME theme text
-// always yields the SAME quotes, cached per device, so a paid call happens at
-// most once per theme rather than once per page.
+// Caching contract: the SAME theme text always yields the SAME quotes, cached
+// per device, so a paid call happens at most once per theme rather than once
+// per page. (The sunset clipart pipeline used the same contract.)
 
 import { THEME_QUOTES } from '../pages/builder/themeQuotes';
 import type { TemplateType } from '../pages/builder/types';
