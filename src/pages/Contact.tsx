@@ -44,7 +44,13 @@ export default function Contact() {
       setSent(true);
     } catch (err) {
       reportError(err, { path: 'contact_submit' });
-      setError("We couldn't send your message right now. Please email us directly at hello@megyprints.com.");
+      // 53400 is the flood cap from 0026 — a transient, actionable refusal, so
+      // tell the customer to retry rather than sending them to email. Any other
+      // failure is not known to be transient; offer the working alternative.
+      const code = (err as { code?: string } | null)?.code;
+      setError(code === '53400'
+        ? "We're getting a lot of messages right now. Please try again in a minute."
+        : "We couldn't send your message right now. Please email us directly at hello@megyprints.com.");
     } finally {
       setSubmitting(false);
     }

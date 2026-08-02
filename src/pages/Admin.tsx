@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, ClipboardList, LayoutGrid, Users, Calculator, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
+import { BarChart3, ClipboardList, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
@@ -18,11 +18,13 @@ import OrdersPanel from './admin/OrdersPanel';
 import TemplatesPanel from './admin/TemplatesPanel';
 import TeamPanel from './admin/TeamPanel';
 import PricingPanel from './admin/PricingPanel';
+import MessagesPanel from './admin/MessagesPanel';
 
-type Tab = 'overview' | 'orders' | 'templates' | 'pricing' | 'team';
+type Tab = 'overview' | 'orders' | 'messages' | 'templates' | 'pricing' | 'team';
 const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3, ownerOnly: true },
   { id: 'orders', label: 'Orders', icon: ClipboardList, ownerOnly: false },
+  { id: 'messages', label: 'Messages', icon: Mail, ownerOnly: true },
   { id: 'templates', label: 'Templates', icon: LayoutGrid, ownerOnly: true },
   { id: 'pricing', label: 'Pricing', icon: Calculator, ownerOnly: true },
   { id: 'team', label: 'Team', icon: Users, ownerOnly: true },
@@ -187,6 +189,7 @@ export default function Admin() {
             )}
           </>
         ))}
+        {tab === 'messages' && isOwner && <MessagesPanel />}
         {tab === 'templates' && isOwner && <TemplatesPanel />}
         {tab === 'pricing' && isOwner && <PricingPanel />}
         {tab === 'team' && isOwner && <TeamPanel />}
