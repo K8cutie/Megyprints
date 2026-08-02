@@ -9,8 +9,8 @@ import { useState, useEffect } from 'react';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
-import { SHEET, SIZES, costOf, sheetsFor, priceOf, SIZE_SURCHARGE, type Binding } from '../../lib/pricing';
-import { getPriceMultiple, setPriceMultiple, getDisabledSizes, setDisabledSizes } from '../../lib/storeSettings';
+import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, type Binding, type PricingModel } from '../../lib/pricing';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
 
@@ -24,8 +24,14 @@ export default function PricingPanel() {
   const [pages, setPages] = useState(40);
   const [mult, setMult] = useState(3);
 
+  // ── Raw cost model — owner-only, fetched from owner_pricing_model() (0024).
+  // It is no longer a client constant, so this panel cannot render until it
+  // arrives; a non-owner reaching here gets the error, not the figures.
+  const [model, setModel] = useState<PricingModel | null>(null);
+  const [modelErr, setModelErr] = useState('');
+
   // ── Persisted store price multiple (drives the LIVE checkout price) ──
-  const [storeMult, setStoreMult] = useState(getPriceMultiple());
+  const [storeMult, setStoreMult] = useState(3);
   const [savingMult, setSavingMult] = useState(false);
   const [savedMult, setSavedMult] = useState(false);
   const [saveErr, setSaveErr] = useState('');
@@ -36,8 +42,18 @@ export default function PricingPanel() {
   const [savedSizes, setSavedSizes] = useState(false);
   const [sizeErr, setSizeErr] = useState('');
 
-  // Seed from the loaded cache once on mount (App loads it on start).
-  useEffect(() => { setStoreMult(getPriceMultiple()); setDisabledSizesState(getDisabledSizes()); }, []);
+  // Size curation comes from the cache App loaded on start; the cost model and
+  // the live multiple are fetched here, owner-gated.
+  useEffect(() => {
+    let alive = true;
+    setDisabledSizesState(getDisabledSizes());
+    void loadOwnerPricingModel().then((m) => {
+      if (!alive) return;
+      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); }
+      else setModelErr('Could not load the cost model. Owner sign-in is required to view pricing.');
+    });
+    return () => { alive = false; };
+  }, []);
 
   const saveStoreMult = async () => {
     setSavingMult(true);
@@ -62,11 +78,21 @@ export default function PricingPanel() {
     else { setSavedSizes(true); setTimeout(() => setSavedSizes(false), 2500); }
   };
 
-  const cost = costOf(size, bind, pages);
-  const surcharge = SIZE_SURCHARGE[size];
-  const price = priceOf(size, bind, pages, mult); // marked-up cost + size premium
+  // Every hook is declared above, so this early return is safe. Nothing below
+  // can render without the model — the figures it needs no longer exist client-side.
+  if (!model) {
+    return (
+      <div className="py-16 text-center text-sm text-[#6B6B6B]">
+        {modelErr || 'Loading pricing model…'}
+      </div>
+    );
+  }
+
+  const cost = costOf(model, size, bind, pages);
+  const surcharge = model.sizes[size].surcharge;
+  const price = ownerPriceOf(model, size, bind, pages, mult); // marked-up cost + size premium
   const profit = price - cost;
-  const cpp = SHEET / SIZES[size].pps;
+  const cpp = perPageCost(model, size);
   const marginPct = Math.round((1 - cost / price) * 100);
   const effMult = price / cost; // effective markup once the size premium is added
   const r = rival8(pages);
@@ -184,7 +210,7 @@ export default function PricingPanel() {
                   style={size === k
                     ? { background: '#BF5E3E', borderColor: '#BF5E3E', color: '#fff' }
                     : { background: '#FAF8F5', borderColor: '#DED5C9', color: '#2D2D2D' }}>
-                  {SIZES[k].label}
+                  {SIZE_LABELS[k]}
                 </button>
               ))}
             </div>
@@ -247,7 +273,7 @@ export default function PricingPanel() {
             {[
               { k: 'Production cost', n: peso(cost), c: 'text-[#2D2D2D]' },
               { k: 'Profit / album', n: peso(profit), c: 'text-[#2E7D4A]' },
-              { k: 'Printed sheets', n: String(sheetsFor(size, pages)), c: 'text-[#2D2D2D]' },
+              { k: 'Printed sheets', n: String(sheetsFor(model.sizes[size].pps, model.min_pages, pages)), c: 'text-[#2D2D2D]' },
               { k: 'Cost / extra page', n: '₱' + cpp.toFixed(2), c: 'text-[#2D2D2D]' },
             ].map((s) => (
               <div key={s.k} className="bg-white px-3.5 py-3">
@@ -299,7 +325,7 @@ export default function PricingPanel() {
             </thead>
             <tbody className="font-mono tabular-nums">
               {(['soft', 'hard'] as Binding[]).map((bg) => (
-                <PricingGroup key={bg} bind={bg} />
+                <PricingGroup key={bg} bind={bg} model={model} />
               ))}
             </tbody>
           </table>
@@ -344,7 +370,7 @@ export default function PricingPanel() {
   );
 }
 
-function PricingGroup({ bind }: { bind: Binding }) {
+function PricingGroup({ bind, model }: { bind: Binding; model: PricingModel }) {
   return (
     <>
       <tr className="bg-[#FBF6F1]">
@@ -353,18 +379,18 @@ function PricingGroup({ bind }: { bind: Binding }) {
         </td>
       </tr>
       {ORDER.map((k) => {
-        const c = costOf(k, bind, 40);
-        const cpp = SHEET / SIZES[k].pps;
-        const prem = SIZE_SURCHARGE[k];
+        const c = costOf(model, k, bind, 40);
+        const cpp = perPageCost(model, k);
+        const prem = model.sizes[k].surcharge;
         return (
           <tr key={k} className="border-t border-[#EEE7DE]">
             <td className="px-4 py-2.5 text-left font-sans text-[#2D2D2D]">
-              {SIZES[k].label}
+              {SIZE_LABELS[k]}
               {prem > 0 && <span className="ml-1.5 text-[10px] font-sans text-[#8B6F47]">+{peso(prem)}</span>}
             </td>
             <td className="px-4 py-2.5 text-right text-[#2D2D2D]">{peso(c)}</td>
-            <td className="px-4 py-2.5 text-right text-[#2E7D4A]">{peso(priceOf(k, bind, 40, 3))}</td>
-            <td className="px-4 py-2.5 text-right text-[#BF5E3E]">{peso(priceOf(k, bind, 40, 5))}</td>
+            <td className="px-4 py-2.5 text-right text-[#2E7D4A]">{peso(ownerPriceOf(model, k, bind, 40, 3))}</td>
+            <td className="px-4 py-2.5 text-right text-[#BF5E3E]">{peso(ownerPriceOf(model, k, bind, 40, 5))}</td>
             <td className="px-4 py-2.5 text-right text-[#6B6B6B]">₱{cpp.toFixed(2)}</td>
           </tr>
         );

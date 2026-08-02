@@ -11,7 +11,7 @@ import { getPendingPrintJob } from '../lib/printQueue';
 import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, MIN_PAGES, type Binding } from '../lib/pricing';
-import { getPriceMultiple, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
+import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
 import { reportError } from '../lib/report';
 import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, validateAddress, EMPTY_ADDRESS, type AddressValue } from '../lib/contact';
@@ -66,11 +66,10 @@ export default function Order() {
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
   const hasJob = job != null;
 
-  // The store multiple loads async on app start. If checkout mounts before it
-  // resolves, getPriceMultiple() returns the DEFAULT (3×) — and this component
-  // would never re-price when the real value arrives. Track readiness so we
-  // re-read the multiple once loaded and BLOCK payment until then, so an album
-  // can never be priced/charged against the default multiple.
+  // The price schedule loads async on app start (0024 — the cost model is no
+  // longer in the bundle, so there is nothing to fall back to). Track readiness
+  // so we re-read once it lands, and BLOCK payment until it does: a wrong price
+  // on a money path is worse than a blocked one.
   const [settingsReady, setSettingsReady] = useState(isStoreSettingsReady());
   useEffect(() => {
     if (settingsReady) return;
@@ -78,13 +77,19 @@ export default function Order() {
     void storeSettingsReady().then(() => { if (alive) setSettingsReady(true); });
     return () => { alive = false; };
   }, [settingsReady]);
-  const multiple = getPriceMultiple(); // re-read on each render; correct once settingsReady
+  const schedule = getPriceSchedule(); // re-read each render; non-null once loaded
 
   const breakdown = useMemo(
-    () => priceBreakdown(albumSize, binding, pageCount, multiple),
-    [albumSize, binding, pageCount, multiple],
+    () => (schedule
+      ? priceBreakdown(schedule, albumSize, binding, pageCount)
+      : { items: [], total: 0 }),
+    [schedule, albumSize, binding, pageCount],
   );
   const totalPrice = breakdown.total;
+  // Loaded AND priceable. `settingsReady` alone only means the load settled — it
+  // can settle with no schedule (offline, RPC blocked), and quoting ₱0 then would
+  // charge nothing for a real album.
+  const priceReady = settingsReady && schedule !== null;
 
   // ── Form → Payment ──
   const handleProceedToPayment = () => {
@@ -307,14 +312,16 @@ export default function Order() {
             </div>
             <button
               onClick={handlePay}
-              disabled={submitting || !settingsReady}
+              disabled={submitting || !priceReady}
               className="w-full py-3.5 bg-[#E8A598] text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
             >
               {submitting
                 ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Processing payment…'}</>
                 : !settingsReady
                   ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
-                  : <>Pay ₱{totalPrice}</>}
+                  : !schedule
+                    ? <>Pricing unavailable — please refresh</>
+                    : <>Pay ₱{totalPrice}</>}
             </button>
             <p className="mt-3 text-[11px] text-[#9B9B9B] text-center">🔒 Simulated payment — no real charge. (Xendit checkout goes here later.)</p>
             {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}
@@ -444,9 +451,11 @@ export default function Order() {
                   <b className="text-[#2D2D2D]">Free living-memory QR included</b> — add a video that plays when anyone scans your printed album.
                 </p>
               </div>
-              <button onClick={handleProceedToPayment} disabled={!settingsReady}
+              <button onClick={handleProceedToPayment} disabled={!priceReady}
                 className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
-                {settingsReady ? <><ShoppingCart size={16} /> Proceed to Payment</> : <><Loader2 size={16} className="animate-spin" /> Loading price…</>}
+                {priceReady ? <><ShoppingCart size={16} /> Proceed to Payment</>
+                  : !settingsReady ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
+                    : <>Pricing unavailable — please refresh</>}
               </button>
               {errorMsg && (
                 <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>

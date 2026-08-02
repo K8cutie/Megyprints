@@ -1,107 +1,184 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   Pricing — the SINGLE SOURCE cost + price model.
+   Pricing — customer math on a server-issued schedule.
 
-   The RAW COST side (SHEET, SOFT_ consts, SIZES, sheetsFor, costOf, perPageCost) is
-   admin/internal ONLY. It lives here so the operator Pricing panel and the
-   customer checkout agree on one model. Never render these raw figures on a
-   customer-facing surface.
+   The raw cost model (sheet cost, per-size hardbound cost, the size premium)
+   USED to live here as module constants. It shipped in the JS bundle, so the
+   whole cost structure and — combined with the then-public
+   store_settings.price_multiple — the margin were readable with devtools. Both
+   now live in the `pricing_model` table (migration 0024), owner-readable only.
 
-   The CUSTOMER side is `priceBreakdown` — it returns ONLY marked-up peso
-   amounts (cost × the store multiple). Its structure contains no cost, no
-   margin, and no multiplier, so nothing the customer sees can be reversed into
-   the profit.
+   The customer path gets `PriceSchedule` from public_price_schedule(): the
+   PRE-MULTIPLIED rates, which reproduce the exact same totals but cannot be
+   separated back into cost × multiple. Final prices stay public — it's a shop —
+   the structure behind them doesn't.
+
+   There is deliberately NO fallback cost model in this file. If the schedule
+   fails to load, checkout must refuse to price rather than guess: a wrong price
+   on a money path is worse than a blocked one, and any hardcoded fallback would
+   put the costs straight back into the bundle.
+
+   The owner-side helpers (costOf / ownerPriceOf / perPageCost) take the model as
+   an argument. They are only reachable with a model the Pricing panel fetched
+   from owner_pricing_model(), so they carry no secret of their own.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumSizePreset } from '../pages/builder/types';
 
 export type Binding = 'soft' | 'hard';
 
-export const SHEET = 26.5;        // raw cost — admin only (₱2.50 paper + ₱24 print)
-export const SOFT_COVER = 50;     // raw cost — admin only
-export const SOFT_BIND = 100;     // raw cost — admin only
+/** Minimum billable pages. Public by nature — the customer is told "40 pages
+ *  included" — so unlike the cost constants this one is fine in the bundle. The
+ *  schedule carries the authoritative value; this is the render-time default. */
 export const MIN_PAGES = 40;
 
-export interface SizeDef { label: string; pps: number; hb: number }
-export const SIZES: Record<AlbumSizePreset, SizeDef> = {
-  '6x4':    { label: '6×4',    pps: 16, hb: 250 },
-  '8x6':    { label: '8×6',    pps: 4,  hb: 350 },
-  '6x8':    { label: '6×8',    pps: 4,  hb: 350 },
-  '6x6':    { label: '6×6',    pps: 12, hb: 280 },
-  '8x8':    { label: '8×8',    pps: 4,  hb: 350 },
-  '9x9':    { label: '9×9',    pps: 4,  hb: 380 },
-  '11.5x8': { label: '11.5×8', pps: 4,  hb: 450 },
-  '8.5x11': { label: '8.5×11', pps: 4,  hb: 500 },
+/** Display names. Purely presentational — the customer reads these off the size
+ *  picker — so these stay client-side; only the cost figures moved to the DB. */
+export const SIZE_LABELS: Record<AlbumSizePreset, string> = {
+  '6x4': '6×4', '8x6': '8×6', '6x8': '6×8', '6x6': '6×6',
+  '8x8': '8×8', '9x9': '9×9', '11.5x8': '11.5×8', '8.5x11': '8.5×11',
 };
 
-// RAW COST — admin/internal only. Never call from customer-facing code paths
-// that render the value.
-export function sheetsFor(size: AlbumSizePreset, pages: number): number {
-  return Math.ceil(Math.max(MIN_PAGES, pages) / SIZES[size].pps);
-}
-export function costOf(size: AlbumSizePreset, binding: Binding, pages: number): number {
-  const interior = sheetsFor(size, pages) * SHEET;
-  return binding === 'hard' ? interior + SIZES[size].hb : interior + SOFT_COVER + SOFT_BIND;
-}
-export function perPageCost(size: AlbumSizePreset): number {
-  return SHEET / SIZES[size].pps;
+/** Owner-only view of the cost model — the shape of owner_pricing_model(). */
+export interface PricingModel {
+  sheet_cost: number;
+  soft_cover_cost: number;
+  soft_bind_cost: number;
+  min_pages: number;
+  price_multiple: number;
+  sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
 }
 
-/** Value premium (PURE PROFIT) added to the customer price for the larger
- *  formats. They cost the SAME to produce as 8×8 (all pps=4 → identical interior
- *  sheets) but are worth more, so this is a flat peso premium on top of
- *  cost × multiple, applied to BOTH bindings. Admin-tunable here — this is the
- *  single source the checkout and the operator panel both read. */
-export const SIZE_SURCHARGE: Record<AlbumSizePreset, number> = {
-  '6x4': 0, '8x6': 0, '6x8': 0, '6x6': 0, '8x8': 0, '9x9': 150, '11.5x8': 300, '8.5x11': 300,
-};
+/** Customer-facing schedule — the shape of public_price_schedule(). Carries no
+ *  cost and no multiple, only their product. */
+export interface PriceSchedule {
+  min_pages: number;
+  sheet_rate: number;
+  disabled_sizes: AlbumSizePreset[];
+  sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
+}
 
-/** Final customer price = marked-up cost + the size premium. SINGLE SOURCE for
- *  both the checkout (priceBreakdown) and the operator Pricing panel, so the
- *  number a customer pays and the number the operator sees can never diverge. */
+/** Printed sheets for a page count. Pages are laid up `pps` to a sheet and the
+ *  minimum always bills, so this is the one place the page→sheet step lives. */
+export function sheetsFor(pps: number, minPages: number, pages: number): number {
+  return Math.ceil(Math.max(minPages, pages) / pps);
+}
+
+// ── Customer side ───────────────────────────────────────────────────────────
+
+/** Final customer price from the schedule. Equals the operator's
+ *  ownerPriceOf() exactly — locked by spec, since the two diverging would mean
+ *  charging one number and reporting another. */
 export function priceOf(
+  schedule: PriceSchedule,
   size: AlbumSizePreset,
   binding: Binding,
   pages: number,
-  multiple: number,
 ): number {
-  return Math.round(costOf(size, binding, pages) * multiple) + SIZE_SURCHARGE[size];
+  const s = schedule.sizes[size];
+  const sheets = sheetsFor(s.pps, schedule.min_pages, pages);
+  const coverRate = binding === 'hard' ? s.hard_rate : s.soft_rate;
+  return Math.round(sheets * schedule.sheet_rate + coverRate);
+}
+
+/** Marked-up per-page rate used for the "extra pages" display line. */
+export function perPageRate(schedule: PriceSchedule, size: AlbumSizePreset): number {
+  return Math.round(schedule.sheet_rate / schedule.sizes[size].pps);
 }
 
 export interface PriceLine { label: string; amount: number }
 export interface PriceBreakdown { items: PriceLine[]; total: number }
 
-// CUSTOMER-FACING. Returns marked-up amounts ONLY — no cost, no margin, no
-// multiplier in the structure. Line amounts are reconciled so items sum exactly
-// to total (base line = total − extra line), so nothing hints at the model.
+/** CUSTOMER-FACING. Marked-up amounts only. Line amounts are reconciled so items
+ *  sum exactly to total (base = total − extra), so the displayed split never
+ *  hints at the underlying model. */
 export function priceBreakdown(
+  schedule: PriceSchedule,
   size: AlbumSizePreset,
   binding: Binding,
   pages: number,
-  multiple: number,
 ): PriceBreakdown {
   const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
-  // Includes the size premium — it folds into the base album line below (the
-  // base is reconciled as total − extra), so it never surfaces as its own line.
-  const total = priceOf(size, binding, pages, multiple);
+  const sizeLabel = SIZE_LABELS[size];
+  const minPages = schedule.min_pages;
+  const total = priceOf(schedule, size, binding, pages);
 
-  const extra = Math.max(0, pages - MIN_PAGES);
+  const extra = Math.max(0, pages - minPages);
   const items: PriceLine[] = [];
 
   if (extra > 0) {
-    const perPage = Math.round(perPageCost(size) * multiple);
+    const perPage = perPageRate(schedule, size);
     const extraAmount = extra * perPage;
-    // Reconcile the base line so the displayed lines are exactly additive.
     items.push({
-      label: `Album — ${SIZES[size].label} ${bindingLabel} · ${MIN_PAGES} pages included`,
+      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages included`,
       amount: total - extraAmount,
     });
     items.push({ label: `Extra pages · ${extra} × ₱${perPage}`, amount: extraAmount });
   } else {
     items.push({
-      label: `Album — ${SIZES[size].label} ${bindingLabel} · ${MIN_PAGES} pages included`,
+      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages included`,
       amount: total,
     });
   }
 
   return { items, total };
+}
+
+// ── Owner side (model supplied by owner_pricing_model()) ────────────────────
+
+/** RAW COST. Owner-only — never render on a customer surface. */
+export function costOf(
+  model: PricingModel,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+): number {
+  const s = model.sizes[size];
+  const interior = sheetsFor(s.pps, model.min_pages, pages) * model.sheet_cost;
+  return binding === 'hard'
+    ? interior + s.hb
+    : interior + model.soft_cover_cost + model.soft_bind_cost;
+}
+
+/** RAW per-page cost. Owner-only. */
+export function perPageCost(model: PricingModel, size: AlbumSizePreset): number {
+  return model.sheet_cost / model.sizes[size].pps;
+}
+
+/** The operator's view of the customer price, computed from the raw model at an
+ *  arbitrary multiple (the Pricing panel's what-if slider). At the store's own
+ *  multiple this must equal priceOf() on the schedule — see the spec. */
+export function ownerPriceOf(
+  model: PricingModel,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  multiple: number,
+): number {
+  return Math.round(costOf(model, size, binding, pages) * multiple)
+    + model.sizes[size].surcharge;
+}
+
+/** Pure mirror of public_price_schedule()'s arithmetic. Lives here so the spec
+ *  can prove the schedule and the raw model agree without standing up a
+ *  database; the SQL is the runtime source of truth. */
+export function scheduleFrom(
+  model: PricingModel,
+  multiple: number,
+  disabledSizes: AlbumSizePreset[] = [],
+): PriceSchedule {
+  const sizes = {} as PriceSchedule['sizes'];
+  for (const key of Object.keys(model.sizes) as AlbumSizePreset[]) {
+    const s = model.sizes[key];
+    sizes[key] = {
+      pps: s.pps,
+      soft_rate: (model.soft_cover_cost + model.soft_bind_cost) * multiple + s.surcharge,
+      hard_rate: s.hb * multiple + s.surcharge,
+    };
+  }
+  return {
+    min_pages: model.min_pages,
+    sheet_rate: model.sheet_cost * multiple,
+    disabled_sizes: disabledSizes,
+    sizes,
+  };
 }
