@@ -73,11 +73,18 @@ create policy "Owners manage pricing model"
 -- Belt-and-braces: no table grant at all for anon.
 revoke all on table public.pricing_model from anon;
 
--- ── store_settings: drop the world-read that exposed price_multiple ─────────
--- The owner "for all" policy from 0014 still covers owner SELECT, so the admin
--- panel keeps working. disabled_sizes — the one field the customer genuinely
--- needs — is served by public_price_schedule() below instead.
-drop policy if exists "Anyone can read store settings" on public.store_settings;
+-- ── store_settings public read is NOT dropped here — see 0025 ───────────────
+-- This migration is deliberately ADDITIVE ONLY, so it is safe to apply against
+-- production while the CURRENT client is still live.
+--
+-- Dropping the public read in this migration would have been a live money bug:
+-- the deployed client reads store_settings directly and fails OPEN to its
+-- built-in DEFAULT_MULTIPLE of 3. Production is running a multiple of 4, so the
+-- moment the policy vanished every checkout would have quietly priced at 3x —
+-- a 25% undercharge with no error surfaced to anyone.
+--
+-- Expand here, contract in 0025 once the new client (which reads the schedule
+-- RPC instead) is deployed and confirmed.
 
 -- ── Customer-facing schedule (anon) ─────────────────────────────────────────
 create or replace function public.public_price_schedule()
@@ -170,12 +177,8 @@ select
     where schemaname = 'public' and tablename = 'pricing_model')::text as result
 union all
 select
-  'store_settings public read removed',
-  (not exists (
-     select 1 from pg_policies
-     where schemaname = 'public' and tablename = 'store_settings'
-       and policyname = 'Anyone can read store settings'
-   ))::text
+  'schedule rpc callable',
+  (public.public_price_schedule() is not null)::text
 union all
 select
   'schedule leaks no cost/multiple',
