@@ -26,13 +26,31 @@ Fire this skill when the user says **"release the kraken"**, with a target ("rel
 3. **Launch the engine:** run the `kraken` workflow (`.claude/workflows/kraken.js`) via the Workflow tool with
    `args = { target: "<name>", repoPath: "<path>", feature: "<feature desc or omit>", paths: ["<file>", ...] | omit, live: { url, anonKey, serviceKey } }`
    (omit `live` for a static-only run; omit `feature`/`paths` for a whole-app run). It recons → hunts (the security-vuln + correctness classes in the workflow's `CLASSES` list) → proves each finding live → runs a behavioral persona-sim → drafts repairs — all concentrated on the feature scope when given.
-4. **Report the unified findings**, grouped by proof strength:
-   - 🔴 **LIVE-CONFIRMED** — exploit was actually executed against the backend (highest confidence; lead with these).
-   - **Behavioral** — silent side-effect / validation / lifecycle bugs from the persona-sim.
-   - **Static-only (unproven)** — code-flagged but not live-proven (note this honestly).
-   - **Blocked / false-positive** — the backend correctly rejected the attempt.
-   Each with severity, evidence, and the drafted repair.
-   - **Detector admissibility (L001 positive control):** the workflow runs a canary fixture (a committed service_role key + a raw-HTML XSS sink + an IDOR fetch) through the hunter pipeline BEFORE trusting any "clean." Read `result.detector`: if `verified:false`, the hunters could not prove they can fire this run, so **every class reporting 0 findings is UNVERIFIED, not clean** — say so, and re-run rather than reporting a false all-clear.
+4. **Report by ROOT CAUSE, not by raw finding count.** Ten class-specialized hunters mean one defect
+   gets reported many times over — the first Megyprints run turned one unguarded RPC into four
+   confirmed findings plus a behavioral one. The workflow now consolidates after the prove step, so:
+   - **Lead with `result.root_causes`** — one entry per distinct defect, each carrying `confirmed_by`
+     (how many independent lenses proved it) and `classes`. Multiple lenses on one root cause is
+     **corroboration, not duplication** — say "confirmed by 4 independent lenses," don't report it four times.
+   - `result.findings.live_confirmed` is the **evidence trail** behind those root causes, not the headline.
+     Still group it by proof strength when showing detail: 🔴 live-confirmed (exploit actually executed) ·
+     behavioral (persona-sim side-effect/lifecycle bugs) · static-only (code-flagged, NOT live-proven — say so) ·
+     blocked/false-positive (the backend correctly refused).
+   - `result.repairs` is one drafted fix per root cause. Each carries a `migration_prefix` **reserved for it
+     alone this run** — when applying, keep that number. Two migrations sharing a numeric prefix make the
+     ledger silently skip one.
+   - **Detector admissibility — read `result.detector` before reporting anything as clean.** Two gates:
+     - **Positive control (per class):** every class has its own planted vuln that its own hunter must catch.
+       `detector.clean_unverified` lists classes that reported 0 findings *and* whose control did not fire —
+       those are **UNVERIFIED, not clean.** Name them and re-run; never report a false all-clear.
+       `detector.clean_verified` are the ones genuinely admissible as clean.
+     - **Negative control (the prover):** decoy findings that the platform mitigates in every Supabase install
+       are slipped into the prove queue. If `detector.negative_control.proverDiscriminates` is false, the prover
+       never demonstrated it can return live-blocked, so **this run's confirmations were not filtered by
+       anything** — report them with that caveat rather than as proven.
+   - **Environment parity caveat:** live-confirmed means confirmed *against the local throwaway stack*. When a
+     finding depends on backend config rather than app code (auth auto-confirm, exposed schemas, open signup),
+     say which local setting it rested on — prod may differ, and that cuts both ways.
 5. **Offer to close the loop:** apply the repairs for confirmed findings, then **re-release the Kraken** to prove they're fixed (find → fix → re-prove).
 
 ## Scan state & incremental runs (resume / new-only)
