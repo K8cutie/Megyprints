@@ -1527,11 +1527,13 @@ function renderTemplateSlots(
       slotRect.slotIndex = i;
       canvas.add(slotRect);
 
-      // Spell out what an empty photo slot can hold (chooser: Photo/Text/Ornament)
-      // when the slot is big enough; fall back to a bare "+" in tight cells.
+      // Spell out what an empty photo slot can hold — MUST match SlotChooser's
+      // photo-slot options (Photo/Quote/Text). This label, the DOM hint and the
+      // chooser drift separately; this one still said "Ornament" long after that
+      // option was retired, and named neither Quote nor the sunset Clipart.
       const cell = Math.min(sw, sh);
       const hint = cell >= 120
-        ? new fab.Text('Click to add:\n•  Photo\n•  Text\n•  Ornament', {
+        ? new fab.Text('Click to add:\n•  Photo\n•  Quote\n•  Text', {
             left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center',
             fontSize: Math.max(13, Math.min(30, cell * 0.13)),
             fontFamily: '"DM Sans", sans-serif', fontWeight: '700', fill: '#A0562F',
@@ -1916,10 +1918,10 @@ function renderScene(
       selectable: false, evented: true, hoverCursor: 'pointer',
     });
     box.slotId = `${SLOT_ID}-textbox-${i}`;
-    // Empty combo/caption box holds a quote, your own text, clipart or a QR —
-    // tapping opens the chooser. Keep this label in step with SlotChooser's
-    // caption-box options; the DOM hint (BuilderPreview EmptyChooserBox) and
-    // this Fabric label are SEPARATE and both drift silently.
+    // Empty combo/caption box holds a quote, your own text or a QR (clipart was
+    // sunset) — tapping opens the chooser. Keep this label in step with
+    // SlotChooser's caption-box options; the DOM hint (BuilderPreview
+    // EmptyChooserBox) and this Fabric label are SEPARATE and drift silently.
     const label = new fab.Text('Tap to add', {
       left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
       fontSize: Math.max(12, Math.min(24, Math.min(r.width, r.height) * 0.12)),
