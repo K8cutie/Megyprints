@@ -1,10 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
-  PaintBucket,
-  Image,
-  Blend,
-  Layers,
   Check,
   Droplets,
   Upload,
@@ -14,15 +9,15 @@ import type { AlbumPage, UploadedPhoto } from './types';
 import { resolveBgImageSrc } from './types';
 import { TEXTURE_NAMES, TEXTURE_COLORS, DEFAULT_TEXTURE_COLORS, textureDataUri, TEXTURE_TILE_PX } from './textures';
 
-/* ─── Tabs ─── */
-type BgTab = 'solid' | 'gradient' | 'image' | 'texture';
-
-const TABS: { key: BgTab; label: string; icon: React.ReactNode; title: string }[] = [
-  { key: 'solid', label: 'Solid', title: 'Solid Color', icon: <PaintBucket size={20} /> },
-  { key: 'gradient', label: 'Gradient', title: 'Gradient', icon: <Blend size={20} /> },
-  { key: 'image', label: 'Image', title: 'Image Background', icon: <Image size={20} /> },
-  { key: 'texture', label: 'Textures', title: 'Material Textures', icon: <Layers size={20} /> },
-];
+/* ─── Modes ───
+   TEXTURES-ONLY by design (owner call 2026-08-06): solid/gradient/image page
+   backgrounds were removed from the picker — materials read premium, photo
+   backgrounds made interiors chaotic. The renderers still DRAW legacy
+   solid/gradient/image backgrounds (bgPreviewStyle below, and the page
+   renderers), so old drafts keep rendering; they just can't be re-picked.
+   The `imageOnly` cover mode is the ONE exception — a cover background IS a
+   photo (the picture browser is the whole panel there). */
+type BgTab = 'image' | 'texture';
 
 /* ─── Live-preview CSS for a background (so opacity etc. is visible) ─── */
 function bgPreviewStyle(bg: AlbumPage['background'], photos: UploadedPhoto[]): React.CSSProperties {
@@ -65,17 +60,16 @@ interface BackgroundDesignerProps {
   /** Denser swatch grids (smaller swatches) — used by the cover editor so the
    *  preview can be bigger. Leaves Step 3 at its normal sizes. */
   compact?: boolean;
-  /** PHOTO-ONLY mode: hide the Solid/Gradient/Textures options and go straight to
-   *  the picture browser. Used by the cover editor — a cover background is a photo. */
+  /** PHOTO-ONLY mode: swap the texture grid for the picture browser. Used by
+   *  the cover editor — a cover background is a photo. */
   imageOnly?: boolean;
   /** Hide the opacity slider (not meaningful on a cover panel). */
   hideOpacity?: boolean;
 }
 
 export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false, compact = false, imageOnly = false, hideOpacity = false }: BackgroundDesignerProps) {
-  const [activeTab, setActiveTab] = useState<BgTab>('solid');
-  // In photo-only mode the picture browser is the whole panel.
-  const effectiveTab: BgTab = imageOnly ? 'image' : activeTab;
+  // One fixed mode per host: covers browse pictures, everything else picks a texture.
+  const effectiveTab: BgTab = imageOnly ? 'image' : 'texture';
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -87,22 +81,6 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
     onChange({ type: 'image', image: url });
     e.target.value = '';
   }, [onChange]);
-
-  /* Solid colour presets */
-  const solidPresets = [
-    '#FFFBF7', '#FFFFFF', '#F5F5F4', '#E7E5E4', '#D6D3D1',
-    '#FDA4AF', '#FCD34D', '#86EFAC', '#93C5FD', '#C4B5FD',
-    '#1C1917', '#44403C', '#78716C', '#A8A29E', '#0EA5E9',
-  ];
-
-  /* Gradient presets */
-  const gradientPresets = [
-    { type: 'linear' as const, angle: 45, stops: [{ color: '#FFFBF7', offset: 0 }, { color: '#FDA4AF', offset: 1 }] },
-    { type: 'linear' as const, angle: 135, stops: [{ color: '#93C5FD', offset: 0 }, { color: '#C4B5FD', offset: 1 }] },
-    { type: 'linear' as const, angle: 90, stops: [{ color: '#FCD34D', offset: 0 }, { color: '#FFFBF7', offset: 1 }] },
-    { type: 'linear' as const, angle: 0, stops: [{ color: '#86EFAC', offset: 0 }, { color: '#0EA5E9', offset: 1 }] },
-    { type: 'radial' as const, angle: 0, stops: [{ color: '#FFFBF7', offset: 0 }, { color: '#E7E5E4', offset: 1 }] },
-  ];
 
   return (
     <div className="w-full flex flex-col h-full">
@@ -145,116 +123,12 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
         />
       </div>
 
-      {/* Tab cards — 2×2 on mobile, 4-across on wider screens.
-          Hidden in photo-only mode (the cover goes straight to the picture browser). */}
-      <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0 ${imageOnly ? 'hidden' : ''}`}>
-        {TABS.map((t) => {
-          const active = activeTab === t.key;
-          return (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              title={t.title}
-              className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border-2 text-xs font-medium transition-all ${
-                active
-                  ? 'border-rose-400 bg-rose-50 text-stone-900 shadow'
-                  : 'border-stone-200 bg-white text-stone-500 hover:border-stone-300 hover:text-stone-700 hover:shadow-sm'
-              }`}
-            >
-              <span className={active ? 'text-rose-500' : 'text-stone-400'}>{t.icon}</span>
-              <span>{t.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Scrollable content area */}
+      {/* Scrollable content area — ONE fixed mode (no tab row): the texture
+          grid, or the picture browser in the cover's photo-only mode. */}
       <div className="flex-1 overflow-y-auto min-h-0 py-3">
-        <AnimatePresence mode="wait">
-        {effectiveTab === 'solid' && (
-          <motion.div
-            key="solid"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="space-y-3"
-          >
-            <div className={`grid gap-2 ${compact ? 'grid-cols-8' : 'grid-cols-5'}`}>
-              {solidPresets.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => onChange({ type: 'solid', solid: c })}
-                  className={`w-full aspect-square rounded-lg border-2 transition-all ${
-                    background.type === 'solid' && background.solid === c
-                      ? 'border-rose-400 scale-110 shadow'
-                      : 'border-transparent hover:scale-105'
-                  }`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-stone-500">Custom</label>
-              <input
-                type="color"
-                value={background.type === 'solid' ? background.solid || '#FFFBF7' : '#FFFBF7'}
-                onChange={(e) => onChange({ type: 'solid', solid: e.target.value })}
-                className="w-8 h-8 rounded cursor-pointer"
-              />
-            </div>
-          </motion.div>
-        )}
-
-        {/* ─── GRADIENT ─── */}
-        {effectiveTab === 'gradient' && (
-          <motion.div
-            key="gradient"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="space-y-3"
-          >
-            <div className={`grid gap-1.5 ${compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
-              {gradientPresets.map((g, i) => {
-                const css =
-                  g.type === 'linear'
-                    ? `linear-gradient(${g.angle}deg, ${g.stops.map((s) => `${s.color}`).join(', ')})`
-                    : `radial-gradient(circle, ${g.stops.map((s) => `${s.color}`).join(', ')})`;
-                return (
-                  <button
-                    key={i}
-                    onClick={() =>
-                      onChange({
-                        type: 'gradient',
-                        gradient: { type: g.type, angle: g.angle, stops: g.stops },
-                      })
-                    }
-                    className={`w-full h-12 rounded-lg border-2 transition-all ${
-                      background.type === 'gradient' &&
-                      background.gradient?.type === g.type &&
-                      background.gradient.stops[0]?.color === g.stops[0]?.color &&
-                      background.gradient.stops[1]?.color === g.stops[1]?.color
-                        ? 'border-rose-400 shadow'
-                        : 'border-transparent hover:scale-105'
-                    }`}
-                    style={{ background: css }}
-                  />
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-
-        {/* ─── IMAGE ─── */}
+        {/* ─── IMAGE (cover photo-only mode) ─── */}
         {effectiveTab === 'image' && (
-          <motion.div
-            key="image"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.15 }}
-            className="space-y-3"
-          >
+          <div className="space-y-3">
             {/* ─── Your uploaded photos → use one as the page background ───
                 In photo-only mode the whole panel IS the picture browser, so the
                 "Your Photos" heading and the empty-state line are just noise. */}
@@ -320,18 +194,12 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
                 <X size={12} /> Remove custom image
               </button>
             )}
-          </motion.div>
+          </div>
         )}
 
-        {/* ─── TEXTURES ─── */}
+        {/* ─── TEXTURES (the picker, everywhere else) ─── */}
         {effectiveTab === 'texture' && (
-          <motion.div
-            key="texture"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="space-y-3"
-          >
+          <div className="space-y-3">
             {/* Material */}
             <div>
               <p className="text-[10px] text-stone-400 mb-1.5 uppercase tracking-wider font-semibold">Material</p>
@@ -376,9 +244,8 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
                 })}
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
       </div>
     </div>
   );

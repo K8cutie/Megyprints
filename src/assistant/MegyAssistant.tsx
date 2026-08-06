@@ -535,8 +535,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   })}
                 </div>
 
-                {/* BACKGROUND picker — reuses RichBackgroundDesigner (colors,
-                    gradients, upload, patterns, "Your Photos"); applies on click. */}
+                {/* BACKGROUND picker — reuses RichBackgroundDesigner (material
+                    textures + tint + opacity); applies on click. */}
                 {activePicker === 'bg' && (
                   <div className="rounded-2xl border border-[#F4C2A1]/30 bg-[#FFF8F0] p-3">
                     <RichBackgroundDesigner

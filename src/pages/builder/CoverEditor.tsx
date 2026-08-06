@@ -7,8 +7,8 @@
    the spine auto-follows the front title, and the BACK is reserved for the
    Megy Prints mark (coverLayout.deriveBrandedBack) — no Back face here.
 
-   • Background — reuses the exact Step-3 picker (Solid/Gradient/Image/Textures +
-     opacity). Setting an Image here IS how you put a photo on the cover.
+   • Background — reuses the Step-3 picker in photo-only mode. Setting an
+     Image here IS how you put a photo on the cover.
    • Text — the cover title, typed inline (+ font / colour).
    ══════════════════════════════════════════════════════════════════════════ */
 
