@@ -99,8 +99,9 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
 }
 
 /** Empty-slot "content chooser" affordance — the tappable dashed box that
- *  either spells out "Click to add: Photo/Text/QR" (when the 3-way chooser is
- *  wired and the cell is big enough) or falls back to a bare "+" bubble.
+ *  either spells out what the box takes (photo slots: Photo/Quote/Text; combo
+ *  boxes: Quote/Text/QR — the `options` prop, which MUST match the SlotChooser
+ *  wiring for that slot kind) or falls back to a bare "+" bubble.
  *  ONE definition shared by photo slots AND caption boxes so the two never
  *  drift (previously copy-pasted, which the duplication gate flagged). */
 function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex }: {
@@ -308,11 +309,12 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         // legacy add-photo picker (onAddToSlot).
         if (!uploaded) {
           const onEmptyTap = onChooseSlot ?? onAddToSlot;
-          // Cover panels don't show the "Click to add: Photo/Text/Graphic" empty-slot
-          // chooser box (the cover approach is being reworked).
+          // Cover panels don't show the empty-slot chooser box (the cover is
+          // edited via the Step-3-style tabs instead).
           if (!editable || !onEmptyTap || coverMode) return null;
-          // Where the 3-way chooser is wired (onChooseSlot) and the slot is big
-          // enough, spell out what the box can hold ("Click to add: Photo/Text/QR")
+          // Where the chooser is wired (onChooseSlot) and the slot is big
+          // enough, spell out what the box can hold ("Click to add:
+          // Photo/Quote/Text" — the photo-slot chooser's real options)
           // instead of a bare "+"; otherwise fall back to the "+" bubble.
           const cell = Math.min(slotW, slotH);
           return (
@@ -499,8 +501,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
         // (4) EMPTY — tapping adds text/content.
         //
-        // The full 3-way chooser ("Click to add: Photo/Text/QR") is an EDIT-mode
-        // affordance and is gated on `editable && onChooseTextSlot`.
+        // The full chooser ("Click to add: Quote/Text/QR" — a combo box takes
+        // words or a QR, not a photo) is an EDIT-mode affordance and is gated
+        // on `editable && onChooseTextSlot`.
         //
         // But a plain tap-to-add-caption (onTextSlotTap) must NOT be gated on
         // `editable`: the BuilderPreview spread wires onTextSlotTap (to open the
