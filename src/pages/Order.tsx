@@ -188,12 +188,11 @@ export default function Order() {
           albumSize: order.albumSize,
           pageCount: printJob.pages.length,
           cover: order.cover,
-          // Cover-as-pages: when the front/back cover PAGES are present the wrap
-          // composites them + a derived spine; otherwise it falls back to the
-          // legacy CoverDesign form output.
+          // Cover-as-pages: when the FRONT cover page is present the wrap
+          // composites it + a derived spine + the reserved Megy Prints back
+          // panel; otherwise it falls back to the legacy CoverDesign form output.
           coverDesign: printJob.coverDesign ?? DEFAULT_COVER_DESIGN,
           coverFront: printJob.coverFront,
-          coverBack: printJob.coverBack,
           photos: printJob.photos,
         });
       } catch (e) {

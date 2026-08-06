@@ -252,3 +252,76 @@ export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry): { text: Tex
 
   return { text, bg };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESERVED BACK PANEL — the Megy Prints mark.
+   ───────────────────────────────────────────────────────────────────────────
+   The back cover is NOT customer artwork: it is reserved for the Megy Prints
+   brand mark (a colophon, like a publisher's mark on a book back). Like the
+   spine, everything about it is DERIVED from the front page — bg =
+   solidOf(front.background) — so the flat wrap reads as one cohesive piece.
+   `deriveBrandedBack` is the SINGLE authority, consumed by BOTH wrap renderers
+   (print canvas + DOM preview) so they cannot drift.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Swap these two lines to change what the reserved back says — both wrap
+ *  renderers pick it up. Keep the tagline in step with the public identity the
+ *  Footer/Contact pages publish. */
+export const BRAND_BACK_WORDMARK = 'Megy Prints';
+export const BRAND_BACK_TAGLINE = 'megyprints.com';
+
+/** Perceived luminance (0..1) of a CSS colour; tolerant of #rgb/#rrggbb/rgb().
+ *  Unknown formats read as light (→ dark ink), matching the light defaults. */
+function perceivedLuminance(color: string): number {
+  const c = color.trim();
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
+  const rgb = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(c);
+  let r: number, g: number, b: number;
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].split('').map((ch) => ch + ch).join('') : hex[1];
+    r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16);
+  } else if (rgb) {
+    r = +rgb[1]; g = +rgb[2]; b = +rgb[3];
+  } else {
+    return 1;
+  }
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+/** Derive the reserved back panel from the FRONT cover page: its solid colour
+ *  (same rule as the spine) + a centred brand lockup (wordmark over tagline) in
+ *  an ink that stays legible on light AND dark covers. Rects are wrap-px. */
+export function deriveBrandedBack(front: AlbumPage, g: CoverWrapGeometry): { bg: string; texts: PositionedText[] } {
+  const bg = solidOf(front.background);
+  const lightBg = perceivedLuminance(bg) > 0.55;
+  const ink = lightBg ? 'rgba(45,45,45,0.66)' : 'rgba(255,251,247,0.92)';
+  const soft = lightBg ? 'rgba(45,45,45,0.45)' : 'rgba(255,251,247,0.72)';
+
+  const panel = g.panels.back;
+  const safe = insetRect(panel, g.safeInsetPx);
+  const wordPx = Math.round(g.panels.front.height * 0.045);
+  const subPx = Math.round(g.panels.front.height * 0.021);
+  const wordH = Math.round(wordPx * 1.35);
+  const subH = Math.round(subPx * 1.35);
+  const gap = Math.round(wordPx * 0.5);
+  const top = Math.round(panel.y + panel.height / 2 - (wordH + gap + subH) / 2);
+
+  const base = { fontFamily: 'Cinzel, Georgia, serif', bold: false, italic: false, underline: false, alignment: 'center' as const };
+  return {
+    bg,
+    texts: [
+      {
+        style: { ...base, text: BRAND_BACK_WORDMARK, fontSize: wordPx, color: ink },
+        rect: { x: safe.x, y: top, width: safe.width, height: wordH },
+        rotateDeg: 0,
+        valign: 'middle',
+      },
+      {
+        style: { ...base, text: BRAND_BACK_TAGLINE, fontSize: subPx, color: soft },
+        rect: { x: safe.x, y: top + wordH + gap, width: safe.width, height: subH },
+        rotateDeg: 0,
+        valign: 'middle',
+      },
+    ],
+  };
+}

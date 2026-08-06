@@ -15,7 +15,7 @@ import { getCanvasDimensions } from './layouts';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 import { coverWrapGeometry, insetRect } from './coverGeometry';
-import { coverLayout, deriveSpine, solidOf, type PositionedText } from './coverLayout';
+import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedText } from './coverLayout';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -916,11 +916,11 @@ export interface CoverPrintInput {
   cover: CoverType;
   coverDesign: CoverDesign;
   photos: UploadedPhoto[];
-  /** Cover-as-pages: when both are present, the wrap composites these ACTUAL
-   *  page renders (front/back) + a spine derived from the front page, instead of
-   *  the legacy CoverDesign layout. */
+  /** Cover-as-pages: when present, the wrap composites this ACTUAL front-page
+   *  render + a spine derived from it + the RESERVED Megy Prints back panel
+   *  (deriveBrandedBack — the back is brand space, not customer artwork),
+   *  instead of the legacy CoverDesign layout. */
   coverFront?: AlbumPage;
-  coverBack?: AlbumPage;
 }
 
 /** Render ONE cover panel PAGE (front/back) to an Image via the SAME per-page
@@ -938,7 +938,7 @@ async function renderCoverPanelImage(page: AlbumPage, photos: UploadedPhoto[], a
 
 /** Render the flat cover wrap to a full-resolution JPEG Blob. */
 export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<Blob> {
-  const { albumSize, pageCount, cover, coverDesign, photos, coverFront, coverBack } = input;
+  const { albumSize, pageCount, cover, coverDesign, photos, coverFront } = input;
   const geom = coverWrapGeometry(albumSize, pageCount, cover);
   const W = geom.wrap.wPx;
   const H = geom.wrap.hPx;
@@ -948,25 +948,25 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
 
-  if (coverFront && coverBack) {
-    // ── COVER-AS-PAGES: composite the ACTUAL front/back page renders + a spine
-    //    DERIVED from the front page (text = front title, colour = front bg). ──
+  if (coverFront) {
+    // ── COVER-AS-PAGES: composite the ACTUAL front page render + a spine
+    //    DERIVED from the front page (text = front title, colour = front bg) +
+    //    the RESERVED back panel (Megy Prints mark on the front's colour). ──
     const spine = deriveSpine(coverFront, geom);
+    const branded = deriveBrandedBack(coverFront, geom);
     const frontBg = solidOf(coverFront.background);
-    const backBg = solidOf(coverBack.background);
-    // Full-bleed base (no white turn-in): back colour left of the spine, front right.
+    // Full-bleed base (no white turn-in): the reserved back's colour left of the
+    // spine, the front's colour right.
     const splitX = geom.foldXPx[0];
-    ctx.fillStyle = backBg;
+    ctx.fillStyle = branded.bg;
     ctx.fillRect(0, 0, splitX, H);
     ctx.fillStyle = frontBg;
     ctx.fillRect(splitX, 0, W - splitX, H);
-    // Panel page renders (front & back), each drawn edge-to-edge into its trim rect.
-    const [backImg, frontImg] = await Promise.all([
-      renderCoverPanelImage(coverBack, photos, albumSize),
-      renderCoverPanelImage(coverFront, photos, albumSize),
-    ]);
-    const { back, front, spine: spineRect } = geom.panels;
-    ctx.drawImage(backImg, back.x, back.y, back.width, back.height);
+    // Reserved back panel: the brand lockup only — no customer artwork.
+    for (const t of branded.texts) drawCoverText(ctx, t);
+    // Front panel page render, drawn edge-to-edge into its trim rect.
+    const frontImg = await renderCoverPanelImage(coverFront, photos, albumSize);
+    const { front, spine: spineRect } = geom.panels;
     ctx.drawImage(frontImg, front.x, front.y, front.width, front.height);
     // Spine: fill + the derived front-page text, rotated up the spine.
     ctx.fillStyle = spine.bg;

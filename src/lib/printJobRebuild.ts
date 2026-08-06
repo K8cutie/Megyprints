@@ -44,19 +44,20 @@ function draftCoverDesign(): CoverDesign | undefined {
   }
 }
 
-/** Recover the cover-as-pages front/back PAGES from the local draft after the
- *  same-device OAuth round-trip (they aren't in the cloud album row). Each is
+/** Recover the cover-as-pages FRONT page from the local draft after the
+ *  same-device OAuth round-trip (it isn't in the cloud album row). It is
  *  normalized through the same sanitizer the interior pages use (shape + ornament
- *  data-URI validation). The cover upload is best-effort, so a missing cover
- *  photo degrades the cover only — it does NOT fail the interior job. */
-function draftCoverPages(): { coverFront?: AlbumPage; coverBack?: AlbumPage } {
+ *  data-URI validation). The back cover is NOT recovered — it's the reserved
+ *  Megy Prints panel, derived from the front at wrap time. The cover upload is
+ *  best-effort, so a missing cover photo degrades the cover only — it does NOT
+ *  fail the interior job. */
+function draftCoverPages(): { coverFront?: AlbumPage } {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return {};
-    const d = JSON.parse(raw) as { coverFront?: unknown; coverBack?: unknown };
+    const d = JSON.parse(raw) as { coverFront?: unknown };
     return {
       coverFront: d.coverFront ? normalizeStoredPage(d.coverFront) : undefined,
-      coverBack: d.coverBack ? normalizeStoredPage(d.coverBack) : undefined,
     };
   } catch {
     return {};

@@ -9,7 +9,7 @@ import type { CSSProperties } from 'react';
 import { resolveBgImageSrc, type UploadedPhoto, type AlbumPage } from './types';
 import type { CoverWrapGeometry } from './coverGeometry';
 import type { CoverDesign } from './types';
-import { coverLayout, deriveSpine, solidOf, type PanelLayout, type PositionedText } from './coverLayout';
+import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PanelLayout, type PositionedText } from './coverLayout';
 import { wordArtDomStyle } from './wordArt';
 import { PageView } from './BuilderPreview';
 
@@ -22,21 +22,22 @@ interface Props {
   /** Draw dashed fold/crease guides at the spine edges. */
   showGuides?: boolean;
   className?: string;
-  /** Cover-as-pages: when both are present, render the ACTUAL front/back cover
-   *  PAGES (via PageView) + a spine DERIVED from the front page, mirroring the
-   *  print compositor. Falls back to the legacy CoverDesign layout otherwise. */
+  /** Cover-as-pages: when present, render the ACTUAL front cover PAGE (via
+   *  PageView) + a spine DERIVED from it + the RESERVED Megy Prints back panel,
+   *  mirroring the print compositor. Falls back to the legacy CoverDesign
+   *  layout otherwise. */
   coverFront?: AlbumPage;
-  coverBack?: AlbumPage;
 }
 
-export function CoverWrapPreview({ geometry, coverDesign, photos, width, showGuides, className, coverFront, coverBack }: Props) {
+export function CoverWrapPreview({ geometry, coverDesign, photos, width, showGuides, className, coverFront }: Props) {
   const layout = useMemo(() => coverLayout(geometry, coverDesign), [geometry, coverDesign]);
   const scale = width / geometry.wrap.wPx;
   const height = geometry.wrap.hPx * scale;
-  const usePages = !!(coverFront && coverBack);
+  const usePages = !!coverFront;
+  const branded = usePages ? deriveBrandedBack(coverFront!, geometry) : null;
   // Full-bleed base — mirrors the print renderer so preview and print both have
   // no white turn-in edges (back colour left of the spine, front colour right).
-  const backBg = usePages ? solidOf(coverBack!.background) : (layout.panels.find((p) => p.panel === 'back')?.bg || '#ffffff');
+  const backBg = usePages ? branded!.bg : (layout.panels.find((p) => p.panel === 'back')?.bg || '#ffffff');
   const frontBg = usePages ? solidOf(coverFront!.background) : (layout.panels.find((p) => p.panel === 'front')?.bg || '#ffffff');
   const spine = usePages ? deriveSpine(coverFront!, geometry) : null;
 
@@ -78,7 +79,13 @@ export function CoverWrapPreview({ geometry, coverDesign, photos, width, showGui
     const { back, front, spine: spineRect } = geometry.panels;
     return shell(
       <>
-        <PanelPage page={coverBack!} rect={back} scale={scale} photos={photos} />
+        {/* Reserved back panel: the Megy Prints lockup on the front's colour —
+            same PositionedText geometry the print canvas draws. */}
+        <div style={{ position: 'absolute', left: back.x * scale, top: back.y * scale, width: back.width * scale, height: back.height * scale, overflow: 'hidden' }}>
+          {branded!.texts.map((t, i) => (
+            <TextView key={i} t={t} panelRect={back} scale={scale} />
+          ))}
+        </div>
         <PanelPage page={coverFront!} rect={front} scale={scale} photos={photos} />
         <div
           style={{

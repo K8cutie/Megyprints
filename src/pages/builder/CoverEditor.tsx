@@ -2,16 +2,14 @@
    CoverEditor — Step-3-style cover editor.
 
    Same format as the "Style Your Album" step: a live PREVIEW panel + inline
-   category TABS (Background / Text / Spine) + controls right below — no tap-a-box,
-   no bottom sheet, no separate modal. The front & back covers are edited one face
-   at a time (Front / Back toggle); the spine belongs to the front and auto-follows
-   the front title (overridable in the Spine tab).
+   category TABS (Background / Text) + controls right below — no tap-a-box,
+   no bottom sheet, no separate modal. Only the FRONT cover is customer-editable:
+   the spine auto-follows the front title, and the BACK is reserved for the
+   Megy Prints mark (coverLayout.deriveBrandedBack) — no Back face here.
 
    • Background — reuses the exact Step-3 picker (Solid/Gradient/Image/Textures +
      opacity). Setting an Image here IS how you put a photo on the cover.
    • Text — the cover title, typed inline (+ font / colour).
-   • Spine (front only) — a live spine preview; auto-uses the front title unless a
-     custom spine text is typed here.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -38,7 +36,7 @@ interface Props {
 
 export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }: Props) {
   const b = useBuilderContext();
-  const { editScope, setEditScope, coverFront, coverBack, albumSize, albumPages, uploadedPhotos } = b;
+  const { setEditScope, coverFront, albumSize, albumPages, uploadedPhotos } = b;
 
   // Own the cover scope for the editor's lifetime; always restore 'interior' on
   // unmount so a stale cover scope can't corrupt the next interior edit.
@@ -47,8 +45,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     return () => setEditScope('interior');
   }, [setEditScope]);
 
-  const isFront = editScope !== 'coverBack';
-  const page: AlbumPage = isFront ? coverFront : coverBack;
+  const page: AlbumPage = coverFront;
 
   const [tab, setTab] = useState<CoverTab>('background');
   const activeTab: CoverTab = tab;
@@ -170,13 +167,11 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   };
   const onTextDragEnd = (e: React.PointerEvent) => { e.stopPropagation(); textDragRef.current = null; };
 
-  const toggle = (front: boolean) => setEditScope(front ? 'coverFront' : 'coverBack');
-
   const header = (
     <div className="flex items-center justify-between px-5 h-14 border-b border-[#EADFD3] shrink-0">
       <div>
         <h2 className="font-display text-lg font-semibold text-[#2D2D2D]">Design your cover</h2>
-        <p className="text-[11px] text-[#9B8B7A] -mt-0.5">Style the front &amp; back — the spine follows your front title</p>
+        <p className="text-[11px] text-[#9B8B7A] -mt-0.5">Style the front — the spine follows your title</p>
       </div>
       {mode === 'modal' && (
         <button onClick={onClose} className="p-2 rounded-full hover:bg-black/5 text-[#6B6B6B]"><X size={20} /></button>
@@ -184,28 +179,10 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     </div>
   );
 
-  const faceToggle = (
-    <div className="shrink-0 flex justify-center pt-3">
-      <div className="inline-flex rounded-full bg-[#F1E7DA] p-1">
-        {([['Front', true], ['Back', false]] as const).map(([label, front]) => (
-          <button
-            key={label}
-            onClick={() => toggle(front)}
-            className={`px-6 py-1.5 rounded-full text-sm font-semibold transition-colors ${isFront === front ? 'bg-white text-[#2D2D2D] shadow-sm' : 'text-[#9B8B7A]'}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
-  // Live preview of the active cover face (display-only; you edit via the tabs).
+  // Live preview of the front cover (display-only; you edit via the tabs).
   const preview = (
     <div className="shrink-0 flex items-start justify-center gap-2 pt-3">
-      {isFront
-        ? <SpineStrip height={dims.h} spine={spine} />
-        : <div style={{ width: SPINE_STRIP_W }} aria-hidden />}
+      <SpineStrip height={dims.h} spine={spine} />
       <div
         className="bg-white shadow-lg relative overflow-hidden"
         style={{ width: dims.w, height: dims.h, cursor: bgIsImage ? 'move' : undefined, touchAction: bgIsImage ? 'none' : undefined }}
@@ -234,6 +211,14 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
         )}
       </div>
     </div>
+  );
+
+  // The back face isn't editable — say so once, right under the preview, so
+  // nobody hunts for a Back toggle that no longer exists.
+  const reservedNote = (
+    <p className="shrink-0 text-center text-[10px] text-[#B9A992] pt-1.5 px-6">
+      The back cover carries the Megy Prints mark in your cover colour.
+    </p>
   );
 
   const tabs: { key: CoverTab; label: string }[] = [
@@ -299,11 +284,11 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
       {activeTab === 'text' && (
         <div className="space-y-3">
           <label className="block">
-            <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">{isFront ? 'Front cover title' : 'Back cover text'}</span>
+            <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Cover title</span>
             <input
               value={title.text}
               onChange={(e) => updateTitle({ text: e.target.value })}
-              placeholder={isFront ? 'e.g. The Cruz Family' : 'A note, quote, or thank-you'}
+              placeholder="e.g. The Cruz Family"
               className="w-full px-3 py-2.5 rounded-xl border border-[#E4D8C9] bg-white text-[15px] text-[#2D2D2D] outline-none focus:border-[#E8A598]"
               style={{ fontFamily: title.fontFamily }}
             />
@@ -421,8 +406,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
       <div className="h-full bg-[#FFF8F0] relative flex justify-center">
         <div className="w-full max-w-[560px] h-full flex flex-col">
           {header}
-          {faceToggle}
           {preview}
+          {reservedNote}
           {tabBar}
           {controls}
           {footer}
@@ -435,8 +420,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-stretch sm:items-center justify-center sm:p-4">
       <div className="bg-[#FFF8F0] w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden relative">
         {header}
-        {faceToggle}
         {preview}
+        {reservedNote}
         {tabBar}
         {controls}
         {footer}

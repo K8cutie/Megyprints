@@ -21,10 +21,10 @@ export interface PrintJob {
    *  back-compat; the wrap falls back to this when cover PAGES are absent.
    *  The cover MATERIAL (soft/hard) is chosen at checkout, not stored here. */
   coverDesign?: CoverDesign;
-  /** Cover-as-pages: the front & back cover PAGES. When present, the checkout
-   *  cover wrap composites these actual page renders + a derived spine. */
+  /** Cover-as-pages: the FRONT cover PAGE. When present, the checkout cover
+   *  wrap composites this actual page render + a derived spine + the reserved
+   *  Megy Prints back panel (the back is not customer artwork). */
   coverFront?: AlbumPage;
-  coverBack?: AlbumPage;
 }
 
 let pending: PrintJob | null = null;

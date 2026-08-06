@@ -580,7 +580,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
   const total = pages.length;
-  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, coverBack } = useBuilderContext();
+  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront } = useBuilderContext();
 
   // The preview is a TWO-PAGE spread — wider than a phone screen, so it shrinks to
   // a stamp in portrait. Rather than ask the user to rotate (useless if their phone
@@ -671,7 +671,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // and a cover PDF that doesn't match the album. The toolbar button and the
   // end-of-album CTA must BOTH go through here so they can never drift apart.
   const handleOrder = () => {
-    setPendingPrintJob({ pages, photos, albumSize, coverDesign, coverFront, coverBack });
+    setPendingPrintJob({ pages, photos, albumSize, coverDesign, coverFront });
     onOrder();
   };
 

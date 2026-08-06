@@ -151,45 +151,40 @@ function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
   };
 }
 
-/* ── COVER PAGES (cover-as-pages) ────────────────────────────────────────────
-   The front & back covers are edited as normal AlbumPages, so they reuse the
-   exact per-page editor + 3 renderers. They live OUTSIDE albumPages (dedicated
-   coverFront/coverBack state) so page-count pricing / spine thickness / spread
-   pairing stay driven only by interior pages. A cover page is seeded onto the
-   default full-bleed cover template so it opens with a tappable hero + title box
-   (a raw createEmptyPage has NO templateId → a blank, slot-less canvas). */
-function createCoverPage(role: 'front' | 'back', size: AlbumSizePreset): AlbumPage {
-  const blank: AlbumPage = { ...createEmptyPage(0, size), id: `cover-${role}-${Date.now()}` };
+/* ── COVER PAGE (cover-as-pages) ─────────────────────────────────────────────
+   The FRONT cover is edited as a normal AlbumPage, so it reuses the exact
+   per-page editor + 3 renderers. It lives OUTSIDE albumPages (dedicated
+   coverFront state) so page-count pricing / spine thickness / spread pairing
+   stay driven only by interior pages. The BACK cover is NOT customer-editable —
+   it's reserved for the Megy Prints mark, derived from the front at wrap time
+   (coverLayout.deriveBrandedBack), so no back-page state exists. The cover page
+   is seeded onto the default full-bleed cover template so it opens with a
+   tappable hero + title box (a raw createEmptyPage has NO templateId → a blank,
+   slot-less canvas). */
+function createCoverPage(size: AlbumSizePreset): AlbumPage {
+  const blank: AlbumPage = { ...createEmptyPage(0, size), id: `cover-front-${Date.now()}` };
   const tmpl = getTemplateById(DEFAULT_COVER_TEMPLATE_ID);
   return tmpl ? relayPageOnTemplate(blank, tmpl) : blank;
 }
 
-/** Migrate a legacy CoverDesign (the old stacked Front/Spine/Back form) into two
- *  cover PAGES so an in-flight draft keeps its title/blurb + background colour.
- *  Best-effort: title→front title box, blurb→back title box, panel background
- *  colours. A legacy hero photo (referenced by id) is NOT remapped — cover
- *  photos are simply re-picked in the new editor. Only runs for old drafts that
- *  have coverDesign but no coverFront/coverBack yet. */
-function coverDesignToPages(d: CoverDesign, size: AlbumSizePreset): { front: AlbumPage; back: AlbumPage } {
+/** Migrate a legacy CoverDesign (the old stacked Front/Spine/Back form) into a
+ *  front cover PAGE so an in-flight draft keeps its title + background colour.
+ *  Best-effort: title→front title box, panel background colour. A legacy hero
+ *  photo (referenced by id) is NOT remapped — cover photos are simply re-picked
+ *  in the new editor. The legacy back blurb is dropped: the back is now the
+ *  reserved Megy Prints panel. Only runs for old drafts that have coverDesign
+ *  but no coverFront yet. */
+function coverDesignToFront(d: CoverDesign, size: AlbumSizePreset): AlbumPage {
   const boxCaption = (style: TextStyle | undefined, id: string): TextElement | null =>
     (style && style.text && style.text.trim())
       ? { ...style, id, x: 0, y: 0, rotation: 0, opacity: 1, boxIndex: 0 }
       : null;
-  const front = createCoverPage('front', size);
-  const back = createCoverPage('back', size);
+  const front = createCoverPage(size);
   const ft = boxCaption(d.front?.title, `cover-ft-${Date.now()}`);
-  const bt = boxCaption(d.back?.blurb, `cover-bt-${Date.now()}`);
   return {
-    front: {
-      ...front,
-      background: d.front?.background ? { type: 'solid', solid: d.front.background } : front.background,
-      textElements: ft ? [ft] : [],
-    },
-    back: {
-      ...back,
-      background: d.back?.background ? { type: 'solid', solid: d.back.background } : back.background,
-      textElements: bt ? [bt] : [],
-    },
+    ...front,
+    background: d.front?.background ? { type: 'solid', solid: d.front.background } : front.background,
+    textElements: ft ? [ft] : [],
   };
 }
 
@@ -203,10 +198,10 @@ interface SerializedState {
   rejectedTemplateIds: string[];
   photosPerPage: number | undefined;
   coverDesign: CoverDesign;
-  /** Front & back cover PAGES (cover-as-pages). Optional in stored drafts: old
-   *  drafts predate them and are migrated from coverDesign on restore. */
+  /** Front cover PAGE (cover-as-pages). Optional in stored drafts: old drafts
+   *  predate it and are migrated from coverDesign on restore. (A stored
+   *  coverBack from the pre-reserved-back era is simply ignored.) */
   coverFront: AlbumPage;
-  coverBack: AlbumPage;
 }
 
 /* ── Undo snapshot ── */
@@ -351,8 +346,7 @@ function getInitialState(): SerializedState {
       rejectedTemplateIds: [],
       photosPerPage: undefined,
       coverDesign: DEFAULT_COVER_DESIGN,
-      coverFront: createCoverPage('front', '8x8'),
-      coverBack: createCoverPage('back', '8x8'),
+      coverFront: createCoverPage('8x8'),
     };
   }
 
@@ -391,9 +385,7 @@ function getInitialState(): SerializedState {
     photosPerPage: effectiveSaved?.photosPerPage ?? undefined,
     coverDesign: effectiveSaved?.coverDesign ?? DEFAULT_COVER_DESIGN,
     coverFront: effectiveSaved?.coverFront
-      ?? (effectiveSaved?.coverDesign ? coverDesignToPages(effectiveSaved.coverDesign, effectiveSaved?.albumSize ?? defaultSize).front : createCoverPage('front', effectiveSaved?.albumSize ?? defaultSize)),
-    coverBack: effectiveSaved?.coverBack
-      ?? (effectiveSaved?.coverDesign ? coverDesignToPages(effectiveSaved.coverDesign, effectiveSaved?.albumSize ?? defaultSize).back : createCoverPage('back', effectiveSaved?.albumSize ?? defaultSize)),
+      ?? (effectiveSaved?.coverDesign ? coverDesignToFront(effectiveSaved.coverDesign, effectiveSaved?.albumSize ?? defaultSize) : createCoverPage(effectiveSaved?.albumSize ?? defaultSize)),
   };
 }
 
@@ -407,22 +399,22 @@ export interface BuilderActions {
   setSelectedTemplate: (t: TemplateType) => void;
 
   // Cover design (front·spine·back artwork — distinct from the binding material)
-  // LEGACY: retired as the cover source of truth (replaced by coverFront/coverBack
-  // pages), kept for back-compat migration of old drafts + the fallback wrap path.
+  // LEGACY: retired as the cover source of truth (replaced by the coverFront
+  // page), kept for back-compat migration of old drafts + the fallback wrap path.
   coverDesign: CoverDesign;
   setCoverDesign: (d: CoverDesign | ((prev: CoverDesign) => CoverDesign)) => void;
   setCoverFront: (patch: Partial<CoverDesign['front']>) => void;
   setCoverSpine: (patch: Partial<CoverDesign['spine']>) => void;
   setCoverBack: (patch: Partial<CoverDesign['back']>) => void;
 
-  // Cover PAGES (cover-as-pages) — front & back covers edited as AlbumPages, one
-  // panel at a time, with the SAME per-page editor as interior pages. editScope
-  // points the editor + updateCurrentPage at the active cover page; the spine is
-  // derived from the front page (see coverLayout.deriveSpine).
+  // Cover PAGE (cover-as-pages) — the FRONT cover edited as an AlbumPage with
+  // the SAME per-page editor as interior pages. editScope points the editor +
+  // updateCurrentPage at it; the spine is derived from the front page
+  // (coverLayout.deriveSpine) and the back is the reserved Megy Prints panel
+  // (coverLayout.deriveBrandedBack) — neither is editable state.
   coverFront: AlbumPage;
-  coverBack: AlbumPage;
-  editScope: 'interior' | 'coverFront' | 'coverBack';
-  setEditScope: (s: 'interior' | 'coverFront' | 'coverBack') => void;
+  editScope: 'interior' | 'coverFront';
+  setEditScope: (s: 'interior' | 'coverFront') => void;
   /** Apply a cover layout template to the active cover page (respects editScope). */
   applyCoverLayout: (templateId: string) => void;
 
@@ -625,21 +617,20 @@ export function useBuilderState(): BuilderActions {
     setCoverDesign((d) => ({ ...d, spine: { ...d.spine, ...patch } })), []);
   const setCoverBack = useCallback((patch: Partial<CoverDesign['back']>) =>
     setCoverDesign((d) => ({ ...d, back: { ...d.back, ...patch } })), []);
-  // ── COVER PAGES (cover-as-pages) — front & back covers edited as AlbumPages. ──
+  // ── COVER PAGE (cover-as-pages) — the FRONT cover edited as an AlbumPage. ──
   // editScope routes the editor + updateCurrentPage at the active page:
-  // 'interior' → albumPages[currentPageIndex]; 'coverFront'/'coverBack' → the
-  // matching cover page. A ref mirrors editScope so updateCurrentPage stays
-  // scope-aware without a stale closure.
+  // 'interior' → albumPages[currentPageIndex]; 'coverFront' → the cover page.
+  // A ref mirrors editScope so updateCurrentPage stays scope-aware without a
+  // stale closure. (No coverBack state: the back is the reserved Megy Prints
+  // panel, derived from the front at wrap time.)
   const [coverFront, setCoverFrontPage] = useState<AlbumPage>(() => getInitialState().coverFront);
-  const [coverBack, setCoverBackPage] = useState<AlbumPage>(() => getInitialState().coverBack);
-  const [editScope, setEditScope] = useState<'interior' | 'coverFront' | 'coverBack'>('interior');
+  const [editScope, setEditScope] = useState<'interior' | 'coverFront'>('interior');
   const editScopeRef = useRef(editScope);
   editScopeRef.current = editScope;
   // Keep cover-page aspect in lockstep with the album size (cover is chosen after
   // size, but the user can go back and change it).
   useEffect(() => {
     setCoverFrontPage((p) => (p.size === albumSize ? p : { ...p, size: albumSize }));
-    setCoverBackPage((p) => (p.size === albumSize ? p : { ...p, size: albumSize }));
     // A QR transform is stored as per-axis page FRACTIONS, so changing the album
     // aspect silently turns a square code into a rectangle (8x8 -> 6x4 stretches
     // it 1.5:1) and can drop it under the scannable floor. Re-clamp against the
@@ -769,7 +760,6 @@ export function useBuilderState(): BuilderActions {
 
   const currentPage =
     editScope === 'coverFront' ? coverFront
-    : editScope === 'coverBack' ? coverBack
     : (albumPages[currentPageIndex] ?? createEmptyPage(0, albumSize));
 
   /* ── Phase 1: Serialize album for cloud ── */
@@ -805,7 +795,7 @@ export function useBuilderState(): BuilderActions {
     justLoaded: () => boolean;
   } | null>(null);
   persistRef.current = {
-    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, coverBack },
+    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront },
     serializeAlbum,
     save: albumSync.save,
     userId: user?.id,
@@ -842,7 +832,7 @@ export function useBuilderState(): BuilderActions {
     if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(flushLocal, 30000);
     return () => { if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current); };
-  }, [albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, coverBack, flushLocal]);
+  }, [albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, flushLocal]);
 
   // Cloud backup every 10 minutes (only if something changed).
   useEffect(() => {
@@ -1057,7 +1047,6 @@ export function useBuilderState(): BuilderActions {
     // interior page — this is how the cover editor reuses ALL interior edit logic.
     const scope = editScopeRef.current;
     if (scope === 'coverFront') { setCoverFrontPage((p) => updater(p)); return; }
-    if (scope === 'coverBack') { setCoverBackPage((p) => updater(p)); return; }
     setAlbumPages((prev) => {
       const next = [...prev];
       if (next[currentPageIndex]) {
@@ -2447,8 +2436,7 @@ export function useBuilderState(): BuilderActions {
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
     setCoverDesign(DEFAULT_COVER_DESIGN);
-    setCoverFrontPage(createCoverPage('front', '8x8'));
-    setCoverBackPage(createCoverPage('back', '8x8'));
+    setCoverFrontPage(createCoverPage('8x8'));
     setEditScope('interior');
     pageSnapshotsRef.current = {};
     // ── Phase 1: Clear cloud state ──
@@ -2602,7 +2590,6 @@ export function useBuilderState(): BuilderActions {
     setCoverSpine,
     setCoverBack,
     coverFront,
-    coverBack,
     editScope,
     setEditScope,
     applyCoverLayout,
