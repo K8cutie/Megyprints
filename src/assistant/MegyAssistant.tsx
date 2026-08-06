@@ -645,13 +645,18 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               >
                 ← Previous
               </button>
-              <button
-                onClick={() => { wizardRef.current.advance(); setWizardStep(wizardRef.current.state.step); }}
-                disabled={wizardRef.current.state.step === 'finalize'}
-                className="flex items-center gap-1 px-5 py-2 rounded-lg text-sm font-medium bg-[#F4C2A1] text-white hover:bg-[#E8A598] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-              >
-                Next →
-              </button>
+              {/* No footer Next on the upload step: "Generate Album →" is the
+                  real way forward (it generates AND advances), and an unguarded
+                  Next with zero photos skips into an empty review. */}
+              {wizardRef.current.state.step !== 'upload_photos' && (
+                <button
+                  onClick={() => { wizardRef.current.advance(); setWizardStep(wizardRef.current.state.step); }}
+                  disabled={wizardRef.current.state.step === 'finalize'}
+                  className="flex items-center gap-1 px-5 py-2 rounded-lg text-sm font-medium bg-[#F4C2A1] text-white hover:bg-[#E8A598] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  Next →
+                </button>
+              )}
             </div>
             {msg.tips.length > 0 && (
               <div className="mt-3 pt-3 border-t border-[#F0F0F0] space-y-1">
@@ -800,13 +805,17 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               >
                 ← Previous
               </button>
-              <button
-                onClick={() => { wizardRef.current.advance(); setWizardStep(wizardRef.current.state.step); }}
-                disabled={wizardRef.current.state.step === 'finalize'}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[#F4C2A1] text-white hover:bg-[#E8A598] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-              >
-                Next →
-              </button>
+              {/* No footer Next on the upload step — same rule as the desktop
+                  panel: "Generate Album →" advances; Next would skip with 0 photos. */}
+              {wizardRef.current.state.step !== 'upload_photos' && (
+                <button
+                  onClick={() => { wizardRef.current.advance(); setWizardStep(wizardRef.current.state.step); }}
+                  disabled={wizardRef.current.state.step === 'finalize'}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[#F4C2A1] text-white hover:bg-[#E8A598] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  Next →
+                </button>
+              )}
             </div>
             {wizardRef.current.getMessage().tips.length > 0 && (
               <div className="mt-2 pt-2 border-t border-[#F0F0F0] space-y-0.5">
