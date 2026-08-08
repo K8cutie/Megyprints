@@ -298,6 +298,33 @@ export function buildRectTemplates(size: AlbumSizePreset): PageTemplate[] {
       rect(2 * (col3 + gA), 1 - col23B, col3, col23B, '2:3'),
     ], [box(0, 0, 1, 1 - col23B)]),
 
+    /* ── FRAMED (matted) layouts — the shop's 8×6 print-template sheet ────
+       Added 2026-08-08 from the owner's PDF template. Unlike every tiling
+       above, these deliberately do NOT cover the sheet: the photos float
+       inside the page with the background showing as a mat around them —
+       the exact rects the print template draws (fractions of the full
+       sheet, verbatim). With the textures-only backgrounds this prints as
+       photos matted on the material.
+       Cell aspects sit within ~2% of the declared ratio on the duo/pairs
+       and ~8% on the hero — the same order of squeeze the binding reserve
+       already imposes on every full-bleed layout, so the crop is house-
+       normal. Floor (worst parity, 0.5" spine reserve): duo 3.07×4.45",
+       pairs 3.25×2.62", hero 3.07×5.36" — all ≥ 2". */
+    t('duo-34-framed', { land: 'Two Portraits, Framed', port: 'Two Landscapes, Framed' }, 'duo', '3:4', [
+      rect(0.0752, 0.1292, 0.4088, 0.7416, '3:4'),
+      rect(0.5161, 0.1292, 0.4088, 0.7416, '3:4'),
+    ]),
+    t('trio-hero-framed-l', { land: 'Hero Left, Framed', port: 'Hero Top, Framed' }, 'trio', '2:3', [
+      rect(0.0712, 0.0532, 0.4088, 0.8935, '2:3'),
+      rect(0.4959, 0.0532, 0.4328, 0.4367, '4:3'),
+      rect(0.4959, 0.5099, 0.4328, 0.4367, '4:3'),
+    ]),
+    t('trio-hero-framed-r', { land: 'Hero Right, Framed', port: 'Hero Bottom, Framed' }, 'trio', '2:3', [
+      rect(0.5200, 0.0532, 0.4088, 0.8935, '2:3'),
+      rect(0.0712, 0.0532, 0.4328, 0.4367, '4:3'),
+      rect(0.0712, 0.5099, 0.4328, 0.4367, '4:3'),
+    ]),
+
     /* ── 4 photos ─────────────────────────────────────────────────────────
        The full 2×2: the trio grids' quadrant fractions with a photo in the
        fourth corner instead of the box. Quarters of a 4:3 page are 4:3

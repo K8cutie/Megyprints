@@ -46,6 +46,18 @@ const duoTall = (id: string, name: string, gap: number) =>
 const T64_FB_DUO_TALL = duoTall('t64-fb-duo-tall', 'Two Tall', 0);
 const T64_FB_DUO_TALL_G = duoTall('t64-fb-duo-tall-gap', 'Two Tall', GAP);
 
+/* 2 photos, FRAMED (matted) — from the shop's print-template sheet (2026-08-08):
+   two portraits floating on the page with the background showing as a mat,
+   same fractions as the 8×6 framed duo. Cells print 2.45×2.97" (2.25×2.97"
+   on the spine-reserve parity) — above the floor. The sheet's hero trios do
+   NOT come to 6×4: their pair cells land at 1.75" tall on a 4" page, under
+   the 2" floor — the same physics that retired this size's old hero trios
+   (see RETIRED_6X4; the size caps at 2 photos/page). */
+const T64_DUO_TALL_FRAMED = fb('t64-duo-tall-framed', 'Two Portraits, Framed', '3:4', [
+  fill(0.0752, 0.1292, 0.4088, 0.7416, '3:4'),
+  fill(0.5161, 0.1292, 0.4088, 0.7416, '3:4'),
+]);
+
 /* 2 photos + combo box — the landscape and square pairs the bare-ratio math
    above rules out. Two 4:3 cells side by side print 2.97×2.23" (2.72×2.23"
    once the 0.5" spine reserve bites — still above the floor) and the box takes
@@ -137,6 +149,7 @@ export const TEMPLATES_6X4: PageTemplate[] = [
   T64_FB_SQ_BOX_RIGHT,
   T64_FB_SQ_BOX_LEFT,
   T64_FB_DUO_TALL_G,
+  T64_DUO_TALL_FRAMED,
   T64_FB_DUO_LS_BAND_B,
   T64_FB_DUO_LS_BAND_A,
   T64_FB_DUO_SQ_BAND_B,
