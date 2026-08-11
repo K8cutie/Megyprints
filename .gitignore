@@ -18,3 +18,14 @@ _backups/
 src - Copy/
 src - Copy (2)/
 *.zip
+
+# Android (TWA) signing + build outputs — the keystore and its passwords must
+# never land in git; backup lives in Documents\megyprints-signing
+android/*.keystore
+android/signing.local.txt
+android/.gradle/
+android/build/
+android/app/build/
+android/*.apk
+android/*.aab
+android/*.idsig
