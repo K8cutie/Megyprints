@@ -1,0 +1,42 @@
+{
+  "packageId": "com.megyprints.app",
+  "host": "megyprints.vercel.app",
+  "name": "Megy Prints",
+  "launcherName": "Megy Prints",
+  "display": "standalone",
+  "themeColor": "#F4C2A1",
+  "themeColorDark": "#F4C2A1",
+  "navigationColor": "#FFF8F0",
+  "navigationColorDark": "#1F1B16",
+  "navigationDividerColor": "#00000000",
+  "navigationDividerColorDark": "#00000000",
+  "backgroundColor": "#FFF8F0",
+  "enableNotifications": false,
+  "splashScreenFadeOutDuration": 300,
+  "startUrl": "/",
+  "iconUrl": "https://megyprints.vercel.app/pwa-512.png",
+  "maskableIconUrl": "https://megyprints.vercel.app/pwa-maskable-512.png",
+  "appVersion": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://megyprints.vercel.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://megyprints.vercel.app/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "signingKey": {
+    "path": "./megyprints-upload.keystore",
+    "alias": "megyprints"
+  }
+}
