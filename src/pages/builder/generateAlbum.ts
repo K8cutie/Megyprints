@@ -120,31 +120,24 @@ export function rollBoxKind(): BoxRoll {
   return 'qr';
 }
 
-/** Deals quotes from a shuffled copy of the pool, reshuffling on exhaustion
- *  without ever dealing the same line twice in a row (pool permitting) — the
- *  same "dealt, not drawn" idea as ShuffleBag, minus the id plumbing. */
+/** Deals each pool line AT MOST ONCE per generation (shuffled order), then
+ *  null forever — an album can NEVER carry the same dealt quote twice (owner
+ *  rule). Callers degrade a null deal (dealBoxContent re-rolls the box between
+ *  the remaining kinds), so a big album gets more invitations once the pool
+ *  runs dry instead of twin quotes. */
 export function makeQuoteDealer(pool: string[]): () => string | null {
   const deck = shuffleArray([...pool]);
   let i = 0;
-  let last: string | null = null;
-  return () => {
-    if (deck.length === 0) return null;
-    if (i >= deck.length) {
-      const re = shuffleArray([...deck]);
-      if (re.length > 1 && re[0] === last) re.push(re.shift()!);
-      deck.splice(0, deck.length, ...re);
-      i = 0;
-    }
-    last = deck[i++];
-    return last;
-  };
+  return () => (i < deck.length ? deck[i++] : null);
 }
 
 /** Roll every combo/caption box of a freshly built page (mutates it). A rolled
  *  quote becomes a bound caption NOW — the exact TextElement shape setBoxText
- *  creates, so all three renderers treat it as an ordinary caption. An empty
- *  quote pool degrades that roll to a 'text' invitation rather than a blank
- *  promise. Shared by generateAlbum and the per-page regenerate. */
+ *  creates, so all three renderers treat it as an ordinary caption. An
+ *  exhausted or empty quote pool degrades the roll to a text/qr invitation
+ *  (at their relative odds) rather than a blank promise — a line is never
+ *  dealt twice in one album. Shared by generateAlbum and the per-page
+ *  regenerate. */
 export function dealBoxContent(
   page: AlbumPage,
   template: PageTemplate,
@@ -176,7 +169,12 @@ export function dealBoxContent(
           boxIndex: j,
         } satisfies TextElement);
       } else {
-        kind = 'text';
+        // Pool exhausted (or empty): never repeat a line — re-roll this box
+        // between the two remaining kinds at their RELATIVE odds (30:25) so
+        // QR keeps its share instead of every late box collapsing to text.
+        kind = Math.random() < BOX_ROLL_WEIGHTS.text / (BOX_ROLL_WEIGHTS.text + BOX_ROLL_WEIGHTS.qr)
+          ? 'text'
+          : 'qr';
       }
     }
     rolls.push(kind);
@@ -218,7 +216,7 @@ export function generateAlbum(
   const border = options?.border;
   const cornerBase = options?.cornerBase;
   // Box dealing (see BOX_ROLL_WEIGHTS above). One quote dealer for the whole
-  // generation so lines spread across the album instead of repeating page-to-page.
+  // generation so each line is dealt AT MOST ONCE album-wide (never-repeat rule).
   const boxContent = options?.boxContent;
   const dealQuote = boxContent ? makeQuoteDealer(boxContent.quotePool) : () => null;
 

@@ -108,14 +108,24 @@ describe('box dealing', () => {
     }
   });
 
-  it('the quote dealer never deals the same line twice in a row', () => {
+  it('the quote dealer deals each line AT MOST ONCE, then null forever', () => {
     const deal = makeQuoteDealer(['a', 'b', 'c']);
-    let prev: string | null = null;
-    for (let i = 0; i < 60; i++) {
-      const q = deal();
-      expect(q).not.toBeNull();
-      expect(q, `draw ${i} repeated "${q}"`).not.toBe(prev);
-      prev = q;
+    const dealt = [deal(), deal(), deal()];
+    expect([...dealt].sort()).toEqual(['a', 'b', 'c']);
+    for (let i = 0; i < 10; i++) expect(deal(), `draw ${i} after exhaustion`).toBeNull();
+  });
+
+  it('a generated album NEVER carries the same dealt quote twice (owner rule)', () => {
+    // A 3-line pool against a 150-photo album guarantees exhaustion, so this
+    // exercises the degrade path too: dealt quotes stay unique, extra quote
+    // rolls become text/qr invitations instead of twins.
+    for (let run = 0; run < 20; run++) {
+      const pages = generateAlbum(roll(150), '8x8', undefined, undefined, {
+        boxContent: { ...BOX, quotePool: ['One of a kind', 'Second to none', 'Third time lucky'] },
+      });
+      const dealt = pages.flatMap((p) =>
+        p.textElements.filter((t) => t.boxIndex != null).map((t) => t.text));
+      expect(new Set(dealt).size, `run ${run}: dealt ${JSON.stringify(dealt)}`).toBe(dealt.length);
     }
   });
 });
