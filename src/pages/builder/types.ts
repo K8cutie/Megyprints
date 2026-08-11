@@ -495,6 +495,11 @@ export const DEFAULT_COVER_DESIGN: CoverDesign = {
   back: { background: '#FFFBF7', brandMark: false },
 };
 
+/** What a combo/caption box was dealt at generation — the three SlotChooser
+ *  kinds. (A box can also hold a photo via textSlotFills, but Megy never deals
+ *  photos into caption boxes — that stays a manual choice.) */
+export type BoxRoll = 'quote' | 'text' | 'qr';
+
 export interface AlbumPage {
   id: string;
   layout: LayoutStyle;
@@ -548,6 +553,16 @@ export interface AlbumPage {
    *  every writer gets them. Rotation is free — QR finder patterns make the code
    *  rotation-invariant. Positional, parallel to template.textSlots[j]. */
   textSlotQrGeom?: (OrnamentTransform | null)[];
+  /** The content kind Megy DEALT to each combo/caption box at generation time
+   *  (weighted roll — see BOX_ROLL_WEIGHTS in generateAlbum). Positional,
+   *  parallel to template.textSlots[j]. 'quote' is materialized immediately as
+   *  a bound caption; 'text'/'qr' render as tap-to-fill invitations in the
+   *  editors (never printed) and route the tap STRAIGHT to that kind's editor,
+   *  skipping the 3-way chooser. Null/absent (pre-feature drafts, extra boxes
+   *  after a template swap) = the legacy empty box + chooser. Editor-only
+   *  routing state, but serialized as-is with its siblings so a reopened draft
+   *  keeps its deal. */
+  textSlotRoll?: (BoxRoll | null)[];
   background: AlbumBackground;
   photos: CanvasPhoto[];
   textElements: TextElement[];

@@ -130,6 +130,21 @@ export async function fetchThemeQuotes(theme: string): Promise<QuoteSet> {
   return p;
 }
 
+/** The lines available RIGHT NOW for a theme, with no network round-trip: a
+ *  previously generated AI set from the cache, else the curated corpus. Album
+ *  generation is synchronous, so its auto-dealt box quotes draw from this;
+ *  callers fire fetchThemeQuotes alongside to warm the AI cache for the NEXT
+ *  generation instead of delaying this one. */
+export function quotesForThemeNow(theme: string): string[] {
+  const t = theme.trim();
+  if (t) {
+    hydrate();
+    const cached = cache.get(t.toLowerCase());
+    if (cached?.length) return withinLimit(cached);
+  }
+  return withinLimit(curatedQuotesFor(t));
+}
+
 /** The album theme the customer typed at setup (BuilderSetup writes this). */
 export function currentAlbumTheme(): string {
   try { return localStorage.getItem('megy-album-theme') || ''; } catch { return ''; }

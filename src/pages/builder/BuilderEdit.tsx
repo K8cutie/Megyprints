@@ -164,7 +164,18 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     }, [containerMode]),
     onTextSlotEmptyClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
-      // Empty combo/caption box → chooser: Text or an AI-matched Graphic.
+      // A DEALT box (textSlotRoll) opens its kind's editor directly — the roll
+      // already answered "which kind?". Undealt boxes (old drafts, boxes a
+      // template swap added) keep the 3-way chooser; the box's ⋯ badge
+      // (onTextSlotChooserClick below) is the always-available override.
+      const roll = actions.currentPage?.textSlotRoll?.[slotIndex] ?? null;
+      if (roll === 'text') setTextEditSlot(slotIndex);
+      else if (roll === 'qr') setTextSlotQrEditSlot(slotIndex);
+      else if (roll === 'quote') setBoxQuoteSlot(slotIndex);
+      else setChooserTextSlot(slotIndex);
+    }, [containerMode, actions.currentPage]),
+    onTextSlotChooserClick: useCallback((slotIndex: number) => {
+      if (containerMode) return;
       setChooserTextSlot(slotIndex);
     }, [containerMode]),
     onTextSlotPhotoClick: useCallback((slotIndex: number) => {

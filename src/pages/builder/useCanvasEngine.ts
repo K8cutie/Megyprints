@@ -120,8 +120,12 @@ export interface UseCanvasEngineOptions {
   onOrnamentSlotClick?: (slotIndex: number) => void;
   /** Click on a filled per-slot TEXT → re-open the shared text editor for it. */
   onSlotTextClick?: (slotIndex: number) => void;
-  /** Click on an EMPTY caption box → open the 3-way content chooser. */
+  /** Click on an EMPTY caption box → open the 3-way content chooser (or, for
+   *  a DEALT box, the surface routes straight to the dealt kind's editor). */
   onTextSlotEmptyClick?: (slotIndex: number) => void;
+  /** Click on a dealt box's ⋯ badge → ALWAYS the full 3-way chooser, so the
+   *  roll can be overridden to a different kind. */
+  onTextSlotChooserClick?: (slotIndex: number) => void;
   /** Click on a caption box FILLED with a photo → re-open the photo picker. */
   onTextSlotPhotoClick?: (slotIndex: number) => void;
   /** Click on a caption box FILLED with a QR → re-open the QR editor. */
@@ -221,6 +225,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     onOrnamentSlotClick,
     onSlotTextClick,
     onTextSlotEmptyClick,
+    onTextSlotChooserClick,
     onTextSlotPhotoClick,
     onTextSlotQrClick,
     onTextSlotOrnamentClick,
@@ -280,6 +285,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   onSlotTextClickRef.current = onSlotTextClick ?? (() => {});
   const onTextSlotEmptyClickRef = useRef<(slotIndex: number) => void>(() => {});
   onTextSlotEmptyClickRef.current = onTextSlotEmptyClick ?? (() => {});
+  const onTextSlotChooserClickRef = useRef<(slotIndex: number) => void>(() => {});
+  onTextSlotChooserClickRef.current = onTextSlotChooserClick ?? (() => {});
   const onTextSlotPhotoClickRef = useRef<(slotIndex: number) => void>(() => {});
   onTextSlotPhotoClickRef.current = onTextSlotPhotoClick ?? (() => {});
   const onTextSlotQrClickRef = useRef<(slotIndex: number) => void>(() => {});
@@ -603,7 +610,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -742,7 +749,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -1582,6 +1589,9 @@ function renderScene(
   onTextSlotOrnamentModified: (slotIndex: number, geom: import('./types').OrnamentTransform) => void = () => {},
   onTextSlotQrModified: (slotIndex: number, geom: import('./types').OrnamentTransform) => void = () => {},
   coverMode: boolean = false,
+  // Last + defaulted (like coverMode) so the long positional call sites stay
+  // valid: the ⋯ badge on a DEALT box → the full 3-way chooser (override).
+  onTextSlotChooserClick: (slotIndex: number) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1918,11 +1928,18 @@ function renderScene(
       selectable: false, evented: true, hoverCursor: 'pointer',
     });
     box.slotId = `${SLOT_ID}-textbox-${i}`;
-    // Empty combo/caption box holds a quote, your own text or a QR (clipart was
-    // sunset) — tapping opens the chooser. Keep this label in step with
-    // SlotChooser's caption-box options; the DOM hint (BuilderPreview
-    // EmptyChooserBox) and this Fabric label are SEPARATE and drift silently.
-    const label = new fab.Text('Tap to add', {
+    // Megy's dealt kind (textSlotRoll) names the invitation, and the tap opens
+    // that kind's editor directly (the routing lives in the surface's
+    // onTextSlotEmptyClick). Undealt boxes (old drafts, template-swap extras)
+    // keep the generic label + 3-way chooser. Keep these labels in step with
+    // the DOM hint (BuilderPreview EmptyChooserBox) — the two are SEPARATE and
+    // drift silently.
+    const roll = page.textSlotRoll?.[i] ?? null;
+    const labelText =
+      roll === 'text' ? 'Your words here' :
+      roll === 'qr' ? 'Add a video link' :
+      roll === 'quote' ? 'Add a quote' : 'Tap to add';
+    const label = new fab.Text(labelText, {
       left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
       fontSize: Math.max(12, Math.min(24, Math.min(r.width, r.height) * 0.12)),
       fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700', textAlign: 'center',
@@ -1932,6 +1949,25 @@ function renderScene(
     canvas.add(box);
     canvas.add(label);
     box.on('mousedown', () => onTextSlotEmptyClick(i));
+    // A dealt box also gets a ⋯ badge → ALWAYS the full chooser, so the roll
+    // stays a default, never a cage (turn a dealt QR box into a quote, etc.).
+    if (roll) {
+      const br = Math.max(9, Math.min(14, Math.min(r.width, r.height) * 0.10));
+      const moreDot = new fab.Circle({
+        left: r.left + r.width - br * 2 - 6, top: r.top + 6, radius: br,
+        fill: '#F4C2A1', selectable: false, evented: true, hoverCursor: 'pointer',
+      });
+      moreDot.slotId = `${SLOT_ID}-textbox-more-${i}`;
+      const moreGlyph = new fab.Text('⋯', {
+        left: r.left + r.width - br - 6, top: r.top + 6 + br, originX: 'center', originY: 'center',
+        fontSize: br * 1.7, fill: '#FFFFFF', fontFamily: '"DM Sans", sans-serif', fontWeight: '900',
+        selectable: false, evented: false,
+      });
+      moreGlyph.slotId = `${SLOT_ID}-textbox-more-label-${i}`;
+      canvas.add(moreDot);
+      canvas.add(moreGlyph);
+      moreDot.on('mousedown', () => onTextSlotChooserClick(i));
+    }
   });
 
   // Ensure text AND the QR chip AND ornaments stay on top even when slot images

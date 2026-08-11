@@ -190,7 +190,17 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onTextTap={(textId) => setEditTextId(textId)}
               onQrSlotTap={(slot) => setQrEditSlot(slot)}
               onOrnamentSlotTap={(slot) => setOrnamentEditSlot(slot)}
-              onChooseTextSlot={(slotIndex) => setChooserTextSlot(slotIndex)}
+              onChooseTextSlot={(slotIndex) => {
+                // A DEALT box (textSlotRoll) opens its kind's editor directly;
+                // undealt boxes keep the 3-way chooser. The ⋯ badge below is
+                // the always-available override.
+                const roll = page.textSlotRoll?.[slotIndex] ?? null;
+                if (roll === 'text') setEditSlot(slotIndex);
+                else if (roll === 'qr') setTextSlotQrEditSlot(slotIndex);
+                else if (roll === 'quote') setBoxQuoteSlot(slotIndex);
+                else setChooserTextSlot(slotIndex);
+              }}
+              onChooseTextSlotMenu={(slotIndex) => setChooserTextSlot(slotIndex)}
               onTextSlotPhotoTap={(slotIndex) => setTextReplaceSlot(slotIndex)}
               onTextSlotQrTap={(slot) => setTextSlotQrEditSlot(slot)}
               onTextSlotOrnamentTap={(slot) => setTextSlotOrnamentEditSlot(slot)} />}

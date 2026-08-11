@@ -22,7 +22,8 @@ import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum } from './generateAlbum';
+import { generateAlbum, type BoxContentOptions } from './generateAlbum';
+import { quotesForThemeNow, fetchThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
 import { useAlbumSync } from '../../lib/useAlbumSync';
@@ -1251,7 +1252,20 @@ export function useBuilderState(): BuilderActions {
     // Fall back to the theme's own background so image-less palette themes
     // (e.g. baptism) don't generate as plain white when no bg is passed.
     const bg = wizardBackground ?? getThemedBackground(selectedTemplate, 0);
-    let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase });
+    // Megy deals each combo box's content (see BOX_ROLL_WEIGHTS). Quotes draw
+    // from what's available NOW — cached AI lines for the typed theme, else the
+    // curated corpus — while fetchThemeQuotes warms the AI cache in the
+    // background for the NEXT generation instead of delaying this one. Styling
+    // mirrors setBoxText's defaults so a dealt quote ≡ a QuotePickerModal pick.
+    const albumTheme = currentAlbumTheme();
+    void fetchThemeQuotes(albumTheme);
+    const quoteTheme = THEMES[selectedTemplate];
+    const boxContent: BoxContentOptions = {
+      quotePool: quotesForThemeNow(albumTheme),
+      quoteFontFamily: quoteTheme.fontFamily,
+      quoteColor: quoteTheme.textColor,
+    };
+    let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase, boxContent });
     // createEmptyPage only carries border color/width — also apply the border STYLE
     // and the decorative FRAME (when chosen) onto every freshly generated page.
     const bStyle = border.style;
@@ -1319,6 +1333,10 @@ export function useBuilderState(): BuilderActions {
         // regenerate, with no undo entry (the geom setters push no snapshot).
         textSlotQrGeom: page.textSlotQrGeom,
         textSlotOrnamentGeom: page.textSlotOrnamentGeom,
+        // The dealt box kinds ride along with the content they describe —
+        // re-dealing here would fight the carried captions/QRs above. Boxes the
+        // new template ADDS have no roll and fall back to the legacy chooser.
+        textSlotRoll: page.textSlotRoll,
         slotFills: new Array(slotCount).fill(null),
         slotScales: new Array(slotCount).fill(1),
         slotOffsetsX: new Array(slotCount).fill(0),

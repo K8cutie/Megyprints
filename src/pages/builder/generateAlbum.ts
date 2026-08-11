@@ -1,4 +1,4 @@
-import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate } from './types';
+import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll } from './types';
 import { getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio } from './pageTemplates';
 
 /* ── Ratio LOOSENING budget ───────────────────────────────────────────────────
@@ -88,6 +88,102 @@ function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
   return groups.length ? groups : [photos.map((_, i) => i)];
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   BOX DEALING — Megy decides what each combo/caption box holds.
+   Boxes used to generate EMPTY and wait for the customer to pick a kind from
+   the 3-way chooser (which mostly never happened — dead bands). Now each box
+   ROLLS its content at generation: a quote materializes immediately as a bound
+   caption; text/qr are stored as the box's dealt kind and render as tap-to-fill
+   invitations that open that kind's editor directly. The customer can always
+   override via the box's chooser affordance — the roll sets a default, never
+   a cage.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** The owner-set odds of each kind. Must sum to 1. */
+export const BOX_ROLL_WEIGHTS: Record<BoxRoll, number> = { quote: 0.45, text: 0.30, qr: 0.25 };
+
+/** What generation needs to deal boxes. Quote styling is passed in (not read
+ *  from THEMES here) because generateAlbum is pure — the caller resolves the
+ *  active theme's caption font/color so a dealt quote is EXACTLY what a
+ *  QuotePickerModal pick via setBoxText would have produced. Absent (specs,
+ *  legacy callers) → boxes generate empty exactly as before. */
+export interface BoxContentOptions {
+  quotePool: string[];
+  quoteFontFamily: string;
+  quoteColor: string;
+}
+
+export function rollBoxKind(): BoxRoll {
+  const r = Math.random();
+  if (r < BOX_ROLL_WEIGHTS.quote) return 'quote';
+  if (r < BOX_ROLL_WEIGHTS.quote + BOX_ROLL_WEIGHTS.text) return 'text';
+  return 'qr';
+}
+
+/** Deals quotes from a shuffled copy of the pool, reshuffling on exhaustion
+ *  without ever dealing the same line twice in a row (pool permitting) — the
+ *  same "dealt, not drawn" idea as ShuffleBag, minus the id plumbing. */
+export function makeQuoteDealer(pool: string[]): () => string | null {
+  const deck = shuffleArray([...pool]);
+  let i = 0;
+  let last: string | null = null;
+  return () => {
+    if (deck.length === 0) return null;
+    if (i >= deck.length) {
+      const re = shuffleArray([...deck]);
+      if (re.length > 1 && re[0] === last) re.push(re.shift()!);
+      deck.splice(0, deck.length, ...re);
+      i = 0;
+    }
+    last = deck[i++];
+    return last;
+  };
+}
+
+/** Roll every combo/caption box of a freshly built page (mutates it). A rolled
+ *  quote becomes a bound caption NOW — the exact TextElement shape setBoxText
+ *  creates, so all three renderers treat it as an ordinary caption. An empty
+ *  quote pool degrades that roll to a 'text' invitation rather than a blank
+ *  promise. Shared by generateAlbum and the per-page regenerate. */
+export function dealBoxContent(
+  page: AlbumPage,
+  template: PageTemplate,
+  box: BoxContentOptions,
+  dealQuote: () => string | null,
+): void {
+  const boxes = template.textSlots?.length ?? 0;
+  if (boxes === 0) return;
+  const rolls: (BoxRoll | null)[] = [];
+  for (let j = 0; j < boxes; j++) {
+    let kind = rollBoxKind();
+    if (kind === 'quote') {
+      const quote = dealQuote();
+      if (quote) {
+        page.textElements.push({
+          id: `box-${j}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          text: quote,
+          x: 0,
+          y: 0,
+          fontSize: 28,
+          fontFamily: box.quoteFontFamily,
+          color: box.quoteColor,
+          bold: false,
+          italic: true,
+          underline: false,
+          alignment: 'center',
+          rotation: 0,
+          opacity: 100,
+          boxIndex: j,
+        } satisfies TextElement);
+      } else {
+        kind = 'text';
+      }
+    }
+    rolls.push(kind);
+  }
+  page.textSlotRoll = rolls;
+}
+
 /**
  * Smart album generation:
  *  1. Analyze all photos to find dominant aspect ratio
@@ -100,7 +196,7 @@ export function generateAlbum(
   albumSize: AlbumSizePreset,
   photosPerPage?: number | undefined,
   background?: AlbumPage['background'] | undefined,
-  options?: { randomize?: boolean; border?: { color: string; width: number }; cornerBase?: string },
+  options?: { randomize?: boolean; border?: { color: string; width: number }; cornerBase?: string; boxContent?: BoxContentOptions },
 ): AlbumPage[] {
   // A size with no layouts cannot build an album. The size pickers already drop
   // such a size (see albumSizeOptions), so reaching here means a stale draft or
@@ -121,6 +217,10 @@ export function generateAlbum(
   // Theme-baked photo frame + corner art applied to every generated page.
   const border = options?.border;
   const cornerBase = options?.cornerBase;
+  // Box dealing (see BOX_ROLL_WEIGHTS above). One quote dealer for the whole
+  // generation so lines spread across the album instead of repeating page-to-page.
+  const boxContent = options?.boxContent;
+  const dealQuote = boxContent ? makeQuoteDealer(boxContent.quotePool) : () => null;
 
   // Reset anti-repeat history at the START of every generation so a prior
   // album's tail doesn't bias the first pages of this one (cross-album carry).
@@ -342,6 +442,9 @@ export function generateAlbum(
       if (page.qrFills?.[s] || page.slotTexts?.[s]) return;
       page.slotFills![s] = photoIdx;
     });
+    // Megy deals this page's combo/caption boxes (no-op for box-free layouts
+    // and for callers that don't opt in — specs generate empty boxes as before).
+    if (boxContent) dealBoxContent(page, template, boxContent, dealQuote);
     pages.push(page);
     pageIdx++;
   };

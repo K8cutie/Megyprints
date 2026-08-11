@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw } from 'lucide-react';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
-import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform } from './types';
+import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { setPendingPrintJob } from '../../lib/printQueue';
@@ -104,9 +104,23 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
  *  wiring for that slot kind) or falls back to a bare "+" bubble.
  *  ONE definition shared by photo slots AND caption boxes so the two never
  *  drift (previously copy-pasted, which the duplication gate flagged). */
-function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex }: {
+/** One-line invitation per DEALT box kind (textSlotRoll). Keep these in step
+ *  with the Fabric labels in useCanvasEngine's empty-textbox block — the two
+ *  are SEPARATE and drift silently. */
+const ROLL_LABELS: Record<BoxRoll, string> = {
+  quote: 'Add a quote',
+  text: 'Your words here',
+  qr: 'Add a video link',
+};
+
+function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex, roll, onMore }: {
   rectKey: string; left: number; top: number; width: number; height: number;
   sx: number; showList: boolean; options: string[]; onTap: () => void; zIndex: number;
+  /** Megy's dealt kind for this box — replaces the option list with a single
+   *  invitation (the tap routes straight to that kind's editor upstream). */
+  roll?: BoxRoll | null;
+  /** The dealt box's ⋯ badge → the full chooser (override the roll). */
+  onMore?: () => void;
 }) {
   const cell = Math.min(width, height);
   const fs = Math.max(12, Math.min(28, cell * 0.15));
@@ -119,7 +133,23 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         background: 'rgba(253,232,228,0.5)', cursor: 'pointer', boxSizing: 'border-box',
         color: '#A0562F', padding: 6, gap: `${5 * sx}px`, overflow: 'hidden',
       }}>
-      {showList ? (
+      {roll ? (
+        // A single-line invitation fits even the short caption bands the 3-item
+        // list can't (the list needs cell ≥ 84; one line only needs ~2× fs).
+        height >= fs * 2 ? (
+          <span style={{ fontWeight: 800, fontSize: fs * 1.15, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>
+            {ROLL_LABELS[roll]}
+          </span>
+        ) : (
+          <div style={{
+            width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
+          }}>
+            <Plus size={26} color="white" />
+          </div>
+        )
+      ) : showList ? (
         <>
           <span style={{ fontWeight: 800, fontSize: fs * 1.15, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>Click to add:</span>
           <div style={{ fontSize: fs, fontWeight: 700, lineHeight: 1.5, textAlign: 'left' }}>
@@ -134,6 +164,20 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         }}>
           <Plus size={26} color="white" />
         </div>
+      )}
+      {roll && onMore && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onMore(); }}
+          aria-label="More options for this box"
+          style={{
+            position: 'absolute', top: 4, right: 4, width: 22, height: 22,
+            borderRadius: '50%', background: '#F4C2A1', color: '#FFFFFF', border: 'none',
+            cursor: 'pointer', fontWeight: 900, fontSize: 14, lineHeight: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 1px 4px rgba(232,165,152,0.6)',
+          }}>
+          ⋯
+        </button>
       )}
     </div>
   );
@@ -215,7 +259,7 @@ function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onT
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -235,8 +279,12 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   editable?: boolean;
   onAddToSlot?: (slotIndex: number) => void;
   onRemoveFromSlot?: (slotIndex: number) => void;
-  /** Tap an EMPTY caption box → open the content chooser (photo / text / QR). */
+  /** Tap an EMPTY caption box → open the content chooser (photo / text / QR).
+   *  For a DEALT box (textSlotRoll) the surface's handler routes the tap
+   *  straight to the dealt kind's editor instead. */
   onChooseTextSlot?: (slotIndex: number) => void;
+  /** Tap a dealt box's ⋯ badge → ALWAYS the full chooser (override the roll). */
+  onChooseTextSlotMenu?: (slotIndex: number) => void;
   /** Tap a caption box FILLED with a photo → re-open the photo picker. */
   onTextSlotPhotoTap?: (slotIndex: number) => void;
   /** Tap a caption box FILLED with a QR → re-open the QR editor. */
@@ -519,6 +567,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
               left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
               showList={!!onChooseTextSlot && Math.min(boxW, boxH) >= 84}
               options={['Quote', 'Text', 'QR']}
+              roll={page.textSlotRoll?.[i] ?? null}
+              onMore={onChooseTextSlotMenu ? () => onChooseTextSlotMenu(i) : undefined}
               onTap={() => onChooseTextSlot(i)} />
           );
         }
