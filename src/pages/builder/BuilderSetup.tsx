@@ -15,7 +15,7 @@ import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
  *  (lib/quotes.ts), so a pick lands on its curated quote pool with no new
  *  plumbing; anything off-list goes through the "Others…" free-text path, which
  *  behaves exactly like the old always-visible textbox. */
-const COMMON_THEMES = ['Wedding', 'Baptism', 'Birthday', 'Baby', 'Graduation', 'Family'];
+const COMMON_THEMES = ['Wedding', 'Baptism', 'Birthday', 'Baby', 'Graduation', 'Family', 'Vacation'];
 /** Dropdown sentinel for the "Others…" row — never written to storage. */
 const OTHER_THEME = '__other__';
 
