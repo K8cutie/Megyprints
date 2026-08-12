@@ -1,7 +1,12 @@
 /** Preview pixel dimensions for each album size.
- *  These are the rendered preview sizes — scaled to fit the screen nicely. */
+ *  These are the rendered preview sizes — scaled to fit the screen nicely.
+ *  Keyed by AlbumSizePreset so tsc FAILS here when a new size is added —
+ *  this was one of the tsc-invisible size surfaces the structural audit
+ *  flagged; keep the Record key typed. */
 
-export const PREVIEW_DIMS: Record<string, { w: number; h: number }> = {
+import type { AlbumSizePreset } from './types';
+
+export const PREVIEW_DIMS: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x6':    { w: 420, h: 420 },   // square 1:1
   '8x8':    { w: 460, h: 460 },   // square 1:1
   '9x9':    { w: 500, h: 500 },   // square 1:1

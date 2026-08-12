@@ -122,10 +122,14 @@ const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
   unknown: [],
 };
 
-// Album sizes we support
-const SIZE_ALIASES: Record<string, AlbumSizePreset> = {
+// Album sizes we support. EVERY AlbumSizePreset must appear as a VALUE at
+// least once — printParity.spec.ts walks ALBUM_SIZES and fails if a size has
+// no alias (the 9x9 launch shipped without one, so Megy couldn't parse a 9×9
+// request by chat until the structural audit caught it). Exported for that spec.
+export const SIZE_ALIASES: Record<string, AlbumSizePreset> = {
   '6x6': '6x6', '6 by 6': '6x6', 'six by six': '6x6', 'square small': '6x6',
   '8x8': '8x8', '8 by 8': '8x8', 'eight by eight': '8x8', 'square': '8x8',
+  '9x9': '9x9', '9 by 9': '9x9', 'nine by nine': '9x9', 'square large': '9x9',
   '6x4': '6x4', '6 by 4': '6x4', 'four by six': '6x4', 'landscape small': '6x4',
   '8x6': '8x6', '8 by 6': '8x6', 'eight by six': '8x6', 'landscape medium': '8x6',
   '6x8': '6x8', '6 by 8': '6x8', 'six by eight': '6x8', 'portrait small': '6x8',

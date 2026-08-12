@@ -6,13 +6,17 @@
  * from here, so the size guidance and the density options can never drift apart.
  */
 
+import type { AlbumSizePreset } from './types';
+
 /** Photos-per-page options offered for each album-size preset. Max per size
  *  MATCHES the densest layout its deck actually deals (the per-size authored
  *  files for 6×4/squares/8×6/6×8, the tiled generator for 11.5×8/8.5×11) — the
  *  print 2" floor is why small albums cap lower. Keep these two in lockstep so
  *  the manual picker never offers a density the generator won't actually
  *  produce for that size. */
-export const DENSITY_BY_SIZE: Record<string, number[]> = {
+// Keyed by AlbumSizePreset so tsc FAILS here when a new size is added (this
+// was a tsc-invisible size surface before the structural audit).
+export const DENSITY_BY_SIZE: Record<AlbumSizePreset, number[]> = {
   '6x4': [1, 2],
   // The three SQUARE sizes share one authored layout set (squareTemplates.ts)
   // that caps at 3 photos/page — there is no 4-up square layout yet. Offering a
@@ -48,7 +52,10 @@ export const DEFAULT_DENSITY: number[] = [1, 2, 3, 4];
 
 /** Render the per-page range for a size as a label, e.g. "1-2" or "1-4". */
 export function densityRangeLabel(sizePreset: string): string {
-  const opts = DENSITY_BY_SIZE[sizePreset] ?? DEFAULT_DENSITY;
+  // Loose-string read ON PURPOSE: callers pass free-form size strings and the
+  // fallback keeps them crash-proof. The table itself stays Record<AlbumSizePreset>
+  // so tsc still forces an entry for every real size.
+  const opts = (DENSITY_BY_SIZE as Record<string, number[] | undefined>)[sizePreset] ?? DEFAULT_DENSITY;
   if (opts.length === 0) return '';
   const lo = opts[0];
   const hi = opts[opts.length - 1];
@@ -61,7 +68,7 @@ export const MIN_ALBUM_PAGES = 40;
 
 /** Typical photos-per-page on AUTO (no explicit density) — the "natural" look
  *  when there are plenty of photos. ~2 (3 for the large landscape/portrait sizes). */
-const NATURAL_BY_SIZE: Record<string, number> = {
+const NATURAL_BY_SIZE: Record<AlbumSizePreset, number> = {
   // The three square sizes share one layout set that deals at ~2.7 photos/page,
   // so their natural is 3: a natural of 2 put the fill-mode threshold at 80
   // photos (MIN_ALBUM_PAGES x 2) while the deck could not fill 40 pages until
@@ -82,7 +89,8 @@ const NATURAL_BY_SIZE: Record<string, number> = {
   '8x6': 3, '6x8': 3, '6x6': 3, '8x8': 3, '9x9': 3, '11.5x8': 3, '8.5x11': 3,
 };
 export function naturalPerPage(albumSize: string): number {
-  return NATURAL_BY_SIZE[albumSize] ?? 2;
+  // Loose-string read on purpose (see densityRangeLabel) — table stays strict.
+  return (NATURAL_BY_SIZE as Record<string, number | undefined>)[albumSize] ?? 2;
 }
 
 /** The density generation will actually use for the AUTO case: the natural look
