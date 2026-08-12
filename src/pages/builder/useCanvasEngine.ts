@@ -9,7 +9,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { WORDART_SHADOW } from './wordArt';
+import { WORDART_SHADOW, TEXT_LINE_HEIGHT, resolveTextSlotAlign } from './wordArt';
+import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import type { QrFill, OrnamentFill } from './types';
 import { clampQrGeom } from './types';
 import type {
@@ -181,6 +182,11 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
     `:${t.width ?? ''}:${t.scaleX ?? ''}:${t.scaleY ?? ''}:${t.outlineColor ?? ''}:${t.outlineWidth ?? ''}:${t.shadow ? 1 : 0}`
   ).join('|');
   const slotGeoms = page.slotGeometries ? page.slotGeometries.map((g) => `${g?.x ?? ''}:${g?.y ?? ''}:${g?.width ?? ''}:${g?.height ?? ''}`).join('|') : '';
+  // Per-slot photo TRANSFORMS (zoom + pan) — PropertiesPanel writes slotScales/
+  // slotOffsetsX/Y without touching any field this fingerprint previously read,
+  // so a zoom/pan edit didn't repaint the Fabric canvas until a page-nav (the
+  // same desync class the formatting/slotText fields above document).
+  const slotTransforms = `${(page.slotScales ?? []).join(',')};${(page.slotOffsetsX ?? []).join(',')};${(page.slotOffsetsY ?? []).join(',')}`;
   // QR fills — so adding/relinking/removing a QR memory repaints the canvas.
   const qrData = page.qrFills ? page.qrFills.map((q) => q ? `${q.code}:${q.destination}` : '').join('|') : '';
   // Per-slot caption text (page.slotTexts) — so ADD/EDIT of a slot caption
@@ -206,7 +212,7 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   // Ornament fills — so adding/changing/removing an ornament repaints the Fabric
   // editor without a page-nav (same desync class as slotTextData/qrData above).
   const ornamentData = page.ornamentFills ? page.ornamentFills.map((o) => o ? `${o.pack}:${o.id}` : '').join('|') : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}|${textSlotQrGeomData}`;
+  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${slotTransforms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}|${textSlotQrGeomData}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -1032,28 +1038,33 @@ function createBackgroundObject(
     };
     htmlImg.src = imgSrc;
   } else if (bg.type === 'gradient' && (bg as any).gradient) {
-    const { type, angle, stops } = (bg as any).gradient;
-    const fabricStops = stops.map((s: { offset: number; color: string }) => ({
-      offset: s.offset,
-      color: s.color,
-    }));
-
-    let gradFill: any;
-    if (type === 'linear') {
-      const rad = (angle * Math.PI) / 180;
-      gradFill = new fab.Gradient({
-        type: 'linear',
-        coords: { x1: 0, y1: 0, x2: Math.cos(rad) * w, y2: Math.sin(rad) * h },
-        colorStops: fabricStops,
-      });
+    // Shared resolver + geometry (gradient.ts): tolerates BOTH stored formats
+    // (the legacy sidebar shape used to crash this path on `stops.map`), and
+    // uses the CSS angle convention + farthest-corner radial the DOM preview
+    // shows — the old local math pointed 135° at a different corner than the
+    // screen and undersized the radial.
+    const grad = normalizeGradient((bg as any).gradient);
+    if (!grad) {
+      addBg(new fab.Rect({ ...baseProps, width: w, height: h, fill: '#FFFBF7' }));
     } else {
-      gradFill = new fab.Gradient({
-        type: 'radial',
-        coords: { x1: w / 2, y1: h / 2, r1: 0, x2: w / 2, y2: h / 2, r2: Math.max(w, h) / 2 },
-        colorStops: fabricStops,
-      });
+      const fabricStops = grad.stops.map((s) => ({ offset: s.offset, color: s.color }));
+      let gradFill: any;
+      if (grad.type === 'radial') {
+        const { cx, cy, r } = radialGradientGeom(w, h);
+        gradFill = new fab.Gradient({
+          type: 'radial',
+          coords: { x1: cx, y1: cy, r1: 0, x2: cx, y2: cy, r2: r },
+          colorStops: fabricStops,
+        });
+      } else {
+        gradFill = new fab.Gradient({
+          type: 'linear',
+          coords: linearGradientEndpoints(grad.angle, w, h),
+          colorStops: fabricStops,
+        });
+      }
+      addBg(new fab.Rect({ ...baseProps, width: w, height: h, fill: gradFill }));
     }
-    addBg(new fab.Rect({ ...baseProps, width: w, height: h, fill: gradFill }));
   } else if (bg.type === 'texture') {
     // Material texture — load the procedural SVG data URI (a native 80x80 tile)
     // and TILE it across the canvas via a repeating Fabric Pattern fill, exactly
@@ -1878,7 +1889,11 @@ function renderScene(
       fontWeight: text.bold ? 'bold' : 'normal',
       fontStyle: text.italic ? 'italic' : 'normal',
       underline: text.underline,
-      textAlign: text.alignment,
+      // ELEMENT-first alignment via the shared resolver (same as DOM + print);
+      // 1.25 line rhythm matching both (Fabric's default was 1.16, so multi-line
+      // captions sat tighter in the editor than on screen and paper).
+      textAlign: resolveTextSlotAlign(text, text.boxIndex != null ? template?.textSlots?.[text.boxIndex] : null),
+      lineHeight: TEXT_LINE_HEIGHT,
       stroke: text.outlineWidth && text.outlineColor ? text.outlineColor : undefined,
       strokeWidth: text.outlineWidth && text.outlineColor ? text.outlineWidth : 0,
       paintFirst: 'stroke',

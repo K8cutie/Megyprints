@@ -10,7 +10,8 @@ import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { drawWordArtText, drawWrappedWordArtText, TEXT_LINE_HEIGHT } from './wordArt';
+import { drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT } from './wordArt';
+import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import { getCanvasDimensions } from './layouts';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
@@ -20,9 +21,13 @@ import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedTe
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
 
-/** Multiplier for 300 DPI export relative to UI canvas */
+/** Multiplier for 300 DPI export relative to UI canvas.
+ *  UI dimensions come from the SAME getCanvasDimensions the Fabric editor uses
+ *  — this file used to carry its own hand-copied size switch (stale values,
+ *  '9x9' missing entirely), which the structural audit flagged as the #1
+ *  drift copy in the repo. Never re-introduce a local size table here. */
 export function getPrintMultiplier(albumSize: AlbumSizePreset): number {
-  const uiSize = getUISize(albumSize);
+  const uiSize = getCanvasDimensions(albumSize);
   const printSize = getPrintDimensions(albumSize);
   // Use the larger dimension to determine scale
   const scale = Math.max(
@@ -30,20 +35,6 @@ export function getPrintMultiplier(albumSize: AlbumSizePreset): number {
     printSize.height / uiSize.height,
   );
   return Math.ceil(scale);
-}
-
-/** UI canvas dimensions (must match useCanvasEngine.ts) */
-function getUISize(albumSize: AlbumSizePreset) {
-  switch (albumSize) {
-    case '6x6': return { width: 432, height: 432 };
-    case '8x8': return { width: 576, height: 576 };
-    case '6x4': return { width: 432, height: 288 };
-    case '8x6': return { width: 576, height: 432 };
-    case '6x8': return { width: 432, height: 576 };
-    case '11.5x8': return { width: 690, height: 480 };
-    case '8.5x11': return { width: 510, height: 660 };
-    default: return { width: 576, height: 576 };
-  }
 }
 
 /** Print dimensions in pixels at 300 DPI.
@@ -115,7 +106,7 @@ async function renderPageManually(
   ctx.fillRect(0, 0, W, H);
 
   // ── Background ──
-  await renderBackground(ctx, page, W, H, photos, coverMode);
+  await renderBackground(ctx, page, W, H, photos, coverMode, uiW);
 
   // ── Slot Photos ──
   // Match the editor/preview geometry EXACTLY: adapt the template to the page
@@ -166,7 +157,7 @@ async function renderPageManually(
       const photo = photos[photoIdx];
       if (!photo) continue;
 
-      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false);
+      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false, W / uiW);
     }
   }
 
@@ -206,12 +197,11 @@ async function renderPageManually(
         // same fractions the DOM cover preview applies (see TextElement.offsetX).
         const offX = coverMode ? (text.offsetX ?? 0) * W : 0;
         const offY = coverMode ? (text.offsetY ?? 0) * H : 0;
-        // renderTextElement resolves align as `slot.align ?? text.alignment`, i.e.
-        // the TEMPLATE wins — the inverse of the DOM preview, which lets the
-        // element's own alignment win. On a COVER the user picks the alignment
-        // explicitly, so feed the element's choice in here or the print would
-        // ignore it. Interior pages keep the existing template-wins behaviour.
-        const align = coverMode ? (text.alignment ?? ts.align) : ts.align;
+        // ELEMENT-first alignment, same resolver as the DOM + Fabric renderers.
+        // Print used to let the template win on interior pages (self-documented
+        // as "the inverse of the DOM preview"), so a left-aligned caption on any
+        // template declaring ts.align printed centered.
+        const align = resolveTextSlotAlign(text, ts);
         slot = { x: sX + ts.x * sW + offX, y: sY + ts.y * sH + offY, w: ts.width * sW, h: ts.height * sH, align };
       }
     }
@@ -334,7 +324,9 @@ async function renderPageManually(
   });
 }
 
-/** Render background at print resolution */
+/** Render background at print resolution.
+ *  `uiW` = the Fabric authoring width (getCanvasDimensions) — the texture tile
+ *  scale derives from it, so it must be the REAL editor width, not a copy. */
 async function renderBackground(
   ctx: CanvasRenderingContext2D,
   page: AlbumPage,
@@ -342,6 +334,7 @@ async function renderBackground(
   H: number,
   photos: UploadedPhoto[],
   coverMode = false,
+  uiW: number = getCanvasDimensions((page as any).size ?? '8x8').width,
 ) {
   const bg = page.background;
   if (!bg) {
@@ -357,18 +350,25 @@ async function renderBackground(
       break;
 
     case 'gradient': {
-      const grad = bg.gradient;
+      // Shared resolver + geometry (see gradient.ts): tolerates BOTH stored
+      // formats (the legacy sidebar shape used to crash this path), honors
+      // radial (used to flatten to linear), and uses the CSS angle convention
+      // (the old cos/sin math swept a 135° wash toward bottom-LEFT on paper
+      // while the screen showed bottom-right).
+      const grad = normalizeGradient(bg.gradient);
       if (!grad) {
         ctx.fillStyle = '#FFFBF7';
         ctx.fillRect(0, 0, W, H);
         break;
       }
-      const angleRad = ((grad.angle ?? 135) * Math.PI) / 180;
-      const x1 = W / 2 - (W / 2) * Math.cos(angleRad);
-      const y1 = H / 2 - (H / 2) * Math.sin(angleRad);
-      const x2 = W / 2 + (W / 2) * Math.cos(angleRad);
-      const y2 = H / 2 + (H / 2) * Math.sin(angleRad);
-      const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+      let gradient: CanvasGradient;
+      if (grad.type === 'radial') {
+        const { cx, cy, r } = radialGradientGeom(W, H);
+        gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      } else {
+        const { x1, y1, x2, y2 } = linearGradientEndpoints(grad.angle, W, H);
+        gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+      }
       for (const stop of grad.stops) {
         gradient.addColorStop(stop.offset, stop.color);
       }
@@ -413,7 +413,12 @@ async function renderBackground(
       // — NOT the white-overlay trick below, which we skip for texture.
       try {
         const tile = await loadImage(textureDataUri((bg as any).texture, (bg as any).textureColor));
-        const dpiScale = W / getUISize(page.size).width;
+        // TEXTURE_TILE_PX is a DESIGN-px size (the 750-wide editor space), so
+        // the print tile scales by W/uiW — the same factor text and pan use.
+        // (The old code divided by a stale local size table, printing tiles
+        // ~30% larger than the editor showed; worst on 9x9, which the table
+        // didn't even list.)
+        const dpiScale = W / uiW;
         const tilePx = Math.max(1, Math.round(TEXTURE_TILE_PX * dpiScale));
         // Pre-scale one tile onto an offscreen canvas at the print tile size so
         // createPattern repeats it at the correct on-page scale.
@@ -488,7 +493,8 @@ async function renderSlotOrnament(
   } catch { /* ornament failed to load — leave the slot empty (clean) */ }
 }
 
-/** Render a single slot photo at print resolution */
+/** Render a single slot photo at print resolution.
+ *  `printScale` = W/uiW — converts DESIGN-px slot pan offsets to print px. */
 async function renderSlotPhoto(
   ctx: CanvasRenderingContext2D,
   photo: UploadedPhoto,
@@ -500,6 +506,7 @@ async function renderSlotPhoto(
   page: AlbumPage,
   slotIndex: number,
   fullBleed: boolean,
+  printScale: number,
 ) {
   // Load original photo at full resolution
   let img: HTMLImageElement;
@@ -611,9 +618,13 @@ async function renderSlotPhoto(
     drawH *= slotScale;
   }
 
-  // Center and apply offset
-  const drawX = sx + sw / 2 - drawW / 2 + slotOffsetX * (sw / 100);
-  const drawY = sy + sh / 2 - drawH / 2 + slotOffsetY * (sh / 100);
+  // Center and apply the user's pan. Offsets are stored in DESIGN px (the
+  // Fabric editor writes canvas px; the DOM preview consumes them × its own
+  // display scale), so print converts with the same W/uiW factor as text.
+  // The old `* (sw / 100)` treated them as percent-of-slot, printing a panned
+  // photo displaced ~2.5–7× further than designed (error grew with slot size).
+  const drawX = sx + sw / 2 - drawW / 2 + slotOffsetX * printScale;
+  const drawY = sy + sh / 2 - drawH / 2 + slotOffsetY * printScale;
 
   ctx.drawImage(img, drawX, drawY, drawW, drawH);
 
@@ -766,18 +777,37 @@ function renderTextElement(
     // QUOTE, being longer than a typical caption, hits routinely.
     const pad = slot.w * 0.04;
     const cx = align === 'left' ? slot.x + pad : align === 'right' ? slot.x + slot.w - pad : slot.x + slot.w / 2;
+    const cy = slot.y + slot.h / 2;
     ctx.save();
     ctx.beginPath();
     ctx.rect(slot.x, slot.y, slot.w, slot.h);
     ctx.clip();
-    drawWrappedWordArtText(ctx, text.text, cx, slot.y + slot.h / 2, slot.w - pad * 2, fontSize, text, W / uiW);
+    const lines = drawWrappedWordArtText(ctx, text.text, cx, cy, slot.w - pad * 2, fontSize, text, W / uiW);
+    // Underline prints too — DOM + Fabric both render it; captions were the one
+    // text kind whose underline silently vanished on paper (renderSlotText
+    // already hand-draws it for per-slot text via the same shared helper).
+    if (text.underline) underlineTextLines(ctx, lines, cx, cy, fontSize, align as any, text.color || '#2D2D2D');
     ctx.restore();
-  } else if (text.rotation) {
-    ctx.translate(text.x * (W / uiW), text.y * (W / uiW));
-    ctx.rotate((text.rotation * Math.PI) / 180);
-    drawWordArtText(ctx, text.text, 0, 0, text, W / uiW);
   } else {
-    drawWordArtText(ctx, text.text, text.x * (W / uiW), text.y * (W / uiW), text, W / uiW);
+    // FREE text (title/quote at x/y) — mirror the DOM preview's box model
+    // exactly: a box at (x, y), freeTextBoxWidth wide, text WRAPPED inside it
+    // (the DOM div wraps; printing one unwrapped line ran long titles off the
+    // page), rotate→scale about the box's TOP-LEFT (the DOM transform-origin),
+    // element opacity honored (it was ignored in print), underline drawn.
+    const eff = W / uiW;
+    ctx.globalAlpha = (text.opacity ?? 100) / 100;
+    ctx.translate(text.x * eff, text.y * eff);
+    if (text.rotation) ctx.rotate((text.rotation * Math.PI) / 180);
+    ctx.scale(text.scaleX ?? 1, text.scaleY ?? 1);
+    const bw = freeTextBoxWidth(text) * eff;
+    const cx = align === 'left' ? 0 : align === 'right' ? bw : bw / 2;
+    const step = fontSize * TEXT_LINE_HEIGHT;
+    const lines = wrapTextLines(ctx, text.text, bw);
+    lines.forEach((line, i) => drawWordArtText(ctx, line, cx, step / 2 + i * step, text, eff));
+    if (text.underline) {
+      const blockCenter = step / 2 + ((lines.length - 1) * step) / 2;
+      underlineTextLines(ctx, lines, cx, blockCenter, fontSize, align as any, text.color || '#2D2D2D');
+    }
   }
 
   ctx.restore();
@@ -822,22 +852,7 @@ function renderSlotText(
   ctx.rect(x, y, w, h);
   ctx.clip();
   const lines = drawWrappedWordArtText(ctx, st.text, cx, cy, w - pad * 2, fontSize, st, W / uiW);
-
-  if (st.underline) {
-    const step = fontSize * TEXT_LINE_HEIGHT;
-    const top = cy - ((lines.length - 1) * step) / 2;
-    ctx.strokeStyle = st.color || '#2D2D2D';
-    ctx.lineWidth = Math.max(1, fontSize * 0.05);
-    lines.forEach((line, i) => {
-      const textW = ctx.measureText(line).width;
-      const ux = align === 'left' ? cx : align === 'right' ? cx - textW : cx - textW / 2;
-      const uy = top + i * step + fontSize * 0.5;
-      ctx.beginPath();
-      ctx.moveTo(ux, uy);
-      ctx.lineTo(ux + textW, uy);
-      ctx.stroke();
-    });
-  }
+  if (st.underline) underlineTextLines(ctx, lines, cx, cy, fontSize, align as any, st.color || '#2D2D2D');
   ctx.restore();
 
   ctx.restore();

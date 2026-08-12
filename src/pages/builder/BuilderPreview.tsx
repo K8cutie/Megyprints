@@ -17,7 +17,8 @@ import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { wordArtDomStyle } from './wordArt';
+import { wordArtDomStyle, resolveTextSlotAlign, freeTextBoxWidth, TEXT_LINE_HEIGHT } from './wordArt';
+import { normalizeGradient, gradientToCss } from './gradient';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -35,28 +36,16 @@ interface BuilderPreviewProps {
   onOrder: () => void;
 }
 
-function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = false): React.CSSProperties {
+function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = false, displayScale = 1): React.CSSProperties {
   if (!bg) return {};
   switch (bg.type) {
     case 'solid': return { backgroundColor: bg.solid || '#FFFBF7' };
     case 'gradient': {
-      const g = bg.gradient;
-      if (!g) return { backgroundColor: '#FFFBF7' };
-      // Handle both formats:
-      // Sidebar: { colors: [{ color, position }], direction: 'radial' | 'to bottom' }
-      // Wizard:  { type: 'linear', angle: 135, stops: [{ offset, color }] }
-      if (g.stops) {
-        // Wizard format — honor radial vs linear
-        const stops = g.stops.map((s: any) => `${s.color} ${(s.offset ?? 0) * 100}%`).join(', ');
-        return { background: g.type === 'radial' ? `radial-gradient(circle, ${stops})` : `linear-gradient(${g.angle ?? 135}deg, ${stops})` };
-      }
-      if (g.colors) {
-        // Sidebar format
-        const dir = g.direction === 'radial' ? 'circle' : g.direction || 'to bottom';
-        const stops = g.colors.map((c: any) => `${c.color} ${c.position}%`).join(', ');
-        return { background: g.direction === 'radial' ? `radial-gradient(${stops})` : `linear-gradient(${dir}, ${stops})` };
-      }
-      return { backgroundColor: '#FFFBF7' };
+      // Shared resolver (gradient.ts) — the ONE place both stored gradient
+      // formats are understood; Fabric + print build from the same normalized
+      // shape, so the wash can't render differently across the three renderers.
+      const g = normalizeGradient(bg.gradient);
+      return g ? { background: gradientToCss(g) } : { backgroundColor: '#FFFBF7' };
     }
     case 'image': {
       // BackgroundDesigner stores the value in `bg.image` (a blob URL for
@@ -87,10 +76,15 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
     case 'texture': {
       // Material texture — a procedural, tileable SVG data URI (leather, linen,
       // …). Opacity is applied by the wrapping layer div (see PageView) so we do
-      // NOT bake it in here → screen/print parity. Tiled at the shared px size.
+      // NOT bake it in here → screen/print parity. TEXTURE_TILE_PX is a DESIGN-px
+      // size (the 750-wide editor space), so the on-screen tile scales by the
+      // page's display scale — the same factor fontSize/pan use. (Unscaled, the
+      // preview tiled at raw CSS px and showed a coarser material than the
+      // editor and the print, which each scale the tile to their own space.)
+      const tile = TEXTURE_TILE_PX * displayScale;
       return {
         backgroundImage: `url("${textureDataUri(bg.texture, bg.textureColor)}")`,
-        backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
+        backgroundSize: `${tile}px ${tile}px`,
         backgroundRepeat: 'repeat',
       };
     }
@@ -310,7 +304,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
   return (
     <>
-      <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos, coverMode), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
+      <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos, coverMode, sx), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
       {template && template.slots.map((slot, idx) => {
         if (!slot) return null;
         // Content precedence is DRIVEN BY page data, not slot.kind:
@@ -342,7 +336,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontFamily: st.fontFamily || 'serif', fontSize: (st.fontSize || 24) * sx,
                 fontWeight: st.bold ? 'bold' : 'normal', fontStyle: st.italic ? 'italic' : 'normal',
                 textDecoration: st.underline ? 'underline' : 'none', color: st.color || '#2D2D2D',
-                lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 ...wordArtDomStyle(st, sx),
               }}>{st.text}</span>
             </div>
@@ -457,11 +451,14 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           onClick={onTextTap ? (e) => { e.stopPropagation(); onTextTap(t.id); } : undefined}
           style={{
           zIndex: 3, left: t.x * sx, top: t.y * sy,
-          width: (t.width || t.text.length * (t.fontSize || 24) * 0.6) * sx,
+          width: freeTextBoxWidth(t) * sx,
           transform: `rotate(${t.rotation || 0}deg) scale(${t.scaleX ?? 1}, ${t.scaleY ?? 1})`,
           transformOrigin: 'top left', fontFamily: t.fontFamily || 'serif',
           fontSize: (t.fontSize || 24) * sx, fontWeight: t.bold ? 'bold' : 'normal',
           fontStyle: t.italic ? 'italic' : 'normal', color: t.color || '#2D2D2D',
+          // Underline + 1.25 line rhythm, matching the Fabric editor and print —
+          // free text was the one kind whose underline showed only in the editor.
+          textDecoration: t.underline ? 'underline' : 'none', lineHeight: TEXT_LINE_HEIGHT,
           display: 'flex', alignItems: 'center', justifyContent: t.alignment || 'center',
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
           ...wordArtDomStyle(t, sx),
@@ -501,7 +498,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         }
 
         const boxed = page.textElements?.find((t) => t.boxIndex === i);
-        const align = boxed?.alignment ?? ts.align ?? 'center';
+        const align = resolveTextSlotAlign(boxed, ts);
 
         // (2) TEXT — a bound caption. On a COVER the caption can be nudged off its
         // template slot (offsetX/offsetY, fractions of the panel) so the title can
@@ -523,7 +520,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontFamily: boxed.fontFamily || 'serif', fontSize: (boxed.fontSize || 24) * sx,
                 fontWeight: boxed.bold ? 'bold' : 'normal', fontStyle: boxed.italic ? 'italic' : 'normal',
                 textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
-                lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 ...wordArtDomStyle(boxed, sx),
               }}>{boxed.text}</span>
             </div>

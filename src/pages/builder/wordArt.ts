@@ -54,6 +54,54 @@ export function wordArtDomStyle(s: WordArtStyle, scale: number): CSSProperties {
  *  different height on paper than it does on screen. */
 export const TEXT_LINE_HEIGHT = 1.25;
 
+/** Caption alignment resolution — the ELEMENT's own choice wins over the
+ *  template slot's default, in ALL THREE renderers. (Print used to resolve
+ *  template-first on interior pages, so a left-aligned caption printed centered
+ *  on any template that declares ts.align.) */
+export function resolveTextSlotAlign(
+  element: { alignment?: 'left' | 'center' | 'right' } | null | undefined,
+  slot: { align?: 'left' | 'center' | 'right' } | null | undefined,
+): 'left' | 'center' | 'right' {
+  return element?.alignment ?? slot?.align ?? 'center';
+}
+
+/** Free-text wrap width in DESIGN px — the DOM preview's box model, shared with
+ *  print so both wrap a title/quote at the same width. (The Fabric editor keeps
+ *  a 100px usability floor so a short text stays grabbable — that floor only
+ *  differs for texts too short to wrap anyway.) */
+export function freeTextBoxWidth(t: { width?: number; text: string; fontSize?: number }): number {
+  return t.width || t.text.length * (t.fontSize || 24) * 0.6;
+}
+
+/** Underline the lines drawWrappedWordArtText just drew (canvas has no native
+ *  underline). `cy` = the line block's vertical CENTER, mirroring that
+ *  function's layout; ctx.font must still be set so measureText is accurate. */
+export function underlineTextLines(
+  ctx: CanvasRenderingContext2D,
+  lines: string[],
+  cx: number,
+  cy: number,
+  fontSize: number,
+  align: 'left' | 'center' | 'right',
+  color: string,
+): void {
+  const step = fontSize * TEXT_LINE_HEIGHT;
+  const top = cy - ((lines.length - 1) * step) / 2;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, fontSize * 0.05);
+  lines.forEach((line, i) => {
+    const textW = ctx.measureText(line).width;
+    const ux = align === 'left' ? cx : align === 'right' ? cx - textW : cx - textW / 2;
+    const uy = top + i * step + fontSize * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(ux, uy);
+    ctx.lineTo(ux + textW, uy);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
 /** Break `text` into lines that each fit `maxWidth` with the ctx's CURRENT font.
  *  Greedy word wrap; a single word wider than the box is split by character,
  *  matching the DOM's `word-break: break-word`. */
