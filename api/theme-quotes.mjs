@@ -19,7 +19,11 @@ const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
  *  client so a prompt regression can't reach the page. */
 const MAX_QUOTE_CHARS = 46;
 const MIN_QUOTE_CHARS = 6;
-const MAX_QUOTES = 12;
+/** Owner-set pool size (2026-08-12): 25 unique lines per theme. Quotes never
+ *  repeat within an album (single-pass dealer), so the pool IS the per-album
+ *  quote ceiling — 25 covers even huge albums plus the finish-line sweep,
+ *  at the same one-call-per-theme cost. */
+const MAX_QUOTES = 25;
 
 /** Lines we refuse to print. The curated corpus is deliberately brand-safe and
  *  non-copyrighted; a generative source must not undo that on a product the
@@ -53,7 +57,7 @@ function clean(arr) {
 async function haikuQuotes(theme) {
   const prompt =
     'You write short ORIGINAL caption lines for a printed photo album.\n' +
-    'Given the album theme below, reply with ONLY a JSON array of 8 to 12 lines.\n' +
+    'Given the album theme below, reply with ONLY a JSON array of 20 to 25 lines.\n' +
     'Rules:\n' +
     '- Each line is ORIGINAL writing by you. Never quote or paraphrase song lyrics, ' +
     'poems, scripture, films, or any famous quotation.\n' +
@@ -67,7 +71,7 @@ async function haikuQuotes(theme) {
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: 500, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 900, messages: [{ role: 'user', content: prompt }] }),
   });
   if (!resp.ok) throw new Error('anthropic ' + resp.status);
   const data = await resp.json();

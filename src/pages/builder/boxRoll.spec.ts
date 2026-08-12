@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateAlbum, dealBoxContent, makeQuoteDealer, rollBoxKind, BOX_ROLL_WEIGHTS, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, dealBoxContent, makeQuoteDealer, rollBoxKind, sweepFillQuotes, BOX_ROLL_WEIGHTS, type BoxContentOptions } from './generateAlbum';
 import { getTemplatesForAlbum } from './pageTemplates';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto, BoxRoll } from './types';
 
@@ -106,6 +106,63 @@ describe('box dealing', () => {
       expect(page.textSlotRoll!.every((r) => r === 'text' || r === 'qr')).toBe(true);
       expect(page.textElements.length).toBe(0);
     }
+  });
+
+  it('sweepFillQuotes fills ONLY empty boxes with lines the album has never used', () => {
+    const template = getTemplatesForAlbum('8x8').find((t) => t.textSlots?.length === 1)!;
+    expect(template, 'no single-box 8x8 template — fixture broken').toBeDefined();
+    const mkPage = (id: string, extra: Partial<AlbumPage>): AlbumPage => ({
+      id, layout: 'freeform', size: '8x8', templateId: template.id,
+      slotFills: [], photos: [], textElements: [],
+      background: { type: 'solid', solid: '#FFFFFF' },
+      ...extra,
+    } as unknown as AlbumPage);
+    const pages = [
+      // Box occupied by a caption whose text is ALSO in the pool — must be
+      // untouched, and its line must not be dealt again elsewhere.
+      mkPage('a', { textElements: [{ id: 'x', text: 'Already here', x: 0, y: 0, fontSize: 28, fontFamily: 'serif', color: '#000', bold: false, italic: true, underline: false, alignment: 'center', rotation: 0, opacity: 100, boxIndex: 0 }] as AlbumPage['textElements'] }),
+      mkPage('b', {}), // empty box → gets a fresh line
+      // Empty box, but a photo-slot text already uses a pool line — excluded.
+      mkPage('c', { slotTexts: [{ text: 'Used in slot' }] as AlbumPage['slotTexts'] }),
+    ];
+    const { pages: out, filled, remaining } = sweepFillQuotes(pages, {
+      ...BOX, quotePool: ['Already here', 'Used in slot', 'Fresh one', 'Fresh two'],
+    });
+    expect(filled).toBe(2);
+    expect(remaining).toBe(0);
+    expect(out[0].textElements).toHaveLength(1); // occupied box untouched
+    expect(out[0].textElements[0].text).toBe('Already here');
+    const dealt = [out[1], out[2]].map((p) => p.textElements.find((t) => t.boxIndex === 0)!);
+    dealt.forEach((t) => {
+      expect(t).toBeDefined();
+      expect(['Fresh one', 'Fresh two']).toContain(t.text); // used lines excluded
+      expect(t.italic).toBe(true);
+      expect(t.fontSize).toBe(28);
+    });
+    // Album-wide uniqueness after the sweep — captions and slot texts together.
+    const allTexts = out.flatMap((p) => [
+      ...p.textElements.map((t) => t.text),
+      ...(p.slotTexts ?? []).flatMap((st) => (st ? [st.text] : [])),
+    ]);
+    expect(new Set(allTexts).size).toBe(allTexts.length);
+  });
+
+  it('sweepFillQuotes reports boxes it could not fill when the pool runs dry', () => {
+    const template = getTemplatesForAlbum('8x8').find((t) => t.textSlots?.length === 1)!;
+    const mkPage = (id: string): AlbumPage => ({
+      id, layout: 'freeform', size: '8x8', templateId: template.id,
+      slotFills: [], photos: [], textElements: [],
+      background: { type: 'solid', solid: '#FFFFFF' },
+    } as unknown as AlbumPage);
+    const { pages: out, filled, remaining } = sweepFillQuotes(
+      [mkPage('a'), mkPage('b')],
+      { ...BOX, quotePool: ['Only line'] },
+    );
+    expect(filled).toBe(1);
+    expect(remaining).toBe(1);
+    const captions = out.flatMap((p) => p.textElements);
+    expect(captions).toHaveLength(1);
+    expect(captions[0].text).toBe('Only line');
   });
 
   it('the quote dealer deals each line AT MOST ONCE, then null forever', () => {

@@ -22,7 +22,7 @@ import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, sweepFillQuotes, type BoxContentOptions } from './generateAlbum';
 import { quotesForThemeNow, fetchThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
@@ -507,6 +507,11 @@ export interface BuilderActions {
    *  current page by default, or an explicit pageIndex (the preview spread shows
    *  two pages). Creates/updates the boxed TextElement; empty text clears it. */
   setBoxText: (slotIndex: number, content: Partial<TextElement> & { text: string }, pageIndex?: number) => void;
+  /** "Megy finishes it" (preview sweep): fill EVERY still-empty caption box
+   *  album-wide with a theme quote the album hasn't used yet (never-repeat
+   *  holds). One undo step. Returns counts for the CTA's feedback —
+   *  remaining>0 means the pool ran dry and that many boxes stayed empty. */
+  finishBoxesWithQuotes: () => { filled: number; remaining: number };
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
@@ -2290,6 +2295,24 @@ export function useBuilderState(): BuilderActions {
   /** COVER: nudge a bound caption off its template slot (fractions of the panel).
    *  No undo snapshot per call — a drag fires many updates (see
    *  setTextSlotOrnamentGeom). */
+  /** "Megy finishes it": one-tap sweep from the preview. Deals unused theme
+   *  quotes into every empty caption box (sweepFillQuotes excludes any line
+   *  the album already carries, so the never-repeat rule survives the sweep).
+   *  Styling mirrors setBoxText's defaults, same as generation-time deals. */
+  const finishBoxesWithQuotes = useCallback((): { filled: number; remaining: number } => {
+    const theme = THEMES[selectedTemplate];
+    const { pages, filled, remaining } = sweepFillQuotes(albumPages, {
+      quotePool: quotesForThemeNow(currentAlbumTheme()),
+      quoteFontFamily: theme.fontFamily,
+      quoteColor: theme.textColor,
+    });
+    if (filled > 0) {
+      pushSnapshot();
+      setAlbumPages(pages);
+    }
+    return { filled, remaining };
+  }, [albumPages, selectedTemplate]);
+
   const setBoxTextOffset = useCallback((slotIndex: number, offsetX: number, offsetY: number) => {
     updateCurrentPage((page) => ({
       ...page,
@@ -2587,6 +2610,7 @@ export function useBuilderState(): BuilderActions {
     updateTextElement,
     deleteTextElement,
     setBoxText,
+    finishBoxesWithQuotes,
     setPageBackground,
     setBackgroundCrop,
     setBoxTextOffset,

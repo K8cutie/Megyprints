@@ -1,5 +1,5 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll } from './types';
-import { getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio } from './pageTemplates';
+import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio } from './pageTemplates';
 
 /* ── Ratio LOOSENING budget ───────────────────────────────────────────────────
    Ratio matching is loosened, not removed: a photo still prefers its own ratio,
@@ -180,6 +180,69 @@ export function dealBoxContent(
     rolls.push(kind);
   }
   page.textSlotRoll = rolls;
+}
+
+/** "Megy finishes it" — the preview's finish-line sweep. Fills EVERY still-
+ *  empty combo/caption box across the album with a quote the album hasn't
+ *  used yet: lines already printed anywhere (bound captions AND photo-slot
+ *  texts, including customer-edited ones) are excluded from the deck, so the
+ *  album-wide never-repeat rule holds. Occupied boxes are untouched. Pure —
+ *  returns new pages plus counts; `remaining` > 0 means the pool ran dry and
+ *  that many boxes were left exactly as they were. */
+export function sweepFillQuotes(
+  pages: AlbumPage[],
+  box: BoxContentOptions,
+): { pages: AlbumPage[]; filled: number; remaining: number } {
+  const used = new Set<string>();
+  for (const p of pages) {
+    for (const t of p.textElements) used.add(t.text);
+    for (const st of p.slotTexts ?? []) if (st) used.add(st.text);
+  }
+  const deck = shuffleArray(box.quotePool.filter((l) => !used.has(l)));
+  let di = 0;
+  let filled = 0;
+  let remaining = 0;
+  const next = pages.map((page) => {
+    const template = page.templateId ? getTemplateById(page.templateId) : undefined;
+    const boxes = template?.textSlots?.length ?? 0;
+    if (boxes === 0) return page;
+    let out = page;
+    for (let j = 0; j < boxes; j++) {
+      const occupied =
+        out.textElements.some((t) => t.boxIndex === j) ||
+        out.textSlotFills?.[j] != null ||
+        !!out.textSlotQr?.[j] ||
+        !!out.textSlotOrnament?.[j];
+      if (occupied) continue;
+      if (di >= deck.length) { remaining++; continue; }
+      const quote = deck[di++];
+      out = {
+        ...out,
+        textElements: [
+          ...out.textElements,
+          {
+            id: `box-${j}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            text: quote,
+            x: 0,
+            y: 0,
+            fontSize: 28,
+            fontFamily: box.quoteFontFamily,
+            color: box.quoteColor,
+            bold: false,
+            italic: true,
+            underline: false,
+            alignment: 'center',
+            rotation: 0,
+            opacity: 100,
+            boxIndex: j,
+          } satisfies TextElement,
+        ],
+      };
+      filled++;
+    }
+    return out;
+  });
+  return { pages: next, filled, remaining };
 }
 
 /**
