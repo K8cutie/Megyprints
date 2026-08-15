@@ -15,7 +15,7 @@ name, versionCode — need a new upload).
 | Upload keystore | `android/megyprints-upload.keystore` (+ backup in `Documents\megyprints-signing\`) | ✅ NEVER commit; password in `android/signing.local.txt` |
 | Digital Asset Links | https://megyprints.vercel.app/.well-known/assetlinks.json | ✅ live, upload-key SHA-256 `53:1A:E2:…:C0:AE` |
 | PWA manifest + icons | live (`pwa-192/512`, maskable pair) | ✅ verified HTTP 200 |
-| Store listing icon 512 | `store/playstore-icon-512.png` | ✅ (regenerate when the final icon art lands) |
+| Store listing icon 512 | `store/playstore-icon-512.png` | ✅ FINAL — MEGY cube art (source: `megy icon logo.png`, master: `store/megy-icon-master.png`) |
 | Feature graphic 1024×500 | `store/feature-graphic-1024x500.png` | ✅ |
 | Privacy policy | https://megyprints.vercel.app/#/privacy | ✅ live route |
 | TWA config | `android/twa-manifest.json` (`com.megyprints.app`, target SDK 36) | ✅ exceeds Play's current target-API rule |
@@ -122,10 +122,12 @@ cd android && bubblewrap update --skipVersionUpgrade && bubblewrap build --skipP
   junctions/paths already configured on this machine.)
   Upload the new AAB to the track.
 
-## When the final icon art lands
+## Final icon art — DONE (2026-08-15)
 
-1. Replace `public/megy-character.png` (ideal: square 1024×1024 PNG, transparent bg)
-   — or drop the new file in and update the icon script's source path.
-2. Re-run the icon generator (Claude has it: regenerates pwa-192/512, maskable
-   pair, and `store/playstore-icon-512.png`), commit + push.
-3. Rebuild the wrapper (bumped versionCode) so the launcher icon updates too.
+The MEGY cube (`megy icon logo.png`, full-bleed 1021px PNG) is now the icon
+everywhere: Play listing 512, pwa-192/512, maskable pair, launcher mipmaps,
+and the splash (backgrounds moved to icon-edge orange `#F05239`). AAB + APK
+rebuilt and emulator-verified — proof shots `store/emulator-splash-newicon.png`
+and `store/emulator-drawer-newicon.png`. `public/megy-character.png` stays the
+IN-APP mascot only. If the art ever changes again: replace the source file,
+re-run the generator, push, `bubblewrap update && build`, re-upload.
