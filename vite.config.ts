@@ -24,7 +24,10 @@ export default defineConfig(({ command }) => ({
         short_name: 'Megy Prints',
         description: 'AI photo-album builder — Megy designs your album, you just approve.',
         theme_color: '#F4C2A1',
-        background_color: '#FFF8F0',
+        // Splash/backdrop behind the launch icon. Icon-edge orange so the
+        // full-bleed MEGY cube melts into the splash instead of floating as an
+        // orange square on cream (the in-app cream theme takes over on paint).
+        background_color: '#F05239',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '.',
