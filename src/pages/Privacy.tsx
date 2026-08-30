@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 
-const UPDATED = 'July 2026';
+const UPDATED = 'August 2026';
 const CONTACT = 'megyprints@gmail.com';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -80,11 +80,40 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="Keeping your information &amp; deleting it">
+        <Section title="Deleting your account">
           <p>
-            We keep your account and order information for as long as your account is active or as
-            needed to fulfill and support your orders. You can ask us to delete your account and
-            associated data at any time by emailing <a className="text-[#BF5E3E] underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+            You can delete your account and its data at any time, two ways:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <b>In the app</b> — <b>My Profile → Delete my account</b>. It happens immediately.
+            </li>
+            <li>
+              <b>By asking us</b> — email <a className="text-[#BF5E3E] underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>,
+              or use the <a className="text-[#BF5E3E] underline" href="/delete-account.html">account deletion page</a>.
+              We complete it within 30 days.
+            </li>
+          </ul>
+          <p>
+            Deleting removes your sign-in and profile, every album and the photos in it, your QR
+            memory links (printed codes stop working), the print files from your past orders, and
+            the name, phone number and address on those orders.
+          </p>
+          <p>
+            <b>What we keep:</b> if you've ordered before, we keep a receipt-only record of that
+            sale — order number, amount, status and dates, and the album's size, material and page
+            count — because Philippine tax and accounting rules require a business to keep records
+            of its sales. That record carries no name, phone number, address or photos, and is no
+            longer linked to you.
+          </p>
+          <p>
+            One exception: if an order is paid but not yet delivered, we still need your delivery
+            details to finish it, so the account can't be deleted until it arrives — or until you
+            ask us to cancel the order.
+          </p>
+          <p>
+            Otherwise we keep your account and order information for as long as your account is
+            active or as needed to fulfill and support your orders.
           </p>
         </Section>
 

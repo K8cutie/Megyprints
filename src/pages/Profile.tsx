@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { useAlbumSync } from '../lib/useAlbumSync';
+import DeleteAccountSection from '../components/DeleteAccountSection';
 import { supabase } from '../lib/supabase';
 import type { AlbumData } from '../lib/useAlbumSync';
 
@@ -464,6 +465,9 @@ export function Profile({ onBack }: ProfilePageProps) {
             </div>
           </div>
         </motion.section>
+
+        {/* Account deletion — required in-app path (see DeleteAccountSection) */}
+        <DeleteAccountSection />
       </main>
     </div>
   );

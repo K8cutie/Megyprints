@@ -60,8 +60,14 @@ While the 14 days run, finish Steps 3–5 (all doable immediately).
 
 - **Privacy policy URL:** `https://megyprints.vercel.app/#/privacy`
 - **Ads:** No ads.
-- **App access:** All functionality available without special access (guest flow
-  works; note the "Continue without an account" path).
+- **App access:** **Not** "available without special access" — the builder is
+  open, but the HARD gates (adding a QR memory, checkout) require sign-in, so a
+  reviewer cannot reach them. Choose *All or some functionality is restricted*
+  and supply a working demo email + password. A review that can't reach checkout
+  fails.
+- **Account deletion URL:** `https://megyprints.vercel.app/delete-account.html`
+  (goes in the Data safety form). Static page, no login wall — deliberately not
+  a HashRouter route, since a `#`-less URL would render the homepage.
 - **Content rating questionnaire:** Utility/Productivity → answers all "No" →
   Everyone.
 - **Target audience:** 18+ (simplest; avoids Families policy overhead).
@@ -75,7 +81,18 @@ While the 14 days run, finish Steps 3–5 (all doable immediately).
   - **Crash logs / diagnostics:** YES — Sentry is wired (`@sentry/react`).
     Declare *Crash logs + Diagnostics, collected, not shared, not linked to
     identity.*
-  - Data deleted on request via shop contact.
+  - **Account deletion:** answer YES to *users can request account deletion* and
+    give the URL above. Both the in-app path (My Profile → Delete my account)
+    and the web URL are required — one is not a substitute for the other.
+
+## Step 4b — Before deploying: one server env var
+
+`api/delete-account.mjs` needs **`SUPABASE_SERVICE_ROLE_KEY`** in Vercel →
+Project → Settings → Environment Variables (all environments). Server-only —
+never prefix it with `VITE_`. Without it the endpoint refuses deletion with
+"Account deletion is misconfigured" rather than deleting an account and leaving
+the customer's photos in the bucket. Also apply migration `0027_account_deletion`
+(`npx supabase db push`) before deploying, or the endpoint's RPC won't exist.
 
 ## Step 5 — Payments note (why no Play Billing)
 
