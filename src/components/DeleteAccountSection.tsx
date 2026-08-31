@@ -222,10 +222,15 @@ export default function DeleteAccountSection() {
                     >
                       {blocked ? 'Close' : 'Keep my account'}
                     </button>
+                    {/* `armed` already requires phase === 'ready', so `!armed`
+                        also covers the in-flight delete: once handleDelete sets
+                        'deleting', armed goes false and the button locks. An
+                        extra `|| phase === 'deleting'` is not just redundant,
+                        it's unreachable — TS2367. */}
                     {!blocked && (
                       <button
                         onClick={handleDelete}
-                        disabled={!armed || phase === 'deleting'}
+                        disabled={!armed}
                         className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-600 disabled:bg-red-200 disabled:cursor-not-allowed transition-colors"
                       >
                         {phase === 'deleting' ? (
