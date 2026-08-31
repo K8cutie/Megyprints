@@ -19,7 +19,7 @@ import {
 } from '../lib/accountDeletion';
 
 const CONFIRM_WORD = 'DELETE';
-const CONTACT = 'megyprints@gmail.com';
+const CONTACT = 'megyprintsph@gmail.com';
 
 type Phase = 'idle' | 'loading' | 'ready' | 'deleting' | 'done';
 

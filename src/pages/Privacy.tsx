@@ -5,7 +5,7 @@
 import type { ReactNode } from 'react';
 
 const UPDATED = 'August 2026';
-const CONTACT = 'megyprints@gmail.com';
+const CONTACT = 'megyprintsph@gmail.com';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
