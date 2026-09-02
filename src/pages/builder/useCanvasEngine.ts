@@ -1956,7 +1956,10 @@ function renderScene(
       roll === 'quote' ? 'Add a quote' : 'Tap to add';
     const label = new fab.Text(labelText, {
       left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
-      fontSize: Math.max(12, Math.min(24, Math.min(r.width, r.height) * 0.12)),
+      // Cap by the box WIDTH too (0.62em ≈ avg glyph width): a tall narrow
+      // band otherwise clips the longer invitation labels — same fix as the
+      // DOM twin in BuilderPreview's EmptyChooserBox.
+      fontSize: Math.max(9, Math.min(24, Math.min(r.width, r.height) * 0.12, (r.width - 16) / (labelText.length * 0.62))),
       fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700', textAlign: 'center',
       selectable: false, evented: false,
     });

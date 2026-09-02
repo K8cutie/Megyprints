@@ -127,14 +127,31 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         background: 'rgba(253,232,228,0.5)', cursor: 'pointer', boxSizing: 'border-box',
         color: '#A0562F', padding: 6, gap: `${5 * sx}px`, overflow: 'hidden',
       }}>
-      {roll ? (
-        // A single-line invitation fits even the short caption bands the 3-item
-        // list can't (the list needs cell ≥ 84; one line only needs ~2× fs).
-        height >= fs * 2 ? (
-          <span style={{ fontWeight: 800, fontSize: fs * 1.15, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>
-            {ROLL_LABELS[roll]}
-          </span>
-        ) : (
+      {roll ? (() => {
+        // Fit the invitation to the BOX, not just its shorter side. Sizing by
+        // cell=min(w,h) alone let a TALL NARROW band (portrait side column)
+        // clip "Add a video link" to "dd a video li" — the label must also
+        // shrink to the width (0.62em ≈ avg bold glyph width), then wrap to
+        // two lines on the narrowest bands, then fall back to the "+" bubble.
+        const label = ROLL_LABELS[roll];
+        const innerW = width - 24; // padding + dashed border
+        const oneLineFs = Math.min(fs * 1.15, innerW / (label.length * 0.62));
+        if (oneLineFs >= 11 && height >= oneLineFs * 2) {
+          return (
+            <span style={{ fontWeight: 800, fontSize: oneLineFs, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>
+              {label}
+            </span>
+          );
+        }
+        const wrapFs = Math.min(fs * 1.15, innerW / (Math.ceil(label.length / 2) * 0.62));
+        if (wrapFs >= 10 && height >= wrapFs * 3) {
+          return (
+            <span style={{ fontWeight: 800, fontSize: wrapFs, lineHeight: 1.25, letterSpacing: '0.01em' }}>
+              {label}
+            </span>
+          );
+        }
+        return (
           <div style={{
             width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -142,8 +159,8 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
           }}>
             <Plus size={26} color="white" />
           </div>
-        )
-      ) : showList ? (
+        );
+      })() : showList ? (
         <>
           <span style={{ fontWeight: 800, fontSize: fs * 1.15, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>Click to add:</span>
           <div style={{ fontSize: fs, fontWeight: 700, lineHeight: 1.5, textAlign: 'left' }}>
