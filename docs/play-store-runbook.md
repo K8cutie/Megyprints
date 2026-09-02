@@ -100,7 +100,15 @@ Megy Prints sells **physical goods** (printed albums). Google Play Billing is
 **not allowed** for physical goods — your own checkout (manual pay today,
 Xendit later) is the required path, and Google takes **0% of sales**.
 
-## Step 6 — THE critical post-upload step (don't skip)
+## Step 6 — ✅ DONE 2026-09-03: Play App Signing cert added + Google-verified
+
+Play signing cert `2E:D4:9B:E6:…:ED:EE:76` is live in assetlinks alongside the
+upload key (commit 4bd420f), and Google's Digital Asset Links API returns BOTH
+statements for com.megyprints.app. Store installs verify full-screen. If a
+device installed the app BEFORE this fix and shows a browser bar: uninstall +
+reinstall from the tester link (verification runs at install time).
+
+Original instructions (for reference):
 
 Play re-signs the app with **Play App Signing**, so the store build's
 certificate is Google's, not the upload key. Until that cert is in assetlinks,
