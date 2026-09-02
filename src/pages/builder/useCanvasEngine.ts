@@ -1954,12 +1954,18 @@ function renderScene(
       roll === 'text' ? 'Your words here' :
       roll === 'qr' ? 'Add a video link' :
       roll === 'quote' ? 'Add a quote' : 'Tap to add';
-    const label = new fab.Text(labelText, {
+    // WRAP, don't clip. A single-line fab.Text sized by an estimated glyph
+    // width still clipped the longer labels on tall-narrow bands; a Textbox
+    // wraps within its width instead. Font is capped so the longest WORD fits
+    // (0.72em safe bold bound) — mirrors the DOM twin in BuilderPreview's
+    // EmptyChooserBox; keep the two in step.
+    const longestWord = labelText.split(' ').reduce((a, b) => (b.length > a.length ? b : a), '');
+    const boxW = Math.max(24, r.width - 16);
+    const labelFs = Math.max(9, Math.min(24, r.height * 0.14, boxW / (longestWord.length * 0.72)));
+    const label = new fab.Textbox(labelText, {
       left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
-      // Cap by the box WIDTH too (0.62em ≈ avg glyph width): a tall narrow
-      // band otherwise clips the longer invitation labels — same fix as the
-      // DOM twin in BuilderPreview's EmptyChooserBox.
-      fontSize: Math.max(9, Math.min(24, Math.min(r.width, r.height) * 0.12, (r.width - 16) / (labelText.length * 0.62))),
+      width: boxW,
+      fontSize: labelFs,
       fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700', textAlign: 'center',
       selectable: false, evented: false,
     });

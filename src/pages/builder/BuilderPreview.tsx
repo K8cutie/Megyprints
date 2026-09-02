@@ -128,25 +128,24 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         color: '#A0562F', padding: 6, gap: `${5 * sx}px`, overflow: 'hidden',
       }}>
       {roll ? (() => {
-        // Fit the invitation to the BOX, not just its shorter side. Sizing by
-        // cell=min(w,h) alone let a TALL NARROW band (portrait side column)
-        // clip "Add a video link" to "dd a video li" — the label must also
-        // shrink to the width (0.62em ≈ avg bold glyph width), then wrap to
-        // two lines on the narrowest bands, then fall back to the "+" bubble.
+        // WRAP, don't force one line. Forcing "Add a video link" onto a single
+        // nowrap line (sized by an estimated glyph width) clipped it to
+        // "dd a video li" on tall-narrow portrait bands — twice. Instead: let
+        // the label wrap to as many lines as it needs, and cap the font only so
+        // the LONGEST WORD fits the width (0.72em is a safe bold upper bound).
+        // Wrapping can't clip mid-word, and break-word is a final backstop; then
+        // fall back to the "+" bubble only when even two wrapped lines won't fit.
         const label = ROLL_LABELS[roll];
-        const innerW = width - 24; // padding + dashed border
-        const oneLineFs = Math.min(fs * 1.15, innerW / (label.length * 0.62));
-        if (oneLineFs >= 11 && height >= oneLineFs * 2) {
+        const innerW = width - 24;  // padding + dashed border
+        const innerH = height - 24;
+        const longestWord = label.split(' ').reduce((a, b) => (b.length > a.length ? b : a), '');
+        const fontSize = Math.min(fs, innerW / (longestWord.length * 0.72));
+        if (fontSize >= 10 && innerH >= fontSize * 2.2) {
           return (
-            <span style={{ fontWeight: 800, fontSize: oneLineFs, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>
-              {label}
-            </span>
-          );
-        }
-        const wrapFs = Math.min(fs * 1.15, innerW / (Math.ceil(label.length / 2) * 0.62));
-        if (wrapFs >= 10 && height >= wrapFs * 3) {
-          return (
-            <span style={{ fontWeight: 800, fontSize: wrapFs, lineHeight: 1.25, letterSpacing: '0.01em' }}>
+            <span style={{
+              fontWeight: 800, fontSize, lineHeight: 1.2, letterSpacing: '0.01em',
+              wordBreak: 'break-word', maxWidth: '100%',
+            }}>
               {label}
             </span>
           );
