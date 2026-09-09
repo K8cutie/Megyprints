@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, perPageRate,
+  qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE,
   MIN_PAGES, SIZE_LABELS,
   type Binding, type PricingModel,
 } from './pricing';
@@ -115,6 +116,55 @@ describe('priceBreakdown', () => {
       expect(labels).toContain(SIZE_LABELS[size]);
       expect(labels).not.toContain(String(MODEL.sheet_cost));
     }
+  });
+});
+
+describe('living-memory QR add-on (7 included, ₱20 each after — owner, 2026-09-09)', () => {
+  it('the first 7 QR memories cost nothing; each one past 7 is ₱20', () => {
+    expect(FREE_QR_MEMORIES).toBe(7);
+    expect(EXTRA_QR_RATE).toBe(20);
+    for (let n = 0; n <= 7; n++) expect(qrMemoryCharge(n)).toBe(0);
+    expect(qrMemoryCharge(8)).toBe(20);
+    expect(qrMemoryCharge(12)).toBe(100);
+    expect(qrMemoryCharge(-3)).toBe(0);
+  });
+
+  it('counts QR memories from BOTH homes (photo-slot qrFills and combo-box textSlotQr), ignoring nulls', () => {
+    const pages = [
+      { qrFills: [null, { code: 'a' }], textSlotQr: [{ code: 'b' }] },
+      { qrFills: [null, null] },
+      { textSlotQr: [null, null, { code: 'c' }] },
+      {},
+    ];
+    expect(countQrMemories(pages)).toBe(3);
+    expect(countQrMemories([])).toBe(0);
+  });
+
+  it('the breakdown adds ONE add-on line only past 7, and every line still sums to the total', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    for (const size of SIZE_KEYS)
+      for (const binding of BINDINGS)
+        for (const pages of PAGE_COUNTS)
+          for (const qr of [0, 1, 7, 8, 15]) {
+            const b = priceBreakdown(schedule, size, binding, pages, qr);
+            const print = priceOf(schedule, size, binding, pages);
+            expect(b.total).toBe(print + qrMemoryCharge(qr));
+            expect(b.items.reduce((s, i) => s + i.amount, 0)).toBe(b.total);
+            const qrLines = b.items.filter((i) => i.label.includes('Living-memory QR'));
+            expect(qrLines).toHaveLength(qr > FREE_QR_MEMORIES ? 1 : 0);
+            if (qr > FREE_QR_MEMORIES) {
+              expect(qrLines[0].label).toContain(`${FREE_QR_MEMORIES} included`);
+              expect(qrLines[0].label).toContain(`${qr - FREE_QR_MEMORIES} extra`);
+              expect(qrLines[0].amount).toBe((qr - FREE_QR_MEMORIES) * EXTRA_QR_RATE);
+            }
+          }
+  });
+
+  it('omitting the QR count keeps every pre-existing price byte-identical', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    for (const size of SIZE_KEYS)
+      for (const pages of PAGE_COUNTS)
+        expect(priceBreakdown(schedule, size, 'hard', pages)).toEqual(priceBreakdown(schedule, size, 'hard', pages, 0));
   });
 });
 

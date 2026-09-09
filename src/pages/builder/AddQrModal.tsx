@@ -6,6 +6,7 @@ import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination, videoEm
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
+import { FREE_QR_MEMORIES, EXTRA_QR_RATE } from '../../lib/pricing';
 
 const CORNER_LABELS: Record<QrCorner, string> = {
   tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right',
@@ -112,6 +113,9 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose, corner,
             <p className="text-sm font-bold text-[#2D2D2D]">Add a memory of this event 🎬</p>
             <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
               Paste a YouTube link — it plays the moment anyone scans the QR printed on this page. Your album stops being just photos and starts <span className="font-medium text-[#8B6F47]">reliving the day</span>.
+            </p>
+            <p className="text-[11px] text-[#9B8B7A] mt-1.5">
+              {FREE_QR_MEMORIES} QR memories are included with every album · ₱{EXTRA_QR_RATE} each after that, added at checkout.
             </p>
           </div>
           <div>

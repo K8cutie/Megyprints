@@ -88,6 +88,37 @@ export function perPageRate(schedule: PriceSchedule, size: AlbumSizePreset): num
 export interface PriceLine { label: string; amount: number }
 export interface PriceBreakdown { items: PriceLine[]; total: number }
 
+// ── Living-memory QR add-on (owner-set 2026-09-09) ──────────────────────────
+// Every album includes FREE_QR_MEMORIES QR memories; each one past that adds
+// EXTRA_QR_RATE to the order. Counted per QR code (hosted clip or pasted link
+// alike). Public by nature — the customer is told "7 included" — so these sit
+// in the bundle like MIN_PAGES; move them to the schedule if they ever need to
+// be owner-tunable without a deploy.
+export const FREE_QR_MEMORIES = 7;
+export const EXTRA_QR_RATE = 20;
+
+/** Pesos owed for `count` QR memories on one album. */
+export function qrMemoryCharge(count: number): number {
+  return Math.max(0, Math.floor(count) - FREE_QR_MEMORIES) * EXTRA_QR_RATE;
+}
+
+/** Structural view of a page for counting — both QR homes: a QR slot on a
+ *  photo layout (`qrFills`) and a QR in a combo/caption box (`textSlotQr`). */
+export interface QrCountablePage {
+  qrFills?: (unknown | null)[] | null;
+  textSlotQr?: (unknown | null)[] | null;
+}
+
+/** QR memories an album carries — what the add-on line bills. */
+export function countQrMemories(pages: readonly QrCountablePage[]): number {
+  let n = 0;
+  for (const p of pages) {
+    for (const f of p.qrFills ?? []) if (f) n++;
+    for (const f of p.textSlotQr ?? []) if (f) n++;
+  }
+  return n;
+}
+
 /** CUSTOMER-FACING. Marked-up amounts only. Line amounts are reconciled so items
  *  sum exactly to total (base = total − extra), so the displayed split never
  *  hints at the underlying model. */
@@ -96,11 +127,15 @@ export function priceBreakdown(
   size: AlbumSizePreset,
   binding: Binding,
   pages: number,
+  /** QR memories on the album (see FREE_QR_MEMORIES). Omitted = none. */
+  qrMemories = 0,
 ): PriceBreakdown {
   const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
   const sizeLabel = SIZE_LABELS[size];
   const minPages = schedule.min_pages;
-  const total = priceOf(schedule, size, binding, pages);
+  const printTotal = priceOf(schedule, size, binding, pages);
+  const qrCharge = qrMemoryCharge(qrMemories);
+  const total = printTotal + qrCharge;
 
   const extra = Math.max(0, pages - minPages);
   const items: PriceLine[] = [];
@@ -110,13 +145,21 @@ export function priceBreakdown(
     const extraAmount = extra * perPage;
     items.push({
       label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages included`,
-      amount: total - extraAmount,
+      amount: printTotal - extraAmount,
     });
     items.push({ label: `Extra pages · ${extra} × ₱${perPage}`, amount: extraAmount });
   } else {
     items.push({
       label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages included`,
-      amount: total,
+      amount: printTotal,
+    });
+  }
+
+  if (qrCharge > 0) {
+    const extraQr = qrMemories - FREE_QR_MEMORIES;
+    items.push({
+      label: `Living-memory QR · ${FREE_QR_MEMORIES} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`,
+      amount: qrCharge,
     });
   }
 

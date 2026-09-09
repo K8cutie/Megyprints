@@ -10,7 +10,7 @@ import { createOrderFromLatestAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } 
 import { getPendingPrintJob } from '../lib/printQueue';
 import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, MIN_PAGES, type Binding } from '../lib/pricing';
+import { priceBreakdown, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
 import { reportError } from '../lib/report';
@@ -63,6 +63,9 @@ export default function Order() {
   const job = getPendingPrintJob();
   const albumSize: AlbumSizePreset = job?.albumSize ?? size ?? DEFAULT_ALBUM_SIZE;
   const pageCount = job?.pages.length ?? MIN_PAGES;
+  // QR memories on the album — the first FREE_QR_MEMORIES are included, each
+  // one past that is an add-on line (counted per QR code, link or clip alike).
+  const qrCount = countQrMemories(job?.pages ?? []);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
   const hasJob = job != null;
 
@@ -81,9 +84,9 @@ export default function Order() {
 
   const breakdown = useMemo(
     () => (schedule
-      ? priceBreakdown(schedule, albumSize, binding, pageCount)
+      ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount)
       : { items: [], total: 0 }),
-    [schedule, albumSize, binding, pageCount],
+    [schedule, albumSize, binding, pageCount, qrCount],
   );
   const totalPrice = breakdown.total;
   // Loaded AND priceable. `settingsReady` alone only means the load settled — it
@@ -447,7 +450,8 @@ export default function Order() {
               <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#FBEDE7] border border-[#F4C2A1]/60 px-3 py-2.5">
                 <QrCode size={16} className="text-[#E8A598] shrink-0 mt-0.5" />
                 <p className="text-xs text-[#8B6F47] leading-snug">
-                  <b className="text-[#2D2D2D]">Free living-memory QR included</b> — add a video that plays when anyone scans your printed album.
+                  <b className="text-[#2D2D2D]">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
+                  {qrCount > 0 && <> This album has <b className="text-[#2D2D2D]">{qrCount}</b>.</>}
                 </p>
               </div>
               <button onClick={handleProceedToPayment} disabled={!priceReady}
