@@ -1,4 +1,4 @@
-import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll } from './types';
+import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TemplateSlot, TextElement, BoxRoll } from './types';
 import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio } from './pageTemplates';
 
 /* ── Ratio LOOSENING budget ───────────────────────────────────────────────────
@@ -9,6 +9,20 @@ import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplat
      3:4 <-> 2:3  11.1%      2:3 <-> 9:16  15.6%      3:4 <-> 9:16  25.0%
    0.16 therefore admits the adjacent pairs and excludes the far ones. */
 const MAX_LOOSE_CROP = 0.16;
+/** v2: a photo may leave its native ratio's queue for one whose template pool
+ *  is at least this rich relative to its own. 1.0 = "at least as rich": the
+ *  gain is ALBUM-level (the union of pools the album can draw from — on 8×8
+ *  that is 22 layouts instead of 6), so a move into an equally rich pool is
+ *  still a win as long as some photos stay behind (REASSIGN_SHARE). */
+const REASSIGN_POOL_RATIO = 1.0;
+/** v2: at most this share of a native pool's photos are moved, strongest fits
+ *  first. The native layouts must keep appearing too, or the album trades one
+ *  monoculture for another. */
+const REASSIGN_SHARE = 0.6;
+/** v2 curation Layer 0: a hero page takes the best-scoring photo among the
+ *  next few in the queue, not blindly the next one. Small, so chronology holds. */
+const HERO_LOOKAHEAD = 4;
+const ALL_RATIOS: PhotoRatio[] = ['4:3', '3:4', '3:2', '2:3', '1:1', '16:9', '9:16'];
 const RATIO_VALUE: Record<string, number> = {
   '4:3': 4 / 3, '3:4': 3 / 4, '3:2': 3 / 2, '2:3': 2 / 3, '1:1': 1, '16:9': 16 / 9, '9:16': 9 / 16,
 };
@@ -19,6 +33,12 @@ import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { PER_SIZE_AUTHORED } from './templateKit';
 import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
+// ── v2 · fit-to-layout (branch) ── the image adapts to the layout. Active ONLY
+// when the caller passes `options.subjects`; without it every path below is
+// byte-identical to v1 (the existing specs are the guard).
+import { fitSubject, fitAtRatio, designPxOffset, FIT_THRESHOLD, type Rect } from '../../lib/v2/fit';
+import { bestAssignment } from '../../lib/v2/assign';
+import { getCanvasDimensions } from './layouts';
 
 /* ══════════════════════════════════════════════════════════════════════════
    SMART ALBUM GENERATION — Ratio-aware template matching
@@ -306,7 +326,19 @@ export function generateAlbum(
   albumSize: AlbumSizePreset,
   photosPerPage?: number | undefined,
   background?: AlbumPage['background'] | undefined,
-  options?: { randomize?: boolean; border?: { color: string; width: number }; cornerBase?: string; boxContent?: BoxContentOptions },
+  options?: {
+    randomize?: boolean;
+    border?: { color: string; width: number };
+    cornerBase?: string;
+    boxContent?: BoxContentOptions;
+    /** v2: photo index → subject box (normalised). Presence switches the
+     *  fit-to-layout engine on. Photos without an entry follow v1 rules. */
+    subjects?: Record<number, Rect>;
+    /** v2 curation Layer 0: photo index → 0..1 hero score. */
+    heroScores?: Record<number, number>;
+    /** v2: minimum fit for a crop to count as safe (default FIT_THRESHOLD). */
+    fitThreshold?: number;
+  },
 ): AlbumPage[] {
   // A size with no layouts cannot build an album. The size pickers already drop
   // such a size (see albumSizeOptions), so reaching here means a stale draft or
@@ -367,6 +399,47 @@ export function generateAlbum(
     idxs.forEach((i) => { ratioOf[i] = ratio; });
   });
 
+  // ── v2 · subject-aware fit ──
+  const subjects = options?.subjects;
+  const v2 = !!subjects && Object.keys(subjects).length > 0;
+  const fitThreshold = options?.fitThreshold ?? FIT_THRESHOLD;
+  const heroScores = options?.heroScores;
+  const aspectOf = (i: number): number => {
+    const p = photos[i];
+    return p && p.width > 0 && p.height > 0 ? p.width / p.height : (RATIO_VALUE[ratioOf[i] ?? dominantRatio] ?? 1);
+  };
+  // Slot size in DESIGN pixels — the unit the renderers read offsets in.
+  const canvasDims = getCanvasDimensions(albumSize);
+  const slotPx = (t: PageTemplate, s: TemplateSlot): { w: number; h: number } => {
+    const m = t.margin;
+    return {
+      w: s.width * canvasDims.width * (1 - m.left - m.right),
+      h: s.height * canvasDims.height * (1 - m.top - m.bottom),
+    };
+  };
+  /** Ratios other than its own that this photo can safely be cropped into. */
+  const safeRatiosOf = (i: number): PhotoRatio[] => {
+    const sb = subjects?.[i];
+    if (!sb) return [];
+    const a = aspectOf(i);
+    const native = ratioOf[i] ?? dominantRatio;
+    return ALL_RATIOS.filter((r) => r !== native && fitAtRatio(sb, a, r).fit >= fitThreshold);
+  };
+  /** Even v1's own loose neighbours would cut this subject (a wide group, a
+   *  full-body portrait) → it may only take an EXACT-ratio slot. This is the
+   *  deferral rule: the photo waits for a layout that fits it. */
+  const isStrict = (i: number): boolean => {
+    const sb = subjects?.[i];
+    if (!sb) return false;
+    const native = ratioOf[i] ?? dominantRatio;
+    const a = aspectOf(i);
+    return ALL_RATIOS.some((r) =>
+      r !== native
+      && orientationOfRatio(r) === orientationOfRatio(native)
+      && ratioCrop(r, native) <= MAX_LOOSE_CROP
+      && fitAtRatio(sb, a, r).fit < fitThreshold);
+  };
+
   /** Does this template's slots span MORE THAN ONE ratio? Such a template can
    *  only be filled slot-by-slot (tryMixedFill); handing it to a single-ratio
    *  queue would cross orientations. Single-slot templates are never mixed. */
@@ -401,6 +474,14 @@ export function generateAlbum(
     // Last resort for a size with nothing of this orientation: single-ratio
     // layouts only, so even here a slot is never filled across orientations.
     return getTemplatesForAlbum(albumSize).filter((t) => !isMixedRatio(t));
+  };
+
+  /** v2 strict queues: this ratio's exact layouts only (no loosening). Falls
+   *  back to the loose pool if the size has no exact layout for the ratio, so
+   *  a photo is never stranded. */
+  const templatesExact = (ratio: PhotoRatio): PageTemplate[] => {
+    const exact = getTemplatesForRatio(albumSize, ratio).filter((t) => !isMixedRatio(t));
+    return exact.length ? exact : templatesForRatio(ratio);
   };
 
   const pages: AlbumPage[] = [];
@@ -552,11 +633,42 @@ export function generateAlbum(
       if (page.qrFills?.[s] || page.slotTexts?.[s]) return;
       page.slotFills![s] = photoIdx;
     });
+    // v2: write the crop. For each placed photo with a known subject, pan so
+    // the subject sits inside the slot's visible window. Offsets are DESIGN px
+    // (see printPipeline); scale stays 1 — the renderers disagree on scale.
+    if (v2) {
+      fills.forEach((photoIdx, s) => {
+        const sb = subjects?.[photoIdx];
+        const slot = template.slots[s];
+        if (!sb || !slot || page.slotFills![s] !== photoIdx) return;
+        const px = slotPx(template, slot);
+        if (!(px.w > 0) || !(px.h > 0)) return;
+        const a = aspectOf(photoIdx);
+        const { window } = fitSubject(sb, a, px.w / px.h);
+        const o = designPxOffset(window, a, px.w, px.h);
+        page.slotOffsetsX![s] = o.offsetX;
+        page.slotOffsetsY![s] = o.offsetY;
+      });
+    }
     // Megy deals this page's combo/caption boxes (no-op for box-free layouts
     // and for callers that don't opt in — specs generate empty boxes as before).
     if (boxContent) dealBoxContent(page, template, boxContent, dealQuote);
     pages.push(page);
     pageIdx++;
+  };
+
+  /** v2 curation Layer 0: the hero page takes the strongest of the next few
+   *  photos rather than blindly the next one. v1 (no scores): the next one. */
+  const takeHero = (queue: number[]): number[] => {
+    if (!heroScores) return queue.splice(0, 1);
+    const look = Math.min(HERO_LOOKAHEAD, queue.length);
+    let bestK = 0;
+    let bestS = -Infinity;
+    for (let k = 0; k < look; k++) {
+      const s = heroScores[queue[k]] ?? 0;
+      if (s > bestS) { bestS = s; bestK = k; }
+    }
+    return queue.splice(bestK, 1);
   };
 
   // Templates that MIX photo ratios on one page (e.g. 3:2 + 1:1 + 2:3). Filled
@@ -566,7 +678,7 @@ export function generateAlbum(
   // Try to fill a mixed template from `pool`: one unused photo per slot whose
   // ratio matches that slot's ratio. Returns the fills, or null if any slot
   // can't be matched (the template is then skipped this round).
-  const tryMixedFill = (template: PageTemplate, pool: number[]): number[] | null => {
+  const tryMixedFillV1 = (template: PageTemplate, pool: number[]): number[] | null => {
     const used = new Set<number>();
     const fills: number[] = [];
     for (const slot of template.slots) {
@@ -594,6 +706,37 @@ export function generateAlbum(
     }
     return fills;
   };
+
+  /** v2: every slot may take any photo that FITS it — its own ratio (score 1),
+   *  a measured-safe crop (its fit), or, for a photo with no subject, v1's
+   *  loosening (ranked below any measured fit). The page's slots are then
+   *  filled by the best assignment, so the wide group lands in the widest slot
+   *  with no special rule. */
+  const tryMixedFillV2 = (template: PageTemplate, pool: number[]): number[] | null => {
+    const slots = template.slots;
+    if (pool.length < slots.length) return null;
+    const score = (pi: number, si: number): number => {
+      const idx = pool[pi];
+      const native = ratioOf[idx] ?? dominantRatio;
+      const need = slots[si].ratio ?? template.targetRatio;
+      if (native === need) return 1;
+      const sb = subjects?.[idx];
+      if (sb) {
+        const f = fitAtRatio(sb, aspectOf(idx), need).fit;
+        return f >= fitThreshold ? f : -Infinity;
+      }
+      if (orientationOfRatio(native) === orientationOfRatio(need) && ratioCrop(native, need) <= MAX_LOOSE_CROP) {
+        return 0.5 - ratioCrop(native, need);
+      }
+      return -Infinity;
+    };
+    const a = bestAssignment(pool.length, slots.length, score);
+    if (a.picks.length !== slots.length) return null;
+    if (a.picks.some((pi, si) => score(pi, si) === -Infinity)) return null;
+    return a.picks.map((pi) => pool[pi]);
+  };
+  const tryMixedFill = (template: PageTemplate, pool: number[]): number[] | null =>
+    v2 ? tryMixedFillV2(template, pool) : tryMixedFillV1(template, pool);
 
   // ── 3. Lay out each moment. First place any MIXED-ratio templates the pool can
   //       satisfy; then the remaining photos go RATIO-BY-RATIO (homogeneous
@@ -654,10 +797,65 @@ export function generateAlbum(
     }
 
     // ── 3b. Remaining photos → ratio by ratio, but INTERLEAVED. ──
-    const byRatio: Partial<Record<PhotoRatio, number[]>> = {};
-    for (const i of remaining) {
-      const r = ratioOf[i] ?? dominantRatio;
-      (byRatio[r] ??= []).push(i);
+    // Queue key = the ratio whose TEMPLATE POOL the photo draws from. v1: its
+    // own ratio. v2: a richer ratio it fits safely — or its own ratio marked
+    // strict when even the loose neighbours would cut its subject.
+    const byRatio: Record<string, number[]> = {};
+    const keyRatio = (key: string): PhotoRatio => key.split('!')[0] as PhotoRatio;
+    if (v2) {
+      const poolSizeCache = new Map<PhotoRatio, number>();
+      const poolSize = (r: PhotoRatio): number => {
+        let n = poolSizeCache.get(r);
+        if (n == null) { n = templatesForRatio(r).length; poolSizeCache.set(r, n); }
+        return n;
+      };
+      const pos = new Map(remaining.map((i, k) => [i, k]));
+      // Two ratio names can resolve to the SAME loosened pool (on 8×8, "16:9"
+      // has no exact layouts and borrows the 3:2 landscape set). Moving a photo
+      // there adds no variety — keep one ratio per distinct pool, the mildest crop.
+      const poolSig = (r: PhotoRatio): string => templatesForRatio(r).map((t) => t.id).sort().join('|');
+      const movable: Record<string, { i: number; options: { to: PhotoRatio; gain: number }[] }[]> = {};
+      for (const i of remaining) {
+        const native = ratioOf[i] ?? dominantRatio;
+        if (isStrict(i)) { (byRatio[`${native}!strict`] ??= []).push(i); continue; }
+        const nativeSize = Math.max(1, poolSize(native));
+        const nativeSig = poolSig(native);
+        const bySig = new Map<string, { to: PhotoRatio; gain: number }>();
+        for (const r of safeRatiosOf(i)) {
+          const size = poolSize(r);
+          if (size < REASSIGN_POOL_RATIO * nativeSize) continue;
+          const sig = poolSig(r);
+          if (sig === nativeSig) continue;
+          const gain = (size / nativeSize) * fitAtRatio(subjects![i], aspectOf(i), r).fit;
+          const prev = bySig.get(sig);
+          if (!prev || gain > prev.gain) bySig.set(sig, { to: r, gain });
+        }
+        const options = [...bySig.values()].sort((a, b) => b.gain - a.gain);
+        if (options.length) (movable[native] ??= []).push({ i, options });
+        else (byRatio[native] ??= []).push(i);
+      }
+      for (const [native, list] of Object.entries(movable)) {
+        // Strongest fits move first; the rest stay so native layouts still appear.
+        list.sort((a, b) => b.options[0].gain - a.options[0].gain);
+        const moveN = Math.floor(list.length * REASSIGN_SHARE);
+        // Spread the movers across their near-equal best pools (round-robin)
+        // rather than piling every one into the single top pool.
+        let turn = 0;
+        list.forEach((m, k) => {
+          if (k >= moveN) { (byRatio[native] ??= []).push(m.i); return; }
+          const top = m.options[0].gain;
+          const near = m.options.filter((o) => o.gain >= top * 0.95);
+          const pick = near[turn++ % near.length];
+          (byRatio[pick.to] ??= []).push(m.i);
+        });
+      }
+      // Restore the moment's own (chronological) order inside every queue.
+      for (const k of Object.keys(byRatio)) byRatio[k].sort((a, b) => (pos.get(a) ?? 0) - (pos.get(b) ?? 0));
+    } else {
+      for (const i of remaining) {
+        const r = ratioOf[i] ?? dominantRatio;
+        (byRatio[r] ??= []).push(i);
+      }
     }
 
     // Precompute each ratio's queue + its multi/onePhoto/full candidate sets once,
@@ -677,9 +875,11 @@ export function generateAlbum(
       singles: PageTemplate[];
       multi: PageTemplate[];
     }
-    const states: RatioState[] = (Object.keys(byRatio) as PhotoRatio[]).map((ratio) => {
-      const queue = byRatio[ratio]!;
-      const ratioTemplates = templatesForRatio(ratio);
+    const states: RatioState[] = Object.keys(byRatio).map((key) => {
+      const ratio = keyRatio(key);
+      const strict = key.endsWith('!strict');
+      const queue = byRatio[key];
+      const ratioTemplates = strict ? templatesExact(ratio) : templatesForRatio(ratio);
       const onePhoto = ratioTemplates.filter((t) => t.slotCount === 1);
       const safeSingles = onePhoto.filter(cropSafe);
       const singles = safeSingles.length > 0 ? safeSingles : onePhoto;
@@ -709,7 +909,7 @@ export function generateAlbum(
       } else {
         multi = allMulti;
       }
-      return { key: ratio, queue, ratioTemplates, onePhoto, singles, multi };
+      return { key, queue, ratioTemplates, onePhoto, singles, multi };
     });
 
     // Emit exactly one page from a ratio's queue (drains 1..slotCount photos).
@@ -731,7 +931,7 @@ export function generateAlbum(
         ((photosPerPage == null && !fillMode) || multi.length < 3);
       if (heroAllowed && fits.length > 0 && nextHeroIn <= 0) {
         const hero = dealSingle(key, singles, heroPool);
-        pushPage(hero, queue.splice(0, 1));
+        pushPage(hero, takeHero(queue));
         // ADAPTIVE cadence (set AFTER pushPage — its natural-single reset would
         // otherwise max() this away): a THIN multi pool (2 layouts) can only
         // alternate A/B between heroes, so heroes must come often (every 2–4

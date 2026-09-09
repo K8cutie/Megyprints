@@ -46,6 +46,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@sentry/react": "^10.63.0",
     "@supabase/supabase-js": "^2.106.2",
+    "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow-models/mobilenet": "^2.1.1",
     "@tensorflow/tfjs": "^4.22.0",
     "class-variance-authority": "^0.7.1",

@@ -23,6 +23,12 @@ import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
 import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, type BoxContentOptions } from './generateAlbum';
+// v2 · fit-to-layout (branch): subject boxes gathered at upload, handed to the
+// engine at generation. With the flag off nothing is gathered and the engine
+// runs exactly as v1.
+import { queueSubject, whenSubjectsReady, subjectBoxesByIndex, heroScoresByIndex, installV2Debug } from '../../lib/v2/subjectBox';
+import { v2FitEnabled } from '../../lib/v2/flags';
+import type { Rect } from '../../lib/v2/fit';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
@@ -1127,6 +1133,9 @@ export function useBuilderState(): BuilderActions {
       pendingMeasureRef.current.add(task);
       void task.catch(() => { /* a failed measure must not block generation */ })
         .finally(() => pendingMeasureRef.current.delete(task));
+      // v2: find the subject in the background while the customer keeps
+      // uploading and designing. Two at a time; results cached by photo id.
+      if (v2FitEnabled()) queueSubject(photo.id, photo.previewUrl);
     }
 
     return { added: freshFiles.length, skipped: fileArray.length - freshFiles.length };
@@ -1236,6 +1245,11 @@ export function useBuilderState(): BuilderActions {
     }
   }, []);
 
+  // v2 measurement hook for the preview: `__megyV2.squareUnlock(1.5)` etc.
+  useEffect(() => {
+    installV2Debug(() => uploadedPhotosRef.current.map((p) => ({ id: p.id, url: p.previewUrl, width: p.width, height: p.height })));
+  }, []);
+
   const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean }) => {
     // NEVER lay out unmeasured photos. Uploads are added optimistically at 0×0
     // and measured in the background, so generating straight after a big upload
@@ -1266,7 +1280,15 @@ export function useBuilderState(): BuilderActions {
     // has once the wait budget is spent — the rest keeps landing in the cache
     // for the finish-line sweep. Styling mirrors setBoxText's defaults so a
     // dealt quote ≡ a QuotePickerModal pick.
-    let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase });
+    // v2: give the engine each photo's subject box + hero score. Waits for
+    // background detection up to a short budget; whatever is still unknown
+    // follows v1 rules this time and lands in the cache for the next.
+    let v2opts: { subjects?: Record<number, Rect>; heroScores?: Record<number, number> } = {};
+    if (v2FitEnabled()) {
+      await whenSubjectsReady(photos.map((p) => ({ id: p.id, url: p.previewUrl })), 10_000);
+      v2opts = { subjects: subjectBoxesByIndex(photos), heroScores: heroScoresByIndex(photos) };
+    }
+    let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase, ...v2opts });
     const quoteTheme = THEMES[selectedTemplate];
     const quotePool = await ensureThemeQuotes(currentAlbumTheme(), countAlbumBoxes(newPages), { budgetMs: 12_000 });
     const boxContent: BoxContentOptions = {
