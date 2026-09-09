@@ -1,0 +1,77 @@
+# Verification gate for main.
+#
+# Every pull request into main — and every push to main — must pass the unit
+# suite, the app typecheck and a production build before it can merge. Branch
+# protection on main lists the `verify` job as a required status check, so a
+# red run blocks the merge button; nothing reaches main on faith.
+#
+# Mirrors the local commands exactly (npm test / tsc / npm run build) so a green
+# check here means the same thing as a green run on the developer's machine.
+
+name: Verify
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Typecheck (app)
+        run: npx tsc --noEmit -p tsconfig.app.json
+
+      - name: Production build
+        run: npm run build
+
+      # A PR that adds a migration is not wrong, but it must be a deliberate act:
+      # v2 work is UI/engine only, and a migration slipping in with it would apply
+      # to production the next time someone runs `npm run db:push`. Surface it
+      # loudly in the job summary so the reviewer cannot miss it.
+      - name: Flag database migrations in this change
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- supabase/migrations || true)
+          if [ -n "$CHANGED" ]; then
+            {
+              echo "## ⚠️ This PR adds or changes database migrations"
+              echo
+              echo "Applying them is a separate, deliberate step (\`npm run db:push\` from main). Confirm this is intended before merging."
+              echo
+              echo '```'
+              echo "$CHANGED"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::This PR touches supabase/migrations — see the job summary."
+          else
+            echo "No migration changes in this PR." >> "$GITHUB_STEP_SUMMARY"
+          fi
