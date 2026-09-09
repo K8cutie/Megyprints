@@ -3,6 +3,7 @@ import {
   priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, perPageRate,
   qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE,
   hostingTiersOf, hostingTermCharge, includedHostingYears, DEFAULT_HOSTING_TIERS,
+  hdMemoriesPriceOf, hdMemoriesCharge,
   MIN_PAGES, SIZE_LABELS,
   type Binding, type PricingModel,
 } from './pricing';
@@ -24,6 +25,7 @@ const MODEL: PricingModel = {
   price_multiple: 3,
   hosting_reserve: 50,
   hosting_tiers: DEFAULT_HOSTING_TIERS,
+  hd_memories_price: 49,
   sizes: {
     '6x4':    { pps: 16, hb: 250, surcharge: 0 },
     '8x6':    { pps: 4,  hb: 350, surcharge: 0 },
@@ -240,6 +242,53 @@ describe('hosting terms — 5 included, 10/15/20 paid (owner, 2026-09-09)', () =
     const b = priceBreakdown(schedule, '8x8', 'hard', 80, 9, 20);
     expect(b.total).toBe(priceOf(schedule, '8x8', 'hard', 80) + 2 * EXTRA_QR_RATE + 199);
     expect(b.items).toHaveLength(4); // album, extra pages, QR add-on, term
+  });
+});
+
+describe('HD memories — one-time 1080p upgrade (owner, 2026-09-10)', () => {
+  it('bills the flat price once, and ONLY when the album actually carries memories', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    expect(hdMemoriesPriceOf(schedule)).toBe(49);
+    expect(hdMemoriesCharge(schedule, true, 3)).toBe(49);
+    expect(hdMemoriesCharge(schedule, true, 12)).toBe(49);   // flat, not per memory
+    expect(hdMemoriesCharge(schedule, true, 0)).toBe(0);     // HD flag, no memories
+    expect(hdMemoriesCharge(schedule, false, 3)).toBe(0);
+  });
+
+  it('a pre-0032 schedule offers no upgrade and can never bill for one', () => {
+    expect(hdMemoriesPriceOf({})).toBe(0);
+    expect(hdMemoriesCharge({}, true, 7)).toBe(0);
+    expect(hdMemoriesPriceOf({ hd_memories_price: 'free' })).toBe(0);
+    expect(hdMemoriesPriceOf({ hd_memories_price: -5 })).toBe(0);
+  });
+
+  it('adds ONE line only when charged, and every line still sums to the total', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    for (const size of SIZE_KEYS)
+      for (const binding of BINDINGS)
+        for (const pages of PAGE_COUNTS)
+          for (const qr of [0, 3, 9])
+            for (const hd of [false, true]) {
+              const b = priceBreakdown(schedule, size, binding, pages, qr, null, hd);
+              expect(b.total).toBe(priceOf(schedule, size, binding, pages) + qrMemoryCharge(qr) + hdMemoriesCharge(schedule, hd, qr));
+              expect(b.items.reduce((s, i) => s + i.amount, 0)).toBe(b.total);
+              expect(b.items.filter((i) => i.label.startsWith('HD memories'))).toHaveLength(hd && qr > 0 ? 1 : 0);
+            }
+  });
+
+  it('stacks with the QR add-on and the hosting term without double-counting', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    const b = priceBreakdown(schedule, '8x8', 'hard', 80, 9, 20, true);
+    expect(b.total).toBe(priceOf(schedule, '8x8', 'hard', 80) + 2 * EXTRA_QR_RATE + 199 + 49);
+    expect(b.items).toHaveLength(5); // album, extra pages, QR add-on, term, HD
+  });
+
+  it('omitting the HD flag keeps every pre-0032 price byte-identical', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    for (const size of SIZE_KEYS)
+      for (const pages of PAGE_COUNTS)
+        expect(priceBreakdown(schedule, size, 'hard', pages, 7, 10))
+          .toEqual(priceBreakdown(schedule, size, 'hard', pages, 7, 10, false));
   });
 });
 

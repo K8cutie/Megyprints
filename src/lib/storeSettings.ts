@@ -108,6 +108,15 @@ export async function setHostingTiers(tiers: { years: number; price: number }[])
   return null;
 }
 
+/** Owner-only (definer RPC). Sets the one-time HD memory upgrade price. */
+export async function setHdMemoriesPrice(next: number): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_hd_memories_price', { p_amount: Math.round(next) });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
 /** Owner-only. The raw cost model behind the schedule, for the admin Pricing
  *  panel. Rejected by the database for anyone else, so a non-owner reaching this
  *  gets an error rather than the figures. */

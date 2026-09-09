@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   clipExtFor, clipMimeFor, clipObjectPath, publicClipUrl, isHostedClipUrl, checkClipMeta,
-  MAX_CLIP_BYTES, MAX_CLIP_SECONDS, CLIP_BUCKET,
+  MAX_CLIP_BYTES, MAX_INPUT_BYTES, MAX_CLIP_SECONDS, CLIP_BUCKET,
 } from './memoryClips';
+import { targetDimensions, transcodeSupported, QUALITY_TARGETS } from './videoTranscode';
 
 /* ══════════════════════════════════════════════════════════════════════════
    HOSTED MEMORY CLIPS — the pure half (caps, naming, URLs).
@@ -67,21 +68,78 @@ describe('public clip URL ↔ resolver recognition', () => {
 });
 
 describe('caps', () => {
-  it('owner caps: 60 seconds, 100 MB', () => {
-    expect(MAX_CLIP_SECONDS).toBe(60);
+  it('owner caps (2026-09-10): 2 minutes, a generous 400 MB source, 100 MB uploaded', () => {
+    // Real memory clips run 30s-2min, so 60s cut off the top half of the range.
+    expect(MAX_CLIP_SECONDS).toBe(120);
+    // The source cap is generous because we re-encode; the OUTPUT is what has
+    // to fit the bucket's object limit.
+    expect(MAX_INPUT_BYTES).toBe(400 * 1024 * 1024);
     expect(MAX_CLIP_BYTES).toBe(100 * 1024 * 1024);
+    expect(MAX_INPUT_BYTES).toBeGreaterThan(MAX_CLIP_BYTES);
   });
-  it('accepts a clip inside both caps, tolerates an unreadable duration, rejects over either cap or wrong type', () => {
+
+  it('accepts ordinary phone video that the OLD 100 MB source cap rejected', () => {
+    // A 2-minute 1080p recording (~180 MB) and a 60-second 4K one (~350 MB)
+    // both used to bounce with no way for the customer to fix it.
+    expect(checkClipMeta({ size: 180e6, durationSec: 120, ext: 'mov' })).toEqual({ ok: true });
+    expect(checkClipMeta({ size: 350e6, durationSec: 60, ext: 'mp4' })).toEqual({ ok: true });
+  });
+
+  it('accepts inside the caps, tolerates an unreadable duration, rejects past either cap or the wrong type', () => {
     expect(checkClipMeta({ size: 30e6, durationSec: 45, ext: 'mp4' })).toEqual({ ok: true });
     expect(checkClipMeta({ size: 30e6, durationSec: null, ext: 'mov' })).toEqual({ ok: true });
-    expect(checkClipMeta({ size: 30e6, durationSec: 60.4, ext: 'mp4' })).toEqual({ ok: true }); // rounding slack
-    const tooLong = checkClipMeta({ size: 30e6, durationSec: 61, ext: 'mp4' });
+    expect(checkClipMeta({ size: 30e6, durationSec: 120.4, ext: 'mp4' })).toEqual({ ok: true }); // rounding slack
+    const tooLong = checkClipMeta({ size: 30e6, durationSec: 121, ext: 'mp4' });
     expect(tooLong.ok).toBe(false);
-    if (!tooLong.ok) expect(tooLong.error).toMatch(/60 seconds/);
-    const tooBig = checkClipMeta({ size: MAX_CLIP_BYTES + 1, durationSec: 10, ext: 'mp4' });
+    if (!tooLong.ok) expect(tooLong.error).toMatch(/2 minutes/);
+    const tooBig = checkClipMeta({ size: MAX_INPUT_BYTES + 1, durationSec: 10, ext: 'mp4' });
     expect(tooBig.ok).toBe(false);
-    if (!tooBig.ok) expect(tooBig.error).toMatch(/100 MB/);
+    if (!tooBig.ok) expect(tooBig.error).toMatch(/too large/);
     const wrong = checkClipMeta({ size: 10, durationSec: 10, ext: null });
     expect(wrong.ok).toBe(false);
+  });
+});
+
+describe('transcode targets — standard 720p included, HD 1080p paid', () => {
+  it('caps the long AND short edge per tier, so portrait stays portrait', () => {
+    expect(targetDimensions(3840, 2160, 'hd')).toEqual({ width: 1920, height: 1080 });
+    expect(targetDimensions(2160, 3840, 'hd')).toEqual({ width: 1080, height: 1920 });
+    expect(targetDimensions(3840, 2160, 'standard')).toEqual({ width: 1280, height: 720 });
+    expect(targetDimensions(2160, 3840, 'standard')).toEqual({ width: 720, height: 1280 });
+    expect(targetDimensions(2160, 2160, 'hd')).toEqual({ width: 1080, height: 1080 });
+  });
+
+  it('never upscales a small source', () => {
+    expect(targetDimensions(640, 480, 'hd')).toEqual({ width: 640, height: 480 });
+    expect(targetDimensions(1280, 720, 'hd')).toEqual({ width: 1280, height: 720 });
+  });
+
+  it('always returns EVEN dimensions — H.264 cannot encode odd ones', () => {
+    for (const [w, h] of [[1921, 1081], [1079, 1919], [999, 555], [4001, 2251]]) {
+      for (const q of ['standard', 'hd'] as const) {
+        const d = targetDimensions(w, h, q);
+        expect(d.width % 2, `${w}x${h} ${q}`).toBe(0);
+        expect(d.height % 2, `${w}x${h} ${q}`).toBe(0);
+      }
+    }
+  });
+
+  it('degenerate input yields no target rather than a crash', () => {
+    expect(targetDimensions(0, 0, 'hd')).toEqual({ width: 0, height: 0 });
+    expect(targetDimensions(NaN, 100, 'hd')).toEqual({ width: 0, height: 0 });
+  });
+
+  it('HD really is the bigger tier, and both stay inside the bucket limit', () => {
+    expect(QUALITY_TARGETS.hd.shortEdge).toBeGreaterThan(QUALITY_TARGETS.standard.shortEdge);
+    expect(QUALITY_TARGETS.hd.bitrate).toBeGreaterThan(QUALITY_TARGETS.standard.bitrate);
+    // Worst case: a full 2-minute clip plus audio, against the 100 MB object cap.
+    for (const q of ['standard', 'hd'] as const) {
+      const bytes = ((QUALITY_TARGETS[q].bitrate + 128_000) / 8) * MAX_CLIP_SECONDS;
+      expect(bytes, `${q} worst case`).toBeLessThan(MAX_CLIP_BYTES);
+    }
+  });
+
+  it('reports no transcode support in a DOM-less environment (callers keep the original)', () => {
+    expect(transcodeSupported()).toBe(false);
   });
 });

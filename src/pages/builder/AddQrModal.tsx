@@ -6,11 +6,12 @@ import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination, videoEm
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
 import {
   hostedMemoriesEnabled, validateClipFile, stageClip, getStagedClip, removeStagedClip, publicClipUrl,
-  MAX_CLIP_SECONDS, MAX_CLIP_BYTES, type ClipExt,
+  listStagedCodes, currentClipQuality, setClipQuality, QUALITY_TARGETS,
+  MAX_CLIP_SECONDS, type ClipExt, type ClipQuality,
 } from '../../lib/memoryClips';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
-import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears } from '../../lib/pricing';
+import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
 import { getPriceSchedule } from '../../lib/storeSettings';
 
 const CORNER_LABELS: Record<QrCorner, string> = {
@@ -56,7 +57,21 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   const [checking, setChecking] = useState(false);
   const [stagedUrl, setStagedUrl] = useState<string | null>(null); // local blob of a not-yet-uploaded clip
   const inputRef = useRef<HTMLInputElement>(null);
-  const includedYears = includedHostingYears(getPriceSchedule() ?? {});
+  const schedule = getPriceSchedule();
+  const includedYears = includedHostingYears(schedule ?? {});
+  const hdPrice = hdMemoriesPriceOf(schedule ?? {});
+
+  // Quality tier: offered with the album's FIRST memory, then locked — each
+  // clip is encoded straight to its target, so there is no stored original to
+  // re-encode from once one is staged. null = still counting.
+  const [quality, setQuality] = useState<ClipQuality>(() => currentClipQuality());
+  const [tierLocked, setTierLocked] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void listStagedCodes().then((codes) => { if (alive) setTierLocked(codes.length > 0); });
+    return () => { alive = false; };
+  }, []);
+  const offerTier = !initial && tierLocked === false && hdPrice > 0;
 
   // Preview the PICKED file (object URL), revoked on change/unmount.
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
@@ -105,6 +120,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
         await stageClip({
           code: initial.code, ext: meta.ext, blob: file, size: file.size,
           durationSec: meta.durationSec, name: file.name,
+          quality: prior?.quality ?? currentClipQuality(),
           replace: initial.kind !== 'clip' || !!prior?.uploaded || !prior,
         });
         onSave({ ...initial, kind: 'clip', clipExt: meta.ext, destination: publicClipUrl(initial.code, meta.ext) });
@@ -116,7 +132,12 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
       for (let i = 0; i < 5 && (await getStagedClip(code)); i++) code = mintCode();
       const memUrl = memoryUrl(code);
       const qrPngDataUrl = await generateQrPngDataUrl(memUrl);
-      await stageClip({ code, ext: meta.ext, blob: file, size: file.size, durationSec: meta.durationSec, name: file.name });
+      // Lock the album's tier with its first memory (a no-op afterwards).
+      if (offerTier) setClipQuality(quality);
+      await stageClip({
+        code, ext: meta.ext, blob: file, size: file.size, durationSec: meta.durationSec, name: file.name,
+        quality: offerTier ? quality : currentClipQuality(),
+      });
       onSave({
         code, destination: publicClipUrl(code, meta.ext), qrPngDataUrl, memoryUrl: memUrl,
         createdAt: Date.now(), kind: 'clip', clipExt: meta.ext,
@@ -152,7 +173,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
               <p className="text-sm font-bold text-[#2D2D2D]">Pick a video of this moment 🎬</p>
               <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
                 It plays the instant anyone scans the QR printed on this page — no app, no account.
-                Up to {MAX_CLIP_SECONDS} seconds, {MAX_CLIP_BYTES / 1024 / 1024} MB.
+                Up to {Math.round(MAX_CLIP_SECONDS / 60)} minutes — we shrink it for you, so any phone video works.
               </p>
               <p className="text-[11px] text-[#9B8B7A] mt-1.5 flex items-center gap-1">
                 <Clock size={11} className="shrink-0" />
@@ -176,6 +197,34 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
                 Replace it with a video and it will play right on the page — same QR, no reprint.
               </div>
             ) : null
+          )}
+
+          {/* Quality tier - first memory only, then locked for the album */}
+          {offerTier && (
+            <div>
+              <label className="text-xs text-[#6B6B6B] mb-1.5 block">Video quality for this album</label>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Memory video quality">
+                {(['standard', 'hd'] as ClipQuality[]).map((q) => {
+                  const active = quality === q;
+                  return (
+                    <button key={q} type="button" role="radio" aria-checked={active}
+                      onClick={() => setQuality(q)}
+                      className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-[#E8A598] bg-[#FFF3EC]' : 'border-[#E8E8E8] hover:border-[#F4C2A1]'}`}>
+                      <div className="text-sm font-semibold text-[#2D2D2D]">
+                        {q === 'hd' ? 'HD' : 'Standard'} {QUALITY_TARGETS[q].label}
+                      </div>
+                      <div className="text-[11px] text-[#8B6F47]">{q === 'hd' ? `+PHP ${hdPrice} once` : 'Included'}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-[#9B9B9B] mt-1">Applies to every memory in this album, for its whole hosting term.</p>
+            </div>
+          )}
+          {!initial && tierLocked === true && hdPrice > 0 && (
+            <p className="text-[11px] text-[#9B8B7A]">
+              Quality: <b className="text-[#8B6F47]">{quality === 'hd' ? `HD ${QUALITY_TARGETS.hd.label}` : `Standard ${QUALITY_TARGETS.standard.label}`}</b> - set with your first memory.
+            </p>
           )}
 
           {/* Picker */}

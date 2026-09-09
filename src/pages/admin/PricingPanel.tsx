@@ -10,7 +10,7 @@ import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
 import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
-import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers } from '../../lib/storeSettings';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
 
@@ -43,6 +43,12 @@ export default function PricingPanel() {
   const [savedReserve, setSavedReserve] = useState(false);
   const [reserveErr, setReserveErr] = useState('');
 
+  // ── Persisted HD memory upgrade price (one-time, per album) ──
+  const [hdPrice, setHdPrice] = useState(49);
+  const [savingHd, setSavingHd] = useState(false);
+  const [savedHd, setSavedHd] = useState(false);
+  const [hdErr, setHdErr] = useState('');
+
   // ── Persisted hosting TERMS (5/10/15/20 yrs; first = included) ──
   const [tiers, setTiers] = useState<{ years: number; price: number }[]>([]);
   const [savingTiers, setSavingTiers] = useState(false);
@@ -61,7 +67,7 @@ export default function PricingPanel() {
     setDisabledSizesState(getDisabledSizes());
     void loadOwnerPricingModel().then((m) => {
       if (!alive) return;
-      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); }
+      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); setHdPrice(Number(m.hd_memories_price ?? 0)); }
       else setModelErr('Could not load the cost model. Owner sign-in is required to view pricing.');
     });
     return () => { alive = false; };
@@ -85,6 +91,17 @@ export default function PricingPanel() {
     else {
       setModel((m) => (m ? { ...m, hosting_reserve: Math.round(reserve) } : m));
       setSavedReserve(true); setTimeout(() => setSavedReserve(false), 2500);
+    }
+  };
+
+  const saveHd = async () => {
+    setSavingHd(true); setSavedHd(false); setHdErr('');
+    const err = await setHdMemoriesPrice(hdPrice);
+    setSavingHd(false);
+    if (err) setHdErr(err);
+    else {
+      setModel((m) => (m ? { ...m, hd_memories_price: Math.round(hdPrice) } : m));
+      setSavedHd(true); setTimeout(() => setSavedHd(false), 2500);
     }
   };
 
@@ -204,6 +221,33 @@ export default function PricingPanel() {
           </div>
           {savedReserve && <p className="text-xs text-[#2E7D4A] mt-2 font-semibold">✓ Saved — every album now carries a ₱{model.hosting_reserve} hosting reserve.</p>}
           {reserveErr && <p className="text-xs text-[#B0503A] mt-2">Couldn't save: {reserveErr}</p>}
+        </div>
+
+        {/* HD memories - one-time upgrade from the included 720p to 1080p */}
+        <div className="mt-5 pt-5 border-t border-[#EAE3DA]">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="min-w-[220px]">
+              <h4 className="font-semibold text-[#2D2D2D]">HD memories</h4>
+              <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
+                One-time upgrade from the included <b>720p</b> to <b>1080p</b> for every memory video in an album.
+                The extra hosting cost is only about {peso(14)} over ten years, so this is a value tier - price it like one.
+              </p>
+            </div>
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-[#9B9B9B] block mb-1">Price / album</label>
+                <input type="number" min={0} max={100000} step={1} value={hdPrice}
+                  onChange={(e) => { setHdPrice(+e.target.value); setSavedHd(false); }}
+                  className="w-28 border border-[#E8E8E8] rounded-lg px-3 py-2 font-mono text-sm tabular-nums" />
+              </div>
+              <button onClick={saveHd} disabled={savingHd || hdPrice === model.hd_memories_price}
+                className="px-4 py-2 rounded-lg bg-[#2D2D2D] text-white text-sm font-semibold disabled:opacity-40">
+                {savingHd ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+          {savedHd && <p className="text-xs text-[#2E7D4A] mt-2 font-semibold">Saved - HD memories now cost {peso(model.hd_memories_price)}.</p>}
+          {hdErr && <p className="text-xs text-[#B0503A] mt-2">Couldn't save: {hdErr}</p>}
         </div>
 
         {/* Hosting TERMS — sold at checkout; the shortest is the included term */}

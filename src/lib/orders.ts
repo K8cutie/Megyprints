@@ -44,6 +44,8 @@ export async function createOrderFromLatestAlbum(opts: {
   /** Chosen memory-hosting term (0030). Stored for the operator + stamped on
    *  the album's memory rows at checkout. */
   hostingYears?: number | null;
+  /** HD (1080p) memory upgrade chosen for this album (0032). */
+  hdMemories?: boolean;
 }): Promise<CreatedOrder> {
   // 1. Load the latest album to freeze into the order.
   const { data: albums, error: albErr } = await supabase
@@ -105,6 +107,7 @@ export async function createOrderFromLatestAlbum(opts: {
       ship_street: normalizeStreet(addr.street),
       ship_zip: addr.zip.trim(),
       hosting_years: opts.hostingYears ?? null,
+      hd_memories: !!opts.hdMemories,
       status_history: [{ status: 'pending_payment', at: new Date().toISOString() }],
     })
     .select('id, order_number, status')

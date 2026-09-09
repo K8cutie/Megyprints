@@ -53,6 +53,9 @@ export interface PricingModel {
    *  first tier is the included term (price 0); longer terms are flat add-ons,
    *  never multiplied. */
   hosting_tiers: HostingTier[];
+  /** One-time HD (1080p) memory upgrade, flat (owner, 2026-09-10; migration
+   *  0032). Standard 720p is included; HD is a value tier, not cost recovery. */
+  hd_memories_price: number;
   sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
 }
 
@@ -76,6 +79,8 @@ export interface PriceSchedule {
   hosting_reserve?: number;
   /** Hosting terms (see PricingModel). Absent on a pre-0030 schedule. */
   hosting_tiers?: HostingTier[];
+  /** HD memory upgrade price. Absent on a pre-0032 schedule → free/no offer. */
+  hd_memories_price?: number;
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
 }
@@ -129,6 +134,19 @@ export function hostingTermCharge(src: { hosting_tiers?: unknown }, years: numbe
   if (years == null) return 0;
   const tier = hostingTiersOf(src).find((t) => t.years === years);
   return tier ? tier.price : 0;
+}
+
+/** The HD upgrade price, tolerant of a pre-0032 schedule (no field → 0, which
+ *  also means the upgrade is not offered). */
+export function hdMemoriesPriceOf(src: { hd_memories_price?: unknown }): number {
+  const n = Number(src.hd_memories_price);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+}
+
+/** Pesos owed for the HD upgrade on this album. Charged only when the album
+ *  actually carries memories — an HD flag with no QR memories bills nothing. */
+export function hdMemoriesCharge(src: { hd_memories_price?: unknown }, hd: boolean, qrMemories: number): number {
+  return hd && qrMemories > 0 ? hdMemoriesPriceOf(src) : 0;
 }
 
 /** The flat reserve, tolerant of a pre-0029 schedule (no field → 0). */
@@ -188,6 +206,8 @@ export function priceBreakdown(
   qrMemories = 0,
   /** Chosen hosting term in years (see hosting_tiers). Omitted = included term. */
   hostingYears: number | null = null,
+  /** HD (1080p) memories chosen for this album. Omitted = standard 720p. */
+  hdMemories = false,
 ): PriceBreakdown {
   const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
   const sizeLabel = SIZE_LABELS[size];
@@ -195,7 +215,8 @@ export function priceBreakdown(
   const printTotal = priceOf(schedule, size, binding, pages);
   const qrCharge = qrMemoryCharge(qrMemories);
   const termCharge = hostingTermCharge(schedule, hostingYears);
-  const total = printTotal + qrCharge + termCharge;
+  const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
+  const total = printTotal + qrCharge + termCharge + hdCharge;
 
   const extra = Math.max(0, pages - minPages);
   const items: PriceLine[] = [];
@@ -229,6 +250,10 @@ export function priceBreakdown(
       label: `Memories stay live · ${hostingYears} years${included ? ` (${included} included)` : ''}`,
       amount: termCharge,
     });
+  }
+
+  if (hdCharge > 0) {
+    items.push({ label: 'HD memories · 1080p, one time', amount: hdCharge });
   }
 
   return { items, total };
@@ -292,6 +317,7 @@ export function scheduleFrom(
     sheet_rate: model.sheet_cost * multiple,
     hosting_reserve: model.hosting_reserve,
     hosting_tiers: model.hosting_tiers,
+    hd_memories_price: model.hd_memories_price,
     disabled_sizes: disabledSizes,
     sizes,
   };

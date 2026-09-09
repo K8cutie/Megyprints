@@ -34,6 +34,8 @@ export interface AdminOrder {
   page_count: number;
   /** Memory-hosting term the customer bought (0030); null on older orders. */
   hosting_years?: number | null;
+  /** HD (1080p) memory upgrade bought (0032). */
+  hd_memories?: boolean | null;
   ship_name: string | null;
   ship_phone: string | null;
   ship_address: string | null;

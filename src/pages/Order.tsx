@@ -10,8 +10,8 @@ import { createOrderFromLatestAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } 
 import { getPendingPrintJob } from '../lib/printQueue';
 import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
-import { uploadStagedClips, removeStagedClip } from '../lib/memoryClips';
+import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { uploadStagedClips, removeStagedClip, currentClipQuality } from '../lib/memoryClips';
 import { updateMemoryDestination } from '../lib/qrMemories';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
@@ -71,6 +71,9 @@ export default function Order() {
   // Every QR on the album — both homes — for the checkout belt + clip uploads.
   const allQrFills = (job?.pages ?? []).flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
   const clipCodes = allQrFills.filter((f) => f?.kind === 'clip').map((f) => f!.code);
+  // HD (1080p) memories — chosen with the first memory in the builder, priced
+  // here. Standard 720p is included, so this bills only when HD was picked.
+  const hdMemories = qrCount > 0 && currentClipQuality() === 'hd';
   // Memory-hosting TERM (0030): the included term unless the customer upgrades.
   const [hostingYears, setHostingYears] = useState<number | null>(null);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
@@ -91,10 +94,11 @@ export default function Order() {
   const tiers = schedule ? hostingTiersOf(schedule) : [];
   const includedYears = schedule ? includedHostingYears(schedule) : null;
   const effectiveYears = qrCount > 0 ? (hostingYears ?? includedYears) : null;
+  const hdPrice = schedule ? hdMemoriesPriceOf(schedule) : 0;
 
   // Cheap arithmetic — recomputed per render on purpose (schedule is read fresh).
   const breakdown = schedule
-    ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount, effectiveYears)
+    ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount, effectiveYears, hdMemories)
     : { items: [], total: 0 };
   const totalPrice = breakdown.total;
   // Loaded AND priceable. `settingsReady` alone only means the load settled — it
@@ -154,6 +158,7 @@ export default function Order() {
           shipping: { name, phone, address },
           amount: totalPrice,
           hostingYears: effectiveYears,
+          hdMemories,
         });
         createdOrderRef.current = {
           id: created.id, order_number: created.order_number,
@@ -185,8 +190,11 @@ export default function Order() {
       let replacedCodes: string[] = [];
       if (clipCodes.length) {
         setPrepMsg('Uploading your memory videos…');
-        const r = await uploadStagedClips(clipCodes, (d, t) => {
-          if (d < t) setPrepMsg(`Uploading memory video ${d + 1} of ${t}…`);
+        const r = await uploadStagedClips(clipCodes, (d, t, phase) => {
+          if (d >= t) return;
+          setPrepMsg(phase === 'compress'
+            ? `Preparing memory video ${d + 1} of ${t}…`
+            : `Uploading memory video ${d + 1} of ${t}…`);
         });
         replacedCodes = r.replaced;
       }
@@ -492,6 +500,9 @@ export default function Order() {
                 <p className="text-xs text-[#8B6F47] leading-snug">
                   <b className="text-[#2D2D2D]">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
                   {qrCount > 0 && <> This album has <b className="text-[#2D2D2D]">{qrCount}</b>.</>}
+                  {qrCount > 0 && hdPrice > 0 && (
+                    <> Quality: <b className="text-[#2D2D2D]">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>
+                  )}
                 </p>
               </div>
               {qrCount > 0 && tiers.length > 0 && (
