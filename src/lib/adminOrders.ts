@@ -32,6 +32,8 @@ export interface AdminOrder {
   material: string | null;
   cover: string | null;
   page_count: number;
+  /** Memory-hosting term the customer bought (0030); null on older orders. */
+  hosting_years?: number | null;
   ship_name: string | null;
   ship_phone: string | null;
   ship_address: string | null;
@@ -80,5 +82,17 @@ export type OrderPatch = Partial<Pick<AdminOrder, 'status' | 'amount' | 'payment
  *  on failure, or null on success. */
 export async function updateOrder(id: string, patch: OrderPatch): Promise<string | null> {
   const { error } = await supabase.from('orders').update(patch).eq('id', id);
-  return error ? error.message : null;
+  if (error) return error.message;
+  // Paid → the customer's chosen memory-hosting term takes effect (0030). The
+  // client could only stamp the included term; this extends each clip on the
+  // order's album to hosting_years. Owner-gated in SQL; best-effort here so a
+  // hiccup never un-marks a paid order (the panel shows the failure).
+  if (patch.payment_status === 'paid') {
+    const { error: termErr } = await supabase.rpc('apply_order_hosting_term', { p_order_id: id });
+    if (termErr) {
+      console.error('apply_order_hosting_term failed:', termErr.message);
+      return `Marked paid, but the memory hosting term could not be applied (${termErr.message}). Re-run Mark paid or apply it in SQL.`;
+    }
+  }
+  return null;
 }

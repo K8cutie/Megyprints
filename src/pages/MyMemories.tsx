@@ -1,7 +1,20 @@
-import { useEffect, useState } from 'react';
-import { QrCode, Copy, Check, Trash2, Loader2, ExternalLink } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { QrCode, Copy, Check, Trash2, Loader2, ExternalLink, Upload, Clock } from 'lucide-react';
 import { listMemories, updateMemoryDestination, removeMemory, type QrMemoryRow } from '../lib/qrMemories';
 import { memoryUrl, generateQrPngDataUrl, validateDestination } from '../lib/qrMemory';
+import { validateClipFile, uploadClip, publicClipUrl, isHostedClipUrl } from '../lib/memoryClips';
+
+const fmtMonth = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+};
+const renewCodeFromHash = (): string | null => {
+  try {
+    const q = window.location.hash.split('?')[1] || '';
+    const c = new URLSearchParams(q).get('renew') || '';
+    return /^[a-z2-9]{4,32}$/.test(c) ? c : null;
+  } catch { return null; }
+};
 
 /* "My Memories" — manage the QR living-memories tied to your printed albums.
    The printed QR never changes; here you re-point where it goes (relink) —
@@ -10,6 +23,7 @@ export default function MyMemories() {
   const [rows, setRows] = useState<QrMemoryRow[] | null>(null);
   const [err, setErr] = useState('');
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [renewCode] = useState<string | null>(() => renewCodeFromHash());
 
   useEffect(() => {
     let alive = true;
@@ -38,6 +52,12 @@ export default function MyMemories() {
         Each QR printed in your album points here. Re-point it anytime — <span className="font-medium text-[#8B6F47]">the printed code stays the same</span>, the video updates. No reprint.
       </p>
 
+      {renewCode && (
+        <div className="mb-4 rounded-xl border border-[#F4C2A1] bg-[#FFF3EC] px-4 py-3 text-sm text-[#8B6F47]">
+          <b className="text-[#2D2D2D]">Renew memory {renewCode}.</b> Renewals are handled by the Megy Prints team for now —
+          <a href="#/contact" className="underline font-semibold ml-1">message us</a> with this code and the term you want, and we'll extend it. Your video is kept safe meanwhile.
+        </div>
+      )}
       {err && <p className="text-sm text-red-500 mb-4">{err}</p>}
       {rows === null && !err && (
         <div className="flex items-center gap-2 text-sm text-[#9B9B9B] py-10 justify-center">
@@ -54,7 +74,7 @@ export default function MyMemories() {
       <div className="space-y-3">
         {rows?.map((row) => (
           <MemoryRow
-            key={row.code} row={row} thumb={thumbs[row.code]}
+            key={row.code} row={row} thumb={thumbs[row.code]} highlight={row.code === renewCode}
             onRemoved={() => setRows((rs) => rs?.filter((r) => r.code !== row.code) ?? null)}
           />
         ))}
@@ -63,14 +83,44 @@ export default function MyMemories() {
   );
 }
 
-function MemoryRow({ row, thumb, onRemoved }: { row: QrMemoryRow; thumb?: string; onRemoved: () => void }) {
+function MemoryRow({ row, thumb, highlight, onRemoved }: { row: QrMemoryRow; thumb?: string; highlight?: boolean; onRemoved: () => void }) {
   const url = memoryUrl(row.code);
   const [dest, setDest] = useState(row.destination);
+  /** What the row points at NOW (updates after a relink/replace without
+   *  mutating the prop). */
+  const [saved, setSaved] = useState(row.destination);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
-  const dirty = dest.trim() !== row.destination;
+  const [now] = useState(() => Date.now());
+  const dirty = dest.trim() !== saved;
+  const isClip = row.kind === 'clip' || isHostedClipUrl(saved);
+  const expired = !!row.expires_at && new Date(row.expires_at).getTime() < now;
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Hosted clip: REPLACE the video in place — same code, same printed QR.
+  const replaceClip = async (f: File | null) => {
+    if (!f) return;
+    setSaving(true); setMsg(null);
+    try {
+      const v = await validateClipFile(f);
+      if (!v.ok) { setMsg({ text: v.error, ok: false }); return; }
+      await uploadClip(row.code, v.ext, f, { replace: true });
+      const next = publicClipUrl(row.code, v.ext);
+      if (next !== saved) {
+        const ok = await updateMemoryDestination(row.code, next);
+        if (!ok) { setMsg({ text: 'Uploaded, but could not re-point the QR. Try again.', ok: false }); return; }
+        setSaved(next); setDest(next);
+      }
+      setMsg({ text: 'Video replaced ✓ — same QR, new memory', ok: true });
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'Could not replace the video.', ok: false });
+    } finally {
+      setSaving(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   const save = async () => {
     const v = validateDestination(dest);
@@ -78,7 +128,7 @@ function MemoryRow({ row, thumb, onRemoved }: { row: QrMemoryRow; thumb?: string
     setSaving(true); setMsg(null);
     const ok = await updateMemoryDestination(row.code, v.url);
     setSaving(false);
-    if (ok) { setDest(v.url); row.destination = v.url; setMsg({ text: 'Re-pointed ✓ — same QR, new video', ok: true }); }
+    if (ok) { setDest(v.url); setSaved(v.url); setMsg({ text: 'Re-pointed ✓ — same QR, new video', ok: true }); }
     else setMsg({ text: 'Could not save. Try again.', ok: false });
   };
 
@@ -92,7 +142,7 @@ function MemoryRow({ row, thumb, onRemoved }: { row: QrMemoryRow; thumb?: string
   };
 
   return (
-    <div className="flex gap-4 bg-white rounded-2xl border border-[#F0F0F0] p-4">
+    <div className={`flex gap-4 bg-white rounded-2xl border p-4 ${highlight ? 'border-[#E8A598] ring-2 ring-[#F4C2A1]/50' : 'border-[#F0F0F0]'}`}>
       <div className="shrink-0 w-20 h-20 rounded-lg border border-[#E8E8E8] bg-white flex items-center justify-center overflow-hidden">
         {thumb ? <img src={thumb} alt="QR" className="w-full h-full object-contain" /> : <QrCode size={28} className="text-[#D4D4D4]" />}
       </div>
@@ -103,6 +153,21 @@ function MemoryRow({ row, thumb, onRemoved }: { row: QrMemoryRow; thumb?: string
             {copied ? <Check size={14} className="text-[#2E7D4A]" /> : <Copy size={14} />}
           </button>
         </div>
+        {row.expires_at && (
+          <p className={`text-[11px] mb-1.5 flex items-center gap-1 ${expired ? 'text-red-600 font-semibold' : 'text-[#8B6F47]'}`}>
+            <Clock size={11} /> {expired ? `Hosting ended ${fmtMonth(row.expires_at)} — renew to bring it back` : `Live until ${fmtMonth(row.expires_at)}`}
+          </p>
+        )}
+        {isClip ? (
+          <div>
+            <video src={saved} controls muted playsInline preload="metadata" className="w-full max-h-48 rounded-lg bg-black mb-2" />
+            <input ref={fileRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v" className="hidden" onChange={(e) => void replaceClip(e.target.files?.[0] ?? null)} />
+            <button onClick={() => fileRef.current?.click()} disabled={saving}
+              className="px-3 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Replace video
+            </button>
+          </div>
+        ) : (<>
         <label className="text-[11px] text-[#6B6B6B] block mb-1">Points to</label>
         <div className="flex gap-2">
           <input
@@ -112,12 +177,13 @@ function MemoryRow({ row, thumb, onRemoved }: { row: QrMemoryRow; thumb?: string
             inputMode="url" placeholder="https://youtu.be/…"
             className="flex-1 min-w-0 border border-[#E8E8E8] rounded-lg px-3 py-2 text-sm"
           />
-          <a href={row.destination} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center px-2 text-[#9B9B9B] hover:text-[#E8A598]" title="Open current"><ExternalLink size={16} /></a>
+          <a href={saved} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center px-2 text-[#9B9B9B] hover:text-[#E8A598]" title="Open current"><ExternalLink size={16} /></a>
           <button onClick={save} disabled={!dirty || saving}
             className="shrink-0 px-3 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
             {saving ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
           </button>
         </div>
+        </>)}
         {msg && <p className={`text-xs mt-1 ${msg.ok ? 'text-[#2E7D4A]' : 'text-red-500'}`}>{msg.text}</p>}
         <div className="flex items-center justify-between mt-2">
           <span className="text-[11px] text-[#9B9B9B]">{row.scan_count} scan{row.scan_count === 1 ? '' : 's'}</span>

@@ -1,12 +1,17 @@
-import { useMemo, useState } from 'react';
-import { X, Youtube, Trash2, Loader2, LogIn, Play } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { X, Youtube, Trash2, Loader2, LogIn, Play, Video, Upload, Clock } from 'lucide-react';
 import type { QrFill } from './types';
 import { QR_CORNERS, type QrCorner } from './pageTemplates';
 import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination, videoEmbedInfo } from '../../lib/qrMemory';
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
+import {
+  hostedMemoriesEnabled, validateClipFile, stageClip, getStagedClip, removeStagedClip, publicClipUrl,
+  MAX_CLIP_SECONDS, MAX_CLIP_BYTES, type ClipExt,
+} from '../../lib/memoryClips';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
-import { FREE_QR_MEMORIES, EXTRA_QR_RATE } from '../../lib/pricing';
+import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears } from '../../lib/pricing';
+import { getPriceSchedule } from '../../lib/storeSettings';
 
 const CORNER_LABELS: Record<QrCorner, string> = {
   tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right',
@@ -16,14 +21,8 @@ const CORNER_POS: Record<QrCorner, React.CSSProperties> = {
   bl: { bottom: 5, left: 5 }, br: { bottom: 5, right: 5 },
 };
 
-/* Add / edit a QR "living memory" for a template QR slot. New: mints a stable
-   code, generates a print-crisp QR encoding /m/:code, and returns the fill.
-   Edit: keeps the SAME code + printed QR image and only re-points the
-   destination — so the physical album never needs a reprint.
-   When `onCorner` is passed (the full-bleed memory-badge flow), a 4-corner
-   picker lets the user place the QR chip; `corner` is the current selection
-   (null = Auto, face-aware) and `allowAuto` shows the Auto option. */
-export default function AddQrModal({ initial, onSave, onRemove, onClose, corner, onCorner, allowAuto }: {
+export interface AddQrModalProps {
+  /** The fill currently in this box, if any — enables Replace/Remove wording. */
   initial: QrFill | null;
   onSave: (fill: QrFill) => void;
   onRemove: () => void;
@@ -31,123 +30,175 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose, corner,
   corner?: QrCorner | null;
   onCorner?: (corner: QrCorner | null) => void;
   allowAuto?: boolean;
-}) {
-  const { user } = useAuth();
-  const { openLogin } = useAuthModal();
-  const [url, setUrl] = useState(initial?.destination ?? '');
+}
+
+/* Add / edit a QR "living memory".
+   HOSTED (the product since 2026-09-09): the customer PICKS A VIDEO from their
+   phone. It is validated (≤60 s, ≤100 MB), previewed, staged locally under a
+   freshly minted code, and the QR is placed immediately — no link, no sign-in.
+   The clip uploads at checkout (where sign-in already lives) and the memory row
+   is created with the paid hosting term. Edit keeps the SAME code + printed QR:
+   replacing the video never needs a reprint.
+   LEGACY (only until migration 0030 is applied — hostedMemoriesEnabled() is
+   false): the previous paste-a-link flow, unchanged. */
+export default function AddQrModal(props: AddQrModalProps) {
+  return hostedMemoriesEnabled() ? <ClipModal {...props} /> : <LegacyLinkModal {...props} />;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HOSTED CLIP
+   ══════════════════════════════════════════════════════════════════════════ */
+function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allowAuto }: AddQrModalProps) {
+  const [file, setFile] = useState<File | null>(null);
+  const [meta, setMeta] = useState<{ ext: ClipExt; durationSec: number | null } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [stagedUrl, setStagedUrl] = useState<string | null>(null); // local blob of a not-yet-uploaded clip
+  const inputRef = useRef<HTMLInputElement>(null);
+  const includedYears = includedHostingYears(getPriceSchedule() ?? {});
 
-  // Live proof: the moment a valid YouTube/Vimeo link is entered, embed the real
-  // player so the user WATCHES the exact video their QR will open — no printing,
-  // no scanning needed to confirm it's attached. Autoplays muted (no surprise).
-  const embed = useMemo(() => videoEmbedInfo(url), [url]);
-  const previewSrc = embed
-    ? (embed.src.includes('player.vimeo.com')
-        ? `${embed.src}?autoplay=1&muted=1&title=0&byline=0&portrait=0`
-        : `${embed.src}?rel=0&playsinline=1&modestbranding=1&autoplay=1&mute=1`)
-    : '';
+  // Preview the PICKED file (object URL), revoked on change/unmount.
+  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  // Existing clip: staged locally (not yet uploaded) → play the local blob;
+  // otherwise it is in the bucket → play the public URL. Legacy link → none.
+  useEffect(() => {
+    if (!initial || initial.kind !== 'clip') return;
+    let alive = true;
+    let objUrl: string | null = null;
+    void getStagedClip(initial.code).then((c) => {
+      if (!alive || !c) return;
+      objUrl = URL.createObjectURL(c.blob);
+      setStagedUrl(objUrl);
+    });
+    return () => { alive = false; if (objUrl) URL.revokeObjectURL(objUrl); };
+  }, [initial]);
+  const currentUrl = initial?.kind === 'clip' ? (stagedUrl ?? initial.destination) : null;
+
+  const pick = async (f: File | null) => {
+    setError('');
+    setMeta(null);
+    setFile(null);
+    if (!f) return;
+    setChecking(true);
+    try {
+      const v = await validateClipFile(f);
+      if (!v.ok) { setError(v.error); return; }
+      setFile(f);
+      setMeta({ ext: v.ext, durationSec: v.durationSec });
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const confirm = async () => {
+    if (!file || !meta) { setError('Choose a video first.'); return; }
     setError('');
-    const v = validateDestination(url);
-    if ('error' in v) { setError(v.error); return; }
-    // A QR memory lives in qr_memories, keyed to the owner (RLS). Without a signed-in
-    // account we CANNOT save a row — and a QR with no row resolves to "Memory not
-    // found" when anyone scans it. So require sign-in and never place a dead QR.
-    if (!user) {
-      setError('Please sign in first — a QR memory is saved to your Megyprints account so it opens for anyone who scans it (no app needed) and you can re-point it later.');
-      return;
-    }
     setBusy(true);
     try {
       if (initial) {
-        // Relink: keep the SAME code + printed QR image; re-point the destination.
-        // Await it so we only update the local fill once the DB actually persisted.
-        const ok = await updateMemoryDestination(initial.code, v.url);
-        if (!ok) { setError('Couldn’t save the new link. Please try again.'); return; }
-        onSave({ ...initial, destination: v.url });
+        // REPLACE: same code, same printed QR. If the old clip already reached
+        // the bucket (a past checkout), the next checkout overwrites it.
+        const prior = await getStagedClip(initial.code);
+        await stageClip({
+          code: initial.code, ext: meta.ext, blob: file, size: file.size,
+          durationSec: meta.durationSec, name: file.name,
+          replace: initial.kind !== 'clip' || !!prior?.uploaded || !prior,
+        });
+        onSave({ ...initial, kind: 'clip', clipExt: meta.ext, destination: publicClipUrl(initial.code, meta.ext) });
         return;
       }
-      // New: mint a code, generate the QR encoding /m/:code, and persist. Only place
-      // the QR once the row is CONFIRMED created — otherwise a scan hits a dead code.
-      let fill: QrFill | null = null;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const code = mintCode();
-        const memUrl = memoryUrl(code);
-        const qrPngDataUrl = await generateQrPngDataUrl(memUrl);
-        const candidate: QrFill = { code, destination: v.url, qrPngDataUrl, memoryUrl: memUrl, createdAt: Date.now() };
-        const res = await tryCreateMemory(candidate);
-        if (res === 'conflict') continue; // re-mint and try again
-        if (res === 'skip') { setError('Please sign in first to save the QR memory.'); return; }
-        if (res === 'error') { setError('Couldn’t save the QR just now. Please try again.'); return; }
-        fill = candidate; // res === 'ok' — row created
-        break;
-      }
-      if (!fill) { setError('Could not generate a unique code. Please try again.'); return; }
-      onSave(fill);
-    } catch {
-      setError('Could not save the QR code. Please try again.');
+      // NEW: mint a code (re-mint on the astronomically rare local collision),
+      // stage the clip under it, generate the print-crisp QR, place it NOW.
+      let code = mintCode();
+      for (let i = 0; i < 5 && (await getStagedClip(code)); i++) code = mintCode();
+      const memUrl = memoryUrl(code);
+      const qrPngDataUrl = await generateQrPngDataUrl(memUrl);
+      await stageClip({ code, ext: meta.ext, blob: file, size: file.size, durationSec: meta.durationSec, name: file.name });
+      onSave({
+        code, destination: publicClipUrl(code, meta.ext), qrPngDataUrl, memoryUrl: memUrl,
+        createdAt: Date.now(), kind: 'clip', clipExt: meta.ext,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save the video. Please try again.');
     } finally {
       setBusy(false);
     }
   };
 
+  const remove = async () => {
+    if (initial) await removeStagedClip(initial.code);
+    onRemove();
+  };
+
+  const legacyLink = initial && initial.kind !== 'clip' ? initial.destination : null;
+  const mb = file ? (file.size / 1024 / 1024).toFixed(1) : null;
+
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8]">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8] shrink-0">
           <span className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
-            <Youtube size={18} className="text-[#E8A598]" /> {initial ? 'Edit YouTube Memory' : 'Add a YouTube Memory'}
+            <Video size={18} className="text-[#E8A598]" /> {initial ? 'Change this memory' : 'Add a video memory'}
           </span>
-          <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+          <button onClick={onClose} className="text-[#9B9B9B] p-1" aria-label="Close"><X size={18} /></button>
         </div>
 
-        <div className="p-5 space-y-3">
-          {!user && (
-            <div className="text-[11px] leading-snug text-[#8B6F47] bg-[#FFF3EC] border border-[#F4C2A1]/60 rounded-lg px-3 py-2">
-              <span className="font-semibold">Sign in to add a QR.</span> The link is saved to your account so it opens for anyone who scans it — no app needed — and you can re-point it anytime.
-            </div>
-          )}
-          <div className="rounded-xl bg-gradient-to-br from-[#FFF3EC] to-[#FDF6F1] border border-[#F4C2A1]/50 px-4 py-3">
-            <p className="text-sm font-bold text-[#2D2D2D]">Add a memory of this event 🎬</p>
-            <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
-              Paste a YouTube link — it plays the moment anyone scans the QR printed on this page. Your album stops being just photos and starts <span className="font-medium text-[#8B6F47]">reliving the day</span>.
-            </p>
-            <p className="text-[11px] text-[#9B8B7A] mt-1.5">
-              {FREE_QR_MEMORIES} QR memories are included with every album · ₱{EXTRA_QR_RATE} each after that, added at checkout.
-            </p>
-          </div>
-          <div>
-            <label className="text-xs text-[#6B6B6B] mb-1 block">YouTube link</label>
-            <input
-              value={url}
-              onChange={(e) => { setUrl(e.target.value); if (error) setError(''); }}
-              onKeyDown={(e) => { if (e.key === 'Enter') confirm(); }}
-              inputMode="url" autoComplete="off" placeholder="https://youtu.be/…"
-              aria-invalid={!!error}
-              className={`w-full border rounded-lg px-3 py-2 text-sm ${error ? 'border-red-400' : 'border-[#E8E8E8]'}`}
-            />
-            {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-          </div>
-          {embed && (
-            <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-2">
-              <div className={`relative overflow-hidden rounded-lg bg-black mx-auto ${embed.portrait ? 'w-[200px] aspect-[9/16]' : 'w-full aspect-video'}`}>
-                <iframe
-                  key={embed.src}
-                  src={previewSrc}
-                  title="Memory video preview"
-                  className="absolute inset-0 w-full h-full"
-                  allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                  allowFullScreen
-                />
-              </div>
-              <p className="text-[11px] text-[#6B6B6B] mt-2 flex items-center gap-1 justify-center text-center">
-                <Play size={11} className="text-[#E8A598] shrink-0" fill="currentColor" />
-                This is exactly what plays when someone scans your QR.
+        <div className="p-5 space-y-3 overflow-y-auto">
+          {!initial && (
+            <div className="rounded-xl bg-gradient-to-br from-[#FFF3EC] to-[#FDF6F1] border border-[#F4C2A1]/50 px-4 py-3">
+              <p className="text-sm font-bold text-[#2D2D2D]">Pick a video of this moment 🎬</p>
+              <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
+                It plays the instant anyone scans the QR printed on this page — no app, no account.
+                Up to {MAX_CLIP_SECONDS} seconds, {MAX_CLIP_BYTES / 1024 / 1024} MB.
+              </p>
+              <p className="text-[11px] text-[#9B8B7A] mt-1.5 flex items-center gap-1">
+                <Clock size={11} className="shrink-0" />
+                {FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after
+                {includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}
               </p>
             </div>
           )}
+
+          {/* What's in the box now (edit mode) */}
+          {initial && !file && (
+            currentUrl ? (
+              <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-2">
+                <video src={currentUrl} controls muted playsInline preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
+                <p className="text-[11px] text-[#6B6B6B] mt-2 text-center">This is what plays when someone scans this page.</p>
+              </div>
+            ) : legacyLink ? (
+              <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] px-3 py-2.5 text-xs text-[#6B6B6B]">
+                This memory currently points to a link on{' '}
+                <span className="font-semibold text-[#8B6F47] break-all">{safeHost(legacyLink)}</span>.
+                Replace it with a video and it will play right on the page — same QR, no reprint.
+              </div>
+            ) : null
+          )}
+
+          {/* Picker */}
+          <input ref={inputRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v" className="hidden"
+            onChange={(e) => void pick(e.target.files?.[0] ?? null)} />
+          <button type="button" onClick={() => inputRef.current?.click()} disabled={checking || busy}
+            className="w-full rounded-xl border-2 border-dashed border-[#F4C2A1] bg-[#FFF8F0] px-4 py-4 text-sm font-semibold text-[#8B6F47] flex items-center justify-center gap-2 disabled:opacity-60">
+            {checking ? <><Loader2 size={16} className="animate-spin" /> Checking your video…</>
+              : <><Upload size={16} /> {file ? 'Choose a different video' : initial ? 'Replace with a new video' : 'Choose a video'}</>}
+          </button>
+          {error && <p className="text-xs text-red-500" role="alert">{error}</p>}
+
+          {/* Preview of the picked file — the live proof, before anything is saved */}
+          {file && previewUrl && (
+            <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-2">
+              <video key={previewUrl} src={previewUrl} controls autoPlay muted playsInline preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
+              <p className="text-[11px] text-[#6B6B6B] mt-2 flex items-center gap-1 justify-center text-center">
+                <Play size={11} className="text-[#E8A598] shrink-0" fill="currentColor" />
+                {file.name} · {mb} MB{meta?.durationSec != null ? ` · ${Math.round(meta.durationSec)} s` : ''}
+              </p>
+            </div>
+          )}
+
           {onCorner && (
             <div>
               <label className="text-xs text-[#6B6B6B] mb-1.5 block">Which corner should the QR sit in?</label>
@@ -178,6 +229,7 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose, corner,
               </div>
             </div>
           )}
+
           {initial && (
             <div className="flex items-center gap-3 rounded-lg bg-[#FAFAFA] p-2">
               <img src={initial.qrPngDataUrl} alt="QR preview" className="w-12 h-12 shrink-0" />
@@ -186,24 +238,137 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose, corner,
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#E8E8E8]">
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#E8E8E8] shrink-0">
           {initial ? (
-            <button onClick={onRemove} className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
+            <button onClick={() => void remove()} className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
               <Trash2 size={14} /> Remove
             </button>
           ) : <span />}
+          <button onClick={() => void confirm()} disabled={busy || !file}
+            className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold hover:brightness-105 disabled:opacity-60 flex items-center gap-2">
+            {busy ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : (initial ? 'Use this video' : 'Place QR')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function safeHost(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return 'a link'; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LEGACY LINK FLOW — retired once 0030 is live. Kept verbatim so a client that
+   deploys ahead of the migration behaves exactly as before.
+   ══════════════════════════════════════════════════════════════════════════ */
+function LegacyLinkModal({ initial, onSave, onRemove, onClose, corner, onCorner, allowAuto }: AddQrModalProps) {
+  const { user } = useAuth();
+  const { openLogin } = useAuthModal();
+  const [url, setUrl] = useState(initial?.destination ?? '');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const embed = useMemo(() => videoEmbedInfo(url), [url]);
+  const previewSrc = embed
+    ? (embed.src.includes('player.vimeo.com')
+        ? `${embed.src}?autoplay=1&muted=1&title=0&byline=0&portrait=0`
+        : `${embed.src}?rel=0&playsinline=1&modestbranding=1&autoplay=1&mute=1`)
+    : '';
+
+  const confirm = async () => {
+    setError('');
+    const v = validateDestination(url);
+    if ('error' in v) { setError(v.error); return; }
+    if (!user) {
+      setError('Please sign in first — a QR memory is saved to your Megyprints account so it opens for anyone who scans it (no app needed) and you can re-point it later.');
+      return;
+    }
+    setBusy(true);
+    try {
+      if (initial) {
+        const ok = await updateMemoryDestination(initial.code, v.url);
+        if (!ok) { setError('Couldn’t save the new link. Please try again.'); return; }
+        onSave({ ...initial, destination: v.url });
+        return;
+      }
+      let fill: QrFill | null = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const code = mintCode();
+        const memUrl = memoryUrl(code);
+        const qrPngDataUrl = await generateQrPngDataUrl(memUrl);
+        const candidate: QrFill = { code, destination: v.url, qrPngDataUrl, memoryUrl: memUrl, createdAt: Date.now(), kind: 'link' };
+        const res = await tryCreateMemory(candidate);
+        if (res === 'conflict') continue;
+        if (res === 'skip') { setError('Please sign in first to save the QR memory.'); return; }
+        if (res === 'error') { setError('Couldn’t save the QR just now. Please try again.'); return; }
+        fill = candidate;
+        break;
+      }
+      if (!fill) { setError('Could not generate a unique code. Please try again.'); return; }
+      onSave(fill);
+    } catch {
+      setError('Could not save the QR code. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8]">
+          <span className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
+            <Youtube size={18} className="text-[#E8A598]" /> {initial ? 'Edit YouTube Memory' : 'Add a YouTube Memory'}
+          </span>
+          <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          {!user && (
+            <div className="text-[11px] leading-snug text-[#8B6F47] bg-[#FFF3EC] border border-[#F4C2A1]/60 rounded-lg px-3 py-2">
+              <span className="font-semibold">Sign in to add a QR.</span> The link is saved to your account so it opens for anyone who scans it — no app needed — and you can re-point it anytime.
+            </div>
+          )}
+          <div>
+            <label className="text-xs text-[#6B6B6B] mb-1 block">YouTube link</label>
+            <input value={url} onChange={(e) => { setUrl(e.target.value); if (error) setError(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') confirm(); }}
+              inputMode="url" autoComplete="off" placeholder="https://youtu.be/…" aria-invalid={!!error}
+              className={`w-full border rounded-lg px-3 py-2 text-sm ${error ? 'border-red-400' : 'border-[#E8E8E8]'}`} />
+            {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+          </div>
+          {embed && (
+            <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-2">
+              <div className={`relative overflow-hidden rounded-lg bg-black mx-auto ${embed.portrait ? 'w-[200px] aspect-[9/16]' : 'w-full aspect-video'}`}>
+                <iframe key={embed.src} src={previewSrc} title="Memory video preview" className="absolute inset-0 w-full h-full"
+                  allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+              </div>
+            </div>
+          )}
+          {onCorner && (
+            <div className="flex items-center gap-3">
+              {allowAuto && (
+                <button type="button" onClick={() => onCorner(null)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 ${corner == null ? 'bg-[#F4C2A1] text-white' : 'bg-[#FFF8F0] text-[#8B6F47]'}`}>✨ Auto</button>
+              )}
+              <div className="relative rounded-lg border-2 border-dashed border-[#E8D9CC] bg-[#FBF6F1] shrink-0" style={{ width: 92, height: 68 }}>
+                {QR_CORNERS.map((c) => (
+                  <button key={c} type="button" onClick={() => onCorner(c)} aria-label={CORNER_LABELS[c]}
+                    className={`absolute w-6 h-6 rounded-[5px] ${corner === c ? 'bg-[#E8A598] ring-2 ring-[#F4C2A1]' : 'bg-white border border-[#E0D3C6]'}`}
+                    style={CORNER_POS[c]} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#E8E8E8]">
+          {initial ? (
+            <button onClick={onRemove} className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg"><Trash2 size={14} /> Remove</button>
+          ) : <span />}
           {!user ? (
-            <button
-              onClick={openLogin}
-              className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold hover:brightness-105 flex items-center gap-2"
-            >
-              <LogIn size={15} /> Log In to continue
-            </button>
+            <button onClick={openLogin} className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold flex items-center gap-2"><LogIn size={15} /> Log In to continue</button>
           ) : (
-            <button
-              onClick={confirm} disabled={busy}
-              className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold hover:brightness-105 disabled:opacity-60 flex items-center gap-2"
-            >
+            <button onClick={confirm} disabled={busy} className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold disabled:opacity-60 flex items-center gap-2">
               {busy ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : (initial ? 'Save' : 'Generate QR')}
             </button>
           )}

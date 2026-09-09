@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, perPageRate,
   qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE,
+  hostingTiersOf, hostingTermCharge, includedHostingYears, DEFAULT_HOSTING_TIERS,
   MIN_PAGES, SIZE_LABELS,
   type Binding, type PricingModel,
 } from './pricing';
@@ -22,6 +23,7 @@ const MODEL: PricingModel = {
   min_pages: 40,
   price_multiple: 3,
   hosting_reserve: 50,
+  hosting_tiers: DEFAULT_HOSTING_TIERS,
   sizes: {
     '6x4':    { pps: 16, hb: 250, surcharge: 0 },
     '8x6':    { pps: 4,  hb: 350, surcharge: 0 },
@@ -188,6 +190,56 @@ describe('living-memory QR add-on (7 included, ₱20 each after — owner, 2026-
     for (const size of SIZE_KEYS)
       for (const pages of PAGE_COUNTS)
         expect(priceBreakdown(schedule, size, 'hard', pages)).toEqual(priceBreakdown(schedule, size, 'hard', pages, 0));
+  });
+});
+
+describe('hosting terms — 5 included, 10/15/20 paid (owner, 2026-09-09)', () => {
+  it('defaults: 5 years included, 10 → ₱99, 15 → ₱149, 20 → ₱199', () => {
+    expect(DEFAULT_HOSTING_TIERS).toEqual([{ years: 5, price: 0 }, { years: 10, price: 99 }, { years: 15, price: 149 }, { years: 20, price: 199 }]);
+    const schedule = scheduleFrom(MODEL, 3);
+    expect(includedHostingYears(schedule)).toBe(5);
+    expect(hostingTermCharge(schedule, 5)).toBe(0);
+    expect(hostingTermCharge(schedule, 10)).toBe(99);
+    expect(hostingTermCharge(schedule, 20)).toBe(199);
+  });
+
+  it('an unknown term, no term, or a pre-0030 schedule charges NOTHING (never over-charge on a stale client)', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    expect(hostingTermCharge(schedule, 7)).toBe(0);
+    expect(hostingTermCharge(schedule, null)).toBe(0);
+    expect(hostingTermCharge({}, 20)).toBe(0);
+    expect(includedHostingYears({})).toBeNull();
+  });
+
+  it('malformed owner saves are sanitised: sorted ascending, non-numeric dropped, negatives clamped', () => {
+    const tiers = hostingTiersOf({ hosting_tiers: [{ years: 20, price: 199 }, { years: 'x', price: 1 }, { years: 5, price: -3 }, null, { years: 10, price: '99' }] });
+    expect(tiers).toEqual([{ years: 5, price: 0 }, { years: 10, price: 99 }, { years: 20, price: 199 }]);
+    expect(hostingTiersOf({ hosting_tiers: 'nope' })).toEqual([]);
+  });
+
+  it('the breakdown adds ONE term line only for a paid term, flat, and still sums exactly', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    for (const size of SIZE_KEYS)
+      for (const binding of BINDINGS)
+        for (const pages of PAGE_COUNTS)
+          for (const years of [null, 5, 10, 15, 20]) {
+            const b = priceBreakdown(schedule, size, binding, pages, 0, years);
+            expect(b.total).toBe(priceOf(schedule, size, binding, pages) + hostingTermCharge(schedule, years));
+            expect(b.items.reduce((s, i) => s + i.amount, 0)).toBe(b.total);
+            const termLines = b.items.filter((i) => i.label.startsWith('Memories stay live'));
+            expect(termLines).toHaveLength(years && years > 5 ? 1 : 0);
+            if (years && years > 5) {
+              expect(termLines[0].label).toContain(`${years} years`);
+              expect(termLines[0].label).toContain('5 included');
+            }
+          }
+  });
+
+  it('QR add-on and term add-on stack independently', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    const b = priceBreakdown(schedule, '8x8', 'hard', 80, 9, 20);
+    expect(b.total).toBe(priceOf(schedule, '8x8', 'hard', 80) + 2 * EXTRA_QR_RATE + 199);
+    expect(b.items).toHaveLength(4); // album, extra pages, QR add-on, term
   });
 });
 

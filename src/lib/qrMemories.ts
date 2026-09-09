@@ -12,6 +12,17 @@ export interface QrMemoryRow {
   scan_count: number;
   created_at: string;
   updated_at: string;
+  /** 'clip' = hosted video (0030); 'link' = legacy pasted link. */
+  kind?: 'link' | 'clip';
+  /** End of the paid hosting term (clips only); null = no expiry. */
+  expires_at?: string | null;
+}
+
+/** ISO expiry for a term bought now. */
+export function expiryForTerm(years: number, from: Date = new Date()): string {
+  const d = new Date(from.getTime());
+  d.setUTCFullYear(d.getUTCFullYear() + years);
+  return d.toISOString();
 }
 
 async function currentUserId(): Promise<string | null> {
@@ -27,7 +38,7 @@ export async function tryCreateMemory(fill: QrFill): Promise<'ok' | 'conflict' |
   if (!uid) return 'skip';
   const { error } = await supabase
     .from('qr_memories')
-    .insert({ code: fill.code, user_id: uid, destination: fill.destination });
+    .insert({ code: fill.code, user_id: uid, destination: fill.destination, kind: fill.kind ?? 'link' });
   if (!error) return 'ok';
   if ((error as { code?: string }).code === '23505') return 'conflict'; // unique_violation
   console.error('QR memory create failed:', error.message);
@@ -60,7 +71,7 @@ export async function updateMemoryDestination(code: string, destination: string)
 export async function listMemories(): Promise<QrMemoryRow[]> {
   const { data, error } = await supabase
     .from('qr_memories')
-    .select('code,destination,title,scan_count,created_at,updated_at')
+    .select('code,destination,title,scan_count,created_at,updated_at,kind,expires_at')
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return data ?? [];
@@ -75,13 +86,28 @@ export async function removeMemory(code: string): Promise<boolean> {
 /** Reliability belt: ensure every QR in an album has a resolvable row (called at
  *  checkout, where the user is signed in). INSERT-only (ignoreDuplicates) so it
  *  never clobbers a later relink. Best-effort. */
-export async function ensureMemoriesForFills(fills: (QrFill | null)[]): Promise<void> {
+export async function ensureMemoriesForFills(
+  fills: (QrFill | null)[],
+  /** The INCLUDED hosting term — stamped as expires_at on CLIP rows (links
+   *  never expire: they cost nothing to host). RLS rejects anything longer;
+   *  the paid term is applied by the operator (apply_order_hosting_term) once
+   *  the order is marked paid. Absent = no expiry (legacy). */
+  opts: { hostingYears?: number | null } = {},
+): Promise<boolean> {
   const uid = await currentUserId();
-  if (!uid) return;
+  if (!uid) return false;
+  const expiresAt = opts.hostingYears ? expiryForTerm(opts.hostingYears) : null;
   const rows = fills
     .filter((f): f is QrFill => !!f)
-    .map((f) => ({ code: f.code, user_id: uid, destination: f.destination }));
-  if (!rows.length) return;
+    .map((f) => ({
+      code: f.code,
+      user_id: uid,
+      destination: f.destination,
+      kind: f.kind ?? 'link',
+      expires_at: f.kind === 'clip' ? expiresAt : null,
+    }));
+  if (!rows.length) return true;
   const { error } = await supabase.from('qr_memories').upsert(rows, { onConflict: 'code', ignoreDuplicates: true });
-  if (error) console.error('QR memories ensure failed:', error.message);
+  if (error) { console.error('QR memories ensure failed:', error.message); return false; }
+  return true;
 }

@@ -9,8 +9,8 @@ import { useState, useEffect } from 'react';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
-import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, type Binding, type PricingModel } from '../../lib/pricing';
-import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve } from '../../lib/storeSettings';
+import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
 
@@ -43,6 +43,12 @@ export default function PricingPanel() {
   const [savedReserve, setSavedReserve] = useState(false);
   const [reserveErr, setReserveErr] = useState('');
 
+  // ── Persisted hosting TERMS (5/10/15/20 yrs; first = included) ──
+  const [tiers, setTiers] = useState<{ years: number; price: number }[]>([]);
+  const [savingTiers, setSavingTiers] = useState(false);
+  const [savedTiers, setSavedTiers] = useState(false);
+  const [tiersErr, setTiersErr] = useState('');
+
   const [disabledSizes, setDisabledSizesState] = useState<AlbumSizePreset[]>(getDisabledSizes());
   const [savingSizes, setSavingSizes] = useState(false);
   const [savedSizes, setSavedSizes] = useState(false);
@@ -55,7 +61,7 @@ export default function PricingPanel() {
     setDisabledSizesState(getDisabledSizes());
     void loadOwnerPricingModel().then((m) => {
       if (!alive) return;
-      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); }
+      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); }
       else setModelErr('Could not load the cost model. Owner sign-in is required to view pricing.');
     });
     return () => { alive = false; };
@@ -79,6 +85,20 @@ export default function PricingPanel() {
     else {
       setModel((m) => (m ? { ...m, hosting_reserve: Math.round(reserve) } : m));
       setSavedReserve(true); setTimeout(() => setSavedReserve(false), 2500);
+    }
+  };
+
+  const saveTiers = async () => {
+    setSavingTiers(true); setSavedTiers(false); setTiersErr('');
+    const clean = hostingTiersOf({ hosting_tiers: tiers });
+    if (!clean.length) { setTiersErr('Keep at least one term.'); setSavingTiers(false); return; }
+    const err = await setHostingTiers(clean);
+    setSavingTiers(false);
+    if (err) setTiersErr(err);
+    else {
+      setTiers(clean);
+      setModel((m) => (m ? { ...m, hosting_tiers: clean } : m));
+      setSavedTiers(true); setTimeout(() => setSavedTiers(false), 2500);
     }
   };
 
@@ -184,6 +204,37 @@ export default function PricingPanel() {
           </div>
           {savedReserve && <p className="text-xs text-[#2E7D4A] mt-2 font-semibold">✓ Saved — every album now carries a ₱{model.hosting_reserve} hosting reserve.</p>}
           {reserveErr && <p className="text-xs text-[#B0503A] mt-2">Couldn't save: {reserveErr}</p>}
+        </div>
+
+        {/* Hosting TERMS — sold at checkout; the shortest is the included term */}
+        <div className="mt-5 pt-5 border-t border-[#EAE3DA]">
+          <h4 className="font-semibold text-[#2D2D2D]">Memory hosting terms</h4>
+          <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
+            The customer picks how long their videos stay live. The <b>shortest term is included</b> (keep its price at 0);
+            longer terms are flat add-ons. Cost to you ≈ ₱3 per album per year on R2 — the rest is margin.
+          </p>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {tiers.map((t, i) => (
+              <div key={i} className="rounded-lg border border-[#E8E8E8] p-2">
+                <label className="text-[10px] font-semibold uppercase tracking-wide text-[#9B9B9B] block">Years</label>
+                <input type="number" min={1} max={50} value={t.years}
+                  onChange={(e) => { const v = +e.target.value; setTiers((ts) => ts.map((x, j) => (j === i ? { ...x, years: v } : x))); setSavedTiers(false); }}
+                  className="w-full border border-[#E8E8E8] rounded px-2 py-1 font-mono text-sm tabular-nums" />
+                <label className="text-[10px] font-semibold uppercase tracking-wide text-[#9B9B9B] block mt-1.5">₱ add-on</label>
+                <input type="number" min={0} max={100000} step={1} value={t.price}
+                  onChange={(e) => { const v = +e.target.value; setTiers((ts) => ts.map((x, j) => (j === i ? { ...x, price: v } : x))); setSavedTiers(false); }}
+                  className="w-full border border-[#E8E8E8] rounded px-2 py-1 font-mono text-sm tabular-nums" />
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <button onClick={saveTiers} disabled={savingTiers}
+              className="px-4 py-2 rounded-lg bg-[#2D2D2D] text-white text-sm font-semibold disabled:opacity-40">
+              {savingTiers ? 'Saving…' : 'Save terms'}
+            </button>
+            {savedTiers && <p className="text-xs text-[#2E7D4A] font-semibold">✓ Saved — checkout now offers these terms.</p>}
+            {tiersErr && <p className="text-xs text-[#B0503A]">Couldn't save: {tiersErr}</p>}
+          </div>
         </div>
       </div>
 

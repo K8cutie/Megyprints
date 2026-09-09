@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -10,7 +10,9 @@ import { createOrderFromLatestAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } 
 import { getPendingPrintJob } from '../lib/printQueue';
 import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { uploadStagedClips, removeStagedClip } from '../lib/memoryClips';
+import { updateMemoryDestination } from '../lib/qrMemories';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
 import { reportError } from '../lib/report';
@@ -66,6 +68,11 @@ export default function Order() {
   // QR memories on the album — the first FREE_QR_MEMORIES are included, each
   // one past that is an add-on line (counted per QR code, link or clip alike).
   const qrCount = countQrMemories(job?.pages ?? []);
+  // Every QR on the album — both homes — for the checkout belt + clip uploads.
+  const allQrFills = (job?.pages ?? []).flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
+  const clipCodes = allQrFills.filter((f) => f?.kind === 'clip').map((f) => f!.code);
+  // Memory-hosting TERM (0030): the included term unless the customer upgrades.
+  const [hostingYears, setHostingYears] = useState<number | null>(null);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
   const hasJob = job != null;
 
@@ -81,13 +88,14 @@ export default function Order() {
     return () => { alive = false; };
   }, [settingsReady]);
   const schedule = getPriceSchedule(); // re-read each render; non-null once loaded
+  const tiers = schedule ? hostingTiersOf(schedule) : [];
+  const includedYears = schedule ? includedHostingYears(schedule) : null;
+  const effectiveYears = qrCount > 0 ? (hostingYears ?? includedYears) : null;
 
-  const breakdown = useMemo(
-    () => (schedule
-      ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount)
-      : { items: [], total: 0 }),
-    [schedule, albumSize, binding, pageCount, qrCount],
-  );
+  // Cheap arithmetic — recomputed per render on purpose (schedule is read fresh).
+  const breakdown = schedule
+    ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount, effectiveYears)
+    : { items: [], total: 0 };
   const totalPrice = breakdown.total;
   // Loaded AND priceable. `settingsReady` alone only means the load settled — it
   // can settle with no schedule (offline, RPC blocked), and quoting ₱0 then would
@@ -145,6 +153,7 @@ export default function Order() {
           // from these structured PSGC parts (single source of truth).
           shipping: { name, phone, address },
           amount: totalPrice,
+          hostingYears: effectiveYears,
         });
         createdOrderRef.current = {
           id: created.id, order_number: created.order_number,
@@ -167,6 +176,19 @@ export default function Order() {
         throw new Error(
           "We couldn't prepare your album for printing on this device. Please open your album in the builder on the device where you created it, then order again — your photos live only in that browser.",
         );
+      }
+
+      // 2b. REQUIRED: upload every staged memory CLIP (0030). A printed QR must
+      //     never point at a missing video, so a failed upload stops checkout —
+      //     the customer stays on Pay and retries (idempotent: finished clips
+      //     are skipped, an existing object counts as done).
+      let replacedCodes: string[] = [];
+      if (clipCodes.length) {
+        setPrepMsg('Uploading your memory videos…');
+        const r = await uploadStagedClips(clipCodes, (d, t) => {
+          if (d < t) setPrepMsg(`Uploading memory video ${d + 1} of ${t}…`);
+        });
+        replacedCodes = r.replaced;
       }
 
       // 3. REQUIRED: build + upload the print PDF. If gen throws or the upload
@@ -209,13 +231,31 @@ export default function Order() {
       //    print-job pages — the same source the PDF is built from — so a QR added
       //    just before checkout can't ship with a dead /m/:code even if the
       //    throttled cloud save hasn't flushed it. INSERT-only; never clobbers a relink.
+      //    For hosted CLIPS this belt is REQUIRED (the row is created only here,
+      //    stamped with the paid term); for legacy links it stays best-effort.
+      const jobFills = printJob.pages.flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
+      const hasClips = jobFills.some((f) => f?.kind === 'clip');
       try {
-        const qrFills = printJob.pages.flatMap((p) => p.qrFills ?? []);
-        if (qrFills.length) await ensureMemoriesForFills(qrFills);
+        if (jobFills.length) {
+          setPrepMsg('Saving your memories…');
+          // The client may only stamp the INCLUDED term (RLS caps it — 0030);
+          // the PAID term is applied by the operator at "Mark paid" from the
+          // order's hosting_years, exactly as the price is set server-side.
+          const ok = await ensureMemoriesForFills(jobFills, { hostingYears: includedYears });
+          if (!ok && hasClips) throw new Error('Could not save your memory videos to your account. Please try again.');
+          // A replaced clip may live at a new extension → re-point the row.
+          for (const code of replacedCodes) {
+            const f = jobFills.find((x) => x?.code === code);
+            if (f) await updateMemoryDestination(code, f.destination);
+          }
+        }
       } catch (e) {
         console.error('QR memories ensure (print job) failed:', e);
         reportError(e, { path: 'checkout', step: 'qr_ensure', orderId: order.id });
+        if (hasClips) throw e;
       }
+      // Staged clips are safely in the bucket + rows: free the device storage.
+      for (const code of clipCodes) void removeStagedClip(code);
       setPrepMsg('');
 
       // 5. Only NOW — with the PDF safely in the bucket — advance to tracking.
@@ -454,6 +494,25 @@ export default function Order() {
                   {qrCount > 0 && <> This album has <b className="text-[#2D2D2D]">{qrCount}</b>.</>}
                 </p>
               </div>
+              {qrCount > 0 && tiers.length > 0 && (
+                <div className="mt-3 rounded-xl border border-[#F0F0F0] bg-white px-3 py-3">
+                  <p className="text-xs font-semibold text-[#2D2D2D]">How long should your memories stay live?</p>
+                  <p className="text-[11px] text-[#9B9B9B] mb-2">Your videos play from the printed QR for the whole term. Renew anytime after.</p>
+                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Memory hosting term">
+                    {tiers.map((t) => {
+                      const active = (hostingYears ?? includedYears) === t.years;
+                      return (
+                        <button key={t.years} type="button" role="radio" aria-checked={active}
+                          onClick={() => setHostingYears(t.years)}
+                          className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-[#E8A598] bg-[#FFF3EC]' : 'border-[#E8E8E8] hover:border-[#F4C2A1]'}`}>
+                          <div className="text-sm font-semibold text-[#2D2D2D]">{t.years} years</div>
+                          <div className="text-[11px] text-[#8B6F47]">{t.price > 0 ? `+₱${t.price}` : 'Included'}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <button onClick={handleProceedToPayment} disabled={!priceReady}
                 className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                 {priceReady ? <><ShoppingCart size={16} /> Proceed to Payment</>

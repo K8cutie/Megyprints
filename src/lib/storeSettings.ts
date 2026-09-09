@@ -98,6 +98,16 @@ export async function setHostingReserve(next: number): Promise<string | null> {
   return null;
 }
 
+/** Owner-only (definer RPC, shape-validated in SQL). Replaces the hosting
+ *  tiers and reloads the schedule. */
+export async function setHostingTiers(tiers: { years: number; price: number }[]): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_hosting_tiers', { p_tiers: tiers });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
 /** Owner-only. The raw cost model behind the schedule, for the admin Pricing
  *  panel. Rejected by the database for anyone else, so a non-owner reaching this
  *  gets an error rather than the figures. */

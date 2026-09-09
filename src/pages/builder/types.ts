@@ -427,6 +427,11 @@ export interface QrFill {
    *  change can't desync the management thumbnail from the physical print. */
   memoryUrl: string;
   createdAt: number;
+  /** 'clip' = a video the customer picked in the app, staged locally and
+   *  uploaded at checkout to `memory-clips/<code>.<clipExt>` (destination is
+   *  that object's public URL). Absent/'link' = legacy pasted link. */
+  kind?: 'link' | 'clip';
+  clipExt?: 'mp4' | 'mov' | 'webm' | 'm4v';
 }
 
 /** Fill data for an ORNAMENT slot — a themed vector SVG placed into a combo-box

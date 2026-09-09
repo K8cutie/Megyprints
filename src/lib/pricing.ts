@@ -49,8 +49,22 @@ export interface PricingModel {
    *  living-memory video hosting (owner, 2026-09-09; migration 0029). Added
    *  AFTER the rounded markup like the size premium — never multiplied. */
   hosting_reserve: number;
+  /** Hosting TERMS sold at checkout (owner, 2026-09-09; migration 0030). The
+   *  first tier is the included term (price 0); longer terms are flat add-ons,
+   *  never multiplied. */
+  hosting_tiers: HostingTier[];
   sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
 }
+
+export interface HostingTier { years: number; price: number }
+
+/** What a fresh store sells before the owner retunes it (mirrors the 0030
+ *  default). Also the client fallback when a schedule predates 0030 — but in
+ *  that case hosted mode is OFF (see hostedMemoriesEnabled), so nothing is
+ *  charged from these. */
+export const DEFAULT_HOSTING_TIERS: HostingTier[] = [
+  { years: 5, price: 0 }, { years: 10, price: 99 }, { years: 15, price: 149 }, { years: 20, price: 199 },
+];
 
 /** Customer-facing schedule — the shape of public_price_schedule(). Carries no
  *  cost and no multiple, only their product. */
@@ -60,6 +74,8 @@ export interface PriceSchedule {
   /** Flat per-album hosting reserve (see PricingModel). Optional so a schedule
    *  cached by a client older than 0029 still prices — as 0. */
   hosting_reserve?: number;
+  /** Hosting terms (see PricingModel). Absent on a pre-0030 schedule. */
+  hosting_tiers?: HostingTier[];
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
 }
@@ -85,6 +101,34 @@ export function priceOf(
   const sheets = sheetsFor(s.pps, schedule.min_pages, pages);
   const coverRate = binding === 'hard' ? s.hard_rate : s.soft_rate;
   return Math.round(sheets * schedule.sheet_rate + coverRate) + hostingReserveOf(schedule);
+}
+
+/** Valid, ascending hosting tiers from a schedule/model; [] when absent or
+ *  malformed (a broken owner save must never crash checkout). */
+export function hostingTiersOf(src: { hosting_tiers?: unknown }): HostingTier[] {
+  const raw = src.hosting_tiers;
+  if (!Array.isArray(raw)) return [];
+  const tiers = raw
+    .filter((t): t is HostingTier => !!t && typeof t === 'object'
+      && Number.isFinite(Number((t as HostingTier).years)) && Number.isFinite(Number((t as HostingTier).price)))
+    .map((t) => ({ years: Math.round(Number(t.years)), price: Math.max(0, Math.round(Number(t.price))) }))
+    .filter((t) => t.years >= 1);
+  tiers.sort((a, b) => a.years - b.years);
+  return tiers;
+}
+
+/** The included term (the cheapest tier), or null when no tiers are sold. */
+export function includedHostingYears(src: { hosting_tiers?: unknown }): number | null {
+  const tiers = hostingTiersOf(src);
+  return tiers.length ? tiers[0].years : null;
+}
+
+/** Pesos for a chosen term. Unknown/absent term → 0 (never over-charge on a
+ *  stale client). */
+export function hostingTermCharge(src: { hosting_tiers?: unknown }, years: number | null | undefined): number {
+  if (years == null) return 0;
+  const tier = hostingTiersOf(src).find((t) => t.years === years);
+  return tier ? tier.price : 0;
 }
 
 /** The flat reserve, tolerant of a pre-0029 schedule (no field → 0). */
@@ -142,13 +186,16 @@ export function priceBreakdown(
   pages: number,
   /** QR memories on the album (see FREE_QR_MEMORIES). Omitted = none. */
   qrMemories = 0,
+  /** Chosen hosting term in years (see hosting_tiers). Omitted = included term. */
+  hostingYears: number | null = null,
 ): PriceBreakdown {
   const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
   const sizeLabel = SIZE_LABELS[size];
   const minPages = schedule.min_pages;
   const printTotal = priceOf(schedule, size, binding, pages);
   const qrCharge = qrMemoryCharge(qrMemories);
-  const total = printTotal + qrCharge;
+  const termCharge = hostingTermCharge(schedule, hostingYears);
+  const total = printTotal + qrCharge + termCharge;
 
   const extra = Math.max(0, pages - minPages);
   const items: PriceLine[] = [];
@@ -173,6 +220,14 @@ export function priceBreakdown(
     items.push({
       label: `Living-memory QR · ${FREE_QR_MEMORIES} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`,
       amount: qrCharge,
+    });
+  }
+
+  if (termCharge > 0 && hostingYears != null) {
+    const included = includedHostingYears(schedule);
+    items.push({
+      label: `Memories stay live · ${hostingYears} years${included ? ` (${included} included)` : ''}`,
+      amount: termCharge,
     });
   }
 
@@ -236,6 +291,7 @@ export function scheduleFrom(
     min_pages: model.min_pages,
     sheet_rate: model.sheet_cost * multiple,
     hosting_reserve: model.hosting_reserve,
+    hosting_tiers: model.hosting_tiers,
     disabled_sizes: disabledSizes,
     sizes,
   };

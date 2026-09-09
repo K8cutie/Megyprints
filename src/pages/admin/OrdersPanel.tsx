@@ -103,7 +103,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
             {o.ship_name || '—'}{o.ship_phone ? ` · ${o.ship_phone}` : ''} · {date}
           </div>
           <div className="text-xs text-[#9B9B9B]">
-            {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages
+            {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages{o.hosting_years ? ` · memories ${o.hosting_years} yrs` : ''}
           </div>
           {o.ship_address && <div className="text-xs text-[#B9B9B9] mt-0.5 max-w-md">{o.ship_address}</div>}
         </div>
