@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "db:link": "supabase link --project-ref lvbsrbmikunynphlbckt",
     "db:status": "supabase migration list",
-    "db:push": "supabase db push",
+    "db:push": "node scripts/guard-main.mjs && supabase db push",
     "db:diff": "supabase db diff --linked",
     "build:psgc": "node scripts/build-psgc.mjs"
   },
