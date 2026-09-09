@@ -99,8 +99,11 @@ function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
    a cage.
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** The owner-set odds of each kind. Must sum to 1. */
-export const BOX_ROLL_WEIGHTS: Record<BoxRoll, number> = { quote: 0.45, text: 0.30, qr: 0.25 };
+/** The owner-set odds of each kind. Must sum to 1.
+ *  2026-08-12: 45/30/25. 2026-09-09 (owner): 60/25/15 — quotes are the
+ *  zero-effort completion accelerant, so they take the larger share now that
+ *  the pool is sized to the album and can't run dry. */
+export const BOX_ROLL_WEIGHTS: Record<BoxRoll, number> = { quote: 0.60, text: 0.25, qr: 0.15 };
 
 /** What generation needs to deal boxes. Quote styling is passed in (not read
  *  from THEMES here) because generateAlbum is pure — the caller resolves the
@@ -170,7 +173,7 @@ export function dealBoxContent(
         } satisfies TextElement);
       } else {
         // Pool exhausted (or empty): never repeat a line — re-roll this box
-        // between the two remaining kinds at their RELATIVE odds (30:25) so
+        // between the two remaining kinds at their RELATIVE odds (25:15) so
         // QR keeps its share instead of every late box collapsing to text.
         kind = Math.random() < BOX_ROLL_WEIGHTS.text / (BOX_ROLL_WEIGHTS.text + BOX_ROLL_WEIGHTS.qr)
           ? 'text'

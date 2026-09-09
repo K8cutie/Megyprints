@@ -79,7 +79,7 @@ describe('box dealing', () => {
     expect(sawBoxPage).toBe(true);
   });
 
-  it('roll odds hit the owner-set 45/30/25 (±3% at N=10k)', () => {
+  it('roll odds hit the owner-set 60/25/15 (±3% at N=10k)', () => {
     const n = 10_000;
     const counts: Record<BoxRoll, number> = { quote: 0, text: 0, qr: 0 };
     for (let i = 0; i < n; i++) counts[rollBoxKind()]++;
@@ -94,7 +94,7 @@ describe('box dealing', () => {
   it('an empty quote pool degrades quote rolls to text invitations, never blanks', () => {
     const template = getTemplatesForAlbum('8x8').find((t) => (t.textSlots?.length ?? 0) > 0)!;
     expect(template, 'no box-bearing 8x8 template — fixture broken').toBeDefined();
-    // Enough boxes that at 45% odds P(no quote roll) < 1e-20 — the degrade
+    // Enough boxes that at 60% odds P(no quote roll) < 1e-30 — the degrade
     // path is exercised with certainty, not luck.
     for (let i = 0; i < 80; i++) {
       const page: AlbumPage = {
