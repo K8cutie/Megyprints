@@ -45,6 +45,10 @@ export interface PricingModel {
   soft_bind_cost: number;
   min_pages: number;
   price_multiple: number;
+  /** Flat per-album amount buffered into every price to fund ~10 years of
+   *  living-memory video hosting (owner, 2026-09-09; migration 0029). Added
+   *  AFTER the rounded markup like the size premium — never multiplied. */
+  hosting_reserve: number;
   sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
 }
 
@@ -53,6 +57,9 @@ export interface PricingModel {
 export interface PriceSchedule {
   min_pages: number;
   sheet_rate: number;
+  /** Flat per-album hosting reserve (see PricingModel). Optional so a schedule
+   *  cached by a client older than 0029 still prices — as 0. */
+  hosting_reserve?: number;
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
 }
@@ -77,7 +84,13 @@ export function priceOf(
   const s = schedule.sizes[size];
   const sheets = sheetsFor(s.pps, schedule.min_pages, pages);
   const coverRate = binding === 'hard' ? s.hard_rate : s.soft_rate;
-  return Math.round(sheets * schedule.sheet_rate + coverRate);
+  return Math.round(sheets * schedule.sheet_rate + coverRate) + hostingReserveOf(schedule);
+}
+
+/** The flat reserve, tolerant of a pre-0029 schedule (no field → 0). */
+export function hostingReserveOf(schedule: Pick<PriceSchedule, 'hosting_reserve'>): number {
+  const r = Number(schedule.hosting_reserve);
+  return Number.isFinite(r) && r > 0 ? Math.round(r) : 0;
 }
 
 /** Marked-up per-page rate used for the "extra pages" display line. */
@@ -144,13 +157,13 @@ export function priceBreakdown(
     const perPage = perPageRate(schedule, size);
     const extraAmount = extra * perPage;
     items.push({
-      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages included`,
+      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} QR memories included`,
       amount: printTotal - extraAmount,
     });
     items.push({ label: `Extra pages · ${extra} × ₱${perPage}`, amount: extraAmount });
   } else {
     items.push({
-      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages included`,
+      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} QR memories included`,
       amount: printTotal,
     });
   }
@@ -198,7 +211,8 @@ export function ownerPriceOf(
   multiple: number,
 ): number {
   return Math.round(costOf(model, size, binding, pages) * multiple)
-    + model.sizes[size].surcharge;
+    + model.sizes[size].surcharge
+    + hostingReserveOf(model);
 }
 
 /** Pure mirror of public_price_schedule()'s arithmetic. Lives here so the spec
@@ -221,6 +235,7 @@ export function scheduleFrom(
   return {
     min_pages: model.min_pages,
     sheet_rate: model.sheet_cost * multiple,
+    hosting_reserve: model.hosting_reserve,
     disabled_sizes: disabledSizes,
     sizes,
   };

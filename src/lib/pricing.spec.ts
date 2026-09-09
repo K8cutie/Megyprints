@@ -21,6 +21,7 @@ const MODEL: PricingModel = {
   soft_bind_cost: 100,
   min_pages: 40,
   price_multiple: 3,
+  hosting_reserve: 50,
   sizes: {
     '6x4':    { pps: 16, hb: 250, surcharge: 0 },
     '8x6':    { pps: 4,  hb: 350, surcharge: 0 },
@@ -53,6 +54,28 @@ describe('schedule ↔ model agreement', () => {
             expect(priceOf(schedule, size, binding, pages))
               .toBe(ownerPriceOf(MODEL, size, binding, pages, multiple));
     }
+  });
+
+  it('the hosting reserve is FLAT: exactly ₱reserve more than a zero-reserve model, for every size/binding/pages/multiple', () => {
+    const zero: PricingModel = { ...MODEL, hosting_reserve: 0 };
+    for (const multiple of MULTIPLES)
+      for (const size of SIZE_KEYS)
+        for (const binding of BINDINGS)
+          for (const pages of PAGE_COUNTS) {
+            expect(ownerPriceOf(MODEL, size, binding, pages, multiple) - ownerPriceOf(zero, size, binding, pages, multiple))
+              .toBe(MODEL.hosting_reserve);
+            expect(priceOf(scheduleFrom(MODEL, multiple), size, binding, pages) - priceOf(scheduleFrom(zero, multiple), size, binding, pages))
+              .toBe(MODEL.hosting_reserve);
+          }
+  });
+
+  it('a pre-0029 schedule (no hosting_reserve field) still prices — as a zero reserve', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    const legacy = { ...schedule } as Partial<typeof schedule>;
+    delete legacy.hosting_reserve;
+    for (const size of SIZE_KEYS)
+      expect(priceOf(legacy as typeof schedule, size, 'soft', 60))
+        .toBe(priceOf(scheduleFrom({ ...MODEL, hosting_reserve: 0 }, 3), size, 'soft', 60));
   });
 
   it('the schedule carries no cost, multiple, or premium field', () => {

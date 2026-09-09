@@ -10,7 +10,7 @@ import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
 import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, type Binding, type PricingModel } from '../../lib/pricing';
-import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel } from '../../lib/storeSettings';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
 
@@ -37,6 +37,12 @@ export default function PricingPanel() {
   const [saveErr, setSaveErr] = useState('');
 
   // ── Persisted "sizes offered" toggle (drives the customer size picker) ──
+  // ── Persisted flat hosting reserve (10-year living-memory hosting buffer) ──
+  const [reserve, setReserve] = useState(50);
+  const [savingReserve, setSavingReserve] = useState(false);
+  const [savedReserve, setSavedReserve] = useState(false);
+  const [reserveErr, setReserveErr] = useState('');
+
   const [disabledSizes, setDisabledSizesState] = useState<AlbumSizePreset[]>(getDisabledSizes());
   const [savingSizes, setSavingSizes] = useState(false);
   const [savedSizes, setSavedSizes] = useState(false);
@@ -49,7 +55,7 @@ export default function PricingPanel() {
     setDisabledSizesState(getDisabledSizes());
     void loadOwnerPricingModel().then((m) => {
       if (!alive) return;
-      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); }
+      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); }
       else setModelErr('Could not load the cost model. Owner sign-in is required to view pricing.');
     });
     return () => { alive = false; };
@@ -63,6 +69,17 @@ export default function PricingPanel() {
     setSavingMult(false);
     if (err) setSaveErr(err);
     else { setSavedMult(true); setTimeout(() => setSavedMult(false), 2500); }
+  };
+
+  const saveReserve = async () => {
+    setSavingReserve(true); setSavedReserve(false); setReserveErr('');
+    const err = await setHostingReserve(reserve);
+    setSavingReserve(false);
+    if (err) setReserveErr(err);
+    else {
+      setModel((m) => (m ? { ...m, hosting_reserve: Math.round(reserve) } : m));
+      setSavedReserve(true); setTimeout(() => setSavedReserve(false), 2500);
+    }
   };
 
   const toggleSize = (preset: AlbumSizePreset) => {
@@ -140,6 +157,34 @@ export default function PricingPanel() {
         </div>
         {savedMult && <p className="text-xs text-[#2E7D4A] mt-2 font-semibold">✓ Saved — live checkout now uses {storeMult}×.</p>}
         {saveErr && <p className="text-xs text-[#B0503A] mt-2">Couldn't save: {saveErr}</p>}
+
+        {/* Hosting reserve — flat per-album buffer for ~10 years of memory hosting */}
+        <div className="mt-5 pt-5 border-t border-[#EAE3DA]">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="min-w-[220px]">
+              <h4 className="font-semibold text-[#2D2D2D]">Hosting reserve</h4>
+              <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
+                Flat ₱ added to <b>every album</b> after the markup (like the size premium — never multiplied).
+                Funds ~10 years of hosting for the {7} included living-memory videos: ≈₱29 on R2 at today's rates,
+                so ₱50 buffers price drift and scans. Extra QRs pay their own ₱20.
+              </p>
+            </div>
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-[#9B9B9B] block mb-1">₱ / album</label>
+                <input type="number" min={0} max={10000} step={5} value={reserve}
+                  onChange={(e) => { setReserve(+e.target.value); setSavedReserve(false); }}
+                  className="w-28 border border-[#E8E8E8] rounded-lg px-3 py-2 font-mono text-sm tabular-nums" />
+              </div>
+              <button onClick={saveReserve} disabled={savingReserve || reserve === model.hosting_reserve}
+                className="px-4 py-2 rounded-lg bg-[#2D2D2D] text-white text-sm font-semibold disabled:opacity-40">
+                {savingReserve ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+          {savedReserve && <p className="text-xs text-[#2E7D4A] mt-2 font-semibold">✓ Saved — every album now carries a ₱{model.hosting_reserve} hosting reserve.</p>}
+          {reserveErr && <p className="text-xs text-[#B0503A] mt-2">Couldn't save: {reserveErr}</p>}
+        </div>
       </div>
 
       {/* Album sizes offered — hides sizes from the customer picker (owner-only) */}
@@ -259,9 +304,12 @@ export default function PricingPanel() {
             <div>
               <div className="text-xs uppercase tracking-wide text-[#9B9B9B]">Your price</div>
               <div className="font-mono text-4xl font-semibold tabular-nums text-[#2D2D2D] leading-none mt-1">{peso(price)}</div>
-              {surcharge > 0 && (
+              {(surcharge > 0 || model.hosting_reserve > 0) && (
                 <div className="text-[11px] text-[#8B6F47] mt-1">
-                  incl. +{peso(surcharge)} size premium ({mult.toFixed(2).replace(/0$/, '')}× base)
+                  incl.{surcharge > 0 && <> +{peso(surcharge)} size premium</>}
+                  {surcharge > 0 && model.hosting_reserve > 0 && <> ·</>}
+                  {model.hosting_reserve > 0 && <> +{peso(model.hosting_reserve)} hosting reserve</>}
+                  {' '}({mult.toFixed(2).replace(/0$/, '')}× base)
                 </div>
               )}
             </div>
