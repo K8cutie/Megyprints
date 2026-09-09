@@ -186,3 +186,104 @@ describe('box dealing', () => {
     }
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   POOL SIZED TO THE ALBUM (2026-09-09 regression).
+   Live bug: an 80-page album's AI quotes stopped halfway through. The pool
+   was a fixed 25 lines and each line deals at most once, so every quote roll
+   after the 25th degraded to a text/QR invitation. Generation now sizes the
+   pool to the album's box count and deals AFTER layout.
+   ══════════════════════════════════════════════════════════════════════════ */
+import { vi, afterEach } from 'vitest';
+import { countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep } from './generateAlbum';
+
+afterEach(() => { vi.restoreAllMocks(); });
+
+const uniqueLines = (n: number) => Array.from({ length: n }, (_, i) => `Original line number ${i + 1}`);
+
+describe('quote pool sized to the album', () => {
+  it('countAlbumBoxes = the sum of every page template\'s textSlots', () => {
+    const pages = generateAlbum(roll(80), '8x8', 1);
+    const expected = pages.reduce((n, p) => n + boxCountOf(p, '8x8'), 0);
+    expect(expected).toBeGreaterThan(0);
+    expect(countAlbumBoxes(pages)).toBe(expected);
+  });
+
+  it('REPRODUCES the bug: a 25-line pool on an 80-page album leaves the late boxes without quotes', () => {
+    // Force every box to roll "quote" so the only thing that can stop a quote
+    // from materializing is the pool running dry — deterministic, not luck.
+    vi.spyOn(Math, 'random').mockReturnValue(0.1);
+    const pages = generateAlbum(roll(80), '8x8', 1);
+    const boxes = countAlbumBoxes(pages);
+    expect(boxes).toBeGreaterThan(25);
+    dealAlbumBoxes(pages, { ...BOX, quotePool: uniqueLines(25) });
+    const captions = pages.flatMap((p) => p.textElements.filter((t) => t.boxIndex != null));
+    expect(captions.length).toBe(25);            // exactly the pool, then nothing
+    // …and the quote-less boxes cluster at the END of the album (what the customer saw).
+    const quoted = pages.filter((p) => p.textElements.some((t) => t.boxIndex != null));
+    const lastQuotedIdx = pages.indexOf(quoted[quoted.length - 1]);
+    expect(lastQuotedIdx).toBeLessThan(pages.length - 1);
+    for (const p of pages.slice(lastQuotedIdx + 1)) {
+      if (boxCountOf(p, '8x8') === 0) continue;
+      expect(p.textSlotRoll!.every((r) => r === 'text' || r === 'qr')).toBe(true);
+    }
+  });
+
+  it('FIXED: a pool holding one line per box quotes EVERY box to the last page, no repeats', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.1);   // every box rolls "quote"
+    const pages = generateAlbum(roll(80), '8x8', 1);
+    const boxes = countAlbumBoxes(pages);
+    dealAlbumBoxes(pages, { ...BOX, quotePool: uniqueLines(boxes) });
+    const dealt: string[] = [];
+    for (const p of pages) {
+      const n = boxCountOf(p, '8x8');
+      if (n === 0) continue;
+      for (let j = 0; j < n; j++) {
+        const cap = p.textElements.find((t) => t.boxIndex === j);
+        expect(cap, `page ${p.id} box ${j} has no quote`).toBeDefined();
+        expect(p.textSlotRoll![j]).toBe('quote');
+        dealt.push(cap!.text);
+      }
+    }
+    expect(dealt.length).toBe(boxes);
+    expect(new Set(dealt).size).toBe(dealt.length);  // never-repeat still holds
+  });
+
+  it('dealAlbumBoxes ≡ generateAlbum({ boxContent }) in shape (one dealer, rolls parallel to textSlots)', () => {
+    const pages = generateAlbum(roll(80), '8x8', undefined);
+    dealAlbumBoxes(pages, BOX);
+    for (const p of pages) {
+      const n = boxCountOf(p, '8x8');
+      if (n === 0) { expect(p.textSlotRoll).toBeUndefined(); continue; }
+      expect(p.textSlotRoll!.length).toBe(n);
+      p.textSlotRoll!.forEach((r, j) => {
+        const cap = p.textElements.find((t) => t.boxIndex === j);
+        if (r === 'quote') { expect(cap).toBeDefined(); expect(BOX.quotePool).toContain(cap!.text); }
+        else expect(cap).toBeUndefined();
+      });
+    }
+  });
+
+  it('quotesNeededForSweep = empty boxes + lines already held (so a full sweep never runs dry)', () => {
+    const template = getTemplatesForAlbum('8x8').find((t) => t.textSlots?.length === 1)!;
+    const mkPage = (id: string, extra: Partial<AlbumPage> = {}): AlbumPage => ({
+      id, layout: 'freeform', size: '8x8', templateId: template.id,
+      slotFills: [], photos: [], textElements: [],
+      background: { type: 'solid', solid: '#FFFFFF' },
+      ...extra,
+    } as unknown as AlbumPage);
+    const held = { id: 'x', text: 'Held line', x: 0, y: 0, fontSize: 28, fontFamily: 'serif', color: '#000', bold: false, italic: true, underline: false, alignment: 'center', rotation: 0, opacity: 100, boxIndex: 0 };
+    const pages = [
+      mkPage('a', { textElements: [held] as AlbumPage['textElements'] }),           // occupied, 1 held
+      mkPage('b'),                                                                      // empty
+      mkPage('c', { slotTexts: [{ text: 'Slot line' }] as AlbumPage['slotTexts'] }),   // empty box, 1 held
+      mkPage('d', { textSlotQr: ['qr'] as unknown as AlbumPage['textSlotQr'] }),        // occupied by QR
+    ];
+    expect(quotesNeededForSweep(pages)).toBe(2 + 2);
+    // Proof by construction: a pool of exactly that many unique lines (the two
+    // held ones included, worst case) fills every empty box.
+    const { filled, remaining } = sweepFillQuotes(pages, { ...BOX, quotePool: ['Held line', 'Slot line', 'New one', 'New two'] });
+    expect(filled).toBe(2);
+    expect(remaining).toBe(0);
+  });
+});

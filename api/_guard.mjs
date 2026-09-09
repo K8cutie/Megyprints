@@ -30,16 +30,19 @@
 // (a normal album makes one call per theme, cached client-side after that).
 
 /** Reject a body larger than this many bytes. A theme is capped at 200 chars
- *  downstream; 2 KB leaves generous headroom for JSON overhead while still
- *  refusing a payload crafted to balloon token spend. */
-const MAX_BODY_BYTES = 2048;
+ *  downstream, and a TOP-UP call also carries an `avoid` list of up to 200
+ *  lines × ≤50 chars (≈11 KB with JSON quoting) so the model doesn't repeat
+ *  lines the album already holds. 16 KB covers that legitimate maximum while
+ *  still refusing a payload crafted to balloon token spend (the endpoint
+ *  re-clamps every field, so an oversized-but-under-cap body buys nothing). */
+const MAX_BODY_BYTES = 16 * 1024;
 
 /** Rolling window for the per-IP counter. */
 const WINDOW_MS = 60_000;
 
-/** Max requests per IP per window. A customer makes ~1 paid call per theme
- *  (the client caches per theme), so 20/min is orders of magnitude above real
- *  use and only bites a scripted loop. */
+/** Max requests per IP per window. A customer makes 1–4 paid calls per theme
+ *  (one per 60-line top-up batch, sized to the album, cached per theme after
+ *  that), so 20/min is far above real use and only bites a scripted loop. */
 const MAX_PER_WINDOW = 20;
 
 /** Stop the counter Map from growing without bound on a long-lived instance. */

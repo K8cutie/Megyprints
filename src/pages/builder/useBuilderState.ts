@@ -22,8 +22,8 @@ import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, type BoxContentOptions } from './generateAlbum';
-import { quotesForThemeNow, fetchThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, type BoxContentOptions } from './generateAlbum';
+import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
 import { useAlbumSync } from '../../lib/useAlbumSync';
@@ -511,7 +511,7 @@ export interface BuilderActions {
    *  album-wide with a theme quote the album hasn't used yet (never-repeat
    *  holds). One undo step. Returns counts for the CTA's feedback —
    *  remaining>0 means the pool ran dry and that many boxes stayed empty. */
-  finishBoxesWithQuotes: () => { filled: number; remaining: number };
+  finishBoxesWithQuotes: () => Promise<{ filled: number; remaining: number }>;
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
@@ -1257,20 +1257,24 @@ export function useBuilderState(): BuilderActions {
     // Fall back to the theme's own background so image-less palette themes
     // (e.g. baptism) don't generate as plain white when no bg is passed.
     const bg = wizardBackground ?? getThemedBackground(selectedTemplate, 0);
-    // Megy deals each combo box's content (see BOX_ROLL_WEIGHTS). Quotes draw
-    // from what's available NOW — cached AI lines for the typed theme, else the
-    // curated corpus — while fetchThemeQuotes warms the AI cache in the
-    // background for the NEXT generation instead of delaying this one. Styling
-    // mirrors setBoxText's defaults so a dealt quote ≡ a QuotePickerModal pick.
-    const albumTheme = currentAlbumTheme();
-    void fetchThemeQuotes(albumTheme);
+    // Lay the pages out FIRST, then size the quote pool to them. Megy deals
+    // each combo box's content (see BOX_ROLL_WEIGHTS) and never repeats a line,
+    // so the pool must hold one line per box: a fixed 25-line pool left the
+    // second half of an 80-page album with no quotes at all (2026-09-09).
+    // ensureThemeQuotes tops the cached AI set up in batches for the typed
+    // theme (curated corpus when the proxy is unavailable) and returns what it
+    // has once the wait budget is spent — the rest keeps landing in the cache
+    // for the finish-line sweep. Styling mirrors setBoxText's defaults so a
+    // dealt quote ≡ a QuotePickerModal pick.
+    let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase });
     const quoteTheme = THEMES[selectedTemplate];
+    const quotePool = await ensureThemeQuotes(currentAlbumTheme(), countAlbumBoxes(newPages), { budgetMs: 12_000 });
     const boxContent: BoxContentOptions = {
-      quotePool: quotesForThemeNow(albumTheme),
+      quotePool,
       quoteFontFamily: quoteTheme.fontFamily,
       quoteColor: quoteTheme.textColor,
     };
-    let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase, boxContent });
+    dealAlbumBoxes(newPages, boxContent);
     // createEmptyPage only carries border color/width — also apply the border STYLE
     // and the decorative FRAME (when chosen) onto every freshly generated page.
     const bStyle = border.style;
@@ -2299,19 +2303,24 @@ export function useBuilderState(): BuilderActions {
    *  quotes into every empty caption box (sweepFillQuotes excludes any line
    *  the album already carries, so the never-repeat rule survives the sweep).
    *  Styling mirrors setBoxText's defaults, same as generation-time deals. */
-  const finishBoxesWithQuotes = useCallback((): { filled: number; remaining: number } => {
+  const finishBoxesWithQuotes = useCallback(async (): Promise<{ filled: number; remaining: number }> => {
     const theme = THEMES[selectedTemplate];
-    const { pages, filled, remaining } = sweepFillQuotes(albumPages, {
-      quotePool: quotesForThemeNow(currentAlbumTheme()),
-      quoteFontFamily: theme.fontFamily,
-      quoteColor: theme.textColor,
+    // Grow the theme's pool to what a FULL sweep needs before dealing — the
+    // sweep excludes every line the album already carries, so a pool sized
+    // only for generation would leave the late boxes empty again.
+    const quotePool = await ensureThemeQuotes(currentAlbumTheme(), quotesNeededForSweep(albumPages), { budgetMs: 12_000 });
+    const box: BoxContentOptions = { quotePool, quoteFontFamily: theme.fontFamily, quoteColor: theme.textColor };
+    // Sweep the LATEST pages (the customer may have edited during the wait);
+    // the functional updater sees them, the closure above may not.
+    let result = { filled: 0, remaining: 0 };
+    pushSnapshot();
+    setAlbumPages((prev) => {
+      const { pages, filled, remaining } = sweepFillQuotes(prev, box);
+      result = { filled, remaining };
+      return filled > 0 ? pages : prev;
     });
-    if (filled > 0) {
-      pushSnapshot();
-      setAlbumPages(pages);
-    }
-    return { filled, remaining };
-  }, [albumPages, selectedTemplate]);
+    return result;
+  }, [albumPages, selectedTemplate, pushSnapshot]);
 
   const setBoxTextOffset = useCallback((slotIndex: number, offsetX: number, offsetY: number) => {
     updateCurrentPage((page) => ({

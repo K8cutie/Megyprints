@@ -182,6 +182,52 @@ export function dealBoxContent(
   page.textSlotRoll = rolls;
 }
 
+/** How many combo/caption boxes an album carries — ONE quote per box is the
+ *  pool size that guarantees neither generation nor the finish-line sweep ever
+ *  runs dry (each line is dealt at most once). */
+export function countAlbumBoxes(pages: AlbumPage[]): number {
+  let n = 0;
+  for (const p of pages) {
+    const t = p.templateId ? getTemplateById(p.templateId) : undefined;
+    n += t?.textSlots?.length ?? 0;
+  }
+  return n;
+}
+
+/** Deal every page's boxes with ONE dealer (album-wide never-repeat). This is
+ *  the generation-time path split out so the caller can size the quote pool
+ *  to the FINISHED page list first — the pool used to be fixed at 25 lines and
+ *  went dry halfway through an 80-page album (2026-09-09). Mutates pages. */
+export function dealAlbumBoxes(pages: AlbumPage[], box: BoxContentOptions): void {
+  const dealQuote = makeQuoteDealer(box.quotePool);
+  for (const page of pages) {
+    const template = page.templateId ? getTemplateById(page.templateId) : undefined;
+    if (template) dealBoxContent(page, template, box, dealQuote);
+  }
+}
+
+/** Lines the finish-line sweep needs in the pool to fill EVERY empty box:
+ *  the deck excludes lines the album already carries, so the pool must hold
+ *  the still-empty boxes PLUS every held line (an upper bound on overlap). */
+export function quotesNeededForSweep(pages: AlbumPage[]): number {
+  let held = 0;
+  let empty = 0;
+  for (const p of pages) {
+    held += p.textElements.length + (p.slotTexts ?? []).filter(Boolean).length;
+    const t = p.templateId ? getTemplateById(p.templateId) : undefined;
+    const boxes = t?.textSlots?.length ?? 0;
+    for (let j = 0; j < boxes; j++) {
+      const occupied =
+        p.textElements.some((x) => x.boxIndex === j) ||
+        p.textSlotFills?.[j] != null ||
+        !!p.textSlotQr?.[j] ||
+        !!p.textSlotOrnament?.[j];
+      if (!occupied) empty++;
+    }
+  }
+  return held + empty;
+}
+
 /** "Megy finishes it" — the preview's finish-line sweep. Fills EVERY still-
  *  empty combo/caption box across the album with a quote the album hasn't
  *  used yet: lines already printed anywhere (bound captions AND photo-slot

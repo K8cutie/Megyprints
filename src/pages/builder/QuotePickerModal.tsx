@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Quote, Loader2, RefreshCw, Trash2 } from 'lucide-react';
-import { fetchThemeQuotes, forgetThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
+import { fetchThemeQuotes, moreThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
 
 const THEME_KEY = 'megy-album-theme';
 
@@ -33,8 +33,9 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
     try { if (q) localStorage.setItem(THEME_KEY, q); } catch { /* ignore */ }
     setLoading(true);
     try {
-      if (fresh && q) forgetThemeQuotes(q);   // "More lines" → regenerate, don't serve the cache
-      const set = await fetchThemeQuotes(q);
+      // "More lines" → GROW the theme's pool (the album deals from it, so the
+      // held lines are kept — never thrown away and regenerated).
+      const set = fresh && q ? await moreThemeQuotes(q) : await fetchThemeQuotes(q);
       setQuotes(set.quotes);
       setSource(set.source);
     } catch {

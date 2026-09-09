@@ -5,6 +5,7 @@ import { ALBUM_SIZES } from './types';
 import type { AlbumSizePreset } from './types';
 import { loadStoreSettings } from '../../lib/storeSettings';
 import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
+import { fetchThemeQuotes } from '../../lib/quotes';
 
 /* ═══════════════════════════════════════════════════════════
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
@@ -223,7 +224,14 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
           className="text-center"
         >
           <button
-            onClick={onNext}
+            onClick={() => {
+              // Warm the theme's AI quote pool NOW (one cached call) so the
+              // album's first generation deals real themed lines instead of
+              // waiting on the proxy. Generation tops the pool up to the
+              // album's box count from here.
+              if (theme.trim()) void fetchThemeQuotes(theme);
+              onNext();
+            }}
             className="inline-flex items-center gap-2 px-10 py-3.5 bg-gradient-to-r from-[#F4C2A1] to-[#E8A598] text-white font-semibold rounded-2xl hover:brightness-105 transition-all shadow-lg shadow-[#F4C2A1]/25 text-base"
           >
             <Sparkles size={18} />

@@ -669,16 +669,26 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     return n;
   }, [pages]);
   const [sweepNote, setSweepNote] = useState<string | null>(null);
-  const handleMegyFinish = () => {
-    const { filled, remaining } = finishBoxesWithQuotes();
-    setSweepNote(
-      filled === 0
-        ? 'No unused quotes left for this theme'
-        : remaining > 0
-          ? `Megy filled ${filled} — ${remaining} left (out of unique lines)`
-          : `Megy filled ${filled} ${filled === 1 ? 'box' : 'boxes'} ✓`,
-    );
-    window.setTimeout(() => setSweepNote(null), 4000);
+  const [sweeping, setSweeping] = useState(false);
+  const handleMegyFinish = async () => {
+    if (sweeping) return;
+    setSweeping(true);
+    // The sweep may first ask the proxy for more lines (a big album needs one
+    // per box) — say so, so a few seconds of nothing isn't a dead button.
+    setSweepNote('Megy is writing lines for your theme…');
+    try {
+      const { filled, remaining } = await finishBoxesWithQuotes();
+      setSweepNote(
+        filled === 0
+          ? 'No unused quotes left for this theme'
+          : remaining > 0
+            ? `Megy filled ${filled} — ${remaining} left (out of unique lines)`
+            : `Megy filled ${filled} ${filled === 1 ? 'box' : 'boxes'} ✓`,
+      );
+    } finally {
+      setSweeping(false);
+      window.setTimeout(() => setSweepNote(null), 4000);
+    }
   };
 
   // The preview is a TWO-PAGE spread — wider than a phone screen, so it shrinks to
