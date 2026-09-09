@@ -223,7 +223,9 @@ export default async function handler(req, res) {
   // oracle, so cap scripted hammering here (the sole legit auto-forward path).
   // A human scanning printed QRs is nowhere near the limit; distinct scanners
   // are distinct IPs. On throttle, show the branded "unavailable" page.
-  const g = guard(req);
+  // checkOrigin:false — a scan is a top-level navigation with no Origin/Referer;
+  // the allow-list would (and did) 403 every real customer. See _guard.mjs.
+  const g = guard(req, { checkOrigin: false });
   if (g) {
     if (g.retryAfter) res.setHeader('Retry-After', String(g.retryAfter));
     return send(res, g.status === 429 ? 429 : g.status, unavailable());

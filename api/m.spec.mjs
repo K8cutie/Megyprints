@@ -113,6 +113,22 @@ describe('handler', () => {
     expect(rpc).toHaveBeenCalledTimes(1);
   });
 
+  it('REGRESSION: a bare scan (no Origin, no Referer) is served even when ALLOWED_ORIGINS is set', async () => {
+    // A phone camera opening /m/<code> sends neither header. From 2026-08-12 to
+    // 2026-09-09 the origin allow-list 403'd every scan as "Temporarily unavailable".
+    process.env.ALLOWED_ORIGINS = 'https://megyprints.vercel.app';
+    try {
+      rpc.mockResolvedValue({ data: [row({ expires_at: inYears(10) })], error: null });
+      const res = mkRes();
+      await mod.default(mkReq('k7m2p9qz'), res);
+      expect(res.code).toBe(200);
+      expect(res.body).toContain('<video');
+      expect(res.body).not.toContain('Temporarily unavailable');
+    } finally {
+      delete process.env.ALLOWED_ORIGINS;
+    }
+  });
+
   it('a title is HTML-escaped on every page', async () => {
     rpc.mockResolvedValue({ data: [row({ title: '<script>alert(1)</script>', expires_at: inYears(-1) })], error: null });
     const res = mkRes();

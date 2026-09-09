@@ -76,8 +76,15 @@ function allowedOrigins() {
 
 /** Inspect a request. Returns null when it may proceed, or
  *  { status, error, retryAfter? } describing how to reject it. Pure w.r.t. the
- *  response — the caller sends the status so this stays easy to reason about. */
-export function guard(req) {
+ *  response — the caller sends the status so this stays easy to reason about.
+ *
+ *  opts.checkOrigin (default true): the origin allow-list only makes sense for
+ *  XHR/fetch callers (the builder's paid proxies). A TOP-LEVEL NAVIGATION — a
+ *  phone camera opening a scanned /m/<code> — carries NO Origin and NO Referer,
+ *  so the allow-list must be skipped for the QR resolver. (Live bug 2026-08-12
+ *  → 2026-09-09: every scan answered 403 "Temporarily unavailable" once
+ *  ALLOWED_ORIGINS was set. Rate + body limits still apply there.) */
+export function guard(req, opts = {}) {
   // 1. body size — check the declared length first (cheap), then the actual body.
   // On Vercel a JSON request arrives ALREADY PARSED as an object, so a raw-string
   // check alone never fires; measure the serialized object too so the cap is real
@@ -92,8 +99,8 @@ export function guard(req) {
     if (n > MAX_BODY_BYTES) return { status: 413, error: 'request body too large' };
   }
 
-  // 2. origin allow-list (opt-in via ALLOWED_ORIGINS).
-  const allow = allowedOrigins();
+  // 2. origin allow-list (opt-in via ALLOWED_ORIGINS; skipped for navigations).
+  const allow = opts.checkOrigin === false ? [] : allowedOrigins();
   if (allow.length) {
     const origin = req.headers.origin || '';
     const referer = req.headers.referer || '';
