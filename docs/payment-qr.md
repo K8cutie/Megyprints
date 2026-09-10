@@ -9,8 +9,9 @@ taps **Mark paid** in `/admin`.
 
 `public/pay/gotyme-instapay.png` — the screenshot from the GoTyme app
 ("Receive money" → QR). The Order page shows it at `/pay/gotyme-instapay.png`.
-The file is **not** in git history yet; drop it in before merging the payment
-branch, or the payment step shows the fallback text instead of a code.
+Committed 2026-09-10 (418×561 px). It decodes as a QR Ph / EMVCo payload
+addressed to GoTyme (`com.p2pqrpay`, `GOTYPHM2XXX`), so it scans from any
+InstaPay app. Replace the file if the account ever changes.
 
 The payee text (bank, name, last four digits) is in `src/lib/payment.ts`.
 Change both together when the account changes.
