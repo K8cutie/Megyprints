@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package, QrCode, Wifi } from 'lucide-react';
+import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, Package, QrCode, Wifi, Landmark, Paperclip, Clock } from 'lucide-react';
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_ALBUM_SIZE, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
@@ -12,6 +12,7 @@ import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
+import { PAYEE, checkProof, uploadPaymentProof, submitPaymentProof, cleanReference } from '../lib/payment';
 import { updateMemoryDestination } from '../lib/qrMemories';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
@@ -23,7 +24,8 @@ type Step = 'form' | 'payment' | 'tracking';
 
 // The fulfillment journey shown on the tracker.
 const TRACK_STAGES = [
-  { label: 'Payment received', icon: Check },
+  { label: 'Payment sent — we\'re confirming it', icon: Clock },
+  { label: 'Payment confirmed', icon: Check },
   { label: 'Sent to the printer', icon: Package },
   { label: 'Printing your album', icon: Printer },
   { label: 'Finished', icon: Check },
@@ -58,6 +60,11 @@ export default function Order() {
   const [orderNumber, setOrderNumber] = useState('');
   const [trackStage, setTrackStage] = useState(0);
   const [prepMsg, setPrepMsg] = useState('');
+  // Manual transfer (0033): the receipt + bank reference the customer attaches.
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofError, setProofError] = useState('');
+  const [payRef, setPayRef] = useState('');
+  const [qrMissing, setQrMissing] = useState(false);
 
   // Price the ACTUAL album the customer built. Size + page count come from the
   // print job (set at "ORDER ALBUM"); fall back sensibly if someone hits /order
@@ -148,22 +155,22 @@ export default function Order() {
       openLogin();
       return;
     }
-    setStep('payment');
+    void placeOrder();
   };
 
-  // ── Placeholder payment → create order → REQUIRED print-PDF upload → tracking ──
+  // ── Place the order → REQUIRED print-PDF upload → show the payment QR ──
+  // Manual bank transfer (0033): the order row exists BEFORE the customer pays
+  // so its number can be the transfer reference; it stays pending_payment
+  // until the operator matches the deposit and taps "Mark paid".
   // The print-ready PDF is generated on THIS device (the photos live only in
   // this browser's IndexedDB) and uploaded to the private fulfillment bucket. It
   // is a BLOCKING step: an order must never reach the "Sent to print" screen
   // without its PDF in the bucket. On any failure we surface a clear error and
   // leave the user on the Pay button to retry.
-  const handlePay = async () => {
+  const placeOrder = async () => {
     setErrorMsg('');
     setSubmitting(true);
     try {
-      // Simulated payment — no real gateway. (Xendit slots in here later.)
-      await new Promise((r) => setTimeout(r, 1200));
-
       // 1. Create the order — but only once. A retry after a failed upload reuses
       //    the same order row (no duplicate) since the storage upload upserts.
       let order = createdOrderRef.current;
@@ -284,40 +291,70 @@ export default function Order() {
       for (const code of clipCodes) void removeStagedClip(code);
       setPrepMsg('');
 
-      // 5. Only NOW — with the PDF safely in the bucket — advance to tracking.
-      setTrackStage(0);
-      setStep('tracking');
+      // 5. Only NOW — with the PDF safely in the bucket — show the payment QR.
+      setStep('payment');
     } catch (err) {
       setPrepMsg('');
       // The money path must never fail silently in production — the customer sees
       // the message, and the operator/owner sees the cause in Sentry/the endpoint.
-      reportError(err, { path: 'checkout', step: 'pay', orderId: createdOrderRef.current?.id });
+      reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong placing your order.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // ── Tracker auto-advances through the fulfillment stages ──
-  useEffect(() => {
-    if (step !== 'tracking') return;
-    if (trackStage >= TRACK_STAGES.length - 1) return;
-    const t = setTimeout(() => setTrackStage((s) => s + 1), 2400);
-    return () => clearTimeout(t);
-  }, [step, trackStage]);
+  // ── "I've sent the payment": attach the receipt + reference, then wait ──
+  // Both are optional — a customer who can't screenshot still gets through,
+  // and the operator confirms from the GoTyme app either way. Only the record
+  // step is required; a failed receipt upload is reported but does not block.
+  const handlePaymentSent = async () => {
+    const order = createdOrderRef.current;
+    if (!order) { setErrorMsg('Your order was not created yet — go back and try again.'); return; }
+    setErrorMsg('');
+    setSubmitting(true);
+    try {
+      let proofPath: string | null = null;
+      if (proofFile) {
+        setPrepMsg('Attaching your receipt…');
+        try { proofPath = await uploadPaymentProof(order.id, proofFile); }
+        catch (e) { reportError(e, { path: 'checkout', step: 'payment_proof', orderId: order.id }); setProofError(e instanceof Error ? e.message : 'Receipt upload failed.'); }
+      }
+      setPrepMsg('Recording your payment…');
+      await submitPaymentProof(order.id, { reference: cleanReference(payRef), proofPath });
+      setPrepMsg('');
+      setTrackStage(0);
+      setStep('tracking');
+    } catch (err) {
+      setPrepMsg('');
+      reportError(err, { path: 'checkout', step: 'payment_sent', orderId: order.id });
+      setErrorMsg(err instanceof Error ? err.message : 'Could not record your payment. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onPickProof = (f: File | null) => {
+    setProofError('');
+    if (!f) { setProofFile(null); return; }
+    const bad = checkProof(f);
+    if (bad) { setProofError(bad); setProofFile(null); return; }
+    setProofFile(f);
+  };
 
   /* ══════════════ TRACKING ══════════════ */
   if (step === 'tracking') {
-    const printerReached = trackStage >= 1; // "Sent to the printer" onward
+    const printerReached = trackStage >= 2; // "Sent to the printer" onward
     const finished = trackStage >= TRACK_STAGES.length - 1;
     return (
       <div className="min-h-screen bg-[#FFF8F0] pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg">
           <div className="text-center mb-8">
-            <h2 className="font-display text-3xl font-bold text-[#2D2D2D]">{finished ? 'Your album is finished! 🎉' : 'Order in progress…'}</h2>
+            <h2 className="font-display text-3xl font-bold text-[#2D2D2D]">{finished ? 'Your album is finished! 🎉' : 'Thank you — we\'re confirming your payment'}</h2>
             {orderNumber && (
               <p className="mt-2 text-sm font-medium text-[#2D2D2D]">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
             )}
+            <p className="mt-2 text-xs text-[#8B7E7A] max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-[#2D2D2D]">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
           </div>
 
           {/* Status tracker */}
@@ -349,12 +386,10 @@ export default function Order() {
             </div>
           )}
 
-          {finished && (
-            <div className="mt-6 flex gap-3 justify-center">
-              <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-[#F4C2A1] text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
-              <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-[#6B6B6B] rounded-lg font-medium hover:bg-[#F0F0F0]">Home</button>
-            </div>
-          )}
+          <div className="mt-6 flex gap-3 justify-center">
+            <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-[#F4C2A1] text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
+            <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-[#6B6B6B] rounded-lg font-medium hover:bg-[#F0F0F0]">Home</button>
+          </div>
         </motion.div>
       </div>
     );
@@ -362,13 +397,65 @@ export default function Order() {
 
   /* ══════════════ PAYMENT (placeholder) ══════════════ */
   if (step === 'payment') {
+    // Read the order NUMBER from state, not the ref, during render (react-hooks/refs).
+    const placed = orderNumber ? { order_number: orderNumber } : null;
+    const amountLabel = `₱${totalPrice.toLocaleString('en-PH')}`;
     return (
       <div className="min-h-screen bg-[#FFF8F0] pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
-          <h1 className="font-display text-3xl font-bold text-[#2D2D2D] text-center mb-6">Payment</h1>
+          <h1 className="font-display text-3xl font-bold text-[#2D2D2D] text-center mb-1">Send {amountLabel}</h1>
+          {placed && <p className="text-center text-sm text-[#6B6B6B] mb-5">Order <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> is placed. Pay by bank transfer to finish.</p>}
           <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 text-[#6B6B6B] mb-4"><CreditCard size={18} /> <span className="text-sm font-medium">Pay for your album</span></div>
-            <div className="space-y-2 text-sm border-y border-[#F0F0F0] py-4 mb-4">
+            {/* The QR — scanned from any PH bank or e-wallet app (InstaPay / QR Ph). */}
+            <div className="rounded-xl border border-[#F0F0F0] bg-[#FFFDFB] p-4 text-center">
+              <div className="flex items-center justify-center gap-2 text-[#6B6B6B] mb-2"><Landmark size={16} /> <span className="text-xs font-semibold uppercase tracking-wide">{PAYEE.bank} · {PAYEE.rail}</span></div>
+              {!qrMissing ? (
+                <img src={PAYEE.qrSrc} alt={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} onError={() => setQrMissing(true)}
+                  className="mx-auto w-56 h-56 object-contain rounded-lg bg-white" draggable={false} />
+              ) : (
+                <div className="mx-auto w-56 h-56 rounded-lg bg-[#F7F1EC] flex items-center justify-center text-xs text-[#8B7E7A] px-4">The QR code isn't available right now — message us and we'll send the account details.</div>
+              )}
+              <p className="mt-3 text-base font-semibold text-[#2D2D2D]">{PAYEE.name}</p>
+              <p className="text-xs text-[#8B7E7A]">Account ending in <span className="font-mono">{PAYEE.accountLast4}</span></p>
+              <p className="mt-2 font-display text-2xl font-bold text-[#E8A598]">{amountLabel}</p>
+            </div>
+
+            <ol className="mt-4 space-y-1.5 text-xs text-[#5A5A5A] list-decimal pl-4">
+              <li>Open your bank or e-wallet app (GCash, Maya, BPI, BDO, UnionBank…).</li>
+              <li>Choose <b>Scan QR</b> / <b>InstaPay</b> and scan the code above.</li>
+              <li>Send exactly <b className="text-[#2D2D2D]">{amountLabel}</b>{placed && <> and put <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> in the note if your app asks</>}.</li>
+              <li>Attach your receipt below — it speeds up confirmation.</li>
+            </ol>
+            <p className="mt-2 text-[11px] text-[#9B9B9B]">Your app may charge a small InstaPay fee. We don't add any.</p>
+
+            {/* Receipt + reference (0033). Optional, but it lets the operator match the deposit at a glance. */}
+            <div className="mt-4 rounded-xl border border-[#F0F0F0] p-3">
+              <label className="block text-xs font-semibold text-[#2D2D2D] mb-1.5">Receipt screenshot <span className="font-normal text-[#9B9B9B]">(optional)</span></label>
+              <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-[#F4C2A1] bg-[#FFF8F0] text-xs text-[#8B6F47] cursor-pointer hover:bg-[#FDE8E4]">
+                <Paperclip size={14} className="shrink-0" />
+                <span className="truncate">{proofFile ? `${proofFile.name} · ${Math.max(1, Math.round(proofFile.size / 1024))} KB` : 'Attach the transfer receipt (JPG, PNG or PDF)'}</span>
+                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={(e) => onPickProof(e.target.files?.[0] ?? null)} />
+              </label>
+              {proofError && <p className="mt-1.5 text-[11px] text-red-500">{proofError}</p>}
+              <label className="block text-xs font-semibold text-[#2D2D2D] mt-3 mb-1.5">Reference no. <span className="font-normal text-[#9B9B9B]">(optional — from your bank's receipt)</span></label>
+              <input value={payRef} onChange={(e) => setPayRef(e.target.value)} inputMode="text" autoComplete="off" placeholder="e.g. 2026091012345678" maxLength={64}
+                className="w-full px-3 py-2 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1]" />
+            </div>
+
+            <button
+              onClick={handlePaymentSent}
+              disabled={submitting}
+              className="w-full mt-4 py-3.5 bg-[#E8A598] text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+            >
+              {submitting
+                ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Saving…'}</>
+                : <><Check size={16} /> I've sent {amountLabel}</>}
+            </button>
+            <p className="mt-3 text-[11px] text-[#9B9B9B] text-center">We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</p>
+            {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}
+            <details className="mt-3 text-xs text-[#9B9B9B]">
+              <summary className="cursor-pointer text-center hover:text-[#6B6B6B]">Order summary</summary>
+            <div className="space-y-2 text-sm border-y border-[#F0F0F0] py-4 mt-2">
               <div className="flex justify-between gap-3"><span className="text-[#6B6B6B] shrink-0">Album</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
               {breakdown.items.map((item) => (
                 <div key={item.label} className="flex justify-between gap-3">
@@ -378,22 +465,7 @@ export default function Order() {
               ))}
               <div className="flex justify-between items-baseline pt-1 border-t border-[#F0F0F0]"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice.toLocaleString('en-PH')}</span></div>
             </div>
-            <button
-              onClick={handlePay}
-              disabled={submitting || !priceReady}
-              className="w-full py-3.5 bg-[#E8A598] text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
-            >
-              {submitting
-                ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Processing payment…'}</>
-                : !settingsReady
-                  ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
-                  : !schedule
-                    ? <>Pricing unavailable — please refresh</>
-                    : <>Pay ₱{totalPrice}</>}
-            </button>
-            <p className="mt-3 text-[11px] text-[#9B9B9B] text-center">🔒 Simulated payment — no real charge. (Xendit checkout goes here later.)</p>
-            {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}
-            <button onClick={() => { setStep('form'); setErrorMsg(''); }} disabled={submitting} className="w-full mt-3 text-xs text-[#9B9B9B] hover:text-[#6B6B6B] disabled:opacity-50">← Back to details</button>
+            </details>
           </div>
         </motion.div>
       </div>
@@ -571,11 +643,12 @@ export default function Order() {
                   </div>
                 </div>
               )}
-              <button onClick={handleProceedToPayment} disabled={!priceReady}
+              <button onClick={handleProceedToPayment} disabled={!priceReady || submitting}
                 className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
-                {priceReady ? <><ShoppingCart size={16} /> Proceed to Payment</>
-                  : !settingsReady ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
-                    : <>Pricing unavailable — please refresh</>}
+                {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
+                  : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${totalPrice.toLocaleString('en-PH')}`} by bank transfer</>
+                    : !settingsReady ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
+                      : <>Pricing unavailable — please refresh</>}
               </button>
               {errorMsg && (
                 <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>
