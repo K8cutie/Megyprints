@@ -327,28 +327,48 @@
   background-image:
     radial-gradient(60% 40% at 15% 0%, rgb(244 194 161 / .18), transparent 70%),
     radial-gradient(50% 35% at 100% 20%, rgb(232 165 152 / .10), transparent 70%);
-  background-attachment: fixed;
 }
 
 /* ── Soft-glass: frosted panels over an ambient backdrop ────────────────── */
+/* The gradient scrolls with the page on purpose: a fixed attachment is
+   ignored or janky on mobile Chrome / Safari. */
 [data-theme="soft-glass"] body {
   background-image:
     radial-gradient(45% 35% at 10% 5%, rgb(244 194 161 / .45), transparent 70%),
     radial-gradient(40% 40% at 90% 15%, rgb(184 169 217 / .30), transparent 70%),
     radial-gradient(50% 40% at 50% 100%, rgb(155 207 184 / .22), transparent 70%);
-  background-attachment: fixed;
 }
-[data-theme="soft-glass"] .bg-white {
+
+/* THE RULE THAT BIT US: a backdrop blur on an element makes it the containing
+   block for every position:fixed descendant. Put it on a page wrapper and the
+   full-screen wizard stage and the sign-in gate collapse into a 48-px strip
+   (blank screen on the phone, 2026-09-12). So the blur never goes on the
+   panel itself — it goes on a ::before pseudo-layer, which is a CHILD and can
+   never be an ancestor of anything. Page-sized wrappers are excluded outright:
+   blurring a whole page is pointless and the heaviest thing a phone can do. */
+[data-theme="soft-glass"] :is(.bg-white, .bg-warm-white, .bg-cream, .bg-paper):not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full) {
+  isolation: isolate;
+}
+[data-theme="soft-glass"] .bg-white:not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full) {
   background-color: rgb(255 255 255 / .62);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  backdrop-filter: blur(18px) saturate(1.4);
 }
-[data-theme="soft-glass"] .bg-warm-white,
-[data-theme="soft-glass"] .bg-cream,
-[data-theme="soft-glass"] .bg-paper {
+[data-theme="soft-glass"] :is(.bg-warm-white, .bg-cream, .bg-paper):not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full) {
   background-color: rgb(255 251 247 / .55);
-  -webkit-backdrop-filter: blur(14px) saturate(1.3);
-  backdrop-filter: blur(14px) saturate(1.3);
+}
+/* Statically positioned panels need a positioning box for the pseudo-layer;
+   fixed / absolute / sticky / relative ones already have one - never touch those. */
+[data-theme="soft-glass"] :is(.bg-white, .bg-warm-white, .bg-cream, .bg-paper):not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full):not(.fixed):not(.absolute):not(.sticky):not(.relative) {
+  position: relative;
+}
+[data-theme="soft-glass"] :is(.bg-white, .bg-warm-white, .bg-cream, .bg-paper):not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  backdrop-filter: blur(16px) saturate(1.35);
 }
 [data-theme="soft-glass"] .border-line,
 [data-theme="soft-glass"] .border-line-soft { border-color: rgb(255 255 255 / .6); }
@@ -356,9 +376,8 @@
 [data-theme="soft-glass"] .fixed.inset-0.bg-warm-white,
 [data-theme="soft-glass"] .fixed.inset-0.bg-cream {
   background-color: rgb(var(--t-cream));
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 @media (prefers-reduced-transparency: reduce) {
-  [data-theme="soft-glass"] .bg-white { background-color: rgb(255 255 255 / .92); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  [data-theme="soft-glass"] .bg-white { background-color: rgb(255 255 255 / .92); }
+  [data-theme="soft-glass"] :is(.bg-white, .bg-warm-white, .bg-cream, .bg-paper)::before { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
