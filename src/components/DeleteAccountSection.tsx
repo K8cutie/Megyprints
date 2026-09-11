@@ -94,8 +94,8 @@ export default function DeleteAccountSection() {
         transition={{ delay: 0.4 }}
         className="bg-white rounded-2xl border border-red-200/70 p-6"
       >
-        <h3 className="text-lg font-bold text-[#4A423F] mb-1">Delete my account</h3>
-        <p className="text-sm text-[#8B7E7A] mb-4 max-w-2xl">
+        <h3 className="text-lg font-bold text-ink-warm mb-1">Delete my account</h3>
+        <p className="text-sm text-taupe mb-4 max-w-2xl">
           Permanently deletes your account, your albums, your saved photos and any QR memory
           links. This can&apos;t be undone.
         </p>
@@ -129,8 +129,8 @@ export default function DeleteAccountSection() {
             >
               {phase === 'done' ? (
                 <div className="p-8 text-center">
-                  <h2 className="text-lg font-bold text-[#4A423F]">Your account is deleted</h2>
-                  <p className="text-sm text-[#8B7E7A] mt-2">
+                  <h2 className="text-lg font-bold text-ink-warm">Your account is deleted</h2>
+                  <p className="text-sm text-taupe mt-2">
                     Your albums, photos and memory links are gone. Thanks for using Megy Prints.
                   </p>
                 </div>
@@ -141,14 +141,14 @@ export default function DeleteAccountSection() {
                       <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
                         <AlertTriangle size={20} className="text-red-500" />
                       </div>
-                      <h2 id="delete-account-title" className="text-lg font-bold text-[#4A423F]">
+                      <h2 id="delete-account-title" className="text-lg font-bold text-ink-warm">
                         Delete your account?
                       </h2>
                     </div>
                     <button
                       onClick={close}
                       disabled={phase === 'deleting'}
-                      className="p-1.5 rounded-lg text-[#8B7E7A] hover:bg-[#F5EDE8] disabled:opacity-40"
+                      className="p-1.5 rounded-lg text-taupe hover:bg-sand disabled:opacity-40"
                       aria-label="Close"
                     >
                       <X size={18} />
@@ -156,30 +156,30 @@ export default function DeleteAccountSection() {
                   </div>
 
                   {phase === 'loading' ? (
-                    <div className="py-10 flex items-center justify-center text-[#8B7E7A]">
+                    <div className="py-10 flex items-center justify-center text-taupe">
                       <Loader2 size={20} className="animate-spin" />
                     </div>
                   ) : blocked ? (
                     <>
-                      <p className="text-sm text-[#4A423F] leading-relaxed">
+                      <p className="text-sm text-ink-warm leading-relaxed">
                         You have an order that&apos;s paid and not delivered yet
                         {' — '}
                         <b>{preflight?.blocking.map((o) => o.order_number).join(', ')}</b>.
                         We need your delivery details to finish it, so we can&apos;t delete the
                         account while it&apos;s in progress.
                       </p>
-                      <p className="text-sm text-[#8B7E7A] leading-relaxed mt-3">
+                      <p className="text-sm text-taupe leading-relaxed mt-3">
                         Once it arrives you can delete the account here. To cancel the order
                         instead, email{' '}
-                        <a className="text-[#BF5E3E] underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+                        <a className="text-rust underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
                       </p>
                     </>
                   ) : (
                     <>
-                      <p className="text-sm text-[#4A423F] leading-relaxed">
+                      <p className="text-sm text-ink-warm leading-relaxed">
                         This permanently deletes:
                       </p>
-                      <ul className="mt-2 mb-4 text-sm text-[#4A423F] list-disc pl-5 space-y-1">
+                      <ul className="mt-2 mb-4 text-sm text-ink-warm list-disc pl-5 space-y-1">
                         <li>your sign-in and profile</li>
                         <li>{preflight?.albums ?? 0} saved album{preflight?.albums === 1 ? '' : 's'} and the photos in them</li>
                         <li>{preflight?.memories ?? 0} QR memory link{preflight?.memories === 1 ? '' : 's'} — printed codes will stop working</li>
@@ -187,7 +187,7 @@ export default function DeleteAccountSection() {
                       </ul>
 
                       {(preflight?.orders ?? 0) > 0 && (
-                        <p className="text-xs text-[#8B7E7A] leading-relaxed bg-[#FFF8F0] border border-[#F0E2D6] rounded-xl p-3 mb-4">
+                        <p className="text-xs text-taupe leading-relaxed bg-cream border border-[#F0E2D6] rounded-xl p-3 mb-4">
                           We keep a receipt-only record of your {preflight?.orders} past order
                           {preflight?.orders === 1 ? '' : 's'} — order number, amount and status —
                           because Philippine tax rules require it. Your name, phone number and
@@ -195,8 +195,8 @@ export default function DeleteAccountSection() {
                         </p>
                       )}
 
-                      <p className="text-sm text-[#8B7E7A] mb-2">
-                        Type <b className="text-[#4A423F]">{CONFIRM_WORD}</b> to confirm.
+                      <p className="text-sm text-taupe mb-2">
+                        Type <b className="text-ink-warm">{CONFIRM_WORD}</b> to confirm.
                       </p>
                       <input
                         type="text"
@@ -205,7 +205,7 @@ export default function DeleteAccountSection() {
                         disabled={phase === 'deleting'}
                         autoComplete="off"
                         aria-label={`Type ${CONFIRM_WORD} to confirm`}
-                        className="w-full rounded-xl border-2 border-[#E8D5D0] px-4 py-2.5 text-sm text-[#4A423F] outline-none focus:border-red-300 disabled:opacity-50"
+                        className="w-full rounded-xl border-2 border-blush-deep px-4 py-2.5 text-sm text-ink-warm outline-none focus:border-red-300 disabled:opacity-50"
                       />
                     </>
                   )}
@@ -218,7 +218,7 @@ export default function DeleteAccountSection() {
                     <button
                       onClick={close}
                       disabled={phase === 'deleting'}
-                      className="flex-1 rounded-xl border-2 border-[#E8D5D0] px-4 py-2.5 text-sm font-medium text-[#4A423F] hover:bg-[#F5EDE8] disabled:opacity-40"
+                      className="flex-1 rounded-xl border-2 border-blush-deep px-4 py-2.5 text-sm font-medium text-ink-warm hover:bg-sand disabled:opacity-40"
                     >
                       {blocked ? 'Close' : 'Keep my account'}
                     </button>

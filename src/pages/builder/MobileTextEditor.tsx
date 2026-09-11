@@ -102,10 +102,10 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
     <div className="fixed left-0 right-0 z-[120] bg-white flex flex-col"
       style={{ top: vp?.top ?? 0, height: vp?.h ?? '100%' }}>
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-4 h-12 border-b border-[#E8E8E8]">
-        <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={20} /></button>
-        <span className="text-sm font-semibold text-[#2D2D2D]">Edit text</span>
-        <button onClick={save} className="text-[#2E7D4A] font-semibold flex items-center gap-1 p-1">
+      <div className="shrink-0 flex items-center justify-between px-4 h-12 border-b border-line">
+        <button onClick={onClose} className="text-light p-1"><X size={20} /></button>
+        <span className="text-sm font-semibold text-dark">Edit text</span>
+        <button onClick={save} className="text-success font-semibold flex items-center gap-1 p-1">
           <Check size={18} /> Done
         </button>
       </div>
@@ -132,17 +132,17 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
       </div>
 
       {/* Format bar — floats directly above the keyboard */}
-      <div className="shrink-0 border-t border-[#E8E8E8] bg-white relative">
+      <div className="shrink-0 border-t border-line bg-white relative">
         {/* Font picker dropdown — opens upward, each font shown in its own face */}
         {fontOpen && (
           <>
             <div className="fixed inset-0 z-[1]" onClick={() => setFontOpen(false)} />
-            <div className="absolute bottom-full left-0 right-0 z-[2] max-h-72 overflow-y-auto bg-white border-t border-[#E8E8E8] shadow-[0_-10px_30px_rgba(0,0,0,0.14)]">
+            <div className="absolute bottom-full left-0 right-0 z-[2] max-h-72 overflow-y-auto bg-white border-t border-line shadow-[0_-10px_30px_rgba(0,0,0,0.14)]">
               {FONTS.map((f) => (
                 <button key={f.name} onClick={() => { setFontFamily(f.family); setFontOpen(false); }}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 text-left ${f.family === fontFamily ? 'bg-[#FDE8E4]' : 'active:bg-[#F5F5F5]'}`}>
-                  <span className="text-[18px] text-[#2D2D2D] truncate" style={{ fontFamily: f.family }}>{f.name}</span>
-                  {f.family === fontFamily && <Check size={16} className="text-[#E8A598] shrink-0 ml-2" />}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-left ${f.family === fontFamily ? 'bg-blush' : 'active:bg-paper'}`}>
+                  <span className="text-[18px] text-dark truncate" style={{ fontFamily: f.family }}>{f.name}</span>
+                  {f.family === fontFamily && <Check size={16} className="text-blush-pink shrink-0 ml-2" />}
                 </button>
               ))}
             </div>
@@ -155,11 +155,11 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
           <ToolBtn active={underline} onClick={() => setUnderline((v) => !v)}><Underline size={18} /></ToolBtn>
           <Divider />
           <button onClick={() => setFontOpen((v) => !v)}
-            className="px-3 h-9 rounded-lg text-sm text-[#2D2D2D] bg-[#F5F5F5] active:scale-95 transition-transform shrink-0 flex items-center gap-1.5"
-            style={{ fontFamily }}>{FONTS[fontIdx].name} <ChevronDown size={14} className="text-[#9B9B9B]" /></button>
+            className="px-3 h-9 rounded-lg text-sm text-dark bg-paper active:scale-95 transition-transform shrink-0 flex items-center gap-1.5"
+            style={{ fontFamily }}>{FONTS[fontIdx].name} <ChevronDown size={14} className="text-light" /></button>
           <Divider />
           <ToolBtn onClick={() => setFontSize((s) => Math.max(14, s - 2))}><Minus size={16} /></ToolBtn>
-          <span className="text-sm text-[#6B6B6B] w-7 text-center tabular-nums">{fontSize}</span>
+          <span className="text-sm text-medium w-7 text-center tabular-nums">{fontSize}</span>
           <ToolBtn onClick={() => setFontSize((s) => Math.min(80, s + 2))}><Plus size={16} /></ToolBtn>
           <Divider />
           {COLORS.map((c) => (
@@ -200,5 +200,5 @@ function ToolBtn({ active, onClick, children }: { active?: boolean; onClick: () 
 }
 
 function Divider() {
-  return <div className="w-px h-6 bg-[#E8E8E8] mx-1 shrink-0" />;
+  return <div className="w-px h-6 bg-line mx-1 shrink-0" />;
 }

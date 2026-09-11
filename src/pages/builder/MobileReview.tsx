@@ -148,17 +148,17 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
 
   if (finishing) {
     return (
-      <div className="h-full flex flex-col items-center justify-center bg-[#FFF8F0] text-[#6B6B6B] gap-3">
-        <Loader2 className="w-7 h-7 animate-spin text-[#E8A598]" />
+      <div className="h-full flex flex-col items-center justify-center bg-cream text-medium gap-3">
+        <Loader2 className="w-7 h-7 animate-spin text-blush-pink" />
         <span className="text-sm font-medium">Loading album preview…</span>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#F5F5F5] relative">
+    <div className="h-full flex flex-col bg-paper relative">
       {/* Page counter */}
-      <div className="shrink-0 text-center py-2.5 text-xs font-medium text-[#6B6B6B]">
+      <div className="shrink-0 text-center py-2.5 text-xs font-medium text-medium">
         Page {idx + 1} of {total} · tap 🗑 to remove a photo, + to add one
       </div>
 
@@ -209,27 +209,27 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
       </div>
 
       {/* Bottom action bar */}
-      <div className="shrink-0 px-4 pb-7 pt-3 bg-white border-t border-[#E8E8E8]">
+      <div className="shrink-0 px-4 pb-7 pt-3 bg-white border-t border-line">
         {/* One hidden input serves both entry points (bar + "Add a photo" sheet). */}
         <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} />
         {uploadMsg && (
-          <p className="mb-2 text-center text-xs font-semibold text-[#2E7D4A]">{uploadMsg}</p>
+          <p className="mb-2 text-center text-xs font-semibold text-success">{uploadMsg}</p>
         )}
         <div className="flex items-center gap-3">
           <button onClick={goPrev} disabled={idx === 0}
-            className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] disabled:opacity-30 transition-opacity">
+            className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-medium disabled:opacity-30 transition-opacity">
             <ChevronLeft size={22} />
           </button>
           <button onClick={() => uploadRef.current?.click()} title="Add more photos"
-            className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] active:scale-95 transition-transform">
+            className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-medium active:scale-95 transition-transform">
             <ImagePlus size={20} />
           </button>
           <button onClick={() => actions.setLayoutPickerOpen(true)}
-            className="flex-1 h-12 rounded-xl bg-[#F4C2A1] text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+            className="flex-1 h-12 rounded-xl bg-peach text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
             <LayoutGrid size={18} /> Change layout
           </button>
           <button onClick={goNext} disabled={isLast}
-            className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] disabled:opacity-30 transition-opacity">
+            className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-medium disabled:opacity-30 transition-opacity">
             <ChevronRight size={22} />
           </button>
         </div>
@@ -237,13 +237,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             a full-bleed photo with a scannable corner badge (face-picked corner). */}
         {actions.canAddMemoryQr && (
           <button onClick={openMemory}
-            className={`w-full mt-3 h-11 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform bg-[#E8A598] text-white shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}>
+            className={`w-full mt-3 h-11 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform bg-blush-pink text-white shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}>
             <Youtube size={18} /> Add YouTube Memory
           </button>
         )}
         {isLast && (
           <button onClick={handleDone}
-            className="w-full mt-3 h-12 rounded-xl bg-[#2E7D4A] text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+            className="w-full mt-3 h-12 rounded-xl bg-success text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
             <Check size={18} /> Done — Preview my album
           </button>
         )}
@@ -310,20 +310,20 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               className="w-full bg-white rounded-t-2xl max-h-[60vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
-                <span className="text-sm font-semibold text-[#2D2D2D]">Add a photo</span>
-                <button onClick={() => { setReplaceSlot(null); setTextReplaceSlot(null); }} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
+                <span className="text-sm font-semibold text-dark">Add a photo</span>
+                <button onClick={() => { setReplaceSlot(null); setTextReplaceSlot(null); }} className="text-light p-1"><X size={18} /></button>
               </div>
               {/* Running out of photos is discovered HERE, so offer the uploader
                   right where it's noticed rather than only in the action bar. */}
               <div className="px-3 pt-3 shrink-0">
                 <button onClick={() => uploadRef.current?.click()}
-                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#F4C2A1] text-[#E8A598] text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.99] transition-transform">
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-peach text-blush-pink text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.99] transition-transform">
                   <ImagePlus size={16} /> Upload more photos
                 </button>
               </div>
               {actions.uploadedPhotos.length === 0 ? (
-                <p className="p-6 text-center text-sm text-[#9B9B9B]">No photos uploaded yet.</p>
+                <p className="p-6 text-center text-sm text-light">No photos uploaded yet.</p>
               ) : (
                 <div className="overflow-y-auto p-3 grid grid-cols-3 gap-2">
                   {actions.uploadedPhotos.map((p, i) => (
@@ -337,7 +337,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                       // which older Android/Samsung browsers don't support → cells collapse
                       // and thumbnails overlap). h-0 + pb-[100%] forces height = width on any
                       // browser; the image is absolutely positioned to fill it.
-                      className="relative h-0 pb-[100%] rounded-lg overflow-hidden bg-[#F0F0F0] active:scale-95 transition-transform">
+                      className="relative h-0 pb-[100%] rounded-lg overflow-hidden bg-line-soft active:scale-95 transition-transform">
                       <img src={p.previewUrl} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
                     </button>
                   ))}

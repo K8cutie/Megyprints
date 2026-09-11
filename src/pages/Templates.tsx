@@ -70,11 +70,11 @@ export default function Templates() {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-[#FFF8F0] pt-24 pb-12 px-6">
+    <div className="min-h-screen bg-cream pt-24 pb-12 px-6">
       <div className="max-w-[1400px] mx-auto">
         <div className="text-center mb-8">
-          <h1 className="font-display text-4xl sm:text-5xl font-bold text-[#2D2D2D]">Choose Your Style</h1>
-          <p className="mt-3 text-lg text-[#6B6B6B] max-w-[600px] mx-auto">{ALL_TEMPLATES.length} beautifully designed templates for every occasion.</p>
+          <h1 className="font-display text-4xl sm:text-5xl font-bold text-dark">Choose Your Style</h1>
+          <p className="mt-3 text-lg text-medium max-w-[600px] mx-auto">{ALL_TEMPLATES.length} beautifully designed templates for every occasion.</p>
         </div>
 
         <div className="flex gap-2 justify-center mb-8 flex-wrap">
@@ -105,8 +105,8 @@ export default function Templates() {
                 </div>
                 <div className="p-4">
                   <div className="h-1 w-full rounded-full mb-3" style={{ backgroundColor: t.accentColor }} />
-                  <h3 className="font-display text-lg font-semibold text-[#2D2D2D]">{t.name}</h3>
-                  <p className="text-sm text-[#6B6B6B] mt-1 line-clamp-2">{t.description}</p>
+                  <h3 className="font-display text-lg font-semibold text-dark">{t.name}</h3>
+                  <p className="text-sm text-medium mt-1 line-clamp-2">{t.description}</p>
                 </div>
               </motion.div>
             ))}
@@ -115,7 +115,7 @@ export default function Templates() {
 
         {modalTemplate && (
           <Dialog open={modalOpen} onOpenChange={(v) => !v && setModalOpen(false)}>
-            <DialogContent className="max-w-[600px] p-0 rounded-2xl border-0 bg-[#FFFBF7] overflow-hidden">
+            <DialogContent className="max-w-[600px] p-0 rounded-2xl border-0 bg-warm-white overflow-hidden">
               <div className="relative aspect-[16/9]">
                 <img src={modalTemplate.image} alt={modalTemplate.name} className="w-full h-full object-cover" />
                 <button onClick={() => setModalOpen(false)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white shadow flex items-center justify-center">
@@ -125,22 +125,22 @@ export default function Templates() {
               <div className="p-6">
                 <DialogHeader>
                   <DialogTitle className="font-display text-2xl">{modalTemplate.name}</DialogTitle>
-                  <DialogDescription className="text-[#6B6B6B] mt-2">{modalTemplate.description}</DialogDescription>
+                  <DialogDescription className="text-medium mt-2">{modalTemplate.description}</DialogDescription>
                 </DialogHeader>
-                <div className="flex gap-4 mt-4 text-sm text-[#6B6B6B]">
+                <div className="flex gap-4 mt-4 text-sm text-medium">
                   <span className="flex items-center gap-1"><LayoutGrid size={14} /> {modalTemplate.specLayout}</span>
                 </div>
                 <button onClick={() => { setModalOpen(false); navigate(`/builder?template=${modalTemplate.id}`); }}
-                  className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all">Use This Template</button>
+                  className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all">Use This Template</button>
               </div>
             </DialogContent>
           </Dialog>
         )}
 
-        <div className="mt-12 text-center bg-[#FBE5D8] rounded-2xl py-12 px-6">
-          <h2 className="font-display text-3xl font-bold text-[#2D2D2D]">Ready to Create?</h2>
-          <p className="text-[#6B6B6B] mt-2">Start building your album with any template.</p>
-          <button onClick={() => navigate('/builder')} className="mt-4 px-8 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 inline-flex items-center gap-2 transition-all">
+        <div className="mt-12 text-center bg-pale-peach rounded-2xl py-12 px-6">
+          <h2 className="font-display text-3xl font-bold text-dark">Ready to Create?</h2>
+          <p className="text-medium mt-2">Start building your album with any template.</p>
+          <button onClick={() => navigate('/builder')} className="mt-4 px-8 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 inline-flex items-center gap-2 transition-all">
             Start Building <ArrowRight size={16} />
           </button>
         </div>

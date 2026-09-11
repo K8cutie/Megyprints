@@ -58,6 +58,41 @@
     --sidebar-border: 30 10% 88%;
     --sidebar-ring: 25 80% 76%;
 
+    /* ── Theme tokens (RGB triplets; see tailwind.config) ──────────
+       Defaults are the exact colors the UI shipped with. A theme
+       (data-theme on <html>) redefines these — nothing else moves. */
+    --t-peach: 244 194 161; /* #F4C2A1 */
+    --t-blush-pink: 232 165 152; /* #E8A598 */
+    --t-dark: 45 45 45; /* #2D2D2D */
+    --t-medium: 107 107 107; /* #6B6B6B */
+    --t-light: 155 155 155; /* #9B9B9B */
+    --t-taupe: 139 126 122; /* #8B7E7A */
+    --t-ink-warm: 74 66 63; /* #4A423F */
+    --t-ink-mid: 90 90 90; /* #5A5A5A */
+    --t-charcoal: 74 74 74; /* #4A4A4A */
+    --t-cocoa: 139 111 71; /* #8B6F47 */
+    --t-stone: 155 139 122; /* #9B8B7A */
+    --t-cream: 255 248 240; /* #FFF8F0 */
+    --t-warm-white: 255 251 247; /* #FFFBF7 */
+    --t-blush: 253 232 228; /* #FDE8E4 */
+    --t-blush-deep: 232 213 208; /* #E8D5D0 */
+    --t-sand: 245 237 232; /* #F5EDE8 */
+    --t-sand-deep: 234 227 218; /* #EAE3DA */
+    --t-line: 232 232 232; /* #E8E8E8 */
+    --t-line-soft: 240 240 240; /* #F0F0F0 */
+    --t-paper: 245 245 245; /* #F5F5F5 */
+    --t-success: 46 125 74; /* #2E7D4A */
+    --t-rust: 191 94 62; /* #BF5E3E */
+    --t-rust-deep: 176 80 58; /* #B0503A */
+    --t-coral-soft: 216 149 141; /* #D8958D */
+    --t-soft-lavender: 184 169 217; /* #B8A9D9 */
+    --t-mint: 155 207 184; /* #9BCFB8 */
+    --t-sky-blue: 143 191 224; /* #8FBFE0 */
+    --t-cream-gold: 212 184 150; /* #D4B896 */
+    --t-soft-sage: 228 240 224; /* #E4F0E0 */
+    --t-pale-peach: 251 229 216; /* #FBE5D8 */
+    --t-pale-coral: 232 149 140; /* #E8958C */
+
     --cream: #FFF8F0;
     --warm-white: #FFFBF7;
     --blush: #FDE8E4;
@@ -91,7 +126,7 @@
   }
 
   body {
-    @apply bg-[#FFF8F0] text-[#2D2D2D] font-body antialiased;
+    @apply bg-cream text-dark font-body antialiased;
     font-family: "DM Sans", sans-serif;
   }
 
@@ -101,7 +136,7 @@
 
   /* Keyboard focus ring styles for accessibility */
   *:focus-visible {
-    outline: 2px solid #F4C2A1;
+    outline: 2px solid rgb(var(--t-peach));
     outline-offset: 2px;
   }
 
@@ -240,4 +275,90 @@
   .animate-float {
     animation: none;
   }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UI THEMES (pass 2). CSS-only layers keyed by data-theme on <html>.
+   They redefine colour tokens and override shadow / radius / surface
+   utilities in place — layout is never touched, so nothing moves.
+   Selected by src/lib/theme.ts (?theme= on the URL, then localStorage).
+
+   soft        — "Soft UI Evolution": warm multi-layer shadows, rounder
+                 corners, warmer hairlines and muted text. Brand peach kept.
+   soft-glass  — soft + frosted-glass panels over a soft ambient backdrop
+                 (backdrop blur on white surfaces). Heavier on GPU; keep an
+                 eye on mid-range phones before making it the default.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared token shifts ─────────────────────────────────────────────────── */
+[data-theme="soft"],
+[data-theme="soft-glass"] {
+  --t-cream: 255 250 245;        /* page ground, a touch lighter */
+  --t-line: 240 231 225;         /* hairlines warm instead of neutral grey */
+  --t-line-soft: 246 240 235;
+  --t-paper: 250 246 242;
+  --t-light: 152 141 136;        /* muted text warmed to match */
+  --t-medium: 98 90 86;
+}
+
+/* ── Shadows: warm, layered, softer than flat, clearer than neumorphism ──── */
+[data-theme="soft"] .shadow-sm,        [data-theme="soft-glass"] .shadow-sm        { --tw-shadow: 0 1px 2px rgb(45 45 45 / .04), 0 6px 16px -6px rgb(232 165 152 / .18); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow,           [data-theme="soft-glass"] .shadow           { --tw-shadow: 0 2px 4px rgb(45 45 45 / .04), 0 10px 24px -8px rgb(232 165 152 / .22); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-md,        [data-theme="soft-glass"] .shadow-md        { --tw-shadow: 0 4px 8px -2px rgb(45 45 45 / .05), 0 16px 32px -12px rgb(232 165 152 / .25); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-lg,        [data-theme="soft-glass"] .shadow-lg        { --tw-shadow: 0 8px 16px -4px rgb(45 45 45 / .06), 0 24px 48px -16px rgb(232 165 152 / .28); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-xl,        [data-theme="soft-glass"] .shadow-xl        { --tw-shadow: 0 12px 24px -6px rgb(45 45 45 / .08), 0 32px 64px -20px rgb(232 165 152 / .32); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-2xl,       [data-theme="soft-glass"] .shadow-2xl       { --tw-shadow: 0 20px 40px -10px rgb(45 45 45 / .12), 0 40px 80px -24px rgb(232 165 152 / .35); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-card,      [data-theme="soft-glass"] .shadow-card      { --tw-shadow: 0 2px 4px rgb(45 45 45 / .03), 0 14px 32px -10px rgb(232 165 152 / .24); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-card-hover,[data-theme="soft-glass"] .shadow-card-hover{ --tw-shadow: 0 6px 12px rgb(45 45 45 / .05), 0 28px 56px -16px rgb(232 165 152 / .32); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-button,    [data-theme="soft-glass"] .shadow-button    { --tw-shadow: 0 2px 6px rgb(232 165 152 / .25), 0 10px 20px -6px rgb(232 165 152 / .35); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-button-hover,[data-theme="soft-glass"] .shadow-button-hover { --tw-shadow: 0 4px 10px rgb(232 165 152 / .3), 0 16px 28px -8px rgb(232 165 152 / .45); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-dropdown,  [data-theme="soft-glass"] .shadow-dropdown  { --tw-shadow: 0 8px 16px -4px rgb(45 45 45 / .06), 0 24px 48px -16px rgb(232 165 152 / .26); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-builder-panel, [data-theme="soft-glass"] .shadow-builder-panel { --tw-shadow: 0 0 0 1px rgb(232 165 152 / .06), 0 12px 40px -12px rgb(232 165 152 / .25); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+
+/* ── Corners: one step rounder across the board ─────────────────────────── */
+[data-theme="soft"] .rounded-lg,  [data-theme="soft-glass"] .rounded-lg  { border-radius: 12px; }
+[data-theme="soft"] .rounded-xl,  [data-theme="soft-glass"] .rounded-xl  { border-radius: 16px; }
+[data-theme="soft"] .rounded-2xl, [data-theme="soft-glass"] .rounded-2xl { border-radius: 20px; }
+[data-theme="soft"] .rounded-3xl, [data-theme="soft-glass"] .rounded-3xl { border-radius: 28px; }
+
+/* ── Soft: a barely-there warm glow on the page ground ──────────────────── */
+[data-theme="soft"] body {
+  background-image:
+    radial-gradient(60% 40% at 15% 0%, rgb(244 194 161 / .18), transparent 70%),
+    radial-gradient(50% 35% at 100% 20%, rgb(232 165 152 / .10), transparent 70%);
+  background-attachment: fixed;
+}
+
+/* ── Soft-glass: frosted panels over an ambient backdrop ────────────────── */
+[data-theme="soft-glass"] body {
+  background-image:
+    radial-gradient(45% 35% at 10% 5%, rgb(244 194 161 / .45), transparent 70%),
+    radial-gradient(40% 40% at 90% 15%, rgb(184 169 217 / .30), transparent 70%),
+    radial-gradient(50% 40% at 50% 100%, rgb(155 207 184 / .22), transparent 70%);
+  background-attachment: fixed;
+}
+[data-theme="soft-glass"] .bg-white {
+  background-color: rgb(255 255 255 / .62);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+[data-theme="soft-glass"] .bg-warm-white,
+[data-theme="soft-glass"] .bg-cream,
+[data-theme="soft-glass"] .bg-paper {
+  background-color: rgb(255 251 247 / .55);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+}
+[data-theme="soft-glass"] .border-line,
+[data-theme="soft-glass"] .border-line-soft { border-color: rgb(255 255 255 / .6); }
+/* Full-screen wizard stage is the page itself, not a card — keep it opaque. */
+[data-theme="soft-glass"] .fixed.inset-0.bg-warm-white,
+[data-theme="soft-glass"] .fixed.inset-0.bg-cream {
+  background-color: rgb(var(--t-cream));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="soft-glass"] .bg-white { background-color: rgb(255 255 255 / .92); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }

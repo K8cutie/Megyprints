@@ -19,7 +19,7 @@ export default function AlbumThemeStep({ value, onChange, onContinue }: {
 
   return (
     <div className="mb-4" data-step="pick_theme">
-      <p className="text-sm text-[#5A5A5A] leading-relaxed mb-3">
+      <p className="text-sm text-ink-mid leading-relaxed mb-3">
         Pick the occasion — Megy writes the quotes on your pages to match it. You can change it later, but not skip it.
       </p>
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Album occasion">
@@ -33,7 +33,7 @@ export default function AlbumThemeStep({ value, onChange, onContinue }: {
               aria-checked={active}
               onClick={() => { setOtherOpen(false); onChange(t); }}
               className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all active:scale-[0.98] ${
-                active ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-sm' : 'bg-white text-[#2D2D2D] border-[#E8E8E8] hover:border-[#F4C2A1]/60'
+                active ? 'bg-peach text-white border-peach shadow-sm' : 'bg-white text-dark border-line hover:border-peach/60'
               }`}
             >
               {t}
@@ -46,7 +46,7 @@ export default function AlbumThemeStep({ value, onChange, onContinue }: {
           aria-checked={otherOpen}
           onClick={() => { setOtherOpen(true); if (isCommonTheme(value)) onChange(''); }}
           className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all active:scale-[0.98] flex items-center gap-1.5 ${
-            otherOpen ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow-sm' : 'bg-white text-[#2D2D2D] border-[#E8E8E8] hover:border-[#F4C2A1]/60'
+            otherOpen ? 'bg-peach text-white border-peach shadow-sm' : 'bg-white text-dark border-line hover:border-peach/60'
           }`}
         >
           <PenLine size={14} /> Something else
@@ -54,7 +54,7 @@ export default function AlbumThemeStep({ value, onChange, onContinue }: {
       </div>
       {otherOpen && (
         <div className="mt-3">
-          <label htmlFor="album-theme" className="block text-xs font-semibold text-[#2D2D2D] mb-1.5">What is it about?</label>
+          <label htmlFor="album-theme" className="block text-xs font-semibold text-dark mb-1.5">What is it about?</label>
           <input
             id="album-theme"
             value={custom}
@@ -64,15 +64,15 @@ export default function AlbumThemeStep({ value, onChange, onContinue }: {
             autoFocus
             autoComplete="off"
             placeholder="e.g. Beach trip, Debut, Reunion, Lola's 80th"
-            className="w-full border border-[#E8E8E8] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#F4C2A1] transition-colors"
+            className="w-full border border-line rounded-xl px-4 py-3 text-sm outline-none focus:border-peach transition-colors"
           />
-          <p className="text-[11px] text-[#9B9B9B] mt-1.5">A few words is plenty — the quotes take their cue from this.</p>
+          <p className="text-[11px] text-light mt-1.5">A few words is plenty — the quotes take their cue from this.</p>
         </div>
       )}
       <p className="mt-3 text-xs font-medium" aria-live="polite">
         {ready
-          ? <span className="text-[#2E7D4A]">Theme: <b>{value.trim()}</b> — tap Next.</span>
-          : <span className="text-[#8B7E7A]">Choose one to continue.</span>}
+          ? <span className="text-success">Theme: <b>{value.trim()}</b> — tap Next.</span>
+          : <span className="text-taupe">Choose one to continue.</span>}
       </p>
     </div>
   );

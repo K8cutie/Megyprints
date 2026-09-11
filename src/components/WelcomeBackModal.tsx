@@ -117,17 +117,17 @@ export function WelcomeBackModal({ onViewProjects }: WelcomeBackModalProps) {
               {/* Avatar circle */}
               <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
                 <div className="w-20 h-20 rounded-full bg-white shadow-lg flex items-center justify-center border-4 border-white">
-                  <User size={32} className="text-[#E8A598]" />
+                  <User size={32} className="text-blush-pink" />
                 </div>
               </div>
             </div>
 
             {/* Content */}
             <div className="pt-14 pb-8 px-8 text-center">
-              <h2 className="font-display text-2xl font-bold text-[#2D2D2D] mb-1">
+              <h2 className="font-display text-2xl font-bold text-dark mb-1">
                 Welcome back, {firstName}!
               </h2>
-              <p className="text-[#6B6B6B] text-sm leading-relaxed mb-6">
+              <p className="text-medium text-sm leading-relaxed mb-6">
                 Ready to continue working on your albums? You can pick up right where you left off.
               </p>
 
@@ -135,7 +135,7 @@ export function WelcomeBackModal({ onViewProjects }: WelcomeBackModalProps) {
               <div className="flex flex-col gap-3">
                 <button
                   onClick={handleViewProjects}
-                  className="flex items-center justify-center gap-2 w-full py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all"
+                  className="flex items-center justify-center gap-2 w-full py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all"
                 >
                   <BookOpen size={18} />
                   View My Projects
@@ -143,7 +143,7 @@ export function WelcomeBackModal({ onViewProjects }: WelcomeBackModalProps) {
 
                 <button
                   onClick={handleCreateNew}
-                  className="flex items-center justify-center gap-2 w-full py-3 bg-white border-2 border-[#F4C2A1] text-[#F4C2A1] font-semibold rounded-xl hover:bg-[#F4C2A1]/5 transition-all"
+                  className="flex items-center justify-center gap-2 w-full py-3 bg-white border-2 border-peach text-peach font-semibold rounded-xl hover:bg-peach/5 transition-all"
                 >
                   <Sparkles size={18} />
                   Create New Album
@@ -151,7 +151,7 @@ export function WelcomeBackModal({ onViewProjects }: WelcomeBackModalProps) {
 
                 <button
                   onClick={handleClose}
-                  className="text-[#9B9B9B] text-sm hover:text-[#6B6B6B] transition-colors pt-1"
+                  className="text-light text-sm hover:text-medium transition-colors pt-1"
                 >
                   Maybe later
                 </button>

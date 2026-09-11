@@ -137,7 +137,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
 
           {/* Modal */}
           <motion.div
-            className="relative z-10 w-full max-w-md mx-4 rounded-2xl bg-[#FFFBF7] shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+            className="relative z-10 w-full max-w-md mx-4 rounded-2xl bg-warm-white shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -147,15 +147,15 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
             <div className="relative px-6 pt-6 pb-4">
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 p-1.5 rounded-full text-[#8B7E7A] hover:text-[#4A423F] hover:bg-[#E8A598]/10 transition-colors"
+                className="absolute top-4 right-4 p-1.5 rounded-full text-taupe hover:text-ink-warm hover:bg-blush-pink/10 transition-colors"
                 aria-label="Close"
               >
                 <X size={20} />
               </button>
 
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-[#4A423F]">Create Account</h2>
-                <p className="mt-1 text-sm text-[#8B7E7A]">
+                <h2 className="text-2xl font-bold text-ink-warm">Create Account</h2>
+                <p className="mt-1 text-sm text-taupe">
                   Start building beautiful photo albums
                 </p>
               </div>
@@ -179,14 +179,14 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                 <div>
                   <label
                     htmlFor="signup-fullname"
-                    className="block text-sm font-medium text-[#4A423F] mb-1"
+                    className="block text-sm font-medium text-ink-warm mb-1"
                   >
                     Full Name
                   </label>
                   <div className="relative">
                     <User
                       size={16}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B7E7A]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-taupe"
                     />
                     <input
                       id="signup-fullname"
@@ -198,7 +198,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                           setFieldErrors((p) => ({ ...p, fullName: undefined }));
                       }}
                       placeholder="Your full name"
-                      className="w-full rounded-xl border-2 border-[#E8D5D0] bg-white py-2.5 pl-10 pr-4 text-sm text-[#4A423F] placeholder-[#8B7E7A]/50 focus:border-[#E8A598] focus:outline-none focus:ring-2 focus:ring-[#E8A598]/20 transition-all"
+                      className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-4 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
                       autoComplete="name"
                     />
                   </div>
@@ -211,14 +211,14 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                 <div>
                   <label
                     htmlFor="signup-email"
-                    className="block text-sm font-medium text-[#4A423F] mb-1"
+                    className="block text-sm font-medium text-ink-warm mb-1"
                   >
                     Email
                   </label>
                   <div className="relative">
                     <Mail
                       size={16}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B7E7A]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-taupe"
                     />
                     <input
                       id="signup-email"
@@ -230,7 +230,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                           setFieldErrors((p) => ({ ...p, email: undefined }));
                       }}
                       placeholder="you@example.com"
-                      className="w-full rounded-xl border-2 border-[#E8D5D0] bg-white py-2.5 pl-10 pr-4 text-sm text-[#4A423F] placeholder-[#8B7E7A]/50 focus:border-[#E8A598] focus:outline-none focus:ring-2 focus:ring-[#E8A598]/20 transition-all"
+                      className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-4 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
                       autoComplete="email"
                     />
                   </div>
@@ -243,14 +243,14 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                 <div>
                   <label
                     htmlFor="signup-password"
-                    className="block text-sm font-medium text-[#4A423F] mb-1"
+                    className="block text-sm font-medium text-ink-warm mb-1"
                   >
                     Password
                   </label>
                   <div className="relative">
                     <Lock
                       size={16}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B7E7A]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-taupe"
                     />
                     <input
                       id="signup-password"
@@ -262,7 +262,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                           setFieldErrors((p) => ({ ...p, password: undefined }));
                       }}
                       placeholder="At least 8 characters"
-                      className="w-full rounded-xl border-2 border-[#E8D5D0] bg-white py-2.5 pl-10 pr-4 text-sm text-[#4A423F] placeholder-[#8B7E7A]/50 focus:border-[#E8A598] focus:outline-none focus:ring-2 focus:ring-[#E8A598]/20 transition-all"
+                      className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-4 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
                       autoComplete="new-password"
                     />
                   </div>
@@ -275,14 +275,14 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                 <div>
                   <label
                     htmlFor="signup-confirm"
-                    className="block text-sm font-medium text-[#4A423F] mb-1"
+                    className="block text-sm font-medium text-ink-warm mb-1"
                   >
                     Confirm Password
                   </label>
                   <div className="relative">
                     <Lock
                       size={16}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B7E7A]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-taupe"
                     />
                     <input
                       id="signup-confirm"
@@ -294,7 +294,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                           setFieldErrors((p) => ({ ...p, confirmPassword: undefined }));
                       }}
                       placeholder="Re-enter your password"
-                      className="w-full rounded-xl border-2 border-[#E8D5D0] bg-white py-2.5 pl-10 pr-4 text-sm text-[#4A423F] placeholder-[#8B7E7A]/50 focus:border-[#E8A598] focus:outline-none focus:ring-2 focus:ring-[#E8A598]/20 transition-all"
+                      className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-4 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
                       autoComplete="new-password"
                     />
                   </div>
@@ -318,7 +318,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                 <button
                   type="submit"
                   disabled={loading || !!successMessage}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#E8A598] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-[#E8A598]/25 hover:bg-[#D8958D] hover:shadow-xl hover:shadow-[#E8A598]/30 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blush-pink px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blush-pink/25 hover:bg-coral-soft hover:shadow-xl hover:shadow-blush-pink/30 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -330,11 +330,11 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
               </form>
 
               {/* Switch to login */}
-              <p className="mt-5 text-center text-sm text-[#8B7E7A]">
+              <p className="mt-5 text-center text-sm text-taupe">
                 Already have an account?{' '}
                 <button
                   onClick={handleSwitch}
-                  className="font-medium text-[#E8A598] hover:text-[#D8958D] transition-colors"
+                  className="font-medium text-blush-pink hover:text-coral-soft transition-colors"
                 >
                   Log in
                 </button>

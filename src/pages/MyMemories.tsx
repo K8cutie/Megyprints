@@ -45,27 +45,27 @@ export default function MyMemories() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <div className="flex items-center gap-2 mb-1">
-        <QrCode className="text-[#E8A598]" size={22} />
-        <h1 className="font-display text-2xl font-semibold text-[#2D2D2D]">My Memories</h1>
+        <QrCode className="text-blush-pink" size={22} />
+        <h1 className="font-display text-2xl font-semibold text-dark">My Memories</h1>
       </div>
-      <p className="text-sm text-[#6B6B6B] mb-6">
-        Each QR printed in your album points here. Re-point it anytime — <span className="font-medium text-[#8B6F47]">the printed code stays the same</span>, the video updates. No reprint.
+      <p className="text-sm text-medium mb-6">
+        Each QR printed in your album points here. Re-point it anytime — <span className="font-medium text-cocoa">the printed code stays the same</span>, the video updates. No reprint.
       </p>
 
       {renewCode && (
-        <div className="mb-4 rounded-xl border border-[#F4C2A1] bg-[#FFF3EC] px-4 py-3 text-sm text-[#8B6F47]">
-          <b className="text-[#2D2D2D]">Renew memory {renewCode}.</b> Renewals are handled by the Megy Prints team for now —
+        <div className="mb-4 rounded-xl border border-peach bg-[#FFF3EC] px-4 py-3 text-sm text-cocoa">
+          <b className="text-dark">Renew memory {renewCode}.</b> Renewals are handled by the Megy Prints team for now —
           <a href="#/contact" className="underline font-semibold ml-1">message us</a> with this code and the term you want, and we'll extend it. Your video is kept safe meanwhile.
         </div>
       )}
       {err && <p className="text-sm text-red-500 mb-4">{err}</p>}
       {rows === null && !err && (
-        <div className="flex items-center gap-2 text-sm text-[#9B9B9B] py-10 justify-center">
+        <div className="flex items-center gap-2 text-sm text-light py-10 justify-center">
           <Loader2 size={16} className="animate-spin" /> Loading…
         </div>
       )}
       {rows && rows.length === 0 && (
-        <div className="text-center py-16 text-[#9B9B9B]">
+        <div className="text-center py-16 text-light">
           <QrCode size={40} className="mx-auto mb-3 opacity-40" />
           <p className="text-sm">No QR memories yet. Add one to any album page in the builder.</p>
         </div>
@@ -142,19 +142,19 @@ function MemoryRow({ row, thumb, highlight, onRemoved }: { row: QrMemoryRow; thu
   };
 
   return (
-    <div className={`flex gap-4 bg-white rounded-2xl border p-4 ${highlight ? 'border-[#E8A598] ring-2 ring-[#F4C2A1]/50' : 'border-[#F0F0F0]'}`}>
-      <div className="shrink-0 w-20 h-20 rounded-lg border border-[#E8E8E8] bg-white flex items-center justify-center overflow-hidden">
+    <div className={`flex gap-4 bg-white rounded-2xl border p-4 ${highlight ? 'border-blush-pink ring-2 ring-peach/50' : 'border-line-soft'}`}>
+      <div className="shrink-0 w-20 h-20 rounded-lg border border-line bg-white flex items-center justify-center overflow-hidden">
         {thumb ? <img src={thumb} alt="QR" className="w-full h-full object-contain" /> : <QrCode size={28} className="text-[#D4D4D4]" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-2">
-          <code className="text-[11px] text-[#9B9B9B] truncate">{url}</code>
-          <button onClick={copy} className="shrink-0 text-[#9B9B9B] hover:text-[#E8A598] p-1" title="Copy link">
-            {copied ? <Check size={14} className="text-[#2E7D4A]" /> : <Copy size={14} />}
+          <code className="text-[11px] text-light truncate">{url}</code>
+          <button onClick={copy} className="shrink-0 text-light hover:text-blush-pink p-1" title="Copy link">
+            {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
           </button>
         </div>
         {row.expires_at && (
-          <p className={`text-[11px] mb-1.5 flex items-center gap-1 ${expired ? 'text-red-600 font-semibold' : 'text-[#8B6F47]'}`}>
+          <p className={`text-[11px] mb-1.5 flex items-center gap-1 ${expired ? 'text-red-600 font-semibold' : 'text-cocoa'}`}>
             <Clock size={11} /> {expired ? `Hosting ended ${fmtMonth(row.expires_at)} — renew to bring it back` : `Live until ${fmtMonth(row.expires_at)}`}
           </p>
         )}
@@ -163,30 +163,30 @@ function MemoryRow({ row, thumb, highlight, onRemoved }: { row: QrMemoryRow; thu
             <video src={saved} controls muted playsInline preload="metadata" className="w-full max-h-48 rounded-lg bg-black mb-2" />
             <input ref={fileRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v" className="hidden" onChange={(e) => void replaceClip(e.target.files?.[0] ?? null)} />
             <button onClick={() => fileRef.current?.click()} disabled={saving}
-              className="px-3 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
+              className="px-3 py-2 rounded-lg bg-peach text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Replace video
             </button>
           </div>
         ) : (<>
-        <label className="text-[11px] text-[#6B6B6B] block mb-1">Points to</label>
+        <label className="text-[11px] text-medium block mb-1">Points to</label>
         <div className="flex gap-2">
           <input
             value={dest}
             onChange={(e) => { setDest(e.target.value); if (msg) setMsg(null); }}
             onKeyDown={(e) => { if (e.key === 'Enter' && dirty) save(); }}
             inputMode="url" placeholder="https://youtu.be/…"
-            className="flex-1 min-w-0 border border-[#E8E8E8] rounded-lg px-3 py-2 text-sm"
+            className="flex-1 min-w-0 border border-line rounded-lg px-3 py-2 text-sm"
           />
-          <a href={saved} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center px-2 text-[#9B9B9B] hover:text-[#E8A598]" title="Open current"><ExternalLink size={16} /></a>
+          <a href={saved} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center px-2 text-light hover:text-blush-pink" title="Open current"><ExternalLink size={16} /></a>
           <button onClick={save} disabled={!dirty || saving}
-            className="shrink-0 px-3 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
+            className="shrink-0 px-3 py-2 rounded-lg bg-peach text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
             {saving ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
           </button>
         </div>
         </>)}
-        {msg && <p className={`text-xs mt-1 ${msg.ok ? 'text-[#2E7D4A]' : 'text-red-500'}`}>{msg.text}</p>}
+        {msg && <p className={`text-xs mt-1 ${msg.ok ? 'text-success' : 'text-red-500'}`}>{msg.text}</p>}
         <div className="flex items-center justify-between mt-2">
-          <span className="text-[11px] text-[#9B9B9B]">{row.scan_count} scan{row.scan_count === 1 ? '' : 's'}</span>
+          <span className="text-[11px] text-light">{row.scan_count} scan{row.scan_count === 1 ? '' : 's'}</span>
           <button onClick={del} onBlur={() => setConfirmDel(false)}
             className={`text-xs flex items-center gap-1 px-2 py-1 rounded-lg ${confirmDel ? 'bg-red-50 text-red-600 font-semibold' : 'text-[#B4B4B4] hover:text-red-500'}`}>
             <Trash2 size={13} /> {confirmDel ? 'Tap again to delete' : 'Delete'}

@@ -30,7 +30,7 @@ function TypeText({ text, speed = 28 }: { text: string; speed?: number }) {
     }, speed);
     return () => clearInterval(t);
   }, [text, speed]);
-  return <span>{d}{d.length < text.length && <span className="inline-block w-0.5 h-4 bg-[#F4C2A1] ml-0.5 animate-pulse align-middle" />}</span>;
+  return <span>{d}{d.length < text.length && <span className="inline-block w-0.5 h-4 bg-peach ml-0.5 animate-pulse align-middle" />}</span>;
 }
 
 /* ── Size card renderer ── */
@@ -54,7 +54,7 @@ function SizeCard({ size, selected, onSelect }: {
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          className="absolute top-3 right-3 w-6 h-6 rounded-full bg-[#F4C2A1] flex items-center justify-center"
+          className="absolute top-3 right-3 w-6 h-6 rounded-full bg-peach flex items-center justify-center"
         >
           <svg width="12" height="10" viewBox="0 0 10 8">
             <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" />
@@ -63,14 +63,14 @@ function SizeCard({ size, selected, onSelect }: {
       )}
       <div className="flex items-center gap-3 mb-2">
         <div
-          className="rounded-lg border border-[#E8E8E8] bg-[#F9F9F9] flex items-center justify-center"
+          className="rounded-lg border border-line bg-[#F9F9F9] flex items-center justify-center"
           style={{
             width: size.category === 'landscape' ? 48 : size.category === 'portrait' ? 32 : 40,
             height: size.category === 'landscape' ? 32 : size.category === 'portrait' ? 48 : 40,
           }}
         >
           <div
-            className="rounded bg-[#FDE8E4]"
+            className="rounded bg-blush"
             style={{
               width: size.category === 'landscape' ? 36 : size.category === 'portrait' ? 20 : 28,
               height: size.category === 'landscape' ? 20 : size.category === 'portrait' ? 36 : 28,
@@ -78,11 +78,11 @@ function SizeCard({ size, selected, onSelect }: {
           />
         </div>
         <div>
-          <p className="font-semibold text-sm text-[#2D2D2D]">{size.name}</p>
-          <p className="text-[10px] text-[#9B9B9B] capitalize">{size.category}</p>
+          <p className="font-semibold text-sm text-dark">{size.name}</p>
+          <p className="text-[10px] text-light capitalize">{size.category}</p>
         </div>
       </div>
-      <p className="text-[11px] text-[#8B7E7A] leading-relaxed">
+      <p className="text-[11px] text-taupe leading-relaxed">
         {size.preset === '6x6' && 'Perfect for small gifts & keepsakes'}
         {size.preset === '8x8' && 'Great for travel & everyday memories'}
         {size.preset === '9x9' && 'Bold statement piece for special occasions'}
@@ -127,7 +127,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
   }, []);
   const sizes = offerableAlbumSizes();
   return (
-    <div className="h-full flex flex-col items-center justify-center bg-[#FFFBF7] overflow-y-auto px-4 py-8">
+    <div className="h-full flex flex-col items-center justify-center bg-warm-white overflow-y-auto px-4 py-8">
       {/* Megy — center attraction */}
       <motion.div
         initial={{ opacity: 0, scale: 0.7 }}
@@ -141,10 +141,10 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
         >
           <MegyFace size="xl" />
         </motion.div>
-        <h1 className="font-display text-2xl md:text-3xl text-[#2D2D2D] mt-4 mb-2">
+        <h1 className="font-display text-2xl md:text-3xl text-dark mt-4 mb-2">
           <TypeText text="Let's pick the perfect size for your album!" speed={30} />
         </h1>
-        <p className="text-sm text-[#8B7E7A] max-w-xs">
+        <p className="text-sm text-taupe max-w-xs">
           Choose the size that fits your photos best. You can always change this later!
         </p>
       </motion.div>
@@ -169,8 +169,8 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
 
         {/* Occasion backstop — only when nothing is stored yet. */}
         {!themeReady && (
-          <div className="mb-6 rounded-2xl border border-[#F4C2A1]/40 bg-white p-5 text-left shadow-sm" data-testid="occasion-backstop">
-            <h2 className="font-display text-lg font-semibold text-[#2D2D2D] mb-1">First — what is this album about?</h2>
+          <div className="mb-6 rounded-2xl border border-peach/40 bg-white p-5 text-left shadow-sm" data-testid="occasion-backstop">
+            <h2 className="font-display text-lg font-semibold text-dark mb-1">First — what is this album about?</h2>
             <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme} onContinue={() => { if (isAlbumThemeReady(albumTheme)) { void fetchThemeQuotes(albumTheme.trim()); onNext(); } }} />
           </div>
         )}
@@ -197,7 +197,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
               void fetchThemeQuotes(theme);
               onNext();
             }}
-            className="inline-flex items-center gap-2 px-10 py-3.5 bg-gradient-to-r from-[#F4C2A1] to-[#E8A598] text-white font-semibold rounded-2xl hover:brightness-105 transition-all shadow-lg shadow-[#F4C2A1]/25 text-base disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100"
+            className="inline-flex items-center gap-2 px-10 py-3.5 bg-gradient-to-r from-peach to-blush-pink text-white font-semibold rounded-2xl hover:brightness-105 transition-all shadow-lg shadow-peach/25 text-base disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100"
           >
             <Sparkles size={18} />
             Start Creating

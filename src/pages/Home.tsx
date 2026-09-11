@@ -97,22 +97,22 @@ function TrustBarSection() {
 
   const items = [
     {
-      icon: <Upload size={28} className="text-[#F4C2A1]" />,
+      icon: <Upload size={28} className="text-peach" />,
       label: 'Easy Photo Upload',
       desc: 'Upload 20\u2013100 photos in seconds',
     },
     {
-      icon: <LayoutGrid size={28} className="text-[#B8A9D9]" />,
+      icon: <LayoutGrid size={28} className="text-soft-lavender" />,
       label: 'Beautiful Templates',
       desc: '6 handcrafted themes to choose from',
     },
     {
-      icon: <Sparkles size={28} className="text-[#9BCFB8]" />,
+      icon: <Sparkles size={28} className="text-mint" />,
       label: 'Auto-Generated Layouts',
       desc: 'Your album designed in one click',
     },
     {
-      icon: <Truck size={28} className="text-[#8FBFE0]" />,
+      icon: <Truck size={28} className="text-sky-blue" />,
       label: 'Professional Printing',
       desc: 'Premium materials & fast delivery',
     },
@@ -121,7 +121,7 @@ function TrustBarSection() {
   return (
     <section
       ref={sectionRef}
-      className="bg-[#FFFBF7] py-8 border-b border-[rgba(45,45,45,0.06)]"
+      className="bg-warm-white py-8 border-b border-[rgba(45,45,45,0.06)]"
     >
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
@@ -131,10 +131,10 @@ function TrustBarSection() {
               className="trust-item flex flex-col items-center text-center gap-2"
             >
               {item.icon}
-              <span className="font-body text-[0.875rem] font-semibold text-[#2D2D2D]">
+              <span className="font-body text-[0.875rem] font-semibold text-dark">
                 {item.label}
               </span>
-              <span className="font-body text-[0.75rem] font-normal text-[#6B6B6B]">
+              <span className="font-body text-[0.75rem] font-normal text-medium">
                 {item.desc}
               </span>
             </div>
@@ -173,28 +173,28 @@ function HowItWorksSection() {
   const steps = [
     {
       num: '01',
-      numColor: 'text-[#F4C2A1]',
+      numColor: 'text-peach',
       img: '/step-upload.jpg',
       title: 'Upload Your Photos',
       desc: 'Upload 20 or more of your favorite JPG or PNG photos — add as many as you like, any time. Preview and organize them before building.',
     },
     {
       num: '02',
-      numColor: 'text-[#B8A9D9]',
+      numColor: 'text-soft-lavender',
       img: '/step-template.jpg',
       title: 'Pick a Template',
       desc: "Browse our collection of beautiful themes \u2014 from elegant to playful \u2014 and pick the perfect style.",
     },
     {
       num: '03',
-      numColor: 'text-[#9BCFB8]',
+      numColor: 'text-mint',
       img: '/step-edit.jpg',
       title: 'Generate & Customize',
       desc: "Click 'Generate Album' and watch your photos arranged beautifully. Then customize layouts, text, and more.",
     },
     {
       num: '04',
-      numColor: 'text-[#8FBFE0]',
+      numColor: 'text-sky-blue',
       img: '/step-order.jpg',
       title: 'Order & Receive',
       desc: 'Choose your material and size, review your live price estimate, and submit your order. We\'ll handle the rest!',
@@ -202,13 +202,13 @@ function HowItWorksSection() {
   ];
 
   return (
-    <section ref={sectionRef} className="bg-[#FFF8F0] py-20">
+    <section ref={sectionRef} className="bg-cream py-20">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
         <div className="hiw-heading text-center mb-12">
-          <h2 className="font-display text-[2rem] sm:text-[3rem] font-bold text-[#2D2D2D] leading-[1.15]">
+          <h2 className="font-display text-[2rem] sm:text-[3rem] font-bold text-dark leading-[1.15]">
             How It Works
           </h2>
-          <p className="font-body text-[1rem] font-normal text-[#6B6B6B] mt-3">
+          <p className="font-body text-[1rem] font-normal text-medium mt-3">
             Create your perfect album in four simple steps
           </p>
         </div>
@@ -217,7 +217,7 @@ function HowItWorksSection() {
           {steps.map((step) => (
             <div
               key={step.num}
-              className="hiw-card group bg-[#FFFBF7] rounded-2xl shadow-card p-6 text-center hover:-translate-y-1 hover:shadow-card-hover transition-all duration-300"
+              className="hiw-card group bg-warm-white rounded-2xl shadow-card p-6 text-center hover:-translate-y-1 hover:shadow-card-hover transition-all duration-300"
             >
               <span
                 className={`font-display text-[3rem] font-bold ${step.numColor} opacity-30 block mb-2 leading-none`}
@@ -229,10 +229,10 @@ function HowItWorksSection() {
                 alt={step.title}
                 className="w-full aspect-[4/3] object-cover rounded-2xl mb-4"
               />
-              <h4 className="font-display text-[1.25rem] font-semibold text-[#2D2D2D] leading-[1.3] mb-2">
+              <h4 className="font-display text-[1.25rem] font-semibold text-dark leading-[1.3] mb-2">
                 {step.title}
               </h4>
-              <p className="font-body text-[0.875rem] font-normal text-[#6B6B6B] leading-[1.6]">
+              <p className="font-body text-[0.875rem] font-normal text-medium leading-[1.6]">
                 {step.desc}
               </p>
             </div>
@@ -272,61 +272,61 @@ function TemplatePreviewSection() {
     {
       img: './album-graduation.jpg',
       badge: 'Graduation',
-      badgeColor: 'bg-[#F4C2A1]',
+      badgeColor: 'bg-peach',
       title: 'Graduation',
       desc: 'Elegant layouts with school colors and formal typography',
-      borderColor: 'hover:ring-[#F4C2A1]',
+      borderColor: 'hover:ring-peach',
     },
     {
       img: './album-elegant.jpg',
       badge: 'Elegant',
-      badgeColor: 'bg-[#B8A9D9]',
+      badgeColor: 'bg-soft-lavender',
       title: 'Elegant',
       desc: 'Romantic full-bleed layouts for weddings and special moments',
-      borderColor: 'hover:ring-[#B8A9D9]',
+      borderColor: 'hover:ring-soft-lavender',
     },
     {
       img: './album-minimalist.jpg',
       badge: 'Minimalist',
-      badgeColor: 'bg-[#9BCFB8]',
+      badgeColor: 'bg-mint',
       title: 'Minimalist',
       desc: 'Clean, spacious designs that let your photos speak for themselves',
-      borderColor: 'hover:ring-[#9BCFB8]',
+      borderColor: 'hover:ring-mint',
     },
     {
       img: './album-kids.jpg',
       badge: 'Kids Theme',
-      badgeColor: 'bg-[#8FBFE0]',
+      badgeColor: 'bg-sky-blue',
       title: 'Kids Theme',
       desc: 'Playful, colorful layouts full of joy and fun elements',
-      borderColor: 'hover:ring-[#8FBFE0]',
+      borderColor: 'hover:ring-sky-blue',
     },
     {
       img: './album-modern.jpg',
       badge: 'Modern',
-      badgeColor: 'bg-[#F4C2A1]',
+      badgeColor: 'bg-peach',
       title: 'Modern',
       desc: 'Bold editorial layouts with magazine-style sophistication',
-      borderColor: 'hover:ring-[#F4C2A1]',
+      borderColor: 'hover:ring-peach',
     },
     {
       img: './album-family.jpg',
       badge: 'Family Album',
-      badgeColor: 'bg-[#D4B896]',
+      badgeColor: 'bg-cream-gold',
       title: 'Family Album',
       desc: 'Warm, inviting layouts perfect for treasured family memories',
-      borderColor: 'hover:ring-[#D4B896]',
+      borderColor: 'hover:ring-cream-gold',
     },
   ];
 
   return (
-    <section ref={sectionRef} className="bg-[#FDE8E4] py-20">
+    <section ref={sectionRef} className="bg-blush py-20">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
         <div className="tp-heading text-center mb-12">
-          <h2 className="font-display text-[2rem] sm:text-[3rem] font-bold text-[#2D2D2D] leading-[1.15]">
+          <h2 className="font-display text-[2rem] sm:text-[3rem] font-bold text-dark leading-[1.15]">
             Beautiful Templates for Every Occasion
           </h2>
-          <p className="font-body text-[1rem] font-normal text-[#6B6B6B] mt-3">
+          <p className="font-body text-[1rem] font-normal text-medium mt-3">
             Each template is carefully designed to make your photos shine
           </p>
         </div>
@@ -373,7 +373,7 @@ function TemplatePreviewSection() {
 
               {/* Title below image (visible when not hovered) */}
               <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[rgba(253,232,228,0.95)] to-transparent group-hover:opacity-0 transition-opacity duration-300">
-                <h4 className="font-display text-[1.15rem] font-semibold text-[#2D2D2D]">
+                <h4 className="font-display text-[1.15rem] font-semibold text-dark">
                   {t.title}
                 </h4>
               </div>
@@ -384,7 +384,7 @@ function TemplatePreviewSection() {
         <div className="mt-10 text-center">
           <Link
             to="/templates"
-            className="inline-flex items-center font-body text-[0.875rem] font-semibold text-[#F4C2A1] border-[1.5px] border-[#F4C2A1] px-8 py-3.5 rounded-xl hover:bg-[#F4C2A1] hover:text-white transition-all duration-250"
+            className="inline-flex items-center font-body text-[0.875rem] font-semibold text-peach border-[1.5px] border-peach px-8 py-3.5 rounded-xl hover:bg-peach hover:text-white transition-all duration-250"
           >
             View All Templates &rarr;
           </Link>
@@ -431,7 +431,7 @@ function TestimonialsSection() {
   const testimonials = [
     {
       img: '/testimonial-1.jpg',
-      borderColor: 'border-[#F4C2A1]',
+      borderColor: 'border-peach',
       quote:
         'Megy Prints made creating my wedding album so easy! The templates are gorgeous and the print quality is amazing. I couldn\'t be happier.',
       name: 'Sarah M.',
@@ -439,7 +439,7 @@ function TestimonialsSection() {
     },
     {
       img: '/testimonial-2.jpg',
-      borderColor: 'border-[#9BCFB8]',
+      borderColor: 'border-mint',
       quote:
         'I needed graduation albums for my entire class. The auto-generate feature saved me hours, and my students loved the results!',
       name: 'Mr. Dela Cruz',
@@ -447,7 +447,7 @@ function TestimonialsSection() {
     },
     {
       img: '/testimonial-3.jpg',
-      borderColor: 'border-[#B8A9D9]',
+      borderColor: 'border-soft-lavender',
       quote:
         'The kids theme is absolutely adorable! I made albums for both my children\'s birthdays and they turned out perfect.',
       name: 'Jenny L.',
@@ -456,9 +456,9 @@ function TestimonialsSection() {
   ];
 
   return (
-    <section ref={sectionRef} className="bg-[#FFF8F0] py-20">
+    <section ref={sectionRef} className="bg-cream py-20">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
-        <h2 className="tst-heading font-display text-[2rem] sm:text-[3rem] font-bold text-[#2D2D2D] leading-[1.15] text-center mb-12">
+        <h2 className="tst-heading font-display text-[2rem] sm:text-[3rem] font-bold text-dark leading-[1.15] text-center mb-12">
           What Our Customers Say
         </h2>
 
@@ -466,10 +466,10 @@ function TestimonialsSection() {
           {testimonials.map((t) => (
             <div
               key={t.name}
-              className="tst-card relative bg-[#FFFBF7] rounded-2xl shadow-card p-8"
+              className="tst-card relative bg-warm-white rounded-2xl shadow-card p-8"
             >
               {/* Quote icon */}
-              <Quote className="w-6 h-6 text-[#F4C2A1] opacity-30 mb-3" />
+              <Quote className="w-6 h-6 text-peach opacity-30 mb-3" />
 
               {/* Stars */}
               <div className="flex gap-1 mb-4">
@@ -485,12 +485,12 @@ function TestimonialsSection() {
                       ease: [0.34, 1.56, 0.64, 1] as [number, number, number, number],
                     }}
                   >
-                    <Star className="w-4 h-4 text-[#F4C2A1] fill-[#F4C2A1]" />
+                    <Star className="w-4 h-4 text-peach fill-peach" />
                   </motion.div>
                 ))}
               </div>
 
-              <p className="font-body text-[1rem] font-normal italic text-[#4A4A4A] leading-[1.7] mb-5">
+              <p className="font-body text-[1rem] font-normal italic text-charcoal leading-[1.7] mb-5">
                 &ldquo;{t.quote}&rdquo;
               </p>
 
@@ -501,10 +501,10 @@ function TestimonialsSection() {
                   className={`tst-avatar w-14 h-14 rounded-full object-cover border-2 ${t.borderColor}`}
                 />
                 <div>
-                  <h5 className="font-body text-[0.875rem] font-semibold text-[#2D2D2D]">
+                  <h5 className="font-body text-[0.875rem] font-semibold text-dark">
                     {t.name}
                   </h5>
-                  <span className="font-body text-[0.75rem] font-medium text-[#9B9B9B]">
+                  <span className="font-body text-[0.75rem] font-medium text-light">
                     {t.detail}
                   </span>
                 </div>
@@ -564,7 +564,7 @@ function CTASection() {
         <div className="mt-8">
           <Link
             to="/builder"
-            className="inline-flex items-center font-body text-[0.875rem] font-semibold bg-white text-[#2D2D2D] px-10 py-4 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.15)] hover:scale-[1.03] transition-all duration-200"
+            className="inline-flex items-center font-body text-[0.875rem] font-semibold bg-white text-dark px-10 py-4 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.15)] hover:scale-[1.03] transition-all duration-200"
           >
             Get Started &mdash; It&apos;s Free!
           </Link>
@@ -616,22 +616,22 @@ export default function Home() {
         className="w-24 h-24 mx-auto object-contain drop-shadow-lg mb-4"
         draggable={false}
       />
-      <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#2D2D2D] mb-2">
+      <h1 className="font-display text-2xl sm:text-3xl font-bold text-dark mb-2">
         Hi, I&apos;m Megy 👋
       </h1>
-      <p className="font-body text-[#6B6B6B] leading-relaxed mb-6">
+      <p className="font-body text-medium leading-relaxed mb-6">
         Your personal album designer. Upload your photos and I&apos;ll build a
         beautiful, print-ready album for you — no design skills needed.
       </p>
       <button
         onClick={() => handleMegyAction('go-builder')}
-        className="w-full inline-flex items-center justify-center gap-2 bg-[#F4C2A1] hover:bg-[#E8A598] text-white font-semibold px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all text-base"
+        className="w-full inline-flex items-center justify-center gap-2 bg-peach hover:bg-blush-pink text-white font-semibold px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all text-base"
       >
         <Sparkles size={18} /> Start Creating
       </button>
       <Link
         to="/templates"
-        className="inline-block mt-3 text-sm font-medium text-[#8B7E7A] hover:text-[#F4C2A1] transition-colors"
+        className="inline-block mt-3 text-sm font-medium text-taupe hover:text-peach transition-colors"
       >
         Or browse templates first →
       </Link>
@@ -646,7 +646,7 @@ export default function Home() {
       <TrustBarSection />
 
       {/* User projects — still visible below the fold as fallback */}
-      <div className="bg-[#FFFBF7] py-16">
+      <div className="bg-warm-white py-16">
         <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
           <UserProjectsSection />
         </div>

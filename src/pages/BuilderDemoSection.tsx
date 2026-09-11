@@ -120,7 +120,7 @@ function DemoCanvas({ step }: { step: StepKey }) {
 
   return (
     <div
-      className="relative w-full aspect-[4/5] bg-[#FFFBF7] rounded-lg shadow-inner overflow-hidden"
+      className="relative w-full aspect-[4/5] bg-warm-white rounded-lg shadow-inner overflow-hidden"
       style={{
         background: previewMode
           ? 'linear-gradient(180deg, #FFF8F0 0%, #FFFBF7 100%)'
@@ -164,7 +164,7 @@ function DemoCanvas({ step }: { step: StepKey }) {
                   transition={{ delay: 0.2, type: 'spring', stiffness: 400 }}
                   className="absolute top-1 right-1 w-4 h-4 rounded-full bg-white/90 flex items-center justify-center"
                 >
-                  <Check size={10} className="text-[#9BCFB8]" />
+                  <Check size={10} className="text-mint" />
                 </motion.div>
               )}
             </motion.div>
@@ -202,7 +202,7 @@ function DemoCanvas({ step }: { step: StepKey }) {
             }}
           >
             <p
-              className="font-display text-[0.75rem] font-semibold text-[#2D2D2D]"
+              className="font-display text-[0.75rem] font-semibold text-dark"
               style={{
                 fontFamily: '"Playfair Display", serif',
               }}
@@ -214,7 +214,7 @@ function DemoCanvas({ step }: { step: StepKey }) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: [0, 1, 0] }}
                 transition={{ repeat: Infinity, duration: 1 }}
-                className="absolute right-0 top-0 w-[1px] h-full bg-[#8FBFE0]"
+                className="absolute right-0 top-0 w-[1px] h-full bg-sky-blue"
               />
             )}
           </motion.div>
@@ -236,8 +236,8 @@ function DemoCanvas({ step }: { step: StepKey }) {
               transition={{ delay: 0.2, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
               className="bg-white rounded-xl shadow-lg px-6 py-3 flex items-center gap-2"
             >
-              <Sparkles size={16} className="text-[#F4C2A1]" />
-              <span className="font-body text-sm font-semibold text-[#2D2D2D]">
+              <Sparkles size={16} className="text-peach" />
+              <span className="font-body text-sm font-semibold text-dark">
                 Your album looks great!
               </span>
             </motion.div>
@@ -251,12 +251,12 @@ function DemoCanvas({ step }: { step: StepKey }) {
           initial={{ x: 20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.4 }}
-          className="absolute right-0 top-0 bottom-0 w-8 bg-white/80 border-l border-[#E8E8E8] flex flex-col items-center py-2 gap-1.5 z-10"
+          className="absolute right-0 top-0 bottom-0 w-8 bg-white/80 border-l border-line flex flex-col items-center py-2 gap-1.5 z-10"
         >
-          <div className="w-5 h-5 rounded bg-[#F4C2A1]/20" />
-          <div className="w-5 h-5 rounded bg-[#B8A9D9]/20" />
-          <div className="w-5 h-5 rounded bg-[#9BCFB8]/20" />
-          <div className="w-5 h-5 rounded bg-[#8FBFE0]/20" />
+          <div className="w-5 h-5 rounded bg-peach/20" />
+          <div className="w-5 h-5 rounded bg-soft-lavender/20" />
+          <div className="w-5 h-5 rounded bg-mint/20" />
+          <div className="w-5 h-5 rounded bg-sky-blue/20" />
         </motion.div>
       )}
 
@@ -266,11 +266,11 @@ function DemoCanvas({ step }: { step: StepKey }) {
           <motion.div
             animate={{ y: [0, -6, 0] }}
             transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
-            className="w-12 h-12 rounded-full bg-[#F4C2A1]/20 flex items-center justify-center mb-2"
+            className="w-12 h-12 rounded-full bg-peach/20 flex items-center justify-center mb-2"
           >
-            <Upload size={20} className="text-[#F4C2A1]" />
+            <Upload size={20} className="text-peach" />
           </motion.div>
-          <span className="font-body text-[0.65rem] text-[#6B6B6B]">Drop photos here</span>
+          <span className="font-body text-[0.65rem] text-medium">Drop photos here</span>
         </div>
       )}
 
@@ -296,7 +296,7 @@ function DemoCanvas({ step }: { step: StepKey }) {
                 className="w-6 h-6 rounded"
                 style={{ backgroundColor: t.color }}
               />
-              <span className="font-body text-[0.65rem] font-medium text-[#2D2D2D]">
+              <span className="font-body text-[0.65rem] font-medium text-dark">
                 {t.name}
               </span>
               {i === 0 && (
@@ -306,7 +306,7 @@ function DemoCanvas({ step }: { step: StepKey }) {
                   transition={{ delay: 0.8, type: 'spring' }}
                   className="ml-auto"
                 >
-                  <Check size={10} className="text-[#9BCFB8]" />
+                  <Check size={10} className="text-mint" />
                 </motion.div>
               )}
             </motion.div>
@@ -397,14 +397,14 @@ export default function BuilderDemoSection() {
   const currentStep = STEPS[activeStep];
 
   return (
-    <section ref={sectionRef} className="bg-[#FFFBF7] py-20 overflow-hidden">
+    <section ref={sectionRef} className="bg-warm-white py-20 overflow-hidden">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
         {/* Heading */}
         <div className="demo-heading text-center mb-12">
-          <h2 className="font-display text-[2rem] sm:text-[3rem] font-bold text-[#2D2D2D] leading-[1.15]">
+          <h2 className="font-display text-[2rem] sm:text-[3rem] font-bold text-dark leading-[1.15]">
             See the Editor in Action
           </h2>
-          <p className="font-body text-[1rem] font-normal text-[#6B6B6B] mt-3 max-w-[520px] mx-auto">
+          <p className="font-body text-[1rem] font-normal text-medium mt-3 max-w-[520px] mx-auto">
             Watch how easy it is to create a stunning album in minutes — no design skills needed
           </p>
         </div>
@@ -455,7 +455,7 @@ export default function BuilderDemoSection() {
                       {step.label}
                     </span>
                     {/* Progress bar */}
-                    <div className="w-20 h-1 rounded-full bg-[#F0F0F0] mt-1 overflow-hidden">
+                    <div className="w-20 h-1 rounded-full bg-line-soft mt-1 overflow-hidden">
                       <motion.div
                         className="h-full rounded-full"
                         style={{ backgroundColor: step.color }}
@@ -474,7 +474,7 @@ export default function BuilderDemoSection() {
                   {/* Connector line (vertical on lg) */}
                   {index < STEPS.length - 1 && (
                     <div
-                      className="hidden lg:block absolute left-5 top-10 w-[2px] h-4 bg-[#F0F0F0]"
+                      className="hidden lg:block absolute left-5 top-10 w-[2px] h-4 bg-line-soft"
                       style={{
                         position: 'relative',
                         marginLeft: '-1px',
@@ -489,23 +489,23 @@ export default function BuilderDemoSection() {
           {/* Center: animated canvas mockup */}
           <div className="flex-1 max-w-[360px] w-full order-1 lg:order-2">
             {/* Browser chrome */}
-            <div className="bg-white rounded-xl shadow-2xl overflow-hidden border border-[#E8E8E8]">
+            <div className="bg-white rounded-xl shadow-2xl overflow-hidden border border-line">
               {/* Window header */}
-              <div className="h-8 bg-[#F5F5F5] border-b border-[#E8E8E8] flex items-center px-3 gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#E8A598]" />
-                <div className="w-2.5 h-2.5 rounded-full bg-[#F4C2A1]" />
-                <div className="w-2.5 h-2.5 rounded-full bg-[#9BCFB8]" />
-                <span className="font-body text-[0.6rem] text-[#9B9B9B] ml-2">
+              <div className="h-8 bg-paper border-b border-line flex items-center px-3 gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-blush-pink" />
+                <div className="w-2.5 h-2.5 rounded-full bg-peach" />
+                <div className="w-2.5 h-2.5 rounded-full bg-mint" />
+                <span className="font-body text-[0.6rem] text-light ml-2">
                   Megy Prints Builder
                 </span>
               </div>
 
               {/* Toolbar */}
-              <div className="h-7 bg-white border-b border-[#E8E8E8] flex items-center px-2 gap-1">
+              <div className="h-7 bg-white border-b border-line flex items-center px-2 gap-1">
                 {['File', 'Edit', 'View', 'Insert'].map((item) => (
                   <span
                     key={item}
-                    className="font-body text-[0.55rem] text-[#6B6B6B] px-1.5 py-0.5 rounded hover:bg-[#F0F0F0] transition-colors"
+                    className="font-body text-[0.55rem] text-medium px-1.5 py-0.5 rounded hover:bg-line-soft transition-colors"
                   >
                     {item}
                   </span>
@@ -553,11 +553,11 @@ export default function BuilderDemoSection() {
                   <currentStep.icon size={20} style={{ color: currentStep.color }} />
                 </div>
 
-                <h3 className="font-display text-xl font-semibold text-[#2D2D2D] mb-2">
+                <h3 className="font-display text-xl font-semibold text-dark mb-2">
                   {STEP_DETAILS[currentStep.key].title}
                 </h3>
 
-                <p className="font-body text-sm text-[#6B6B6B] leading-[1.7] mb-4">
+                <p className="font-body text-sm text-medium leading-[1.7] mb-4">
                   {STEP_DETAILS[currentStep.key].desc}
                 </p>
 
@@ -577,7 +577,7 @@ export default function BuilderDemoSection() {
                       >
                         <Check size={10} style={{ color: currentStep.color }} />
                       </div>
-                      <span className="font-body text-xs text-[#4A4A4A]">{feature}</span>
+                      <span className="font-body text-xs text-charcoal">{feature}</span>
                     </motion.li>
                   ))}
                 </ul>

@@ -77,16 +77,16 @@ export default function AddressPicker({ value, onChange, errors }: {
   };
 
   const selCls = (e?: string) =>
-    `w-full border rounded-lg px-3 py-2 text-sm bg-white disabled:bg-[#F7F7F7] disabled:text-[#B4B4B4] ${e ? 'border-red-400' : 'border-[#E8E8E8]'}`;
+    `w-full border rounded-lg px-3 py-2 text-sm bg-white disabled:bg-[#F7F7F7] disabled:text-[#B4B4B4] ${e ? 'border-red-400' : 'border-line'}`;
   const inputCls = (e?: string) =>
-    `w-full border rounded-lg px-3 py-2 text-sm ${e ? 'border-red-400' : 'border-[#E8E8E8]'}`;
+    `w-full border rounded-lg px-3 py-2 text-sm ${e ? 'border-red-400' : 'border-line'}`;
   const errText = (k: keyof AddressValue) => (errors?.[k] ? <p className="text-xs text-red-500 mt-1">{errors[k]}</p> : null);
 
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-[#6B6B6B] mb-1 block">Province</label>
+          <label className="text-xs text-medium mb-1 block">Province</label>
           <select value={value.provinceCode} onChange={(e) => pickProvince(e.target.value)} disabled={loading.prov} aria-invalid={!!errors?.provinceCode} className={selCls(errors?.provinceCode)}>
             <option value="">{loading.prov ? 'Loading…' : 'Select province…'}</option>
             {provinces.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
@@ -94,7 +94,7 @@ export default function AddressPicker({ value, onChange, errors }: {
           {errText('provinceCode')}
         </div>
         <div>
-          <label className="text-xs text-[#6B6B6B] mb-1 block">City / Municipality</label>
+          <label className="text-xs text-medium mb-1 block">City / Municipality</label>
           <select value={value.cityCode} onChange={(e) => pickCity(e.target.value)} disabled={!value.provinceCode || loading.city} aria-invalid={!!errors?.cityCode} className={selCls(errors?.cityCode)}>
             <option value="">{loading.city ? 'Loading…' : 'Select city / municipality…'}</option>
             {cities.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
@@ -104,7 +104,7 @@ export default function AddressPicker({ value, onChange, errors }: {
       </div>
 
       <div>
-        <label className="text-xs text-[#6B6B6B] mb-1 block">Barangay</label>
+        <label className="text-xs text-medium mb-1 block">Barangay</label>
         <select value={value.barangayCode} onChange={(e) => pickBarangay(e.target.value)} disabled={!value.cityCode || loading.brgy} aria-invalid={!!errors?.barangayCode} className={selCls(errors?.barangayCode)}>
           <option value="">{loading.brgy ? 'Loading…' : 'Select barangay…'}</option>
           {barangays.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
@@ -114,7 +114,7 @@ export default function AddressPicker({ value, onChange, errors }: {
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_110px] gap-3">
         <div>
-          <label className="text-xs text-[#6B6B6B] mb-1 block">House / Unit No. &amp; Street</label>
+          <label className="text-xs text-medium mb-1 block">House / Unit No. &amp; Street</label>
           <input
             value={value.street}
             onChange={(e) => onChange({ ...value, street: e.target.value })}
@@ -124,7 +124,7 @@ export default function AddressPicker({ value, onChange, errors }: {
           {errText('street')}
         </div>
         <div>
-          <label className="text-xs text-[#6B6B6B] mb-1 block">ZIP</label>
+          <label className="text-xs text-medium mb-1 block">ZIP</label>
           <input
             value={value.zip}
             onChange={(e) => onChange({ ...value, zip: e.target.value.replace(/\D/g, '').slice(0, 4) })}

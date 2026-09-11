@@ -66,14 +66,14 @@ export default function SlotChooser({ onPhoto, onText, onQuote, onQr, onClose, m
         <button
           key={key}
           onClick={() => pick(run)}
-          className="flex items-center gap-3 w-full p-3 rounded-xl border border-[#EDE7E0] bg-[#FFF8F0] hover:bg-[#FDE8E4] active:scale-[0.98] transition text-left"
+          className="flex items-center gap-3 w-full p-3 rounded-xl border border-[#EDE7E0] bg-cream hover:bg-blush active:scale-[0.98] transition text-left"
         >
-          <span className="w-10 h-10 rounded-full bg-[#F4C2A1] flex items-center justify-center text-white shrink-0">
+          <span className="w-10 h-10 rounded-full bg-peach flex items-center justify-center text-white shrink-0">
             <Icon size={20} />
           </span>
           <span className="flex flex-col">
-            <span className="text-sm font-semibold text-[#2D2D2D]">{label}</span>
-            <span className="text-xs text-[#9B8B7A]">{desc}</span>
+            <span className="text-sm font-semibold text-dark">{label}</span>
+            <span className="text-xs text-stone">{desc}</span>
           </span>
         </button>
       ))}
@@ -94,9 +94,9 @@ export default function SlotChooser({ onPhoto, onText, onQuote, onQr, onClose, m
             className="w-full bg-white rounded-t-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
-              <span className="text-sm font-semibold text-[#2D2D2D]">Add to this box</span>
-              <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
+              <span className="text-sm font-semibold text-dark">Add to this box</span>
+              <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
             </div>
             <div className="p-3">{Buttons}</div>
           </motion.div>
@@ -109,8 +109,8 @@ export default function SlotChooser({ onPhoto, onText, onQuote, onQr, onClose, m
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <span className="text-base font-semibold text-[#2D2D2D]">Add to this box</span>
-          <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+          <span className="text-base font-semibold text-dark">Add to this box</span>
+          <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
         </div>
         {Buttons}
       </div>

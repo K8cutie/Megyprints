@@ -347,14 +347,14 @@ export default function Order() {
     const printerReached = trackStage >= 2; // "Sent to the printer" onward
     const finished = trackStage >= TRACK_STAGES.length - 1;
     return (
-      <div className="min-h-screen bg-[#FFF8F0] pt-28 px-6 pb-16 flex items-start justify-center">
+      <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg">
           <div className="text-center mb-8">
-            <h2 className="font-display text-3xl font-bold text-[#2D2D2D]">{finished ? 'Your album is finished! 🎉' : 'Thank you — we\'re confirming your payment'}</h2>
+            <h2 className="font-display text-3xl font-bold text-dark">{finished ? 'Your album is finished! 🎉' : 'Thank you — we\'re confirming your payment'}</h2>
             {orderNumber && (
-              <p className="mt-2 text-sm font-medium text-[#2D2D2D]">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
+              <p className="mt-2 text-sm font-medium text-dark">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
             )}
-            <p className="mt-2 text-xs text-[#8B7E7A] max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-[#2D2D2D]">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
+            <p className="mt-2 text-xs text-taupe max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-dark">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
           </div>
 
           {/* Status tracker */}
@@ -367,10 +367,10 @@ export default function Order() {
                 const Icon = stage.icon;
                 return (
                   <div key={stage.label} className="flex items-center gap-3 py-2">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${reached ? 'bg-[#E4F0E0] text-[#2E7D4A]' : 'bg-[#F0F0F0] text-[#C4C4C4]'}`}>
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${reached ? 'bg-soft-sage text-success' : 'bg-line-soft text-[#C4C4C4]'}`}>
                       {active ? <Loader2 size={18} className="animate-spin text-[#C98A5E]" /> : done || (finished && i === TRACK_STAGES.length - 1) ? <Check size={18} /> : <Icon size={18} />}
                     </div>
-                    <span className={`text-sm font-medium ${reached ? 'text-[#2D2D2D]' : 'text-[#9B9B9B]'}`}>{stage.label}</span>
+                    <span className={`text-sm font-medium ${reached ? 'text-dark' : 'text-light'}`}>{stage.label}</span>
                   </div>
                 );
               })}
@@ -381,14 +381,14 @@ export default function Order() {
               the PDF (so it can't be printed elsewhere). Just reassure them. */}
           {printerReached && (
             <div className="bg-white rounded-2xl p-6 shadow-sm mt-4">
-              <h3 className="font-display text-base font-semibold text-[#2D2D2D] mb-1 flex items-center gap-2"><Printer size={16} /> Sent to print</h3>
-              <p className="text-xs text-[#6B6B6B]">Your print-ready album has been sent to Megyprints. We'll print it on premium paper and ship it to your address — no action needed on your end. 💛</p>
+              <h3 className="font-display text-base font-semibold text-dark mb-1 flex items-center gap-2"><Printer size={16} /> Sent to print</h3>
+              <p className="text-xs text-medium">Your print-ready album has been sent to Megyprints. We'll print it on premium paper and ship it to your address — no action needed on your end. 💛</p>
             </div>
           )}
 
           <div className="mt-6 flex gap-3 justify-center">
-            <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-[#F4C2A1] text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
-            <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-[#6B6B6B] rounded-lg font-medium hover:bg-[#F0F0F0]">Home</button>
+            <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-peach text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
+            <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-medium rounded-lg font-medium hover:bg-line-soft">Home</button>
           </div>
         </motion.div>
       </div>
@@ -401,69 +401,69 @@ export default function Order() {
     const placed = orderNumber ? { order_number: orderNumber } : null;
     const amountLabel = `₱${totalPrice.toLocaleString('en-PH')}`;
     return (
-      <div className="min-h-screen bg-[#FFF8F0] pt-28 px-6 pb-16 flex items-start justify-center">
+      <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
-          <h1 className="font-display text-3xl font-bold text-[#2D2D2D] text-center mb-1">Send {amountLabel}</h1>
-          {placed && <p className="text-center text-sm text-[#6B6B6B] mb-5">Order <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> is placed. Pay by bank transfer to finish.</p>}
+          <h1 className="font-display text-3xl font-bold text-dark text-center mb-1">Send {amountLabel}</h1>
+          {placed && <p className="text-center text-sm text-medium mb-5">Order <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> is placed. Pay by bank transfer to finish.</p>}
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             {/* The QR — scanned from any PH bank or e-wallet app (InstaPay / QR Ph). */}
-            <div className="rounded-xl border border-[#F0F0F0] bg-[#FFFDFB] p-4 text-center">
-              <div className="flex items-center justify-center gap-2 text-[#6B6B6B] mb-2"><Landmark size={16} /> <span className="text-xs font-semibold uppercase tracking-wide">{PAYEE.bank} · {PAYEE.rail}</span></div>
+            <div className="rounded-xl border border-line-soft bg-[#FFFDFB] p-4 text-center">
+              <div className="flex items-center justify-center gap-2 text-medium mb-2"><Landmark size={16} /> <span className="text-xs font-semibold uppercase tracking-wide">{PAYEE.bank} · {PAYEE.rail}</span></div>
               {!qrMissing ? (
                 <img src={PAYEE.qrSrc} alt={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} onError={() => setQrMissing(true)}
                   className="mx-auto w-56 h-56 object-contain rounded-lg bg-white" draggable={false} />
               ) : (
-                <div className="mx-auto w-56 h-56 rounded-lg bg-[#F7F1EC] flex items-center justify-center text-xs text-[#8B7E7A] px-4">The QR code isn't available right now — message us and we'll send the account details.</div>
+                <div className="mx-auto w-56 h-56 rounded-lg bg-[#F7F1EC] flex items-center justify-center text-xs text-taupe px-4">The QR code isn't available right now — message us and we'll send the account details.</div>
               )}
-              <p className="mt-3 text-base font-semibold text-[#2D2D2D]">{PAYEE.name}</p>
-              <p className="text-xs text-[#8B7E7A]">Account ending in <span className="font-mono">{PAYEE.accountLast4}</span></p>
-              <p className="mt-2 font-display text-2xl font-bold text-[#E8A598]">{amountLabel}</p>
+              <p className="mt-3 text-base font-semibold text-dark">{PAYEE.name}</p>
+              <p className="text-xs text-taupe">Account ending in <span className="font-mono">{PAYEE.accountLast4}</span></p>
+              <p className="mt-2 font-display text-2xl font-bold text-blush-pink">{amountLabel}</p>
             </div>
 
-            <ol className="mt-4 space-y-1.5 text-xs text-[#5A5A5A] list-decimal pl-4">
+            <ol className="mt-4 space-y-1.5 text-xs text-ink-mid list-decimal pl-4">
               <li>Open your bank or e-wallet app (GCash, Maya, BPI, BDO, UnionBank…).</li>
               <li>Choose <b>Scan QR</b> / <b>InstaPay</b> and scan the code above.</li>
-              <li>Send exactly <b className="text-[#2D2D2D]">{amountLabel}</b>{placed && <> and put <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> in the note if your app asks</>}.</li>
+              <li>Send exactly <b className="text-dark">{amountLabel}</b>{placed && <> and put <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> in the note if your app asks</>}.</li>
               <li>Attach your receipt below — it speeds up confirmation.</li>
             </ol>
-            <p className="mt-2 text-[11px] text-[#9B9B9B]">Your app may charge a small InstaPay fee. We don't add any.</p>
+            <p className="mt-2 text-[11px] text-light">Your app may charge a small InstaPay fee. We don't add any.</p>
 
             {/* Receipt + reference (0033). Optional, but it lets the operator match the deposit at a glance. */}
-            <div className="mt-4 rounded-xl border border-[#F0F0F0] p-3">
-              <label className="block text-xs font-semibold text-[#2D2D2D] mb-1.5">Receipt screenshot <span className="font-normal text-[#9B9B9B]">(optional)</span></label>
-              <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-[#F4C2A1] bg-[#FFF8F0] text-xs text-[#8B6F47] cursor-pointer hover:bg-[#FDE8E4]">
+            <div className="mt-4 rounded-xl border border-line-soft p-3">
+              <label className="block text-xs font-semibold text-dark mb-1.5">Receipt screenshot <span className="font-normal text-light">(optional)</span></label>
+              <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-peach bg-cream text-xs text-cocoa cursor-pointer hover:bg-blush">
                 <Paperclip size={14} className="shrink-0" />
                 <span className="truncate">{proofFile ? `${proofFile.name} · ${Math.max(1, Math.round(proofFile.size / 1024))} KB` : 'Attach the transfer receipt (JPG, PNG or PDF)'}</span>
                 <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={(e) => onPickProof(e.target.files?.[0] ?? null)} />
               </label>
               {proofError && <p className="mt-1.5 text-[11px] text-red-500">{proofError}</p>}
-              <label className="block text-xs font-semibold text-[#2D2D2D] mt-3 mb-1.5">Reference no. <span className="font-normal text-[#9B9B9B]">(optional — from your bank's receipt)</span></label>
+              <label className="block text-xs font-semibold text-dark mt-3 mb-1.5">Reference no. <span className="font-normal text-light">(optional — from your bank's receipt)</span></label>
               <input value={payRef} onChange={(e) => setPayRef(e.target.value)} inputMode="text" autoComplete="off" placeholder="e.g. 2026091012345678" maxLength={64}
-                className="w-full px-3 py-2 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1]" />
+                className="w-full px-3 py-2 rounded-lg border border-line text-sm outline-none focus:border-peach" />
             </div>
 
             <button
               onClick={handlePaymentSent}
               disabled={submitting}
-              className="w-full mt-4 py-3.5 bg-[#E8A598] text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+              className="w-full mt-4 py-3.5 bg-blush-pink text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
             >
               {submitting
                 ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Saving…'}</>
                 : <><Check size={16} /> I've sent {amountLabel}</>}
             </button>
-            <p className="mt-3 text-[11px] text-[#9B9B9B] text-center">We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</p>
+            <p className="mt-3 text-[11px] text-light text-center">We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</p>
             {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}
-            <details className="mt-3 text-xs text-[#9B9B9B]">
-              <summary className="cursor-pointer text-center hover:text-[#6B6B6B]">Order summary</summary>
-            <div className="space-y-2 text-sm border-y border-[#F0F0F0] py-4 mt-2">
-              <div className="flex justify-between gap-3"><span className="text-[#6B6B6B] shrink-0">Album</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
+            <details className="mt-3 text-xs text-light">
+              <summary className="cursor-pointer text-center hover:text-medium">Order summary</summary>
+            <div className="space-y-2 text-sm border-y border-line-soft py-4 mt-2">
+              <div className="flex justify-between gap-3"><span className="text-medium shrink-0">Album</span><span className="font-semibold text-blush-pink text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
               {breakdown.items.map((item) => (
                 <div key={item.label} className="flex justify-between gap-3">
-                  <span className="text-[#6B6B6B]">{item.label}</span>
-                  <span className="font-medium text-[#2D2D2D] text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
+                  <span className="text-medium">{item.label}</span>
+                  <span className="font-medium text-dark text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
                 </div>
               ))}
-              <div className="flex justify-between items-baseline pt-1 border-t border-[#F0F0F0]"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice.toLocaleString('en-PH')}</span></div>
+              <div className="flex justify-between items-baseline pt-1 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span></div>
             </div>
             </details>
           </div>
@@ -474,23 +474,23 @@ export default function Order() {
 
   /* ══════════════ FORM (checkout) ══════════════ */
   return (
-    <div className="min-h-screen bg-[#FFF8F0] pt-24 pb-12 px-6">
+    <div className="min-h-screen bg-cream pt-24 pb-12 px-6">
       <div className="max-w-[900px] mx-auto">
-        <h1 className="font-display text-4xl font-bold text-[#2D2D2D] text-center mb-8">Finalize Your Order</h1>
+        <h1 className="font-display text-4xl font-bold text-dark text-center mb-8">Finalize Your Order</h1>
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left: Options */}
           <div className="lg:col-span-2 space-y-6">
             {/* Material */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4 flex items-center gap-2"><Palette size={18} /> Paper Material</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><Palette size={18} /> Paper Material</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {MATERIALS.map((m) => (
                   <button key={m.type} onClick={() => setMaterial(m.type)}
                     className="p-3 rounded-xl border-2 text-left transition-all"
                     style={{ borderColor: material === m.type ? '#F4C2A1' : '#E8E8E8', backgroundColor: material === m.type ? '#FFF8F0' : '#fff' }}>
-                    <span className="font-medium text-sm text-[#2D2D2D]">{m.name}</span>
-                    <span className="block text-xs text-[#9B9B9B] mt-1">{m.description}</span>
+                    <span className="font-medium text-sm text-dark">{m.name}</span>
+                    <span className="block text-xs text-light mt-1">{m.description}</span>
                   </button>
                 ))}
               </div>
@@ -498,14 +498,14 @@ export default function Order() {
 
             {/* Cover */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4 flex items-center gap-2"><HardDrive size={18} /> Cover Type</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><HardDrive size={18} /> Cover Type</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {COVERS.map((c) => (
                   <button key={c.type} onClick={() => setCover(c.type)}
                     className="p-3 rounded-xl border-2 text-left transition-all"
                     style={{ borderColor: cover === c.type ? '#F4C2A1' : '#E8E8E8', backgroundColor: cover === c.type ? '#FFF8F0' : '#fff' }}>
-                    <span className="font-medium text-sm text-[#2D2D2D]">{c.name}</span>
-                    <span className="block text-xs text-[#9B9B9B] mt-1">{c.description}</span>
+                    <span className="font-medium text-sm text-dark">{c.name}</span>
+                    <span className="block text-xs text-light mt-1">{c.description}</span>
                   </button>
                 ))}
               </div>
@@ -513,11 +513,11 @@ export default function Order() {
 
             {/* Size — locked to the album you built when a design is in progress */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4 flex items-center gap-2"><BookOpen size={18} /> Album Size</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><BookOpen size={18} /> Album Size</h3>
               {hasJob ? (
-                <div className="flex items-center justify-between rounded-xl border-2 border-[#F4C2A1] bg-[#FFF8F0] px-4 py-3">
-                  <span className="text-sm text-[#6B6B6B]">From your design</span>
-                  <span className="text-sm font-semibold text-[#2D2D2D]">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span>
+                <div className="flex items-center justify-between rounded-xl border-2 border-peach bg-cream px-4 py-3">
+                  <span className="text-sm text-medium">From your design</span>
+                  <span className="text-sm font-semibold text-dark">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
@@ -534,29 +534,29 @@ export default function Order() {
 
             {/* Form */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4">Your Details</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4">Your Details</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-[#6B6B6B] mb-1 block">Full Name</label>
+                  <label className="text-xs text-medium mb-1 block">Full Name</label>
                   <input value={name}
                     onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: '' })); }}
                     autoComplete="name" maxLength={80}
                     aria-invalid={!!errors.name}
-                    className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.name ? 'border-red-400' : 'border-[#E8E8E8]'}`} placeholder="Juan Dela Cruz" />
+                    className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.name ? 'border-red-400' : 'border-line'}`} placeholder="Juan Dela Cruz" />
                   {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-[#6B6B6B] mb-1 block">Phone Number</label>
+                  <label className="text-xs text-medium mb-1 block">Phone Number</label>
                   <input value={phone}
                     onChange={(e) => { setPhone(e.target.value); if (errors.phone) setErrors((p) => ({ ...p, phone: '' })); }}
                     onBlur={() => { const c = normalizePHPhone(phone); if (c) setPhone(formatPHPhoneDisplay(c)); }}
                     inputMode="tel" autoComplete="tel" maxLength={20}
                     aria-invalid={!!errors.phone}
-                    className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.phone ? 'border-red-400' : 'border-[#E8E8E8]'}`} placeholder="+63 9XX XXX XXXX" />
+                    className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.phone ? 'border-red-400' : 'border-line'}`} placeholder="+63 9XX XXX XXXX" />
                   {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-[#6B6B6B] mb-2 block">Delivery Address</label>
+                  <label className="text-xs text-medium mb-2 block">Delivery Address</label>
                   <AddressPicker
                     value={address}
                     onChange={(v) => { setAddress(v); if (Object.keys(addressErrors).length) setAddressErrors({}); }}
@@ -570,46 +570,46 @@ export default function Order() {
           {/* Right: Summary */}
           <div>
             <div className="bg-white rounded-2xl p-6 shadow-sm sticky top-24">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4">Order Summary</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4">Order Summary</h3>
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Material</span><span className="font-semibold text-[#E8A598] text-right">{MATERIALS.find((m) => m.type === material)?.name}</span></div>
-                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Cover</span><span className="font-semibold text-[#E8A598] text-right">{COVERS.find((c) => c.type === cover)?.name}</span></div>
-                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Size</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span></div>
-                <div className="border-t border-[#F0F0F0] pt-3 mt-3 space-y-2">
+                <div className="flex justify-between items-center gap-3"><span className="text-medium">Material</span><span className="font-semibold text-blush-pink text-right">{MATERIALS.find((m) => m.type === material)?.name}</span></div>
+                <div className="flex justify-between items-center gap-3"><span className="text-medium">Cover</span><span className="font-semibold text-blush-pink text-right">{COVERS.find((c) => c.type === cover)?.name}</span></div>
+                <div className="flex justify-between items-center gap-3"><span className="text-medium">Size</span><span className="font-semibold text-blush-pink text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span></div>
+                <div className="border-t border-line-soft pt-3 mt-3 space-y-2">
                   {breakdown.items.map((item) => (
                     <div key={item.label} className="flex justify-between gap-3 text-[13px]">
-                      <span className="text-[#6B6B6B]">{item.label}</span>
-                      <span className="font-medium text-[#2D2D2D] text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
+                      <span className="text-medium">{item.label}</span>
+                      <span className="font-medium text-dark text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between items-baseline pt-2 border-t border-[#F0F0F0]"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice.toLocaleString('en-PH')}</span></div>
+                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span></div>
                 </div>
               </div>
-              <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#FBEDE7] border border-[#F4C2A1]/60 px-3 py-2.5">
-                <QrCode size={16} className="text-[#E8A598] shrink-0 mt-0.5" />
-                <p className="text-xs text-[#8B6F47] leading-snug">
-                  <b className="text-[#2D2D2D]">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
-                  {qrCount > 0 && <> This album has <b className="text-[#2D2D2D]">{qrCount}</b>.</>}
+              <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#FBEDE7] border border-peach/60 px-3 py-2.5">
+                <QrCode size={16} className="text-blush-pink shrink-0 mt-0.5" />
+                <p className="text-xs text-cocoa leading-snug">
+                  <b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
+                  {qrCount > 0 && <> This album has <b className="text-dark">{qrCount}</b>.</>}
                   {qrCount > 0 && hdPrice > 0 && (
-                    <> Quality: <b className="text-[#2D2D2D]">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>
+                    <> Quality: <b className="text-dark">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>
                   )}
                 </p>
               </div>
               {clipCodes.length > 0 && (
-                <div className="mt-2 flex items-start gap-2 rounded-xl border border-[#F0F0F0] bg-white px-3 py-2.5" role="status" aria-live="polite">
+                <div className="mt-2 flex items-start gap-2 rounded-xl border border-line-soft bg-white px-3 py-2.5" role="status" aria-live="polite">
                   {clipPrep.phase === 'ready'
                     ? <Check size={16} className="text-[#5AA469] shrink-0 mt-0.5" />
                     : clipPrep.phase === 'failed'
-                      ? <Wifi size={16} className="text-[#E8A598] shrink-0 mt-0.5" />
+                      ? <Wifi size={16} className="text-blush-pink shrink-0 mt-0.5" />
                       : <Loader2 size={16} className="animate-spin text-[#C98A5E] shrink-0 mt-0.5" />}
-                  <p className="text-xs text-[#8B6F47] leading-snug">
+                  <p className="text-xs text-cocoa leading-snug">
                     {clipPrep.phase === 'ready' ? (
-                      <><b className="text-[#2D2D2D]">Your {clipCodes.length === 1 ? 'memory video is' : `${clipCodes.length} memory videos are`} uploaded.</b> Nothing to wait for at payment.</>
+                      <><b className="text-dark">Your {clipCodes.length === 1 ? 'memory video is' : `${clipCodes.length} memory videos are`} uploaded.</b> Nothing to wait for at payment.</>
                     ) : clipPrep.phase === 'failed' ? (
-                      <><b className="text-[#2D2D2D]">Upload paused.</b> We'll try again when you tap Pay — a Wi-Fi connection helps.</>
+                      <><b className="text-dark">Upload paused.</b> We'll try again when you tap Pay — a Wi-Fi connection helps.</>
                     ) : (
                       <>
-                        <b className="text-[#2D2D2D]">
+                        <b className="text-dark">
                           {clipPrep.phase === 'compress'
                             ? `Preparing memory video ${Math.min(clipPrep.done + 1, clipPrep.total || 1)} of ${clipPrep.total || clipCodes.length}…`
                             : clipPrep.phase === 'upload'
@@ -625,18 +625,18 @@ export default function Order() {
                 </div>
               )}
               {qrCount > 0 && tiers.length > 0 && (
-                <div className="mt-3 rounded-xl border border-[#F0F0F0] bg-white px-3 py-3">
-                  <p className="text-xs font-semibold text-[#2D2D2D]">How long should your memories stay live?</p>
-                  <p className="text-[11px] text-[#9B9B9B] mb-2">Your videos play from the printed QR for the whole term. Renew anytime after.</p>
+                <div className="mt-3 rounded-xl border border-line-soft bg-white px-3 py-3">
+                  <p className="text-xs font-semibold text-dark">How long should your memories stay live?</p>
+                  <p className="text-[11px] text-light mb-2">Your videos play from the printed QR for the whole term. Renew anytime after.</p>
                   <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Memory hosting term">
                     {tiers.map((t) => {
                       const active = (hostingYears ?? includedYears) === t.years;
                       return (
                         <button key={t.years} type="button" role="radio" aria-checked={active}
                           onClick={() => setHostingYears(t.years)}
-                          className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-[#E8A598] bg-[#FFF3EC]' : 'border-[#E8E8E8] hover:border-[#F4C2A1]'}`}>
-                          <div className="text-sm font-semibold text-[#2D2D2D]">{t.years} years</div>
-                          <div className="text-[11px] text-[#8B6F47]">{t.price > 0 ? `+₱${t.price}` : 'Included'}</div>
+                          className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-blush-pink bg-[#FFF3EC]' : 'border-line hover:border-peach'}`}>
+                          <div className="text-sm font-semibold text-dark">{t.years} years</div>
+                          <div className="text-[11px] text-cocoa">{t.price > 0 ? `+₱${t.price}` : 'Included'}</div>
                         </button>
                       );
                     })}
@@ -644,7 +644,7 @@ export default function Order() {
                 </div>
               )}
               <button onClick={handleProceedToPayment} disabled={!priceReady || submitting}
-                className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
+                className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                 {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
                   : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${totalPrice.toLocaleString('en-PH')}`} by bank transfer</>
                     : !settingsReady ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>

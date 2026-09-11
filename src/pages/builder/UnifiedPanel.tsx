@@ -134,7 +134,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
         <Icon size={20} />
         <span className="text-[9px] font-medium">{item.label}</span>
         {isActive && (
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-[#E8A598]" />
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-blush-pink" />
         )}
       </button>
     );
@@ -143,7 +143,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
   return (
     <div className="flex h-full shrink-0">
       {/* ── Icon Sidebar (always visible) ── */}
-      <div className="w-14 bg-white border-r border-[#E8E8E8] flex flex-col items-center py-2 relative z-10">
+      <div className="w-14 bg-white border-r border-line flex flex-col items-center py-2 relative z-10">
         {/* Icons */}
         <div className="flex-1 flex flex-col gap-1 w-full">
           {SIDEBAR_ITEMS.map((item) => (
@@ -154,7 +154,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
         {/* Collapse toggle */}
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className="w-full flex items-center justify-center py-3 text-[#9B9B9B] hover:text-[#E8A598] hover:bg-[#FDE8E4] transition-all"
+          className="w-full flex items-center justify-center py-3 text-light hover:text-blush-pink hover:bg-blush transition-all"
           title={collapsed ? 'Expand panel' : 'Collapse panel'}
         >
           {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
@@ -169,7 +169,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
             animate={{ width: 320, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className="bg-white border-r border-[#E8E8E8] flex flex-col overflow-hidden"
+            className="bg-white border-r border-line flex flex-col overflow-hidden"
           >
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto min-h-0">
@@ -183,21 +183,21 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                     />
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full mb-4 py-2.5 border-2 border-dashed border-[#F4C2A1] rounded-xl text-[#E8A598] text-xs font-medium hover:bg-[#FFF5F0] transition-all flex items-center justify-center gap-2"
+                      className="w-full mb-4 py-2.5 border-2 border-dashed border-peach rounded-xl text-blush-pink text-xs font-medium hover:bg-[#FFF5F0] transition-all flex items-center justify-center gap-2"
                     >
                       <Upload size={14} /> Upload Photos
                     </button>
 
                     {uploadedPhotos.length === 0 ? (
-                      <p className="text-xs text-[#9B9B9B] text-center py-6">Upload photos to start filling templates</p>
+                      <p className="text-xs text-light text-center py-6">Upload photos to start filling templates</p>
                     ) : (
                       <>
-                        <p className="text-[10px] text-[#9B9B9B] mb-3 uppercase tracking-wider font-medium">
+                        <p className="text-[10px] text-light mb-3 uppercase tracking-wider font-medium">
                           Your Photos ({uploadedPhotos.length})
                         </p>
                         <div className="grid grid-cols-3 gap-2">
                           {uploadedPhotos.map((photo) => (
-                            <div key={photo.id} className="relative aspect-square rounded-lg overflow-hidden border border-[#E8E8E8] hover:border-[#F4C2A1] transition-colors cursor-pointer">
+                            <div key={photo.id} className="relative aspect-square rounded-lg overflow-hidden border border-line hover:border-peach transition-colors cursor-pointer">
                               <img src={photo.previewUrl} alt={photo.name} className="w-full h-full object-cover" />
                             </div>
                           ))}
@@ -211,10 +211,10 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                 {activeTab === 'pages' && (
                   <motion.div key="pages" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-4">
                     <div className="flex gap-2 mb-4">
-                      <button onClick={onAddPage} className="flex-1 py-2 bg-[#F4C2A1] text-white text-xs font-medium rounded-xl hover:brightness-105 flex items-center justify-center gap-1.5 transition-all">
+                      <button onClick={onAddPage} className="flex-1 py-2 bg-peach text-white text-xs font-medium rounded-xl hover:brightness-105 flex items-center justify-center gap-1.5 transition-all">
                         <Plus size={12} /> Add Page
                       </button>
-                      <button onClick={onAddText} className="flex-1 py-2 bg-[#F0F0F0] text-[#6B6B6B] text-xs font-medium rounded-xl hover:bg-[#E8E8E8] flex items-center justify-center gap-1.5 transition-all">
+                      <button onClick={onAddText} className="flex-1 py-2 bg-line-soft text-medium text-xs font-medium rounded-xl hover:bg-line flex items-center justify-center gap-1.5 transition-all">
                         <FileText size={12} /> Add Text
                       </button>
                     </div>
@@ -222,8 +222,8 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                     {/* Slot count filter */}
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-[10px] font-semibold text-[#2D2D2D] uppercase tracking-wider">Slot Count</h4>
-                        <span className="text-[9px] text-[#9B9B9B]">
+                        <h4 className="text-[10px] font-semibold text-dark uppercase tracking-wider">Slot Count</h4>
+                        <span className="text-[9px] text-light">
                           {PAGE_TEMPLATES.filter(t => !hasQrSlot(t) && (photosPerPage === undefined ? true : photoSlotCount(t) === photosPerPage)).length} match
                         </span>
                       </div>
@@ -242,15 +242,15 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                         ))}
                       </div>
                       <button onClick={onShuffleLayout}
-                        className="w-full py-2 bg-white border border-[#F4C2A1] text-[#F4C2A1] text-[11px] font-medium rounded-xl hover:bg-[#F4C2A1] hover:text-white flex items-center justify-center gap-1.5 transition-all"
+                        className="w-full py-2 bg-white border border-peach text-peach text-[11px] font-medium rounded-xl hover:bg-peach hover:text-white flex items-center justify-center gap-1.5 transition-all"
                       >
                         <Sparkles size={12} /> Shuffle Layout
                       </button>
                     </div>
 
                     {/* Page count */}
-                    <p className="text-[10px] text-[#9B9B9B] mb-2">
-                      {albumPages.length} pages <span className="text-[#E8A598]">(40 minimum)</span>
+                    <p className="text-[10px] text-light mb-2">
+                      {albumPages.length} pages <span className="text-blush-pink">(40 minimum)</span>
                     </p>
 
                     {/* Page list */}
@@ -266,26 +266,26 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                               backgroundColor: i === currentPageIndex ? '#FDE8E4' : 'transparent',
                               border: i === currentPageIndex ? '1px solid #F4C2A1' : '1px solid transparent',
                             }}>
-                            <span className="text-[11px] text-[#9B9B9B] w-5 font-medium">{i + 1}</span>
+                            <span className="text-[11px] text-light w-5 font-medium">{i + 1}</span>
                             {(() => {
                               const snapshot = getPageSnapshot?.(page.id);
                               if (snapshot) {
                                 return (
-                                  <div className="flex-1 h-14 rounded-lg overflow-hidden bg-white border border-[#E8E8E8]">
+                                  <div className="flex-1 h-14 rounded-lg overflow-hidden bg-white border border-line">
                                     <img src={snapshot} alt={`Page ${i + 1}`} className="w-full h-full object-cover" />
                                   </div>
                                 );
                               }
                               return (
-                                <div className="flex-1 h-14 rounded-lg overflow-hidden bg-white border border-[#E8E8E8] flex items-center justify-center text-[9px] text-[#C4C4C4]">
+                                <div className="flex-1 h-14 rounded-lg overflow-hidden bg-white border border-line flex items-center justify-center text-[9px] text-[#C4C4C4]">
                                   {totalPhotos > 0 ? `${totalPhotos} photo${totalPhotos !== 1 ? 's' : ''}` : 'Empty'}
                                 </div>
                               );
                             })()}
                             <div className="flex flex-col gap-1">
-                              <button onClick={(e) => { e.stopPropagation(); onDuplicatePage(i); }} className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#9B9B9B] transition-colors"><Copy size={11} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); onDuplicatePage(i); }} className="p-1.5 rounded-md hover:bg-line-soft text-light transition-colors"><Copy size={11} /></button>
                               {albumPages.length > 40 && (
-                                <button onClick={(e) => { e.stopPropagation(); onDeletePage(i); }} className="p-1.5 rounded-md hover:bg-[#FDE8E4] text-[#E8A598] transition-colors"><Trash2 size={11} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); onDeletePage(i); }} className="p-1.5 rounded-md hover:bg-blush text-blush-pink transition-colors"><Trash2 size={11} /></button>
                               )}
                             </div>
                           </div>
@@ -298,7 +298,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                 {/* ═══════ TEMPLATES TAB ═══════ */}
                 {activeTab === 'templates' && (
                   <motion.div key="templates" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-4">
-                    <h3 className="text-xs font-semibold text-[#2D2D2D] mb-3">Page Templates</h3>
+                    <h3 className="text-xs font-semibold text-dark mb-3">Page Templates</h3>
 
                     {/* Category filter */}
                     <div className="flex flex-wrap gap-1 mb-3">
@@ -318,11 +318,11 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
 
                     {/* Action buttons */}
                     <div className="flex gap-2 mb-4">
-                      <button onClick={onAutoFill} className="flex-1 py-2 bg-[#F4C2A1] text-white text-[11px] font-medium rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-1.5">
+                      <button onClick={onAutoFill} className="flex-1 py-2 bg-peach text-white text-[11px] font-medium rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-1.5">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
                         Auto-Fill
                       </button>
-                      <button onClick={onClearAllSlots} className="px-4 py-2 border border-[#E8E8E8] text-[#6B6B6B] text-[11px] font-medium rounded-xl hover:bg-[#FDE8E4] hover:text-[#E8A598] transition-all">
+                      <button onClick={onClearAllSlots} className="px-4 py-2 border border-line text-medium text-[11px] font-medium rounded-xl hover:bg-blush hover:text-blush-pink transition-all">
                         Clear
                       </button>
                     </div>
@@ -340,7 +340,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                         >
                           <div className="absolute inset-1.5">
                             {tmpl.slots.map((slot, si) => (
-                              <div key={si} className="absolute bg-[#E8E8E8] rounded-sm"
+                              <div key={si} className="absolute bg-line rounded-sm"
                                 style={{
                                   left: `${slot.x * 100}%`,
                                   top: `${slot.y * 100}%`,
@@ -353,8 +353,8 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                             ))}
                           </div>
                           <div className="absolute bottom-0 left-0 right-0 bg-white/90 px-1.5 py-1">
-                            <span className="text-[8px] text-[#6B6B6B] font-medium truncate block">{tmpl.name}</span>
-                            <span className="text-[7px] text-[#9B9B9B]">({photoSlotCount(tmpl)}{hasQrSlot(tmpl) ? '+QR' : ''})</span>
+                            <span className="text-[8px] text-medium font-medium truncate block">{tmpl.name}</span>
+                            <span className="text-[7px] text-light">({photoSlotCount(tmpl)}{hasQrSlot(tmpl) ? '+QR' : ''})</span>
                           </div>
                         </button>
                       ))}
@@ -366,9 +366,9 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                 {activeTab === 'background' && (
                   <motion.div key="background" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col">
                     {/* Background Controls */}
-                    <div className="shrink-0 p-4 space-y-3 border-b border-[#F0F0F0]">
+                    <div className="shrink-0 p-4 space-y-3 border-b border-line-soft">
                       <div>
-                        <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Type</p>
+                        <p className="text-[10px] text-light mb-1.5 uppercase tracking-wider font-medium">Type</p>
                         <div className="flex gap-1">
                           {(['solid', 'gradient', 'texture', 'image'] as const).map((type) => (
                             <button key={type}
@@ -385,11 +385,11 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
 
                       {background.type === 'solid' && (
                         <div>
-                          <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Color</p>
+                          <p className="text-[10px] text-light mb-1.5 uppercase tracking-wider font-medium">Color</p>
                           <div className="flex flex-wrap gap-1.5">
                             {['#FFFBF7', '#F8F3ED', '#E8F0E8', '#FFF3D8', '#E0E0E8', '#F0F0F0', '#E8D8B8', '#2D2D2D', '#FFFFFF', '#FDE8E4', '#E8A598', '#B8A9D9'].map((c) => (
                               <button key={c} onClick={() => onUpdateBackground?.({ ...background, type: 'solid', solid: c })}
-                                className="w-7 h-7 rounded-full border border-[#E8E8E8] transition-transform hover:scale-110"
+                                className="w-7 h-7 rounded-full border border-line transition-transform hover:scale-110"
                                 style={{ backgroundColor: c, boxShadow: background.solid === c ? '0 0 0 2px #F4C2A1' : 'none' }} />
                             ))}
                           </div>
@@ -401,7 +401,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
 
                       {background.type === 'gradient' && (
                         <div>
-                          <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Presets</p>
+                          <p className="text-[10px] text-light mb-1.5 uppercase tracking-wider font-medium">Presets</p>
                           <div className="grid grid-cols-2 gap-1.5">
                             {[
                               { name: 'Sunset', stops: [{ offset: 0, color: '#FF6B6B' }, { offset: 0.5, color: '#FFE66D' }, { offset: 1, color: '#FF8E53' }] },
@@ -426,7 +426,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                       {background.type === 'texture' && (
                         <div className="space-y-3">
                           <div>
-                            <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Material</p>
+                            <p className="text-[10px] text-light mb-1.5 uppercase tracking-wider font-medium">Material</p>
                             <div className="grid grid-cols-4 gap-1.5">
                               {TEXTURE_NAMES.map((p) => (
                                 <button key={p} onClick={() => onUpdateBackground?.({ ...background, type: 'texture', texture: p, textureColor: background.textureColor })}
@@ -446,7 +446,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                             </div>
                           </div>
                           <div>
-                            <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Color</p>
+                            <p className="text-[10px] text-light mb-1.5 uppercase tracking-wider font-medium">Color</p>
                             <div className="grid grid-cols-4 gap-1.5">
                               {TEXTURE_COLORS.map((c) => {
                                 const mat = background.texture || TEXTURE_NAMES[0];
@@ -470,25 +470,25 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
 
                       {background.type === 'image' && (
                         <div>
-                          <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Image URL</p>
+                          <p className="text-[10px] text-light mb-1.5 uppercase tracking-wider font-medium">Image URL</p>
                           <input type="text" placeholder="Enter image URL..."
                             value={background.image || ''}
                             onChange={(e) => onUpdateBackground?.({ ...background, type: 'image', image: e.target.value })}
-                            className="w-full px-3 py-2 text-xs border border-[#E8E8E8] rounded-lg focus:outline-none focus:border-[#F4C2A1]" />
+                            className="w-full px-3 py-2 text-xs border border-line rounded-lg focus:outline-none focus:border-peach" />
                         </div>
                       )}
 
                       <div>
-                        <p className="text-[10px] text-[#9B9B9B] mb-1.5 uppercase tracking-wider font-medium">Opacity</p>
+                        <p className="text-[10px] text-light mb-1.5 uppercase tracking-wider font-medium">Opacity</p>
                         <input type="range" min="0" max="100" value={background.opacity ?? 100}
                           onChange={(e) => onUpdateBackground?.({ ...background, opacity: Number(e.target.value) })}
                           className="w-full" />
-                        <p className="text-[10px] text-[#9B9B9B] text-right">{background.opacity ?? 100}%</p>
+                        <p className="text-[10px] text-light text-right">{background.opacity ?? 100}%</p>
                       </div>
 
                       <button
                         onClick={onApplyBackgroundToAll}
-                        className="w-full py-2 bg-white border border-[#F4C2A1] text-[#F4C2A1] text-[11px] font-medium rounded-xl hover:bg-[#F4C2A1] hover:text-white flex items-center justify-center gap-1.5 transition-all"
+                        className="w-full py-2 bg-white border border-peach text-peach text-[11px] font-medium rounded-xl hover:bg-peach hover:text-white flex items-center justify-center gap-1.5 transition-all"
                       >
                         <Layers size={12} /> Apply to All Pages
                       </button>

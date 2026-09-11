@@ -119,17 +119,17 @@ export default function Admin() {
 
   if (!user) return null; // ProtectedRoute redirects to login
   if (roleLoading) {
-    return <div className="min-h-[100dvh] flex items-center justify-center text-[#9B9B9B]"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+    return <div className="min-h-[100dvh] flex items-center justify-center text-light"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   }
   if (!role) {
     return (
       <div className="max-w-md mx-auto py-24 px-4 text-center">
-        <p className="text-lg font-semibold text-[#2D2D2D]">Not authorized</p>
-        <p className="text-sm mt-2 text-[#6B6B6B]">This console is for Megy Prints operators only.</p>
-        <p className="text-xs mt-4 text-[#9B9B9B]">
+        <p className="text-lg font-semibold text-dark">Not authorized</p>
+        <p className="text-sm mt-2 text-medium">This console is for Megy Prints operators only.</p>
+        <p className="text-xs mt-4 text-light">
           Signed in as <b>{user.email ?? '(no email)'}</b>. Ask an owner ({ADMIN_EMAILS.join(' / ')}) to add you in Team.
         </p>
-        <Link to="/" className="inline-block mt-5 text-sm text-[#E8A598]">← Back to site</Link>
+        <Link to="/" className="inline-block mt-5 text-sm text-blush-pink">← Back to site</Link>
       </div>
     );
   }
@@ -140,16 +140,16 @@ export default function Admin() {
 
   return (
     <div className="min-h-[100dvh] bg-[#FAF8F5]">
-      <header className="bg-white border-b border-[#E8E8E8] sticky top-0 z-10">
+      <header className="bg-white border-b border-line sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className="font-display italic text-base text-[#2D2D2D]">Megy</span>
-            <span className="text-base text-[#2D2D2D]">Prints</span>
-            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#F4C2A1] text-white ml-1 capitalize">{role}</span>
+            <span className="font-display italic text-base text-dark">Megy</span>
+            <span className="text-base text-dark">Prints</span>
+            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-peach text-white ml-1 capitalize">{role}</span>
           </div>
           <div className="flex items-center gap-1">
-            <Link to="/" className="text-sm text-[#6B6B6B] flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-[#F5F5F5]"><ArrowLeft size={14} /> Site</Link>
-            <button onClick={() => void logout()} className="text-sm text-[#6B6B6B] flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-[#F5F5F5]"><LogOut size={14} /> Sign out</button>
+            <Link to="/" className="text-sm text-medium flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-paper"><ArrowLeft size={14} /> Site</Link>
+            <button onClick={() => void logout()} className="text-sm text-medium flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-paper"><LogOut size={14} /> Sign out</button>
           </div>
         </div>
         <div className="max-w-6xl mx-auto px-4 flex gap-1">
@@ -177,7 +177,7 @@ export default function Admin() {
             {/* Never let the list imply it is showing everything. */}
             {ordersTotal > orders.length && (
               <div className="mt-4 flex items-center justify-center gap-3 text-sm">
-                <span className="text-[#9B9B9B]">
+                <span className="text-light">
                   Showing {orders.length} of {ordersTotal} orders
                 </span>
                 <button onClick={() => void loadMoreOrders()} disabled={loadingMore}
@@ -199,5 +199,5 @@ export default function Admin() {
 }
 
 function Spinner() {
-  return <div className="py-24 flex justify-center text-[#9B9B9B]"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  return <div className="py-24 flex justify-center text-light"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 }

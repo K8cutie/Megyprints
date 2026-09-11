@@ -10,7 +10,7 @@ const CONTACT = 'megyprintsph@gmail.com';
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mb-8">
-      <h2 className="font-display text-xl font-semibold text-[#2D2D2D] mb-2">{title}</h2>
+      <h2 className="font-display text-xl font-semibold text-dark mb-2">{title}</h2>
       <div className="text-[15px] leading-relaxed text-[#5B534C] space-y-2">{children}</div>
     </section>
   );
@@ -18,16 +18,16 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 export default function Privacy() {
   return (
-    <div className="min-h-screen bg-[#FFF8F0] pt-24 pb-16 px-6">
+    <div className="min-h-screen bg-cream pt-24 pb-16 px-6">
       <div className="max-w-[760px] mx-auto">
-        <h1 className="font-display text-3xl font-semibold text-[#2D2D2D] mb-1">Privacy Policy</h1>
-        <p className="text-sm text-[#9B8B7A] mb-8">Last updated: {UPDATED}</p>
+        <h1 className="font-display text-3xl font-semibold text-dark mb-1">Privacy Policy</h1>
+        <p className="text-sm text-stone mb-8">Last updated: {UPDATED}</p>
 
         <Section title="Who we are">
           <p>
             Megyprints is a photo-album design and printing service. This policy explains what
             information we collect when you use our app and website, how we use it, and the choices
-            you have. Questions? Email us at <a className="text-[#BF5E3E] underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+            you have. Questions? Email us at <a className="text-rust underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
           </p>
         </Section>
 
@@ -89,8 +89,8 @@ export default function Privacy() {
               <b>In the app</b> — <b>My Profile → Delete my account</b>. It happens immediately.
             </li>
             <li>
-              <b>By asking us</b> — email <a className="text-[#BF5E3E] underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>,
-              or use the <a className="text-[#BF5E3E] underline" href="/delete-account.html">account deletion page</a>.
+              <b>By asking us</b> — email <a className="text-rust underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>,
+              or use the <a className="text-rust underline" href="/delete-account.html">account deletion page</a>.
               We complete it within 30 days.
             </li>
           </ul>
@@ -135,7 +135,7 @@ export default function Privacy() {
 
         <Section title="Contact">
           <p>
-            For any privacy questions or requests, email <a className="text-[#BF5E3E] underline" href={`mailto:${CONTACT}`}>{CONTACT}</a> or reach us via the Contact page.
+            For any privacy questions or requests, email <a className="text-rust underline" href={`mailto:${CONTACT}`}>{CONTACT}</a> or reach us via the Contact page.
           </p>
         </Section>
       </div>

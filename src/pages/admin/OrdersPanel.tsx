@@ -18,7 +18,7 @@ export default function OrdersPanel({ orders, onChanged, canSeeFinancials, print
   printReadyIds: Set<string>;
 }) {
   if (orders.length === 0) {
-    return <p className="text-sm text-[#9B9B9B] py-16 text-center">No orders yet.</p>;
+    return <p className="text-sm text-light py-16 text-center">No orders yet.</p>;
   }
   return (
     <div className="space-y-3">
@@ -97,12 +97,12 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
   const saysPaid = !paid && !!o.payment_submitted_at;
 
   return (
-    <div className="rounded-xl border border-[#E8E8E8] bg-white p-4">
+    <div className="rounded-xl border border-line bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#2D2D2D]">{o.order_number}</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${paid ? 'bg-[#E6F4EA] text-[#2E7D4A]' : saysPaid ? 'bg-[#E8F0FE] text-[#2F5BB7]' : 'bg-[#FFF3E0] text-[#B8791F]'}`}
+            <span className="font-semibold text-dark">{o.order_number}</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${paid ? 'bg-[#E6F4EA] text-success' : saysPaid ? 'bg-[#E8F0FE] text-[#2F5BB7]' : 'bg-[#FFF3E0] text-[#B8791F]'}`}
               title={saysPaid ? `Customer marked it sent on ${o.payment_submitted_at!.slice(0, 16).replace('T', ' ')} — match it in the GoTyme app, then Mark paid.` : undefined}>
               {paid ? 'Paid' : saysPaid ? 'Customer says paid' : 'Unpaid'}
             </span>
@@ -113,16 +113,16 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
               </span>
             )}
           </div>
-          <div className="text-xs text-[#9B9B9B] mt-1">
+          <div className="text-xs text-light mt-1">
             {o.ship_name || '—'}{o.ship_phone ? ` · ${o.ship_phone}` : ''} · {date}
           </div>
-          <div className="text-xs text-[#9B9B9B]">
+          <div className="text-xs text-light">
             {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages{o.hosting_years ? ` · memories ${o.hosting_years} yrs` : ''}{o.hd_memories ? ' · HD' : ''}
           </div>
           {o.ship_address && <div className="text-xs text-[#B9B9B9] mt-0.5 max-w-md">{o.ship_address}</div>}
           {(o.payment_reference || o.payment_submitted_at) && (
-            <div className="text-xs text-[#6B6B6B] mt-1">
-              Transfer{o.payment_reference ? <> ref <span className="font-mono text-[#2D2D2D]">{o.payment_reference}</span></> : ' sent'}
+            <div className="text-xs text-medium mt-1">
+              Transfer{o.payment_reference ? <> ref <span className="font-mono text-dark">{o.payment_reference}</span></> : ' sent'}
               {o.payment_submitted_at ? ` · ${o.payment_submitted_at.slice(0, 16).replace('T', ' ')}` : ''}
             </div>
           )}
@@ -132,15 +132,15 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
           {canSeeFinancials && (
             <>
               <div className="flex items-center gap-1">
-                <span className="text-sm text-[#9B9B9B]">₱</span>
+                <span className="text-sm text-light">₱</span>
                 <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="numeric" placeholder="price"
-                  className="w-20 h-8 px-2 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1]" />
+                  className="w-20 h-8 px-2 rounded-lg border border-line text-sm outline-none focus:border-peach" />
                 <button onClick={commitPrice} disabled={saving}
-                  className="h-8 px-2 rounded-lg bg-[#F5F5F5] text-xs text-[#6B6B6B] disabled:opacity-50">Set</button>
+                  className="h-8 px-2 rounded-lg bg-paper text-xs text-medium disabled:opacity-50">Set</button>
               </div>
               {!paid && (
                 <button onClick={() => saveFin({ payment_status: 'paid', status: 'paid' })} disabled={saving}
-                  className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-[#2E7D4A] flex items-center gap-1 disabled:opacity-50">
+                  className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
                   <Check size={13} /> Mark paid
                 </button>
               )}
@@ -165,10 +165,10 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
             </button>
           )}
           <select value={o.status} onChange={(e) => changeStatus(e.target.value as AdminOrder['status'])} disabled={saving}
-            className="h-8 px-2 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1] bg-white">
+            className="h-8 px-2 rounded-lg border border-line text-sm outline-none focus:border-peach bg-white">
             {ORDER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
           </select>
-          {saving && <Loader2 size={15} className="animate-spin text-[#9B9B9B]" />}
+          {saving && <Loader2 size={15} className="animate-spin text-light" />}
         </div>
       </div>
       {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
