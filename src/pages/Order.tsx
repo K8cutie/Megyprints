@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package, QrCode } from 'lucide-react';
+import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package, QrCode, Wifi } from 'lucide-react';
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_ALBUM_SIZE, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
@@ -11,7 +11,7 @@ import { getPendingPrintJob } from '../lib/printQueue';
 import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
-import { uploadStagedClips, removeStagedClip, currentClipQuality } from '../lib/memoryClips';
+import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
 import { updateMemoryDestination } from '../lib/qrMemories';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
@@ -78,6 +78,24 @@ export default function Order() {
   const [hostingYears, setHostingYears] = useState<number | null>(null);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
   const hasJob = job != null;
+
+  // ── Early clip upload ──────────────────────────────────────────────────
+  // Opening this page is already a commit signal, so the memory videos start
+  // uploading NOW and overlap with the address form instead of stacking up
+  // behind the Pay tap (7 × 2-min 720p clips ≈ 230 MB — minutes on mobile).
+  // The Pay tap still runs the same upload as the REQUIRED backstop; it is
+  // serialized with this one and skips whatever already landed.
+  const clipKey = clipCodes.join(',');
+  const [clipPrep, setClipPrep] = useState<{ phase: ClipUploadPhase | 'ready' | 'failed' | null; done: number; total: number; bytes: number | null }>({ phase: null, done: 0, total: 0, bytes: null });
+  useEffect(() => {
+    if (!clipKey) return;
+    const codes = clipKey.split(',');
+    let alive = true;
+    void stagedClipBytes(codes).then((bytes) => { if (alive) setClipPrep((c) => ({ ...c, bytes })); });
+    void prefetchStagedClipUploads(codes, (done, total, phase) => { if (alive) setClipPrep((c) => ({ ...c, phase, done, total })); })
+      .then((ok) => { if (alive) setClipPrep((c) => ({ ...c, phase: ok ? 'ready' : 'failed' })); });
+    return () => { alive = false; };
+  }, [clipKey]);
 
   // The price schedule loads async on app start (0024 — the cost model is no
   // longer in the bundle, so there is nothing to fall back to). Track readiness
@@ -505,6 +523,35 @@ export default function Order() {
                   )}
                 </p>
               </div>
+              {clipCodes.length > 0 && (
+                <div className="mt-2 flex items-start gap-2 rounded-xl border border-[#F0F0F0] bg-white px-3 py-2.5" role="status" aria-live="polite">
+                  {clipPrep.phase === 'ready'
+                    ? <Check size={16} className="text-[#5AA469] shrink-0 mt-0.5" />
+                    : clipPrep.phase === 'failed'
+                      ? <Wifi size={16} className="text-[#E8A598] shrink-0 mt-0.5" />
+                      : <Loader2 size={16} className="animate-spin text-[#C98A5E] shrink-0 mt-0.5" />}
+                  <p className="text-xs text-[#8B6F47] leading-snug">
+                    {clipPrep.phase === 'ready' ? (
+                      <><b className="text-[#2D2D2D]">Your {clipCodes.length === 1 ? 'memory video is' : `${clipCodes.length} memory videos are`} uploaded.</b> Nothing to wait for at payment.</>
+                    ) : clipPrep.phase === 'failed' ? (
+                      <><b className="text-[#2D2D2D]">Upload paused.</b> We'll try again when you tap Pay — a Wi-Fi connection helps.</>
+                    ) : (
+                      <>
+                        <b className="text-[#2D2D2D]">
+                          {clipPrep.phase === 'compress'
+                            ? `Preparing memory video ${Math.min(clipPrep.done + 1, clipPrep.total || 1)} of ${clipPrep.total || clipCodes.length}…`
+                            : clipPrep.phase === 'upload'
+                              ? `Uploading memory video ${Math.min(clipPrep.done + 1, clipPrep.total || 1)} of ${clipPrep.total || clipCodes.length}…`
+                              : `Uploading your ${clipCodes.length === 1 ? 'memory video' : `${clipCodes.length} memory videos`}…`}
+                        </b>
+                        {' '}This runs while you fill in your details
+                        {clipPrep.bytes != null && clipPrep.bytes > 0 && <> ({Math.max(1, Math.round(clipPrep.bytes / 1_048_576))} MB)</>}
+                        . Best on Wi-Fi.
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
               {qrCount > 0 && tiers.length > 0 && (
                 <div className="mt-3 rounded-xl border border-[#F0F0F0] bg-white px-3 py-3">
                   <p className="text-xs font-semibold text-[#2D2D2D]">How long should your memories stay live?</p>

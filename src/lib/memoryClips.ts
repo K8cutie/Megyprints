@@ -338,12 +338,58 @@ export async function uploadClip(code: string, ext: ClipExt, blob: Blob, opts: {
   throw new Error(`Could not upload your memory video (${msg || 'storage error'}).`);
 }
 
+export type ClipUploadPhase = 'compress' | 'upload';
+export type ClipUploadProgress = (done: number, total: number, phase: ClipUploadPhase) => void;
+
+/* ── Single-flight ──────────────────────────────────────────────────────────
+   Uploads run ONE AT A TIME app-wide. The Order page starts them the moment it
+   opens (so they overlap with the customer typing an address) and the Pay tap
+   starts them again as the required backstop; without this the two runs would
+   race the same clips into the bucket twice. The later caller waits for the
+   earlier run, then walks the set itself — finished clips are skipped, so it
+   returns quickly with its OWN result (incl. `replaced`). Every waiting caller
+   also hears the running caller's progress, so the Pay spinner shows real
+   numbers instead of a silent wait. */
+let uploadChain: Promise<unknown> = Promise.resolve();
+const progressTaps = new Set<ClipUploadProgress>();
+export function serializeUploads<T>(run: () => Promise<T>): Promise<T> {
+  const p = uploadChain.then(run, run); // a failed earlier run never blocks the next
+  uploadChain = p.catch(() => undefined);
+  return p;
+}
+const fanOut: ClipUploadProgress = (d, t, ph) => { for (const tap of progressTaps) tap(d, t, ph); };
+
+/** Total staged bytes for these codes (0 for anything not staged). Cheap: reads
+ *  the IndexedDB records; the blobs are not copied. */
+export async function stagedClipBytes(codes: string[]): Promise<number> {
+  const clips = await Promise.all([...new Set(codes)].map((c) => getStagedClip(c).catch(() => null)));
+  return clips.reduce((n, c) => n + (c?.size ?? 0), 0);
+}
+
 /** Compress anything still pending, then upload every staged clip referenced
  *  by these codes. Reports progress as (done, total). Skips clips already
- *  marked uploaded. Throws on the first hard failure. */
-export async function uploadStagedClips(
+ *  marked uploaded. Throws on the first hard failure. Serialized app-wide —
+ *  see serializeUploads. */
+export function uploadStagedClips(
   codes: string[],
-  onProgress?: (done: number, total: number, phase: 'compress' | 'upload') => void,
+  onProgress?: ClipUploadProgress,
+): Promise<{ uploaded: string[]; replaced: string[] }> {
+  if (onProgress) progressTaps.add(onProgress);
+  return serializeUploads(() => runUploadStagedClips(codes, fanOut))
+    .finally(() => { if (onProgress) progressTaps.delete(onProgress); });
+}
+
+/** Fire-and-forget start of the uploads (Order page open). Errors are swallowed
+ *  here on purpose: the Pay tap re-runs the same set and is where a failure is
+ *  shown and retried. Resolves to whether the run finished clean. */
+export function prefetchStagedClipUploads(codes: string[], onProgress?: ClipUploadProgress): Promise<boolean> {
+  if (!codes.length) return Promise.resolve(true);
+  return uploadStagedClips(codes, onProgress).then(() => true, (e) => { console.warn('[memories] early clip upload failed; the Pay tap will retry:', e); return false; });
+}
+
+async function runUploadStagedClips(
+  codes: string[],
+  onProgress?: ClipUploadProgress,
 ): Promise<{ uploaded: string[]; replaced: string[] }> {
   const unique = [...new Set(codes)];
   await ensureClipsTranscoded(unique, (d, t) => onProgress?.(d, t, 'compress'));
