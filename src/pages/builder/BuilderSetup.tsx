@@ -1,24 +1,17 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { ChevronRight, Sparkles } from 'lucide-react';
 import { ALBUM_SIZES } from './types';
 import type { AlbumSizePreset } from './types';
 import { loadStoreSettings } from '../../lib/storeSettings';
 import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
 import { fetchThemeQuotes } from '../../lib/quotes';
+import { readAlbumTheme } from '../../lib/albumTheme';
 
 /* ═══════════════════════════════════════════════════════════
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
    ═══════════════════════════════════════════════════════════ */
 
-/** The shop's most-ordered album occasions, offered as one-tap dropdown rows on
- *  the setup step. Each label round-trips through curatedThemeFor's alias map
- *  (lib/quotes.ts), so a pick lands on its curated quote pool with no new
- *  plumbing; anything off-list goes through the "Others…" free-text path, which
- *  behaves exactly like the old always-visible textbox. */
-const COMMON_THEMES = ['Wedding', 'Baptism', 'Birthday', 'Baby', 'Graduation', 'Family', 'Vacation'];
-/** Dropdown sentinel for the "Others…" row — never written to storage. */
-const OTHER_THEME = '__other__';
 
 function MegyFace({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' | 'xl' }) {
   const sz = { sm: 'w-10 h-10', md: 'w-16 h-16', lg: 'w-24 h-24', xl: 'w-32 h-32' };
@@ -109,24 +102,6 @@ interface BuilderSetupProps {
 }
 
 export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: BuilderSetupProps) {
-  // Album theme — feeds the dealt box quotes + the quote picker. Stored
-  // locally; no photos involved, so it stays private. Optional. The dropdown
-  // writes the SAME free-text 'megy-album-theme' value the rest of the app
-  // reads; "Others…" reveals a textbox for off-list themes. A stored theme
-  // that isn't one of the common labels (old drafts, typed themes) restores
-  // as "Others…" + its text — nothing is lost.
-  const [theme, setTheme] = useState(() => { try { return localStorage.getItem('megy-album-theme') || ''; } catch { return ''; } });
-  const [themeChoice, setThemeChoice] = useState(() =>
-    theme === '' ? '' : (COMMON_THEMES.includes(theme) ? theme : OTHER_THEME));
-  const persistTheme = (v: string) => { setTheme(v); try { localStorage.setItem('megy-album-theme', v); } catch { /* ignore */ } };
-  const onChoiceChange = (v: string) => {
-    setThemeChoice(v);
-    // A common pick IS the theme; "No specific theme" clears it. Switching to
-    // "Others…" from a common pick starts the textbox blank (a common label
-    // never doubles as custom text); an existing custom theme is kept.
-    if (v === OTHER_THEME) persistTheme(COMMON_THEMES.includes(theme) ? '' : theme);
-    else persistTheme(v);
-  };
   // A size is offered only if the owner hasn't hidden it AND it has layouts to
   // build with (see albumSizeOptions). Re-load the store settings once so a cold
   // direct-load to setup still reflects curation, then filter the grid.
@@ -185,37 +160,6 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
           ))}
         </div>
 
-        {/* Album theme — optional; feeds the dealt quotes + quote picker */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-[#2D2D2D] mb-1.5 text-center">
-            Is there a specific theme for this album?
-          </label>
-          <div className="relative">
-            <select
-              value={themeChoice}
-              onChange={(e) => onChoiceChange(e.target.value)}
-              className="w-full border border-[#E8E8E8] rounded-xl px-4 py-3 pr-10 text-sm text-center outline-none focus:border-[#F4C2A1] transition-colors bg-white appearance-none cursor-pointer text-[#2D2D2D]"
-            >
-              <option value="">No specific theme</option>
-              {COMMON_THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
-              <option value={OTHER_THEME}>Others…</option>
-            </select>
-            <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9B9B9B] pointer-events-none" />
-          </div>
-          {themeChoice === OTHER_THEME && (
-            <input
-              value={theme}
-              onChange={(e) => persistTheme(e.target.value)}
-              placeholder="Type your theme — e.g. beach trip, debut, reunion"
-              autoFocus
-              className="w-full border border-[#E8E8E8] rounded-xl px-4 py-3 text-sm text-center outline-none focus:border-[#F4C2A1] transition-colors mt-2"
-            />
-          )}
-          <p className="text-[11px] text-[#9B9B9B] mt-1.5 text-center">
-            We'll write quotes to match — Megy drops them into your pages, and you can swap any of them.
-          </p>
-        </div>
-
         {/* Start Creating */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -229,6 +173,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
               // album's first generation deals real themed lines instead of
               // waiting on the proxy. Generation tops the pool up to the
               // album's box count from here.
+              const theme = readAlbumTheme();
               if (theme.trim()) void fetchThemeQuotes(theme);
               onNext();
             }}

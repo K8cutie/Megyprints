@@ -1,3 +1,4 @@
+import type { WizardStep } from '../../assistant/wizard';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type {
   AlbumSizePreset,
@@ -545,8 +546,8 @@ export interface BuilderActions {
   setPhase: (phase: string) => void;
 
   // Wizard
-  wizardStep: 'welcome' | 'pick_size' | 'design_cover' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize';
-  setWizardStep: (step: 'welcome' | 'pick_size' | 'design_cover' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize') => void;
+  wizardStep: WizardStep;
+  setWizardStep: (step: WizardStep) => void;
 
   // Undo / Redo
   undo: () => void;
@@ -677,7 +678,7 @@ export function useBuilderState(): BuilderActions {
   //    review and the desktop panel both open the same picker ──
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   // ── Wizard step tracking — assistant is the primary controller ──
-  const [wizardStep, setWizardStep] = useState<'welcome' | 'pick_size' | 'design_cover' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize'>('welcome');
+  const [wizardStep, setWizardStep] = useState<WizardStep>('welcome');
 
   // ── Selection tracking ──
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
