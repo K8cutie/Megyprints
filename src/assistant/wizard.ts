@@ -78,6 +78,20 @@ export const STEP_META: Record<WizardStep, { title: string; description: string;
   finalize: { title: 'Finalize', description: 'Preview and order', emoji: '📦' },
 };
 
+/**
+ * Where an external forward jump (the size page's "Start Creating", the cover
+ * editor's Continue) actually lands. The occasion step is unskippable, so a
+ * forward jump that would end past it with no occasion stored lands on it.
+ * Backward moves are returned unchanged.
+ */
+export function forwardJumpTarget(from: WizardStep, to: WizardStep, themeReady: boolean): WizardStep {
+  const f = WIZARD_ORDER.indexOf(from), t = WIZARD_ORDER.indexOf(to), g = WIZARD_ORDER.indexOf('pick_theme');
+  // Wherever the engine THINKS it is, a forward move that ends past the
+  // occasion step with no occasion stored goes to the occasion step.
+  if (t > f && t > g && !themeReady) return 'pick_theme';
+  return to;
+}
+
 export class WizardEngine {
   state: WizardState;
   builder: BuilderActions;
@@ -148,14 +162,28 @@ export class WizardEngine {
   advance() {
     const currentIdx = WIZARD_ORDER.indexOf(this.state.step);
     if (currentIdx < WIZARD_ORDER.length - 1) {
+      const next = WIZARD_ORDER[currentIdx + 1];
+      // The occasion step is unskippable from EVERY direction: whatever step
+      // the engine is on (a seeded state, an old draft, a dismissed card), a
+      // move that would end past it with no occasion stored lands on it.
+      const target = forwardJumpTarget(this.state.step, next, isAlbumThemeReady(readAlbumTheme()));
+      if (target !== next) { this.state.step = target; return; }
       this.state.completed.push(this.state.step);
-      this.state.step = WIZARD_ORDER[currentIdx + 1];
+      this.state.step = next;
     }
   }
 
   /* ── Skip current step ── */
   skip() {
     if (this.state.step === 'pick_theme') return; // unskippable by design
+    const idx = WIZARD_ORDER.indexOf(this.state.step);
+    const next = WIZARD_ORDER[Math.min(idx + 1, WIZARD_ORDER.length - 1)];
+    // A skip that would end past the occasion step with none stored is not a
+    // skip - it lands on the occasion step and records nothing.
+    if (forwardJumpTarget(this.state.step, next, isAlbumThemeReady(readAlbumTheme())) !== next) {
+      this.state.step = 'pick_theme';
+      return;
+    }
     this.state.skipped.push(this.state.step);
     this.advance();
   }

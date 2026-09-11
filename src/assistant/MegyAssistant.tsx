@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useBuilderContext } from '../pages/builder/BuilderContext';
 import { parseIntent } from './intentParser';
-import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep } from './wizard';
+import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
@@ -191,6 +191,18 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   useEffect(() => {
     const eng = wizardRef.current;
     if (builder.wizardStep !== eng.state.step) {
+      // The occasion step cannot be jumped over: a forward jump past it with
+      // no occasion stored lands on it, and the guided card comes back so the
+      // customer actually sees it (a dismissed wizard would otherwise hide it).
+      const target = forwardJumpTarget(eng.state.step, builder.wizardStep, isAlbumThemeReady(readAlbumTheme()));
+      if (target !== builder.wizardStep) {
+        eng.state.step = target;
+        setShowWizard(true);
+        setWizardStep(target);
+        builder.setWizardStep(target);
+        builder.setPhase(phaseForStep(target));
+        return;
+      }
       const from = WIZARD_ORDER.indexOf(eng.state.step);
       const to = WIZARD_ORDER.indexOf(builder.wizardStep);
       if (to > from) {

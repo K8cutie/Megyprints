@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep } from './wizard';
+import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep, forwardJumpTarget } from './wizard';
 import { ALBUM_THEME_KEY, isAlbumThemeReady, cleanAlbumTheme } from '../lib/albumTheme';
 import type { BuilderActions as BuilderActions } from '../pages/builder/useBuilderState';
 
@@ -69,6 +69,13 @@ describe('pick_theme is unskippable', () => {
     w.skip();
     expect(w.state.step).toBe('pick_theme');
     expect(w.state.skipped).toEqual([]);
+    // With no occasion stored, even skipping the cover step pulls back to the occasion.
+    w.state.step = 'design_cover';
+    w.skip();
+    expect(w.state.step).toBe('pick_theme');
+    expect(w.state.skipped).toEqual([]);
+    // With one stored, skip works as before.
+    store[ALBUM_THEME_KEY] = 'Wedding';
     w.state.step = 'design_cover';
     w.skip();
     expect(w.state.step).toBe('pick_background');
@@ -92,6 +99,39 @@ describe('pick_theme is unskippable', () => {
     expect(w.getMessage().body).toMatch(/can't be skipped/);
     store[ALBUM_THEME_KEY] = 'Beach trip';
     expect(w.getMessage().body).toContain('**Beach trip**');
+  });
+});
+
+describe('external forward jumps cannot hop over the occasion step', () => {
+  it('a jump from size to cover (the size page\'s Start Creating) lands on the occasion when none is stored', () => {
+    expect(forwardJumpTarget('pick_size', 'design_cover', false)).toBe('pick_theme');
+    expect(forwardJumpTarget('welcome', 'pick_background', false)).toBe('pick_theme');
+  });
+  it('the same jump goes through once an occasion is stored', () => {
+    expect(forwardJumpTarget('pick_size', 'design_cover', true)).toBe('design_cover');
+  });
+  it('even a later forward move is pulled back to the occasion step while none is stored', () => {
+    expect(forwardJumpTarget('design_cover', 'pick_background', false)).toBe('pick_theme');
+    expect(forwardJumpTarget('design_cover', 'pick_background', true)).toBe('pick_background');
+  });
+  it('backward moves and a move onto the occasion step itself are untouched', () => {
+    expect(forwardJumpTarget('pick_background', 'pick_size', false)).toBe('pick_size');
+    expect(forwardJumpTarget('welcome', 'pick_theme', false)).toBe('pick_theme');
+  });
+});
+
+describe('advance() itself enforces the occasion', () => {
+  it('from a seeded size step with no occasion, advancing lands on the occasion step, not the cover', () => {
+    const w = new WizardEngine(builderStub(), false);
+    w.state.step = 'pick_size';
+    w.advance();
+    expect(w.state.step).toBe('pick_theme');
+    expect(w.state.completed).toEqual([]); // nothing was marked done on the way
+    store[ALBUM_THEME_KEY] = 'Graduation';
+    w.state.step = 'pick_size';
+    w.advance();
+    expect(w.state.step).toBe('design_cover');
+    expect(w.state.completed).toEqual(['pick_size']);
   });
 });
 

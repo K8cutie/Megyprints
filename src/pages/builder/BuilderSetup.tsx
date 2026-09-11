@@ -6,7 +6,8 @@ import type { AlbumSizePreset } from './types';
 import { loadStoreSettings } from '../../lib/storeSettings';
 import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
 import { fetchThemeQuotes } from '../../lib/quotes';
-import { readAlbumTheme } from '../../lib/albumTheme';
+import { readAlbumTheme, writeAlbumTheme, isAlbumThemeReady } from '../../lib/albumTheme';
+import AlbumThemeStep from '../../assistant/AlbumThemeStep';
 
 /* ═══════════════════════════════════════════════════════════
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
@@ -102,6 +103,12 @@ interface BuilderSetupProps {
 }
 
 export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: BuilderSetupProps) {
+  // The occasion is asked by the wizard's Step 1; this is the backstop for
+  // every path that reaches the size page without it (wizard dismissed, deep
+  // link, old draft). Same component, same key, same gate.
+  const [albumTheme, setAlbumThemeState] = useState(readAlbumTheme);
+  const setAlbumTheme = (v: string) => { setAlbumThemeState(v); writeAlbumTheme(v); };
+  const themeReady = isAlbumThemeReady(albumTheme);
   // A size is offered only if the owner hasn't hidden it AND it has layouts to
   // build with (see albumSizeOptions). Re-load the store settings once so a cold
   // direct-load to setup still reflects curation, then filter the grid.
@@ -160,6 +167,14 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
           ))}
         </div>
 
+        {/* Occasion backstop — only when nothing is stored yet. */}
+        {!themeReady && (
+          <div className="mb-6 rounded-2xl border border-[#F4C2A1]/40 bg-white p-5 text-left shadow-sm" data-testid="occasion-backstop">
+            <h2 className="font-display text-lg font-semibold text-[#2D2D2D] mb-1">First — what is this album about?</h2>
+            <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme} onContinue={() => { if (isAlbumThemeReady(albumTheme)) { void fetchThemeQuotes(albumTheme.trim()); onNext(); } }} />
+          </div>
+        )}
+
         {/* Start Creating */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -168,16 +183,21 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
           className="text-center"
         >
           <button
+            disabled={!themeReady}
+            title={themeReady ? undefined : 'Pick the occasion first'}
             onClick={() => {
+              // Unskippable: no occasion, no album. (The button is disabled
+              // too; this guards a stale render.)
+              const theme = readAlbumTheme();
+              if (!isAlbumThemeReady(theme)) return;
               // Warm the theme's AI quote pool NOW (one cached call) so the
               // album's first generation deals real themed lines instead of
               // waiting on the proxy. Generation tops the pool up to the
               // album's box count from here.
-              const theme = readAlbumTheme();
-              if (theme.trim()) void fetchThemeQuotes(theme);
+              void fetchThemeQuotes(theme);
               onNext();
             }}
-            className="inline-flex items-center gap-2 px-10 py-3.5 bg-gradient-to-r from-[#F4C2A1] to-[#E8A598] text-white font-semibold rounded-2xl hover:brightness-105 transition-all shadow-lg shadow-[#F4C2A1]/25 text-base"
+            className="inline-flex items-center gap-2 px-10 py-3.5 bg-gradient-to-r from-[#F4C2A1] to-[#E8A598] text-white font-semibold rounded-2xl hover:brightness-105 transition-all shadow-lg shadow-[#F4C2A1]/25 text-base disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100"
           >
             <Sparkles size={18} />
             Start Creating
