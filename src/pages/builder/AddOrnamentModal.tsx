@@ -68,7 +68,7 @@ export default function AddOrnamentModal({ initial, onSave, onRemove, onClose }:
                 <button key={it.id} onClick={() => pick(it.id, it.svg)} disabled={!!busyId}
                   title={it.label}
                   className={`relative aspect-square rounded-xl border p-2.5 flex items-center justify-center transition active:scale-[0.97] disabled:opacity-60 ${
-                    isCurrent ? 'border-blush-pink ring-2 ring-peach/50 bg-cream' : 'border-[#EDE7E0] bg-white hover:bg-cream'
+                    isCurrent ? 'border-blush-pink ring-2 ring-peach/50 bg-cream' : 'border-line-soft bg-white hover:bg-cream'
                   }`}>
                   <img src={ornamentDataUri(it.svg)} alt={it.label} draggable={false}
                     className="w-full h-full object-contain pointer-events-none" />

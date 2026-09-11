@@ -167,17 +167,17 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
               className="w-7 h-7 rounded-full shrink-0"
               style={{
                 background: c,
-                border: color === c ? '2px solid #E8A598' : '1px solid rgba(0,0,0,0.12)',
-                boxShadow: color === c ? '0 0 0 2px #FDE8E4' : undefined,
+                border: color === c ? '2px solid #9A4A2C' : '1px solid rgba(0,0,0,0.12)',
+                boxShadow: color === c ? '0 0 0 2px #F6E7DF' : undefined,
               }} />
           ))}
           <Divider />
           <button onClick={() => setOutline((v) => !v)}
             className="px-3 h-9 rounded-lg text-sm shrink-0 active:scale-95 transition-transform"
-            style={{ background: outline ? '#FDE8E4' : '#F5F5F5', color: outline ? '#E8A598' : '#6B6B6B', fontWeight: 600 }}>Outline</button>
+            style={{ background: outline ? '#F6E7DF' : '#F5F5F5', color: outline ? '#9A4A2C' : '#6B6B6B', fontWeight: 600 }}>Outline</button>
           <button onClick={() => setShadow((v) => !v)}
             className="px-3 h-9 rounded-lg text-sm shrink-0 active:scale-95 transition-transform"
-            style={{ background: shadow ? '#FDE8E4' : '#F5F5F5', color: shadow ? '#E8A598' : '#6B6B6B', fontWeight: 600 }}>Shadow</button>
+            style={{ background: shadow ? '#F6E7DF' : '#F5F5F5', color: shadow ? '#9A4A2C' : '#6B6B6B', fontWeight: 600 }}>Shadow</button>
           <Divider />
           <ToolBtn active={alignment === 'left'} onClick={() => setAlignment('left')}><AlignLeft size={18} /></ToolBtn>
           <ToolBtn active={alignment === 'center'} onClick={() => setAlignment('center')}><AlignCenter size={18} /></ToolBtn>
@@ -193,7 +193,7 @@ function ToolBtn({ active, onClick, children }: { active?: boolean; onClick: () 
   return (
     <button onClick={onClick}
       className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 active:scale-95 transition-transform"
-      style={{ background: active ? '#FDE8E4' : '#F5F5F5', color: active ? '#E8A598' : '#6B6B6B' }}>
+      style={{ background: active ? '#F6E7DF' : '#F5F5F5', color: active ? '#9A4A2C' : '#6B6B6B' }}>
       {children}
     </button>
   );

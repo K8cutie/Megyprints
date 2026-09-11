@@ -488,7 +488,7 @@ export default function Order() {
                 {MATERIALS.map((m) => (
                   <button key={m.type} onClick={() => setMaterial(m.type)}
                     className="p-3 rounded-xl border-2 text-left transition-all"
-                    style={{ borderColor: material === m.type ? '#F4C2A1' : '#E8E8E8', backgroundColor: material === m.type ? '#FFF8F0' : '#fff' }}>
+                    style={{ borderColor: material === m.type ? '#B85C38' : '#E8E8E8', backgroundColor: material === m.type ? '#F6E7DF' : '#fff' }}>
                     <span className="font-medium text-sm text-dark">{m.name}</span>
                     <span className="block text-xs text-light mt-1">{m.description}</span>
                   </button>
@@ -503,7 +503,7 @@ export default function Order() {
                 {COVERS.map((c) => (
                   <button key={c.type} onClick={() => setCover(c.type)}
                     className="p-3 rounded-xl border-2 text-left transition-all"
-                    style={{ borderColor: cover === c.type ? '#F4C2A1' : '#E8E8E8', backgroundColor: cover === c.type ? '#FFF8F0' : '#fff' }}>
+                    style={{ borderColor: cover === c.type ? '#B85C38' : '#E8E8E8', backgroundColor: cover === c.type ? '#F6E7DF' : '#fff' }}>
                     <span className="font-medium text-sm text-dark">{c.name}</span>
                     <span className="block text-xs text-light mt-1">{c.description}</span>
                   </button>
@@ -524,7 +524,7 @@ export default function Order() {
                   {ALBUM_SIZES.map((s) => (
                     <button key={s.preset} onClick={() => setSize(s.preset)}
                       className="py-2.5 px-3 rounded-xl border-2 text-center transition-all text-sm"
-                      style={{ borderColor: size === s.preset ? '#F4C2A1' : '#E8E8E8', backgroundColor: size === s.preset ? '#FFF8F0' : '#fff' }}>
+                      style={{ borderColor: size === s.preset ? '#B85C38' : '#E8E8E8', backgroundColor: size === s.preset ? '#F6E7DF' : '#fff' }}>
                       {s.name}
                     </button>
                   ))}
@@ -585,7 +585,7 @@ export default function Order() {
                   <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span></div>
                 </div>
               </div>
-              <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#FBEDE7] border border-peach/60 px-3 py-2.5">
+              <div className="mt-4 flex items-start gap-2 rounded-xl bg-blush border border-peach/60 px-3 py-2.5">
                 <QrCode size={16} className="text-blush-pink shrink-0 mt-0.5" />
                 <p className="text-xs text-cocoa leading-snug">
                   <b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
@@ -634,7 +634,7 @@ export default function Order() {
                       return (
                         <button key={t.years} type="button" role="radio" aria-checked={active}
                           onClick={() => setHostingYears(t.years)}
-                          className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-blush-pink bg-[#FFF3EC]' : 'border-line hover:border-peach'}`}>
+                          className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-blush-pink bg-blush' : 'border-line hover:border-peach'}`}>
                           <div className="text-sm font-semibold text-dark">{t.years} years</div>
                           <div className="text-[11px] text-cocoa">{t.price > 0 ? `+₱${t.price}` : 'Included'}</div>
                         </button>

@@ -169,7 +169,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
 
         <div className="p-5 space-y-3 overflow-y-auto">
           {!initial && (
-            <div className="rounded-xl bg-gradient-to-br from-[#FFF3EC] to-[#FDF6F1] border border-peach/50 px-4 py-3">
+            <div className="rounded-xl bg-gradient-to-br from-blush to-warm-white border border-peach/50 px-4 py-3">
               <p className="text-sm font-bold text-dark">Pick a video of this moment 🎬</p>
               <p className="text-xs text-medium mt-1 leading-snug">
                 It plays the instant anyone scans the QR printed on this page — no app, no account.
@@ -209,7 +209,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
                   return (
                     <button key={q} type="button" role="radio" aria-checked={active}
                       onClick={() => setQuality(q)}
-                      className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-blush-pink bg-[#FFF3EC]' : 'border-line hover:border-peach'}`}>
+                      className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-blush-pink bg-blush' : 'border-line hover:border-peach'}`}>
                       <div className="text-sm font-semibold text-dark">
                         {q === 'hd' ? 'HD' : 'Standard'} {QUALITY_TARGETS[q].label}
                       </div>
@@ -259,13 +259,13 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
                     ✨ Auto
                   </button>
                 )}
-                <div className="relative rounded-lg border-2 border-dashed border-[#E8D9CC] bg-[#FBF6F1] shrink-0" style={{ width: 92, height: 68 }}>
+                <div className="relative rounded-lg border-2 border-dashed border-line bg-warm-white shrink-0" style={{ width: 92, height: 68 }}>
                   {QR_CORNERS.map((c) => {
                     const active = corner === c;
                     return (
                       <button key={c} type="button" onClick={() => onCorner(c)}
                         aria-label={CORNER_LABELS[c]} title={CORNER_LABELS[c]}
-                        className={`absolute w-6 h-6 rounded-[5px] flex items-center justify-center transition ${active ? 'bg-blush-pink ring-2 ring-peach' : 'bg-white border border-[#E0D3C6] hover:bg-blush'}`}
+                        className={`absolute w-6 h-6 rounded-[5px] flex items-center justify-center transition ${active ? 'bg-blush-pink ring-2 ring-peach' : 'bg-white border border-line hover:bg-blush'}`}
                         style={CORNER_POS[c]}>
                         {active && <span className="w-2.5 h-2.5 rounded-[2px] bg-white" />}
                       </button>
@@ -374,7 +374,7 @@ function LegacyLinkModal({ initial, onSave, onRemove, onClose, corner, onCorner,
         </div>
         <div className="p-5 space-y-3">
           {!user && (
-            <div className="text-[11px] leading-snug text-cocoa bg-[#FFF3EC] border border-peach/60 rounded-lg px-3 py-2">
+            <div className="text-[11px] leading-snug text-cocoa bg-blush border border-peach/60 rounded-lg px-3 py-2">
               <span className="font-semibold">Sign in to add a QR.</span> The link is saved to your account so it opens for anyone who scans it — no app needed — and you can re-point it anytime.
             </div>
           )}
@@ -400,10 +400,10 @@ function LegacyLinkModal({ initial, onSave, onRemove, onClose, corner, onCorner,
                 <button type="button" onClick={() => onCorner(null)}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 ${corner == null ? 'bg-peach text-white' : 'bg-cream text-cocoa'}`}>✨ Auto</button>
               )}
-              <div className="relative rounded-lg border-2 border-dashed border-[#E8D9CC] bg-[#FBF6F1] shrink-0" style={{ width: 92, height: 68 }}>
+              <div className="relative rounded-lg border-2 border-dashed border-line bg-warm-white shrink-0" style={{ width: 92, height: 68 }}>
                 {QR_CORNERS.map((c) => (
                   <button key={c} type="button" onClick={() => onCorner(c)} aria-label={CORNER_LABELS[c]}
-                    className={`absolute w-6 h-6 rounded-[5px] ${corner === c ? 'bg-blush-pink ring-2 ring-peach' : 'bg-white border border-[#E0D3C6]'}`}
+                    className={`absolute w-6 h-6 rounded-[5px] ${corner === c ? 'bg-blush-pink ring-2 ring-peach' : 'bg-white border border-line'}`}
                     style={CORNER_POS[c]} />
                 ))}
               </div>

@@ -72,7 +72,7 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
                         <PageView page={previewPage} photos={actions.uploadedPhotos} singleW={W} H={H} pageIndex={idx} />
                       </div>
                       <span className="block text-[11px] text-center truncate mt-1.5"
-                        style={{ color: current ? '#E8A598' : '#6B6B6B', fontWeight: current ? 600 : 400 }}>
+                        style={{ color: current ? '#9A4A2C' : '#6B6B6B', fontWeight: current ? 600 : 400 }}>
                         {current ? '✓ Current' : t.name}
                       </span>
                     </button>

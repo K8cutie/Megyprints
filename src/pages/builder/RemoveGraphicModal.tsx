@@ -30,7 +30,7 @@ export default function RemoveGraphicModal({ onRemove, onClose, mobile }: {
       </div>
       <div className="px-5 pb-4 flex gap-2">
         <button onClick={onClose}
-          className="flex-1 h-10 rounded-xl border border-[#EDE7E0] text-sm font-medium text-[#6B5842] hover:bg-cream">
+          className="flex-1 h-10 rounded-xl border border-line-soft text-sm font-medium text-[#6B5842] hover:bg-cream">
           Keep it
         </button>
         <button onClick={onRemove}

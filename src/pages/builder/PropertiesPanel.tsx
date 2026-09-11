@@ -89,7 +89,7 @@ function FilterPresetButtons({ current, onPreset }: { current: PhotoFilters; onP
         return (
           <button key={preset.name} onClick={() => onPreset(preset.name)}
             className="py-1.5 px-1 rounded-md text-[10px] font-medium transition-all"
-            style={{ backgroundColor: isActive ? '#F4C2A1' : '#F0F0F0', color: isActive ? '#fff' : '#6B6B6B' }}>
+            style={{ backgroundColor: isActive ? '#B85C38' : '#F0F0F0', color: isActive ? '#fff' : '#6B6B6B' }}>
             {preset.name}
           </button>
         );
@@ -106,9 +106,9 @@ function ToggleBtn({ active, onClick, children, title }: { active: boolean; onCl
       title={title}
       className="flex-1 py-1.5 rounded-md text-xs font-medium transition-all border"
       style={{
-        backgroundColor: active ? '#F4C2A1' : '#fff',
+        backgroundColor: active ? '#B85C38' : '#fff',
         color: active ? '#fff' : '#6B6B6B',
-        borderColor: active ? '#F4C2A1' : '#E8E8E8',
+        borderColor: active ? '#B85C38' : '#E8E8E8',
       }}
     >
       {children}
@@ -265,9 +265,9 @@ function TextEditor({
                   className="py-1.5 px-1 rounded-md text-[10px] transition-all border text-center"
                   style={{
                     fontFamily: font.value,
-                    backgroundColor: text.fontFamily === font.value ? '#FDE8E4' : '#fff',
-                    borderColor: text.fontFamily === font.value ? '#F4C2A1' : '#E8E8E8',
-                    color: text.fontFamily === font.value ? '#E8A598' : '#6B6B6B',
+                    backgroundColor: text.fontFamily === font.value ? '#F6E7DF' : '#fff',
+                    borderColor: text.fontFamily === font.value ? '#B85C38' : '#E8E8E8',
+                    color: text.fontFamily === font.value ? '#9A4A2C' : '#6B6B6B',
                   }}
                 >
                   <span className="text-base block leading-tight">{font.preview}</span>
@@ -295,7 +295,7 @@ function TextEditor({
                   onClick={() => update({ fontSize: size })}
                   className="px-2 py-0.5 rounded text-[10px] font-medium transition-all"
                   style={{
-                    backgroundColor: text.fontSize === size ? '#F4C2A1' : '#F0F0F0',
+                    backgroundColor: text.fontSize === size ? '#B85C38' : '#F0F0F0',
                     color: text.fontSize === size ? '#fff' : '#6B6B6B',
                   }}
                 >
@@ -330,7 +330,7 @@ function TextEditor({
                   className="w-6 h-6 rounded-full border-2 transition-all"
                   style={{
                     backgroundColor: c,
-                    borderColor: text.color === c ? '#F4C2A1' : '#E8E8E8',
+                    borderColor: text.color === c ? '#B85C38' : '#E8E8E8',
                     transform: text.color === c ? 'scale(1.15)' : 'scale(1)',
                   }}
                 />
@@ -401,7 +401,7 @@ function TextEditor({
                   onClick={() => update({ rotation: deg })}
                   className="flex-1 py-0.5 rounded text-[9px] font-medium transition-all"
                   style={{
-                    backgroundColor: text.rotation === deg ? '#F4C2A1' : '#F0F0F0',
+                    backgroundColor: text.rotation === deg ? '#B85C38' : '#F0F0F0',
                     color: text.rotation === deg ? '#fff' : '#6B6B6B',
                   }}
                 >

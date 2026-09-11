@@ -164,7 +164,7 @@ export default function PricingPanel() {
       </div>
 
       {/* Store price multiple — the PERSISTED setting that drives live checkout */}
-      <div className="rounded-2xl border-2 border-rust/40 bg-[#FBF6F1] px-5 py-4">
+      <div className="rounded-2xl border-2 border-rust/40 bg-warm-white px-5 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h3 className="font-display text-lg font-semibold text-dark">Store price multiple</h3>
@@ -179,7 +179,7 @@ export default function PricingPanel() {
               <input
                 type="number" min={1} max={10} step={0.25} value={storeMult}
                 onChange={(e) => { setStoreMult(+e.target.value); setSavedMult(false); }}
-                className="w-24 border border-[#DED5C9] rounded-lg px-3 py-2 text-sm font-mono tabular-nums text-dark bg-white"
+                className="w-24 border border-line rounded-lg px-3 py-2 text-sm font-mono tabular-nums text-dark bg-white"
               />
             </div>
             <button
@@ -283,7 +283,7 @@ export default function PricingPanel() {
       </div>
 
       {/* Album sizes offered — hides sizes from the customer picker (owner-only) */}
-      <div className="rounded-2xl border-2 border-rust/40 bg-[#FBF6F1] px-5 py-4">
+      <div className="rounded-2xl border-2 border-rust/40 bg-warm-white px-5 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h3 className="font-display text-lg font-semibold text-dark">Album sizes offered</h3>
@@ -394,7 +394,7 @@ export default function PricingPanel() {
         </div>
 
         {/* Result */}
-        <div className="bg-gradient-to-b from-white to-[#FBF6F1] p-5">
+        <div className="bg-gradient-to-b from-white to-warm-white p-5">
           <div className="flex justify-between items-end pb-4 border-b border-sand-deep mb-4">
             <div>
               <div className="text-xs uppercase tracking-wide text-light">Your price</div>
@@ -427,7 +427,7 @@ export default function PricingPanel() {
           </div>
 
           {size === '8x8' ? (
-            <div className="mt-4 rounded-xl border border-[#EAD3CB] bg-[#F6E7E2] px-4 py-3 text-sm">
+            <div className="mt-4 rounded-xl border border-line bg-blush px-4 py-3 text-sm">
               <div className="text-xs font-semibold uppercase tracking-wide text-rust-deep mb-1.5">vs. competitor · same 8×8, {pages} pages</div>
               {[['Their regular', r.reg], ['Their voucher price', r.vou], ['You', price]].map(([l, v]) => (
                 <div key={l as string} className="flex justify-between py-0.5">
@@ -442,7 +442,7 @@ export default function PricingPanel() {
               </div>
             </div>
           ) : (
-            <div className="mt-4 rounded-xl border border-sand-deep bg-[#FAF8F5] px-4 py-3 text-sm text-medium">
+            <div className="mt-4 rounded-xl border border-sand-deep bg-warm-white px-4 py-3 text-sm text-medium">
               <div className="text-xs font-semibold uppercase tracking-wide text-light mb-1">vs. competitor</div>
               Direct checkout data on file for <b>8×8 (₱30/pg)</b> and <b>14×10 (₱60/pg)</b>. Switch to 8×8 for the live head-to-head — the cost gap holds at every size.
             </div>
@@ -457,10 +457,10 @@ export default function PricingPanel() {
           <b>3×</b> is the recommended baseline (under their sale); <b>5×</b> is the ceiling (their regular price) — worth holding on premium hardbound where the QR living-memory sells it.
           The <b>3×/5×</b> columns include the flat <b>size premium</b> (marked beside the size): <b>+₱150</b> on 9×9, <b>+₱300</b> on 11.5×8 &amp; 8.5×11 — pure margin, since those cost the same to print as 8×8.
         </p>
-        <div className="overflow-x-auto border border-[#DED5C9] rounded-xl">
+        <div className="overflow-x-auto border border-line rounded-xl">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
-              <tr className="bg-[#F4EEE7] text-light">
+              <tr className="bg-warm-white text-light">
                 {['Size', 'Cost', '3× price', '5× price', 'Cost / extra page'].map((h, i) => (
                   <th key={h} className={`px-4 py-2.5 text-[11px] uppercase tracking-wide font-semibold ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
                 ))}
@@ -488,7 +488,7 @@ export default function PricingPanel() {
       </div>
 
       {/* QR strategy — decided: free inclusion, value priced into the album */}
-      <div className="rounded-xl border border-peach/70 bg-[#FBEDE7] px-5 py-4">
+      <div className="rounded-xl border border-peach/70 bg-blush px-5 py-4">
         <h4 className="text-sm font-semibold text-dark flex items-center gap-2">
           <QrCode size={16} className="text-blush-pink" /> Living-memory QR — free with every album
         </h4>
@@ -501,7 +501,7 @@ export default function PricingPanel() {
       </div>
 
       {/* Assumptions */}
-      <div className="border-l-[3px] border-blush-pink bg-[#FBEDE7] rounded-r-xl px-5 py-4 text-sm text-[#41392F]">
+      <div className="border-l-[3px] border-blush-pink bg-blush rounded-r-xl px-5 py-4 text-sm text-[#41392F]">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-rust mb-2">Numbers to confirm before locking in</h4>
         <ul className="list-disc pl-5 space-y-1">
           <li>Pages per 12.5×19 sheet for <b>8×8 and up</b> — estimated at 4/sheet.</li>
@@ -516,7 +516,7 @@ export default function PricingPanel() {
 function PricingGroup({ bind, model }: { bind: Binding; model: PricingModel }) {
   return (
     <>
-      <tr className="bg-[#FBF6F1]">
+      <tr className="bg-warm-white">
         <td colSpan={5} className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-rust">
           {bind === 'soft' ? 'Softcover' : 'Hardbound'} · 40 pages
         </td>
@@ -526,7 +526,7 @@ function PricingGroup({ bind, model }: { bind: Binding; model: PricingModel }) {
         const cpp = perPageCost(model, k);
         const prem = model.sizes[k].surcharge;
         return (
-          <tr key={k} className="border-t border-[#EEE7DE]">
+          <tr key={k} className="border-t border-line-soft">
             <td className="px-4 py-2.5 text-left font-sans text-dark">
               {SIZE_LABELS[k]}
               {prem > 0 && <span className="ml-1.5 text-[10px] font-sans text-cocoa">+{peso(prem)}</span>}
@@ -544,7 +544,7 @@ function PricingGroup({ bind, model }: { bind: Binding; model: PricingModel }) {
 
 function RivalCard({ title, meta, lines }: { title: string; meta: string; lines: [string, string, string][] }) {
   return (
-    <div className="border border-[#DED5C9] rounded-xl p-4 bg-white">
+    <div className="border border-line rounded-xl p-4 bg-white">
       <h4 className="text-sm font-semibold text-dark">{title}</h4>
       <p className="text-xs text-light mb-3">{meta}</p>
       <div className="font-mono tabular-nums text-[13px]">

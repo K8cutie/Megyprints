@@ -53,8 +53,8 @@ export default function BuilderUpload({ photos, onAddPhotos, onRemovePhoto, onRe
           onDragLeave={handleDragLeave}
           className="mb-6 border-2 border-dashed rounded-xl p-8 text-center transition-colors"
           style={{
-            borderColor: isDragging ? '#F4C2A1' : '#E8E8E8',
-            backgroundColor: isDragging ? '#FFF8F0' : 'transparent',
+            borderColor: isDragging ? '#B85C38' : '#E8E8E8',
+            backgroundColor: isDragging ? '#F6E7DF' : 'transparent',
           }}
         >
           <Upload size={32} className="mx-auto text-[#C4C4C4] mb-2" />

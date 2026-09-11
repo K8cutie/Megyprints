@@ -430,7 +430,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     const showSnapGuide = (x1: number, y1: number, x2: number, y2: number) => {
       const line = new fab.Line([x1, y1, x2, y2], {
-        stroke: '#E8A598', strokeWidth: 1, selectable: false, evented: false,
+        stroke: '#9A4A2C', strokeWidth: 1, selectable: false, evented: false,
       });
       snapGuidesRef.current.push(line);
       canvas.add(line);
@@ -1516,7 +1516,7 @@ function renderTemplateSlots(
       // Empty slot
       const emptySlotStyle = {
         fill: 'rgba(244,194,161,0.08)',
-        stroke: '#F4C2A1',
+        stroke: '#B85C38',
         strokeWidth: 2,
         strokeDashArray: [6, 3],
         selectable: false,
@@ -1560,7 +1560,7 @@ function renderTemplateSlots(
         : new fab.Text('+', {
             left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center',
             fontSize: Math.max(24, cell * 0.3),
-            fontFamily: '"DM Sans", sans-serif', fontWeight: 'bold', fill: '#E8A598',
+            fontFamily: '"DM Sans", sans-serif', fontWeight: 'bold', fill: '#9A4A2C',
             selectable: false, evented: false,
           });
       hint.slotId = `${SLOT_ID}-plus-${i}`;
@@ -1728,8 +1728,8 @@ function renderScene(
         }
         img.set({
           selectable: true, evented: true, hasControls: true, hasBorders: true,
-          cornerColor: '#F4C2A1', cornerSize: 10, transparentCorners: false,
-          borderColor: '#F4C2A1', hoverCursor: 'move',
+          cornerColor: '#B85C38', cornerSize: 10, transparentCorners: false,
+          borderColor: '#B85C38', hoverCursor: 'move',
         });
         // A QR must stay SQUARE to scan. `lockUniScaling` is a fabric 3 property
         // that no longer exists in the pinned fabric 5.3 — setting it does
@@ -1817,8 +1817,8 @@ function renderScene(
         img.set({
           selectable: true, evented: true, hasControls: true, hasBorders: true,
           lockUniScaling: true, // keep the vector proportional on a corner drag
-          cornerColor: '#F4C2A1', cornerSize: 10, transparentCorners: false,
-          borderColor: '#F4C2A1', hoverCursor: 'move',
+          cornerColor: '#B85C38', cornerSize: 10, transparentCorners: false,
+          borderColor: '#B85C38', hoverCursor: 'move',
         });
         img.slotId = `${SLOT_ID}-textornament-${i}`;
         img.on('modified', () => {
@@ -1908,11 +1908,11 @@ function renderScene(
       evented: true,
       editable: slotRect ? false : true,
       hoverCursor: slotRect ? 'pointer' : undefined,
-      editingBorderColor: '#F4C2A1',
-      cornerColor: '#F4C2A1',
+      editingBorderColor: '#B85C38',
+      cornerColor: '#B85C38',
       cornerSize: 8,
       transparentCorners: false,
-      borderColor: '#F4C2A1',
+      borderColor: '#B85C38',
       width: slotRect ? slotRect.width : (text.width ?? autoWidth),
       scaleX: text.scaleX ?? 1,
       scaleY: text.scaleY ?? 1,
@@ -1979,7 +1979,7 @@ function renderScene(
       const br = Math.max(9, Math.min(14, Math.min(r.width, r.height) * 0.10));
       const moreDot = new fab.Circle({
         left: r.left + r.width - br * 2 - 6, top: r.top + 6, radius: br,
-        fill: '#F4C2A1', selectable: false, evented: true, hoverCursor: 'pointer',
+        fill: '#B85C38', selectable: false, evented: true, hoverCursor: 'pointer',
       });
       moreDot.slotId = `${SLOT_ID}-textbox-more-${i}`;
       const moreGlyph = new fab.Text('⋯', {
@@ -2023,7 +2023,7 @@ function renderScene(
   if (albumType === 'layflat') {
     const midX = canvasW / 2;
     const creaseLine = new fab.Line([midX, 0, midX, canvasH], {
-      stroke: '#F4C2A1', strokeWidth: 1.5, strokeDashArray: [6, 6],
+      stroke: '#B85C38', strokeWidth: 1.5, strokeDashArray: [6, 6],
       selectable: false, evented: false, opacity: 0.5,
     });
     creaseLine.isGuide = true;
@@ -2031,14 +2031,14 @@ function renderScene(
 
     const leftLabel = new fab.Text('Left Page', {
       left: midX - 80, top: 8, fontSize: 10, fontFamily: '"DM Sans", sans-serif',
-      fill: '#F4C2A1', selectable: false, evented: false, opacity: 0.5,
+      fill: '#B85C38', selectable: false, evented: false, opacity: 0.5,
     });
     leftLabel.isGuide = true;
     canvas.add(leftLabel);
 
     const rightLabel = new fab.Text('Right Page', {
       left: midX + 8, top: 8, fontSize: 10, fontFamily: '"DM Sans", sans-serif',
-      fill: '#F4C2A1', selectable: false, evented: false, opacity: 0.5,
+      fill: '#B85C38', selectable: false, evented: false, opacity: 0.5,
     });
     rightLabel.isGuide = true;
     canvas.add(rightLabel);
@@ -2065,7 +2065,7 @@ function renderScene(
     canvas.add(zone);
 
     const bindLine = new fab.Line([lineX, 0, lineX, canvasH], {
-      stroke: '#E8A598', strokeWidth: 1.5, strokeDashArray: [8, 5],
+      stroke: '#9A4A2C', strokeWidth: 1.5, strokeDashArray: [8, 5],
       selectable: false, evented: false, opacity: 0.7,
     });
     bindLine.isGuide = true;

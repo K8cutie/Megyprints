@@ -187,7 +187,7 @@ export default function DeleteAccountSection() {
                       </ul>
 
                       {(preflight?.orders ?? 0) > 0 && (
-                        <p className="text-xs text-taupe leading-relaxed bg-cream border border-[#F0E2D6] rounded-xl p-3 mb-4">
+                        <p className="text-xs text-taupe leading-relaxed bg-cream border border-line rounded-xl p-3 mb-4">
                           We keep a receipt-only record of your {preflight?.orders} past order
                           {preflight?.orders === 1 ? '' : 's'} — order number, amount and status —
                           because Philippine tax rules require it. Your name, phone number and

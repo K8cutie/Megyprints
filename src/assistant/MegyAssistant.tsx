@@ -603,7 +603,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                             }`}
                           >
                             <span
-                              className="w-full h-10 rounded-md bg-[#EDE6DD]"
+                              className="w-full h-10 rounded-md bg-line-soft"
                               style={{ border: `${border.width}px ${border.style} ${border.color}` }}
                             />
                             <span className="text-[10px] font-medium text-ink-mid text-center leading-tight">{border.label}</span>
@@ -746,7 +746,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         className={`lg:hidden shrink-0 w-full flex items-center justify-center ${mobilePulldown ? 'order-last pb-3 pt-1' : 'pt-2 pb-1'}`}
         aria-label={mobileExpanded ? 'Collapse Megy' : 'Expand Megy'}
       >
-        <span className="w-10 h-1.5 rounded-full bg-[#E8D8C8]" />
+        <span className="w-10 h-1.5 rounded-full bg-line" />
       </button>
 
       {/* ═══ HEADER ═══ */}
@@ -1177,7 +1177,7 @@ function ToggleBtn({ active, onClick, children, title }: {
 }) {
   return (
     <button onClick={onClick} title={title} className="flex-1 py-1.5 rounded-md text-xs font-medium transition-all border"
-      style={{ backgroundColor: active ? '#F4C2A1' : '#fff', color: active ? '#fff' : '#6B6B6B', borderColor: active ? '#F4C2A1' : '#E8E8E8' }}>
+      style={{ backgroundColor: active ? '#B85C38' : '#fff', color: active ? '#fff' : '#6B6B6B', borderColor: active ? '#B85C38' : '#E8E8E8' }}>
       {children}
     </button>
   );
@@ -1284,7 +1284,7 @@ function TextEditor({ text, onUpdate, onDelete }: {
             <div className="grid grid-cols-3 gap-1 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
               {FONT_FAMILIES.map((f) => (
                 <button key={f.value} onClick={() => update({ fontFamily: f.value })} className="py-1.5 px-1 rounded-md text-[10px] transition-all border text-center"
-                  style={{ fontFamily: f.value, backgroundColor: text.fontFamily === f.value ? '#FDE8E4' : '#fff', borderColor: text.fontFamily === f.value ? '#F4C2A1' : '#E8E8E8', color: text.fontFamily === f.value ? '#E8A598' : '#6B6B6B' }}>
+                  style={{ fontFamily: f.value, backgroundColor: text.fontFamily === f.value ? '#F6E7DF' : '#fff', borderColor: text.fontFamily === f.value ? '#B85C38' : '#E8E8E8', color: text.fontFamily === f.value ? '#9A4A2C' : '#6B6B6B' }}>
                   <span className="text-base block leading-tight">{f.preview}</span>
                   <span className="text-[8px] opacity-70 block truncate">{f.name}</span>
                 </button>
@@ -1297,7 +1297,7 @@ function TextEditor({ text, onUpdate, onDelete }: {
             <div className="flex flex-wrap gap-1">
               {FONT_SIZE_PRESETS.map((s) => (
                 <button key={s} onClick={() => update({ fontSize: s })} className="px-2 py-0.5 rounded text-[10px] font-medium transition-all"
-                  style={{ backgroundColor: text.fontSize === s ? '#F4C2A1' : '#F0F0F0', color: text.fontSize === s ? '#fff' : '#6B6B6B' }}>{s}</button>
+                  style={{ backgroundColor: text.fontSize === s ? '#B85C38' : '#F0F0F0', color: text.fontSize === s ? '#fff' : '#6B6B6B' }}>{s}</button>
               ))}
             </div>
           </div>
@@ -1310,7 +1310,7 @@ function TextEditor({ text, onUpdate, onDelete }: {
             <div className="flex flex-wrap gap-1">
               {COLOR_PRESETS.map((c) => (
                 <button key={c} onClick={() => update({ color: c })} className="w-6 h-6 rounded-full border-2 transition-all"
-                  style={{ backgroundColor: c, borderColor: text.color === c ? '#F4C2A1' : '#E8E8E8', transform: text.color === c ? 'scale(1.15)' : 'scale(1)' }} />
+                  style={{ backgroundColor: c, borderColor: text.color === c ? '#B85C38' : '#E8E8E8', transform: text.color === c ? 'scale(1.15)' : 'scale(1)' }} />
               ))}
             </div>
           </div>
@@ -1337,7 +1337,7 @@ function TextEditor({ text, onUpdate, onDelete }: {
             <div className="flex gap-1 mt-1">
               {[0, 45, 90, -45, -90, 180].map((deg) => (
                 <button key={deg} onClick={() => update({ rotation: deg })} className="flex-1 py-0.5 rounded text-[9px] font-medium transition-all"
-                  style={{ backgroundColor: text.rotation === deg ? '#F4C2A1' : '#F0F0F0', color: text.rotation === deg ? '#fff' : '#6B6B6B' }}>{deg}°</button>
+                  style={{ backgroundColor: text.rotation === deg ? '#B85C38' : '#F0F0F0', color: text.rotation === deg ? '#fff' : '#6B6B6B' }}>{deg}°</button>
               ))}
             </div>
           </div>

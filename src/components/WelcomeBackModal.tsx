@@ -103,7 +103,7 @@ export function WelcomeBackModal({ onViewProjects }: WelcomeBackModalProps) {
             <div
               className="h-24 relative"
               style={{
-                background: 'linear-gradient(135deg, #F4C2A1 0%, #E8A598 50%, #B8A9D9 100%)',
+                background: 'linear-gradient(135deg, #B85C38 0%, #9A4A2C 50%, #B8A9D9 100%)',
               }}
             >
               {/* Close button */}

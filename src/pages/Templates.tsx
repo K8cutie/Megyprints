@@ -81,7 +81,7 @@ export default function Templates() {
           {allCategories.map((cat) => (
             <button key={cat} onClick={() => setActiveTab(cat)}
               className="flex-shrink-0 px-4 py-2 rounded-full font-body text-sm font-medium transition-all whitespace-nowrap"
-              style={{ backgroundColor: activeTab === cat ? '#F4C2A1' : 'transparent', color: activeTab === cat ? '#fff' : '#6B6B6B' }}>
+              style={{ backgroundColor: activeTab === cat ? '#B85C38' : 'transparent', color: activeTab === cat ? '#fff' : '#6B6B6B' }}>
               {cat}
             </button>
           ))}

@@ -53,7 +53,7 @@ export default function MyMemories() {
       </p>
 
       {renewCode && (
-        <div className="mb-4 rounded-xl border border-peach bg-[#FFF3EC] px-4 py-3 text-sm text-cocoa">
+        <div className="mb-4 rounded-xl border border-peach bg-blush px-4 py-3 text-sm text-cocoa">
           <b className="text-dark">Renew memory {renewCode}.</b> Renewals are handled by the Megy Prints team for now —
           <a href="#/contact" className="underline font-semibold ml-1">message us</a> with this code and the term you want, and we'll extend it. Your video is kept safe meanwhile.
         </div>

@@ -46,7 +46,7 @@ function SizeCard({ size, selected, onSelect }: {
       whileTap={{ scale: 0.97 }}
       className="relative p-5 rounded-2xl border-2 text-left transition-all hover:shadow-lg"
       style={{
-        borderColor: selected ? '#F4C2A1' : '#E8E8E8',
+        borderColor: selected ? '#B85C38' : '#E8E8E8',
         backgroundColor: selected ? '#FFF5F0' : '#FFFFFF',
       }}
     >

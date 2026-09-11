@@ -152,7 +152,7 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         }
         return (
           <div style={{
-            width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
+            width: 44, height: 44, borderRadius: '50%', background: '#B85C38',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
           }}>
@@ -168,7 +168,7 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         </>
       ) : (
         <div style={{
-          width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
+          width: 44, height: 44, borderRadius: '50%', background: '#B85C38',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
         }}>
@@ -181,7 +181,7 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
           aria-label="More options for this box"
           style={{
             position: 'absolute', top: 4, right: 4, width: 22, height: 22,
-            borderRadius: '50%', background: '#F4C2A1', color: '#FFFFFF', border: 'none',
+            borderRadius: '50%', background: '#B85C38', color: '#FFFFFF', border: 'none',
             cursor: 'pointer', fontWeight: 900, fontSize: 14, lineHeight: 1,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 1px 4px rgba(232,165,152,0.6)',
@@ -635,8 +635,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             left: onLeft ? 0 : singleW * (1 - frac),
             width: singleW * frac,
             background: 'rgba(232,165,152,0.10)',
-            borderRight: onLeft ? '1.5px dashed #E8A598' : undefined,
-            borderLeft: onLeft ? undefined : '1.5px dashed #E8A598',
+            borderRight: onLeft ? '1.5px dashed #9A4A2C' : undefined,
+            borderLeft: onLeft ? undefined : '1.5px dashed #9A4A2C',
           }} />
         );
       })()}
@@ -912,7 +912,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             <p className="text-sm text-medium mb-5">Your album looks beautiful. Give it a cover, then make it real.</p>
             <button
               onClick={() => setCoverOpen(true)}
-              className="w-full py-3 mb-3 bg-white border-2 border-blush-pink text-[#C56B4E] text-base font-semibold rounded-xl hover:bg-[#FDF3EF] active:scale-[0.98] transition-all"
+              className="w-full py-3 mb-3 bg-white border-2 border-blush-pink text-[#C56B4E] text-base font-semibold rounded-xl hover:bg-blush active:scale-[0.98] transition-all"
             >
               🎨 Design your cover
             </button>

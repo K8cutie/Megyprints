@@ -126,8 +126,8 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
         onClick={() => { setActiveTab(item.id); setCollapsed(false); }}
         className="w-full flex flex-col items-center gap-1 py-3 px-1 transition-all relative"
         style={{
-          color: isActive ? '#E8A598' : '#9B9B9B',
-          backgroundColor: isActive ? '#FDE8E4' : 'transparent',
+          color: isActive ? '#9A4A2C' : '#9B9B9B',
+          backgroundColor: isActive ? '#F6E7DF' : 'transparent',
         }}
         title={item.label}
       >
@@ -183,7 +183,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                     />
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full mb-4 py-2.5 border-2 border-dashed border-peach rounded-xl text-blush-pink text-xs font-medium hover:bg-[#FFF5F0] transition-all flex items-center justify-center gap-2"
+                      className="w-full mb-4 py-2.5 border-2 border-dashed border-peach rounded-xl text-blush-pink text-xs font-medium hover:bg-blush transition-all flex items-center justify-center gap-2"
                     >
                       <Upload size={14} /> Upload Photos
                     </button>
@@ -230,13 +230,13 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                       <div className="flex flex-wrap gap-1 mb-3">
                         <button onClick={() => onSetPhotosPerPage?.(undefined)}
                           className="px-2.5 py-1 text-[10px] rounded-full font-medium transition-colors"
-                          style={{ backgroundColor: photosPerPage === undefined ? '#F4C2A1' : '#F0F0F0', color: photosPerPage === undefined ? '#fff' : '#6B6B6B' }}>
+                          style={{ backgroundColor: photosPerPage === undefined ? '#B85C38' : '#F0F0F0', color: photosPerPage === undefined ? '#fff' : '#6B6B6B' }}>
                           All
                         </button>
                         {slotOptions.map((count) => (
                           <button key={count} onClick={() => onSetPhotosPerPage?.(count)}
                             className="px-2.5 py-1 text-[10px] rounded-full font-medium transition-colors"
-                            style={{ backgroundColor: photosPerPage === count ? '#F4C2A1' : '#F0F0F0', color: photosPerPage === count ? '#fff' : '#6B6B6B' }}>
+                            style={{ backgroundColor: photosPerPage === count ? '#B85C38' : '#F0F0F0', color: photosPerPage === count ? '#fff' : '#6B6B6B' }}>
                             {count} slot{count > 1 ? 's' : ''}
                           </button>
                         ))}
@@ -263,8 +263,8 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                           <div key={page.id} onClick={() => onGoToPage(i)}
                             className="flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer transition-all hover:bg-[#F8F8F8]"
                             style={{
-                              backgroundColor: i === currentPageIndex ? '#FDE8E4' : 'transparent',
-                              border: i === currentPageIndex ? '1px solid #F4C2A1' : '1px solid transparent',
+                              backgroundColor: i === currentPageIndex ? '#F6E7DF' : 'transparent',
+                              border: i === currentPageIndex ? '1px solid #B85C38' : '1px solid transparent',
                             }}>
                             <span className="text-[11px] text-light w-5 font-medium">{i + 1}</span>
                             {(() => {
@@ -304,13 +304,13 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                     <div className="flex flex-wrap gap-1 mb-3">
                       <button onClick={() => setTemplateCategory('all')}
                         className="px-2.5 py-1 text-[10px] rounded-full font-medium transition-colors"
-                        style={{ backgroundColor: templateCategory === 'all' ? '#F4C2A1' : '#F0F0F0', color: templateCategory === 'all' ? '#fff' : '#6B6B6B' }}>
+                        style={{ backgroundColor: templateCategory === 'all' ? '#B85C38' : '#F0F0F0', color: templateCategory === 'all' ? '#fff' : '#6B6B6B' }}>
                         All ({PAGE_TEMPLATES.filter(t => !hasQrSlot(t)).length})
                       </button>
                       {TEMPLATE_CATEGORIES.map((cat) => (
                         <button key={cat.id} onClick={() => setTemplateCategory(cat.id)}
                           className="px-2.5 py-1 text-[10px] rounded-full font-medium transition-colors"
-                          style={{ backgroundColor: templateCategory === cat.id ? '#F4C2A1' : '#F0F0F0', color: templateCategory === cat.id ? '#fff' : '#6B6B6B' }}>
+                          style={{ backgroundColor: templateCategory === cat.id ? '#B85C38' : '#F0F0F0', color: templateCategory === cat.id ? '#fff' : '#6B6B6B' }}>
                           {cat.label}
                         </button>
                       ))}
@@ -333,7 +333,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                         <button key={tmpl.id} onClick={() => onSetTemplate?.(tmpl.id)}
                           className="relative rounded-xl border-2 overflow-hidden transition-all hover:scale-[1.03] hover:shadow-md"
                           style={{
-                            borderColor: currentTemplateId === tmpl.id ? '#F4C2A1' : '#E8E8E8',
+                            borderColor: currentTemplateId === tmpl.id ? '#B85C38' : '#E8E8E8',
                             backgroundColor: currentTemplateId === tmpl.id ? '#FEF6F3' : '#fff',
                             aspectRatio: '3/4',
                           }}
@@ -376,7 +376,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                                 ? { ...background, type, texture: background.texture ?? TEXTURE_NAMES[0] }
                                 : { ...background, type })}
                               className="flex-1 py-1.5 text-[10px] rounded-full font-medium capitalize transition-colors"
-                              style={{ backgroundColor: background.type === type ? '#F4C2A1' : '#F0F0F0', color: background.type === type ? '#fff' : '#6B6B6B' }}>
+                              style={{ backgroundColor: background.type === type ? '#B85C38' : '#F0F0F0', color: background.type === type ? '#fff' : '#6B6B6B' }}>
                               {type === 'texture' ? 'Textures' : type}
                             </button>
                           ))}
@@ -390,7 +390,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                             {['#FFFBF7', '#F8F3ED', '#E8F0E8', '#FFF3D8', '#E0E0E8', '#F0F0F0', '#E8D8B8', '#2D2D2D', '#FFFFFF', '#FDE8E4', '#E8A598', '#B8A9D9'].map((c) => (
                               <button key={c} onClick={() => onUpdateBackground?.({ ...background, type: 'solid', solid: c })}
                                 className="w-7 h-7 rounded-full border border-line transition-transform hover:scale-110"
-                                style={{ backgroundColor: c, boxShadow: background.solid === c ? '0 0 0 2px #F4C2A1' : 'none' }} />
+                                style={{ backgroundColor: c, boxShadow: background.solid === c ? '0 0 0 2px #B85C38' : 'none' }} />
                             ))}
                           </div>
                           <input type="color" value={background.solid || '#FFFBF7'}
@@ -436,7 +436,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                                     backgroundImage: `url("${textureDataUri(p, background.textureColor)}")`,
                                     backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
                                     backgroundRepeat: 'repeat',
-                                    borderColor: background.texture === p ? '#F4C2A1' : 'transparent',
+                                    borderColor: background.texture === p ? '#B85C38' : 'transparent',
                                   }}>
                                   <span className="absolute bottom-0 inset-x-0 text-[7px] font-semibold capitalize text-stone-700 bg-white/70 py-0.5 text-center">
                                     {p}
@@ -459,7 +459,7 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                                       backgroundImage: `url("${textureDataUri(mat, c.hex)}")`,
                                       backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
                                       backgroundRepeat: 'repeat',
-                                      borderColor: active ? '#F4C2A1' : 'transparent',
+                                      borderColor: active ? '#B85C38' : 'transparent',
                                     }} />
                                 );
                               })}
