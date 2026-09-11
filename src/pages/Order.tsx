@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Check, ShoppingCart, BookOpen, Palette, HardDrive, CreditCard, Printer, Loader2, Package, QrCode } from 'lucide-react';
+import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, Package, QrCode, Wifi, Landmark, Paperclip, Clock } from 'lucide-react';
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_ALBUM_SIZE, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
@@ -11,7 +11,8 @@ import { getPendingPrintJob } from '../lib/printQueue';
 import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
-import { uploadStagedClips, removeStagedClip, currentClipQuality } from '../lib/memoryClips';
+import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
+import { PAYEE, checkProof, uploadPaymentProof, submitPaymentProof, cleanReference } from '../lib/payment';
 import { updateMemoryDestination } from '../lib/qrMemories';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
@@ -23,7 +24,8 @@ type Step = 'form' | 'payment' | 'tracking';
 
 // The fulfillment journey shown on the tracker.
 const TRACK_STAGES = [
-  { label: 'Payment received', icon: Check },
+  { label: 'Payment sent — we\'re confirming it', icon: Clock },
+  { label: 'Payment confirmed', icon: Check },
   { label: 'Sent to the printer', icon: Package },
   { label: 'Printing your album', icon: Printer },
   { label: 'Finished', icon: Check },
@@ -58,6 +60,11 @@ export default function Order() {
   const [orderNumber, setOrderNumber] = useState('');
   const [trackStage, setTrackStage] = useState(0);
   const [prepMsg, setPrepMsg] = useState('');
+  // Manual transfer (0033): the receipt + bank reference the customer attaches.
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofError, setProofError] = useState('');
+  const [payRef, setPayRef] = useState('');
+  const [qrMissing, setQrMissing] = useState(false);
 
   // Price the ACTUAL album the customer built. Size + page count come from the
   // print job (set at "ORDER ALBUM"); fall back sensibly if someone hits /order
@@ -78,6 +85,24 @@ export default function Order() {
   const [hostingYears, setHostingYears] = useState<number | null>(null);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
   const hasJob = job != null;
+
+  // ── Early clip upload ──────────────────────────────────────────────────
+  // Opening this page is already a commit signal, so the memory videos start
+  // uploading NOW and overlap with the address form instead of stacking up
+  // behind the Pay tap (7 × 2-min 720p clips ≈ 230 MB — minutes on mobile).
+  // The Pay tap still runs the same upload as the REQUIRED backstop; it is
+  // serialized with this one and skips whatever already landed.
+  const clipKey = clipCodes.join(',');
+  const [clipPrep, setClipPrep] = useState<{ phase: ClipUploadPhase | 'ready' | 'failed' | null; done: number; total: number; bytes: number | null }>({ phase: null, done: 0, total: 0, bytes: null });
+  useEffect(() => {
+    if (!clipKey) return;
+    const codes = clipKey.split(',');
+    let alive = true;
+    void stagedClipBytes(codes).then((bytes) => { if (alive) setClipPrep((c) => ({ ...c, bytes })); });
+    void prefetchStagedClipUploads(codes, (done, total, phase) => { if (alive) setClipPrep((c) => ({ ...c, phase, done, total })); })
+      .then((ok) => { if (alive) setClipPrep((c) => ({ ...c, phase: ok ? 'ready' : 'failed' })); });
+    return () => { alive = false; };
+  }, [clipKey]);
 
   // The price schedule loads async on app start (0024 — the cost model is no
   // longer in the bundle, so there is nothing to fall back to). Track readiness
@@ -130,22 +155,22 @@ export default function Order() {
       openLogin();
       return;
     }
-    setStep('payment');
+    void placeOrder();
   };
 
-  // ── Placeholder payment → create order → REQUIRED print-PDF upload → tracking ──
+  // ── Place the order → REQUIRED print-PDF upload → show the payment QR ──
+  // Manual bank transfer (0033): the order row exists BEFORE the customer pays
+  // so its number can be the transfer reference; it stays pending_payment
+  // until the operator matches the deposit and taps "Mark paid".
   // The print-ready PDF is generated on THIS device (the photos live only in
   // this browser's IndexedDB) and uploaded to the private fulfillment bucket. It
   // is a BLOCKING step: an order must never reach the "Sent to print" screen
   // without its PDF in the bucket. On any failure we surface a clear error and
   // leave the user on the Pay button to retry.
-  const handlePay = async () => {
+  const placeOrder = async () => {
     setErrorMsg('');
     setSubmitting(true);
     try {
-      // Simulated payment — no real gateway. (Xendit slots in here later.)
-      await new Promise((r) => setTimeout(r, 1200));
-
       // 1. Create the order — but only once. A retry after a failed upload reuses
       //    the same order row (no duplicate) since the storage upload upserts.
       let order = createdOrderRef.current;
@@ -266,40 +291,70 @@ export default function Order() {
       for (const code of clipCodes) void removeStagedClip(code);
       setPrepMsg('');
 
-      // 5. Only NOW — with the PDF safely in the bucket — advance to tracking.
-      setTrackStage(0);
-      setStep('tracking');
+      // 5. Only NOW — with the PDF safely in the bucket — show the payment QR.
+      setStep('payment');
     } catch (err) {
       setPrepMsg('');
       // The money path must never fail silently in production — the customer sees
       // the message, and the operator/owner sees the cause in Sentry/the endpoint.
-      reportError(err, { path: 'checkout', step: 'pay', orderId: createdOrderRef.current?.id });
+      reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong placing your order.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // ── Tracker auto-advances through the fulfillment stages ──
-  useEffect(() => {
-    if (step !== 'tracking') return;
-    if (trackStage >= TRACK_STAGES.length - 1) return;
-    const t = setTimeout(() => setTrackStage((s) => s + 1), 2400);
-    return () => clearTimeout(t);
-  }, [step, trackStage]);
+  // ── "I've sent the payment": attach the receipt + reference, then wait ──
+  // Both are optional — a customer who can't screenshot still gets through,
+  // and the operator confirms from the GoTyme app either way. Only the record
+  // step is required; a failed receipt upload is reported but does not block.
+  const handlePaymentSent = async () => {
+    const order = createdOrderRef.current;
+    if (!order) { setErrorMsg('Your order was not created yet — go back and try again.'); return; }
+    setErrorMsg('');
+    setSubmitting(true);
+    try {
+      let proofPath: string | null = null;
+      if (proofFile) {
+        setPrepMsg('Attaching your receipt…');
+        try { proofPath = await uploadPaymentProof(order.id, proofFile); }
+        catch (e) { reportError(e, { path: 'checkout', step: 'payment_proof', orderId: order.id }); setProofError(e instanceof Error ? e.message : 'Receipt upload failed.'); }
+      }
+      setPrepMsg('Recording your payment…');
+      await submitPaymentProof(order.id, { reference: cleanReference(payRef), proofPath });
+      setPrepMsg('');
+      setTrackStage(0);
+      setStep('tracking');
+    } catch (err) {
+      setPrepMsg('');
+      reportError(err, { path: 'checkout', step: 'payment_sent', orderId: order.id });
+      setErrorMsg(err instanceof Error ? err.message : 'Could not record your payment. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onPickProof = (f: File | null) => {
+    setProofError('');
+    if (!f) { setProofFile(null); return; }
+    const bad = checkProof(f);
+    if (bad) { setProofError(bad); setProofFile(null); return; }
+    setProofFile(f);
+  };
 
   /* ══════════════ TRACKING ══════════════ */
   if (step === 'tracking') {
-    const printerReached = trackStage >= 1; // "Sent to the printer" onward
+    const printerReached = trackStage >= 2; // "Sent to the printer" onward
     const finished = trackStage >= TRACK_STAGES.length - 1;
     return (
       <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg">
           <div className="text-center mb-8">
-            <h2 className="font-display text-3xl font-bold text-dark">{finished ? 'Your album is finished! 🎉' : 'Order in progress…'}</h2>
+            <h2 className="font-display text-3xl font-bold text-dark">{finished ? 'Your album is finished! 🎉' : 'Thank you — we\'re confirming your payment'}</h2>
             {orderNumber && (
               <p className="mt-2 text-sm font-medium text-dark">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
             )}
+            <p className="mt-2 text-xs text-taupe max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-dark">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
           </div>
 
           {/* Status tracker */}
@@ -331,12 +386,10 @@ export default function Order() {
             </div>
           )}
 
-          {finished && (
-            <div className="mt-6 flex gap-3 justify-center">
-              <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-peach text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
-              <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-medium rounded-lg font-medium hover:bg-line-soft">Home</button>
-            </div>
-          )}
+          <div className="mt-6 flex gap-3 justify-center">
+            <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-peach text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
+            <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-medium rounded-lg font-medium hover:bg-line-soft">Home</button>
+          </div>
         </motion.div>
       </div>
     );
@@ -344,13 +397,65 @@ export default function Order() {
 
   /* ══════════════ PAYMENT (placeholder) ══════════════ */
   if (step === 'payment') {
+    // Read the order NUMBER from state, not the ref, during render (react-hooks/refs).
+    const placed = orderNumber ? { order_number: orderNumber } : null;
+    const amountLabel = `₱${totalPrice.toLocaleString('en-PH')}`;
     return (
       <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
-          <h1 className="font-display text-3xl font-bold text-dark text-center mb-6">Payment</h1>
+          <h1 className="font-display text-3xl font-bold text-dark text-center mb-1">Send {amountLabel}</h1>
+          {placed && <p className="text-center text-sm text-medium mb-5">Order <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> is placed. Pay by bank transfer to finish.</p>}
           <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 text-medium mb-4"><CreditCard size={18} /> <span className="text-sm font-medium">Pay for your album</span></div>
-            <div className="space-y-2 text-sm border-y border-line-soft py-4 mb-4">
+            {/* The QR — scanned from any PH bank or e-wallet app (InstaPay / QR Ph). */}
+            <div className="rounded-xl border border-line-soft bg-[#FFFDFB] p-4 text-center">
+              <div className="flex items-center justify-center gap-2 text-medium mb-2"><Landmark size={16} /> <span className="text-xs font-semibold uppercase tracking-wide">{PAYEE.bank} · {PAYEE.rail}</span></div>
+              {!qrMissing ? (
+                <img src={PAYEE.qrSrc} alt={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} onError={() => setQrMissing(true)}
+                  className="mx-auto w-56 h-56 object-contain rounded-lg bg-white" draggable={false} />
+              ) : (
+                <div className="mx-auto w-56 h-56 rounded-lg bg-[#F7F1EC] flex items-center justify-center text-xs text-taupe px-4">The QR code isn't available right now — message us and we'll send the account details.</div>
+              )}
+              <p className="mt-3 text-base font-semibold text-dark">{PAYEE.name}</p>
+              <p className="text-xs text-taupe">Account ending in <span className="font-mono">{PAYEE.accountLast4}</span></p>
+              <p className="mt-2 font-display text-2xl font-bold text-blush-pink">{amountLabel}</p>
+            </div>
+
+            <ol className="mt-4 space-y-1.5 text-xs text-ink-mid list-decimal pl-4">
+              <li>Open your bank or e-wallet app (GCash, Maya, BPI, BDO, UnionBank…).</li>
+              <li>Choose <b>Scan QR</b> / <b>InstaPay</b> and scan the code above.</li>
+              <li>Send exactly <b className="text-dark">{amountLabel}</b>{placed && <> and put <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> in the note if your app asks</>}.</li>
+              <li>Attach your receipt below — it speeds up confirmation.</li>
+            </ol>
+            <p className="mt-2 text-[11px] text-light">Your app may charge a small InstaPay fee. We don't add any.</p>
+
+            {/* Receipt + reference (0033). Optional, but it lets the operator match the deposit at a glance. */}
+            <div className="mt-4 rounded-xl border border-line-soft p-3">
+              <label className="block text-xs font-semibold text-dark mb-1.5">Receipt screenshot <span className="font-normal text-light">(optional)</span></label>
+              <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-peach bg-cream text-xs text-cocoa cursor-pointer hover:bg-blush">
+                <Paperclip size={14} className="shrink-0" />
+                <span className="truncate">{proofFile ? `${proofFile.name} · ${Math.max(1, Math.round(proofFile.size / 1024))} KB` : 'Attach the transfer receipt (JPG, PNG or PDF)'}</span>
+                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={(e) => onPickProof(e.target.files?.[0] ?? null)} />
+              </label>
+              {proofError && <p className="mt-1.5 text-[11px] text-red-500">{proofError}</p>}
+              <label className="block text-xs font-semibold text-dark mt-3 mb-1.5">Reference no. <span className="font-normal text-light">(optional — from your bank's receipt)</span></label>
+              <input value={payRef} onChange={(e) => setPayRef(e.target.value)} inputMode="text" autoComplete="off" placeholder="e.g. 2026091012345678" maxLength={64}
+                className="w-full px-3 py-2 rounded-lg border border-line text-sm outline-none focus:border-peach" />
+            </div>
+
+            <button
+              onClick={handlePaymentSent}
+              disabled={submitting}
+              className="w-full mt-4 py-3.5 bg-blush-pink text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+            >
+              {submitting
+                ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Saving…'}</>
+                : <><Check size={16} /> I've sent {amountLabel}</>}
+            </button>
+            <p className="mt-3 text-[11px] text-light text-center">We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</p>
+            {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}
+            <details className="mt-3 text-xs text-light">
+              <summary className="cursor-pointer text-center hover:text-medium">Order summary</summary>
+            <div className="space-y-2 text-sm border-y border-line-soft py-4 mt-2">
               <div className="flex justify-between gap-3"><span className="text-medium shrink-0">Album</span><span className="font-semibold text-blush-pink text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
               {breakdown.items.map((item) => (
                 <div key={item.label} className="flex justify-between gap-3">
@@ -360,22 +465,7 @@ export default function Order() {
               ))}
               <div className="flex justify-between items-baseline pt-1 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span></div>
             </div>
-            <button
-              onClick={handlePay}
-              disabled={submitting || !priceReady}
-              className="w-full py-3.5 bg-blush-pink text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
-            >
-              {submitting
-                ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Processing payment…'}</>
-                : !settingsReady
-                  ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
-                  : !schedule
-                    ? <>Pricing unavailable — please refresh</>
-                    : <>Pay ₱{totalPrice}</>}
-            </button>
-            <p className="mt-3 text-[11px] text-light text-center">🔒 Simulated payment — no real charge. (Xendit checkout goes here later.)</p>
-            {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}
-            <button onClick={() => { setStep('form'); setErrorMsg(''); }} disabled={submitting} className="w-full mt-3 text-xs text-light hover:text-medium disabled:opacity-50">← Back to details</button>
+            </details>
           </div>
         </motion.div>
       </div>
@@ -505,6 +595,35 @@ export default function Order() {
                   )}
                 </p>
               </div>
+              {clipCodes.length > 0 && (
+                <div className="mt-2 flex items-start gap-2 rounded-xl border border-line-soft bg-white px-3 py-2.5" role="status" aria-live="polite">
+                  {clipPrep.phase === 'ready'
+                    ? <Check size={16} className="text-[#5AA469] shrink-0 mt-0.5" />
+                    : clipPrep.phase === 'failed'
+                      ? <Wifi size={16} className="text-blush-pink shrink-0 mt-0.5" />
+                      : <Loader2 size={16} className="animate-spin text-[#C98A5E] shrink-0 mt-0.5" />}
+                  <p className="text-xs text-cocoa leading-snug">
+                    {clipPrep.phase === 'ready' ? (
+                      <><b className="text-dark">Your {clipCodes.length === 1 ? 'memory video is' : `${clipCodes.length} memory videos are`} uploaded.</b> Nothing to wait for at payment.</>
+                    ) : clipPrep.phase === 'failed' ? (
+                      <><b className="text-dark">Upload paused.</b> We'll try again when you tap Pay — a Wi-Fi connection helps.</>
+                    ) : (
+                      <>
+                        <b className="text-dark">
+                          {clipPrep.phase === 'compress'
+                            ? `Preparing memory video ${Math.min(clipPrep.done + 1, clipPrep.total || 1)} of ${clipPrep.total || clipCodes.length}…`
+                            : clipPrep.phase === 'upload'
+                              ? `Uploading memory video ${Math.min(clipPrep.done + 1, clipPrep.total || 1)} of ${clipPrep.total || clipCodes.length}…`
+                              : `Uploading your ${clipCodes.length === 1 ? 'memory video' : `${clipCodes.length} memory videos`}…`}
+                        </b>
+                        {' '}This runs while you fill in your details
+                        {clipPrep.bytes != null && clipPrep.bytes > 0 && <> ({Math.max(1, Math.round(clipPrep.bytes / 1_048_576))} MB)</>}
+                        . Best on Wi-Fi.
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
               {qrCount > 0 && tiers.length > 0 && (
                 <div className="mt-3 rounded-xl border border-line-soft bg-white px-3 py-3">
                   <p className="text-xs font-semibold text-dark">How long should your memories stay live?</p>
@@ -524,11 +643,12 @@ export default function Order() {
                   </div>
                 </div>
               )}
-              <button onClick={handleProceedToPayment} disabled={!priceReady}
+              <button onClick={handleProceedToPayment} disabled={!priceReady || submitting}
                 className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
-                {priceReady ? <><ShoppingCart size={16} /> Proceed to Payment</>
-                  : !settingsReady ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
-                    : <>Pricing unavailable — please refresh</>}
+                {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
+                  : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${totalPrice.toLocaleString('en-PH')}`} by bank transfer</>
+                    : !settingsReady ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
+                      : <>Pricing unavailable — please refresh</>}
               </button>
               {errorMsg && (
                 <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>

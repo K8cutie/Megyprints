@@ -3,6 +3,7 @@
    Guides first-time users from open → finished album
    ══════════════════════════════════════════════════════════════════════════ */
 
+import { readAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AlbumSizePreset } from '../pages/builder/types';
 import { densityRangeLabel } from '../pages/builder/densities';
@@ -24,6 +25,7 @@ const SIZE_CHOICES: { label: string; preset: string }[] = [
 
 export type WizardStep =
   | 'welcome'
+  | 'pick_theme'
   | 'pick_size'
   | 'design_cover'
   | 'pick_background'
@@ -45,6 +47,7 @@ export interface WizardState {
    phase (setup/edit/preview) is DERIVED from the step via phaseForStep(). */
 export const WIZARD_ORDER: WizardStep[] = [
   'welcome',
+  'pick_theme',   // unskippable — the occasion seeds the AI quotes
   'pick_size',
   'design_cover',
   'pick_background',
@@ -57,7 +60,7 @@ export const WIZARD_ORDER: WizardStep[] = [
 /** Option A: the center screen (builder phase) follows the wizard step.
     One source of truth — the step — so the center and panel can't disagree. */
 export function phaseForStep(step: WizardStep): 'setup' | 'edit' | 'cover' | 'preview' {
-  if (step === 'welcome' || step === 'pick_size') return 'setup';
+  if (step === 'welcome' || step === 'pick_theme' || step === 'pick_size') return 'setup';
   if (step === 'design_cover') return 'cover';
   if (step === 'finalize') return 'preview';
   return 'edit';
@@ -65,6 +68,7 @@ export function phaseForStep(step: WizardStep): 'setup' | 'edit' | 'cover' | 'pr
 
 export const STEP_META: Record<WizardStep, { title: string; description: string; emoji: string }> = {
   welcome: { title: 'Welcome', description: 'Meet Megy and learn the basics', emoji: '👋' },
+  pick_theme: { title: 'Occasion', description: 'What the album is about — seeds the quotes', emoji: '💌' },
   pick_size: { title: 'Album Size', description: 'Choose your album dimensions', emoji: '📐' },
   design_cover: { title: 'Cover', description: 'Design the front·spine·back cover', emoji: '📔' },
   pick_background: { title: 'Style', description: 'Background, border & frame', emoji: '🎨' },
@@ -73,6 +77,20 @@ export const STEP_META: Record<WizardStep, { title: string; description: string;
   add_text: { title: 'Text', description: 'Add captions and quotes', emoji: '✍️' },
   finalize: { title: 'Finalize', description: 'Preview and order', emoji: '📦' },
 };
+
+/**
+ * Where an external forward jump (the size page's "Start Creating", the cover
+ * editor's Continue) actually lands. The occasion step is unskippable, so a
+ * forward jump that would end past it with no occasion stored lands on it.
+ * Backward moves are returned unchanged.
+ */
+export function forwardJumpTarget(from: WizardStep, to: WizardStep, themeReady: boolean): WizardStep {
+  const f = WIZARD_ORDER.indexOf(from), t = WIZARD_ORDER.indexOf(to), g = WIZARD_ORDER.indexOf('pick_theme');
+  // Wherever the engine THINKS it is, a forward move that ends past the
+  // occasion step with no occasion stored goes to the occasion step.
+  if (t > f && t > g && !themeReady) return 'pick_theme';
+  return to;
+}
 
 export class WizardEngine {
   state: WizardState;
@@ -134,21 +152,38 @@ export class WizardEngine {
       return 'pick_background';
     }
 
-    // Default: start at the size step (its visual is the center size cards)
-    return this.state.isFirstTime && !this.state.completed.includes('welcome') ? 'welcome' : 'pick_size';
+    // Default: welcome on a first visit; then the OCCASION step until it is
+    // answered (unskippable); then the size step (its visual is the center cards).
+    if (this.state.isFirstTime && !this.state.completed.includes('welcome')) return 'welcome';
+    return isAlbumThemeReady(readAlbumTheme()) ? 'pick_size' : 'pick_theme';
   }
 
   /* ── Advance to next step ── */
   advance() {
     const currentIdx = WIZARD_ORDER.indexOf(this.state.step);
     if (currentIdx < WIZARD_ORDER.length - 1) {
+      const next = WIZARD_ORDER[currentIdx + 1];
+      // The occasion step is unskippable from EVERY direction: whatever step
+      // the engine is on (a seeded state, an old draft, a dismissed card), a
+      // move that would end past it with no occasion stored lands on it.
+      const target = forwardJumpTarget(this.state.step, next, isAlbumThemeReady(readAlbumTheme()));
+      if (target !== next) { this.state.step = target; return; }
       this.state.completed.push(this.state.step);
-      this.state.step = WIZARD_ORDER[currentIdx + 1];
+      this.state.step = next;
     }
   }
 
   /* ── Skip current step ── */
   skip() {
+    if (this.state.step === 'pick_theme') return; // unskippable by design
+    const idx = WIZARD_ORDER.indexOf(this.state.step);
+    const next = WIZARD_ORDER[Math.min(idx + 1, WIZARD_ORDER.length - 1)];
+    // A skip that would end past the occasion step with none stored is not a
+    // skip - it lands on the occasion step and records nothing.
+    if (forwardJumpTarget(this.state.step, next, isAlbumThemeReady(readAlbumTheme())) !== next) {
+      this.state.step = 'pick_theme';
+      return;
+    }
     this.state.skipped.push(this.state.step);
     this.advance();
   }
@@ -172,6 +207,7 @@ export class WizardEngine {
     const { builder } = this;
     switch (step) {
       case 'welcome': return true; // Auto-complete
+      case 'pick_theme': return isAlbumThemeReady(readAlbumTheme()); // Must answer — never skipped
       case 'pick_size': return false; // Must click a size in wizard
       case 'design_cover': return true; // Optional — always proceedable
       case 'pick_background': return false; // Must click a background
@@ -213,9 +249,22 @@ export class WizardEngine {
           tips: ["You can always ask me for help by clicking the chat icon", "I auto-arrange your photos into varied layouts — no design work needed"],
         };
 
+      case 'pick_theme': {
+        const t = readAlbumTheme();
+        return {
+          title: "Step 1: What's This Album About? 💌",
+          body: t
+            ? `This album is about **${t}**. Megy writes the quotes on your pages to match — change it here any time.`
+            : "Tell me the occasion first — a wedding, a baptism, a beach trip. Megy writes the quotes on your pages to match it, so this one can't be skipped.",
+          /* Occasion chips + free text render on the center stage (AlbumThemeStep). */
+          actions: [],
+          tips: ["Quotes are 60 % of the little boxes Megy deals into your album — this is what they're about", "Not on the list? Tap 'Something else' and type a few words"],
+        };
+      }
+
       case 'pick_size':
         return {
-          title: "Step 1: Pick Your Album Size 📐",
+          title: "Step 2: Pick Your Album Size 📐",
           body: `What size fits your photos best? Bigger albums comfortably hold more photos per page — smaller ones look their best with just one or two, so they never turn into a wall of thumbnails. Right now it's **${builder.albumSize}**.`,
           /* Derived from DENSITY_BY_SIZE so the size step and the density step
              can never disagree (see densities.ts). Sizes the store has switched
@@ -228,7 +277,7 @@ export class WizardEngine {
 
       case 'design_cover':
         return {
-          title: "Step 2: Design Your Cover 📔",
+          title: "Step 3: Design Your Cover 📔",
           body: `Give your ${builder.albumSize} album a cover — the front (title, subtitle, hero photo), the spine text, and the back. It prints as one wrap around the book. The hero photo goes on after you upload your photos, but you can set the title and style now. This step is optional — skip it and design the cover later from the Preview screen.`,
           /* The cover editor renders on the center stage (phase 'cover'); its own
              Continue/Back drive the wizard, so no panel actions here. */
@@ -238,7 +287,7 @@ export class WizardEngine {
 
       case 'pick_background':
         return {
-          title: "Step 3: Style Your Album 🎨",
+          title: "Step 4: Style Your Album 🎨",
           body: `Style your ${builder.albumSize} album — set the background, the photo border, and a decorative frame. Each choice applies to the whole album, and you can fine-tune anything later.`,
           /* Background / Border / Frame controls render on the center stage; each
              dispatches set_background / set_border / set_frame. No text actions. */
@@ -249,7 +298,7 @@ export class WizardEngine {
       case 'upload_photos':
         const photoCount = builder.uploadedPhotos.length;
         return {
-          title: photoCount > 0 ? `Step 4: Photos Uploaded (${photoCount}) 📸` : "Step 4: Upload Your Photos 📸",
+          title: photoCount > 0 ? `Step 5: Photos Uploaded (${photoCount}) 📸` : "Step 5: Upload Your Photos 📸",
           body: photoCount > 0
             ? `Great! You have **${photoCount}** photo${photoCount > 1 ? 's' : ''} ready. Upload more or let's generate your album!`
             : "Upload your photos and I'll auto-arrange them into beautiful layouts. You can upload as many as you want — I'll pick the best ones for each page.",
@@ -279,7 +328,7 @@ export class WizardEngine {
           };
         }
         return {
-          title: "Step 5: Review Each Page 🔍",
+          title: "Step 6: Review Each Page 🔍",
           body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then use the ‹ › arrows to move through your album.`,
           actions: ["Change layout"],
           tips: ["Go page by page — each can have its own layout", "Use the ‹ › arrows to move between pages", "When every page looks right, you'll order from the last page"],
@@ -288,7 +337,7 @@ export class WizardEngine {
 
       case 'add_text':
         return {
-          title: "Step 6: Add Text & Captions ✍️",
+          title: "Step 7: Add Text & Captions ✍️",
           body: "Personalize your album with captions, dates, quotes, or titles. Click any page to add text elements, then style them with fonts, colors, and effects.",
           actions: ["Add Text to This Page", "Add Date Stamp", "Skip to Finalize →"],
           tips: ["Script fonts look great for quotes", "Bold + large size = perfect titles"],
@@ -296,7 +345,7 @@ export class WizardEngine {
 
       case 'finalize':
         return {
-          title: "Step 7: Preview & Order 📦",
+          title: "Step 8: Preview & Order 📦",
           body: "Your album looks amazing! Preview the full album, make any final tweaks, then place your order. I'll save everything to the cloud so you can come back anytime.",
           actions: ["Preview Full Album", "Save to Cloud", "Place Order →"],
           tips: ["Albums are saved automatically", "You can reorder or reprint anytime"],

@@ -40,6 +40,10 @@ export interface AdminOrder {
   ship_phone: string | null;
   ship_address: string | null;
   tracking: string | null;
+  /** Manual transfer (0033): what the customer attached after paying. */
+  payment_reference?: string | null;
+  payment_proof_path?: string | null;
+  payment_submitted_at?: string | null;
   created_at: string;
   updated_at: string;
 }

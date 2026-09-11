@@ -3,7 +3,7 @@
    render when canSeeFinancials (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
-import { Loader2, Check, Download, AlertTriangle } from 'lucide-react';
+import { Loader2, Check, Download, AlertTriangle, Receipt } from 'lucide-react';
 import {
   type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus,
 } from '../../lib/adminOrders';
@@ -80,8 +80,21 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
     window.open(data.signedUrl, '_blank');
   };
 
+  // The customer's receipt (0033) — private bucket, operators only.
+  const openReceipt = async () => {
+    if (!o.payment_proof_path) return;
+    setSaving(true); setErr(null);
+    const { data, error } = await supabase.storage
+      .from('payment-proofs')
+      .createSignedUrl(o.payment_proof_path, 120);
+    setSaving(false);
+    if (error || !data?.signedUrl) { setErr('Receipt is not readable right now.'); return; }
+    window.open(data.signedUrl, '_blank');
+  };
+
   const paid = o.payment_status === 'paid';
   const date = o.created_at.slice(0, 10);
+  const saysPaid = !paid && !!o.payment_submitted_at;
 
   return (
     <div className="rounded-xl border border-line bg-white p-4">
@@ -89,8 +102,9 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
         <div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-dark">{o.order_number}</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${paid ? 'bg-[#E6F4EA] text-success' : 'bg-[#FFF3E0] text-[#B8791F]'}`}>
-              {paid ? 'Paid' : 'Unpaid'}
+            <span className={`text-xs px-2 py-0.5 rounded-full ${paid ? 'bg-[#E6F4EA] text-success' : saysPaid ? 'bg-[#E8F0FE] text-[#2F5BB7]' : 'bg-[#FFF3E0] text-[#B8791F]'}`}
+              title={saysPaid ? `Customer marked it sent on ${o.payment_submitted_at!.slice(0, 16).replace('T', ' ')} — match it in the GoTyme app, then Mark paid.` : undefined}>
+              {paid ? 'Paid' : saysPaid ? 'Customer says paid' : 'Unpaid'}
             </span>
             {!printReady && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1"
@@ -106,6 +120,12 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
             {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages{o.hosting_years ? ` · memories ${o.hosting_years} yrs` : ''}{o.hd_memories ? ' · HD' : ''}
           </div>
           {o.ship_address && <div className="text-xs text-[#B9B9B9] mt-0.5 max-w-md">{o.ship_address}</div>}
+          {(o.payment_reference || o.payment_submitted_at) && (
+            <div className="text-xs text-medium mt-1">
+              Transfer{o.payment_reference ? <> ref <span className="font-mono text-dark">{o.payment_reference}</span></> : ' sent'}
+              {o.payment_submitted_at ? ` · ${o.payment_submitted_at.slice(0, 16).replace('T', ' ')}` : ''}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -125,6 +145,12 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
                 </button>
               )}
             </>
+          )}
+          {o.payment_proof_path && (
+            <button onClick={openReceipt} disabled={saving}
+              className="h-8 px-3 rounded-lg bg-[#E8F0FE] text-xs font-medium text-[#2F5BB7] flex items-center gap-1 disabled:opacity-50">
+              <Receipt size={13} /> Receipt
+            </button>
           )}
           {paid && (
             <button onClick={downloadPrintPdf} disabled={saving}

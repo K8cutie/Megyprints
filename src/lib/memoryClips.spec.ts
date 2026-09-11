@@ -143,3 +143,30 @@ describe('transcode targets — standard 720p included, HD 1080p paid', () => {
     expect(transcodeSupported()).toBe(false);
   });
 });
+
+describe('serializeUploads — the Order-page prefetch and the Pay tap never race the same clips', () => {
+  it('runs callers one at a time, in order, and each gets its own result', async () => {
+    const { serializeUploads } = await import('./memoryClips');
+    const log: string[] = [];
+    let release!: () => void;
+    const first = serializeUploads(async () => { log.push('a:start'); await new Promise<void>((r) => { release = r; }); log.push('a:end'); return 'A'; });
+    const second = serializeUploads(async () => { log.push('b:start'); return 'B'; });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(log).toEqual(['a:start']); // b has NOT started while a is in flight
+    release();
+    expect(await first).toBe('A');
+    expect(await second).toBe('B');
+    expect(log).toEqual(['a:start', 'a:end', 'b:start']);
+  });
+  it('a failed early run never blocks the Pay-tap run behind it', async () => {
+    const { serializeUploads } = await import('./memoryClips');
+    const failed = serializeUploads(async () => { throw new Error('offline'); });
+    const next = serializeUploads(async () => 'ok');
+    await expect(failed).rejects.toThrow('offline');
+    expect(await next).toBe('ok');
+  });
+  it('prefetch with nothing staged is a clean no-op', async () => {
+    const { prefetchStagedClipUploads } = await import('./memoryClips');
+    expect(await prefetchStagedClipUploads([])).toBe(true);
+  });
+});
