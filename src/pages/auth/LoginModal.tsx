@@ -137,7 +137,7 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup }: LoginModalProp
               <button
                 onClick={handleGoogleSignIn}
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl border-2 border-blush-deep bg-white px-4 py-3 text-sm font-medium text-ink-warm hover:bg-[#FFF5F2] hover:border-blush-pink/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl border-2 border-blush-deep bg-white px-4 py-3 text-sm font-medium text-ink-warm hover:bg-blush hover:border-blush-pink/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Chrome size={18} className="text-[#4285F4]" />
                 Sign in with Google

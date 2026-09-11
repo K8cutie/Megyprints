@@ -66,7 +66,7 @@ export default function SlotChooser({ onPhoto, onText, onQuote, onQr, onClose, m
         <button
           key={key}
           onClick={() => pick(run)}
-          className="flex items-center gap-3 w-full p-3 rounded-xl border border-[#EDE7E0] bg-cream hover:bg-blush active:scale-[0.98] transition text-left"
+          className="flex items-center gap-3 w-full p-3 rounded-xl border border-line-soft bg-cream hover:bg-blush active:scale-[0.98] transition text-left"
         >
           <span className="w-10 h-10 rounded-full bg-peach flex items-center justify-center text-white shrink-0">
             <Icon size={20} />

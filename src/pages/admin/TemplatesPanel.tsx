@@ -99,7 +99,7 @@ export default function TemplatesPanel() {
             <button key={s} onClick={() => { setSize(s); setSizeMsg(null); }}
               title={sOff ? `${s} is OFF for customers` : `${s} is offered to customers`}
               className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
-              style={{ background: size === s ? '#F4C2A1' : '#F5F5F5', color: size === s ? '#fff' : '#6B6B6B' }}>
+              style={{ background: size === s ? '#B85C38' : '#F5F5F5', color: size === s ? '#fff' : '#6B6B6B' }}>
               {s}
               {sOff && (
                 <span className="text-[9px] font-bold uppercase tracking-wide px-1 py-px rounded"
@@ -113,7 +113,7 @@ export default function TemplatesPanel() {
       </div>
 
       {/* Album-size availability for the SELECTED size (mirrors Pricing → "Album sizes offered"). */}
-      <div className="mb-5 rounded-xl border border-[#EAD9CE] bg-[#FBF6F1] px-4 py-3">
+      <div className="mb-5 rounded-xl border border-line bg-warm-white px-4 py-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-dark">

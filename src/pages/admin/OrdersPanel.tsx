@@ -154,7 +154,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
           )}
           {paid && (
             <button onClick={downloadPrintPdf} disabled={saving}
-              className="h-8 px-3 rounded-lg bg-[#FFF1E8] text-xs font-medium text-[#C98A5E] flex items-center gap-1 disabled:opacity-50">
+              className="h-8 px-3 rounded-lg bg-blush text-xs font-medium text-[#C98A5E] flex items-center gap-1 disabled:opacity-50">
               <Download size={13} /> Print PDF
             </button>
           )}

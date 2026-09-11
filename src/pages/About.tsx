@@ -6,7 +6,7 @@ export default function About() {
   const navigate = useNavigate();
 
   const values = [
-    { icon: <Shield size={24} />, title: 'Uncompromising Quality', desc: 'Premium materials and careful attention to every detail.', color: '#F4C2A1' },
+    { icon: <Shield size={24} />, title: 'Uncompromising Quality', desc: 'Premium materials and careful attention to every detail.', color: '#B85C38' },
     { icon: <Sparkles size={24} />, title: 'Effortless Creation', desc: 'Easy for anyone to create beautiful albums in minutes.', color: '#B8A9D9' },
     { icon: <Heart size={24} />, title: 'Made with Heart', desc: 'A family business that cares about your memories.', color: '#9BCFB8' },
   ];

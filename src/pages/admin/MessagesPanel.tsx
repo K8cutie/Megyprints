@@ -55,7 +55,7 @@ export default function MessagesPanel() {
 
       <div className="space-y-3">
         {rows.map((m) => (
-          <div key={m.id} className="rounded-xl border border-[#EEE7DE] bg-white p-4">
+          <div key={m.id} className="rounded-xl border border-line-soft bg-white p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div className="font-semibold text-dark">{m.subject}</div>
               <div className="text-xs text-light">{when(m.created_at)}</div>

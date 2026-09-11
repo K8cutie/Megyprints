@@ -540,7 +540,7 @@ function CTASection() {
       ref={sectionRef}
       className="relative py-20 overflow-hidden"
       style={{
-        background: 'linear-gradient(135deg, #F4C2A1 0%, #E8A598 50%, #B8A9D9 100%)',
+        background: 'linear-gradient(135deg, #C87658 0%, #B85C38 50%, #9A4A2C 100%)',
       }}
     >
       {/* Decorative blob shapes */}

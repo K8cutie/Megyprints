@@ -139,7 +139,7 @@ export default function Admin() {
   const ordersBlocked = ordersErr && /permission|policy|denied|row-level|function/i.test(ordersErr);
 
   return (
-    <div className="min-h-[100dvh] bg-[#FAF8F5]">
+    <div className="min-h-[100dvh] bg-warm-white">
       <header className="bg-white border-b border-line sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
@@ -156,7 +156,7 @@ export default function Admin() {
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className="px-3 py-2.5 text-sm font-medium border-b-2 flex items-center gap-1.5 -mb-px transition-colors"
-              style={{ borderColor: tab === t.id ? '#F4C2A1' : 'transparent', color: tab === t.id ? '#2D2D2D' : '#9B9B9B' }}>
+              style={{ borderColor: tab === t.id ? '#B85C38' : 'transparent', color: tab === t.id ? '#2D2D2D' : '#9B9B9B' }}>
               <t.icon size={15} /> {t.label}
             </button>
           ))}

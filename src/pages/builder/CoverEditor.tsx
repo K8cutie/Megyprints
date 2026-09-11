@@ -168,7 +168,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const onTextDragEnd = (e: React.PointerEvent) => { e.stopPropagation(); textDragRef.current = null; };
 
   const header = (
-    <div className="flex items-center justify-between px-5 h-14 border-b border-[#EADFD3] shrink-0">
+    <div className="flex items-center justify-between px-5 h-14 border-b border-line shrink-0">
       <div>
         <h2 className="font-display text-lg font-semibold text-dark">Design your cover</h2>
         <p className="text-[11px] text-stone -mt-0.5">Style the front — the spine follows your title</p>
@@ -255,7 +255,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
         <div className="space-y-3">
           {/* Crop controls — only meaningful once a photo is on the cover. */}
           {bgIsImage && (
-            <div className="rounded-xl border border-[#E4D8C9] bg-white px-3 py-2.5">
+            <div className="rounded-xl border border-line bg-white px-3 py-2.5">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[11px] font-medium text-stone">Zoom</span>
                 <button
@@ -289,7 +289,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               value={title.text}
               onChange={(e) => updateTitle({ text: e.target.value })}
               placeholder="e.g. The Cruz Family"
-              className="w-full px-3 py-2.5 rounded-xl border border-[#E4D8C9] bg-white text-[15px] text-dark outline-none focus:border-blush-pink"
+              className="w-full px-3 py-2.5 rounded-xl border border-line bg-white text-[15px] text-dark outline-none focus:border-blush-pink"
               style={{ fontFamily: title.fontFamily }}
             />
           </label>
@@ -300,7 +300,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
                 value={title.fontFamily}
                 onChange={(e) => updateTitle({ fontFamily: e.target.value })}
                 style={{ fontFamily: title.fontFamily }}
-                className="w-full px-3 py-2.5 rounded-xl border border-[#E4D8C9] bg-white text-[14px] outline-none focus:border-blush-pink"
+                className="w-full px-3 py-2.5 rounded-xl border border-line bg-white text-[14px] outline-none focus:border-blush-pink"
               >
                 {FONTS.map((f) => <option key={f.name} value={f.family} style={{ fontFamily: f.family }}>{f.name}</option>)}
               </select>
@@ -313,7 +313,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
                     key={c}
                     onClick={() => updateTitle({ color: c })}
                     className="w-7 h-7 rounded-full border transition-transform hover:scale-110"
-                    style={{ background: c, borderColor: title.color === c ? '#E8A598' : 'rgba(0,0,0,0.15)', boxShadow: title.color === c ? '0 0 0 2px #E8A598' : 'none' }}
+                    style={{ background: c, borderColor: title.color === c ? '#9A4A2C' : 'rgba(0,0,0,0.15)', boxShadow: title.color === c ? '0 0 0 2px #9A4A2C' : 'none' }}
                     aria-label={c}
                   />
                 ))}
@@ -323,7 +323,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
           <div className="flex items-end gap-3 flex-wrap">
             <div>
               <span className="block text-[11px] font-medium text-stone mb-1">Alignment</span>
-              <div className="inline-flex rounded-xl border border-[#E4D8C9] bg-white overflow-hidden">
+              <div className="inline-flex rounded-xl border border-line bg-white overflow-hidden">
                 {(['left', 'center', 'right'] as const).map((a) => {
                   const Icon = a === 'left' ? AlignLeft : a === 'center' ? AlignCenter : AlignRight;
                   return (
@@ -331,7 +331,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
                       key={a}
                       onClick={() => updateTitle({ alignment: a })}
                       title={`Align ${a}`}
-                      className={`px-3 py-2 transition-colors ${title.alignment === a ? 'bg-peach text-white' : 'text-taupe hover:bg-[#FBF3EA]'}`}
+                      className={`px-3 py-2 transition-colors ${title.alignment === a ? 'bg-peach text-white' : 'text-taupe hover:bg-warm-white'}`}
                     >
                       <Icon size={16} />
                     </button>
@@ -341,7 +341,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
             </div>
             <div>
               <span className="block text-[11px] font-medium text-stone mb-1">Style</span>
-              <div className="inline-flex rounded-xl border border-[#E4D8C9] bg-white overflow-hidden">
+              <div className="inline-flex rounded-xl border border-line bg-white overflow-hidden">
                 {/* Bold + italic only: canvas printing goes through drawWordArtText,
                     which has no underline, so an Underline control would preview
                     underlined and print plain. */}
@@ -353,7 +353,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
                     key={key}
                     onClick={() => updateTitle({ [key]: !on } as Partial<typeof title>)}
                     title={label}
-                    className={`px-3 py-2 transition-colors ${on ? 'bg-peach text-white' : 'text-taupe hover:bg-[#FBF3EA]'}`}
+                    className={`px-3 py-2 transition-colors ${on ? 'bg-peach text-white' : 'text-taupe hover:bg-warm-white'}`}
                   >
                     <Icon size={16} />
                   </button>
@@ -385,14 +385,14 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
   const footer =
     mode === 'step' ? (
-      <div className="shrink-0 border-t border-[#EADFD3] p-3 flex justify-between items-center bg-cream">
+      <div className="shrink-0 border-t border-line p-3 flex justify-between items-center bg-cream">
         <button onClick={onBack} className="px-4 py-2.5 rounded-xl text-taupe font-medium hover:bg-black/5 transition-colors">← Back</button>
         <button onClick={onNext} className="px-6 py-2.5 rounded-xl bg-blush-pink text-white font-semibold hover:brightness-105 active:scale-[0.98] transition-all shadow-sm">
           Continue to photos →
         </button>
       </div>
     ) : (
-      <div className="shrink-0 border-t border-[#EADFD3] p-3 flex justify-end bg-cream">
+      <div className="shrink-0 border-t border-line p-3 flex justify-end bg-cream">
         <button onClick={onClose} className="px-6 py-2.5 rounded-xl bg-blush-pink text-white font-semibold hover:brightness-105 active:scale-[0.98] transition-all shadow-sm">
           Done
         </button>

@@ -187,8 +187,8 @@ export default function Builder() {
                   onClick={() => { if (i <= phaseIndex || (phase.id === 'preview' && phaseIndex >= 1)) actions.setPhase(phase.id); }}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
                   style={{
-                    backgroundColor: isActive ? '#FDE8E4' : 'transparent',
-                    color: isActive ? '#E8A598' : isPast || (phase.id === 'preview' && phaseIndex >= 1) ? '#6B6B6B' : '#C4C4C4',
+                    backgroundColor: isActive ? '#F6E7DF' : 'transparent',
+                    color: isActive ? '#9A4A2C' : isPast || (phase.id === 'preview' && phaseIndex >= 1) ? '#6B6B6B' : '#C4C4C4',
                   }}
                 >
                   <Icon size={13} /> {phase.label}

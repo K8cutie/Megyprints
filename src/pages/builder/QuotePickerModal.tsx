@@ -94,7 +94,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
                 className={`text-left px-3.5 py-3 rounded-xl border transition active:scale-[0.99] ${
                   q === initial
                     ? 'border-blush-pink bg-blush'
-                    : 'border-[#EDE7E0] bg-cream hover:bg-blush'
+                    : 'border-line-soft bg-cream hover:bg-blush'
                 }`}
               >
                 <span className="text-sm text-dark font-serif italic leading-snug">{q}</span>

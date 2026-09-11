@@ -10,9 +10,9 @@
    memory-discovered flag), so it never nags in the long run. Honors
    prefers-reduced-motion. */
 @keyframes megyMemoryPulse {
-  0%   { box-shadow: 0 0 0 0 rgba(232, 165, 152, 0.55); }
-  70%  { box-shadow: 0 0 0 9px rgba(232, 165, 152, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(232, 165, 152, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(154, 74, 44, 0.55); }
+  70%  { box-shadow: 0 0 0 9px rgba(154, 74, 44, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(154, 74, 44, 0); }
 }
 .memory-pulse { animation: megyMemoryPulse 1.8s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .memory-pulse { animation: none; } }
@@ -29,15 +29,15 @@
 
 @layer base {
   :root {
-    --background: 30 100% 97%;
+    --background: 40 23% 97%;
     --foreground: 0 0% 18%;
-    --card: 30 100% 98.5%;
+    --card: 30 33% 99%;
     --card-foreground: 0 0% 18%;
-    --popover: 30 100% 98.5%;
+    --popover: 30 33% 99%;
     --popover-foreground: 0 0% 18%;
-    --primary: 25 80% 76%;
+    --primary: 17 53% 47%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 75% 94%;
+    --secondary: 21 56% 92%;
     --secondary-foreground: 0 0% 18%;
     --muted: 30 20% 95%;
     --muted-foreground: 0 0% 42%;
@@ -47,22 +47,22 @@
     --destructive-foreground: 0 0% 100%;
     --border: 30 10% 88%;
     --input: 30 10% 88%;
-    --ring: 25 80% 76%;
+    --ring: 17 53% 47%;
     --radius: 0.625rem;
-    --sidebar-background: 30 100% 97%;
+    --sidebar-background: 40 23% 97%;
     --sidebar-foreground: 0 0% 18%;
-    --sidebar-primary: 25 80% 76%;
+    --sidebar-primary: 17 53% 47%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 75% 94%;
+    --sidebar-accent: 21 56% 92%;
     --sidebar-accent-foreground: 0 0% 18%;
     --sidebar-border: 30 10% 88%;
-    --sidebar-ring: 25 80% 76%;
+    --sidebar-ring: 17 53% 47%;
 
     /* ── Theme tokens (RGB triplets; see tailwind.config) ──────────
        Defaults are the exact colors the UI shipped with. A theme
        (data-theme on <html>) redefines these — nothing else moves. */
-    --t-peach: 244 194 161; /* #F4C2A1 */
-    --t-blush-pink: 232 165 152; /* #E8A598 */
+    --t-peach: 184 92 56; /* #B85C38 terracotta (was #F4C2A1) */
+    --t-blush-pink: 154 74 44; /* #9A4A2C terracotta deep / hover (was #E8A598) */
     --t-dark: 45 45 45; /* #2D2D2D */
     --t-medium: 107 107 107; /* #6B6B6B */
     --t-light: 155 155 155; /* #9B9B9B */
@@ -72,33 +72,33 @@
     --t-charcoal: 74 74 74; /* #4A4A4A */
     --t-cocoa: 139 111 71; /* #8B6F47 */
     --t-stone: 155 139 122; /* #9B8B7A */
-    --t-cream: 255 248 240; /* #FFF8F0 */
-    --t-warm-white: 255 251 247; /* #FFFBF7 */
-    --t-blush: 253 232 228; /* #FDE8E4 */
+    --t-cream: 250 249 247; /* #FAF9F7 paper — page ground (was #FFF8F0 cream) */
+    --t-warm-white: 253 252 251; /* #FDFCFB (was #FFFBF7) */
+    --t-blush: 246 231 223; /* #F6E7DF terracotta tint (was #FDE8E4) */
     --t-blush-deep: 232 213 208; /* #E8D5D0 */
     --t-sand: 245 237 232; /* #F5EDE8 */
     --t-sand-deep: 234 227 218; /* #EAE3DA */
-    --t-line: 232 232 232; /* #E8E8E8 */
-    --t-line-soft: 240 240 240; /* #F0F0F0 */
-    --t-paper: 245 245 245; /* #F5F5F5 */
+    --t-line: 230 226 221; /* #E6E2DD warm hairline (was #E8E8E8) */
+    --t-line-soft: 241 238 234; /* #F1EEEA (was #F0F0F0) */
+    --t-paper: 240 237 232; /* #F0EDE8 stone — builder workspaces + chips (was #F5F5F5) */
     --t-success: 46 125 74; /* #2E7D4A */
     --t-rust: 191 94 62; /* #BF5E3E */
     --t-rust-deep: 176 80 58; /* #B0503A */
-    --t-coral-soft: 216 149 141; /* #D8958D */
+    --t-coral-soft: 200 118 88; /* #C87658 terracotta mid (was #D8958D) */
     --t-soft-lavender: 184 169 217; /* #B8A9D9 */
     --t-mint: 155 207 184; /* #9BCFB8 */
     --t-sky-blue: 143 191 224; /* #8FBFE0 */
     --t-cream-gold: 212 184 150; /* #D4B896 */
     --t-soft-sage: 228 240 224; /* #E4F0E0 */
-    --t-pale-peach: 251 229 216; /* #FBE5D8 */
-    --t-pale-coral: 232 149 140; /* #E8958C */
+    --t-pale-peach: 246 231 223; /* #F6E7DF (was #FBE5D8) */
+    --t-pale-coral: 200 118 88; /* #C87658 (was #E8958C) */
 
-    --cream: #FFF8F0;
-    --warm-white: #FFFBF7;
-    --blush: #FDE8E4;
+    --cream: #FAF9F7;
+    --warm-white: #FDFCFB;
+    --blush: #F6E7DF;
     --lavender: #E8E0F0;
     --mist: #E0E8F0;
-    --pale-peach: #FBE5D8;
+    --pale-peach: #F6E7DF;
     --soft-sage: #E4F0E0;
     --deep-charcoal: #2D2D2D;
     --charcoal: #4A4A4A;
@@ -106,14 +106,14 @@
     --medium: #6B6B6B;
     --light: #9B9B9B;
     --white: #FFFFFF;
-    --blush-text: #D4A08C;
+    --blush-text: #9A4A2C;
     --lavender-text: #9B8EC4;
-    --peach: #F4C2A1;
-    --blush-pink: #E8A598;
+    --peach: #B85C38;
+    --blush-pink: #9A4A2C;
     --soft-lavender: #B8A9D9;
     --mint: #9BCFB8;
     --sky-blue: #8FBFE0;
-    --pale-coral: #E8958C;
+    --pale-coral: #C87658;
     --cream-gold: #D4B896;
   }
 
@@ -150,18 +150,18 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(244, 194, 161, 0.4);
+    background-color: rgba(184, 92, 56, 0.4);
     border-radius: 9999px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(244, 194, 161, 0.6);
+    background-color: rgba(184, 92, 56, 0.6);
   }
 
   /* Firefox scrollbar */
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(244, 194, 161, 0.4) transparent;
+    scrollbar-color: rgba(184, 92, 56, 0.4) transparent;
   }
 }
 
@@ -245,11 +245,11 @@
 
 @layer components {
   .shadow-button {
-    box-shadow: 0 4px 14px rgba(244, 194, 161, 0.35);
+    box-shadow: 0 4px 14px rgba(184, 92, 56, 0.35);
   }
 
   .shadow-button-hover {
-    box-shadow: 0 6px 20px rgba(244, 194, 161, 0.45);
+    box-shadow: 0 6px 20px rgba(184, 92, 56, 0.45);
   }
 
   .shadow-card {

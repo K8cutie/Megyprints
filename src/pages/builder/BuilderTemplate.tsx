@@ -122,7 +122,7 @@ function PageTemplatePreview({
                 ? `${slot.borderWidth}px solid ${slot.borderColor || '#fff'}`
                 : '1px solid #E8E8E8',
               backgroundColor: slot.shape === 'heart'
-                ? '#F4C2A1'
+                ? '#B85C38'
                 : slot.shape === 'star'
                 ? '#B8A9D9'
                 : '#F0F0F0',

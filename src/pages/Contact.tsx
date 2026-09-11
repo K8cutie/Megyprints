@@ -67,7 +67,7 @@ export default function Contact() {
         {/* Contact methods */}
         <div className="grid sm:grid-cols-3 gap-4 mb-10">
           {[
-            { icon: <Phone size={20} />, title: 'Call Us', value: '(555) 123-4567', note: 'Mon-Sat, 9AM-6PM', bg: '#FDE8E4' },
+            { icon: <Phone size={20} />, title: 'Call Us', value: '(555) 123-4567', note: 'Mon-Sat, 9AM-6PM', bg: '#F6E7DF' },
             { icon: <Mail size={20} />, title: 'Email Us', value: 'hello@megyprints.com', note: 'Reply within 24h', bg: '#E8E0F0' },
             { icon: <MapPin size={20} />, title: 'Visit Us', value: '123 Main Street', note: 'Mon-Sat, 9AM-6PM', bg: '#E4F0E0' },
           ].map((c) => (

@@ -35,7 +35,7 @@ const DEMO_SLOTS = [
 
 /* ─── step config ─── */
 const STEPS = [
-  { key: 'upload', label: 'Upload', icon: Upload, color: '#F4C2A1' },
+  { key: 'upload', label: 'Upload', icon: Upload, color: '#B85C38' },
   { key: 'template', label: 'Template', icon: Images, color: '#B8A9D9' },
   { key: 'design', label: 'Design', icon: Paintbrush, color: '#9BCFB8' },
   { key: 'text', label: 'Add Text', icon: Type, color: '#8FBFE0' },
@@ -278,7 +278,7 @@ function DemoCanvas({ step }: { step: StepKey }) {
       {step === 'template' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 z-10 p-3">
           {[
-            { name: 'Wedding', color: '#F4C2A1' },
+            { name: 'Wedding', color: '#B85C38' },
             { name: 'Minimalist', color: '#9BCFB8' },
             { name: 'Birthday', color: '#8FBFE0' },
           ].map((t, i) => (

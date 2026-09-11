@@ -27,7 +27,7 @@ export default function ThemePreviewCard({ id, label, selected, onSelect }: {
       }`}
     >
       {/* Real per-theme album cover photo */}
-      <div className="relative w-full aspect-[4/3] overflow-hidden bg-[#F5F0E8]">
+      <div className="relative w-full aspect-[4/3] overflow-hidden bg-warm-white">
         <img
           src={t.coverImage}
           alt={`${label} album`}
