@@ -57,20 +57,20 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   const Body = (
     <>
       <div className="px-4 pt-3 pb-2 shrink-0">
-        <label className="text-[11px] text-[#9B8B7A] mb-1 block">Lines written for your album’s theme</label>
+        <label className="text-[11px] text-stone mb-1 block">Lines written for your album’s theme</label>
         <div className="flex gap-2">
           <input
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void load(theme, true); }}
             placeholder="e.g. Marriage, 1st birthday, Palawan trip"
-            className="flex-1 border border-[#E8E8E8] rounded-lg px-3 py-2 text-sm"
+            className="flex-1 border border-line rounded-lg px-3 py-2 text-sm"
           />
           <button
             onClick={() => void load(theme, true)}
             disabled={loading}
             title="More lines"
-            className="px-3 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5"
+            className="px-3 rounded-lg bg-peach text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5"
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
           </button>
@@ -79,8 +79,8 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
 
       <div className="px-4 pb-4 overflow-y-auto">
         {loading && (
-          <div className="py-10 flex flex-col items-center gap-2 text-[#9B9B9B]">
-            <Loader2 size={22} className="animate-spin text-[#E8A598]" />
+          <div className="py-10 flex flex-col items-center gap-2 text-light">
+            <Loader2 size={22} className="animate-spin text-blush-pink" />
             <span className="text-xs">Writing lines for “{theme.trim() || 'your album'}”…</span>
           </div>
         )}
@@ -93,18 +93,18 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
                 onClick={() => { onPick(q); onClose(); }}
                 className={`text-left px-3.5 py-3 rounded-xl border transition active:scale-[0.99] ${
                   q === initial
-                    ? 'border-[#E8A598] bg-[#FDE8E4]'
-                    : 'border-[#EDE7E0] bg-[#FFF8F0] hover:bg-[#FDE8E4]'
+                    ? 'border-blush-pink bg-blush'
+                    : 'border-[#EDE7E0] bg-cream hover:bg-blush'
                 }`}
               >
-                <span className="text-sm text-[#2D2D2D] font-serif italic leading-snug">{q}</span>
+                <span className="text-sm text-dark font-serif italic leading-snug">{q}</span>
               </button>
             ))}
           </div>
         )}
 
         {!loading && quotes.length === 0 && (
-          <p className="py-8 text-center text-xs text-[#9B9B9B]">
+          <p className="py-8 text-center text-xs text-light">
             Type what your album’s about, then tap refresh.
           </p>
         )}
@@ -124,16 +124,16 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   );
 
   const Header = (
-    <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8] shrink-0">
-      <span className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
-        <Quote size={18} className="text-[#E8A598]" /> {initial ? 'Change quote' : 'Add a quote'}
+    <div className="flex items-center justify-between px-5 py-3 border-b border-line shrink-0">
+      <span className="text-sm font-semibold text-dark flex items-center gap-2">
+        <Quote size={18} className="text-blush-pink" /> {initial ? 'Change quote' : 'Add a quote'}
       </span>
-      <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+      <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
     </div>
   );
 
   const Footer = initial && onRemove ? (
-    <div className="px-5 py-3 border-t border-[#E8E8E8] shrink-0">
+    <div className="px-5 py-3 border-t border-line shrink-0">
       <button onClick={() => { onRemove(); onClose(); }}
         className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
         <Trash2 size={14} /> Remove quote

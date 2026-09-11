@@ -28,17 +28,17 @@ export default function BuilderUpload({ photos, onAddPhotos, onRemovePhoto, onRe
   const handleDragLeave = useCallback(() => setIsDragging(false), []);
 
   return (
-    <div className="flex flex-col h-full bg-[#FFF8F0]">
+    <div className="flex flex-col h-full bg-cream">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-[#F0F0F0] flex items-center justify-between bg-white">
+      <div className="px-6 py-4 border-b border-line-soft flex items-center justify-between bg-white">
         <div>
-          <h2 className="font-display text-xl font-semibold text-[#2D2D2D]">Step 1: Upload Photos</h2>
-          <p className="text-xs text-[#9B9B9B] mt-0.5">{photos.length} photos uploaded</p>
+          <h2 className="font-display text-xl font-semibold text-dark">Step 1: Upload Photos</h2>
+          <p className="text-xs text-light mt-0.5">{photos.length} photos uploaded</p>
         </div>
         <button
           onClick={onNext}
           disabled={photos.length === 0}
-          className="px-6 py-2 bg-[#F4C2A1] text-white font-body text-sm font-semibold rounded-lg hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-2 bg-peach text-white font-body text-sm font-semibold rounded-lg hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Continue →
         </button>
@@ -58,10 +58,10 @@ export default function BuilderUpload({ photos, onAddPhotos, onRemovePhoto, onRe
           }}
         >
           <Upload size={32} className="mx-auto text-[#C4C4C4] mb-2" />
-          <p className="text-sm text-[#6B6B6B] font-medium">
-            Drag & drop photos here or <label className="text-[#F4C2A1] cursor-pointer hover:underline"><input type="file" multiple accept="image/*" className="hidden" onChange={(e) => e.target.files && onAddPhotos(e.target.files)} />browse</label>
+          <p className="text-sm text-medium font-medium">
+            Drag & drop photos here or <label className="text-peach cursor-pointer hover:underline"><input type="file" multiple accept="image/*" className="hidden" onChange={(e) => e.target.files && onAddPhotos(e.target.files)} />browse</label>
           </p>
-          <p className="text-xs text-[#9B9B9B] mt-1">JPG, PNG — add as many as you like</p>
+          <p className="text-xs text-light mt-1">JPG, PNG — add as many as you like</p>
         </div>
 
         {/* Photo grid */}
@@ -72,16 +72,16 @@ export default function BuilderUpload({ photos, onAddPhotos, onRemovePhoto, onRe
                 key={photo.id}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="group relative aspect-square rounded-lg overflow-hidden border border-[#E8E8E8] bg-white"
+                className="group relative aspect-square rounded-lg overflow-hidden border border-line bg-white"
               >
                 <img src={photo.previewUrl} alt={photo.name} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                   <label className="p-1.5 bg-white rounded-full cursor-pointer hover:scale-110 transition-transform">
-                    <Replace size={12} className="text-[#2D2D2D]" />
+                    <Replace size={12} className="text-dark" />
                     <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onReplacePhoto(photo.id, e.target.files[0])} />
                   </label>
                   <button onClick={() => onRemovePhoto(photo.id)} className="p-1.5 bg-white rounded-full hover:scale-110 transition-transform">
-                    <Trash2 size={12} className="text-[#E8A598]" />
+                    <Trash2 size={12} className="text-blush-pink" />
                   </button>
                 </div>
                 <p className="absolute bottom-0 left-0 right-0 text-[9px] text-white bg-black/50 px-1 py-0.5 truncate">{photo.name}</p>

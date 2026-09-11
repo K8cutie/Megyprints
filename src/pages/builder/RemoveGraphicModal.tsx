@@ -17,12 +17,12 @@ export default function RemoveGraphicModal({ onRemove, onClose, mobile }: {
       className={`bg-white shadow-2xl flex flex-col ${mobile ? 'w-full rounded-t-2xl' : 'w-full max-w-xs rounded-2xl'}`}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8]">
-        <span className="text-sm font-semibold text-[#2D2D2D]">Graphic</span>
-        <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+      <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+        <span className="text-sm font-semibold text-dark">Graphic</span>
+        <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
       </div>
       <div className="px-5 py-4">
-        <p className="text-xs text-[#9B8B7A] leading-relaxed">
+        <p className="text-xs text-stone leading-relaxed">
           Graphics have been replaced by themed quotes. This one still prints, but
           it can’t be swapped for another — remove it and the box is free for a
           quote, your own text, or a photo.
@@ -30,7 +30,7 @@ export default function RemoveGraphicModal({ onRemove, onClose, mobile }: {
       </div>
       <div className="px-5 pb-4 flex gap-2">
         <button onClick={onClose}
-          className="flex-1 h-10 rounded-xl border border-[#EDE7E0] text-sm font-medium text-[#6B5842] hover:bg-[#FFF8F0]">
+          className="flex-1 h-10 rounded-xl border border-[#EDE7E0] text-sm font-medium text-[#6B5842] hover:bg-cream">
           Keep it
         </button>
         <button onClick={onRemove}

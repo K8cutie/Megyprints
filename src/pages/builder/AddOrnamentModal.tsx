@@ -39,19 +39,19 @@ export default function AddOrnamentModal({ initial, onSave, onRemove, onClose }:
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8] shrink-0">
-          <span className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
-            <Sparkles size={18} className="text-[#E8A598]" /> {initial ? 'Change Ornament' : 'Add an Ornament'}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line shrink-0">
+          <span className="text-sm font-semibold text-dark flex items-center gap-2">
+            <Sparkles size={18} className="text-blush-pink" /> {initial ? 'Change Ornament' : 'Add an Ornament'}
           </span>
-          <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+          <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
         </div>
 
         {/* Pack tabs */}
-        <div className="flex gap-1.5 overflow-x-auto px-4 py-2.5 border-b border-[#F0F0F0] shrink-0">
+        <div className="flex gap-1.5 overflow-x-auto px-4 py-2.5 border-b border-line-soft shrink-0">
           {ORNAMENT_PACKS.map((p) => (
             <button key={p.id} onClick={() => setPack(p.id)}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition ${
-                p.id === pack ? 'bg-[#F4C2A1] text-white' : 'bg-[#FFF8F0] text-[#8B6F47] hover:bg-[#FDE8E4]'
+                p.id === pack ? 'bg-peach text-white' : 'bg-cream text-cocoa hover:bg-blush'
               }`}>
               <span className="mr-1">{p.emoji}</span>{p.label}
             </button>
@@ -68,13 +68,13 @@ export default function AddOrnamentModal({ initial, onSave, onRemove, onClose }:
                 <button key={it.id} onClick={() => pick(it.id, it.svg)} disabled={!!busyId}
                   title={it.label}
                   className={`relative aspect-square rounded-xl border p-2.5 flex items-center justify-center transition active:scale-[0.97] disabled:opacity-60 ${
-                    isCurrent ? 'border-[#E8A598] ring-2 ring-[#F4C2A1]/50 bg-[#FFF8F0]' : 'border-[#EDE7E0] bg-white hover:bg-[#FFF8F0]'
+                    isCurrent ? 'border-blush-pink ring-2 ring-peach/50 bg-cream' : 'border-[#EDE7E0] bg-white hover:bg-cream'
                   }`}>
                   <img src={ornamentDataUri(it.svg)} alt={it.label} draggable={false}
                     className="w-full h-full object-contain pointer-events-none" />
                   {isBusy && (
                     <span className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-xl">
-                      <Loader2 size={20} className="animate-spin text-[#E8A598]" />
+                      <Loader2 size={20} className="animate-spin text-blush-pink" />
                     </span>
                   )}
                 </button>
@@ -84,13 +84,13 @@ export default function AddOrnamentModal({ initial, onSave, onRemove, onClose }:
           {error && <p className="text-xs text-red-500 mt-3 text-center">{error}</p>}
         </div>
 
-        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#E8E8E8] shrink-0">
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-line shrink-0">
           {initial ? (
             <button onClick={onRemove} className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
               <Trash2 size={14} /> Remove
             </button>
-          ) : <span className="text-[11px] text-[#9B9B9B]">Tap a graphic to place it in this box.</span>}
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-[#FFF8F0] text-[#8B6F47] text-sm font-semibold hover:bg-[#FDE8E4]">
+          ) : <span className="text-[11px] text-light">Tap a graphic to place it in this box.</span>}
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-cream text-cocoa text-sm font-semibold hover:bg-blush">
             Done
           </button>
         </div>

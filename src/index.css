@@ -58,6 +58,41 @@
     --sidebar-border: 30 10% 88%;
     --sidebar-ring: 25 80% 76%;
 
+    /* ── Theme tokens (RGB triplets; see tailwind.config) ──────────
+       Defaults are the exact colors the UI shipped with. A theme
+       (data-theme on <html>) redefines these — nothing else moves. */
+    --t-peach: 244 194 161; /* #F4C2A1 */
+    --t-blush-pink: 232 165 152; /* #E8A598 */
+    --t-dark: 45 45 45; /* #2D2D2D */
+    --t-medium: 107 107 107; /* #6B6B6B */
+    --t-light: 155 155 155; /* #9B9B9B */
+    --t-taupe: 139 126 122; /* #8B7E7A */
+    --t-ink-warm: 74 66 63; /* #4A423F */
+    --t-ink-mid: 90 90 90; /* #5A5A5A */
+    --t-charcoal: 74 74 74; /* #4A4A4A */
+    --t-cocoa: 139 111 71; /* #8B6F47 */
+    --t-stone: 155 139 122; /* #9B8B7A */
+    --t-cream: 255 248 240; /* #FFF8F0 */
+    --t-warm-white: 255 251 247; /* #FFFBF7 */
+    --t-blush: 253 232 228; /* #FDE8E4 */
+    --t-blush-deep: 232 213 208; /* #E8D5D0 */
+    --t-sand: 245 237 232; /* #F5EDE8 */
+    --t-sand-deep: 234 227 218; /* #EAE3DA */
+    --t-line: 232 232 232; /* #E8E8E8 */
+    --t-line-soft: 240 240 240; /* #F0F0F0 */
+    --t-paper: 245 245 245; /* #F5F5F5 */
+    --t-success: 46 125 74; /* #2E7D4A */
+    --t-rust: 191 94 62; /* #BF5E3E */
+    --t-rust-deep: 176 80 58; /* #B0503A */
+    --t-coral-soft: 216 149 141; /* #D8958D */
+    --t-soft-lavender: 184 169 217; /* #B8A9D9 */
+    --t-mint: 155 207 184; /* #9BCFB8 */
+    --t-sky-blue: 143 191 224; /* #8FBFE0 */
+    --t-cream-gold: 212 184 150; /* #D4B896 */
+    --t-soft-sage: 228 240 224; /* #E4F0E0 */
+    --t-pale-peach: 251 229 216; /* #FBE5D8 */
+    --t-pale-coral: 232 149 140; /* #E8958C */
+
     --cream: #FFF8F0;
     --warm-white: #FFFBF7;
     --blush: #FDE8E4;
@@ -91,7 +126,7 @@
   }
 
   body {
-    @apply bg-[#FFF8F0] text-[#2D2D2D] font-body antialiased;
+    @apply bg-cream text-dark font-body antialiased;
     font-family: "DM Sans", sans-serif;
   }
 
@@ -101,7 +136,7 @@
 
   /* Keyboard focus ring styles for accessibility */
   *:focus-visible {
-    outline: 2px solid #F4C2A1;
+    outline: 2px solid rgb(var(--t-peach));
     outline-offset: 2px;
   }
 

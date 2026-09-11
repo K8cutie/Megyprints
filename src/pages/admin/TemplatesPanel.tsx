@@ -84,7 +84,7 @@ export default function TemplatesPanel() {
 
   return (
     <div>
-      <p className="text-sm text-[#6B6B6B] mb-4">
+      <p className="text-sm text-medium mb-4">
         Turn layouts on/off or delete them. Album generation only uses <b>active</b> templates.
       </p>
       {!supabaseConfigured && (
@@ -116,10 +116,10 @@ export default function TemplatesPanel() {
       <div className="mb-5 rounded-xl border border-[#EAD9CE] bg-[#FBF6F1] px-4 py-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-[#2D2D2D]">
-              Offer <span className="text-[#BF5E3E]">{size}</span> to customers
+            <div className="text-sm font-semibold text-dark">
+              Offer <span className="text-rust">{size}</span> to customers
             </div>
-            <div className="text-xs text-[#6B6B6B] mt-0.5 max-w-xl">
+            <div className="text-xs text-medium mt-0.5 max-w-xl">
               Off hides <b>{size}</b> from the customer size picker — no new albums at this size. Existing
               albums &amp; orders still print &amp; fulfill. Same setting as Pricing → “Album sizes offered”.
             </div>
@@ -130,23 +130,23 @@ export default function TemplatesPanel() {
             {savingSize ? <Loader2 size={13} className="animate-spin inline" /> : selectedDisabled ? 'Off' : 'On'}
           </button>
         </div>
-        {sizeMsg && <p className="text-xs mt-2 text-[#2E7D4A] font-medium">{sizeMsg}</p>}
+        {sizeMsg && <p className="text-xs mt-2 text-success font-medium">{sizeMsg}</p>}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or id…"
-          className="h-9 px-3 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1] w-56" />
-        <label className="flex items-center gap-1.5 text-sm text-[#6B6B6B] cursor-pointer">
+          className="h-9 px-3 rounded-lg border border-line text-sm outline-none focus:border-peach w-56" />
+        <label className="flex items-center gap-1.5 text-sm text-medium cursor-pointer">
           <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
           Show deleted
         </label>
-        <div className="text-xs text-[#9B9B9B] ml-auto">
-          {counts.total} total · <span className="text-[#2E7D4A]">{counts.active} active</span> · {counts.hidden} hidden · {counts.deleted} deleted
+        <div className="text-xs text-light ml-auto">
+          {counts.total} total · <span className="text-success">{counts.active} active</span> · {counts.hidden} hidden · {counts.deleted} deleted
         </div>
       </div>
 
       {loading ? (
-        <div className="py-24 flex justify-center text-[#9B9B9B]"><Loader2 className="w-6 h-6 animate-spin" /></div>
+        <div className="py-24 flex justify-center text-light"><Loader2 className="w-6 h-6 animate-spin" /></div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {list.map((t) => {
@@ -155,13 +155,13 @@ export default function TemplatesPanel() {
             const busy = savingId === t.id;
             return (
               <div key={t.id}
-                className={`rounded-xl border p-3 ${s.deleted ? 'border-red-200 bg-red-50/40' : 'border-[#E8E8E8] bg-white'}`}>
+                className={`rounded-xl border p-3 ${s.deleted ? 'border-red-200 bg-red-50/40' : 'border-line bg-white'}`}>
                 <div className="flex justify-center" style={{ opacity: off ? 0.45 : 1 }}>
                   <TemplateThumb template={t} size={size} w={150} />
                 </div>
                 <div className="mt-2">
-                  <div className="text-sm font-medium text-[#2D2D2D] truncate">{t.name}</div>
-                  <div className="text-xs text-[#9B9B9B] truncate">
+                  <div className="text-sm font-medium text-dark truncate">{t.name}</div>
+                  <div className="text-xs text-light truncate">
                     {t.slotCount} photo{t.slotCount !== 1 ? 's' : ''}
                     {t.textSlots?.length ? ` · ${t.textSlots.length} text` : ''} · {t.id}
                   </div>
@@ -177,7 +177,7 @@ export default function TemplatesPanel() {
                   )}
                   {s.deleted ? (
                     <button onClick={() => update(t.id, { deleted: false })} disabled={busy}
-                      className="flex-1 h-8 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 bg-[#F5F5F5] text-[#6B6B6B] disabled:opacity-50">
+                      className="flex-1 h-8 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 bg-paper text-medium disabled:opacity-50">
                       <RotateCcw size={13} /> Restore
                     </button>
                   ) : (
@@ -191,7 +191,7 @@ export default function TemplatesPanel() {
             );
           })}
           {list.length === 0 && (
-            <p className="col-span-full py-16 text-center text-sm text-[#9B9B9B]">No templates match.</p>
+            <p className="col-span-full py-16 text-center text-sm text-light">No templates match.</p>
           )}
         </div>
       )}

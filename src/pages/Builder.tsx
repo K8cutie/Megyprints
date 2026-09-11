@@ -169,11 +169,11 @@ export default function Builder() {
       />
       <div className={`fixed inset-0 z-[60] bg-white flex flex-col transition-[padding] duration-300 ${panelCollapsed ? 'lg:pl-[60px]' : 'lg:pl-[340px]'}`}>
         {/* Step Indicator */}
-        <div className="h-12 bg-white border-b border-[#E8E8E8] flex items-center px-4 gap-1 shrink-0">
+        <div className="h-12 bg-white border-b border-line flex items-center px-4 gap-1 shrink-0">
           <div className="flex items-center gap-1 mr-4">
-            <span className="font-display text-base italic text-[#2D2D2D]">Megy</span>
-            <span className="font-body text-base text-[#2D2D2D]">Prints</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-[#F4C2A1] ml-0.5" />
+            <span className="font-display text-base italic text-dark">Megy</span>
+            <span className="font-body text-base text-dark">Prints</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-peach ml-0.5" />
           </div>
 
           {SHOW_PHASE_CHIPS && phases.map((phase, i) => {
@@ -241,7 +241,7 @@ export default function Builder() {
               for every subsequent phase change; a plain absolute-fill conditional
               mounts/unmounts cleanly and can't stall the other transitions. */}
           {actions.phase === 'cover' && (
-            <div className="absolute inset-0 bg-[#FFF8F0]">
+            <div className="absolute inset-0 bg-cream">
               <CoverEditor
                 mode="step"
                 onNext={() => { actions.setWizardStep('pick_background'); actions.setPhase('edit'); }}

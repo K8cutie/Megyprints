@@ -53,7 +53,7 @@ export default function App() {
     <AuthProvider>
       <AuthModalProvider>
       <InstallPrompt />
-      <Suspense fallback={<div className="min-h-screen bg-[#FFF8F0]" aria-busy="true" />}>
+      <Suspense fallback={<div className="min-h-screen bg-cream" aria-busy="true" />}>
       <Routes>
         <Route element={<Layout><Outlet /></Layout>}>
           <Route path="/" element={<Home />} />

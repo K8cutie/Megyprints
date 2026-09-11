@@ -635,13 +635,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   /* ── Fabric not loaded — show error ── */
   if (!fabricValid) {
     return (
-      <div className="flex h-full bg-[#F5F5F5] items-center justify-center">
+      <div className="flex h-full bg-paper items-center justify-center">
         <div className="text-center">
-          <p className="text-[#E8A598] font-medium mb-2">Editor engine failed to load</p>
-          <p className="text-sm text-[#6B6B6B]">Please refresh the page and try again.</p>
+          <p className="text-blush-pink font-medium mb-2">Editor engine failed to load</p>
+          <p className="text-sm text-medium">Please refresh the page and try again.</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 px-6 py-2 bg-[#F4C2A1] text-white rounded-lg font-medium hover:brightness-105"
+            className="mt-4 px-6 py-2 bg-peach text-white rounded-lg font-medium hover:brightness-105"
           >
             Refresh Page
           </button>
@@ -672,24 +672,24 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4">
+              <h3 className="font-display text-lg font-semibold text-dark mb-4">
                 Choose a photo for slot {selectedSlotForPicker + 1}
               </h3>
               {actions.uploadedPhotos.length === 0 ? (
-                <p className="text-sm text-[#9B9B9B] text-center py-8">
+                <p className="text-sm text-light text-center py-8">
                   No photos uploaded yet. Go to the Photos tab to upload.
                 </p>
               ) : availablePhotos.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-sm text-[#6B6B6B] font-medium mb-1">
+                  <p className="text-sm text-medium font-medium mb-1">
                     All your photos are already in the album.
                   </p>
-                  <p className="text-xs text-[#9B9B9B] mb-4">
+                  <p className="text-xs text-light mb-4">
                     Add more photos to swap in something new.
                   </p>
                   <button
                     onClick={() => { setShowPhotoPicker(false); _onAction?.('trigger-upload'); }}
-                    className="px-5 py-2 bg-[#F4C2A1] text-white text-sm font-semibold rounded-lg hover:brightness-105 inline-flex items-center gap-2"
+                    className="px-5 py-2 bg-peach text-white text-sm font-semibold rounded-lg hover:brightness-105 inline-flex items-center gap-2"
                   >
                     <Upload size={14} /> Add Photos
                   </button>
@@ -705,7 +705,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                         setShowPhotoPicker(false);
                         setPickerIsTextSlot(false);
                       }}
-                      className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-[#F4C2A1] transition-all"
+                      className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-peach transition-all"
                     >
                       <img
                         src={photo.previewUrl}
@@ -720,7 +720,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => { setShowPhotoPicker(false); setPickerIsTextSlot(false); }}
-                  className="px-4 py-2 text-sm text-[#6B6B6B] hover:text-[#2D2D2D]"
+                  className="px-4 py-2 text-sm text-medium hover:text-dark"
                 >
                   Cancel
                 </button>
@@ -848,7 +848,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      <div className="flex h-full bg-[#F5F5F5]">
+      <div className="flex h-full bg-paper">
         {/* ── Unified Panel (LEFT side) — hidden by default ── */}
         {sidebarVisible && (
           <UnifiedPanel
@@ -905,7 +905,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {!ORCHESTRATOR_MODE && !sidebarVisible && (
             <button
               onClick={() => setSidebarVisible(true)}
-              className="absolute top-3 left-3 z-40 flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl shadow-md border border-[#E8E8E8] text-xs font-medium text-[#6B6B6B] hover:text-[#F4C2A1] hover:border-[#F4C2A1]/30 transition-all"
+              className="absolute top-3 left-3 z-40 flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl shadow-md border border-line text-xs font-medium text-medium hover:text-peach hover:border-peach/30 transition-all"
               title="Show sidebar (Ctrl+Shift+S)"
             >
               <PanelLeftOpen size={14} />
@@ -914,12 +914,12 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           )}
 
           {/* Toolbar */}
-          <div className="h-10 bg-white border-b border-[#E8E8E8] flex items-center justify-between px-3 shrink-0">
+          <div className="h-10 bg-white border-b border-line flex items-center justify-between px-3 shrink-0">
             <div className="flex items-center gap-1">
               {/* Home → Homepage */}
               <Link
                 to="/"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[#6B6B6B] hover:bg-[#F0F0F0] hover:text-[#F4C2A1] transition-all mr-1"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-medium hover:bg-line-soft hover:text-peach transition-all mr-1"
                 title="Go to homepage"
               >
                 <Home size={16} />
@@ -928,36 +928,36 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
               {!ORCHESTRATOR_MODE && (
               <>
-              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
+              <div className="w-px h-5 bg-line mx-1" />
 
               <button
                 onClick={() => actions.setPhase('setup')}
-                className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"
+                className="p-1.5 rounded-md hover:bg-line-soft text-medium"
                 title="Back to template"
               >
                 <ChevronLeft size={16} />
               </button>
 
-              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
+              <div className="w-px h-5 bg-line mx-1" />
 
               {/* Zoom */}
-              <button onClick={() => handleZoom(-0.1)} className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]" title="Zoom out">
+              <button onClick={() => handleZoom(-0.1)} className="p-1.5 rounded-md hover:bg-line-soft text-medium" title="Zoom out">
                 <ZoomOut size={14} />
               </button>
-              <span className="text-xs text-[#6B6B6B] w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
-              <button onClick={() => handleZoom(0.1)} className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]" title="Zoom in">
+              <span className="text-xs text-medium w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+              <button onClick={() => handleZoom(0.1)} className="p-1.5 rounded-md hover:bg-line-soft text-medium" title="Zoom in">
                 <ZoomIn size={14} />
               </button>
-              <button onClick={resetZoom} className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]" title="Reset zoom">
+              <button onClick={resetZoom} className="p-1.5 rounded-md hover:bg-line-soft text-medium" title="Reset zoom">
                 <RotateCcw size={12} />
               </button>
 
-              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
+              <div className="w-px h-5 bg-line mx-1" />
 
               {/* Grid */}
               <button
                 onClick={() => setShowGrid((v: boolean) => !v)}
-                className={`p-1.5 rounded-md text-[#6B6B6B] transition-colors ${showGrid ? 'bg-[#FDE8E4] text-[#E8A598]' : 'hover:bg-[#F0F0F0]'}`}
+                className={`p-1.5 rounded-md text-medium transition-colors ${showGrid ? 'bg-blush text-blush-pink' : 'hover:bg-line-soft'}`}
                 title="Toggle grid"
               >
                 <Grid3X3 size={14} />
@@ -966,7 +966,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               {/* Snap */}
               <button
                 onClick={() => setSnapEnabled((v: boolean) => !v)}
-                className={`p-1.5 rounded-md text-[#6B6B6B] transition-colors ${snapEnabled ? 'bg-[#FDE8E4] text-[#E8A598]' : 'hover:bg-[#F0F0F0]'}`}
+                className={`p-1.5 rounded-md text-medium transition-colors ${snapEnabled ? 'bg-blush text-blush-pink' : 'hover:bg-line-soft'}`}
                 title="Toggle snap to grid"
               >
                 <Magnet size={14} />
@@ -983,8 +983,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 isLoggedIn={!!user}
                 onManualSave={actions.manualSave}
               />
-              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
-              <span className="text-xs text-[#9B9B9B]">
+              <div className="w-px h-5 bg-line mx-1" />
+              <span className="text-xs text-light">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
 
@@ -995,7 +995,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     <button
                       onClick={onGenerate}
                       title="Generate layout for this page"
-                      className="px-3 py-1.5 bg-[#B8A9D9] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1 transition-all"
+                      className="px-3 py-1.5 bg-soft-lavender text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1 transition-all"
                     >
                       <Wand2 size={12} /> Generate
                     </button>
@@ -1004,7 +1004,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     <button
                       onClick={onGenerateAll}
                       title="Generate all pages from uploaded photos"
-                      className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                      className="px-3 py-1.5 bg-white border border-soft-lavender text-soft-lavender text-xs font-semibold rounded-lg hover:bg-soft-lavender hover:text-white flex items-center gap-1 transition-all"
                     >
                       <Sparkles size={12} /> Generate All
                     </button>
@@ -1016,7 +1016,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     <button
                       onClick={onRegenerate}
                       title="Regenerate album with new random layouts"
-                      className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                      className="px-3 py-1.5 bg-white border border-soft-lavender text-soft-lavender text-xs font-semibold rounded-lg hover:bg-soft-lavender hover:text-white flex items-center gap-1 transition-all"
                     >
                       <Sparkles size={12} /> Regenerate
                     </button>
@@ -1025,7 +1025,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     <button
                       onClick={onGenerateAll}
                       title="Generate all pages from uploaded photos"
-                      className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                      className="px-3 py-1.5 bg-white border border-soft-lavender text-soft-lavender text-xs font-semibold rounded-lg hover:bg-soft-lavender hover:text-white flex items-center gap-1 transition-all"
                     >
                       <Sparkles size={12} /> Generate All
                     </button>
@@ -1039,7 +1039,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 <button
                   onClick={() => { markMemoryDiscovered(); setMemoryOpen(true); }}
                   title="Add a YouTube video that plays when this page's QR is scanned"
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all bg-[#E8A598] text-white hover:brightness-105 shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all bg-blush-pink text-white hover:brightness-105 shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}
                 >
                   <Youtube size={13} /> Add YouTube Memory
                 </button>
@@ -1059,7 +1059,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 negative space (the canvas gets clipped top & bottom). */}
             <div className="flex flex-col items-center gap-2 my-auto shrink-0">
               {/* Page number above the page */}
-              <span className="text-xs font-medium text-[#6B6B6B] tabular-nums">
+              <span className="text-xs font-medium text-medium tabular-nums">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
             <motion.div
@@ -1084,13 +1084,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     className="absolute inset-0 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm rounded-sm z-10"
                   >
                     <div className="text-center px-6">
-                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-[#FDE8E4] flex items-center justify-center">
-                        <Wand2 size={24} className="text-[#E8A598]" />
+                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-blush flex items-center justify-center">
+                        <Wand2 size={24} className="text-blush-pink" />
                       </div>
-                      <h3 className="font-display text-base font-semibold text-[#2D2D2D] mb-2">
+                      <h3 className="font-display text-base font-semibold text-dark mb-2">
                         This page is empty
                       </h3>
-                      <p className="text-sm text-[#9B9B9B] mb-6 max-w-[260px] mx-auto">
+                      <p className="text-sm text-light mb-6 max-w-[260px] mx-auto">
                         {actions.uploadedPhotos.length === 0
                           ? 'Upload photos to get started with your album.'
                           : hasTemplateButEmpty
@@ -1101,7 +1101,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                         {actions.uploadedPhotos.length > 0 && onGenerate && (
                           <button
                             onClick={onGenerate}
-                            className="px-5 py-2 bg-[#B8A9D9] text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
+                            className="px-5 py-2 bg-soft-lavender text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
                           >
                             <Wand2 size={14} /> Generate Layout
                           </button>
@@ -1109,7 +1109,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                         {actions.uploadedPhotos.length === 0 && (
                           <button
                             onClick={() => _onAction?.('trigger-upload')}
-                            className="px-5 py-2 bg-[#F4C2A1] text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
+                            className="px-5 py-2 bg-peach text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
                           >
                             <Upload size={14} /> Upload Photos
                           </button>
@@ -1129,17 +1129,17 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     disabled={actions.currentPageIndex === 0}
                     title="Previous page"
                     aria-label="Previous page"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-[#E8E8E8] text-[#6B6B6B] hover:bg-[#FDE8E4] hover:text-[#E8A598] hover:border-[#F4C2A1] disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-line text-medium hover:bg-blush hover:text-blush-pink hover:border-peach disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
                   >
                     <ChevronLeft size={18} />
                   </button>
-                  <div className="w-px h-5 bg-[#E8E8E8]" />
+                  <div className="w-px h-5 bg-line" />
                   <button
                     onClick={() => actions.goToPage(actions.currentPageIndex + 1)}
                     disabled={actions.currentPageIndex >= actions.albumPages.length - 1}
                     title="Next page"
                     aria-label="Next page"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-[#E8E8E8] text-[#6B6B6B] hover:bg-[#FDE8E4] hover:text-[#E8A598] hover:border-[#F4C2A1] disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-line text-medium hover:bg-blush hover:text-blush-pink hover:border-peach disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
                   >
                     <ChevronRight size={18} />
                   </button>

@@ -23,7 +23,7 @@ export default function ThemePreviewCard({ id, label, selected, onSelect }: {
       onClick={onSelect}
       aria-pressed={selected}
       className={`group flex flex-col rounded-xl overflow-hidden border-2 text-left transition-all ${
-        selected ? 'border-[#F4C2A1] ring-2 ring-[#F4C2A1]/30' : 'border-[#F0F0F0] hover:border-[#F4C2A1]/60'
+        selected ? 'border-peach ring-2 ring-peach/30' : 'border-line-soft hover:border-peach/60'
       }`}
     >
       {/* Real per-theme album cover photo */}
@@ -48,8 +48,8 @@ export default function ThemePreviewCard({ id, label, selected, onSelect }: {
 
       {/* Label + occasion */}
       <div className="bg-white px-2 py-1.5">
-        <div className="text-xs font-semibold text-[#2D2D2D]">{label}</div>
-        <div className="truncate text-[10px] text-[#9B9B9B]">{t.description}</div>
+        <div className="text-xs font-semibold text-dark">{label}</div>
+        <div className="truncate text-[10px] text-light">{t.description}</div>
       </div>
     </button>
   );

@@ -293,12 +293,12 @@ export default function Order() {
     const printerReached = trackStage >= 1; // "Sent to the printer" onward
     const finished = trackStage >= TRACK_STAGES.length - 1;
     return (
-      <div className="min-h-screen bg-[#FFF8F0] pt-28 px-6 pb-16 flex items-start justify-center">
+      <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg">
           <div className="text-center mb-8">
-            <h2 className="font-display text-3xl font-bold text-[#2D2D2D]">{finished ? 'Your album is finished! 🎉' : 'Order in progress…'}</h2>
+            <h2 className="font-display text-3xl font-bold text-dark">{finished ? 'Your album is finished! 🎉' : 'Order in progress…'}</h2>
             {orderNumber && (
-              <p className="mt-2 text-sm font-medium text-[#2D2D2D]">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
+              <p className="mt-2 text-sm font-medium text-dark">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
             )}
           </div>
 
@@ -312,10 +312,10 @@ export default function Order() {
                 const Icon = stage.icon;
                 return (
                   <div key={stage.label} className="flex items-center gap-3 py-2">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${reached ? 'bg-[#E4F0E0] text-[#2E7D4A]' : 'bg-[#F0F0F0] text-[#C4C4C4]'}`}>
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${reached ? 'bg-soft-sage text-success' : 'bg-line-soft text-[#C4C4C4]'}`}>
                       {active ? <Loader2 size={18} className="animate-spin text-[#C98A5E]" /> : done || (finished && i === TRACK_STAGES.length - 1) ? <Check size={18} /> : <Icon size={18} />}
                     </div>
-                    <span className={`text-sm font-medium ${reached ? 'text-[#2D2D2D]' : 'text-[#9B9B9B]'}`}>{stage.label}</span>
+                    <span className={`text-sm font-medium ${reached ? 'text-dark' : 'text-light'}`}>{stage.label}</span>
                   </div>
                 );
               })}
@@ -326,15 +326,15 @@ export default function Order() {
               the PDF (so it can't be printed elsewhere). Just reassure them. */}
           {printerReached && (
             <div className="bg-white rounded-2xl p-6 shadow-sm mt-4">
-              <h3 className="font-display text-base font-semibold text-[#2D2D2D] mb-1 flex items-center gap-2"><Printer size={16} /> Sent to print</h3>
-              <p className="text-xs text-[#6B6B6B]">Your print-ready album has been sent to Megyprints. We'll print it on premium paper and ship it to your address — no action needed on your end. 💛</p>
+              <h3 className="font-display text-base font-semibold text-dark mb-1 flex items-center gap-2"><Printer size={16} /> Sent to print</h3>
+              <p className="text-xs text-medium">Your print-ready album has been sent to Megyprints. We'll print it on premium paper and ship it to your address — no action needed on your end. 💛</p>
             </div>
           )}
 
           {finished && (
             <div className="mt-6 flex gap-3 justify-center">
-              <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-[#F4C2A1] text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
-              <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-[#6B6B6B] rounded-lg font-medium hover:bg-[#F0F0F0]">Home</button>
+              <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-peach text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
+              <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-medium rounded-lg font-medium hover:bg-line-soft">Home</button>
             </div>
           )}
         </motion.div>
@@ -345,25 +345,25 @@ export default function Order() {
   /* ══════════════ PAYMENT (placeholder) ══════════════ */
   if (step === 'payment') {
     return (
-      <div className="min-h-screen bg-[#FFF8F0] pt-28 px-6 pb-16 flex items-start justify-center">
+      <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
-          <h1 className="font-display text-3xl font-bold text-[#2D2D2D] text-center mb-6">Payment</h1>
+          <h1 className="font-display text-3xl font-bold text-dark text-center mb-6">Payment</h1>
           <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 text-[#6B6B6B] mb-4"><CreditCard size={18} /> <span className="text-sm font-medium">Pay for your album</span></div>
-            <div className="space-y-2 text-sm border-y border-[#F0F0F0] py-4 mb-4">
-              <div className="flex justify-between gap-3"><span className="text-[#6B6B6B] shrink-0">Album</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
+            <div className="flex items-center gap-2 text-medium mb-4"><CreditCard size={18} /> <span className="text-sm font-medium">Pay for your album</span></div>
+            <div className="space-y-2 text-sm border-y border-line-soft py-4 mb-4">
+              <div className="flex justify-between gap-3"><span className="text-medium shrink-0">Album</span><span className="font-semibold text-blush-pink text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
               {breakdown.items.map((item) => (
                 <div key={item.label} className="flex justify-between gap-3">
-                  <span className="text-[#6B6B6B]">{item.label}</span>
-                  <span className="font-medium text-[#2D2D2D] text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
+                  <span className="text-medium">{item.label}</span>
+                  <span className="font-medium text-dark text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
                 </div>
               ))}
-              <div className="flex justify-between items-baseline pt-1 border-t border-[#F0F0F0]"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice.toLocaleString('en-PH')}</span></div>
+              <div className="flex justify-between items-baseline pt-1 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span></div>
             </div>
             <button
               onClick={handlePay}
               disabled={submitting || !priceReady}
-              className="w-full py-3.5 bg-[#E8A598] text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+              className="w-full py-3.5 bg-blush-pink text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
             >
               {submitting
                 ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Processing payment…'}</>
@@ -373,9 +373,9 @@ export default function Order() {
                     ? <>Pricing unavailable — please refresh</>
                     : <>Pay ₱{totalPrice}</>}
             </button>
-            <p className="mt-3 text-[11px] text-[#9B9B9B] text-center">🔒 Simulated payment — no real charge. (Xendit checkout goes here later.)</p>
+            <p className="mt-3 text-[11px] text-light text-center">🔒 Simulated payment — no real charge. (Xendit checkout goes here later.)</p>
             {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}
-            <button onClick={() => { setStep('form'); setErrorMsg(''); }} disabled={submitting} className="w-full mt-3 text-xs text-[#9B9B9B] hover:text-[#6B6B6B] disabled:opacity-50">← Back to details</button>
+            <button onClick={() => { setStep('form'); setErrorMsg(''); }} disabled={submitting} className="w-full mt-3 text-xs text-light hover:text-medium disabled:opacity-50">← Back to details</button>
           </div>
         </motion.div>
       </div>
@@ -384,23 +384,23 @@ export default function Order() {
 
   /* ══════════════ FORM (checkout) ══════════════ */
   return (
-    <div className="min-h-screen bg-[#FFF8F0] pt-24 pb-12 px-6">
+    <div className="min-h-screen bg-cream pt-24 pb-12 px-6">
       <div className="max-w-[900px] mx-auto">
-        <h1 className="font-display text-4xl font-bold text-[#2D2D2D] text-center mb-8">Finalize Your Order</h1>
+        <h1 className="font-display text-4xl font-bold text-dark text-center mb-8">Finalize Your Order</h1>
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left: Options */}
           <div className="lg:col-span-2 space-y-6">
             {/* Material */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4 flex items-center gap-2"><Palette size={18} /> Paper Material</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><Palette size={18} /> Paper Material</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {MATERIALS.map((m) => (
                   <button key={m.type} onClick={() => setMaterial(m.type)}
                     className="p-3 rounded-xl border-2 text-left transition-all"
                     style={{ borderColor: material === m.type ? '#F4C2A1' : '#E8E8E8', backgroundColor: material === m.type ? '#FFF8F0' : '#fff' }}>
-                    <span className="font-medium text-sm text-[#2D2D2D]">{m.name}</span>
-                    <span className="block text-xs text-[#9B9B9B] mt-1">{m.description}</span>
+                    <span className="font-medium text-sm text-dark">{m.name}</span>
+                    <span className="block text-xs text-light mt-1">{m.description}</span>
                   </button>
                 ))}
               </div>
@@ -408,14 +408,14 @@ export default function Order() {
 
             {/* Cover */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4 flex items-center gap-2"><HardDrive size={18} /> Cover Type</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><HardDrive size={18} /> Cover Type</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {COVERS.map((c) => (
                   <button key={c.type} onClick={() => setCover(c.type)}
                     className="p-3 rounded-xl border-2 text-left transition-all"
                     style={{ borderColor: cover === c.type ? '#F4C2A1' : '#E8E8E8', backgroundColor: cover === c.type ? '#FFF8F0' : '#fff' }}>
-                    <span className="font-medium text-sm text-[#2D2D2D]">{c.name}</span>
-                    <span className="block text-xs text-[#9B9B9B] mt-1">{c.description}</span>
+                    <span className="font-medium text-sm text-dark">{c.name}</span>
+                    <span className="block text-xs text-light mt-1">{c.description}</span>
                   </button>
                 ))}
               </div>
@@ -423,11 +423,11 @@ export default function Order() {
 
             {/* Size — locked to the album you built when a design is in progress */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4 flex items-center gap-2"><BookOpen size={18} /> Album Size</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><BookOpen size={18} /> Album Size</h3>
               {hasJob ? (
-                <div className="flex items-center justify-between rounded-xl border-2 border-[#F4C2A1] bg-[#FFF8F0] px-4 py-3">
-                  <span className="text-sm text-[#6B6B6B]">From your design</span>
-                  <span className="text-sm font-semibold text-[#2D2D2D]">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span>
+                <div className="flex items-center justify-between rounded-xl border-2 border-peach bg-cream px-4 py-3">
+                  <span className="text-sm text-medium">From your design</span>
+                  <span className="text-sm font-semibold text-dark">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
@@ -444,29 +444,29 @@ export default function Order() {
 
             {/* Form */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4">Your Details</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4">Your Details</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-[#6B6B6B] mb-1 block">Full Name</label>
+                  <label className="text-xs text-medium mb-1 block">Full Name</label>
                   <input value={name}
                     onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: '' })); }}
                     autoComplete="name" maxLength={80}
                     aria-invalid={!!errors.name}
-                    className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.name ? 'border-red-400' : 'border-[#E8E8E8]'}`} placeholder="Juan Dela Cruz" />
+                    className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.name ? 'border-red-400' : 'border-line'}`} placeholder="Juan Dela Cruz" />
                   {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-[#6B6B6B] mb-1 block">Phone Number</label>
+                  <label className="text-xs text-medium mb-1 block">Phone Number</label>
                   <input value={phone}
                     onChange={(e) => { setPhone(e.target.value); if (errors.phone) setErrors((p) => ({ ...p, phone: '' })); }}
                     onBlur={() => { const c = normalizePHPhone(phone); if (c) setPhone(formatPHPhoneDisplay(c)); }}
                     inputMode="tel" autoComplete="tel" maxLength={20}
                     aria-invalid={!!errors.phone}
-                    className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.phone ? 'border-red-400' : 'border-[#E8E8E8]'}`} placeholder="+63 9XX XXX XXXX" />
+                    className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.phone ? 'border-red-400' : 'border-line'}`} placeholder="+63 9XX XXX XXXX" />
                   {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-[#6B6B6B] mb-2 block">Delivery Address</label>
+                  <label className="text-xs text-medium mb-2 block">Delivery Address</label>
                   <AddressPicker
                     value={address}
                     onChange={(v) => { setAddress(v); if (Object.keys(addressErrors).length) setAddressErrors({}); }}
@@ -480,44 +480,44 @@ export default function Order() {
           {/* Right: Summary */}
           <div>
             <div className="bg-white rounded-2xl p-6 shadow-sm sticky top-24">
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4">Order Summary</h3>
+              <h3 className="font-display text-lg font-semibold text-dark mb-4">Order Summary</h3>
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Material</span><span className="font-semibold text-[#E8A598] text-right">{MATERIALS.find((m) => m.type === material)?.name}</span></div>
-                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Cover</span><span className="font-semibold text-[#E8A598] text-right">{COVERS.find((c) => c.type === cover)?.name}</span></div>
-                <div className="flex justify-between items-center gap-3"><span className="text-[#6B6B6B]">Size</span><span className="font-semibold text-[#E8A598] text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span></div>
-                <div className="border-t border-[#F0F0F0] pt-3 mt-3 space-y-2">
+                <div className="flex justify-between items-center gap-3"><span className="text-medium">Material</span><span className="font-semibold text-blush-pink text-right">{MATERIALS.find((m) => m.type === material)?.name}</span></div>
+                <div className="flex justify-between items-center gap-3"><span className="text-medium">Cover</span><span className="font-semibold text-blush-pink text-right">{COVERS.find((c) => c.type === cover)?.name}</span></div>
+                <div className="flex justify-between items-center gap-3"><span className="text-medium">Size</span><span className="font-semibold text-blush-pink text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span></div>
+                <div className="border-t border-line-soft pt-3 mt-3 space-y-2">
                   {breakdown.items.map((item) => (
                     <div key={item.label} className="flex justify-between gap-3 text-[13px]">
-                      <span className="text-[#6B6B6B]">{item.label}</span>
-                      <span className="font-medium text-[#2D2D2D] text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
+                      <span className="text-medium">{item.label}</span>
+                      <span className="font-medium text-dark text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between items-baseline pt-2 border-t border-[#F0F0F0]"><span className="font-semibold text-[#2D2D2D]">Total</span><span className="font-display text-2xl font-bold text-[#E8A598]">₱{totalPrice.toLocaleString('en-PH')}</span></div>
+                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span></div>
                 </div>
               </div>
-              <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#FBEDE7] border border-[#F4C2A1]/60 px-3 py-2.5">
-                <QrCode size={16} className="text-[#E8A598] shrink-0 mt-0.5" />
-                <p className="text-xs text-[#8B6F47] leading-snug">
-                  <b className="text-[#2D2D2D]">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
-                  {qrCount > 0 && <> This album has <b className="text-[#2D2D2D]">{qrCount}</b>.</>}
+              <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#FBEDE7] border border-peach/60 px-3 py-2.5">
+                <QrCode size={16} className="text-blush-pink shrink-0 mt-0.5" />
+                <p className="text-xs text-cocoa leading-snug">
+                  <b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
+                  {qrCount > 0 && <> This album has <b className="text-dark">{qrCount}</b>.</>}
                   {qrCount > 0 && hdPrice > 0 && (
-                    <> Quality: <b className="text-[#2D2D2D]">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>
+                    <> Quality: <b className="text-dark">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>
                   )}
                 </p>
               </div>
               {qrCount > 0 && tiers.length > 0 && (
-                <div className="mt-3 rounded-xl border border-[#F0F0F0] bg-white px-3 py-3">
-                  <p className="text-xs font-semibold text-[#2D2D2D]">How long should your memories stay live?</p>
-                  <p className="text-[11px] text-[#9B9B9B] mb-2">Your videos play from the printed QR for the whole term. Renew anytime after.</p>
+                <div className="mt-3 rounded-xl border border-line-soft bg-white px-3 py-3">
+                  <p className="text-xs font-semibold text-dark">How long should your memories stay live?</p>
+                  <p className="text-[11px] text-light mb-2">Your videos play from the printed QR for the whole term. Renew anytime after.</p>
                   <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Memory hosting term">
                     {tiers.map((t) => {
                       const active = (hostingYears ?? includedYears) === t.years;
                       return (
                         <button key={t.years} type="button" role="radio" aria-checked={active}
                           onClick={() => setHostingYears(t.years)}
-                          className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-[#E8A598] bg-[#FFF3EC]' : 'border-[#E8E8E8] hover:border-[#F4C2A1]'}`}>
-                          <div className="text-sm font-semibold text-[#2D2D2D]">{t.years} years</div>
-                          <div className="text-[11px] text-[#8B6F47]">{t.price > 0 ? `+₱${t.price}` : 'Included'}</div>
+                          className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-blush-pink bg-[#FFF3EC]' : 'border-line hover:border-peach'}`}>
+                          <div className="text-sm font-semibold text-dark">{t.years} years</div>
+                          <div className="text-[11px] text-cocoa">{t.price > 0 ? `+₱${t.price}` : 'Included'}</div>
                         </button>
                       );
                     })}
@@ -525,7 +525,7 @@ export default function Order() {
                 </div>
               )}
               <button onClick={handleProceedToPayment} disabled={!priceReady}
-                className="w-full mt-4 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
+                className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                 {priceReady ? <><ShoppingCart size={16} /> Proceed to Payment</>
                   : !settingsReady ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
                     : <>Pricing unavailable — please refresh</>}

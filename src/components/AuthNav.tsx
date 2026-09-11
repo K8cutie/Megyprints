@@ -26,7 +26,7 @@ export default function AuthNav() {
           {isOperator && (
             <Link
               to="/admin"
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-[#E8A598] rounded-lg hover:brightness-105 transition-all"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-blush-pink rounded-lg hover:brightness-105 transition-all"
               title="Operator console"
             >
               <LayoutDashboard size={15} />
@@ -35,25 +35,25 @@ export default function AuthNav() {
           )}
           <Link
             to="/memories"
-            className="flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-[#2D2D2D] hover:text-[#E8A598] transition-colors rounded-lg hover:bg-[#FDE8E4]"
+            className="flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-dark hover:text-blush-pink transition-colors rounded-lg hover:bg-blush"
             title="My QR Memories"
           >
-            <QrCode size={16} className="shrink-0 text-[#E8A598]" />
+            <QrCode size={16} className="shrink-0 text-blush-pink" />
             <span className="hidden md:inline">Memories</span>
           </Link>
           <Link
             to="/profile"
-            className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#2D2D2D] hover:text-[#E8A598] transition-colors rounded-lg hover:bg-[#FDE8E4] min-w-0"
+            className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-dark hover:text-blush-pink transition-colors rounded-lg hover:bg-blush min-w-0"
             title={user.user_metadata?.full_name || user.email || 'Account'}
           >
-            <User size={16} className="shrink-0 text-[#E8A598]" />
+            <User size={16} className="shrink-0 text-blush-pink" />
             <span className="truncate max-w-[70px] hidden sm:inline">
               {user.user_metadata?.full_name || user.email?.split('@')[0] || 'Me'}
             </span>
           </Link>
           <button
             onClick={() => { logout(); navigate('/'); }}
-            className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-[#2D2D2D] hover:text-[#E8A598] transition-colors rounded-lg hover:bg-[#FDE8E4]"
+            className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-dark hover:text-blush-pink transition-colors rounded-lg hover:bg-blush"
             title="Sign Out"
           >
             <LogOut size={15} />
@@ -64,13 +64,13 @@ export default function AuthNav() {
         <div className="flex items-center gap-2">
           <button
             onClick={openLogin}
-            className="px-3 py-1.5 text-xs font-medium text-[#E8A598] border border-[#F4C2A1] rounded-lg hover:bg-[#FDE8E4] transition-colors"
+            className="px-3 py-1.5 text-xs font-medium text-blush-pink border border-peach rounded-lg hover:bg-blush transition-colors"
           >
             Log In
           </button>
           <button
             onClick={openSignup}
-            className="px-3 py-1.5 text-xs font-medium text-white bg-[#E8A598] rounded-lg hover:brightness-105 transition-all"
+            className="px-3 py-1.5 text-xs font-medium text-white bg-blush-pink rounded-lg hover:brightness-105 transition-all"
           >
             Sign Up
           </button>

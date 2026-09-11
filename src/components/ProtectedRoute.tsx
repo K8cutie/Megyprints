@@ -13,7 +13,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-[#E8A598] border-t-transparent" />
+        <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-blush-pink border-t-transparent" />
       </div>
     );
   }

@@ -797,27 +797,27 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     <div style={landscapeRotate
       ? { position: 'fixed', top: 0, left: 0, width: '100vh', height: '100vw', transformOrigin: 'top left', transform: 'translateX(100vw) rotate(90deg)', zIndex: 70, overflow: 'hidden' }
       : { height: '100%' }}>
-    <div className="flex flex-col h-full bg-[#F5F5F5] relative">
+    <div className="flex flex-col h-full bg-paper relative">
       {landscapeRotate && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-1.5 text-[11px] font-medium text-[#8B6F47] bg-white/85 rounded-full px-3 py-1 shadow-sm pointer-events-none">
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-1.5 text-[11px] font-medium text-cocoa bg-white/85 rounded-full px-3 py-1 shadow-sm pointer-events-none">
           <RotateCw size={12} /> Hold your phone sideways to view
         </div>
       )}
       {/* Toolbar */}
       <div className="flex items-center justify-between px-5 py-2.5 border-b border-[#E8E4E0] bg-white">
-        <span className="text-xs text-[#6B6B6B] font-medium tabular-nums">
+        <span className="text-xs text-medium font-medium tabular-nums">
           {spreadLeftIndex + 1}-{Math.min(spreadLeftIndex + 2, total)} / {total}
         </span>
         <div className="flex items-center gap-2">
           {/* "Megy finishes it" — visible only while empty caption boxes remain.
               Fills them with unused theme quotes; every fill stays editable. */}
           {sweepNote ? (
-            <span className="text-xs font-medium text-[#8B6F47]">{sweepNote}</span>
+            <span className="text-xs font-medium text-cocoa">{sweepNote}</span>
           ) : waitingBoxes > 0 && (
             <button
               onClick={handleMegyFinish}
               title="Fill every empty box with a quote written for your theme — you can still edit or remove any of them"
-              className="px-3 py-2 bg-[#FDE8E4] text-[#A0562F] text-xs font-semibold rounded-lg hover:bg-[#F4C2A1]/40 flex items-center gap-1.5"
+              className="px-3 py-2 bg-blush text-[#A0562F] text-xs font-semibold rounded-lg hover:bg-peach/40 flex items-center gap-1.5"
             >
               <Sparkles size={13} /> {waitingBoxes} {waitingBoxes === 1 ? 'box' : 'boxes'} waiting — let Megy finish
             </button>
@@ -827,7 +827,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               album can't be downloaded and printed elsewhere. */}
           <button
             onClick={handleOrder}
-            className="px-4 py-2 bg-[#E8A598] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5"
+            className="px-4 py-2 bg-blush-pink text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5"
           >
             <ShoppingCart size={14} /> Order
           </button>
@@ -841,21 +841,21 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           <button
             onClick={navPrev}
             disabled={!hasPrev}
-            className="flex items-center justify-center rounded-full hover:bg-[#E8A598]/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
+            className="flex items-center justify-center rounded-full hover:bg-blush-pink/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
             style={{ width: 56, height: 56 }}
           >
-            <ChevronLeft size={40} className="text-[#E8A598]" />
+            <ChevronLeft size={40} className="text-blush-pink" />
           </button>
 
           {/* Pages */}
           <div className="flex flex-col items-center gap-2">
             {/* Page number labels */}
             <div className="flex items-center" style={{ width: singleW * 2 }}>
-              <span className="text-xs font-medium text-[#6B6B6B]" style={{ width: singleW, textAlign: 'center' }}>
+              <span className="text-xs font-medium text-medium" style={{ width: singleW, textAlign: 'center' }}>
                 Page {spreadLeftIndex + 1}
               </span>
               {spreadRightPage && (
-                <span className="text-xs font-medium text-[#6B6B6B]" style={{ width: singleW, textAlign: 'center' }}>
+                <span className="text-xs font-medium text-medium" style={{ width: singleW, textAlign: 'center' }}>
                   Page {spreadLeftIndex + 2}
                 </span>
               )}
@@ -895,10 +895,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           <button
             onClick={navNext}
             disabled={!hasNext}
-            className="flex items-center justify-center rounded-full hover:bg-[#E8A598]/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
+            className="flex items-center justify-center rounded-full hover:bg-blush-pink/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
             style={{ width: 56, height: 56 }}
           >
-            <ChevronRight size={40} className="text-[#E8A598]" />
+            <ChevronRight size={40} className="text-blush-pink" />
           </button>
         </div>
       </div>
@@ -908,23 +908,23 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 text-center">
             <div className="text-4xl mb-2">📦</div>
-            <h3 className="font-display text-2xl font-semibold text-[#2D2D2D] mb-1">You've reached the end</h3>
-            <p className="text-sm text-[#6B6B6B] mb-5">Your album looks beautiful. Give it a cover, then make it real.</p>
+            <h3 className="font-display text-2xl font-semibold text-dark mb-1">You've reached the end</h3>
+            <p className="text-sm text-medium mb-5">Your album looks beautiful. Give it a cover, then make it real.</p>
             <button
               onClick={() => setCoverOpen(true)}
-              className="w-full py-3 mb-3 bg-white border-2 border-[#E8A598] text-[#C56B4E] text-base font-semibold rounded-xl hover:bg-[#FDF3EF] active:scale-[0.98] transition-all"
+              className="w-full py-3 mb-3 bg-white border-2 border-blush-pink text-[#C56B4E] text-base font-semibold rounded-xl hover:bg-[#FDF3EF] active:scale-[0.98] transition-all"
             >
               🎨 Design your cover
             </button>
             <button
               onClick={handleOrder}
-              className="w-full py-4 bg-[#E8A598] text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md"
+              className="w-full py-4 bg-blush-pink text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md"
             >
               ORDER ALBUM
             </button>
             <button
               onClick={onBack}
-              className="mt-4 text-xs text-[#9B9B9B] hover:text-[#6B6B6B] transition-colors"
+              className="mt-4 text-xs text-light hover:text-medium transition-colors"
             >
               …or do you want to change anything?
             </button>

@@ -68,11 +68,11 @@ function FilterSlider({
 }) {
   return (
     <div className="flex items-center gap-2 mb-2">
-      <span className="text-[#9B9B9B] w-4 flex-shrink-0">{icon}</span>
-      <span className="text-[11px] text-[#6B6B6B] w-14 flex-shrink-0">{label}</span>
+      <span className="text-light w-4 flex-shrink-0">{icon}</span>
+      <span className="text-[11px] text-medium w-14 flex-shrink-0">{label}</span>
       <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))}
-        className="flex-1 h-1 accent-[#F4C2A1]" />
-      <span className="text-[10px] text-[#9B9B9B] w-7 text-right">{value}</span>
+        className="flex-1 h-1 accent-peach" />
+      <span className="text-[10px] text-light w-7 text-right">{value}</span>
     </div>
   );
 }
@@ -147,14 +147,14 @@ function TextEditor({
   return (
     <div className="w-full h-full overflow-y-auto">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-3 border-b border-[#F0F0F0]">
-        <h3 className="font-display text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
-          <TypeOutline size={16} className="text-[#F4C2A1]" />
+      <div className="flex items-center justify-between px-3 py-3 border-b border-line-soft">
+        <h3 className="font-display text-sm font-semibold text-dark flex items-center gap-2">
+          <TypeOutline size={16} className="text-peach" />
           Text Editor
         </h3>
         <button
           onClick={() => onDelete(text.id)}
-          className="p-1.5 rounded-md hover:bg-[#FDE8E4] text-[#E8A598] transition-colors"
+          className="p-1.5 rounded-md hover:bg-blush text-blush-pink transition-colors"
           title="Delete text"
         >
           <Trash2 size={14} />
@@ -162,7 +162,7 @@ function TextEditor({
       </div>
 
       {/* Live Preview */}
-      <div className="mx-3 mt-3 p-3 bg-[#FFFBF7] rounded-lg border border-[#F0F0F0]">
+      <div className="mx-3 mt-3 p-3 bg-warm-white rounded-lg border border-line-soft">
         <p
           className="text-center break-words"
           style={{
@@ -181,7 +181,7 @@ function TextEditor({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0.5 bg-[#F0F0F0] rounded-lg p-0.5 mx-3 mt-3">
+      <div className="flex gap-0.5 bg-line-soft rounded-lg p-0.5 mx-3 mt-3">
         {[
           { id: 'content' as const, label: 'Content', icon: <Type size={12} /> },
           { id: 'style' as const, label: 'Style', icon: <Palette size={12} /> },
@@ -207,19 +207,19 @@ function TextEditor({
         <div className="px-3 py-3 space-y-4">
           {/* Text Area */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 block">Text Content</label>
+            <label className="text-[11px] font-medium text-medium mb-1 block">Text Content</label>
             <textarea
               ref={textareaRef}
               value={text.text}
               onChange={(e) => update({ text: e.target.value })}
-              className="w-full text-xs border border-[#E8E8E8] rounded-lg px-3 py-2 resize-none h-24 focus:outline-none focus:border-[#F4C2A1] focus:ring-1 focus:ring-[#F4C2A1]/30 transition-all"
+              className="w-full text-xs border border-line rounded-lg px-3 py-2 resize-none h-24 focus:outline-none focus:border-peach focus:ring-1 focus:ring-peach/30 transition-all"
               placeholder="Enter your text here..."
             />
           </div>
 
           {/* Quick alignment */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 block">Alignment</label>
+            <label className="text-[11px] font-medium text-medium mb-1 block">Alignment</label>
             <div className="flex gap-1">
               <ToggleBtn active={text.alignment === 'left'} onClick={() => update({ alignment: 'left' })} title="Align left">
                 <AlignLeft size={14} className="mx-auto" />
@@ -235,7 +235,7 @@ function TextEditor({
 
           {/* Format toggles */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 block">Formatting</label>
+            <label className="text-[11px] font-medium text-medium mb-1 block">Formatting</label>
             <div className="flex gap-1">
               <ToggleBtn active={text.bold} onClick={() => update({ bold: !text.bold })} title="Bold">
                 <Bold size={14} className="mx-auto" />
@@ -256,7 +256,7 @@ function TextEditor({
         <div className="px-3 py-3 space-y-4">
           {/* Font Family */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 block">Font Family</label>
+            <label className="text-[11px] font-medium text-medium mb-1 block">Font Family</label>
             <div className="grid grid-cols-3 gap-1 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
               {FONT_FAMILIES.map((font) => (
                 <button
@@ -279,14 +279,14 @@ function TextEditor({
 
           {/* Font Size */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 block">Size: {text.fontSize}px</label>
+            <label className="text-[11px] font-medium text-medium mb-1 block">Size: {text.fontSize}px</label>
             <input
               type="range"
               min={8}
               max={200}
               value={text.fontSize}
               onChange={(e) => update({ fontSize: Number(e.target.value) })}
-              className="w-full h-1 accent-[#F4C2A1] mb-2"
+              className="w-full h-1 accent-peach mb-2"
             />
             <div className="flex flex-wrap gap-1">
               {FONT_SIZE_PRESETS.map((size) => (
@@ -307,19 +307,19 @@ function TextEditor({
 
           {/* Color */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 block">Color</label>
+            <label className="text-[11px] font-medium text-medium mb-1 block">Color</label>
             <div className="flex items-center gap-2 mb-2">
               <input
                 type="color"
                 value={text.color}
                 onChange={(e) => update({ color: e.target.value })}
-                className="w-10 h-8 rounded-md border border-[#E8E8E8] cursor-pointer"
+                className="w-10 h-8 rounded-md border border-line cursor-pointer"
               />
               <input
                 type="text"
                 value={text.color}
                 onChange={(e) => update({ color: e.target.value })}
-                className="flex-1 text-xs border border-[#E8E8E8] rounded-md px-2 py-1"
+                className="flex-1 text-xs border border-line rounded-md px-2 py-1"
               />
             </div>
             <div className="flex flex-wrap gap-1">
@@ -340,14 +340,14 @@ function TextEditor({
 
           {/* Opacity */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 block">Opacity: {text.opacity}%</label>
+            <label className="text-[11px] font-medium text-medium mb-1 block">Opacity: {text.opacity}%</label>
             <input
               type="range"
               min={0}
               max={100}
               value={text.opacity}
               onChange={(e) => update({ opacity: Number(e.target.value) })}
-              className="w-full h-1 accent-[#F4C2A1]"
+              className="w-full h-1 accent-peach"
             />
           </div>
         </div>
@@ -358,24 +358,24 @@ function TextEditor({
         <div className="px-3 py-3 space-y-4">
           {/* Position */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 block">Position</label>
+            <label className="text-[11px] font-medium text-medium mb-1 block">Position</label>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] text-[#9B9B9B]">X</label>
+                <label className="text-[10px] text-light">X</label>
                 <input
                   type="number"
                   value={Math.round(text.x)}
                   onChange={(e) => update({ x: Number(e.target.value) })}
-                  className="w-full text-xs border border-[#E8E8E8] rounded-md px-2 py-1"
+                  className="w-full text-xs border border-line rounded-md px-2 py-1"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-[#9B9B9B]">Y</label>
+                <label className="text-[10px] text-light">Y</label>
                 <input
                   type="number"
                   value={Math.round(text.y)}
                   onChange={(e) => update({ y: Number(e.target.value) })}
-                  className="w-full text-xs border border-[#E8E8E8] rounded-md px-2 py-1"
+                  className="w-full text-xs border border-line rounded-md px-2 py-1"
                 />
               </div>
             </div>
@@ -383,7 +383,7 @@ function TextEditor({
 
           {/* Rotation */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 flex items-center gap-1">
+            <label className="text-[11px] font-medium text-medium mb-1 flex items-center gap-1">
               <RotateCcw size={12} /> Rotation: {text.rotation}°
             </label>
             <input
@@ -392,7 +392,7 @@ function TextEditor({
               max={180}
               value={text.rotation}
               onChange={(e) => update({ rotation: Number(e.target.value) })}
-              className="w-full h-1 accent-[#F4C2A1]"
+              className="w-full h-1 accent-peach"
             />
             <div className="flex gap-1 mt-1">
               {[0, 45, 90, -45, -90, 180].map((deg) => (
@@ -413,16 +413,16 @@ function TextEditor({
 
           {/* Quick nudge buttons */}
           <div>
-            <label className="text-[11px] font-medium text-[#6B6B6B] mb-1 block">Nudge</label>
+            <label className="text-[11px] font-medium text-medium mb-1 block">Nudge</label>
             <div className="grid grid-cols-3 gap-1">
               <div />
-              <button onClick={() => update({ y: text.y - 10 })} className="py-1 rounded bg-[#F0F0F0] text-[#6B6B6B] text-xs hover:bg-[#FDE8E4]">↑</button>
+              <button onClick={() => update({ y: text.y - 10 })} className="py-1 rounded bg-line-soft text-medium text-xs hover:bg-blush">↑</button>
               <div />
-              <button onClick={() => update({ x: text.x - 10 })} className="py-1 rounded bg-[#F0F0F0] text-[#6B6B6B] text-xs hover:bg-[#FDE8E4]">←</button>
-              <button onClick={() => update({ x: text.x + 10 })} className="py-1 rounded bg-[#F4C2A1] text-white text-xs hover:brightness-105">→</button>
-              <button onClick={() => update({ x: text.x + 10 })} className="py-1 rounded bg-[#F0F0F0] text-[#6B6B6B] text-xs hover:bg-[#FDE8E4]">→</button>
+              <button onClick={() => update({ x: text.x - 10 })} className="py-1 rounded bg-line-soft text-medium text-xs hover:bg-blush">←</button>
+              <button onClick={() => update({ x: text.x + 10 })} className="py-1 rounded bg-peach text-white text-xs hover:brightness-105">→</button>
+              <button onClick={() => update({ x: text.x + 10 })} className="py-1 rounded bg-line-soft text-medium text-xs hover:bg-blush">→</button>
               <div />
-              <button onClick={() => update({ y: text.y + 10 })} className="py-1 rounded bg-[#F0F0F0] text-[#6B6B6B] text-xs hover:bg-[#FDE8E4]">↓</button>
+              <button onClick={() => update({ y: text.y + 10 })} className="py-1 rounded bg-line-soft text-medium text-xs hover:bg-blush">↓</button>
               <div />
             </div>
           </div>
@@ -485,10 +485,10 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
 
   /* ── Section wrapper ── */
   const Section = ({ id, title, icon, children }: { id: string; title: string; icon: React.ReactNode; children: React.ReactNode }) => (
-    <div className="border-b border-[#F0F0F0] last:border-0">
+    <div className="border-b border-line-soft last:border-0">
       <button onClick={() => toggle(id)} className="w-full flex items-center justify-between py-2.5 text-left">
-        <span className="flex items-center gap-2 text-xs font-semibold text-[#2D2D2D]">{icon} {title}</span>
-        <ChevronDown size={14} className="text-[#9B9B9B] transition-transform" style={{ transform: expanded === id ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+        <span className="flex items-center gap-2 text-xs font-semibold text-dark">{icon} {title}</span>
+        <ChevronDown size={14} className="text-light transition-transform" style={{ transform: expanded === id ? 'rotate(180deg)' : 'rotate(0deg)' }} />
       </button>
       <AnimatePresence>
         {expanded === id && (
@@ -513,9 +513,9 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
     return (
       <div className="w-full h-full overflow-y-auto px-3 py-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-display text-sm font-semibold text-[#2D2D2D]">Background</h3>
+          <h3 className="font-display text-sm font-semibold text-dark">Background</h3>
           <button onClick={() => onUpdateBackground({ ...background, x: 0, y: 0, width: undefined, height: undefined, rotation: 0 })}
-            className="px-2 py-1 text-[10px] rounded-md bg-[#F0F0F0] text-[#6B6B6B] hover:bg-[#FDE8E4] transition-colors">
+            className="px-2 py-1 text-[10px] rounded-md bg-line-soft text-medium hover:bg-blush transition-colors">
             Reset Transform
           </button>
         </div>
@@ -537,7 +537,7 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
           <FilterSlider label="Hue" value={f.hueRotate} min={0} max={360} icon={<Palette size={12} />} onChange={(v) => onUpdateBackgroundFilters({ hueRotate: v })} />
           <FilterSlider label="Opacity" value={bg.opacity} min={0} max={100} icon={<Droplets size={12} />} onChange={(v) => onUpdateBackground({ ...background, opacity: v })} />
           <button onClick={() => onUpdateBackgroundFilters({ ...DEFAULT_BG_FILTERS })}
-            className="w-full mt-2 py-1.5 text-xs text-[#6B6B6B] hover:text-[#E8A598] flex items-center justify-center gap-1 transition-colors">
+            className="w-full mt-2 py-1.5 text-xs text-medium hover:text-blush-pink flex items-center justify-center gap-1 transition-colors">
             <RotateCcw size={12} /> Reset All Filters
           </button>
         </Section>
@@ -546,19 +546,19 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
           <div className="grid grid-cols-2 gap-2 mb-2">
             {(['x', 'y', 'width', 'height'] as const).map((k) => (
               <div key={k}>
-                <label className="text-[10px] text-[#9B9B9B]">{k.toUpperCase()}</label>
+                <label className="text-[10px] text-light">{k.toUpperCase()}</label>
                 <input type="number" value={Math.round(bg[k])}
                   onChange={(e) => onUpdateBackgroundTransform({ [k]: Number(e.target.value) })}
-                  className="w-full text-xs border border-[#E8E8E8] rounded-md px-2 py-1" />
+                  className="w-full text-xs border border-line rounded-md px-2 py-1" />
               </div>
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-[10px] text-[#9B9B9B]">Rotation</label>
+            <label className="text-[10px] text-light">Rotation</label>
             <input type="range" min="-180" max="180" value={bg.rotation}
               onChange={(e) => onUpdateBackgroundTransform({ rotation: Number(e.target.value) })}
-              className="flex-1 h-1 accent-[#F4C2A1]" />
-            <span className="text-[10px] text-[#9B9B9B] w-8 text-right">{bg.rotation}°</span>
+              className="flex-1 h-1 accent-peach" />
+            <span className="text-[10px] text-light w-8 text-right">{bg.rotation}°</span>
           </div>
         </Section>
 
@@ -573,12 +573,12 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
   if (!selectedPhoto && !selectedText && selectedSlotIndex === null) {
     return (
       <div className="w-full h-full overflow-y-auto px-3 py-4">
-        <h3 className="font-display text-sm font-semibold text-[#2D2D2D] mb-3">Page Properties</h3>
+        <h3 className="font-display text-sm font-semibold text-dark mb-3">Page Properties</h3>
         <BackgroundDesigner background={background} onChange={onUpdateBackground} photos={uploadedPhotos} />
         {onApplyBackgroundToAll && (
           <button
             onClick={onApplyBackgroundToAll}
-            className="w-full mt-3 py-2 bg-white border border-[#F4C2A1] text-[#F4C2A1] text-[11px] font-medium rounded-xl hover:bg-[#F4C2A1] hover:text-white flex items-center justify-center gap-1.5 transition-all"
+            className="w-full mt-3 py-2 bg-white border border-peach text-peach text-[11px] font-medium rounded-xl hover:bg-peach hover:text-white flex items-center justify-center gap-1.5 transition-all"
           >
             <Layers size={12} /> Apply to All Pages
           </button>
@@ -598,8 +598,8 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
     if (!photo) {
       return (
         <div className="w-full h-full overflow-y-auto px-3 py-4">
-          <h3 className="font-display text-sm font-semibold text-[#2D2D2D] mb-3">Slot {selectedSlotIndex + 1}</h3>
-          <p className="text-xs text-[#9B9B9B]">Photo not found.</p>
+          <h3 className="font-display text-sm font-semibold text-dark mb-3">Slot {selectedSlotIndex + 1}</h3>
+          <p className="text-xs text-light">Photo not found.</p>
         </div>
       );
     }
@@ -607,16 +607,16 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
     return (
       <div className="w-full h-full overflow-y-auto px-3 py-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-display text-sm font-semibold text-[#2D2D2D]">Slot {selectedSlotIndex + 1}</h3>
+          <h3 className="font-display text-sm font-semibold text-dark">Slot {selectedSlotIndex + 1}</h3>
           <div className="flex gap-1">
-            <button onClick={onReplaceSlotPhoto} title="Replace photo" className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"><Replace size={14} /></button>
-            <button onClick={() => onClearSlot(selectedSlotIndex)} title="Clear slot" className="p-1.5 rounded-md hover:bg-[#FDE8E4] text-[#E8A598]"><Trash2 size={14} /></button>
+            <button onClick={onReplaceSlotPhoto} title="Replace photo" className="p-1.5 rounded-md hover:bg-line-soft text-medium"><Replace size={14} /></button>
+            <button onClick={() => onClearSlot(selectedSlotIndex)} title="Clear slot" className="p-1.5 rounded-md hover:bg-blush text-blush-pink"><Trash2 size={14} /></button>
           </div>
         </div>
 
-        <div className="mb-3 rounded-lg overflow-hidden border border-[#E8E8E8]">
+        <div className="mb-3 rounded-lg overflow-hidden border border-line">
           <img src={photo.previewUrl} alt={photo.name} className="w-full aspect-square object-cover" />
-          <p className="text-[10px] text-[#9B9B9B] px-2 py-1 truncate bg-white">{photo.name}</p>
+          <p className="text-[10px] text-light px-2 py-1 truncate bg-white">{photo.name}</p>
         </div>
 
         <Section id="slotZoom" title="Zoom" icon={<ZoomIn size={14} />}>
@@ -625,17 +625,17 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
               type="range" min={0.1} max={10} step={0.05}
               value={currentScale}
               onChange={(e) => onSetSlotScale(selectedSlotIndex, Number(e.target.value))}
-              className="flex-1 h-1 accent-[#F4C2A1]"
+              className="flex-1 h-1 accent-peach"
             />
-            <span className="text-[10px] text-[#9B9B9B] w-10 text-right">{Math.round(currentScale * 100)}%</span>
+            <span className="text-[10px] text-light w-10 text-right">{Math.round(currentScale * 100)}%</span>
           </div>
-          <p className="text-[10px] text-[#9B9B9B]">Drag corner handles on the canvas to zoom in or out.</p>
+          <p className="text-[10px] text-light">Drag corner handles on the canvas to zoom in or out.</p>
         </Section>
 
         <Section id="slotPan" title="Pan" icon={<Move size={14} />}>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <div>
-              <label className="text-[10px] text-[#9B9B9B]">Offset X</label>
+              <label className="text-[10px] text-light">Offset X</label>
               <input
                 type="number" value={Math.round(currentOffsetX)}
                 onChange={(e) => {
@@ -643,11 +643,11 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
                   const delta = val - currentOffsetX;
                   onSetSlotOffset(selectedSlotIndex, delta, 0);
                 }}
-                className="w-full text-xs border border-[#E8E8E8] rounded-md px-2 py-1"
+                className="w-full text-xs border border-line rounded-md px-2 py-1"
               />
             </div>
             <div>
-              <label className="text-[10px] text-[#9B9B9B]">Offset Y</label>
+              <label className="text-[10px] text-light">Offset Y</label>
               <input
                 type="number" value={Math.round(currentOffsetY)}
                 onChange={(e) => {
@@ -655,11 +655,11 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
                   const delta = val - currentOffsetY;
                   onSetSlotOffset(selectedSlotIndex, 0, delta);
                 }}
-                className="w-full text-xs border border-[#E8E8E8] rounded-md px-2 py-1"
+                className="w-full text-xs border border-line rounded-md px-2 py-1"
               />
             </div>
           </div>
-          <p className="text-[10px] text-[#9B9B9B]">Shift the photo within its slot frame.</p>
+          <p className="text-[10px] text-light">Shift the photo within its slot frame.</p>
         </Section>
       </div>
     );
@@ -671,12 +671,12 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
     return (
       <div className="w-full h-full overflow-y-auto px-3 py-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-display text-sm font-semibold text-[#2D2D2D]">Photo</h3>
+          <h3 className="font-display text-sm font-semibold text-dark">Photo</h3>
           <div className="flex gap-1">
-            <button onClick={() => onBringToFront(selectedPhoto.id)} title="Bring to front" className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"><ArrowUp size={14} /></button>
-            <button onClick={() => onSendToBack(selectedPhoto.id)} title="Send to back" className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"><ArrowDown size={14} /></button>
-            <button onClick={() => onDuplicatePhoto(selectedPhoto.id)} title="Duplicate" className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"><Copy size={14} /></button>
-            <button onClick={() => onDeletePhoto(selectedPhoto.id)} title="Delete" className="p-1.5 rounded-md hover:bg-[#FDE8E4] text-[#E8A598]"><Trash2 size={14} /></button>
+            <button onClick={() => onBringToFront(selectedPhoto.id)} title="Bring to front" className="p-1.5 rounded-md hover:bg-line-soft text-medium"><ArrowUp size={14} /></button>
+            <button onClick={() => onSendToBack(selectedPhoto.id)} title="Send to back" className="p-1.5 rounded-md hover:bg-line-soft text-medium"><ArrowDown size={14} /></button>
+            <button onClick={() => onDuplicatePhoto(selectedPhoto.id)} title="Duplicate" className="p-1.5 rounded-md hover:bg-line-soft text-medium"><Copy size={14} /></button>
+            <button onClick={() => onDeletePhoto(selectedPhoto.id)} title="Delete" className="p-1.5 rounded-md hover:bg-blush text-blush-pink"><Trash2 size={14} /></button>
           </div>
         </div>
 
@@ -697,7 +697,7 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
           <FilterSlider label="Hue" value={f.hueRotate} min={0} max={360} icon={<Palette size={12} />} onChange={(v) => onUpdateFilters(selectedPhoto.id, { hueRotate: v })} />
           <FilterSlider label="Opacity" value={f.opacity} min={0} max={100} icon={<Droplets size={12} />} onChange={(v) => onUpdateFilters(selectedPhoto.id, { opacity: v })} />
           <button onClick={() => onUpdateFilters(selectedPhoto.id, { ...DEFAULT_FILTERS })}
-            className="w-full mt-2 py-1.5 text-xs text-[#6B6B6B] hover:text-[#E8A598] flex items-center justify-center gap-1 transition-colors">
+            className="w-full mt-2 py-1.5 text-xs text-medium hover:text-blush-pink flex items-center justify-center gap-1 transition-colors">
             <RotateCcw size={12} /> Reset All Filters
           </button>
         </Section>
@@ -706,19 +706,19 @@ export default function PropertiesPanel(props: PropertiesPanelProps) {
           <div className="grid grid-cols-2 gap-2 mb-2">
             {(['x', 'y', 'width', 'height'] as const).map((k) => (
               <div key={k}>
-                <label className="text-[10px] text-[#9B9B9B]">{k.toUpperCase()}</label>
+                <label className="text-[10px] text-light">{k.toUpperCase()}</label>
                 <input type="number" value={Math.round(selectedPhoto[k])}
                   onChange={(e) => onUpdatePhoto(selectedPhoto.id, { [k]: Number(e.target.value) })}
-                  className="w-full text-xs border border-[#E8E8E8] rounded-md px-2 py-1" />
+                  className="w-full text-xs border border-line rounded-md px-2 py-1" />
               </div>
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-[10px] text-[#9B9B9B]">Rotation</label>
+            <label className="text-[10px] text-light">Rotation</label>
             <input type="range" min="-180" max="180" value={selectedPhoto.rotation}
               onChange={(e) => onUpdatePhoto(selectedPhoto.id, { rotation: Number(e.target.value) })}
-              className="flex-1 h-1 accent-[#F4C2A1]" />
-            <span className="text-[10px] text-[#9B9B9B] w-8 text-right">{selectedPhoto.rotation}°</span>
+              className="flex-1 h-1 accent-peach" />
+            <span className="text-[10px] text-light w-8 text-right">{selectedPhoto.rotation}°</span>
           </div>
         </Section>
       </div>

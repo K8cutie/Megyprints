@@ -160,22 +160,22 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8] shrink-0">
-          <span className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
-            <Video size={18} className="text-[#E8A598]" /> {initial ? 'Change this memory' : 'Add a video memory'}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line shrink-0">
+          <span className="text-sm font-semibold text-dark flex items-center gap-2">
+            <Video size={18} className="text-blush-pink" /> {initial ? 'Change this memory' : 'Add a video memory'}
           </span>
-          <button onClick={onClose} className="text-[#9B9B9B] p-1" aria-label="Close"><X size={18} /></button>
+          <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
         </div>
 
         <div className="p-5 space-y-3 overflow-y-auto">
           {!initial && (
-            <div className="rounded-xl bg-gradient-to-br from-[#FFF3EC] to-[#FDF6F1] border border-[#F4C2A1]/50 px-4 py-3">
-              <p className="text-sm font-bold text-[#2D2D2D]">Pick a video of this moment 🎬</p>
-              <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
+            <div className="rounded-xl bg-gradient-to-br from-[#FFF3EC] to-[#FDF6F1] border border-peach/50 px-4 py-3">
+              <p className="text-sm font-bold text-dark">Pick a video of this moment 🎬</p>
+              <p className="text-xs text-medium mt-1 leading-snug">
                 It plays the instant anyone scans the QR printed on this page — no app, no account.
                 Up to {Math.round(MAX_CLIP_SECONDS / 60)} minutes — we shrink it for you, so any phone video works.
               </p>
-              <p className="text-[11px] text-[#9B8B7A] mt-1.5 flex items-center gap-1">
+              <p className="text-[11px] text-stone mt-1.5 flex items-center gap-1">
                 <Clock size={11} className="shrink-0" />
                 {FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after
                 {includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}
@@ -186,14 +186,14 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
           {/* What's in the box now (edit mode) */}
           {initial && !file && (
             currentUrl ? (
-              <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-2">
+              <div className="rounded-xl border border-line bg-[#FAFAFA] p-2">
                 <video src={currentUrl} controls muted playsInline preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
-                <p className="text-[11px] text-[#6B6B6B] mt-2 text-center">This is what plays when someone scans this page.</p>
+                <p className="text-[11px] text-medium mt-2 text-center">This is what plays when someone scans this page.</p>
               </div>
             ) : legacyLink ? (
-              <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] px-3 py-2.5 text-xs text-[#6B6B6B]">
+              <div className="rounded-xl border border-line bg-[#FAFAFA] px-3 py-2.5 text-xs text-medium">
                 This memory currently points to a link on{' '}
-                <span className="font-semibold text-[#8B6F47] break-all">{safeHost(legacyLink)}</span>.
+                <span className="font-semibold text-cocoa break-all">{safeHost(legacyLink)}</span>.
                 Replace it with a video and it will play right on the page — same QR, no reprint.
               </div>
             ) : null
@@ -202,28 +202,28 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
           {/* Quality tier - first memory only, then locked for the album */}
           {offerTier && (
             <div>
-              <label className="text-xs text-[#6B6B6B] mb-1.5 block">Video quality for this album</label>
+              <label className="text-xs text-medium mb-1.5 block">Video quality for this album</label>
               <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Memory video quality">
                 {(['standard', 'hd'] as ClipQuality[]).map((q) => {
                   const active = quality === q;
                   return (
                     <button key={q} type="button" role="radio" aria-checked={active}
                       onClick={() => setQuality(q)}
-                      className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-[#E8A598] bg-[#FFF3EC]' : 'border-[#E8E8E8] hover:border-[#F4C2A1]'}`}>
-                      <div className="text-sm font-semibold text-[#2D2D2D]">
+                      className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-blush-pink bg-[#FFF3EC]' : 'border-line hover:border-peach'}`}>
+                      <div className="text-sm font-semibold text-dark">
                         {q === 'hd' ? 'HD' : 'Standard'} {QUALITY_TARGETS[q].label}
                       </div>
-                      <div className="text-[11px] text-[#8B6F47]">{q === 'hd' ? `+PHP ${hdPrice} once` : 'Included'}</div>
+                      <div className="text-[11px] text-cocoa">{q === 'hd' ? `+PHP ${hdPrice} once` : 'Included'}</div>
                     </button>
                   );
                 })}
               </div>
-              <p className="text-[10px] text-[#9B9B9B] mt-1">Applies to every memory in this album, for its whole hosting term.</p>
+              <p className="text-[10px] text-light mt-1">Applies to every memory in this album, for its whole hosting term.</p>
             </div>
           )}
           {!initial && tierLocked === true && hdPrice > 0 && (
-            <p className="text-[11px] text-[#9B8B7A]">
-              Quality: <b className="text-[#8B6F47]">{quality === 'hd' ? `HD ${QUALITY_TARGETS.hd.label}` : `Standard ${QUALITY_TARGETS.standard.label}`}</b> - set with your first memory.
+            <p className="text-[11px] text-stone">
+              Quality: <b className="text-cocoa">{quality === 'hd' ? `HD ${QUALITY_TARGETS.hd.label}` : `Standard ${QUALITY_TARGETS.standard.label}`}</b> - set with your first memory.
             </p>
           )}
 
@@ -231,7 +231,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
           <input ref={inputRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v" className="hidden"
             onChange={(e) => void pick(e.target.files?.[0] ?? null)} />
           <button type="button" onClick={() => inputRef.current?.click()} disabled={checking || busy}
-            className="w-full rounded-xl border-2 border-dashed border-[#F4C2A1] bg-[#FFF8F0] px-4 py-4 text-sm font-semibold text-[#8B6F47] flex items-center justify-center gap-2 disabled:opacity-60">
+            className="w-full rounded-xl border-2 border-dashed border-peach bg-cream px-4 py-4 text-sm font-semibold text-cocoa flex items-center justify-center gap-2 disabled:opacity-60">
             {checking ? <><Loader2 size={16} className="animate-spin" /> Checking your video…</>
               : <><Upload size={16} /> {file ? 'Choose a different video' : initial ? 'Replace with a new video' : 'Choose a video'}</>}
           </button>
@@ -239,10 +239,10 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
 
           {/* Preview of the picked file — the live proof, before anything is saved */}
           {file && previewUrl && (
-            <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-2">
+            <div className="rounded-xl border border-line bg-[#FAFAFA] p-2">
               <video key={previewUrl} src={previewUrl} controls autoPlay muted playsInline preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
-              <p className="text-[11px] text-[#6B6B6B] mt-2 flex items-center gap-1 justify-center text-center">
-                <Play size={11} className="text-[#E8A598] shrink-0" fill="currentColor" />
+              <p className="text-[11px] text-medium mt-2 flex items-center gap-1 justify-center text-center">
+                <Play size={11} className="text-blush-pink shrink-0" fill="currentColor" />
                 {file.name} · {mb} MB{meta?.durationSec != null ? ` · ${Math.round(meta.durationSec)} s` : ''}
               </p>
             </div>
@@ -250,11 +250,11 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
 
           {onCorner && (
             <div>
-              <label className="text-xs text-[#6B6B6B] mb-1.5 block">Which corner should the QR sit in?</label>
+              <label className="text-xs text-medium mb-1.5 block">Which corner should the QR sit in?</label>
               <div className="flex items-center gap-3">
                 {allowAuto && (
                   <button type="button" onClick={() => onCorner(null)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition ${corner == null ? 'bg-[#F4C2A1] text-white' : 'bg-[#FFF8F0] text-[#8B6F47] hover:bg-[#FDE8E4]'}`}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition ${corner == null ? 'bg-peach text-white' : 'bg-cream text-cocoa hover:bg-blush'}`}
                     title="Auto — tuck it into the corner away from the face">
                     ✨ Auto
                   </button>
@@ -265,14 +265,14 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
                     return (
                       <button key={c} type="button" onClick={() => onCorner(c)}
                         aria-label={CORNER_LABELS[c]} title={CORNER_LABELS[c]}
-                        className={`absolute w-6 h-6 rounded-[5px] flex items-center justify-center transition ${active ? 'bg-[#E8A598] ring-2 ring-[#F4C2A1]' : 'bg-white border border-[#E0D3C6] hover:bg-[#FDE8E4]'}`}
+                        className={`absolute w-6 h-6 rounded-[5px] flex items-center justify-center transition ${active ? 'bg-blush-pink ring-2 ring-peach' : 'bg-white border border-[#E0D3C6] hover:bg-blush'}`}
                         style={CORNER_POS[c]}>
                         {active && <span className="w-2.5 h-2.5 rounded-[2px] bg-white" />}
                       </button>
                     );
                   })}
                 </div>
-                <span className="text-[11px] text-[#9B9B9B] leading-snug">
+                <span className="text-[11px] text-light leading-snug">
                   {corner == null ? 'Auto places it away from the face.' : `Placed in the ${CORNER_LABELS[corner].toLowerCase()} corner.`}
                 </span>
               </div>
@@ -282,19 +282,19 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
           {initial && (
             <div className="flex items-center gap-3 rounded-lg bg-[#FAFAFA] p-2">
               <img src={initial.qrPngDataUrl} alt="QR preview" className="w-12 h-12 shrink-0" />
-              <span className="text-[11px] text-[#9B9B9B] break-all">{initial.memoryUrl}</span>
+              <span className="text-[11px] text-light break-all">{initial.memoryUrl}</span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#E8E8E8] shrink-0">
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-line shrink-0">
           {initial ? (
             <button onClick={() => void remove()} className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
               <Trash2 size={14} /> Remove
             </button>
           ) : <span />}
           <button onClick={() => void confirm()} disabled={busy || !file}
-            className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold hover:brightness-105 disabled:opacity-60 flex items-center gap-2">
+            className="px-5 py-2 rounded-lg bg-peach text-white text-sm font-semibold hover:brightness-105 disabled:opacity-60 flex items-center gap-2">
             {busy ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : (initial ? 'Use this video' : 'Place QR')}
           </button>
         </div>
@@ -366,28 +366,28 @@ function LegacyLinkModal({ initial, onSave, onRemove, onClose, corner, onCorner,
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8]">
-          <span className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
-            <Youtube size={18} className="text-[#E8A598]" /> {initial ? 'Edit YouTube Memory' : 'Add a YouTube Memory'}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+          <span className="text-sm font-semibold text-dark flex items-center gap-2">
+            <Youtube size={18} className="text-blush-pink" /> {initial ? 'Edit YouTube Memory' : 'Add a YouTube Memory'}
           </span>
-          <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+          <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-3">
           {!user && (
-            <div className="text-[11px] leading-snug text-[#8B6F47] bg-[#FFF3EC] border border-[#F4C2A1]/60 rounded-lg px-3 py-2">
+            <div className="text-[11px] leading-snug text-cocoa bg-[#FFF3EC] border border-peach/60 rounded-lg px-3 py-2">
               <span className="font-semibold">Sign in to add a QR.</span> The link is saved to your account so it opens for anyone who scans it — no app needed — and you can re-point it anytime.
             </div>
           )}
           <div>
-            <label className="text-xs text-[#6B6B6B] mb-1 block">YouTube link</label>
+            <label className="text-xs text-medium mb-1 block">YouTube link</label>
             <input value={url} onChange={(e) => { setUrl(e.target.value); if (error) setError(''); }}
               onKeyDown={(e) => { if (e.key === 'Enter') confirm(); }}
               inputMode="url" autoComplete="off" placeholder="https://youtu.be/…" aria-invalid={!!error}
-              className={`w-full border rounded-lg px-3 py-2 text-sm ${error ? 'border-red-400' : 'border-[#E8E8E8]'}`} />
+              className={`w-full border rounded-lg px-3 py-2 text-sm ${error ? 'border-red-400' : 'border-line'}`} />
             {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
           </div>
           {embed && (
-            <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-2">
+            <div className="rounded-xl border border-line bg-[#FAFAFA] p-2">
               <div className={`relative overflow-hidden rounded-lg bg-black mx-auto ${embed.portrait ? 'w-[200px] aspect-[9/16]' : 'w-full aspect-video'}`}>
                 <iframe key={embed.src} src={previewSrc} title="Memory video preview" className="absolute inset-0 w-full h-full"
                   allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
@@ -398,26 +398,26 @@ function LegacyLinkModal({ initial, onSave, onRemove, onClose, corner, onCorner,
             <div className="flex items-center gap-3">
               {allowAuto && (
                 <button type="button" onClick={() => onCorner(null)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 ${corner == null ? 'bg-[#F4C2A1] text-white' : 'bg-[#FFF8F0] text-[#8B6F47]'}`}>✨ Auto</button>
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 ${corner == null ? 'bg-peach text-white' : 'bg-cream text-cocoa'}`}>✨ Auto</button>
               )}
               <div className="relative rounded-lg border-2 border-dashed border-[#E8D9CC] bg-[#FBF6F1] shrink-0" style={{ width: 92, height: 68 }}>
                 {QR_CORNERS.map((c) => (
                   <button key={c} type="button" onClick={() => onCorner(c)} aria-label={CORNER_LABELS[c]}
-                    className={`absolute w-6 h-6 rounded-[5px] ${corner === c ? 'bg-[#E8A598] ring-2 ring-[#F4C2A1]' : 'bg-white border border-[#E0D3C6]'}`}
+                    className={`absolute w-6 h-6 rounded-[5px] ${corner === c ? 'bg-blush-pink ring-2 ring-peach' : 'bg-white border border-[#E0D3C6]'}`}
                     style={CORNER_POS[c]} />
                 ))}
               </div>
             </div>
           )}
         </div>
-        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#E8E8E8]">
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-line">
           {initial ? (
             <button onClick={onRemove} className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg"><Trash2 size={14} /> Remove</button>
           ) : <span />}
           {!user ? (
-            <button onClick={openLogin} className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold flex items-center gap-2"><LogIn size={15} /> Log In to continue</button>
+            <button onClick={openLogin} className="px-5 py-2 rounded-lg bg-peach text-white text-sm font-semibold flex items-center gap-2"><LogIn size={15} /> Log In to continue</button>
           ) : (
-            <button onClick={confirm} disabled={busy} className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold disabled:opacity-60 flex items-center gap-2">
+            <button onClick={confirm} disabled={busy} className="px-5 py-2 rounded-lg bg-peach text-white text-sm font-semibold disabled:opacity-60 flex items-center gap-2">
               {busy ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : (initial ? 'Save' : 'Generate QR')}
             </button>
           )}

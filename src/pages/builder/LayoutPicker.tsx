@@ -45,12 +45,12 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
             className="w-full lg:max-w-2xl bg-white rounded-t-2xl lg:rounded-2xl max-h-[80vh] flex flex-col shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
-              <span className="text-sm font-semibold text-[#2D2D2D]">Choose a layout</span>
-              <button onClick={close} className="text-[#9B9B9B] p-1" aria-label="Close"><X size={18} /></button>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
+              <span className="text-sm font-semibold text-dark">Choose a layout</span>
+              <button onClick={close} className="text-light p-1" aria-label="Close"><X size={18} /></button>
             </div>
             {layouts.length === 0 ? (
-              <p className="p-6 text-center text-sm text-[#9B9B9B]">No other layouts fit this page.</p>
+              <p className="p-6 text-center text-sm text-light">No other layouts fit this page.</p>
             ) : (
               <div className="overflow-y-auto p-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {layouts.map((t) => {
@@ -67,7 +67,7 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
                   return (
                     <button key={t.id}
                       onClick={() => { actions.applyPageLayout(t.id); close(); }}
-                      className={`rounded-xl border-2 p-1.5 active:scale-95 transition-transform ${current ? 'border-[#F4C2A1] bg-[#FFF8F0]' : 'border-[#F0F0F0] bg-white'}`}>
+                      className={`rounded-xl border-2 p-1.5 active:scale-95 transition-transform ${current ? 'border-peach bg-cream' : 'border-line-soft bg-white'}`}>
                       <div className="relative overflow-hidden bg-white mx-auto rounded-md" style={{ width: W, height: H }}>
                         <PageView page={previewPage} photos={actions.uploadedPhotos} singleW={W} H={H} pageIndex={idx} />
                       </div>

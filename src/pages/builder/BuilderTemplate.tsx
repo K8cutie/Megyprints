@@ -77,10 +77,10 @@ function TemplateCard({
           <span className="text-white text-xs font-medium">Click to select</span>
         </div>
       </div>
-      <p className="text-xs font-medium text-[#2D2D2D] mt-1.5 text-center truncate">
+      <p className="text-xs font-medium text-dark mt-1.5 text-center truncate">
         {theme.name}
       </p>
-      <p className="text-[10px] text-[#9B9B9B] text-center line-clamp-1">
+      <p className="text-[10px] text-light text-center line-clamp-1">
         {theme.description}
       </p>
     </div>
@@ -100,7 +100,7 @@ function PageTemplatePreview({
   return (
     <div className={`relative group ${isHidden ? 'opacity-40 grayscale' : ''}`}>
       {/* Mini canvas showing slot layout */}
-      <div className="relative aspect-[3/4] rounded-xl overflow-hidden border border-[#E8E8E8] bg-[#FFFBF7]">
+      <div className="relative aspect-[3/4] rounded-xl overflow-hidden border border-line bg-warm-white">
         {template.slots.map((slot) => (
           <div
             key={slot.id}
@@ -141,21 +141,21 @@ function PageTemplatePreview({
           className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50"
           title={isHidden ? 'Template hidden from generation' : 'Hide this template'}
         >
-          <EyeOff size={12} className={isHidden ? 'text-red-400' : 'text-[#9B9B9B]'} />
+          <EyeOff size={12} className={isHidden ? 'text-red-400' : 'text-light'} />
         </button>
 
         {isHidden && (
           <div className="absolute inset-0 bg-black/10 flex items-center justify-center">
-            <span className="text-[10px] font-medium text-[#6B6B6B] bg-white/80 px-2 py-0.5 rounded-full">
+            <span className="text-[10px] font-medium text-medium bg-white/80 px-2 py-0.5 rounded-full">
               Hidden
             </span>
           </div>
         )}
       </div>
-      <p className="text-[10px] font-medium text-[#2D2D2D] mt-1 text-center truncate">
+      <p className="text-[10px] font-medium text-dark mt-1 text-center truncate">
         {template.name}
       </p>
-      <p className="text-[9px] text-[#9B9B9B] text-center">
+      <p className="text-[9px] text-light text-center">
         {photoSlotCount(template)} photo{photoSlotCount(template) > 1 ? 's' : ''}{hasQrSlot(template) ? ' + QR' : ''}
       </p>
     </div>
@@ -190,22 +190,22 @@ export default function BuilderTemplate({
   const slotOptions = [1, 2, 3, 4, 5];
 
   return (
-    <div className="flex flex-col h-full bg-[#FFF8F0]">
+    <div className="flex flex-col h-full bg-cream">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-[#F0F0F0] flex items-center justify-between bg-white">
+      <div className="px-6 py-4 border-b border-line-soft flex items-center justify-between bg-white">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
             aria-label="Go back"
-            className="p-2 rounded-lg hover:bg-[#F0F0F0] text-[#6B6B6B] transition-colors"
+            className="p-2 rounded-lg hover:bg-line-soft text-medium transition-colors"
           >
             <ChevronLeft size={18} aria-hidden="true" />
           </button>
           <div>
-            <h2 className="font-display text-xl font-semibold text-[#2D2D2D]">
+            <h2 className="font-display text-xl font-semibold text-dark">
               Step 2: Choose Style
             </h2>
-            <p className="text-xs text-[#9B9B9B]">
+            <p className="text-xs text-light">
               Pick a starting point — hide layouts you don't like
             </p>
           </div>
@@ -214,21 +214,21 @@ export default function BuilderTemplate({
           {hiddenCount > 0 && onUnhideAll && (
             <button
               onClick={onUnhideAll}
-              className="text-xs text-[#9B9B9B] hover:text-[#F4C2A1] underline transition-colors"
+              className="text-xs text-light hover:text-peach underline transition-colors"
             >
               Unhide all ({hiddenCount})
             </button>
           )}
           <button
             onClick={onGenerate}
-            className="px-6 py-2 bg-[#F4C2A1] text-white font-body text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5 transition-all"
+            className="px-6 py-2 bg-peach text-white font-body text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5 transition-all"
           >
             <Sparkles size={14} aria-hidden="true" /> Apply to Current Page
           </button>
           {onGenerateFull && (
             <button
               onClick={onGenerateFull}
-              className="px-4 py-2 bg-white border border-[#E8E8E8] text-[#6B6B6B] font-body text-xs font-semibold rounded-lg hover:bg-[#F5F5F5] flex items-center gap-1.5 transition-all"
+              className="px-4 py-2 bg-white border border-line text-medium font-body text-xs font-semibold rounded-lg hover:bg-paper flex items-center gap-1.5 transition-all"
             >
               <Sparkles size={12} aria-hidden="true" /> Generate Full Album
             </button>
@@ -238,8 +238,8 @@ export default function BuilderTemplate({
 
       <div className="flex-1 overflow-auto">
         {/* Theme selector */}
-        <div className="p-6 border-b border-[#F0F0F0]">
-          <h3 className="text-sm font-semibold text-[#2D2D2D] mb-4">Theme</h3>
+        <div className="p-6 border-b border-line-soft">
+          <h3 className="text-sm font-semibold text-dark mb-4">Theme</h3>
           <div className={`${GRID_COLUMNS} max-w-[1400px] mx-auto`}>
             {themes.map((t) => (
               <TemplateCard
@@ -253,10 +253,10 @@ export default function BuilderTemplate({
         </div>
 
         {/* Slot count preference */}
-        <div className="p-6 border-b border-[#F0F0F0] bg-white">
+        <div className="p-6 border-b border-line-soft bg-white">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-[#2D2D2D]">Slot Count</h3>
-            <p className="text-xs text-[#9B9B9B]">
+            <h3 className="text-sm font-semibold text-dark">Slot Count</h3>
+            <p className="text-xs text-light">
               {filteredTemplates.length} layout{filteredTemplates.length !== 1 ? 's' : ''} match
             </p>
           </div>
@@ -266,8 +266,8 @@ export default function BuilderTemplate({
               onClick={() => onPreferredSlotCountChange?.(null)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 preferredSlotCount === undefined || preferredSlotCount === null
-                  ? 'bg-[#F4C2A1] text-white shadow-sm'
-                  : 'bg-[#F5F5F5] text-[#6B6B6B] hover:bg-[#E8E8E8]'
+                  ? 'bg-peach text-white shadow-sm'
+                  : 'bg-paper text-medium hover:bg-line'
               }`}
             >
               All
@@ -278,8 +278,8 @@ export default function BuilderTemplate({
                 onClick={() => onPreferredSlotCountChange?.(count)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   preferredSlotCount === count
-                    ? 'bg-[#F4C2A1] text-white shadow-sm'
-                    : 'bg-[#F5F5F5] text-[#6B6B6B] hover:bg-[#E8E8E8]'
+                    ? 'bg-peach text-white shadow-sm'
+                    : 'bg-paper text-medium hover:bg-line'
                 }`}
               >
                 {count} slot{count > 1 ? 's' : ''}
@@ -292,10 +292,10 @@ export default function BuilderTemplate({
         {onHideTemplate && (
           <div className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-[#2D2D2D]">
+              <h3 className="text-sm font-semibold text-dark">
                 Layouts ({filteredTemplates.length - hiddenCount} active)
               </h3>
-              <p className="text-xs text-[#9B9B9B]">
+              <p className="text-xs text-light">
                 Hover and click the eye icon to hide a layout from generation
               </p>
             </div>
