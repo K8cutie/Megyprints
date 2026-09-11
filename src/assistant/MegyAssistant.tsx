@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useBuilderContext } from '../pages/builder/BuilderContext';
 import { parseIntent } from './intentParser';
-import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep } from './wizard';
+import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
@@ -15,6 +15,9 @@ import type { AssistantMessage } from './types';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
 import { getThemeBackgroundVariants, BORDER_STYLES, FRAME_STYLES, frameStyleToCss } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
+import AlbumThemeStep from './AlbumThemeStep';
+import { readAlbumTheme, writeAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
+import { fetchThemeQuotes } from '../lib/quotes';
 import {
   Images, LayoutGrid, Palette, Type, ChevronUp, ChevronDown,
   PanelLeft, Box, Shuffle, Plus, Minus, ArrowLeft, ArrowRight, Upload,
@@ -155,6 +158,23 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const [wizardStep, setWizardStep] = useState(wizardRef.current.state.step);
   const prevPhaseRef = useRef(builder.phase);
 
+  /* ── Album occasion (pick_theme, unskippable) ──
+     Written to the same local key the quote engine reads. Next is gated on
+     it; advancing warms the themed quote pool so the first generation deals
+     real lines instead of waiting on the proxy. */
+  const [albumTheme, setAlbumThemeState] = useState(readAlbumTheme);
+  const setAlbumTheme = (v: string) => { setAlbumThemeState(v); writeAlbumTheme(v); };
+  const themeReady = isAlbumThemeReady(albumTheme);
+  const goNext = () => {
+    if (wizardStep === 'pick_theme') {
+      if (!themeReady) return;
+      void fetchThemeQuotes(albumTheme.trim());
+    }
+    wizardRef.current.advance();
+    setWizardStep(wizardRef.current.state.step);
+  };
+  const nextDisabled = wizardStep === 'finalize' || (wizardStep === 'pick_theme' && !themeReady);
+
   /* ── Option A: the wizard is the single source of truth for the journey.
      Mirror its step into the SHARED store AND derive the center screen (phase)
      from it — so the center and this panel can never disagree. ── */
@@ -171,6 +191,18 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   useEffect(() => {
     const eng = wizardRef.current;
     if (builder.wizardStep !== eng.state.step) {
+      // The occasion step cannot be jumped over: a forward jump past it with
+      // no occasion stored lands on it, and the guided card comes back so the
+      // customer actually sees it (a dismissed wizard would otherwise hide it).
+      const target = forwardJumpTarget(eng.state.step, builder.wizardStep, isAlbumThemeReady(readAlbumTheme()));
+      if (target !== builder.wizardStep) {
+        eng.state.step = target;
+        setShowWizard(true);
+        setWizardStep(target);
+        builder.setWizardStep(target);
+        builder.setPhase(phaseForStep(target));
+        return;
+      }
       const from = WIZARD_ORDER.indexOf(eng.state.step);
       const to = WIZARD_ORDER.indexOf(builder.wizardStep);
       if (to > from) {
@@ -418,7 +450,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   /* ── Option A / centerpiece: during the guided pre-album steps, Megy's card
      IS the screen. Once an album exists (review onward) we fall back to the
      canvas + side panel. This removes any competing center control. ── */
-  const centerStage = showWizard && ['welcome', 'pick_size', 'pick_background', 'upload_photos'].includes(wizardStep);
+  const centerStage = showWizard && ['welcome', 'pick_theme', 'pick_size', 'pick_background', 'upload_photos'].includes(wizardStep);
 
   if (centerStage) {
     const msg = wizardRef.current.getMessage();
@@ -449,7 +481,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
           <div className="p-6 bg-white rounded-2xl border border-[#F4C2A1]/20 shadow-xl" key={wizardKey}>
             <h3 className="font-display text-xl font-semibold text-[#2D2D2D] mb-2"><TypeText text={msg.title} /></h3>
-            {(wizardRef.current.state.step === 'upload_photos' && builder.uploadedPhotos.length > 0) ? (
+            {wizardRef.current.state.step === 'pick_theme' ? (
+              <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme} onContinue={goNext} />
+            ) : (wizardRef.current.state.step === 'upload_photos' && builder.uploadedPhotos.length > 0) ? (
               <div className="mb-4">
                 {/* Eye-catching photo count */}
                 <div className="flex items-baseline gap-2 mb-3">
@@ -650,8 +684,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   Next with zero photos skips into an empty review. */}
               {wizardRef.current.state.step !== 'upload_photos' && (
                 <button
-                  onClick={() => { wizardRef.current.advance(); setWizardStep(wizardRef.current.state.step); }}
-                  disabled={wizardRef.current.state.step === 'finalize'}
+                  onClick={goNext}
+                  disabled={nextDisabled}
+                  title={wizardStep === 'pick_theme' && !themeReady ? 'Pick the occasion first' : undefined}
                   className="flex items-center gap-1 px-5 py-2 rounded-lg text-sm font-medium bg-[#F4C2A1] text-white hover:bg-[#E8A598] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                 >
                   Next →
@@ -809,8 +844,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   panel: "Generate Album →" advances; Next would skip with 0 photos. */}
               {wizardRef.current.state.step !== 'upload_photos' && (
                 <button
-                  onClick={() => { wizardRef.current.advance(); setWizardStep(wizardRef.current.state.step); }}
-                  disabled={wizardRef.current.state.step === 'finalize'}
+                  onClick={goNext}
+                  disabled={nextDisabled}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[#F4C2A1] text-white hover:bg-[#E8A598] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                 >
                   Next →
