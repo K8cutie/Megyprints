@@ -18,7 +18,7 @@ import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
-import { studioEnabled } from '../../lib/studioFlag';
+import { studioEnabled, setStudioFlag } from '../../lib/studioFlag';
 import StudioGate, { STUDIO_GATE_KEY } from './StudioGate';
 import AddOrnamentModal from './AddOrnamentModal';
 import { StudioToggle, StudioSheet, StudioLayer, StudioTray } from './StudioPhone';
@@ -38,7 +38,23 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
 
   /* ── STUDIO on the phone (behind the flag; album-wide on the phone) ── */
   const { user } = useAuth();
-  const studioAvailable = studioEnabled();
+  // Unlock without a URL (the installed app has no address bar): five taps on
+  // the page counter turns the flag on for this phone; five more turn it off.
+  const [studioAvailable, setStudioAvailable] = useState(() => studioEnabled());
+  const unlockTaps = useRef<{ n: number; at: number }>({ n: 0, at: 0 });
+  const tapCounter = (now: number) => {
+    const u = unlockTaps.current;
+    u.n = now - u.at < 900 ? u.n + 1 : 1;
+    u.at = now;
+    if (u.n >= 5) {
+      u.n = 0;
+      const next = !studioAvailable;
+      setStudioFlag(next);
+      setStudioAvailable(next);
+      if (!next) setStudio(false);
+      sayGuard(next ? 'Studio unlocked on this phone — the switch is beside the page number.' : 'Studio hidden on this phone.');
+    }
+  };
   const [studio, setStudio] = useState(false);
   const [studioGate, setStudioGate] = useState(false);
   // The selection is tagged with the page it was made on, so turning the page
@@ -205,7 +221,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
     <div className="h-full flex flex-col bg-paper relative">
       {/* Page counter (+ the Simple | Studio switch when the flag is on) */}
       <div className="shrink-0 flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-medium">
-        <span>{studio ? `Page ${idx + 1} of ${total} · tap a photo or a sticker` : `Page ${idx + 1} of ${total} · tap 🗑 to remove a photo, + to add one`}</span>
+        <span onClick={(e) => tapCounter(e.timeStamp)} data-testid="page-counter">{studio ? `Page ${idx + 1} of ${total} · tap a photo or a sticker` : `Page ${idx + 1} of ${total} · tap 🗑 to remove a photo, + to add one`}</span>
         {studioAvailable && <StudioToggle studio={studio} onSimple={leaveStudio} onStudio={enterStudio} />}
       </div>
       {studioAvailable && page?.studio && (
@@ -219,7 +235,10 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         <AnimatePresence mode="wait">
           <motion.div
             key={idx}
-            drag="x"
+            // Studio: no page swipe while editing — framer's native pointer
+            // listener fires before React's, so a sticker drag would turn the
+            // page. The arrows still move between pages.
+            drag={studio ? false : 'x'}
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.2}
             onDragEnd={(_e, info) => {
