@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveSlotBox } from './slotGeometry';
-import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, type MaskId } from './masks';
+import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, type MaskId } from './masks';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
@@ -1316,6 +1316,10 @@ function renderTemplateSlots(
           const clip = new fab.Polygon(starPoints(clipCx, clipCy, Math.min(sw, sh) / 2), {});
           clip.absolutePositioned = true;
           img.set('clipPath', clip);
+        } else if (isPathShape(slot.shape)) {
+          const clip = new fab.Path(maskPathD(slot.shape, -sw / 2, -sh / 2, sw, sh), { left: clipCx, top: clipCy, originX: 'center', originY: 'center' });
+          clip.absolutePositioned = true;
+          img.set('clipPath', clip);
         } else {
           const clip = new fab.Rect({ width: sw, height: sh, left: clipCx, top: clipCy, originX: 'center', originY: 'center' });
           clip.absolutePositioned = true;
@@ -1336,7 +1340,7 @@ function renderTemplateSlots(
             if (el && octx) {
               const drawW = imgW * finalScale, drawH = imgH * finalScale;
               octx.drawImage(el, sw / 2 + offsetX - drawW / 2, sh / 2 + offsetY - drawH / 2, drawW, drawH);
-              featherAlpha(octx, 0, 0, off.width, off.height, slot.feather);
+              featherAlpha(octx, 0, 0, off.width, off.height, slot.feather, slot.featherSide);
               const soft = new fab.Image(off, { left: sx, top: sy, originX: 'left', originY: 'top', ...SLOT_IMAGE_LOCK });
               soft.slotId = `${SLOT_ID}-photo-${i}`;
               soft.photoIndex = photoIndex;

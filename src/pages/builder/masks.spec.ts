@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyMask, archPath, archPathCentered, starPoints, starPolygonCss, featherEdgeCss, isMaskId, MASKS, SOFT_FEATHER } from './masks';
+import { applyMask, archPath, archPathCentered, starPoints, starPolygonCss, featherEdgeCss, isMaskId, MASKS, SOFT_FEATHER, PATH_SHAPES, maskPathD, isPathShape } from './masks';
 import { slotShapeStyle } from './slotShapeStyle';
 import type { TemplateSlot } from './types';
 
@@ -18,6 +18,30 @@ describe('applyMask', () => {
       expect(a.masked).toBe(true);
       expect(a.feather).toBeUndefined();
     }
+  });
+  it('every path shape becomes the slot shape, generated from one path with the renderer\'s own offset', () => {
+    for (const sh of PATH_SHAPES) {
+      expect(applyMask(slot, sh).shape).toBe(sh);
+      const dom = maskPathD(sh, 0, 0, 200, 100);
+      const fabric = maskPathD(sh, -100, -50, 200, 100);
+      const print = maskPathD(sh, 1000, 2000, 200, 100);
+      expect(dom.startsWith('M ')).toBe(true);
+      expect(dom.trim().endsWith('Z')).toBe(true);
+      // the same path, only translated: strip numbers and the skeletons match
+      const skel = (d: string) => d.replace(/-?\d+(\.\d+)?/g, '#');
+      expect(skel(fabric)).toBe(skel(dom));
+      expect(skel(print)).toBe(skel(dom));
+      expect(isPathShape(sh)).toBe(true);
+    }
+    expect(isPathShape('circle')).toBe(false);
+    expect(MASKS.length).toBe(16);
+  });
+  it('fade-bottom feathers one edge only', () => {
+    const a = applyMask(slot, 'fade-bottom');
+    expect(a.featherSide).toBe('bottom');
+    const css = featherEdgeCss(a.feather!, 200, 300, 'bottom');
+    expect(String((css as Record<string, unknown>).maskImage)).toMatch(/^linear-gradient\(to bottom/);
+    expect((css as Record<string, unknown>).maskComposite).toBeUndefined();
   });
   it('soft keeps the rectangle and adds the feather; rounded gets a radius', () => {
     const soft = applyMask(slot, 'soft');

@@ -13,31 +13,52 @@ import type { TemplateSlot } from './types';
    none in another.
    ══════════════════════════════════════════════════════════════════════════ */
 
-export type MaskId = 'none' | 'soft' | 'circle' | 'oval' | 'rounded' | 'arch' | 'heart' | 'star';
+export type MaskId =
+  | 'none' | 'soft' | 'fade-bottom'
+  | 'circle' | 'oval' | 'rounded' | 'arch' | 'leaf' | 'scallop'
+  | 'hexagon' | 'octagon' | 'diamond' | 'ticket' | 'cloud'
+  | 'heart' | 'star';
 
 export const MASKS: { id: MaskId; label: string }[] = [
   { id: 'none', label: 'None' },
   { id: 'soft', label: 'Soft edge' },
+  { id: 'fade-bottom', label: 'Fade down' },
   { id: 'circle', label: 'Circle' },
   { id: 'oval', label: 'Oval' },
   { id: 'rounded', label: 'Rounded' },
   { id: 'arch', label: 'Arch' },
+  { id: 'leaf', label: 'Leaf' },
+  { id: 'scallop', label: 'Scallop' },
+  { id: 'hexagon', label: 'Hexagon' },
+  { id: 'octagon', label: 'Octagon' },
+  { id: 'diamond', label: 'Diamond' },
+  { id: 'ticket', label: 'Cut corners' },
+  { id: 'cloud', label: 'Cloud' },
   { id: 'heart', label: 'Heart' },
   { id: 'star', label: 'Star' },
 ];
+
+/** Shapes drawn from ONE path generator (maskPathD) in every renderer. */
+export const PATH_SHAPES = ['leaf', 'scallop', 'hexagon', 'octagon', 'diamond', 'ticket', 'cloud'] as const;
+export type PathShape = typeof PATH_SHAPES[number];
+export function isPathShape(v: unknown): v is PathShape {
+  return typeof v === 'string' && (PATH_SHAPES as readonly string[]).includes(v);
+}
 
 /** The soft edge's width as a fraction of the frame's shorter side. */
 export const SOFT_FEATHER = 0.10;
 /** Rounded mask corner radius in design px (the template's own radius wins). */
 export const ROUNDED_MASK_RADIUS = 28;
 
-export type AppliedSlot<T extends TemplateSlot> = T & { feather?: number; masked?: boolean };
+export type FeatherSide = 'all' | 'bottom';
+export type AppliedSlot<T extends TemplateSlot> = T & { feather?: number; featherSide?: FeatherSide; masked?: boolean };
 
 /** The slot the renderers should draw: the mask overrides the template shape.
  *  Absent / 'none' returns the slot untouched. */
 export function applyMask<T extends TemplateSlot>(slot: T, mask?: MaskId | null): AppliedSlot<T> {
   if (!mask || mask === 'none') return slot;
-  if (mask === 'soft') return { ...slot, shape: 'rectangle', borderRadius: undefined, feather: SOFT_FEATHER, masked: true };
+  if (mask === 'soft') return { ...slot, shape: 'rectangle', borderRadius: undefined, feather: SOFT_FEATHER, featherSide: 'all', masked: true };
+  if (mask === 'fade-bottom') return { ...slot, shape: 'rectangle', borderRadius: undefined, feather: SOFT_FEATHER * 2.5, featherSide: 'bottom', masked: true };
   if (mask === 'rounded') return { ...slot, shape: 'rounded', borderRadius: slot.borderRadius || ROUNDED_MASK_RADIUS, masked: true };
   return { ...slot, shape: mask, masked: true };
 }
@@ -62,6 +83,42 @@ export function archPathCentered(w: number, h: number): string {
   return `M ${x0} ${y0 + h} L ${x0} ${y0 + ry} A ${w / 2} ${ry} 0 0 1 ${x0 + w} ${y0 + ry} L ${x0 + w} ${y0 + h} Z`;
 }
 
+/* ── Path shapes: ONE generator, offset + size supplied by the renderer
+   (DOM: 0,0,w,h in the element; Fabric: -w/2,-h/2 around the centre;
+   print: the slot's page px). Points are authored in a unit box. ────────── */
+type Pt = [number, number];
+/** 3-decimal coordinates: short paths, and no 6e-17 noise from cos/sin. */
+const n3 = (v: number) => String(Math.round(v * 1000) / 1000);
+const poly = (pts: Pt[], x0: number, y0: number, w: number, h: number) =>
+  'M ' + pts.map(([px, py]) => `${n3(x0 + px * w)} ${n3(y0 + py * h)}`).join(' L ') + ' Z';
+const OCT = 0.29, TICKET = 0.1;
+
+export function maskPathD(shape: PathShape, x0: number, y0: number, w: number, h: number): string {
+  const P = (px: number, py: number) => `${n3(x0 + px * w)} ${n3(y0 + py * h)}`;
+  switch (shape) {
+    case 'hexagon': return poly([[0.5, 0], [1, 0.25], [1, 0.75], [0.5, 1], [0, 0.75], [0, 0.25]], x0, y0, w, h);
+    case 'octagon': return poly([[OCT, 0], [1 - OCT, 0], [1, OCT], [1, 1 - OCT], [1 - OCT, 1], [OCT, 1], [0, 1 - OCT], [0, OCT]], x0, y0, w, h);
+    case 'diamond': return poly([[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]], x0, y0, w, h);
+    case 'ticket': return poly([[TICKET, 0], [1 - TICKET, 0], [1, TICKET], [1, 1 - TICKET], [1 - TICKET, 1], [TICKET, 1], [0, 1 - TICKET], [0, TICKET]], x0, y0, w, h);
+    case 'leaf': return `M ${P(0.5, 0)} C ${P(1.05, 0.25)} ${P(1.05, 0.75)} ${P(0.5, 1)} C ${P(-0.05, 0.75)} ${P(-0.05, 0.25)} ${P(0.5, 0)} Z`;
+    case 'scallop': {
+      // 12 lobes around a circle: points on r=0.46, each lobe bulges to r=0.56.
+      const n = 12, r = 0.46, bulge = 0.56;
+      const at = (a: number, rad: number): Pt => [0.5 + rad * Math.cos(a), 0.5 + rad * Math.sin(a)];
+      let d = '';
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2, am = (a0 + a1) / 2;
+        const [sx, sy] = at(a0, r), [mx, my] = at(am, bulge), [ex, ey] = at(a1, r);
+        d += (i === 0 ? `M ${P(sx, sy)} ` : '') + `Q ${P(mx, my)} ${P(ex, ey)} `;
+      }
+      return d + 'Z';
+    }
+    case 'cloud':
+      return `M ${P(0.22, 0.86)} C ${P(0.04, 0.86)} ${P(0.02, 0.6)} ${P(0.18, 0.55)} C ${P(0.08, 0.36)} ${P(0.3, 0.2)} ${P(0.42, 0.34)} `
+        + `C ${P(0.48, 0.1)} ${P(0.82, 0.14)} ${P(0.8, 0.4)} C ${P(1.0, 0.42)} ${P(1.0, 0.82)} ${P(0.78, 0.86)} Z`;
+  }
+}
+
 /* ── Star: one generator for the three renderers (the DOM used to draw a
    different star from the print) ─────────────────────────────────────────── */
 export function starPoints(cx: number, cy: number, outerR: number, innerRatio = 0.4, spikes = 5): { x: number; y: number }[] {
@@ -80,9 +137,14 @@ export function starPolygonCss(): string {
 }
 
 /* ── Soft edge ───────────────────────────────────────────────────────────── */
-/** DOM: a feathered rectangle via two intersecting gradient masks. */
-export function featherEdgeCss(feather: number, w: number, h: number): CSSProperties {
+/** DOM: a feathered rectangle — all four edges (two intersecting gradient
+ *  masks) or the bottom edge only (one gradient). */
+export function featherEdgeCss(feather: number, w: number, h: number, side: FeatherSide = 'all'): CSSProperties {
   const f = Math.max(1, Math.round(feather * Math.min(w, h)));
+  if (side === 'bottom') {
+    const g = `linear-gradient(to bottom, #000 0px, #000 calc(100% - ${f}px), rgba(0,0,0,0) 100%)`;
+    return { WebkitMaskImage: g, maskImage: g } as CSSProperties;
+  }
   const gx = `linear-gradient(to right, rgba(0,0,0,0) 0px, #000 ${f}px, #000 calc(100% - ${f}px), rgba(0,0,0,0) 100%)`;
   const gy = `linear-gradient(to bottom, rgba(0,0,0,0) 0px, #000 ${f}px, #000 calc(100% - ${f}px), rgba(0,0,0,0) 100%)`;
   return {
@@ -94,11 +156,18 @@ export function featherEdgeCss(feather: number, w: number, h: number): CSSProper
 }
 
 /** Canvas (Fabric offscreen + print): multiply the drawn pixels' alpha by the
- *  same two gradients (destination-in keeps only what both keep). */
-export function featherAlpha(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, feather: number): void {
+ *  same gradients (destination-in keeps only what both keep). */
+export function featherAlpha(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, feather: number, side: FeatherSide = 'all'): void {
   const f = Math.max(1, feather * Math.min(w, h));
   ctx.save();
   ctx.globalCompositeOperation = 'destination-in';
+  if (side === 'bottom') {
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(Math.max(0, 1 - f / h), 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+    ctx.restore();
+    return;
+  }
   const gx = ctx.createLinearGradient(x, 0, x + w, 0);
   gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(Math.min(0.5, f / w), 'rgba(0,0,0,1)');
   gx.addColorStop(Math.max(0.5, 1 - f / w), 'rgba(0,0,0,1)'); gx.addColorStop(1, 'rgba(0,0,0,0)');
