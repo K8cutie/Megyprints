@@ -37,6 +37,7 @@ export function normalizeStoredPageFields(p: any): any {
     slotOffsetsX: get('slotOffsetsX', 'slot_offsets_x') ?? [],
     slotOffsetsY: get('slotOffsetsY', 'slot_offsets_y') ?? [],
     slotGeometries: get('slotGeometries', 'slot_geometries') ?? [],
+    studio: !!p.studio,
     qrFills: get('qrFills', 'qr_fills') ?? [],
     slotTexts: get('slotTexts', 'slot_texts') ?? [],
     ornamentFills,

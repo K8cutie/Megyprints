@@ -303,9 +303,12 @@ export interface TextElement extends TextStyle {
   offsetY?: number;
 }
 
-/** Per-slot geometry overrides for container editing mode.
- *  Each index corresponds to template.slots[index].
- *  Only stores modified values — undefined = use template default. */
+/** STUDIO: a customer-moved photo frame. Each index corresponds to
+ *  template.slots[index]; the four box fields are FRACTIONS OF THE SAFE AREA
+ *  (the space template slots are authored in), so all three renderers place
+ *  the frame with the same arithmetic — see slotGeometry.ts, which also owns
+ *  the guardrails every write passes through. Absent = template default.
+ *  `rotation` is legacy and never printed; the setter drops it. */
 export interface SlotGeometryOverride {
   x?: number;
   y?: number;
@@ -515,6 +518,11 @@ export interface AlbumPage {
   slotOffsetsY?: number[];
   /** User-modified slot container geometries */
   slotGeometries?: SlotGeometryOverride[];
+  /** STUDIO: the customer moved or resized a frame on this page, so the page
+   *  is theirs — Regenerate and Surprise Me keep it exactly as it is (its
+   *  photos are held back from the reshuffle). "Megy, fix this page" clears
+   *  it along with the overrides. */
+  studio?: boolean;
   /** QR living-memory fills. Positional, parallel to template.slots — index i
    *  is used only when slots[i].kind === 'qr'. Serializes as-is (local, cloud,
    *  order snapshot). */

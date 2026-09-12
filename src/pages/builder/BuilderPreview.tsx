@@ -14,6 +14,7 @@ import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import { BOOK } from './bookFeel';
+import { resolveSlotBox } from './slotGeometry';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
@@ -341,8 +342,10 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   return (
     <>
       <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos, coverMode, sx), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
-      {template && template.slots.map((slot, idx) => {
-        if (!slot) return null;
+      {template && template.slots.map((rawSlot, idx) => {
+        if (!rawSlot) return null;
+        // STUDIO: a moved frame — same override, same arithmetic as the editor + print.
+        const slot = resolveSlotBox(rawSlot, page.slotGeometries?.[idx]);
         // Content precedence is DRIVEN BY page data, not slot.kind:
         //   qrFills[i] → QR (drawn by the qrFills map below) → skip here.
         //   slotTexts[i] → text rendered in this slot's rect.
@@ -458,9 +461,10 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
       {/* QR living-memory content — content-driven by page.qrFills on ANY slot.
           Empty QR slots are no longer auto-shown; the chooser "+" owns the empty
           state. The QR is drawn on top (white backing) so it stays scannable. */}
-      {template?.slots.map((slot, idx) => {
+      {template?.slots.map((rawSlot, idx) => {
         const qr = page.qrFills?.[idx] ?? null;
         if (!qr) return null;
+        const slot = resolveSlotBox(rawSlot, page.slotGeometries?.[idx]);
         return (
           <QrSquare key={`qr-${idx}`} rectKey={`qr-${idx}`} zIndex={2}
             cellLeft={safeX + slot.x * safeW} cellTop={safeY + slot.y * safeH}
@@ -470,9 +474,10 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         );
       })}
       {/* Ornament content — content-driven by page.ornamentFills on ANY slot. */}
-      {template?.slots.map((slot, idx) => {
+      {template?.slots.map((rawSlot, idx) => {
         const ornament = page.ornamentFills?.[idx] ?? null;
         if (!ornament) return null;
+        const slot = resolveSlotBox(rawSlot, page.slotGeometries?.[idx]);
         return (
           <OrnamentSquare key={`ornament-${idx}`} rectKey={`ornament-${idx}`} zIndex={2}
             cellLeft={safeX + slot.x * safeW} cellTop={safeY + slot.y * safeH}

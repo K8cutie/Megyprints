@@ -9,6 +9,12 @@ import type { AlbumBackground, AlbumSizePreset, TemplateType, TextElement, Frame
 import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
 import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '../pages/builder/types';
 
+/** STUDIO pages are kept through a reshuffle — say so. */
+function studioNote(builder: BuilderActions): string {
+  const n = (builder.albumPages ?? []).filter((p) => p.studio).length;
+  return n ? ` (Your ${n} Studio page${n > 1 ? 's' : ''} stayed as you left ${n > 1 ? 'them' : 'it'}.)` : '';
+}
+
 export class ActionEngine {
   builder: BuilderActions;
   constructor(builder: BuilderActions) {
@@ -24,7 +30,7 @@ export class ActionEngine {
           // Awaited so the reply (and the callers' toasts) land AFTER the album
           // exists — the "making your album" screen covers the wait.
           await this.builder.generateAlbum(this.builder.currentPage?.background);
-          return { intentType: intent.type, success: true, message: 'Album generated! Your photos have been arranged across all pages.' };
+          return { intentType: intent.type, success: true, message: `Album generated! Your photos have been arranged across all pages.${studioNote(this.builder)}` };
 
         case 'shuffle_layout':
           // Cycle through the available templates IN ORDER (exhaust every option
@@ -33,6 +39,9 @@ export class ActionEngine {
           return { intentType: intent.type, success: true, message: 'Next layout.' };
 
         case 'regenerate_page':
+          if (this.builder.currentPage?.studio) {
+            return { intentType: intent.type, success: false, message: 'This page is yours — I won’t rearrange it. Use “Megy, fix this page” if you want it back the way I had it.' };
+          }
           this.builder.regeneratePage();
           return { intentType: intent.type, success: true, message: 'This page has been regenerated with a fresh layout.' };
 
@@ -281,7 +290,7 @@ export class ActionEngine {
           const keepBg = this.builder.currentPage.background;
           await this.builder.generateAlbum(keepBg, { randomize: true });
 
-          return { intentType: intent.type, success: true, message: `Fresh layout! Every page rearranged — click again for another look.` };
+          return { intentType: intent.type, success: true, message: `Fresh layout! Every page rearranged — click again for another look.${studioNote(this.builder)}` };
         }
 
         case 'help':
