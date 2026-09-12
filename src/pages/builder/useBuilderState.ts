@@ -26,6 +26,7 @@ import { getCanvasDimensions } from './layouts';
 import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
+import { isLookId, type LookId } from './looks';
 import { clampStickerGeom, defaultStickerGeom, newStickerUid, type Sticker } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
@@ -487,6 +488,8 @@ export interface BuilderActions {
   resetStudioPage: () => void;
   /** STUDIO masks: a shape / soft edge on one photo slot (null = the template's shape). Marks the page yours. */
   setSlotMask: (slotIndex: number, mask: MaskId | null) => void;
+  /** STUDIO looks: a colour treatment on one photo slot (null = as shot). Marks the page yours. */
+  setSlotLook: (slotIndex: number, look: LookId | null) => void;
   /** STUDIO stickers: add a graphic at the page centre (clamped). Marks the page yours. */
   addSticker: (fill: OrnamentFill) => GuardReason[];
   /** Move / resize / rotate a sticker — clamped to the safe area and the size floor. */
@@ -1653,7 +1656,7 @@ export function useBuilderState(): BuilderActions {
 
   const resetStudioPage = useCallback(() => {
     pushSnapshot();
-    updateCurrentPage((p) => ({ ...p, slotGeometries: [], slotMasks: [], stickers: [], studio: false }));
+    updateCurrentPage((p) => ({ ...p, slotGeometries: [], slotMasks: [], slotLooks: [], stickers: [], studio: false }));
   }, [updateCurrentPage, pushSnapshot]);
 
   /* ── STUDIO masks + stickers (masks.ts / stickers.ts hold the shared rules) ── */
@@ -1670,6 +1673,16 @@ export function useBuilderState(): BuilderActions {
       const slotMasks = [...(p.slotMasks ?? [])];
       slotMasks[slotIndex] = mask && mask !== 'none' ? mask : null;
       return { ...p, slotMasks, studio: true };
+    });
+  }, [updateCurrentPage, pushSnapshot]);
+
+  const setSlotLook = useCallback((slotIndex: number, look: LookId | null) => {
+    if (look != null && !isLookId(look)) return;
+    pushSnapshot();
+    updateCurrentPage((p) => {
+      const slotLooks = [...(p.slotLooks ?? [])];
+      slotLooks[slotIndex] = look;
+      return { ...p, slotLooks, studio: true };
     });
   }, [updateCurrentPage, pushSnapshot]);
 
@@ -2715,6 +2728,7 @@ export function useBuilderState(): BuilderActions {
     updateSlotGeometry,
     resetStudioPage,
     setSlotMask,
+    setSlotLook,
     addSticker,
     updateStickerGeom,
     replaceStickerFill,

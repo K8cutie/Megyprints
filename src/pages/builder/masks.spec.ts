@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applyMask, archPath, archPathCentered, starPoints, starPolygonCss, featherEdgeCss, isMaskId, MASKS, SOFT_FEATHER, PATH_SHAPES, maskPathD, isPathShape } from './masks';
+import { applyMask, archPath, archPathCentered, starPoints, starPolygonCss, featherEdgeCss, isMaskId, MASKS, SOFT_FEATHER, PATH_SHAPES, maskPathD, isPathShape, TEXTURE_MASKS, maskTextureUrl, textureMaskCss, isTextureMask } from './masks';
+import { existsSync } from 'node:fs';
 import { slotShapeStyle } from './slotShapeStyle';
 import type { TemplateSlot } from './types';
 
@@ -34,7 +35,21 @@ describe('applyMask', () => {
       expect(isPathShape(sh)).toBe(true);
     }
     expect(isPathShape('circle')).toBe(false);
-    expect(MASKS.length).toBe(16);
+    expect(MASKS.length).toBe(19);
+  });
+  it('textured edges: one PNG per edge, checked in, used as a CSS mask and stretched to the frame', () => {
+    for (const t of TEXTURE_MASKS) {
+      expect(isTextureMask(t)).toBe(true);
+      expect(existsSync(`public${maskTextureUrl(t)}`), t).toBe(true);
+      const a = applyMask(slot, t);
+      expect(a.texture).toBe(t);
+      expect(a.shape).toBe('rectangle');
+      expect(a.masked).toBe(true);
+      const css = textureMaskCss(t) as Record<string, unknown>;
+      expect(String(css.maskImage)).toContain(`/masks/${t}.png`);
+      expect(css.maskSize).toBe('100% 100%');
+    }
+    expect(isTextureMask('circle')).toBe(false);
   });
   it('fade-bottom feathers one edge only', () => {
     const a = applyMask(slot, 'fade-bottom');

@@ -33,7 +33,7 @@ import { useAuth } from '../../lib/authContext';
 import { studioEnabled } from '../../lib/studioFlag';
 import StudioGate, { STUDIO_GATE_KEY } from './StudioGate';
 import { GUARD_MESSAGES, SOFT_MESSAGE, printSharpness, resolveSlotBox } from './slotGeometry';
-import { MASKS, type MaskId } from './masks';
+import StudioStrip from './StudioStrip';
 import AddOrnamentModal from './AddOrnamentModal';
 /* PropertiesPanel is now rendered inside UnifiedPanel */
 import { getCanvasDimensions } from './layouts';
@@ -1135,38 +1135,12 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             </div>
           </div>
 
-          {/* STUDIO strip — masks for the selected photo, stickers for the page */}
-          {studio && (() => {
-            const slotIdx = selectedSlotIndex;
-            const hasPhoto = slotIdx != null && actions.currentPage?.slotFills?.[slotIdx] != null;
-            const current = (slotIdx != null ? actions.currentPage?.slotMasks?.[slotIdx] : null) ?? 'none';
-            return (
-              <div className="h-9 bg-warm-white border-b border-line flex items-center gap-2 px-3 shrink-0 overflow-x-auto" data-testid="studio-strip">
-                <span className="text-[10px] font-bold tracking-widest uppercase text-medium">Studio</span>
-                <div className="w-px h-4 bg-line" />
-                {hasPhoto ? (
-                  <>
-                    <span className="text-[11px] text-medium">Mask</span>
-                    {MASKS.map((m) => (
-                      <button key={m.id} type="button" aria-pressed={current === m.id}
-                        onClick={() => actions.setSlotMask(slotIdx as number, m.id === 'none' ? null : (m.id as MaskId))}
-                        data-testid={`mask-${m.id}`}
-                        className={`px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors ${current === m.id ? 'bg-blush-pink text-white' : 'bg-paper text-cocoa hover:bg-blush'}`}>
-                        {m.label}
-                      </button>
-                    ))}
-                  </>
-                ) : (
-                  <span className="text-[11px] text-light">Select a photo to mask it · drag a frame to move it</span>
-                )}
-                <div className="ml-auto" />
-                <button type="button" onClick={() => setStickerModal({ uid: null })} data-testid="studio-add-sticker"
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blush-pink text-white hover:brightness-105 flex items-center gap-1 whitespace-nowrap">
-                  <Sparkles size={11} /> Add sticker
-                </button>
-              </div>
-            );
-          })()}
+          {/* STUDIO strip — masks + looks for the selected photo, stickers for the page */}
+          {studio && (
+            <StudioStrip page={actions.currentPage} selectedSlotIndex={selectedSlotIndex}
+              onMask={(i, m) => actions.setSlotMask(i, m)} onLook={(i, l) => actions.setSlotLook(i, l)}
+              onGuard={sayGuard} onAddSticker={() => setStickerModal({ uid: null })} />
+          )}
 
           {/* Canvas */}
           <div

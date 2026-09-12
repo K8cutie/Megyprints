@@ -1,11 +1,11 @@
 import type { TemplateSlot } from './types';
-import { archPath, starPolygonCss, featherEdgeCss, isPathShape, maskPathD, type FeatherSide } from './masks';
+import { archPath, starPolygonCss, featherEdgeCss, isPathShape, maskPathD, textureMaskCss, type FeatherSide, type TextureMask } from './masks';
 
 /** Compute shape-corrected sizing and CSS style for a template slot.
  *  Returns the style object plus adjusted width/height and offsets so
  *  circles stay circular and special shapes are centered properly. */
 export function slotShapeStyle(
-  slot: TemplateSlot & { feather?: number; featherSide?: FeatherSide },
+  slot: TemplateSlot & { feather?: number; featherSide?: FeatherSide; texture?: TextureMask },
   rawWidth: number,
   rawHeight: number,
 ): {
@@ -114,6 +114,7 @@ export function slotShapeStyle(
           borderRadius: borderRadius ? `${borderRadius}px` : undefined,
           clipPath: undefined,
           ...(slot.feather ? featherEdgeCss(slot.feather, rawWidth, rawHeight, slot.featherSide) : {}),
+          ...(slot.texture ? textureMaskCss(slot.texture) : {}),
         },
         width: rawWidth,
         height: rawHeight,

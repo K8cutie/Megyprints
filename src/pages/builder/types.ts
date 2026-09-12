@@ -527,6 +527,8 @@ export interface AlbumPage {
   /** STUDIO masks: a shape / soft edge per PHOTO slot (masks.ts MaskId),
    *  positional like slotFills. Null/absent = the template's own shape. */
   slotMasks?: (string | null)[];
+  /** STUDIO looks: a colour treatment per PHOTO slot (looks.ts LookId). */
+  slotLooks?: (string | null)[];
   /** STUDIO stickers: free graphics on the page (stickers.ts Sticker — the
    *  ornament fill plus a centre-based page-fraction transform). */
   stickers?: import('./stickers').Sticker[];

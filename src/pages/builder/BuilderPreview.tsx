@@ -16,6 +16,7 @@ import AddQrModal from './AddQrModal';
 import { BOOK } from './bookFeel';
 import { resolveSlotBox } from './slotGeometry';
 import { applyMask, isMaskId } from './masks';
+import { lookCss, isLookId } from './looks';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
@@ -447,7 +448,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           }}>
             <img src={uploaded.previewUrl} alt="" draggable={false}
               className="absolute object-cover"
-              style={{ left: imgLeft, top: imgTop, width: imgW, height: imgH, ...frameCss.inner }} />
+              style={{ left: imgLeft, top: imgTop, width: imgW, height: imgH, ...frameCss.inner,
+                // STUDIO look — the same filter functions the editor + print apply to pixels.
+                ...(isLookId(page.slotLooks?.[idx]) ? { filter: lookCss(page.slotLooks?.[idx] as never) } : {}) }} />
             {editable && onRemoveFromSlot && (
               <button onClick={(e) => { e.stopPropagation(); onRemoveFromSlot(idx); }} aria-label="Remove photo"
                 style={{
