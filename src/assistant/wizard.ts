@@ -347,7 +347,7 @@ export class WizardEngine {
         return {
           title: "Step 8: Preview & Order 📦",
           body: "Your album looks amazing! Preview the full album, make any final tweaks, then place your order. I'll save everything to the cloud so you can come back anytime.",
-          actions: ["Preview Full Album", "Save to Cloud", "Place Order →"],
+          actions: ["Preview Full Album", "← Edit pages", "Save to Cloud", "Place Order →"],
           tips: ["Albums are saved automatically", "You can reorder or reprint anytime"],
         };
     }

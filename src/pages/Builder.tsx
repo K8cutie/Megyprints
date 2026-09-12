@@ -71,7 +71,7 @@ const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions:
       photos={actions.uploadedPhotos}
       albumSize={actions.albumSize}
       onGoToPage={actions.goToPage}
-      onBack={() => actions.setPhase('edit')}
+      onBack={() => { actions.setWizardStep('review_pages'); actions.setPhase('edit'); }}
       onOrder={onOrder}
       getPageSnapshot={actions.getPageSnapshot}
     />
