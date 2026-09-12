@@ -222,7 +222,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
       {/* Page counter (+ the Simple | Studio switch when the flag is on) */}
       <div className="shrink-0 flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-medium">
         <span onClick={(e) => tapCounter(e.timeStamp)} data-testid="page-counter">{studio ? `Page ${idx + 1} of ${total} · tap a photo or a sticker` : `Page ${idx + 1} of ${total} · tap 🗑 to remove a photo, + to add one`}</span>
-        {studioAvailable && <StudioToggle studio={studio} onSimple={leaveStudio} onStudio={enterStudio} />}
       </div>
       {studioAvailable && page?.studio && (
         <div className="shrink-0 text-center -mt-1 pb-1">
@@ -296,6 +295,14 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} />
         {uploadMsg && (
           <p className="mb-2 text-center text-xs font-semibold text-success">{uploadMsg}</p>
+        )}
+        {/* Simple | Studio — in the bottom bar, where the Megy pull-down and the
+            page can never cover it. Full width so a thumb finds it. */}
+        {studioAvailable && (
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <span className="text-[11px] font-semibold text-medium">{studio ? 'Studio · tap a photo or a sticker' : 'Simple · Megy leads'}</span>
+            <StudioToggle studio={studio} onSimple={leaveStudio} onStudio={enterStudio} />
+          </div>
         )}
         <div className="flex items-center gap-3">
           <button onClick={goPrev} disabled={idx === 0}
