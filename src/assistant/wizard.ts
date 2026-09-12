@@ -331,7 +331,7 @@ export class WizardEngine {
           title: "Step 6: Review Each Page 🔍",
           body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then use the ‹ › arrows to move through your album.`,
           actions: ["Change layout"],
-          tips: ["Go page by page — each can have its own layout", "Use the ‹ › arrows to move between pages", "When every page looks right, you'll order from the last page"],
+          tips: ["Go page by page — each can have its own layout", "🎬 Any full-photo page can carry a video: tap Add a video memory and it plays when the printed QR is scanned — 7 are included", "When every page looks right, you'll order from the last page"],
         };
       }
 

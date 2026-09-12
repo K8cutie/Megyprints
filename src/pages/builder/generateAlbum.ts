@@ -1,5 +1,5 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll } from './types';
-import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio } from './pageTemplates';
+import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, photoSlotCount } from './pageTemplates';
 
 /* ── Ratio LOOSENING budget ───────────────────────────────────────────────────
    Ratio matching is loosened, not removed: a photo still prefers its own ratio,
@@ -208,6 +208,86 @@ export function dealBoxContent(
   return quotesHere > 0;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   VIDEO-READY PAGES (owner, 2026-09-12): "7 QR links as the minimum for a
+   40-page album." The album includes 7 video memories, so the album must
+   OFFER at least 7 places to put one. A page is video-ready when either
+     • it is a box-free single-photo page (the "Add a video memory" button
+       turns it into a full-bleed photo with a corner QR badge), or
+     • one of its combo boxes was dealt 'qr' and is still empty (the box
+       shows "Add a video of this moment" and the tap opens the video picker).
+   Measured before this floor: 8x8 with 100 mixed photos offered 3 pages,
+   8x6/6x8 with square photos offered 0 (every single there carries a box).
+   ══════════════════════════════════════════════════════════════════════════ */
+export const MIN_MEMORY_PAGES = 7;
+
+/** Box j of `page` holds nothing the customer or Megy put there. */
+function boxEmpty(page: AlbumPage, j: number): boolean {
+  return !page.textElements.some((t) => t.boxIndex === j)
+    && page.textSlotFills?.[j] == null
+    && !page.textSlotQr?.[j]
+    && !page.textSlotOrnament?.[j];
+}
+
+/** Can a video memory be attached to this page as it stands? */
+export function isMemoryReady(page: AlbumPage): boolean {
+  const t = page.templateId ? getTemplateById(page.templateId) : undefined;
+  if (!t) return false;
+  const boxes = t.textSlots?.length ?? 0;
+  const filled = (page.slotFills ?? []).some((f) => f != null);
+  const hasQr = (page.qrFills ?? []).some((q) => q != null) || (page.textSlotQr ?? []).some((q) => q != null);
+  if (hasQr) return true; // already carries one
+  if (photoSlotCount(t) === 1 && filled && boxes === 0) return true;
+  for (let j = 0; j < boxes; j++) if (page.textSlotRoll?.[j] === 'qr' && boxEmpty(page, j)) return true;
+  return false;
+}
+
+/** Guarantee at least `min` video-ready pages, spread across the album.
+ *  Short albums get boxes re-dealt to 'qr' on evenly spaced pages: an empty
+ *  box first (a 'text' invitation), else a dealt quote gives way (its line
+ *  simply goes unused). Mutates pages; returns how many boxes were turned. */
+export function ensureMemoryPages(pages: AlbumPage[], min = MIN_MEMORY_PAGES): number {
+  let ready = pages.filter(isMemoryReady).length;
+  if (ready >= min) return 0;
+  // Candidates: pages with at least one box, not yet ready. Rank each page's
+  // best box: an empty non-quote box beats evicting a quote.
+  type Cand = { i: number; j: number; evict: boolean };
+  const cands: Cand[] = [];
+  pages.forEach((page, i) => {
+    if (isMemoryReady(page)) return;
+    const t = page.templateId ? getTemplateById(page.templateId) : undefined;
+    const boxes = t?.textSlots?.length ?? 0;
+    let best: Cand | null = null;
+    for (let j = 0; j < boxes; j++) {
+      if (page.textSlotFills?.[j] != null || page.textSlotQr?.[j] || page.textSlotOrnament?.[j]) continue;
+      const quoteBound = page.textElements.some((x) => x.boxIndex === j);
+      const c = { i, j, evict: quoteBound };
+      if (!best || (best.evict && !c.evict)) best = c;
+    }
+    if (best) cands.push(best);
+  });
+  if (cands.length === 0) return 0;
+  // Spread the picks evenly over the candidate list (Bresenham), so the
+  // video pages land across the album instead of bunching at the front.
+  const need = Math.min(min - ready, cands.length);
+  const picks: Cand[] = [];
+  for (let k = 0; k < need; k++) picks.push(cands[Math.floor(((k + 0.5) * cands.length) / need)]);
+  let turned = 0;
+  for (const c of picks) {
+    const page = pages[c.i];
+    const t = getTemplateById(page.templateId!)!;
+    const boxes = t.textSlots?.length ?? 0;
+    const rolls = page.textSlotRoll ? [...page.textSlotRoll] : new Array<BoxRoll | null>(boxes).fill(null);
+    while (rolls.length < boxes) rolls.push(null);
+    if (c.evict) page.textElements = page.textElements.filter((x) => x.boxIndex !== c.j);
+    rolls[c.j] = 'qr';
+    page.textSlotRoll = rolls;
+    turned++;
+    ready++;
+  }
+  return turned;
+}
+
 /** How many combo/caption boxes an album carries — ONE quote per box is the
  *  pool size that guarantees neither generation nor the finish-line sweep ever
  *  runs dry (each line is dealt at most once). */
@@ -231,6 +311,7 @@ export function dealAlbumBoxes(pages: AlbumPage[], box: BoxContentOptions): void
     const template = page.templateId ? getTemplateById(page.templateId) : undefined;
     prevHadQuote = template ? dealBoxContent(page, template, box, dealQuote, !prevHadQuote) : false;
   }
+  ensureMemoryPages(pages);
 }
 
 /** Lines the finish-line sweep needs in the pool to fill EVERY empty box:
@@ -288,6 +369,9 @@ export function sweepFillQuotes(
         !!out.textSlotQr?.[j] ||
         !!out.textSlotOrnament?.[j];
       if (occupied) continue;
+      // A box Megy dealt as 'qr' is a place for a video memory — the sweep
+      // leaves the invitation (it prints as paper if never used).
+      if (out.textSlotRoll?.[j] === 'qr') continue;
       // Cadence: one voice per page, and never on the page right after one
       // that speaks. Held-back boxes stay invitations (they print as paper).
       const prevSpeaks = i > 0 && pageSpeaks(next[i - 1]);
@@ -1020,6 +1104,10 @@ export function generateAlbum(
   while (pages.length < MIN_PAGES) {
     pages.push(createEmptyPage(pageIdx++, albumSize, background, border, cornerBase));
   }
+
+  // ── 5. The album offers at least MIN_MEMORY_PAGES places for a video ──
+  // (only once the boxes are dealt; the album-wide dealer applies it itself)
+  if (boxContent) ensureMemoryPages(pages);
 
   return pages;
 }

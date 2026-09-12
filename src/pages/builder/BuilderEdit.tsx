@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, ChevronRight, Sparkles,
-  Wand2, Upload, Home, PanelLeftOpen, Youtube,
+  Wand2, Upload, Home, PanelLeftOpen, Video,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -1038,10 +1038,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               {actions.canAddMemoryQr && (
                 <button
                   onClick={() => { markMemoryDiscovered(); setMemoryOpen(true); }}
-                  title="Add a YouTube video that plays when this page's QR is scanned"
+                  title="Add a video that plays when this page's printed QR is scanned"
                   className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all bg-blush-pink text-white hover:brightness-105 shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}
                 >
-                  <Youtube size={13} /> Add YouTube Memory
+                  <Video size={13} /> Add a video memory
                 </button>
               )}
             </div>
