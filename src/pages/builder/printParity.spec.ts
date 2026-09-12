@@ -195,5 +195,13 @@ describe('Studio slot overrides go through resolveSlotBox in every renderer', ()
     for (const [name, src] of [['dom-shape', domShape], ['fabric', fabric], ['print', print]] as const) {
       expect(src, name).toMatch(/maskPathD\(/);
     }
+    // textured edges: the DOM masks with the texture URL, Fabric + print multiply alpha with the same asset
+    expect(domShape).toMatch(/textureMaskCss\(/);
+    expect(fabric).toMatch(/applyTextureAlpha\(/);
+    expect(print).toMatch(/applyTextureAlpha\(/);
+    // looks: the DOM uses lookCss, Fabric + print apply the same ops to pixels
+    expect(dom).toMatch(/lookCss\(/);
+    expect(fabric).toMatch(/applyLookPixels\(/);
+    expect(print).toMatch(/applyLookPixels\(/);
   });
 });

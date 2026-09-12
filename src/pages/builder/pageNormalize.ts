@@ -39,6 +39,7 @@ export function normalizeStoredPageFields(p: any): any {
     slotGeometries: get('slotGeometries', 'slot_geometries') ?? [],
     studio: !!p.studio,
     slotMasks: get('slotMasks', 'slot_masks') ?? [],
+    slotLooks: get('slotLooks', 'slot_looks') ?? [],
     stickers: Array.isArray(p.stickers)
       ? p.stickers.filter((k: unknown) => !!k && typeof k === 'object' && typeof (k as { uid?: unknown }).uid === 'string' && typeof (k as { pngDataUrl?: unknown }).pngDataUrl === 'string' && !!(k as { geom?: unknown }).geom)
       : [],

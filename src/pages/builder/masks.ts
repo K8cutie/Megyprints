@@ -17,7 +17,8 @@ export type MaskId =
   | 'none' | 'soft' | 'fade-bottom'
   | 'circle' | 'oval' | 'rounded' | 'arch' | 'leaf' | 'scallop'
   | 'hexagon' | 'octagon' | 'diamond' | 'ticket' | 'cloud'
-  | 'heart' | 'star';
+  | 'heart' | 'star'
+  | 'brushed' | 'deckle' | 'frost';
 
 export const MASKS: { id: MaskId; label: string }[] = [
   { id: 'none', label: 'None' },
@@ -36,7 +37,59 @@ export const MASKS: { id: MaskId; label: string }[] = [
   { id: 'cloud', label: 'Cloud' },
   { id: 'heart', label: 'Heart' },
   { id: 'star', label: 'Star' },
+  { id: 'brushed', label: 'Brushed edge' },
+  { id: 'deckle', label: 'Deckle edge' },
+  { id: 'frost', label: 'Frost' },
 ];
+
+/** Textured edges: an alpha PNG (white = photo, black = page) stretched over
+ *  the frame. ONE asset per edge, used by the DOM (mask-image), the Fabric
+ *  editor and the print pipeline (destination-in). Generated once, checked
+ *  in under public/masks — 1800² so a full-page frame still prints clean. */
+export const TEXTURE_MASKS = ['brushed', 'deckle', 'frost'] as const;
+export type TextureMask = typeof TEXTURE_MASKS[number];
+export function isTextureMask(v: unknown): v is TextureMask {
+  return typeof v === 'string' && (TEXTURE_MASKS as readonly string[]).includes(v);
+}
+export function maskTextureUrl(id: TextureMask): string {
+  return `/masks/${id}.png`;
+}
+/** How far in a textured edge can bite, as a fraction of the shorter side —
+ *  the Studio strip warns to keep faces out of that band. */
+export const TEXTURE_BITE = 0.16;
+
+const textureCache = new Map<string, Promise<HTMLImageElement>>();
+export function loadMaskTexture(id: TextureMask): Promise<HTMLImageElement> {
+  let p = textureCache.get(id);
+  if (!p) {
+    p = new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`mask texture ${id} failed to load`));
+      img.src = maskTextureUrl(id);
+    });
+    textureCache.set(id, p);
+  }
+  return p;
+}
+
+/** Canvas: multiply the drawn pixels' alpha by the texture (stretched to the box). */
+export function applyTextureAlpha(ctx: CanvasRenderingContext2D, tex: CanvasImageSource, x: number, y: number, w: number, h: number): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(tex, x, y, w, h);
+  ctx.restore();
+}
+
+/** DOM: the same texture as a CSS mask. */
+export function textureMaskCss(id: TextureMask): CSSProperties {
+  const u = `url("${maskTextureUrl(id)}")`;
+  return {
+    WebkitMaskImage: u, maskImage: u,
+    WebkitMaskSize: '100% 100%', maskSize: '100% 100%',
+    WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+  } as CSSProperties;
+}
 
 /** Shapes drawn from ONE path generator (maskPathD) in every renderer. */
 export const PATH_SHAPES = ['leaf', 'scallop', 'hexagon', 'octagon', 'diamond', 'ticket', 'cloud'] as const;
@@ -51,7 +104,7 @@ export const SOFT_FEATHER = 0.10;
 export const ROUNDED_MASK_RADIUS = 28;
 
 export type FeatherSide = 'all' | 'bottom';
-export type AppliedSlot<T extends TemplateSlot> = T & { feather?: number; featherSide?: FeatherSide; masked?: boolean };
+export type AppliedSlot<T extends TemplateSlot> = T & { feather?: number; featherSide?: FeatherSide; texture?: TextureMask; masked?: boolean };
 
 /** The slot the renderers should draw: the mask overrides the template shape.
  *  Absent / 'none' returns the slot untouched. */
@@ -59,6 +112,7 @@ export function applyMask<T extends TemplateSlot>(slot: T, mask?: MaskId | null)
   if (!mask || mask === 'none') return slot;
   if (mask === 'soft') return { ...slot, shape: 'rectangle', borderRadius: undefined, feather: SOFT_FEATHER, featherSide: 'all', masked: true };
   if (mask === 'fade-bottom') return { ...slot, shape: 'rectangle', borderRadius: undefined, feather: SOFT_FEATHER * 2.5, featherSide: 'bottom', masked: true };
+  if (isTextureMask(mask)) return { ...slot, shape: 'rectangle', borderRadius: undefined, texture: mask, masked: true };
   if (mask === 'rounded') return { ...slot, shape: 'rounded', borderRadius: slot.borderRadius || ROUNDED_MASK_RADIUS, masked: true };
   return { ...slot, shape: mask, masked: true };
 }

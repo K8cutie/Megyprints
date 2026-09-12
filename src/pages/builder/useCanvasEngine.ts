@@ -8,7 +8,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveSlotBox } from './slotGeometry';
-import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, type MaskId } from './masks';
+import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, applyTextureAlpha, type MaskId } from './masks';
+import { applyLookPixels, isLookId, type LookId } from './looks';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
@@ -220,7 +221,7 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   // editor without a page-nav (same desync class as slotTextData/qrData above).
   const ornamentData = page.ornamentFills ? page.ornamentFills.map((o) => o ? `${o.pack}:${o.id}` : '').join('|') : '';
   // STUDIO masks + stickers — so a mask pick or a sticker add/move repaints.
-  const maskData = page.slotMasks ? page.slotMasks.map((m) => m ?? '').join(',') : '';
+  const maskData = (page.slotMasks ? page.slotMasks.map((m) => m ?? '').join(',') : '') + '/' + (page.slotLooks ? page.slotLooks.map((m) => m ?? '').join(',') : '');
   const stickerData = page.stickers ? page.stickers.map((k) => `${k.uid}:${k.pack}:${k.id}:${k.geom.cx.toFixed(3)},${k.geom.cy.toFixed(3)},${k.geom.w.toFixed(3)},${k.geom.h.toFixed(3)},${Math.round(k.geom.rot)}`).join('|') : '';
   return `${maskData}|${stickerData}|${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${slotTransforms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}|${textSlotQrGeomData}`;
 }
@@ -1147,6 +1148,7 @@ function renderTemplateSlots(
   onOrnamentSlotClick: (slotIndex: number) => void = () => {},
   coverMode: boolean = false,
   slotMasks?: (string | null)[],
+  slotLooks?: (string | null)[],
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
@@ -1326,10 +1328,14 @@ function renderTemplateSlots(
           img.set('clipPath', clip);
         }
 
-        if (slot.feather) {
-          // Soft edge: Fabric clips have no alpha, so bake the cover-fitted
-          // photo into an offscreen canvas, feather it with the SAME gradients
-          // the DOM + print use, and show that instead of the raw image.
+        const rawLook = slotLooks?.[i];
+        const look: LookId | null = isLookId(rawLook) ? rawLook : null;
+        if (slot.feather || slot.texture || look) {
+          // Bake: Fabric clips have no alpha and its filters are not the CSS
+          // ones, so draw the cover-fitted photo into an offscreen canvas,
+          // apply the look to the pixels (the same matrices the DOM's CSS
+          // filter uses), then the soft or textured edge on the alpha — and
+          // show that instead of the raw image. Exactly what print does.
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const el = img.getElement ? img.getElement() : (img as any)._element;
@@ -1340,14 +1346,25 @@ function renderTemplateSlots(
             if (el && octx) {
               const drawW = imgW * finalScale, drawH = imgH * finalScale;
               octx.drawImage(el, sw / 2 + offsetX - drawW / 2, sh / 2 + offsetY - drawH / 2, drawW, drawH);
-              featherAlpha(octx, 0, 0, off.width, off.height, slot.feather, slot.featherSide);
-              const soft = new fab.Image(off, { left: sx, top: sy, originX: 'left', originY: 'top', ...SLOT_IMAGE_LOCK });
-              soft.slotId = `${SLOT_ID}-photo-${i}`;
-              soft.photoIndex = photoIndex;
-              soft.slotIndex = i;
-              soft.photoId = `slot-photo-${i}`;
-              canvas.add(soft);
-              canvas.renderAll();
+              if (look) applyLookPixels(octx, 0, 0, off.width, off.height, look);
+              if (slot.feather) featherAlpha(octx, 0, 0, off.width, off.height, slot.feather, slot.featherSide);
+              const show = () => {
+                if (renderId !== currentRenderId) return;
+                const baked = new fab.Image(off, { left: sx, top: sy, originX: 'left', originY: 'top', ...SLOT_IMAGE_LOCK });
+                baked.slotId = `${SLOT_ID}-photo-${i}`;
+                baked.photoIndex = photoIndex;
+                baked.slotIndex = i;
+                baked.photoId = `slot-photo-${i}`;
+                canvas.add(baked);
+                canvas.renderAll();
+              };
+              if (slot.texture) {
+                loadMaskTexture(slot.texture)
+                  .then((tex) => { applyTextureAlpha(octx, tex, 0, 0, off.width, off.height); show(); })
+                  .catch(() => show());
+              } else {
+                show();
+              }
               return;
             }
           } catch { /* fall through to the plain image */ }
@@ -1711,7 +1728,7 @@ function renderScene(
 
   const geoms = page.slotGeometries;
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick, page.slotTexts, onSlotTextClick, page.ornamentFills, onOrnamentSlotClick, coverMode, page.slotMasks);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick, page.slotTexts, onSlotTextClick, page.ornamentFills, onOrnamentSlotClick, coverMode, page.slotMasks, page.slotLooks);
   }
 
   // 3b. Decorative theme corners (one set, all four corners), locked + on top.

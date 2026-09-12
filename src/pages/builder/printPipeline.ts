@@ -5,7 +5,8 @@
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { resolveSlotBox } from './slotGeometry';
-import { applyMask, isMaskId, archRy, starPoints, featherAlpha, isPathShape, maskPathD } from './masks';
+import { applyMask, isMaskId, archRy, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, applyTextureAlpha } from './masks';
+import { applyLookPixels, isLookId } from './looks';
 import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
@@ -648,16 +649,24 @@ async function renderSlotPhoto(
   const drawX = sx + sw / 2 - drawW / 2 + slotOffsetX * printScale;
   const drawY = sy + sh / 2 - drawH / 2 + slotOffsetY * printScale;
 
-  if (slot.feather) {
-    // Soft edge: draw the photo into its own box, feather the alpha with the
-    // same two gradients the DOM + Fabric use, then composite.
+  const rawLook = page.slotLooks?.[slotIndex];
+  const look = isLookId(rawLook) ? rawLook : null;
+  if (slot.feather || slot.texture || look) {
+    // Bake: draw the photo into its own box, apply the look to the pixels
+    // (the same matrices the DOM's CSS filter uses), then the soft edge or the
+    // textured edge on the alpha — exactly what the Fabric editor shows.
     const t = document.createElement('canvas');
     t.width = Math.max(1, Math.ceil(sw));
     t.height = Math.max(1, Math.ceil(sh));
     const tc = t.getContext('2d');
     if (tc) {
       tc.drawImage(img, drawX - sx, drawY - sy, drawW, drawH);
-      featherAlpha(tc, 0, 0, t.width, t.height, slot.feather, slot.featherSide);
+      if (look) applyLookPixels(tc, 0, 0, t.width, t.height, look);
+      if (slot.feather) featherAlpha(tc, 0, 0, t.width, t.height, slot.feather, slot.featherSide);
+      if (slot.texture) {
+        try { applyTextureAlpha(tc, await loadMaskTexture(slot.texture), 0, 0, t.width, t.height); }
+        catch { /* texture missing — print the plain photo rather than nothing */ }
+      }
       ctx.drawImage(t, sx, sy);
     } else {
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
