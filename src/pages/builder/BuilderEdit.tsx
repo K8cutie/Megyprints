@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, ChevronRight, Sparkles,
-  Wand2, Upload, Home, PanelLeftOpen, Video,
+  Wand2, Upload, Home, PanelLeftOpen, Video, PencilRuler,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -30,6 +30,9 @@ import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
 import { CloudSaveStatus } from '../../components/CloudSaveStatus';
 import { useAuth } from '../../lib/authContext';
+import { studioEnabled } from '../../lib/studioFlag';
+import StudioGate, { STUDIO_GATE_KEY } from './StudioGate';
+import { GUARD_MESSAGES, SOFT_MESSAGE, printSharpness, resolveSlotBox } from './slotGeometry';
 /* PropertiesPanel is now rendered inside UnifiedPanel */
 import { getCanvasDimensions } from './layouts';
 import { PAGE_TEMPLATES, hasQrSlot } from './pageTemplates';
@@ -77,6 +80,28 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
   const [containerMode, setContainerMode] = useState(false);
+
+  /* ── STUDIO (owner, 2026-09-13): the same page with the training wheels off.
+     Behind studioEnabled() until the owner flips it. Studio = Fabric's
+     container mode (frames selectable, movable, resizable) + the guardrails
+     at the state setter + the page marked as the customer's. ── */
+  const studioAvailable = studioEnabled();
+  const [studio, setStudio] = useState(false);
+  const [studioGate, setStudioGate] = useState(false);
+  const [guardMsg, setGuardMsg] = useState<string | null>(null);
+  const guardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sayGuard = useCallback((msg: string) => {
+    setGuardMsg(msg);
+    if (guardTimer.current) clearTimeout(guardTimer.current);
+    guardTimer.current = setTimeout(() => setGuardMsg(null), 2600);
+  }, []);
+  const enterStudio = useCallback(() => {
+    let dismissed = false;
+    try { dismissed = !!sessionStorage.getItem(STUDIO_GATE_KEY); } catch { /* private mode */ }
+    if (!user && !dismissed) { setStudioGate(true); return; }
+    setStudio(true); setContainerMode(true);
+  }, [user]);
+  const leaveStudio = useCallback(() => { setStudio(false); setContainerMode(false); }, []);
 
   /* ── Sidebar hidden by default — Megy Assistant is the primary control ── */
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -203,8 +228,19 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {
-      actions.updateSlotGeometry(slotIndex, geometry);
-    }, [actions]),
+      // The setter clamps; the reasons become the page's one-line answer.
+      const reasons = actions.updateSlotGeometry(slotIndex, geometry);
+      if (reasons.length) { sayGuard(GUARD_MESSAGES[reasons[0]]); return; }
+      const page = actions.currentPage;
+      const tpl = page?.templateId ? getTemplateById(page.templateId) : null;
+      const raw = tpl?.slots[slotIndex];
+      const photoIdx = page?.slotFills?.[slotIndex];
+      if (raw && photoIdx != null) {
+        const box = resolveSlotBox(raw, geometry);
+        const ctx = { albumSize: actions.albumSize, pageIndex: actions.currentPageIndex, template: tpl, coverMode: actions.phase === 'cover' };
+        if (printSharpness(actions.uploadedPhotos[photoIdx], box, ctx) === 'soft') sayGuard(SOFT_MESSAGE);
+      }
+    }, [actions, sayGuard]),
     onRenderComplete: useCallback((canvas: any) => {
       try {
         // Small JPEG thumbnail — the snapshot is only used for the project
@@ -730,6 +766,16 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         )}
       </AnimatePresence>
 
+      {/* STUDIO: the guardrail's one-line answer, and the once-per-session sign-in nudge */}
+      {guardMsg && (
+        <div role="status" aria-live="polite" data-testid="studio-guard"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[115] max-w-[90vw] px-4 py-2.5 rounded-xl bg-dark text-warm-white text-sm font-medium shadow-2xl text-center">
+          {guardMsg}
+        </div>
+      )}
+      {studioGate && (
+        <StudioGate onContinue={() => { setStudioGate(false); setStudio(true); setContainerMode(true); }} onClose={() => setStudioGate(false)} />
+      )}
       {/* Caption editor — same component the mobile review + preview use, so the
           desktop canvas textbox edits identically. Click the box → type → it
           binds to the slot and renders fixed + centered. */}
@@ -977,6 +1023,27 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             </div>
 
             <div className="flex items-center gap-2">
+              {studioAvailable && actions.phase === 'edit' && (
+                <div className="inline-flex items-center rounded-full border border-line bg-paper p-0.5 gap-0.5" role="group" aria-label="Editing mode" data-testid="studio-switch">
+                  <button type="button" aria-pressed={!studio} onClick={leaveStudio}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 transition-colors ${!studio ? 'bg-blush-pink text-white shadow-sm' : 'text-medium hover:text-dark'}`}>
+                    <Wand2 size={11} /> Simple
+                  </button>
+                  <button type="button" aria-pressed={studio} onClick={enterStudio}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 transition-colors ${studio ? 'bg-blush-pink text-white shadow-sm' : 'text-medium hover:text-dark'}`}>
+                    <PencilRuler size={11} /> Studio
+                  </button>
+                </div>
+              )}
+              {studioAvailable && actions.currentPage?.studio && (
+                <>
+                  <span className="text-[11px] font-bold text-blush-pink bg-blush rounded-full px-2.5 py-1" data-testid="studio-yours">✎ This page is yours · Regenerate skips it</span>
+                  <button type="button" onClick={() => { actions.resetStudioPage(); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }}
+                    className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-peach text-blush-pink hover:bg-blush flex items-center gap-1" data-testid="studio-fix">
+                    <Sparkles size={11} /> Megy, fix this page
+                  </button>
+                </>
+              )}
               <CloudSaveStatus
                 status={actions.cloudSaveStatus}
                 lastSavedAt={actions.lastSavedAt}

@@ -13,6 +13,7 @@
  *  ══════════════════════════════════════════════════════════════════════════ */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   normalizeGradient,
   gradientToCss,
@@ -157,5 +158,18 @@ describe('album-size surfaces (the 9x9 class of bug)', () => {
       expect(reachable.has(p), `SIZE_ALIASES cannot reach ${p} — Megy can't set it by chat`).toBe(true);
     }
     for (const target of reachable) expect(presets).toContain(target);
+  });
+});
+
+/* ── STUDIO frames: one resolver in all three renderers ─────────────────── */
+describe('Studio slot overrides go through resolveSlotBox in every renderer', () => {
+  it('BuilderPreview (DOM), useCanvasEngine (Fabric), printPipeline (print)', () => {
+    for (const f of ['src/pages/builder/BuilderPreview.tsx', 'src/pages/builder/useCanvasEngine.ts', 'src/pages/builder/printPipeline.ts']) {
+      const src = readFileSync(f, 'utf8');
+      expect(src, f).toContain("from './slotGeometry'");
+      expect(src, f).toMatch(/resolveSlotBox\(/);
+    }
+    // and no renderer merges the override by hand any more
+    expect(readFileSync('src/pages/builder/useCanvasEngine.ts', 'utf8')).not.toMatch(/\.\.\.rawSlot, \.\.\.geom/);
   });
 });

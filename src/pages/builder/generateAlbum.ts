@@ -288,6 +288,42 @@ export function ensureMemoryPages(pages: AlbumPage[], min = MIN_MEMORY_PAGES): n
   return turned;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   STUDIO PAGES SURVIVE A RESHUFFLE. A page the customer moved frames on is
+   theirs: Regenerate / Surprise Me build the rest of the album around it.
+   The caller splits them out, generates from the remaining photos with a
+   smaller minimum, maps the fresh pages' photo indexes back to the full
+   pool, and merges the kept pages back at their old positions.
+   ══════════════════════════════════════════════════════════════════════════ */
+export function splitStudioPages(pages: AlbumPage[]): { kept: { index: number; page: AlbumPage }[]; used: Set<number> } {
+  const kept: { index: number; page: AlbumPage }[] = [];
+  const used = new Set<number>();
+  pages.forEach((page, index) => {
+    if (!page.studio) return;
+    kept.push({ index, page });
+    for (const f of page.slotFills ?? []) if (f != null) used.add(f);
+    for (const f of page.textSlotFills ?? []) if (f != null) used.add(f);
+  });
+  return { kept, used };
+}
+
+/** Fresh pages were dealt from a REDUCED pool; `map[k]` is pool index k's
+ *  index in the full photo list. Mutates. */
+export function remapSlotFills(pages: AlbumPage[], map: number[]): void {
+  const re = (f: number | null | undefined) => (f == null ? null : (map[f] ?? null));
+  for (const p of pages) {
+    if (p.slotFills) p.slotFills = p.slotFills.map(re);
+    if (p.textSlotFills) p.textSlotFills = p.textSlotFills.map(re);
+  }
+}
+
+/** Put the kept pages back where they were (clamped to the new length). */
+export function mergeStudioPages(fresh: AlbumPage[], kept: { index: number; page: AlbumPage }[]): AlbumPage[] {
+  const out = [...fresh];
+  for (const k of [...kept].sort((a, b) => a.index - b.index)) out.splice(Math.min(k.index, out.length), 0, k.page);
+  return out;
+}
+
 /** How many combo/caption boxes an album carries — ONE quote per box is the
  *  pool size that guarantees neither generation nor the finish-line sweep ever
  *  runs dry (each line is dealt at most once). */
@@ -503,8 +539,11 @@ export function generateAlbum(
   albumSize: AlbumSizePreset,
   photosPerPage?: number | undefined,
   background?: AlbumPage['background'] | undefined,
-  options?: { randomize?: boolean; border?: { color: string; width: number }; cornerBase?: string; boxContent?: BoxContentOptions },
+  options?: { randomize?: boolean; border?: { color: string; width: number }; cornerBase?: string; boxContent?: BoxContentOptions; minPages?: number },
 ): AlbumPage[] {
+  // STUDIO: when the caller keeps some pages out of the reshuffle it asks for
+  // fewer fresh pages, so the merged album still lands on the minimum.
+  const minPages = Math.max(1, Math.floor(options?.minPages ?? MIN_PAGES));
   // A size with no layouts cannot build an album. The size pickers already drop
   // such a size (see albumSizeOptions), so reaching here means a stale draft or
   // a direct call — fail LOUDLY rather than dealing pages that would render and
@@ -547,13 +586,13 @@ export function generateAlbum(
   // photos cannot fill MIN_PAGES at it, the budget drops to the densest count
   // that still does (1/page below 80 photos), and single-photo pages carry the
   // rest. Same rule for every size — 8x6/6x8 had the identical hole.
-  const autoFill = !randomize && photosPerPage == null && totalPhotos < MIN_PAGES * naturalPerPage(albumSize);
+  const autoFill = !randomize && photosPerPage == null && totalPhotos < minPages * naturalPerPage(albumSize);
   // Outside fill mode the explicit window allows density + 1 (see the window
   // below), so the album only fills 40 pages once photos reach 40 × (density+1);
   // below that, the fill budget takes over at exactly the chosen density or less.
-  const explicitFill = !randomize && photosPerPage != null && photosPerPage > 1 && totalPhotos < MIN_PAGES * (photosPerPage + 1);
+  const explicitFill = !randomize && photosPerPage != null && photosPerPage > 1 && totalPhotos < minPages * (photosPerPage + 1);
   const fillDensity = (autoFill || explicitFill)
-    ? Math.max(1, Math.floor(totalPhotos / MIN_PAGES))
+    ? Math.max(1, Math.floor(totalPhotos / minPages))
     : undefined;
   const effPerPage = explicitFill ? Math.min(photosPerPage as number, fillDensity as number) : (photosPerPage ?? fillDensity);
   const fillMode = fillDensity != null;
@@ -568,7 +607,7 @@ export function generateAlbum(
 
   // No photos → minimum empty pages
   if (totalPhotos === 0) {
-    return Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, albumSize, background, border, cornerBase));
+    return Array.from({ length: minPages }, (_, i) => createEmptyPage(i, albumSize, background, border, cornerBase));
   }
 
   // ── 1. Analyze photo aspect ratios ──
@@ -825,7 +864,7 @@ export function generateAlbum(
     const present = new Set<PhotoRatio>(photos.map((_, i) => ratioOf[i] ?? dominantRatio));
     const allowed = new Set<number>([1]);
     for (const r of present) for (const t of templatesForRatio(r)) if (t.slotCount <= planCap) allowed.add(t.slotCount);
-    plan = planPageCounts(totalPhotos, MIN_PAGES, planCap, [...allowed]);
+    plan = planPageCounts(totalPhotos, minPages, planCap, [...allowed]);
   }
 
   for (const group of momentGroups) {
@@ -1101,7 +1140,7 @@ export function generateAlbum(
   }
 
   // ── 4. Pad out to the minimum page count with empty pages ──
-  while (pages.length < MIN_PAGES) {
+  while (pages.length < minPages) {
     pages.push(createEmptyPage(pageIdx++, albumSize, background, border, cornerBase));
   }
 

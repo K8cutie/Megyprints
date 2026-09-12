@@ -23,7 +23,9 @@ import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, type BoxContentOptions } from './generateAlbum';
+import { clampSlotGeometry, type GuardReason } from './slotGeometry';
+import { MIN_ALBUM_PAGES } from './densities';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
@@ -474,7 +476,13 @@ export interface BuilderActions {
   clearSlot: (slotIndex: number) => void;
   setSlotScale: (slotIndex: number, scale: number) => void;
   setSlotOffset: (slotIndex: number, dx: number, dy: number) => void;
-  updateSlotGeometry: (slotIndex: number, geometry: SlotGeometryOverride) => void;
+  /** STUDIO: move/resize a photo frame on the current page. The box passes
+   *  the print guardrails (spine, safe area, 2" floor) on the way in and the
+   *  page becomes the customer's (`studio`). Returns the rules that moved it,
+   *  empty when it landed as asked. */
+  updateSlotGeometry: (slotIndex: number, geometry: SlotGeometryOverride) => GuardReason[];
+  /** "Megy, fix this page": drop every frame override and hand the page back. */
+  resetStudioPage: () => void;
   setQrFill: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
   /** True when the current page is a single-photo page a living-memory QR badge
    *  can be applied to. */
@@ -624,6 +632,8 @@ export function useBuilderState(): BuilderActions {
   const measuredRef = useRef<Map<string, { width: number; height: number }>>(new Map());
   const [albumPages, setAlbumPages] = useState<AlbumPage[]>(() => getInitialState().albumPages);
   const [generating, setGenerating] = useState<GeneratingPhase | null>(null);
+  const albumPagesRef = useRef(albumPages);
+  useEffect(() => { albumPagesRef.current = albumPages; }, [albumPages]);
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState().currentPageIndex);
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState().rejectedTemplateIds);
   const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState().photosPerPage);
@@ -1290,7 +1300,14 @@ export function useBuilderState(): BuilderActions {
     // has once the wait budget is spent — the rest keeps landing in the cache
     // for the finish-line sweep. Styling mirrors setBoxText's defaults so a
     // dealt quote ≡ a QuotePickerModal pick.
-    let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase });
+    // STUDIO: pages the customer moved frames on are kept exactly as they are.
+    // Their photos leave the pool, the rest of the album is dealt around them
+    // (with a smaller minimum), fresh pages map back to the full photo list.
+    const { kept, used } = splitStudioPages(albumPagesRef.current);
+    const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i));
+    const pool = poolMap.map((i) => photos[i]);
+    let newPages = generateAlbum(pool, albumSize, photosPerPage, bg, { ...options, border, cornerBase, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     setGenerating('quotes');
     const quotePool = await ensureThemeQuotes(currentAlbumTheme(), countAlbumBoxes(newPages), { budgetMs: 12_000 });
@@ -1302,6 +1319,7 @@ export function useBuilderState(): BuilderActions {
       quoteColor: quoteTheme.textColor,
     };
     dealAlbumBoxes(newPages, boxContent);
+    newPages = mergeStudioPages(newPages, kept);
     // createEmptyPage only carries border color/width — also apply the border STYLE
     // and the decorative FRAME (when chosen) onto every freshly generated page.
     const bStyle = border.style;
@@ -1329,6 +1347,8 @@ export function useBuilderState(): BuilderActions {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page) return prev;
+      // STUDIO: the customer's page is never rearranged behind their back.
+      if (page.studio) return prev;
 
       // ── 1. Collect existing photos on this page (preserve these). Dedup so a
       //       page that already has duplicates gets cleaned on regenerate. ──
@@ -1602,14 +1622,28 @@ export function useBuilderState(): BuilderActions {
     });
   }, [updateCurrentPage]);
 
-  const updateSlotGeometry = useCallback((slotIndex: number, geometry: SlotGeometryOverride) => {
+  const updateSlotGeometry = useCallback((slotIndex: number, geometry: SlotGeometryOverride): GuardReason[] => {
+    // THE chokepoint: nothing outside the printable rules can be stored.
+    const page = currentPage;
+    const template = page?.templateId ? getTemplateById(page.templateId) : null;
+    const slot = template?.slots[slotIndex];
+    if (!page || !slot) return [];
+    const ctx = { albumSize, pageIndex: currentPageIndex, template, coverMode: phase === 'cover' };
+    const prior = page.slotGeometries?.[slotIndex] ?? {};
+    const { geom, reasons } = clampSlotGeometry(slot, { ...prior, ...geometry }, ctx);
     pushSnapshot();
-    updateCurrentPage((page) => {
-      const geoms = [...(page.slotGeometries ?? [])];
-      geoms[slotIndex] = { ...(geoms[slotIndex] ?? {}), ...geometry };
-      return { ...page, slotGeometries: geoms };
+    updateCurrentPage((p) => {
+      const geoms = [...(p.slotGeometries ?? [])];
+      geoms[slotIndex] = geom;
+      return { ...p, slotGeometries: geoms, studio: true };
     });
-  }, [updateCurrentPage]);
+    return reasons;
+  }, [updateCurrentPage, currentPage, albumSize, currentPageIndex, phase, pushSnapshot]);
+
+  const resetStudioPage = useCallback(() => {
+    pushSnapshot();
+    updateCurrentPage((p) => ({ ...p, slotGeometries: [], studio: false }));
+  }, [updateCurrentPage, pushSnapshot]);
 
   /** Set (or clear, with null) the QR living-memory fill for a template QR slot.
    *  pageIndex defaults to the current page; the preview spread passes it explicitly. */
@@ -2627,6 +2661,7 @@ export function useBuilderState(): BuilderActions {
     setSlotScale,
     setSlotOffset,
     updateSlotGeometry,
+    resetStudioPage,
     setQrFill,
     canAddMemoryQr,
     applyMemoryQr,

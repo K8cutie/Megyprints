@@ -4,6 +4,7 @@
     ═══════════════════════════════════════════════════════════════ */
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
+import { resolveSlotBox } from './slotGeometry';
 import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
@@ -126,7 +127,8 @@ async function renderPageManually(
     const fills = dedupeSlotFills(page.slotFills ?? []);
 
     for (let i = 0; i < adapted.slots.length; i++) {
-      const slot = adapted.slots[i];
+      // STUDIO: a moved frame prints exactly where the editor + preview show it.
+      const slot = resolveSlotBox(adapted.slots[i], page.slotGeometries?.[i]);
       const sx = safeX + slot.x * safeW;
       const sy = safeY + slot.y * safeH;
       const sw = slot.width * safeW;

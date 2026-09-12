@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { resolveSlotBox } from './slotGeometry';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
@@ -556,11 +557,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
             const currentOffsetX = page.slotOffsetsX?.[obj.slotIndex] ?? 0;
             const currentOffsetY = page.slotOffsetsY?.[obj.slotIndex] ?? 0;
             latestActions.setSlotOffset(obj.slotIndex, offsetX - currentOffsetX, offsetY - currentOffsetY);
-            // Save rotation if changed
-            const newAngle = Math.round((obj.angle as number) ?? 0);
-            if (newAngle !== (slot.rotation ?? 0) && latestActions.updateSlotGeometry) {
-              latestActions.updateSlotGeometry(obj.slotIndex, { rotation: newAngle });
-            }
+            // (No rotation save: no renderer prints a rotated frame, so the
+            // editor must not keep one either — print parity.)
           }
         }
       }
@@ -1142,11 +1140,13 @@ function renderTemplateSlots(
   const safeY = canvasH * m.top;
   const safeW = canvasW * (1 - m.left - m.right);
   const safeH = canvasH * (1 - m.top - m.bottom);
+  // Studio's live proof reads the frames' canvas rects from here (only while
+  // Studio is on; nothing in the product depends on it).
+  const studioRects: { i: number; x: number; y: number; w: number; h: number }[] = [];
 
   adaptedTemplate.slots.forEach((rawSlot: any, i: number) => {
-    // Merge template slot with user geometry overrides
-    const geom = slotGeometries?.[i] ?? {};
-    const slot = { ...rawSlot, ...geom };
+    // STUDIO: a moved frame — the same override + arithmetic as preview + print.
+    const slot = resolveSlotBox(rawSlot, slotGeometries?.[i]);
     const photoIndex = slotFills[i];
     // Phase 2: map slot proportions (0–1 of safe area) → pixels
     const sx = safeX + slot.x * safeW;
@@ -1154,6 +1154,10 @@ function renderTemplateSlots(
     const sw = slot.width * safeW;
     const sh = slot.height * safeH;
 
+    if (containerMode && typeof window !== 'undefined') {
+      studioRects.push({ i, x: sx, y: sy, w: sw, h: sh });
+      (window as unknown as { __megyStudioRects?: unknown }).__megyStudioRects = { canvasW, canvasH, rects: studioRects };
+    }
     // Content precedence is DRIVEN BY page data (not slot.kind):
     //   qrFills[i] → QR, slotTexts[i] → text, slotFills[i] → photo, else empty "+".
     // QR is handled first so it never falls into the empty-photo branch, and the
@@ -1354,7 +1358,7 @@ function renderTemplateSlots(
           cornerColor: containerMode ? '#3B82F6' : undefined,
           cornerSize: containerMode ? 10 : undefined,
           transparentCorners: false,
-          lockRotation: false,
+          lockRotation: true, // rotation is not printed by any renderer — never offer it
           hoverCursor: containerMode ? 'move' : 'default',
         };
         let borderObj: any;
@@ -1481,16 +1485,26 @@ function renderTemplateSlots(
               newW = (borderObj.width || sw) * (borderObj.scaleX || 1);
               newH = (borderObj.height || sh) * (borderObj.scaleY || 1);
             }
+            // Fabric's scaled size INCLUDES the outline's stroke (the frame was
+            // created with left/top = the slot box and width/height = the box,
+            // stroke on top), so take the stroke back out or every drag grows
+            // the frame by 3 px — measured 0.4% per move before this.
+            newW -= (borderObj.strokeWidth || 0) * (borderObj.scaleX || 1);
+            newH -= (borderObj.strokeWidth || 0) * (borderObj.scaleY || 1);
             // For circle/oval/heart centered objects, adjust left/top
             const isCentered = slot.shape === 'circle' || slot.shape === 'oval' || slot.shape === 'heart';
             const finalLeft = isCentered ? newLeft - newW / 2 : newLeft;
             const finalTop = isCentered ? newTop - newH / 2 : newTop;
+            // FRACTIONS OF THE SAFE AREA — the space template slots live in, so
+            // the preview and the print place this frame with the same maths.
+            // (The old percent-of-canvas write never matched what was read.)
+            // The state setter clamps it (spine, safe area, 2" floor) and the
+            // re-render snaps the frame to where it may actually print.
             onContainerModified(i, {
-              x: Math.round((finalLeft / canvasW) * 100 * 10) / 10,
-              y: Math.round((finalTop / canvasH) * 100 * 10) / 10,
-              width: Math.round((newW / canvasW) * 100 * 10) / 10,
-              height: Math.round((newH / canvasH) * 100 * 10) / 10,
-              rotation: Math.round((borderObj.angle as number) ?? 0),
+              x: (finalLeft - safeX) / safeW,
+              y: (finalTop - safeY) / safeH,
+              width: newW / safeW,
+              height: newH / safeH,
             });
           });
 
