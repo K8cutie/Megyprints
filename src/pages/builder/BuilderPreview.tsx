@@ -13,6 +13,7 @@ import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
+import { BOOK } from './bookFeel';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
@@ -854,7 +855,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       </div>
 
       {/* Page display with side arrows */}
-      <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 overflow-auto">
+      <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 overflow-auto" style={BOOK.table}>
         <div className="flex items-center gap-6">
           {/* Prev Arrow — left side */}
           <button
@@ -867,26 +868,23 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           </button>
 
           {/* Pages */}
-          <div className="flex flex-col items-center gap-2">
-            {/* Page number labels */}
-            <div className="flex items-center" style={{ width: singleW * 2 }}>
-              <span className="text-xs font-medium text-medium" style={{ width: singleW, textAlign: 'center' }}>
-                Page {spreadLeftIndex + 1}
-              </span>
-              {spreadRightPage && (
-                <span className="text-xs font-medium text-medium" style={{ width: singleW, textAlign: 'center' }}>
-                  Page {spreadLeftIndex + 2}
-                </span>
-              )}
-            </div>
-
+          <div className="flex flex-col items-center gap-3">
+            {/* THE BOOK (owner, 2026-09-13: "it looks so flat"). The spread sits
+                inside a cover that peeks out around it, over a stack of page
+                edges, with a gutter dipping into the spine, paper grain and a
+                soft vignette over the pages, on a lit table. Every layer is
+                CSS on top of the untouched pages — nothing in the layout moves,
+                and the overlays never take a tap (pointer-events: none). */}
+            <div style={BOOK.cover(singleW * 2, H, fitScale)} data-testid="preview-book">
+              {/* page-block edges under the spread */}
+              <div aria-hidden="true" style={BOOK.edges(singleW * 2, H, fitScale)} />
             {/* Spread container */}
             <div
-              className="relative bg-white shadow-xl"
+              className="relative bg-white"
               style={{
                 width: singleW * 2,
                 height: H,
-                boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+                isolation: 'isolate',
               }}
             >
               {/* Left Page */}
@@ -907,7 +905,22 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex + 1, slot })} />
                 </div>
               )}
+
+              {/* book layers over the pages: vignette, grain, gutter */}
+              <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
+              <div aria-hidden="true" style={BOOK.grain} />
+              {spreadRightPage
+                ? <div aria-hidden="true" style={BOOK.gutter} data-testid="preview-gutter" />
+                : <div aria-hidden="true" style={BOOK.edgeShade('right')} />}
             </div>
+            </div>
+
+            {/* One caption under the book, like a page number in the corner */}
+            <span className="text-xs font-medium text-medium tabular-nums" data-testid="preview-caption">
+              {spreadRightPage
+                ? `Pages ${spreadLeftIndex + 1}–${spreadLeftIndex + 2} of ${total}`
+                : `Page ${spreadLeftIndex + 1} of ${total}`}
+            </span>
           </div>
 
           {/* Next Arrow — right side */}
