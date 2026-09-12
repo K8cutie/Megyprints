@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw, Sparkles, X } from 'lucide-react';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
@@ -825,11 +825,14 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const hasPrev = spreadLeftIndex > 0;
   const hasNext = spreadLeftIndex + 2 < total;
 
-  // Forced order CTA — auto-shows once they reach the last spread of the preview.
+  // End-of-album prompt — shows once when they reach the last spread. It can
+  // be dismissed (keep browsing) and it offers a real way back to the pages
+  // (owner, 2026-09-13: "there doesn't seem to be a way to go back").
   const [showOrderCta, setShowOrderCta] = useState(false);
+  const [ctaSeen, setCtaSeen] = useState(false);
   useEffect(() => {
-    if (!hasNext && total > 0) setShowOrderCta(true);
-  }, [hasNext, total]);
+    if (!hasNext && total > 0 && !ctaSeen) { setShowOrderCta(true); setCtaSeen(true); }
+  }, [hasNext, total, ctaSeen]);
 
   return (
     <div style={landscapeRotate
@@ -843,9 +846,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       )}
       {/* Toolbar */}
       <div className="flex items-center justify-between px-5 py-2.5 border-b border-[#E8E4E0] bg-white">
-        <span className="text-xs text-medium font-medium tabular-nums">
-          {spreadLeftIndex + 1}-{Math.min(spreadLeftIndex + 2, total)} / {total}
-        </span>
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} data-testid="preview-edit-pages"
+            className="px-3 py-1.5 rounded-lg border border-line text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors">
+            <ChevronLeft size={14} /> Edit pages
+          </button>
+          <span className="text-xs text-medium font-medium tabular-nums">
+            {spreadLeftIndex + 1}-{Math.min(spreadLeftIndex + 2, total)} / {total}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           {/* "Megy finishes it" — visible only while empty caption boxes remain.
               Fills them with unused theme quotes; every fill stays editable. */}
@@ -953,10 +962,12 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         </div>
       </div>
 
-      {/* Forced order CTA — auto-shows on the last spread; no dismiss (must choose). */}
+      {/* End-of-album prompt — shows once on the last spread. Tap outside or ✕ to
+          keep browsing; "Back to my pages" is a real button, not a footnote. */}
       {showOrderCta && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 text-center">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6" onClick={() => setShowOrderCta(false)} data-testid="end-prompt">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 text-center relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowOrderCta(false)} aria-label="Keep browsing" className="absolute top-3 right-3 text-light hover:text-medium p-1"><X size={18} /></button>
             <div className="text-4xl mb-2">📦</div>
             <h3 className="font-display text-2xl font-semibold text-dark mb-1">You've reached the end</h3>
             <p className="text-sm text-medium mb-5">Your album looks beautiful. Give it a cover, then make it real.</p>
@@ -974,9 +985,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             </button>
             <button
               onClick={onBack}
-              className="mt-4 text-xs text-light hover:text-medium transition-colors"
+              data-testid="end-prompt-back"
+              className="w-full mt-3 py-3 rounded-xl border border-line text-cocoa text-sm font-semibold hover:bg-blush active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
             >
-              …or do you want to change anything?
+              <ChevronLeft size={16} /> Back to my pages — I want to change something
             </button>
           </div>
         </div>

@@ -365,6 +365,11 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       case 'finalize':
         if (action.includes('Preview')) {
           void builder.dispatch({ type: 'preview_album', rawMessage: 'preview album' });
+        } else if (action.includes('Edit pages')) {
+          // Back to Step 6 — the store write flows into the engine (backward
+          // jumps are honoured) and the centre follows the step.
+          builder.setWizardStep('review_pages');
+          builder.setPhase('edit');
         } else if (action.includes('Save')) {
           builder.manualSave?.();
         }
