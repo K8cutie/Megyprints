@@ -38,6 +38,10 @@ export function normalizeStoredPageFields(p: any): any {
     slotOffsetsY: get('slotOffsetsY', 'slot_offsets_y') ?? [],
     slotGeometries: get('slotGeometries', 'slot_geometries') ?? [],
     studio: !!p.studio,
+    slotMasks: get('slotMasks', 'slot_masks') ?? [],
+    stickers: Array.isArray(p.stickers)
+      ? p.stickers.filter((k: unknown) => !!k && typeof k === 'object' && typeof (k as { uid?: unknown }).uid === 'string' && typeof (k as { pngDataUrl?: unknown }).pngDataUrl === 'string' && !!(k as { geom?: unknown }).geom)
+      : [],
     qrFills: get('qrFills', 'qr_fills') ?? [],
     slotTexts: get('slotTexts', 'slot_texts') ?? [],
     ornamentFills,

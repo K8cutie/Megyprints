@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveSlotBox } from './slotGeometry';
+import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, type MaskId } from './masks';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
@@ -136,6 +137,10 @@ export interface UseCanvasEngineOptions {
   /** Click on a caption box FILLED with an ornament → re-open the ornament picker. */
   onTextSlotOrnamentClick?: (slotIndex: number) => void;
   onTextSlotOrnamentModified?: (slotIndex: number, geom: import('./types').OrnamentTransform) => void;
+  /** STUDIO stickers: a free graphic was dragged / resized / rotated (the setter clamps). */
+  onStickerModified?: (uid: string, geom: import('./types').OrnamentTransform) => void;
+  /** STUDIO stickers: double-click → swap / remove. */
+  onStickerClick?: (uid: string) => void;
   onTextSlotQrModified?: (slotIndex: number, geom: import('./types').OrnamentTransform) => void;
   actions: BuilderActions;
   /** When true, slot containers become selectable and resizable */
@@ -214,7 +219,10 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   // Ornament fills — so adding/changing/removing an ornament repaints the Fabric
   // editor without a page-nav (same desync class as slotTextData/qrData above).
   const ornamentData = page.ornamentFills ? page.ornamentFills.map((o) => o ? `${o.pack}:${o.id}` : '').join('|') : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${slotTransforms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}|${textSlotQrGeomData}`;
+  // STUDIO masks + stickers — so a mask pick or a sticker add/move repaints.
+  const maskData = page.slotMasks ? page.slotMasks.map((m) => m ?? '').join(',') : '';
+  const stickerData = page.stickers ? page.stickers.map((k) => `${k.uid}:${k.pack}:${k.id}:${k.geom.cx.toFixed(3)},${k.geom.cy.toFixed(3)},${k.geom.w.toFixed(3)},${k.geom.h.toFixed(3)},${Math.round(k.geom.rot)}`).join('|') : '';
+  return `${maskData}|${stickerData}|${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${slotTransforms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}|${textSlotQrGeomData}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -238,6 +246,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     onTextSlotQrClick,
     onTextSlotOrnamentClick,
     onTextSlotOrnamentModified,
+    onStickerModified,
+    onStickerClick,
     onTextSlotQrModified,
     actions,
     containerMode = false,
@@ -303,6 +313,12 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   onTextSlotOrnamentClickRef.current = onTextSlotOrnamentClick ?? (() => {});
   const onTextSlotOrnamentModifiedRef = useRef<(slotIndex: number, geom: import('./types').OrnamentTransform) => void>(() => {});
   onTextSlotOrnamentModifiedRef.current = onTextSlotOrnamentModified ?? (() => {});
+  const onStickerModifiedRef = useRef<(uid: string, geom: import('./types').OrnamentTransform) => void>(() => {});
+  const onStickerClickRef = useRef<(uid: string) => void>(() => {});
+  useEffect(() => {
+    onStickerModifiedRef.current = onStickerModified ?? (() => {});
+    onStickerClickRef.current = onStickerClick ?? (() => {});
+  }, [onStickerModified, onStickerClick]);
   const onTextSlotQrModifiedRef = useRef<(slotIndex: number, geom: import('./types').OrnamentTransform) => void>(() => {});
   onTextSlotQrModifiedRef.current = onTextSlotQrModified ?? (() => {});
   const containerModeRef = useRef(containerMode);
@@ -353,7 +369,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       // photos, slots, text or the background. Without this branch the previous
       // selection survives, so pressing Delete destroys THAT object instead —
       // the user selects the QR and loses an unrelated photo.
-      if (typeof obj.slotId === 'string' && (obj.slotId.includes('-textqr-') || obj.slotId.includes('-textornament-'))) {
+      if (typeof obj.slotId === 'string' && (obj.slotId.includes('-textqr-') || obj.slotId.includes('-textornament-') || obj.slotId.includes('-sticker-'))) {
         clearAll();
         savedSelectionRef.current = { type: null, id: null, slotIndex: null };
         return;
@@ -364,6 +380,10 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       } else if (obj.slotIndex !== undefined) {
         clearAll(); setSelectedSlotIndex(obj.slotIndex);
         savedSelectionRef.current = { type: 'slot', id: null, slotIndex: obj.slotIndex as number };
+      } else if ((obj as { studioSlotIndex?: number }).studioSlotIndex !== undefined) {
+        const si = (obj as { studioSlotIndex?: number }).studioSlotIndex as number;
+        clearAll(); setSelectedSlotIndex(si);
+        savedSelectionRef.current = { type: 'slot', id: null, slotIndex: si };
       } else if (obj.textId) {
         clearAll(); setSelectedTextId(obj.textId);
         savedSelectionRef.current = { type: 'text', id: obj.textId as string, slotIndex: null };
@@ -615,7 +635,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current, onStickerModifiedRef.current, onStickerClickRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -754,7 +774,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current, onStickerModifiedRef.current, onStickerClickRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -1126,6 +1146,7 @@ function renderTemplateSlots(
   ornamentFills?: (OrnamentFill | null)[],
   onOrnamentSlotClick: (slotIndex: number) => void = () => {},
   coverMode: boolean = false,
+  slotMasks?: (string | null)[],
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
@@ -1145,8 +1166,10 @@ function renderTemplateSlots(
   const studioRects: { i: number; x: number; y: number; w: number; h: number }[] = [];
 
   adaptedTemplate.slots.forEach((rawSlot: any, i: number) => {
-    // STUDIO: a moved frame — the same override + arithmetic as preview + print.
-    const slot = resolveSlotBox(rawSlot, slotGeometries?.[i]);
+    // STUDIO: a moved frame (same arithmetic as preview + print) and a mask
+    // (same shape module as preview + print).
+    const rawMask = slotMasks?.[i];
+    const slot = applyMask(resolveSlotBox(rawSlot, slotGeometries?.[i]), isMaskId(rawMask) ? (rawMask as MaskId) : null);
     const photoIndex = slotFills[i];
     // Phase 2: map slot proportions (0–1 of safe area) → pixels
     const sx = safeX + slot.x * safeW;
@@ -1285,10 +1308,45 @@ function renderTemplateSlots(
           const clip = new fab.Path(heartPath, { left: clipCx, top: clipCy, originX: 'center', originY: 'center' });
           clip.absolutePositioned = true;
           img.set('clipPath', clip);
+        } else if (slot.shape === 'arch') {
+          const clip = new fab.Path(archPathCentered(sw, sh), { left: clipCx, top: clipCy, originX: 'center', originY: 'center' });
+          clip.absolutePositioned = true;
+          img.set('clipPath', clip);
+        } else if (slot.shape === 'star') {
+          const clip = new fab.Polygon(starPoints(clipCx, clipCy, Math.min(sw, sh) / 2), {});
+          clip.absolutePositioned = true;
+          img.set('clipPath', clip);
         } else {
           const clip = new fab.Rect({ width: sw, height: sh, left: clipCx, top: clipCy, originX: 'center', originY: 'center' });
           clip.absolutePositioned = true;
           img.set('clipPath', clip);
+        }
+
+        if (slot.feather) {
+          // Soft edge: Fabric clips have no alpha, so bake the cover-fitted
+          // photo into an offscreen canvas, feather it with the SAME gradients
+          // the DOM + print use, and show that instead of the raw image.
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const el = img.getElement ? img.getElement() : (img as any)._element;
+            const off = document.createElement('canvas');
+            off.width = Math.max(1, Math.round(sw));
+            off.height = Math.max(1, Math.round(sh));
+            const octx = off.getContext('2d');
+            if (el && octx) {
+              const drawW = imgW * finalScale, drawH = imgH * finalScale;
+              octx.drawImage(el, sw / 2 + offsetX - drawW / 2, sh / 2 + offsetY - drawH / 2, drawW, drawH);
+              featherAlpha(octx, 0, 0, off.width, off.height, slot.feather);
+              const soft = new fab.Image(off, { left: sx, top: sy, originX: 'left', originY: 'top', ...SLOT_IMAGE_LOCK });
+              soft.slotId = `${SLOT_ID}-photo-${i}`;
+              soft.photoIndex = photoIndex;
+              soft.slotIndex = i;
+              soft.photoId = `slot-photo-${i}`;
+              canvas.add(soft);
+              canvas.renderAll();
+              return;
+            }
+          } catch { /* fall through to the plain image */ }
         }
 
         canvas.add(img);
@@ -1334,7 +1392,7 @@ function renderTemplateSlots(
         const borderStroke = containerMode ? '#3B82F6' : (frameColor ?? '#FFFFFF');
         // Full-bleed (single-photo, no-textbox) pages draw no frame — but keep the
         // blue container outline in edit mode so the slot is still selectable.
-        const effFrameWidth = adaptedTemplate.fullBleed ? 0 : frameWidth;
+        const effFrameWidth = adaptedTemplate.fullBleed || slot.masked ? 0 : frameWidth;
         const borderWidth = containerMode ? 3 : (effFrameWidth ?? 2);
         // Dashed/dotted border style — only on the real (non-container) outline,
         // and only when the slot actually draws a border. Mirrors the DOM
@@ -1378,6 +1436,10 @@ function renderTemplateSlots(
           borderObj = new fab.Rect({ left: sx, top: sy, width: sw, height: sh, ...borderBase });
         }
         borderObj.slotId = `${SLOT_ID}-border-${i}`;
+        // Studio: selecting the frame outline selects the slot (mask chips).
+        // A separate field, NOT slotIndex — the generic object:modified handler
+        // treats anything with slotIndex as a pannable photo.
+        borderObj.studioSlotIndex = i;
         canvas.add(borderObj);
         borderObj.bringToFront();
 
@@ -1392,6 +1454,7 @@ function renderTemplateSlots(
         if (
           !containerMode &&
           !adaptedTemplate.fullBleed &&
+          !slot.masked &&
           effFrameStyle !== 'none' &&
           slot.shape !== 'heart'
         ) {
@@ -1618,6 +1681,8 @@ function renderScene(
   // Last + defaulted (like coverMode) so the long positional call sites stay
   // valid: the ⋯ badge on a DEALT box → the full 3-way chooser (override).
   onTextSlotChooserClick: (slotIndex: number) => void = () => {},
+  onStickerModified: (uid: string, geom: import('./types').OrnamentTransform) => void = () => {},
+  onStickerClick: (uid: string) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
   currentRenderId += 1;
@@ -1642,7 +1707,7 @@ function renderScene(
 
   const geoms = page.slotGeometries;
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick, page.slotTexts, onSlotTextClick, page.ornamentFills, onOrnamentSlotClick, coverMode);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick, page.slotTexts, onSlotTextClick, page.ornamentFills, onOrnamentSlotClick, coverMode, page.slotMasks);
   }
 
   // 3b. Decorative theme corners (one set, all four corners), locked + on top.
@@ -1940,6 +2005,45 @@ function renderScene(
     canvas.add(fabricText);
     textObjects.push(fabricText);
   });
+
+  // 4a-bis. STUDIO stickers — free graphics: drag to move, corner handles to
+  // resize / rotate (uniform), double-click to swap / remove. Their transform
+  // is the same centre-based page-fraction OrnamentTransform the caption-box
+  // graphics use, so the DOM preview + print place them identically.
+  for (const k of page.stickers ?? []) {
+    const g = k.geom;
+    if (!g) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    fab.Image.fromURL(k.pngDataUrl, (img: any) => {
+      if (thisRenderId !== currentRenderId) return;
+      const iw = img.width || 1;
+      const ih = img.height || 1;
+      img.set({
+        originX: 'center', originY: 'center',
+        left: g.cx * canvasW, top: g.cy * canvasH,
+        scaleX: (g.w * canvasW) / iw, scaleY: (g.h * canvasH) / ih,
+        angle: g.rot || 0,
+        selectable: true, evented: true, hasControls: true, hasBorders: true,
+        lockUniScaling: true,
+        cornerColor: '#B85C38', cornerSize: 10, transparentCorners: false,
+        borderColor: '#B85C38', hoverCursor: 'move',
+      });
+      img.slotId = `${SLOT_ID}-sticker-${k.uid}`;
+      img.on('modified', () => {
+        onStickerModified(k.uid, {
+          cx: img.left / canvasW,
+          cy: img.top / canvasH,
+          w: img.getScaledWidth() / canvasW,
+          h: img.getScaledHeight() / canvasH,
+          rot: img.angle || 0,
+        });
+      });
+      img.on('mousedblclick', () => onStickerClick(k.uid));
+      canvas.add(img);
+      img.bringToFront();
+      canvas.renderAll();
+    });
+  }
 
   // 4b. Empty textbox placeholders — a tappable "Tap to add text" region in-slot,
   // identical to the mobile review + preview. Clicking opens the shared text

@@ -5,6 +5,7 @@
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { resolveSlotBox } from './slotGeometry';
+import { applyMask, isMaskId, archRy, starPoints, featherAlpha } from './masks';
 import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
@@ -127,8 +128,10 @@ async function renderPageManually(
     const fills = dedupeSlotFills(page.slotFills ?? []);
 
     for (let i = 0; i < adapted.slots.length; i++) {
-      // STUDIO: a moved frame prints exactly where the editor + preview show it.
-      const slot = resolveSlotBox(adapted.slots[i], page.slotGeometries?.[i]);
+      // STUDIO: a moved frame prints exactly where the editor + preview show it,
+      // and a mask prints with the same shape module they draw from.
+      const rawMask = page.slotMasks?.[i];
+      const slot = applyMask(resolveSlotBox(adapted.slots[i], page.slotGeometries?.[i]), isMaskId(rawMask) ? rawMask : null);
       const sx = safeX + slot.x * safeW;
       const sy = safeY + slot.y * safeH;
       const sw = slot.width * safeW;
@@ -176,6 +179,23 @@ async function renderPageManually(
         ctx.drawImage(cimg, cx, cy, cornerSize, cornerSize);
       } catch { /* missing corner asset — skip */ }
     }
+  }
+
+  // ── STUDIO stickers — free graphics at their centre-based page-fraction
+  // transform, the same draw as a dragged caption-box graphic above. ──
+  for (const k of page.stickers ?? []) {
+    const g = k.geom;
+    if (!g) continue;
+    const cw = g.w * W;
+    const ch = g.h * H;
+    try {
+      const img = await loadImage(k.pngDataUrl);
+      ctx.save();
+      ctx.translate(g.cx * W, g.cy * H);
+      if (g.rot) ctx.rotate((g.rot * Math.PI) / 180);
+      ctx.drawImage(img, -cw / 2, -ch / 2, cw, ch);
+      ctx.restore();
+    } catch { /* graphic failed to load — nothing prints in its place */ }
   }
 
   // ── Text Elements ──
@@ -527,7 +547,7 @@ async function renderSlotPhoto(
   const effBorderStyle = page.photoBorderStyle ?? 'solid';
   const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
   // Frames mirror Fabric: suppressed for full-bleed pages and the heart shape.
-  const drawFrame = effFrameStyle !== 'none' && slot.shape !== 'heart';
+  const drawFrame = effFrameStyle !== 'none' && slot.shape !== 'heart' && !slot.masked;
   const isRect = slot.shape !== 'circle' && slot.shape !== 'oval';
 
   // ── Decorative mat (matte / polaroid) — drawn BEHIND the photo, OUTSIDE the
@@ -628,13 +648,29 @@ async function renderSlotPhoto(
   const drawX = sx + sw / 2 - drawW / 2 + slotOffsetX * printScale;
   const drawY = sy + sh / 2 - drawH / 2 + slotOffsetY * printScale;
 
-  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+  if (slot.feather) {
+    // Soft edge: draw the photo into its own box, feather the alpha with the
+    // same two gradients the DOM + Fabric use, then composite.
+    const t = document.createElement('canvas');
+    t.width = Math.max(1, Math.ceil(sw));
+    t.height = Math.max(1, Math.ceil(sh));
+    const tc = t.getContext('2d');
+    if (tc) {
+      tc.drawImage(img, drawX - sx, drawY - sy, drawW, drawH);
+      featherAlpha(tc, 0, 0, t.width, t.height, slot.feather);
+      ctx.drawImage(t, sx, sy);
+    } else {
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    }
+  } else {
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+  }
 
   // Draw the photo frame. The theme-baked page frame overrides the per-slot
   // template border when present; falls back to the slot border for old albums.
   // The `rounded` decorative frame thickens a thin border to 3px (matches
   // Fabric's max(borderWidth,3)) so the soft corner reads.
-  let frameWidth = fullBleed ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
+  let frameWidth = fullBleed || slot.masked ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
   if (drawFrame && effFrameStyle === 'rounded') frameWidth = Math.max(frameWidth ?? 0, 3);
   if (frameWidth) {
     ctx.strokeStyle = frameColor;
@@ -711,17 +747,18 @@ function applySlotClip(
       break;
     }
     case 'star': {
-      const cx = x + w / 2;
-      const cy = y + h / 2;
-      const outerR = Math.min(w, h) / 2;
-      const innerR = outerR * 0.4;
-      for (let i = 0; i < 10; i++) {
-        const radius = i % 2 === 0 ? outerR : innerR;
-        const angle = (i * Math.PI) / 5 - Math.PI / 2;
-        const px = cx + radius * Math.cos(angle);
-        const py = cy + radius * Math.sin(angle);
-        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-      }
+      // ONE star generator for the three renderers (masks.ts).
+      const pts = starPoints(x + w / 2, y + h / 2, Math.min(w, h) / 2);
+      pts.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+      ctx.closePath();
+      break;
+    }
+    case 'arch': {
+      const ry = archRy(w, h);
+      ctx.moveTo(x, y + h);
+      ctx.lineTo(x, y + ry);
+      ctx.ellipse(x + w / 2, y + ry, w / 2, ry, 0, Math.PI, Math.PI * 2);
+      ctx.lineTo(x + w, y + h);
       ctx.closePath();
       break;
     }

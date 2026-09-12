@@ -25,6 +25,8 @@ import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getTheme
 import { getCanvasDimensions } from './layouts';
 import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
+import { isMaskId, type MaskId } from './masks';
+import { clampStickerGeom, defaultStickerGeom, newStickerUid, type Sticker } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
@@ -481,8 +483,17 @@ export interface BuilderActions {
    *  page becomes the customer's (`studio`). Returns the rules that moved it,
    *  empty when it landed as asked. */
   updateSlotGeometry: (slotIndex: number, geometry: SlotGeometryOverride) => GuardReason[];
-  /** "Megy, fix this page": drop every frame override and hand the page back. */
+  /** "Megy, fix this page": drop every frame override, mask and sticker and hand the page back. */
   resetStudioPage: () => void;
+  /** STUDIO masks: a shape / soft edge on one photo slot (null = the template's shape). Marks the page yours. */
+  setSlotMask: (slotIndex: number, mask: MaskId | null) => void;
+  /** STUDIO stickers: add a graphic at the page centre (clamped). Marks the page yours. */
+  addSticker: (fill: OrnamentFill) => GuardReason[];
+  /** Move / resize / rotate a sticker — clamped to the safe area and the size floor. */
+  updateStickerGeom: (uid: string, geom: OrnamentTransform) => GuardReason[];
+  /** Swap a sticker's graphic, keeping its place. */
+  replaceStickerFill: (uid: string, fill: OrnamentFill) => void;
+  removeSticker: (uid: string) => void;
   setQrFill: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
   /** True when the current page is a single-photo page a living-memory QR badge
    *  can be applied to. */
@@ -1642,7 +1653,48 @@ export function useBuilderState(): BuilderActions {
 
   const resetStudioPage = useCallback(() => {
     pushSnapshot();
-    updateCurrentPage((p) => ({ ...p, slotGeometries: [], studio: false }));
+    updateCurrentPage((p) => ({ ...p, slotGeometries: [], slotMasks: [], stickers: [], studio: false }));
+  }, [updateCurrentPage, pushSnapshot]);
+
+  /* ── STUDIO masks + stickers (masks.ts / stickers.ts hold the shared rules) ── */
+  const studioCtx = useCallback(() => {
+    const page = currentPage;
+    const template = page?.templateId ? getTemplateById(page.templateId) : null;
+    return { albumSize, pageIndex: currentPageIndex, template, coverMode: phase === 'cover' };
+  }, [currentPage, albumSize, currentPageIndex, phase]);
+
+  const setSlotMask = useCallback((slotIndex: number, mask: MaskId | null) => {
+    if (mask != null && !isMaskId(mask)) return;
+    pushSnapshot();
+    updateCurrentPage((p) => {
+      const slotMasks = [...(p.slotMasks ?? [])];
+      slotMasks[slotIndex] = mask && mask !== 'none' ? mask : null;
+      return { ...p, slotMasks, studio: true };
+    });
+  }, [updateCurrentPage, pushSnapshot]);
+
+  const addSticker = useCallback((fill: OrnamentFill): GuardReason[] => {
+    const geom = defaultStickerGeom(studioCtx());
+    const sticker: Sticker = { ...fill, uid: newStickerUid(), geom };
+    pushSnapshot();
+    updateCurrentPage((p) => ({ ...p, stickers: [...(p.stickers ?? []), sticker], studio: true }));
+    return [];
+  }, [updateCurrentPage, pushSnapshot, studioCtx]);
+
+  const updateStickerGeom = useCallback((uid: string, geom: OrnamentTransform): GuardReason[] => {
+    const { geom: clamped, reasons } = clampStickerGeom(geom, studioCtx());
+    updateCurrentPage((p) => ({ ...p, stickers: (p.stickers ?? []).map((k) => (k.uid === uid ? { ...k, geom: clamped } : k)) }));
+    return reasons;
+  }, [updateCurrentPage, studioCtx]);
+
+  const replaceStickerFill = useCallback((uid: string, fill: OrnamentFill) => {
+    pushSnapshot();
+    updateCurrentPage((p) => ({ ...p, stickers: (p.stickers ?? []).map((k) => (k.uid === uid ? { ...k, ...fill, uid, geom: k.geom } : k)) }));
+  }, [updateCurrentPage, pushSnapshot]);
+
+  const removeSticker = useCallback((uid: string) => {
+    pushSnapshot();
+    updateCurrentPage((p) => ({ ...p, stickers: (p.stickers ?? []).filter((k) => k.uid !== uid) }));
   }, [updateCurrentPage, pushSnapshot]);
 
   /** Set (or clear, with null) the QR living-memory fill for a template QR slot.
@@ -2662,6 +2714,11 @@ export function useBuilderState(): BuilderActions {
     setSlotOffset,
     updateSlotGeometry,
     resetStudioPage,
+    setSlotMask,
+    addSticker,
+    updateStickerGeom,
+    replaceStickerFill,
+    removeSticker,
     setQrFill,
     canAddMemoryQr,
     applyMemoryQr,

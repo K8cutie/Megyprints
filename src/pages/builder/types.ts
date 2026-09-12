@@ -11,7 +11,7 @@ export type LayoutStyle =
   | 'heroSupporting' | 'portraitSingle' | 'collage' | 'collage3'
   | 'trio' | 'asymDuo' | 'panorama' | 'freeform';
 
-export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star';
+export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star' | 'arch';
 
 /** Slot purpose. Absent/'photo' = normal photo slot (default; back-compat).
  *  'qr' = QR living-memory slot — filled by page.qrFills[idx], not slotFills.
@@ -523,6 +523,12 @@ export interface AlbumPage {
    *  photos are held back from the reshuffle). "Megy, fix this page" clears
    *  it along with the overrides. */
   studio?: boolean;
+  /** STUDIO masks: a shape / soft edge per PHOTO slot (masks.ts MaskId),
+   *  positional like slotFills. Null/absent = the template's own shape. */
+  slotMasks?: (string | null)[];
+  /** STUDIO stickers: free graphics on the page (stickers.ts Sticker — the
+   *  ornament fill plus a centre-based page-fraction transform). */
+  stickers?: import('./stickers').Sticker[];
   /** QR living-memory fills. Positional, parallel to template.slots — index i
    *  is used only when slots[i].kind === 'qr'. Serializes as-is (local, cloud,
    *  order snapshot). */
