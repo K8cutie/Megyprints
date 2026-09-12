@@ -18,6 +18,14 @@ import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
+import { studioEnabled } from '../../lib/studioFlag';
+import StudioGate, { STUDIO_GATE_KEY } from './StudioGate';
+import AddOrnamentModal from './AddOrnamentModal';
+import { StudioToggle, StudioSheet, StudioLayer, StudioTray } from './StudioPhone';
+import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
+import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
+import { isLookId, type LookId } from './looks';
+import { useAuth } from '../../lib/authContext';
 
 export default function MobileReview({ actions, onDone }: { actions: BuilderContextValue; onDone: () => void }) {
   const pages = actions.albumPages;
@@ -27,6 +35,44 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const isLast = idx >= total - 1;
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
+
+  /* ── STUDIO on the phone (behind the flag; album-wide on the phone) ── */
+  const { user } = useAuth();
+  const studioAvailable = studioEnabled();
+  const [studio, setStudio] = useState(false);
+  const [studioGate, setStudioGate] = useState(false);
+  // The selection is tagged with the page it was made on, so turning the page
+  // drops it without a reset effect (the pill would point at nothing).
+  const [studioSel, setStudioSel] = useState<{ pageIdx: number; slot: number | null; sticker: string | null; sheet: 'mask' | 'look' | null }>({ pageIdx: -1, slot: null, sticker: null, sheet: null });
+  const onPage = studioSel.pageIdx === idx;
+  const studioSlot = onPage ? studioSel.slot : null;
+  const studioSticker = onPage ? studioSel.sticker : null;
+  const studioSheet = onPage ? studioSel.sheet : null;
+  const setStudioSlot = (slot: number | null) => setStudioSel((s) => ({ pageIdx: idx, slot, sticker: slot != null ? null : (s.pageIdx === idx ? s.sticker : null), sheet: slot != null ? (s.pageIdx === idx ? s.sheet : null) : null }));
+  const setStudioSticker = (sticker: string | null) => setStudioSel((s) => ({ pageIdx: idx, slot: sticker != null ? null : (s.pageIdx === idx ? s.slot : null), sticker, sheet: null }));
+  const setStudioSheet = (sheet: 'mask' | 'look' | null) => setStudioSel((s) => ({ pageIdx: idx, slot: s.pageIdx === idx ? s.slot : null, sticker: s.pageIdx === idx ? s.sticker : null, sheet }));
+  const [stickerModal, setStickerModal] = useState<{ uid: string | null } | null>(null);
+  const [guard, setGuard] = useState<string | null>(null);
+  const guardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sayGuard = (msg: string) => {
+    setGuard(msg);
+    if (guardTimer.current) clearTimeout(guardTimer.current);
+    guardTimer.current = setTimeout(() => setGuard(null), 2600);
+  };
+  const enterStudio = () => {
+    let dismissed = false;
+    try { dismissed = !!sessionStorage.getItem(STUDIO_GATE_KEY); } catch { /* private mode */ }
+    if (!user && !dismissed) { setStudioGate(true); return; }
+    setStudio(true);
+  };
+  const leaveStudio = () => { setStudio(false); setStudioSlot(null); setStudioSticker(null); setStudioSheet(null); };
+  const afterGuard = (reasons: GuardReason[]) => { if (reasons.length) sayGuard(GUARD_MESSAGES[reasons[0]]); return reasons; };
+  const pickMask = (id: MaskId | 'none') => {
+    if (studioSlot == null) return;
+    actions.setSlotMask(studioSlot, id === 'none' ? null : id);
+    if (isTextureMask(id)) sayGuard(`A textured edge bites up to ${Math.round(TEXTURE_BITE * 100)}% in from each side — keep faces away from the edge.`);
+  };
+  const pickLook = (id: LookId | 'none') => { if (studioSlot != null) actions.setSlotLook(studioSlot, id === 'none' ? null : id); };
 
   /* ── Add more photos, from the phone, mid-review ────────────────────────────
      A phone's photo picker caps how many can be selected at once, so running out
@@ -157,10 +203,16 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
 
   return (
     <div className="h-full flex flex-col bg-paper relative">
-      {/* Page counter */}
-      <div className="shrink-0 text-center py-2.5 text-xs font-medium text-medium">
-        Page {idx + 1} of {total} · tap 🗑 to remove a photo, + to add one
+      {/* Page counter (+ the Simple | Studio switch when the flag is on) */}
+      <div className="shrink-0 flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-medium">
+        <span>{studio ? `Page ${idx + 1} of ${total} · tap a photo or a sticker` : `Page ${idx + 1} of ${total} · tap 🗑 to remove a photo, + to add one`}</span>
+        {studioAvailable && <StudioToggle studio={studio} onSimple={leaveStudio} onStudio={enterStudio} />}
       </div>
+      {studioAvailable && page?.studio && (
+        <div className="shrink-0 text-center -mt-1 pb-1">
+          <span className="text-[11px] font-bold text-blush-pink bg-blush rounded-full px-2.5 py-0.5" data-testid="studio-yours">✎ This page is yours · Regenerate skips it</span>
+        </div>
+      )}
 
       {/* Swipeable page */}
       <div className="flex-1 flex items-center justify-center overflow-hidden px-4">
@@ -183,6 +235,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           >
             {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx}
               editable
+              onSlotTap={studio ? (slotIndex) => { setStudioSticker(null); setStudioSlot(slotIndex); } : undefined}
               onChooseSlot={(slotIndex) => setChooserSlot(slotIndex)}
               onRemoveFromSlot={(slotIndex) => actions.clearSlot(slotIndex)}
               onSlotTextTap={(slotIndex) => setSlotTextEditSlot(slotIndex)}
@@ -204,6 +257,16 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onTextSlotPhotoTap={(slotIndex) => setTextReplaceSlot(slotIndex)}
               onTextSlotQrTap={(slot) => setTextSlotQrEditSlot(slot)}
               onTextSlotOrnamentTap={(slot) => setTextSlotOrnamentEditSlot(slot)} />}
+            {studio && page && (
+              <StudioLayer page={page} pageIndex={idx} W={dims.w} H={dims.h} albumSize={actions.albumSize}
+                selectedSlot={studioSlot} onSelectSlot={setStudioSlot}
+                selectedSticker={studioSticker} onSelectSticker={setStudioSticker}
+                onOpenSheet={setStudioSheet}
+                onWorn={() => { if (studioSlot != null) { actions.setSlotMask(studioSlot, 'brushed'); actions.setSlotLook(studioSlot, 'faded'); sayGuard('Worn: brushed edge + faded look. Keep faces away from the edge.'); } }}
+                onStickerGeom={(uid, geom) => afterGuard(actions.updateStickerGeom(uid, geom))}
+                onStickerSwap={(uid) => setStickerModal({ uid })}
+                onStickerRemove={(uid) => { actions.removeSticker(uid); setStudioSticker(null); }} />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -233,6 +296,11 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             <ChevronRight size={22} />
           </button>
         </div>
+        {studio && (
+          <StudioTray pageIsYours={!!page?.studio}
+            onAddSticker={() => setStickerModal({ uid: null })}
+            onFix={() => { actions.resetStudioPage(); setStudioSlot(null); setStudioSticker(null); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }} />
+        )}
         {/* Living-memory QR — offered on a single full photo page; turns it into
             a full-bleed photo with a scannable corner badge (face-picked corner). */}
         {actions.canAddMemoryQr && (
@@ -248,6 +316,34 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           </button>
         )}
       </div>
+
+      {/* STUDIO: mask / look sheets, the sticker picker, the sign-in nudge, the guardrail line */}
+      {studio && studioSheet && studioSlot != null && page && (
+        <StudioSheet kind={studioSheet}
+          photo={page.slotFills?.[studioSlot] != null ? actions.uploadedPhotos[page.slotFills[studioSlot] as number] : undefined}
+          currentMask={isMaskId(page.slotMasks?.[studioSlot]) ? (page.slotMasks?.[studioSlot] as MaskId) : 'none'}
+          currentLook={isLookId(page.slotLooks?.[studioSlot]) ? (page.slotLooks?.[studioSlot] as LookId) : 'none'}
+          onPickMask={pickMask} onPickLook={pickLook} onClose={() => setStudioSheet(null)} />
+      )}
+      {stickerModal && (
+        <AddOrnamentModal
+          initial={stickerModal.uid ? (page?.stickers?.find((k) => k.uid === stickerModal.uid) ?? null) : null}
+          onSave={(fill) => {
+            if (stickerModal.uid) actions.replaceStickerFill(stickerModal.uid, fill);
+            else { actions.addSticker(fill); sayGuard('Sticker added — drag it with a finger, pinch to resize, tap it for fine nudges.'); }
+            setStickerModal(null);
+          }}
+          onRemove={() => { if (stickerModal.uid) actions.removeSticker(stickerModal.uid); setStickerModal(null); setStudioSticker(null); }}
+          onClose={() => setStickerModal(null)}
+        />
+      )}
+      {studioGate && <StudioGate onContinue={() => { setStudioGate(false); setStudio(true); }} onClose={() => setStudioGate(false)} />}
+      {guard && (
+        <div role="status" aria-live="polite" data-testid="studio-guard"
+          className="absolute left-1/2 -translate-x-1/2 bottom-28 z-[60] max-w-[88%] px-4 py-2.5 rounded-xl bg-dark text-warm-white text-sm font-medium shadow-2xl text-center">
+          {guard}
+        </div>
+      )}
 
       {/* Empty-slot content chooser — Photo / Quote / Your Text (bottom sheet) */}
       {chooserSlot !== null && (

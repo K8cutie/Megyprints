@@ -436,7 +436,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         const frameClips = !(page.frameStyle === 'polaroid' || page.frameStyle === 'shadowbox');
 
         return (
-          <div key={`slot-${idx}`} className="absolute"
+          <div key={`slot-${idx}`} className="absolute" data-slot={idx}
             onClick={onSlotTap ? (e) => { e.stopPropagation(); onSlotTap(idx); } : undefined}
             style={{
             zIndex: 1, left, top, width, height,
