@@ -324,6 +324,90 @@ export function sweepFillQuotes(
 }
 
 /**
+ * FILL PLAN — the per-page photo counts for an album whose photos cannot fill
+ * MIN_PAGES at the natural (or chosen) density. Replaces "drop to one density"
+ * (which made a 60-photo album sixty single pages): the counts are a varied
+ * mix whose sum is exactly `photos`, spread over `minPages` or a little more,
+ * never denser than `cap`, and never the same count more than 3 pages in a
+ * row when the mix allows. Pure and deterministic given Math.random.
+ */
+export function planPageCounts(photos: number, minPages: number, cap: number, allowedCounts?: number[]): number[] {
+  const max = Math.max(1, Math.floor(cap));
+  if (photos <= 0) return [];
+  // The counts this deck can deal, capped; 1 is always dealable (a single page).
+  const A = [...new Set([1, ...(allowedCounts ?? Array.from({ length: max }, (_, i) => i + 1))])]
+    .filter((c) => c >= 1 && c <= max).sort((a, b) => a - b);
+  if (A.length === 0) A.push(1);
+  const top = A[A.length - 1];
+  if (photos <= minPages || top === 1) return new Array(photos).fill(1);
+  // Page budget: at least minPages; when the photos would force every page
+  // to the cap, add just enough pages for the mix to breathe (about one page
+  // in four below the cap) — more pages cost the customer money, so the
+  // inflation is deliberately mild.
+  const pages = Math.max(minPages, Math.ceil(photos / (top - 0.25)));
+  const avg = photos / pages;
+  const nearest = (d: number, exclude?: number): number => {
+    let best = A[0], bestErr = Infinity;
+    for (const a of A) {
+      if (a === exclude) continue;
+      const e = Math.abs(a - d);
+      if (e < bestErr) { best = a; bestErr = e; }
+    }
+    return best;
+  };
+  // 1. Even spread (Bresenham): each page takes the allowed count nearest to
+  //    what keeps the running total on the average line. Deterministic, and
+  //    the best rhythm a given mix can have — no count runs longer than it must.
+  const counts: number[] = [];
+  let cum = 0;
+  for (let i = 0; i < pages; i++) {
+    const c = nearest(avg * (i + 1) - cum);
+    counts.push(c);
+    cum += c;
+  }
+  // 2. Land the sum exactly on `photos` with allowed-value moves, walking from
+  //    the middle outward. If the deck's steps cannot close the gap, extra
+  //    single pages close it (pages only ever ADD — never a blank).
+  let diff = photos - cum;
+  const order = [...counts.keys()].sort((a, b) => Math.abs(a - pages / 2) - Math.abs(b - pages / 2));
+  const up = (c: number) => A.find((a) => a > c);
+  const down = (c: number) => [...A].reverse().find((a) => a < c);
+  for (let guard = 0; diff !== 0 && guard < 20; guard++) {
+    let moved = false;
+    for (const i of order) {
+      if (diff === 0) break;
+      if (diff > 0) { const n = up(counts[i]); if (n != null && n - counts[i] <= diff) { diff -= n - counts[i]; counts[i] = n; moved = true; } }
+      else { const n = down(counts[i]); if (n != null && counts[i] - n <= -diff) { diff += counts[i] - n; counts[i] = n; moved = true; } }
+    }
+    if (!moved) break;
+  }
+  while (diff > 0) { counts.push(1); diff--; }
+  while (diff < 0) { const i = counts.findIndex((c) => c > 1); if (i < 0) break; counts[i]--; diff++; }
+  // 3. Randomise without breaking the rhythm: swap random neighbouring pages
+  //    only when no run around them grows past what the even spread allows
+  //    (ceil(majority / rest), never under 3). Swaps move pages, not photos,
+  //    so the sum stays exact.
+  const freq = new Map<number, number>();
+  for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1);
+  const major = Math.max(...freq.values());
+  const rest = counts.length - major;
+  const maxRun = rest === 0 ? Infinity : Math.max(3, Math.ceil(major / rest));
+  const runAt = (i: number): number => {
+    let lo = i, hi = i;
+    while (lo > 0 && counts[lo - 1] === counts[i]) lo--;
+    while (hi < counts.length - 1 && counts[hi + 1] === counts[i]) hi++;
+    return hi - lo + 1;
+  };
+  for (let t = 0; t < counts.length; t++) {
+    const i = Math.floor(Math.random() * (counts.length - 1));
+    if (counts[i] === counts[i + 1]) continue;
+    [counts[i], counts[i + 1]] = [counts[i + 1], counts[i]];
+    if (runAt(i) > maxRun || runAt(i + 1) > maxRun) [counts[i], counts[i + 1]] = [counts[i + 1], counts[i]];
+  }
+  return counts;
+}
+
+/**
  * Smart album generation:
  *  1. Analyze all photos to find dominant aspect ratio
  *  2. Select templates that match the dominant ratio + album size
@@ -389,6 +473,14 @@ export function generateAlbum(
     : undefined;
   const effPerPage = explicitFill ? Math.min(photosPerPage as number, fillDensity as number) : (photosPerPage ?? fillDensity);
   const fillMode = fillDensity != null;
+  // FILL PLAN (owner, 2026-09-12): in fill mode the per-page counts are planned
+  // across the whole album so the mix stays varied (see planPageCounts) instead
+  // of collapsing to one density. Cap = the chosen density, or the deck's
+  // natural on AUTO; the emit loop deals each page at its planned count.
+  const deckMax = Math.max(1, ...getTemplatesForAlbum(albumSize).map((t) => t.slotCount));
+  const planCap = fillMode ? Math.min(deckMax, photosPerPage ?? Math.max(2, naturalPerPage(albumSize))) : 1;
+  let plan: number[] | null = null; // built below, once the pool's ratios are known
+  let planCarry = 0; // photos the plan wanted on earlier pages that the queues could not supply yet
 
   // No photos → minimum empty pages
   if (totalPhotos === 0) {
@@ -642,6 +734,16 @@ export function generateAlbum(
   //       satisfy; then the remaining photos go RATIO-BY-RATIO (homogeneous
   //       templates + single-photo full-page leftovers). Every photo lands in a
   //       slot of its OWN ratio — never cropped. ──
+  // The counts the deck can actually deal for THIS pool's ratios (square
+  // photos on a square page have 1, 3 and 4 — no 2), so the plan never asks
+  // for a count no layout can serve.
+  if (fillMode) {
+    const present = new Set<PhotoRatio>(photos.map((_, i) => ratioOf[i] ?? dominantRatio));
+    const allowed = new Set<number>([1]);
+    for (const r of present) for (const t of templatesForRatio(r)) if (t.slotCount <= planCap) allowed.add(t.slotCount);
+    plan = planPageCounts(totalPhotos, MIN_PAGES, planCap, [...allowed]);
+  }
+
   for (const group of momentGroups) {
     let remaining = [...group];
 
@@ -739,7 +841,9 @@ export function generateAlbum(
       // empty window falls through to single-photo pages (more pages, no
       // crops). AUTO/randomize → every multi layout of this ratio.
       let multi: PageTemplate[];
-      if (effPerPage === 1 && !randomize) {
+      if (plan) {
+        multi = allMulti.filter((t) => t.slotCount <= planCap);
+      } else if (effPerPage === 1 && !randomize) {
         multi = [];
       } else if (effPerPage && !randomize) {
         const hi = fillMode ? effPerPage : effPerPage + 1;
@@ -759,6 +863,53 @@ export function generateAlbum(
     const emitOnePage = (st: RatioState) => {
       const { key, queue, ratioTemplates, singles, multi } = st;
       const fits = multi.filter((t) => t.slotCount <= queue.length);
+
+      // ── Planned fill ── deal this page at its planned count (plus any
+      // carry the earlier pages could not place), choosing a layout that
+      // differs from the last and, while the caption cooldown runs, is box-free.
+      if (plan) {
+        // Past the plan's length (singles added pages) the plan CYCLES, so the
+        // tail keeps the same rhythm instead of collapsing to one per page.
+        const planned = plan.length ? plan[pages.length % plan.length] : 1;
+        const want = Math.max(1, Math.min(planCap, planned + planCarry));
+        let template: PageTemplate | undefined;
+        if (want > 1 && fits.length > 0) {
+          // Nearest dealable count to the plan (either side, ties go under so
+          // the album only ever gains pages); the difference carries forward.
+          // A count the last two pages did not use beats an exact repeat by up
+          // to one photo (the carry absorbs it) — the rhythm rule, kept here.
+          let bestDist = Infinity, bestCount = -1;
+          for (const t of fits) {
+            const dist = Math.abs(t.slotCount - want) + (t.slotCount > want ? 0.5 : 0) + (countRecentlyUsed(t.slotCount) ? 0.75 : 0);
+            if (dist < bestDist) { bestDist = dist; bestCount = t.slotCount; }
+          }
+          const nearest = fits.filter((t) => t.slotCount === bestCount);
+          if (nearest.length) {
+            const pool = boxAware(nearest);
+            const byId = new Map(nearest.map((t) => [t.id, t]));
+            const okSet = new Set(pool.map((t) => t.id));
+            const anySet = new Set(nearest.map((t) => t.id));
+            const bag = bagFor(`${key}:multi`, multi.map((t) => t.id));
+            const id =
+              bag.draw((x) => okSet.has(x) && geoSigOf(byId.get(x)!) !== lastGeoSig) ??
+              bag.draw((x) => anySet.has(x) && geoSigOf(byId.get(x)!) !== lastGeoSig) ??
+              bag.draw((x) => okSet.has(x)) ?? bag.draw((x) => anySet.has(x));
+            template = (id != null ? byId.get(id) : undefined) ?? pool[0] ?? nearest[0];
+          }
+        }
+        // A thin pool can only repeat the previous page's layout (one duo per
+        // ratio): break to a distinct single instead — pages only ever ADD.
+        if (template && template.id === lastTemplateId && singles.length > 0) template = undefined;
+        if (!template) {
+          template = singles.length > 0
+            ? dealSingle(key, singles, boxAware(singles))
+            : (ratioTemplates.filter((t) => t.slotCount <= queue.length)[0] ?? ratioTemplates[0]);
+        }
+        const take = Math.min(template.slots.length, queue.length);
+        planCarry = want - take;
+        pushPage(template, queue.splice(0, take));
+        return;
+      }
 
       // Hero sprinkle (see cadence note above): AUTO mode, or a thin pool
       // (<3 distinct even after widening) as the variety emergency valve.
