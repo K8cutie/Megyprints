@@ -1,4 +1,8 @@
 import { useEffect, lazy, Suspense } from 'react';
+import { studioEnabled } from './lib/studioFlag';
+// Read `?studio=` the moment the app loads, whatever screen it lands on, so
+// the flag is remembered before any navigation can drop the query string.
+studioEnabled();
 import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { AuthProvider } from './lib/authContext';
 import { AuthModalProvider } from './components/AuthModalProvider';
