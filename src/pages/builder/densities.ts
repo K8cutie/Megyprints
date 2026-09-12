@@ -18,15 +18,14 @@ import type { AlbumSizePreset } from './types';
 // was a tsc-invisible size surface before the structural audit).
 export const DENSITY_BY_SIZE: Record<AlbumSizePreset, number[]> = {
   '6x4': [1, 2],
-  // The three SQUARE sizes share one authored layout set (squareTemplates.ts)
-  // that caps at 3 photos/page — there is no 4-up square layout yet. Offering a
-  // higher density would let the customer pick one the deck silently deals as 3,
-  // and the pre-gen estimate would then under-count pages / over-ask for photos.
-  // 8x8/9x9 CAN print 4-6 photos above the floor; re-widen these once dense
-  // layouts are authored in templates8x8.ts / templates9x9.ts.
-  '6x6': [1, 2, 3],
-  '8x8': [1, 2, 3],
-  '9x9': [1, 2, 3],
+  // The three SQUARE sizes share one authored layout set (squareTemplates.ts).
+  // Since 2026-09-12 it deals box-free 4-up pages: a 2×2 grid on every square
+  // size, plus hero + three on 8x8/9x9. 4 is the deck max, so the picker may
+  // offer it (a density the deck can't deal would be silently dealt lower and
+  // throw off the pre-generation page estimate).
+  '6x6': [1, 2, 3, 4],
+  '8x8': [1, 2, 3, 4],
+  '9x9': [1, 2, 3, 4],
   // 8×6 / 6×8 are authored per-size (rectTemplates.ts); their densest layout is
   // the box-free 2×2 quad-grid, so the picker caps at 4. Offering a density the
   // deck can't deal would silently deal fewer and throw off the pre-generation

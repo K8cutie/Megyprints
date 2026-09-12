@@ -123,6 +123,24 @@ export function rollBoxKind(): BoxRoll {
   return 'qr';
 }
 
+/** A roll that may NOT be a quote: text vs qr at their relative odds (25:15),
+ *  so QR keeps its share instead of every held-back box collapsing to text. */
+export function rollNonQuoteKind(): BoxRoll {
+  return Math.random() < BOX_ROLL_WEIGHTS.text / (BOX_ROLL_WEIGHTS.text + BOX_ROLL_WEIGHTS.qr) ? 'text' : 'qr';
+}
+
+/** QUOTE CADENCE (owner, 2026-09-12): a quote on most pages reads as filler
+ *  put there to pad the page count. So a dealt quote may land on at most ONE
+ *  box per page, and never on two consecutive pages; the boxes it is held
+ *  back from still deal as own-words / QR invitations at their odds. */
+export const QUOTE_CADENCE = { maxPerPage: 1, minPageGap: 1 } as const;
+
+/** Does this page already carry a bound caption (a dealt quote or the
+ *  customer's own words)? Either way it "speaks", and the cadence counts it. */
+export function pageSpeaks(page: AlbumPage): boolean {
+  return page.textElements.some((t) => t.boxIndex != null) || (page.slotTexts ?? []).some((t) => !!t);
+}
+
 /** Deals each pool line AT MOST ONCE per generation (shuffled order), then
  *  null forever — an album can NEVER carry the same dealt quote twice (owner
  *  rule). Callers degrade a null deal (dealBoxContent re-rolls the box between
@@ -146,15 +164,21 @@ export function dealBoxContent(
   template: PageTemplate,
   box: BoxContentOptions,
   dealQuote: () => string | null,
-): void {
+  /** Cadence: false when the previous page carries a quote. */
+  allowQuote = true,
+): boolean {
   const boxes = template.textSlots?.length ?? 0;
-  if (boxes === 0) return;
+  if (boxes === 0) return false;
   const rolls: (BoxRoll | null)[] = [];
+  let quotesHere = 0;
   for (let j = 0; j < boxes; j++) {
     let kind = rollBoxKind();
+    // Cadence: no quote when the previous page has one, and at most one per page.
+    if (kind === 'quote' && (!allowQuote || quotesHere >= QUOTE_CADENCE.maxPerPage)) kind = rollNonQuoteKind();
     if (kind === 'quote') {
       const quote = dealQuote();
       if (quote) {
+        quotesHere++;
         page.textElements.push({
           id: `box-${j}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           text: quote,
@@ -175,14 +199,13 @@ export function dealBoxContent(
         // Pool exhausted (or empty): never repeat a line — re-roll this box
         // between the two remaining kinds at their RELATIVE odds (25:15) so
         // QR keeps its share instead of every late box collapsing to text.
-        kind = Math.random() < BOX_ROLL_WEIGHTS.text / (BOX_ROLL_WEIGHTS.text + BOX_ROLL_WEIGHTS.qr)
-          ? 'text'
-          : 'qr';
+        kind = rollNonQuoteKind();
       }
     }
     rolls.push(kind);
   }
   page.textSlotRoll = rolls;
+  return quotesHere > 0;
 }
 
 /** How many combo/caption boxes an album carries — ONE quote per box is the
@@ -203,9 +226,10 @@ export function countAlbumBoxes(pages: AlbumPage[]): number {
  *  went dry halfway through an 80-page album (2026-09-09). Mutates pages. */
 export function dealAlbumBoxes(pages: AlbumPage[], box: BoxContentOptions): void {
   const dealQuote = makeQuoteDealer(box.quotePool);
+  let prevHadQuote = false;
   for (const page of pages) {
     const template = page.templateId ? getTemplateById(page.templateId) : undefined;
-    if (template) dealBoxContent(page, template, box, dealQuote);
+    prevHadQuote = template ? dealBoxContent(page, template, box, dealQuote, !prevHadQuote) : false;
   }
 }
 
@@ -251,10 +275,11 @@ export function sweepFillQuotes(
   let di = 0;
   let filled = 0;
   let remaining = 0;
-  const next = pages.map((page) => {
+  const next: AlbumPage[] = [];
+  pages.forEach((page, i) => {
     const template = page.templateId ? getTemplateById(page.templateId) : undefined;
     const boxes = template?.textSlots?.length ?? 0;
-    if (boxes === 0) return page;
+    if (boxes === 0) { next.push(page); return; }
     let out = page;
     for (let j = 0; j < boxes; j++) {
       const occupied =
@@ -263,6 +288,10 @@ export function sweepFillQuotes(
         !!out.textSlotQr?.[j] ||
         !!out.textSlotOrnament?.[j];
       if (occupied) continue;
+      // Cadence: one voice per page, and never on the page right after one
+      // that speaks. Held-back boxes stay invitations (they print as paper).
+      const prevSpeaks = i > 0 && pageSpeaks(next[i - 1]);
+      if (pageSpeaks(out) || prevSpeaks) { remaining++; continue; }
       if (di >= deck.length) { remaining++; continue; }
       const quote = deck[di++];
       out = {
@@ -289,7 +318,7 @@ export function sweepFillQuotes(
       };
       filled++;
     }
-    return out;
+    next.push(out);
   });
   return { pages: next, filled, remaining };
 }
@@ -497,6 +526,8 @@ export function generateAlbum(
   // Starts mid-cycle so page 1 isn't always a box.
   const hasBox = (t: PageTemplate): boolean => (t.textSlots?.length ?? 0) > 0;
   let captionCooldown = Math.floor(Math.random() * 4);
+  // Quote cadence across consecutive pages (see QUOTE_CADENCE).
+  let prevPageHadQuote = false;
   // Prefer box-free layouts while the cadence cooldown is active (no-op once it
   // elapses, or when the ratio has no box-free layout at all).
   const boxAware = (list: PageTemplate[]): PageTemplate[] => {
@@ -554,7 +585,7 @@ export function generateAlbum(
     });
     // Megy deals this page's combo/caption boxes (no-op for box-free layouts
     // and for callers that don't opt in — specs generate empty boxes as before).
-    if (boxContent) dealBoxContent(page, template, boxContent, dealQuote);
+    prevPageHadQuote = boxContent ? dealBoxContent(page, template, boxContent, dealQuote, !prevPageHadQuote) : false;
     pages.push(page);
     pageIdx++;
   };
