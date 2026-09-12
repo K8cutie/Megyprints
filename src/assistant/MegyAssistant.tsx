@@ -324,10 +324,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       case 'upload_photos':
         if (action.includes('Generate')) {
           // The upload step doubles as Generate — build the album, then jump to Review.
-          void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' });
+          void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then(() => showToast('Album generated!'));
           wizardRef.current.advance();
           setWizardStep(wizardRef.current.state.step);
-          showToast('Album generated!');
         } else if (action.includes('Upload')) {
           fileInputRef.current?.click();
         }
@@ -381,7 +380,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     try { localStorage.removeItem(WIZARD_STORAGE_KEY); } catch { /* ignore */ }
     showToast('Wizard restarted — back to the beginning');
   };
-  const doGenerate = () => { void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }); showToast('Album generated!'); };
+  const doGenerate = () => { void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then(() => showToast('Album generated!')); };
   const doShuffle = () => { void builder.dispatch({ type: 'shuffle_layout', rawMessage: 'shuffle layout' }); showToast('Layout shuffled'); };
   const doRegen = () => { void builder.dispatch({ type: 'regenerate_page', rawMessage: 'regenerate page' }); showToast('Page regenerated'); };
   const doAutoFill = () => { void builder.dispatch({ type: 'auto_fill', rawMessage: 'auto fill' }); showToast('Photos auto-filled'); };

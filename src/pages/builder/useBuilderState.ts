@@ -391,6 +391,15 @@ function getInitialState(): SerializedState {
   };
 }
 
+/** The stages of a whole-album generation, in order. Shown to the customer. */
+export type GeneratingPhase = 'measuring' | 'laying_out' | 'quotes' | 'finishing';
+
+/** Resolve after the browser has had one frame to paint pending state. */
+const paintFrame = () => new Promise<void>((resolve) => {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
+  else setTimeout(resolve, 0);
+});
+
 export interface BuilderActions {
   // Album config
   albumType: AlbumType;
@@ -442,6 +451,11 @@ export interface BuilderActions {
   /** Async: waits for any in-flight photo measurement before laying out, so a
    *  photo is never placed by its fallback ratio. Callers may fire-and-forget. */
   generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean }) => Promise<void>;
+  /** What generateAlbum is doing RIGHT NOW, or null when idle. The builder
+   *  shows a "making your album" screen while this is set — a whole-album
+   *  generation can take several seconds (measuring, laying out, waiting on
+   *  the theme's quotes) and a silent wait reads as a hang (owner, 2026-09-12). */
+  generating: GeneratingPhase | null;
   regeneratePage: () => void;
   shuffleLayout: () => void;
   cycleLayout: () => void;
@@ -609,6 +623,7 @@ export function useBuilderState(): BuilderActions {
    *  mirroring it) can still say 0×0. This map cannot. */
   const measuredRef = useRef<Map<string, { width: number; height: number }>>(new Map());
   const [albumPages, setAlbumPages] = useState<AlbumPage[]>(() => getInitialState().albumPages);
+  const [generating, setGenerating] = useState<GeneratingPhase | null>(null);
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState().currentPageIndex);
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState().rejectedTemplateIds);
   const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState().photosPerPage);
@@ -1238,6 +1253,12 @@ export function useBuilderState(): BuilderActions {
   }, []);
 
   const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean }) => {
+    // Show the "making your album" screen for the whole run and let the browser
+    // PAINT it before the synchronous layout work starts (a state update alone
+    // would be batched behind the heavy loop and never appear).
+    setGenerating('measuring');
+    await paintFrame();
+    try {
     // NEVER lay out unmeasured photos. Uploads are added optimistically at 0×0
     // and measured in the background, so generating straight after a big upload
     // (the normal move on a phone) used to classify every photo by the fallback
@@ -1245,6 +1266,8 @@ export function useBuilderState(): BuilderActions {
     // heads off. Wait for the measurements, then read sizes from measuredRef,
     // which is authoritative the instant a measurement lands.
     await whenPhotosMeasured();
+    setGenerating('laying_out');
+    await paintFrame();
     const photos = uploadedPhotosRef.current.map((p) => {
       const m = measuredRef.current.get(p.id);
       return m && (p.width !== m.width || p.height !== m.height) ? { ...p, ...m } : p;
@@ -1269,7 +1292,10 @@ export function useBuilderState(): BuilderActions {
     // dealt quote ≡ a QuotePickerModal pick.
     let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase });
     const quoteTheme = THEMES[selectedTemplate];
+    setGenerating('quotes');
     const quotePool = await ensureThemeQuotes(currentAlbumTheme(), countAlbumBoxes(newPages), { budgetMs: 12_000 });
+    setGenerating('finishing');
+    await paintFrame();
     const boxContent: BoxContentOptions = {
       quotePool,
       quoteFontFamily: quoteTheme.fontFamily,
@@ -1292,6 +1318,9 @@ export function useBuilderState(): BuilderActions {
     // user's photos — removed. Users add their own title/text if they want one.
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
+    } finally {
+      setGenerating(null);
+    }
   }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate]);
 
   const regeneratePage = useCallback(() => {
@@ -2583,6 +2612,7 @@ export function useBuilderState(): BuilderActions {
     deletePage,
     duplicatePage,
     generateAlbum: generateAlbumAction,
+    generating,
     regeneratePage,
     shuffleLayout,
     cycleLayout,
