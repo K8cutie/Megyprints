@@ -13,6 +13,7 @@ import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
+import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
@@ -104,7 +105,7 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
 const ROLL_LABELS: Record<BoxRoll, string> = {
   quote: 'Add a quote',
   text: 'Your words here',
-  qr: 'Add a video of this moment',
+  qr: QR_INVITATION_LABEL,
 };
 
 function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex, roll, onMore }: {
@@ -128,7 +129,7 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         color: '#A0562F', padding: 6, gap: `${5 * sx}px`, overflow: 'hidden',
       }}>
       {roll ? (() => {
-        // WRAP, don't force one line. Forcing "Add a video of this moment" onto a single
+        // WRAP, don't force one line. Forcing the invitation onto a single
         // nowrap line (sized by an estimated glyph width) clipped it to
         // "dd a video li" on tall-narrow portrait bands — twice. Instead: let
         // the label wrap to as many lines as it needs, and cap the font only so
@@ -138,6 +139,24 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         const label = ROLL_LABELS[roll];
         const innerW = width - 24;  // padding + dashed border
         const innerH = height - 24;
+        // A video box: the label, then a QR image (owner, 2026-09-12). Shared
+        // layout with the canvas renderer — see qrInvitation.ts.
+        if (roll === 'qr') {
+          // Reserve the ⋯ badge's row (22 px at top-right) so a narrow band
+          // never runs the label under it; the canvas twin does the same.
+          const lay = qrInvitationLayout(width, height - 20, 12, fs);
+          if (lay.qrSide > 0 && lay.fontSize >= 10) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 20 }}>
+                <span style={{ fontWeight: 800, fontSize: lay.fontSize, lineHeight: 1.2, letterSpacing: '0.01em', wordBreak: 'break-word', maxWidth: '100%' }}>
+                  {label}
+                </span>
+                <img src={QR_INVITATION_IMAGE} alt="" aria-hidden="true" draggable={false}
+                  style={{ width: lay.qrSide, height: lay.qrSide, imageRendering: 'pixelated', opacity: 0.9, marginTop: lay.gap }} />
+              </div>
+            );
+          }
+        }
         const longestWord = label.split(' ').reduce((a, b) => (b.length > a.length ? b : a), '');
         const fontSize = Math.min(fs, innerW / (longestWord.length * 0.72));
         if (fontSize >= 10 && innerH >= fontSize * 2.2) {
