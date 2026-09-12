@@ -5,7 +5,7 @@
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { resolveSlotBox } from './slotGeometry';
-import { applyMask, isMaskId, archRy, starPoints, featherAlpha } from './masks';
+import { applyMask, isMaskId, archRy, starPoints, featherAlpha, isPathShape, maskPathD } from './masks';
 import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
@@ -657,7 +657,7 @@ async function renderSlotPhoto(
     const tc = t.getContext('2d');
     if (tc) {
       tc.drawImage(img, drawX - sx, drawY - sy, drawW, drawH);
-      featherAlpha(tc, 0, 0, t.width, t.height, slot.feather);
+      featherAlpha(tc, 0, 0, t.width, t.height, slot.feather, slot.featherSide);
       ctx.drawImage(t, sx, sy);
     } else {
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
@@ -725,6 +725,12 @@ function applySlotClip(
   cornerRadius = 0,
 ) {
   ctx.beginPath();
+
+  // Path shapes: the ONE generator (masks.ts), clipped as a Path2D.
+  if (isPathShape(slot.shape)) {
+    ctx.clip(new Path2D(maskPathD(slot.shape, x, y, w, h)));
+    return;
+  }
 
   switch (slot.shape) {
     case 'circle': {

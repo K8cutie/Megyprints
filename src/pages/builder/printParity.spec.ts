@@ -191,5 +191,9 @@ describe('Studio slot overrides go through resolveSlotBox in every renderer', ()
     expect(print).toMatch(/archRy\(/);
     expect(fabric).toMatch(/archPathCentered\(/);
     expect(domShape).toMatch(/archPath\(/);
+    // the path shapes (leaf, scallop, hexagon…) come from maskPathD in all three
+    for (const [name, src] of [['dom-shape', domShape], ['fabric', fabric], ['print', print]] as const) {
+      expect(src, name).toMatch(/maskPathD\(/);
+    }
   });
 });
