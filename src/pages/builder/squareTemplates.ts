@@ -38,6 +38,7 @@ const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 const PREFIX: Record<string, string> = { '6x6': 't66', '8x8': 't88', '9x9': 't99' };
 
 type TrioVariant = 'left' | 'right' | 'top' | 'bottom';
+type QuadVariant = TrioVariant;
 type Corner = 'tl' | 'tr' | 'bl' | 'br';
 
 /** Build the full square layout set for one album size. */
@@ -95,6 +96,63 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
     id: id(suffix), name, category: 'trio', slotCount: 3, margin: ZERO, orientation: 'square',
     targetRatio: v === 'left' || v === 'right' ? '2:3' : '3:2',
     albumSizes: [size], fullBleed: true, slots: trioSlots(v, gap),
+  });
+
+  /* ── 4 SQUARE photos, full bleed 2×2 grid — no box ──────────────────────
+     The photo-only page a square album lacked (2026-09-12: quotes on most
+     pages read as filler). Four exact 1:1 cells; the gutter is split evenly
+     on both axes. Cells are (page − 1mm) / 2: 2.97" on 6×6, 3.97" on 8×8,
+     4.47" on 9×9 — every size clears the 2" floor, and the inner column
+     still clears it after the 0.5" spine reserve (6×6: 2.72"). */
+  const fbQuadGrid = (suffix: string, name: string, gap: number): PageTemplate => {
+    const far = 1 / 2 + gap / 2, sideLen = 1 / 2 - gap / 2;
+    return {
+      id: id(suffix), name, category: 'quad', slotCount: 4, margin: ZERO,
+      orientation: 'square', targetRatio: '1:1', albumSizes: [size], fullBleed: true,
+      slots: [
+        fill(0, 0, sideLen, sideLen, '1:1'), fill(far, 0, sideLen, sideLen, '1:1'),
+        fill(0, far, sideLen, sideLen, '1:1'), fill(far, far, sideLen, sideLen, '1:1'),
+      ],
+    };
+  };
+
+  /* ── 4 photos, full bleed — hero 2/3 + three 1:1 cells along the other 1/3 ─
+     Same skeleton as the hero trios (hero column forced to 2:3, or 3:2 when
+     stacked) but the 1/3 strip holds THREE squares instead of two halves.
+     The gutter between hero and strip comes out of the hero (never the
+     floor-critical strip); the two gutters inside the strip shave each cell
+     by 1mm, a <2% drift off 1:1 — far inside the crop budget. Offered only
+     where a 1/3 cell clears the 2" floor after the spine reserve, i.e. the
+     same gate as the side trios (8×8 = 2.50", 9×9 = 2.83"; 6×6 = 1.83" → no). */
+  const quadSlots = (v: QuadVariant, gap: number): PageTemplate['slots'] => {
+    const r: PhotoRatio = v === 'left' || v === 'right' ? '2:3' : '3:2';
+    const heroLong = 2 / 3 - gap;
+    const cell = 1 / 3;
+    const cellLong = (1 - 2 * gap) / 3;
+    const at = (i: number) => i * (cellLong + gap);
+    switch (v) {
+      case 'left': return [
+        fill(0, 0, heroLong, 1, r),
+        fill(2 / 3, at(0), cell, cellLong, '1:1'), fill(2 / 3, at(1), cell, cellLong, '1:1'), fill(2 / 3, at(2), cell, cellLong, '1:1'),
+      ];
+      case 'right': return [
+        fill(1 / 3 + gap, 0, heroLong, 1, r),
+        fill(0, at(0), cell, cellLong, '1:1'), fill(0, at(1), cell, cellLong, '1:1'), fill(0, at(2), cell, cellLong, '1:1'),
+      ];
+      case 'top': return [
+        fill(0, 0, 1, heroLong, r),
+        fill(at(0), 2 / 3, cellLong, cell, '1:1'), fill(at(1), 2 / 3, cellLong, cell, '1:1'), fill(at(2), 2 / 3, cellLong, cell, '1:1'),
+      ];
+      case 'bottom': return [
+        fill(0, 1 / 3 + gap, 1, heroLong, r),
+        fill(at(0), 0, cellLong, cell, '1:1'), fill(at(1), 0, cellLong, cell, '1:1'), fill(at(2), 0, cellLong, cell, '1:1'),
+      ];
+    }
+  };
+  const fbQuadHero = (suffix: string, name: string, v: QuadVariant, gap: number): PageTemplate => ({
+    id: id(suffix), name, category: 'quad', slotCount: 4, margin: ZERO, orientation: 'square',
+    targetRatio: v === 'left' || v === 'right' ? '2:3' : '3:2',
+    albumSizes: [size], fullBleed: true, slots: quadSlots(v, gap),
   });
 
   /* ── 3 SQUARE photos + a combo box, full bleed 2×2 grid ─────────────────
@@ -228,6 +286,14 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
     fbSquareTrio('fb-sq-box-tr-gap', 'Three Squares, Box Top Right', 'tr', GAP),
     fbSquareTrio('fb-sq-box-bl-gap', 'Three Squares, Box Bottom Left', 'bl', GAP),
     fbSquareTrio('fb-sq-box-br-gap', 'Three Squares, Box Bottom Right', 'br', GAP),
+    // ── 4 photos, no box (2026-09-12) ──────────────────────────────────────
+    fbQuadGrid('fb-quad-grid-gap', 'Four Squares', GAP),
+    ...(sideTrioOk ? [
+      fbQuadHero('fb-quad-hero-left-gap', 'Hero Left + Three', 'left', GAP),
+      fbQuadHero('fb-quad-hero-right-gap', 'Hero Right + Three', 'right', GAP),
+      fbQuadHero('fb-quad-hero-top-gap', 'Hero Top + Three', 'top', GAP),
+      fbQuadHero('fb-quad-hero-bottom-gap', 'Hero Bottom + Three', 'bottom', GAP),
+    ] : []),
 
     // ── Retired (resolvable, never selectable) — the gutterless originals ──
     retired(fbDuoExact('fb-duo-exact-v', 'Two Portraits + Box', 'v')),

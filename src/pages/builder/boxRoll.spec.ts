@@ -110,9 +110,10 @@ describe('box dealing', () => {
 
   it('sweepFillQuotes fills ONLY empty boxes with lines the album has never used', () => {
     const template = getTemplatesForAlbum('8x8').find((t) => t.textSlots?.length === 1)!;
+    const boxFree = getTemplatesForAlbum('8x8').find((t) => !t.textSlots?.length)!;
     expect(template, 'no single-box 8x8 template — fixture broken').toBeDefined();
-    const mkPage = (id: string, extra: Partial<AlbumPage>): AlbumPage => ({
-      id, layout: 'freeform', size: '8x8', templateId: template.id,
+    const mkPage = (id: string, extra: Partial<AlbumPage>, tid = template.id): AlbumPage => ({
+      id, layout: 'freeform', size: '8x8', templateId: tid,
       slotFills: [], photos: [], textElements: [],
       background: { type: 'solid', solid: '#FFFFFF' },
       ...extra,
@@ -121,24 +122,27 @@ describe('box dealing', () => {
       // Box occupied by a caption whose text is ALSO in the pool — must be
       // untouched, and its line must not be dealt again elsewhere.
       mkPage('a', { textElements: [{ id: 'x', text: 'Already here', x: 0, y: 0, fontSize: 28, fontFamily: 'serif', color: '#000', bold: false, italic: true, underline: false, alignment: 'center', rotation: 0, opacity: 100, boxIndex: 0 }] as AlbumPage['textElements'] }),
+      mkPage('spacer', {}, boxFree.id), // box-free page, so the cadence lets the next page speak
       mkPage('b', {}), // empty box → gets a fresh line
-      // Empty box, but a photo-slot text already uses a pool line — excluded.
+      // Empty box, but a photo-slot text already uses a pool line — that page
+      // already speaks, so the cadence holds its box back (and the line is excluded).
       mkPage('c', { slotTexts: [{ text: 'Used in slot' }] as AlbumPage['slotTexts'] }),
     ];
     const { pages: out, filled, remaining } = sweepFillQuotes(pages, {
       ...BOX, quotePool: ['Already here', 'Used in slot', 'Fresh one', 'Fresh two'],
     });
-    expect(filled).toBe(2);
-    expect(remaining).toBe(0);
+    expect(filled).toBe(1);
+    expect(remaining).toBe(1);
     expect(out[0].textElements).toHaveLength(1); // occupied box untouched
     expect(out[0].textElements[0].text).toBe('Already here');
-    const dealt = [out[1], out[2]].map((p) => p.textElements.find((t) => t.boxIndex === 0)!);
+    const dealt = [out[2]].map((p) => p.textElements.find((t) => t.boxIndex === 0)!);
     dealt.forEach((t) => {
       expect(t).toBeDefined();
       expect(['Fresh one', 'Fresh two']).toContain(t.text); // used lines excluded
       expect(t.italic).toBe(true);
       expect(t.fontSize).toBe(28);
     });
+    expect(out[3].textElements).toHaveLength(0); // held back, not filled
     // Album-wide uniqueness after the sweep — captions and slot texts together.
     const allTexts = out.flatMap((p) => [
       ...p.textElements.map((t) => t.text),
@@ -209,16 +213,18 @@ describe('quote pool sized to the album', () => {
     expect(countAlbumBoxes(pages)).toBe(expected);
   });
 
-  it('REPRODUCES the bug: a 25-line pool on an 80-page album leaves the late boxes without quotes', () => {
+  it('REPRODUCES the bug: a pool smaller than the album leaves the late boxes without quotes', () => {
     // Force every box to roll "quote" so the only thing that can stop a quote
     // from materializing is the pool running dry — deterministic, not luck.
+    // (The cadence holds some boxes back regardless; 10 lines is far below
+    // what the eligible boxes of an 80-page album need.)
     vi.spyOn(Math, 'random').mockReturnValue(0.1);
     const pages = generateAlbum(roll(80), '8x8', 1);
     const boxes = countAlbumBoxes(pages);
     expect(boxes).toBeGreaterThan(25);
-    dealAlbumBoxes(pages, { ...BOX, quotePool: uniqueLines(25) });
+    dealAlbumBoxes(pages, { ...BOX, quotePool: uniqueLines(10) });
     const captions = pages.flatMap((p) => p.textElements.filter((t) => t.boxIndex != null));
-    expect(captions.length).toBe(25);            // exactly the pool, then nothing
+    expect(captions.length).toBe(10);            // exactly the pool, then nothing
     // …and the quote-less boxes cluster at the END of the album (what the customer saw).
     const quoted = pages.filter((p) => p.textElements.some((t) => t.boxIndex != null));
     const lastQuotedIdx = pages.indexOf(quoted[quoted.length - 1]);
@@ -229,24 +235,34 @@ describe('quote pool sized to the album', () => {
     }
   });
 
-  it('FIXED: a pool holding one line per box quotes EVERY box to the last page, no repeats', () => {
+  it('FIXED: a pool holding one line per box quotes every box the CADENCE allows, to the last page, no repeats', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.1);   // every box rolls "quote"
     const pages = generateAlbum(roll(80), '8x8', 1);
     const boxes = countAlbumBoxes(pages);
     dealAlbumBoxes(pages, { ...BOX, quotePool: uniqueLines(boxes) });
     const dealt: string[] = [];
+    let prevHadQuote = false;
     for (const p of pages) {
       const n = boxCountOf(p, '8x8');
-      if (n === 0) continue;
-      for (let j = 0; j < n; j++) {
-        const cap = p.textElements.find((t) => t.boxIndex === j);
-        expect(cap, `page ${p.id} box ${j} has no quote`).toBeDefined();
-        expect(p.textSlotRoll![j]).toBe('quote');
-        dealt.push(cap!.text);
+      if (n === 0) { prevHadQuote = false; continue; }
+      const caps = p.textElements.filter((t) => t.boxIndex != null);
+      if (prevHadQuote) {
+        // The page after a quote page is held back entirely: invitations only.
+        expect(caps, `page ${p.id} right after a quote page still got one`).toHaveLength(0);
+        expect(p.textSlotRoll!.every((r) => r === 'text' || r === 'qr')).toBe(true);
+        prevHadQuote = false;
+        continue;
       }
+      // Eligible page: exactly ONE quote (box 0), the other boxes are invitations.
+      expect(caps, `page ${p.id} should carry exactly one quote`).toHaveLength(1);
+      expect(p.textSlotRoll![0]).toBe('quote');
+      p.textSlotRoll!.slice(1).forEach((r) => expect(r === 'text' || r === 'qr').toBe(true));
+      dealt.push(caps[0].text);
+      prevHadQuote = true;
     }
-    expect(dealt.length).toBe(boxes);
-    expect(new Set(dealt).size).toBe(dealt.length);  // never-repeat still holds
+    expect(dealt.length).toBeGreaterThan(0);
+    expect(dealt.length).toBeLessThan(boxes);         // the cadence held some back
+    expect(new Set(dealt).size).toBe(dealt.length);   // never-repeat still holds
   });
 
   it('dealAlbumBoxes ≡ generateAlbum({ boxContent }) in shape (one dealer, rolls parallel to textSlots)', () => {
@@ -273,17 +289,20 @@ describe('quote pool sized to the album', () => {
       ...extra,
     } as unknown as AlbumPage);
     const held = { id: 'x', text: 'Held line', x: 0, y: 0, fontSize: 28, fontFamily: 'serif', color: '#000', bold: false, italic: true, underline: false, alignment: 'center', rotation: 0, opacity: 100, boxIndex: 0 };
+    const boxFree = getTemplatesForAlbum('8x8').find((t) => !t.textSlots?.length)!;
     const pages = [
       mkPage('a', { textElements: [held] as AlbumPage['textElements'] }),           // occupied, 1 held
+      mkPage('s', { templateId: boxFree.id }),                                          // box-free spacer (cadence)
       mkPage('b'),                                                                      // empty
-      mkPage('c', { slotTexts: [{ text: 'Slot line' }] as AlbumPage['slotTexts'] }),   // empty box, 1 held
+      mkPage('c', { slotTexts: [{ text: 'Slot line' }] as AlbumPage['slotTexts'] }),   // empty box, 1 held — page already speaks
       mkPage('d', { textSlotQr: ['qr'] as unknown as AlbumPage['textSlotQr'] }),        // occupied by QR
     ];
     expect(quotesNeededForSweep(pages)).toBe(2 + 2);
     // Proof by construction: a pool of exactly that many unique lines (the two
-    // held ones included, worst case) fills every empty box.
+    // held ones included, worst case) never runs dry. Page c's box stays empty
+    // because that page already speaks (its slot text) — the cadence, not the pool.
     const { filled, remaining } = sweepFillQuotes(pages, { ...BOX, quotePool: ['Held line', 'Slot line', 'New one', 'New two'] });
-    expect(filled).toBe(2);
-    expect(remaining).toBe(0);
+    expect(filled).toBe(1);
+    expect(remaining).toBe(1);
   });
 });
