@@ -372,10 +372,22 @@ export function generateAlbum(
   // still fills MIN_PAGES — i.e. 1 photo/page for 40–79 photos. Photo-rich albums
   // (>= MIN_PAGES × natural) keep the natural mixed/multi look. Guarantees no
   // surprise blanks without ballooning the page count.
-  const fillDensity = (!randomize && photosPerPage == null && totalPhotos < MIN_PAGES * naturalPerPage(albumSize))
+  //
+  // The same guarantee for an EXPLICIT density (owner, 2026-09-12): "Collage"
+  // (4/page) on 60 photos is 15 pages, and the deck padded the other 25 with
+  // BLANKS. A chosen density is a CEILING, never a promise to pad: when the
+  // photos cannot fill MIN_PAGES at it, the budget drops to the densest count
+  // that still does (1/page below 80 photos), and single-photo pages carry the
+  // rest. Same rule for every size — 8x6/6x8 had the identical hole.
+  const autoFill = !randomize && photosPerPage == null && totalPhotos < MIN_PAGES * naturalPerPage(albumSize);
+  // Outside fill mode the explicit window allows density + 1 (see the window
+  // below), so the album only fills 40 pages once photos reach 40 × (density+1);
+  // below that, the fill budget takes over at exactly the chosen density or less.
+  const explicitFill = !randomize && photosPerPage != null && photosPerPage > 1 && totalPhotos < MIN_PAGES * (photosPerPage + 1);
+  const fillDensity = (autoFill || explicitFill)
     ? Math.max(1, Math.floor(totalPhotos / MIN_PAGES))
     : undefined;
-  const effPerPage = photosPerPage ?? fillDensity;
+  const effPerPage = explicitFill ? Math.min(photosPerPage as number, fillDensity as number) : (photosPerPage ?? fillDensity);
   const fillMode = fillDensity != null;
 
   // No photos → minimum empty pages
