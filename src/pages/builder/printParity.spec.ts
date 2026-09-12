@@ -172,4 +172,24 @@ describe('Studio slot overrides go through resolveSlotBox in every renderer', ()
     // and no renderer merges the override by hand any more
     expect(readFileSync('src/pages/builder/useCanvasEngine.ts', 'utf8')).not.toMatch(/\.\.\.rawSlot, \.\.\.geom/);
   });
+  it('Studio masks come from masks.ts in every renderer, and stickers are drawn by every renderer', () => {
+    const dom = readFileSync('src/pages/builder/BuilderPreview.tsx', 'utf8');
+    const domShape = readFileSync('src/pages/builder/slotShapeStyle.ts', 'utf8');
+    const fabric = readFileSync('src/pages/builder/useCanvasEngine.ts', 'utf8');
+    const print = readFileSync('src/pages/builder/printPipeline.ts', 'utf8');
+    for (const [name, src] of [['dom', dom], ['fabric', fabric], ['print', print]] as const) {
+      expect(src, name).toMatch(/applyMask\(/);
+      expect(src, name).toMatch(/page\.stickers/);
+    }
+    for (const [name, src] of [['dom-shape', domShape], ['fabric', fabric], ['print', print]] as const) {
+      expect(src, name).toContain("from './masks'");
+    }
+    // the star and the arch are generated, never hand-drawn per renderer
+    expect(print).toMatch(/starPoints\(/);
+    expect(fabric).toMatch(/starPoints\(/);
+    expect(domShape).toMatch(/starPolygonCss\(/);
+    expect(print).toMatch(/archRy\(/);
+    expect(fabric).toMatch(/archPathCentered\(/);
+    expect(domShape).toMatch(/archPath\(/);
+  });
 });

@@ -15,6 +15,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import { BOOK } from './bookFeel';
 import { resolveSlotBox } from './slotGeometry';
+import { applyMask, isMaskId } from './masks';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
@@ -344,8 +345,10 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
       <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos, coverMode, sx), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
       {template && template.slots.map((rawSlot, idx) => {
         if (!rawSlot) return null;
-        // STUDIO: a moved frame — same override, same arithmetic as the editor + print.
-        const slot = resolveSlotBox(rawSlot, page.slotGeometries?.[idx]);
+        // STUDIO: a moved frame (same arithmetic as the editor + print) and a
+        // mask (same shape module as the editor + print).
+        const rawMask = page.slotMasks?.[idx];
+        const slot = applyMask(resolveSlotBox(rawSlot, page.slotGeometries?.[idx]), isMaskId(rawMask) ? rawMask : null);
         // Content precedence is DRIVEN BY page data, not slot.kind:
         //   qrFills[i] → QR (drawn by the qrFills map below) → skip here.
         //   slotTexts[i] → text rendered in this slot's rect.
@@ -419,12 +422,12 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         const imgTop = (height - imgH) / 2 + slotOffsetY * sy;
         // Theme-baked frame overrides the per-slot template border when present.
         // Full-bleed (single-photo, no-textbox) pages get no frame at all.
-        const frameWidth = template.fullBleed ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
+        const frameWidth = template.fullBleed || slot.masked ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
         const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
         // Per-page border line-style (solid by default for back-compat).
         const borderLineStyle = page.photoBorderStyle ?? 'solid';
         // Decorative frame (single source of truth in types.ts). 'none'/absent → {}.
-        const frameCss = template.fullBleed
+        const frameCss = template.fullBleed || slot.masked
           ? {}
           : frameStyleToCss(page.frameStyle, frameColor);
         // Outer drop shadows (polaroid / shadowbox) need overflow visible to show;
@@ -635,6 +638,13 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           </div>
         );
       })}
+      {/* STUDIO stickers — free graphics, drawn at their centre-based page-fraction
+          transform exactly like a dragged caption-box graphic (and like print). */}
+      {page.stickers?.map((k) => (
+        <OrnamentSquare key={`sticker-${k.uid}`} rectKey={`sticker-${k.uid}`} zIndex={6}
+          cellLeft={0} cellTop={0} cellW={0} cellH={0}
+          dataUrl={k.pngDataUrl} transform={k.geom} pageW={singleW} pageH={H} />
+      ))}
       {/* Theme decorative corners — one set, all four corners, on top of photos */}
       {page.cornerBase && CORNER_POSITIONS.map((pos) => {
         const size = Math.min(singleW, H) * 0.25;

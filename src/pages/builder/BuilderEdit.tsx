@@ -33,6 +33,8 @@ import { useAuth } from '../../lib/authContext';
 import { studioEnabled } from '../../lib/studioFlag';
 import StudioGate, { STUDIO_GATE_KEY } from './StudioGate';
 import { GUARD_MESSAGES, SOFT_MESSAGE, printSharpness, resolveSlotBox } from './slotGeometry';
+import { MASKS, type MaskId } from './masks';
+import AddOrnamentModal from './AddOrnamentModal';
 /* PropertiesPanel is now rendered inside UnifiedPanel */
 import { getCanvasDimensions } from './layouts';
 import { PAGE_TEMPLATES, hasQrSlot } from './pageTemplates';
@@ -102,6 +104,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     setStudio(true); setContainerMode(true);
   }, [user]);
   const leaveStudio = useCallback(() => { setStudio(false); setContainerMode(false); }, []);
+  /* Studio stickers: the picker (add) or the editor (swap/remove) for one uid. */
+  const [stickerModal, setStickerModal] = useState<{ uid: string | null } | null>(null);
 
   /* ── Sidebar hidden by default — Megy Assistant is the primary control ── */
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -225,6 +229,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     onTextSlotQrModified: useCallback((slotIndex: number, geom: import('./types').OrnamentTransform) => {
       actions.setTextSlotQrGeom(slotIndex, geom);
     }, [actions]),
+    onStickerModified: useCallback((uid: string, geom: import('./types').OrnamentTransform) => {
+      const reasons = actions.updateStickerGeom(uid, geom);
+      if (reasons.length) sayGuard(GUARD_MESSAGES[reasons[0]]);
+    }, [actions, sayGuard]),
+    onStickerClick: useCallback((uid: string) => setStickerModal({ uid }), []),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {
@@ -776,6 +785,18 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {studioGate && (
         <StudioGate onContinue={() => { setStudioGate(false); setStudio(true); setContainerMode(true); }} onClose={() => setStudioGate(false)} />
       )}
+      {stickerModal && (
+        <AddOrnamentModal
+          initial={stickerModal.uid ? (actions.currentPage?.stickers?.find((k) => k.uid === stickerModal.uid) ?? null) : null}
+          onSave={(fill) => {
+            if (stickerModal.uid) actions.replaceStickerFill(stickerModal.uid, fill);
+            else { actions.addSticker(fill); sayGuard('Sticker added — drag it anywhere inside the safe area, corner handles resize and rotate.'); }
+            setStickerModal(null);
+          }}
+          onRemove={() => { if (stickerModal.uid) actions.removeSticker(stickerModal.uid); setStickerModal(null); }}
+          onClose={() => setStickerModal(null)}
+        />
+      )}
       {/* Caption editor — same component the mobile review + preview use, so the
           desktop canvas textbox edits identically. Click the box → type → it
           binds to the slot and renders fixed + centered. */}
@@ -1113,6 +1134,39 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               )}
             </div>
           </div>
+
+          {/* STUDIO strip — masks for the selected photo, stickers for the page */}
+          {studio && (() => {
+            const slotIdx = selectedSlotIndex;
+            const hasPhoto = slotIdx != null && actions.currentPage?.slotFills?.[slotIdx] != null;
+            const current = (slotIdx != null ? actions.currentPage?.slotMasks?.[slotIdx] : null) ?? 'none';
+            return (
+              <div className="h-9 bg-warm-white border-b border-line flex items-center gap-2 px-3 shrink-0 overflow-x-auto" data-testid="studio-strip">
+                <span className="text-[10px] font-bold tracking-widest uppercase text-medium">Studio</span>
+                <div className="w-px h-4 bg-line" />
+                {hasPhoto ? (
+                  <>
+                    <span className="text-[11px] text-medium">Mask</span>
+                    {MASKS.map((m) => (
+                      <button key={m.id} type="button" aria-pressed={current === m.id}
+                        onClick={() => actions.setSlotMask(slotIdx as number, m.id === 'none' ? null : (m.id as MaskId))}
+                        data-testid={`mask-${m.id}`}
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors ${current === m.id ? 'bg-blush-pink text-white' : 'bg-paper text-cocoa hover:bg-blush'}`}>
+                        {m.label}
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <span className="text-[11px] text-light">Select a photo to mask it · drag a frame to move it</span>
+                )}
+                <div className="ml-auto" />
+                <button type="button" onClick={() => setStickerModal({ uid: null })} data-testid="studio-add-sticker"
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blush-pink text-white hover:brightness-105 flex items-center gap-1 whitespace-nowrap">
+                  <Sparkles size={11} /> Add sticker
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Canvas */}
           <div
