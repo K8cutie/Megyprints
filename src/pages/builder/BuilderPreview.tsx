@@ -104,7 +104,7 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
 const ROLL_LABELS: Record<BoxRoll, string> = {
   quote: 'Add a quote',
   text: 'Your words here',
-  qr: 'Add a video link',
+  qr: 'Add a video of this moment',
 };
 
 function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex, roll, onMore }: {
@@ -128,7 +128,7 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         color: '#A0562F', padding: 6, gap: `${5 * sx}px`, overflow: 'hidden',
       }}>
       {roll ? (() => {
-        // WRAP, don't force one line. Forcing "Add a video link" onto a single
+        // WRAP, don't force one line. Forcing "Add a video of this moment" onto a single
         // nowrap line (sized by an estimated glyph width) clipped it to
         // "dd a video li" on tall-narrow portrait bands — twice. Instead: let
         // the label wrap to as many lines as it needs, and cap the font only so

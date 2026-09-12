@@ -55,7 +55,7 @@ export default function SlotChooser({ onPhoto, onText, onQuote, onQr, onClose, m
     ...(onPhoto ? [{ key: 'photo' as const, label: 'Add Photo', desc: 'Place one of your photos here', Icon: ImageIcon, run: onPhoto }] : []),
     ...(onQuote ? [{ key: 'quote' as const, label: 'Add Quote', desc: 'A line written for your album’s theme', Icon: Quote, run: onQuote }] : []),
     { key: 'text', label: 'Your Text', desc: 'Type your own caption or title', Icon: Type, run: onText },
-    ...(onQr ? [{ key: 'qr' as const, label: 'QR Code', desc: 'Link a video or message to this page', Icon: QrCode, run: onQr }] : []),
+    ...(onQr ? [{ key: 'qr' as const, label: 'Video memory', desc: 'A video that plays when this page is scanned', Icon: QrCode, run: onQr }] : []),
   ];
 
   const pick = (run: () => void) => { run(); onClose(); };

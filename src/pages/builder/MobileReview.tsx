@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Youtube, ImagePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Video, ImagePlus } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -238,7 +238,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         {actions.canAddMemoryQr && (
           <button onClick={openMemory}
             className={`w-full mt-3 h-11 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform bg-blush-pink text-white shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}>
-            <Youtube size={18} /> Add YouTube Memory
+            <Video size={18} /> Add a video memory
           </button>
         )}
         {isLast && (

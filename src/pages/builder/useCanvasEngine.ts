@@ -1952,7 +1952,7 @@ function renderScene(
     const roll = page.textSlotRoll?.[i] ?? null;
     const labelText =
       roll === 'text' ? 'Your words here' :
-      roll === 'qr' ? 'Add a video link' :
+      roll === 'qr' ? 'Add a video of this moment' :
       roll === 'quote' ? 'Add a quote' : 'Tap to add';
     // WRAP, don't clip. A single-line fab.Text sized by an estimated glyph
     // width still clipped the longer labels on tall-narrow bands; a Textbox
