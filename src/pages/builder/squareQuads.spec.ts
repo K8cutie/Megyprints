@@ -83,6 +83,32 @@ describe('square 4-up layouts', () => {
   });
 });
 
+describe('an explicit density never pads the album with blank pages', () => {
+  // A chosen density is a ceiling. Below MIN_PAGES × density the budget drops
+  // to whatever still fills 40 pages; only a pool under 40 photos can leave
+  // blanks, and then exactly the unavoidable ones.
+  const MIN_PAGES = 40;
+  const sq = (n: number): UploadedPhoto[] => Array.from({ length: n }, (_, i) => ({ id: `q${i}`, previewUrl: '', name: `q${i}.jpg`, type: 'image/jpeg', size: 1, width: 3000, height: 3000, capturedAt: i }));
+  for (const size of ['6x6', '8x8', '9x9', '8x6', '6x8'] as AlbumSizePreset[]) {
+    for (const density of DENSITY_BY_SIZE[size].filter((d) => d > 1)) {
+      it(`${size} at ${density}/page: 24, 40, 60, 90, 119, 121 and 160 photos → no avoidable blank page, every photo placed`, () => {
+        for (const n of [24, 40, 60, 90, 119, 121, 160]) {
+          const pages = generateAlbum(sq(n), size, density);
+          const counts = pages.map((p) => (p.slotFills ?? []).filter((f) => f != null).length);
+          const blanks = counts.filter((c) => c === 0).length;
+          expect(pages.length, `${size}/${density}/${n}: page count`).toBeGreaterThanOrEqual(MIN_PAGES);
+          expect(blanks, `${size}/${density}/${n}: blank pages`).toBe(Math.max(0, MIN_PAGES - n));
+          expect(counts.reduce((a, b) => a + b, 0), `${size}/${density}/${n}: photos placed`).toBe(n);
+          // Photo-rich albums keep the deck's existing +1 allowance on an explicit
+          // density; everything below that line is a hard ceiling.
+          const allowed = n < MIN_PAGES * (density + 1) ? density : density + 1;
+          expect(Math.max(...counts), `${size}/${density}/${n}: denser than the chosen density allows`).toBeLessThanOrEqual(allowed);
+        }
+      });
+    }
+  }
+});
+
 /* ── Quote cadence ─────────────────────────────────────────────────────── */
 const mixed = (n: number): UploadedPhoto[] => Array.from({ length: n }, (_, i) => {
   const portrait = i % 5 >= 3;
