@@ -21,7 +21,9 @@ export class ActionEngine {
         case 'generate_album':
           // Carry the user's chosen background into every generated page, so a
           // background picked before generating (incl. a custom upload) survives.
-          this.builder.generateAlbum(this.builder.currentPage?.background);
+          // Awaited so the reply (and the callers' toasts) land AFTER the album
+          // exists — the "making your album" screen covers the wait.
+          await this.builder.generateAlbum(this.builder.currentPage?.background);
           return { intentType: intent.type, success: true, message: 'Album generated! Your photos have been arranged across all pages.' };
 
         case 'shuffle_layout':
@@ -277,7 +279,7 @@ export class ActionEngine {
           // as-is. randomize=true keeps the photo sequence but repackages it into
           // random templates + slot counts, so layouts differ on every click.
           const keepBg = this.builder.currentPage.background;
-          this.builder.generateAlbum(keepBg, { randomize: true });
+          await this.builder.generateAlbum(keepBg, { randomize: true });
 
           return { intentType: intent.type, success: true, message: `Fresh layout! Every page rearranged — click again for another look.` };
         }
