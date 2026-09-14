@@ -21,7 +21,7 @@ import type {
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
-import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
+import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
 import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
@@ -147,7 +147,7 @@ function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
     id: `page-${Date.now()}-${index}`,
     layout: 'freeform',
     size,
-    background: { type: 'solid', solid: '#FFFBF7' },
+    background: { type: 'solid', solid: '#FFFFFF' }, // plain white (owner, 2026-09-14)
     photos: [],
     textElements: [],
     slotFills: [],
@@ -404,6 +404,11 @@ const paintFrame = () => new Promise<void>((resolve) => {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
   else setTimeout(resolve, 0);
 });
+
+/** The album's default look since the Style step was removed (2026-09-14):
+ *  plain white paper, photos with no line around them. */
+export const PLAIN_BACKGROUND: AlbumBackground = { type: 'solid', solid: '#FFFFFF' };
+export const PLAIN_BORDER = { color: '#FFFFFF', width: 0 };
 
 export interface BuilderActions {
   // Album config
@@ -1299,12 +1304,14 @@ export function useBuilderState(): BuilderActions {
     pushSnapshot();
     // Bake the active theme's photo frame + corner art onto every generated page.
     // A custom Border picked on the wizard overrides the theme's border here.
+    // Owner (2026-09-14): plain white pages, no theme border, no corner art —
+    // the Style step is gone; a chosen border (set_border) still wins.
     const border: { color: string; width: number; style?: 'solid' | 'dashed' | 'dotted' } =
-      wizardBorderRef.current ?? getThemedPhotoBorder(selectedTemplate);
-    const cornerBase = getThemeCornerBase(selectedTemplate);
+      wizardBorderRef.current ?? PLAIN_BORDER;
+    const cornerBase = undefined;
     // Fall back to the theme's own background so image-less palette themes
     // (e.g. baptism) don't generate as plain white when no bg is passed.
-    const bg = wizardBackground ?? getThemedBackground(selectedTemplate, 0);
+    const bg = wizardBackground ?? PLAIN_BACKGROUND;
     // Lay the pages out FIRST, then size the quote pool to them. Megy deals
     // each combo box's content (see BOX_ROLL_WEIGHTS) and never repeats a line,
     // so the pool must hold one line per box: a fixed 25-line pool left the

@@ -244,7 +244,7 @@ export default function Builder() {
             <div className="absolute inset-0 bg-cream">
               <CoverEditor
                 mode="step"
-                onNext={() => { actions.setWizardStep('pick_background'); actions.setPhase('edit'); }}
+                onNext={() => { actions.setWizardStep('upload_photos'); actions.setPhase('edit'); }}
                 onBack={() => { actions.setWizardStep('pick_size'); actions.setPhase('setup'); }}
               />
             </div>
