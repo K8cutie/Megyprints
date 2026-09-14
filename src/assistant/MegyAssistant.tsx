@@ -13,7 +13,7 @@ import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
 import type { AssistantMessage } from './types';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
-import { getThemeBackgroundVariants, BORDER_STYLES, FRAME_STYLES, frameStyleToCss } from '../pages/builder/types';
+import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
 import { readAlbumTheme, writeAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
@@ -308,19 +308,6 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           showToast(`Size set: ${size}`);
         }
         break;
-      case 'pick_background':
-        const bgColors: Record<string, string> = {
-          'Warm White': '#FFFBF7', 'Soft Blush': '#FDE8E4', 'Light Lavender': '#E8E0F0',
-          'Ocean Blue': '#E0E8F0', 'Cream Gold': '#F5E8D0', 'Clean White': '#FFFFFF',
-        };
-        const bgName = Object.keys(bgColors).find(k => action.includes(k));
-        if (bgName) {
-          void builder.dispatch({ type: 'set_background', payload: { background: { type: 'solid', solid: bgColors[bgName] }, applyAll: true }, rawMessage: `set background ${bgName}` });
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
-          showToast(`Background: ${bgName}`);
-        }
-        break;
       case 'upload_photos':
         if (action.includes('Generate')) {
           // The upload step doubles as Generate — build the album, then jump to Review.
@@ -405,7 +392,6 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
      Only one panel is shown at a time; clicking the active button closes it. */
   // Step-2 is now the customization studio — open Background by default so the
   // step isn't empty now that the occasion presets are gone.
-  const [activePicker, setActivePicker] = useState<'bg' | 'border' | 'frame' | null>('bg');
   const doSuggestTheme = async () => {
     if (!builder.uploadedPhotos.length || suggesting) return;
     setSuggesting(true);
@@ -454,7 +440,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   /* ── Option A / centerpiece: during the guided pre-album steps, Megy's card
      IS the screen. Once an album exists (review onward) we fall back to the
      canvas + side panel. This removes any competing center control. ── */
-  const centerStage = showWizard && ['welcome', 'pick_theme', 'pick_size', 'pick_background', 'upload_photos'].includes(wizardStep);
+  const centerStage = showWizard && ['welcome', 'pick_theme', 'pick_size', 'upload_photos'].includes(wizardStep);
 
   if (centerStage) {
     const msg = wizardRef.current.getMessage();
@@ -475,7 +461,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
         <img src="/megy-character.png" alt="Megy" className="w-20 h-20 object-contain mb-4 drop-shadow-lg" draggable={false} />
 
-        <div className={`w-full ${wizardRef.current.state.step === 'pick_background' ? 'max-w-4xl' : 'max-w-lg'}`}>
+        <div className="w-full max-w-lg">
           <div className="flex items-center mb-1">
             <span className="text-[11px] font-medium text-taupe">{prog.label}</span>
           </div>
@@ -539,123 +525,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             ) : (
               <p className="text-sm text-ink-mid leading-relaxed mb-4">{msg.body}</p>
             )}
-            {wizardRef.current.state.step === 'pick_background' ? (
-              /* Step-2 customization page.
-                 TOP: occasion themes as quick-pick PRESETS — each sets the whole
-                 look (background + frames + corner art) via apply_theme.
-                 BELOW: three manual controls (Background / Border / Frame), each
-                 opening a picker that applies on click. */
-              <div className="space-y-4">
-                {/* Step-2 customization studio — Background / Border / Frame ARE the
-                    step now (occasion-theme presets removed). One picker open at a
-                    time; Background is open by default so there's something to do. */}
-                <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-                  {([
-                    { key: 'bg' as const, label: 'Background', icon: <Palette className="w-6 h-6" /> },
-                    { key: 'border' as const, label: 'Border', icon: <Box className="w-6 h-6" /> },
-                    { key: 'frame' as const, label: 'Frame', icon: <Frame className="w-6 h-6" /> },
-                  ]).map((b) => {
-                    const open = activePicker === b.key;
-                    return (
-                      <button
-                        key={b.key}
-                        onClick={() => setActivePicker(open ? null : b.key)}
-                        className={`flex flex-col items-center justify-center gap-2 py-4 px-2 rounded-2xl border-2 text-sm sm:text-base font-semibold transition-all active:scale-[0.98] ${
-                          open
-                            ? 'bg-peach text-white border-peach shadow-lg'
-                            : 'bg-white text-dark border-peach/40 hover:border-peach hover:bg-peach/10 shadow-sm'
-                        }`}
-                      >
-                        <span className={open ? 'text-white' : 'text-blush-pink'}>{b.icon}</span>
-                        <span>{b.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* BACKGROUND picker — reuses RichBackgroundDesigner (material
-                    textures + tint + opacity); applies on click. */}
-                {activePicker === 'bg' && (
-                  <div className="rounded-2xl border border-peach/30 bg-cream p-3">
-                    <RichBackgroundDesigner
-                      background={page?.background}
-                      photos={builder.uploadedPhotos}
-                      onChange={(bg) => { if (bg) doSetBg(bg); }}
-                    />
-                  </div>
-                )}
-
-                {/* BORDER picker — swatch thumbnails → set_border (applies to all pages). */}
-                {activePicker === 'border' && (
-                  <div className="rounded-2xl border border-peach/30 bg-cream p-3">
-                    <p className="text-xs font-medium text-light mb-2.5">Pick a border for every photo</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {BORDER_STYLES.map((border) => {
-                        const selected =
-                          page?.photoBorderColor === border.color &&
-                          page?.photoBorderWidth === border.width &&
-                          (page?.photoBorderStyle ?? 'solid') === border.style;
-                        return (
-                          <button
-                            key={border.id}
-                            onClick={() => {
-                              void builder.dispatch({ type: 'set_border', payload: { border }, rawMessage: `set ${border.label} border` });
-                              showToast(`${border.label} border applied`);
-                            }}
-                            className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 transition-all ${
-                              selected ? 'border-peach ring-2 ring-peach/30 bg-white' : 'border-line-soft hover:border-peach/50 bg-white'
-                            }`}
-                          >
-                            <span
-                              className="w-full h-10 rounded-md bg-line-soft"
-                              style={{ border: `${border.width}px ${border.style} ${border.color}` }}
-                            />
-                            <span className="text-[10px] font-medium text-ink-mid text-center leading-tight">{border.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* FRAME picker — decorative-frame thumbnails → set_frame (all pages).
-                    Each preview uses frameStyleToCss — the SAME helper the DOM
-                    renderer uses — so the thumbnail can't drift from the result. */}
-                {activePicker === 'frame' && (
-                  <div className="rounded-2xl border border-peach/30 bg-cream p-3">
-                    <p className="text-xs font-medium text-light mb-2.5">Pick a frame for the photos</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {FRAME_STYLES.map((frameOpt) => {
-                        const selected = (page?.frameStyle ?? 'none') === frameOpt.id;
-                        const css = frameStyleToCss(frameOpt.id, '#F4C2A1');
-                        return (
-                          <button
-                            key={frameOpt.id}
-                            onClick={() => {
-                              void builder.dispatch({ type: 'set_frame', payload: { frame: frameOpt.id }, rawMessage: `set ${frameOpt.label} frame` });
-                              showToast(frameOpt.id === 'none' ? 'Frame removed' : `${frameOpt.label} frame applied`);
-                            }}
-                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                              selected ? 'border-peach ring-2 ring-peach/30 bg-white' : 'border-line-soft hover:border-peach/50 bg-white'
-                            }`}
-                          >
-                            <span className="w-full flex items-center justify-center py-3">
-                              <span style={css.wrapper} className="inline-block">
-                                <span
-                                  className="block w-20 h-20 rounded-sm bg-gradient-to-br from-blush-pink to-peach"
-                                  style={css.inner}
-                                />
-                              </span>
-                            </span>
-                            <span className="text-sm font-medium text-ink-mid text-center leading-tight">{frameOpt.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
+            {(
               <div className="flex flex-col gap-2.5">
                 {msg.actions.map((action) => {
                   const isPrimary = action.includes('→') || action.includes('Now');

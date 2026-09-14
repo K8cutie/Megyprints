@@ -28,7 +28,6 @@ export type WizardStep =
   | 'pick_theme'
   | 'pick_size'
   | 'design_cover'
-  | 'pick_background'
   | 'upload_photos'
   | 'review_pages'
   | 'add_text'
@@ -50,7 +49,6 @@ export const WIZARD_ORDER: WizardStep[] = [
   'pick_theme',   // unskippable — the occasion seeds the AI quotes
   'pick_size',
   'design_cover',
-  'pick_background',
   'upload_photos',
   'review_pages',
   'add_text',
@@ -71,7 +69,6 @@ export const STEP_META: Record<WizardStep, { title: string; description: string;
   pick_theme: { title: 'Occasion', description: 'What the album is about — seeds the quotes', emoji: '💌' },
   pick_size: { title: 'Album Size', description: 'Choose your album dimensions', emoji: '📐' },
   design_cover: { title: 'Cover', description: 'Design the front·spine·back cover', emoji: '📔' },
-  pick_background: { title: 'Style', description: 'Background, border & frame', emoji: '🎨' },
   upload_photos: { title: 'Photos', description: 'Upload, then generate', emoji: '📸' },
   review_pages: { title: 'Review', description: 'Fine-tune each page', emoji: '🔍' },
   add_text: { title: 'Text', description: 'Add captions and quotes', emoji: '✍️' },
@@ -137,19 +134,16 @@ export class WizardEngine {
       return 'review_pages';
     }
 
-    // After picking a background (or uploading) → the combined upload + generate step
-    if (this.state.completed.includes('pick_background')) {
+    // Cover done (or skipped) → the combined upload + generate step.
+    // (The Style step — background / border / frame — was removed 2026-09-14:
+    // pages are plain white, and Studio holds the per-page tools.)
+    if (this.state.completed.includes('design_cover') || this.state.skipped.includes('design_cover')) {
       return 'upload_photos';
     }
 
     // Picked size but haven't passed the cover step yet → design the cover
-    if (this.state.completed.includes('pick_size') && !this.state.completed.includes('design_cover')) {
-      return 'design_cover';
-    }
-
-    // Cover done (or skipped) → pick background
     if (this.state.completed.includes('pick_size')) {
-      return 'pick_background';
+      return 'design_cover';
     }
 
     // Default: welcome on a first visit; then the OCCASION step until it is
@@ -210,7 +204,6 @@ export class WizardEngine {
       case 'pick_theme': return isAlbumThemeReady(readAlbumTheme()); // Must answer — never skipped
       case 'pick_size': return false; // Must click a size in wizard
       case 'design_cover': return true; // Optional — always proceedable
-      case 'pick_background': return false; // Must click a background
       // Combined upload + generate: "complete" only once the album is generated,
       // so Next can't skip past generation.
       case 'upload_photos': return builder.albumPages.length >= 40;
@@ -285,20 +278,10 @@ export class WizardEngine {
           tips: ["The spine width is set automatically from your page count at checkout", "You can revisit the cover any time from the Preview screen"],
         };
 
-      case 'pick_background':
-        return {
-          title: "Step 4: Style Your Album 🎨",
-          body: `Style your ${builder.albumSize} album — set the background, the photo border, and a decorative frame. Each choice applies to the whole album, and you can fine-tune anything later.`,
-          /* Background / Border / Frame controls render on the center stage; each
-             dispatches set_background / set_border / set_frame. No text actions. */
-          actions: [],
-          tips: ["Background = behind the page · Border = the line edge · Frame = around each photo", "You can change any of it later, on any page"],
-        };
-
       case 'upload_photos':
         const photoCount = builder.uploadedPhotos.length;
         return {
-          title: photoCount > 0 ? `Step 5: Photos Uploaded (${photoCount}) 📸` : "Step 5: Upload Your Photos 📸",
+          title: photoCount > 0 ? `Step 4: Photos Uploaded (${photoCount}) 📸` : "Step 4: Upload Your Photos 📸",
           body: photoCount > 0
             ? `Great! You have **${photoCount}** photo${photoCount > 1 ? 's' : ''} ready. Upload more or let's generate your album!`
             : "Upload your photos and I'll auto-arrange them into beautiful layouts. You can upload as many as you want — I'll pick the best ones for each page.",
@@ -328,7 +311,7 @@ export class WizardEngine {
           };
         }
         return {
-          title: "Step 6: Review Each Page 🔍",
+          title: "Step 5: Review Each Page 🔍",
           body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then use the ‹ › arrows to move through your album.`,
           actions: ["Change layout"],
           tips: ["Go page by page — each can have its own layout", "🎬 Any full-photo page can carry a video: tap Add a video memory and it plays when the printed QR is scanned — 7 are included", "When every page looks right, you'll order from the last page"],
@@ -337,7 +320,7 @@ export class WizardEngine {
 
       case 'add_text':
         return {
-          title: "Step 7: Add Text & Captions ✍️",
+          title: "Step 6: Add Text & Captions ✍️",
           body: "Personalize your album with captions, dates, quotes, or titles. Click any page to add text elements, then style them with fonts, colors, and effects.",
           actions: ["Add Text to This Page", "Add Date Stamp", "Skip to Finalize →"],
           tips: ["Script fonts look great for quotes", "Bold + large size = perfect titles"],
@@ -345,7 +328,7 @@ export class WizardEngine {
 
       case 'finalize':
         return {
-          title: "Step 8: Preview & Order 📦",
+          title: "Step 7: Preview & Order 📦",
           body: "Your album looks amazing! Preview the full album, make any final tweaks, then place your order. I'll save everything to the cloud so you can come back anytime.",
           actions: ["Preview Full Album", "← Edit pages", "Save to Cloud", "Place Order →"],
           tips: ["Albums are saved automatically", "You can reorder or reprint anytime"],

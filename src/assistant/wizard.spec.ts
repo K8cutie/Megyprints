@@ -39,7 +39,7 @@ describe('step order and numbering', () => {
     expect(STEP_META.pick_theme.title).toBe('Occasion');
     expect(phaseForStep('pick_theme')).toBe('setup');
   });
-  it('every numbered step title matches the progress label (Step N of 8)', () => {
+  it('every numbered step title matches the progress label (Step N of 7)', () => {
     // Three filled pages, cursor on the first: review_pages shows its numbered
     // title rather than the "All Pages Reviewed" nudge it gives on the last page.
     const page = { slotFills: [0], photos: [], textElements: [] };
@@ -49,8 +49,8 @@ describe('step order and numbering', () => {
       const { current, total, label } = w.getProgress();
       const title = w.getMessage().title;
       if (step === 'welcome') { expect(label).toBe("Let's begin"); continue; }
-      expect(total).toBe(8);
-      expect(label).toBe(`Step ${current} of 8`);
+      expect(total).toBe(7);
+      expect(label).toBe(`Step ${current} of 7`);
       expect(title.startsWith(`Step ${current}:`), `${step}: "${title}" vs "${label}"`).toBe(true);
     }
   });
@@ -78,7 +78,7 @@ describe('pick_theme is unskippable', () => {
     store[ALBUM_THEME_KEY] = 'Wedding';
     w.state.step = 'design_cover';
     w.skip();
-    expect(w.state.step).toBe('pick_background');
+    expect(w.state.step).toBe('upload_photos');
     expect(w.state.skipped).toEqual(['design_cover']);
   });
   it('a returning visitor with no occasion lands on the occasion step; with one, on size', () => {
@@ -105,17 +105,17 @@ describe('pick_theme is unskippable', () => {
 describe('external forward jumps cannot hop over the occasion step', () => {
   it('a jump from size to cover (the size page\'s Start Creating) lands on the occasion when none is stored', () => {
     expect(forwardJumpTarget('pick_size', 'design_cover', false)).toBe('pick_theme');
-    expect(forwardJumpTarget('welcome', 'pick_background', false)).toBe('pick_theme');
+    expect(forwardJumpTarget('welcome', 'upload_photos', false)).toBe('pick_theme');
   });
   it('the same jump goes through once an occasion is stored', () => {
     expect(forwardJumpTarget('pick_size', 'design_cover', true)).toBe('design_cover');
   });
   it('even a later forward move is pulled back to the occasion step while none is stored', () => {
-    expect(forwardJumpTarget('design_cover', 'pick_background', false)).toBe('pick_theme');
-    expect(forwardJumpTarget('design_cover', 'pick_background', true)).toBe('pick_background');
+    expect(forwardJumpTarget('design_cover', 'upload_photos', false)).toBe('pick_theme');
+    expect(forwardJumpTarget('design_cover', 'upload_photos', true)).toBe('upload_photos');
   });
   it('backward moves and a move onto the occasion step itself are untouched', () => {
-    expect(forwardJumpTarget('pick_background', 'pick_size', false)).toBe('pick_size');
+    expect(forwardJumpTarget('upload_photos', 'pick_size', false)).toBe('pick_size');
     expect(forwardJumpTarget('welcome', 'pick_theme', false)).toBe('pick_theme');
   });
 });
@@ -146,5 +146,20 @@ describe('the gate the Next button uses', () => {
   it('cleaning collapses whitespace and caps the length', () => {
     expect(cleanAlbumTheme('  Lola\'s   80th  ')).toBe("Lola's 80th");
     expect(cleanAlbumTheme('a'.repeat(100))).toHaveLength(40);
+  });
+});
+
+describe('the Style step is gone (owner, 2026-09-14)', () => {
+  it('seven steps; the cover hands straight to photos', () => {
+    expect(WIZARD_ORDER).toEqual(['welcome', 'pick_theme', 'pick_size', 'design_cover', 'upload_photos', 'review_pages', 'add_text', 'finalize']);
+    expect(WIZARD_ORDER.length - 1).toBe(7);
+    const w = new WizardEngine(builderStub(), false);
+    w.state.completed = ['welcome', 'pick_theme', 'pick_size', 'design_cover'];
+    store[ALBUM_THEME_KEY] = 'Wedding';
+    expect(w.detectStep()).toBe('upload_photos');
+    w.state.step = 'design_cover';
+    w.advance();
+    expect(w.state.step).toBe('upload_photos');
+    expect(w.getMessage().title).toMatch(/^Step 4/);
   });
 });
