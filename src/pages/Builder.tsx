@@ -14,7 +14,7 @@ import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
 import MegyAssistant from '../assistant/MegyAssistant';
 import SoftAuthGate from '../components/SoftAuthGate';
 import { useIsMobile } from '../hooks/use-mobile';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 const phases = [
   { id: 'setup' as const, label: 'Setup', icon: Settings },
@@ -170,11 +170,15 @@ export default function Builder() {
       <div className={`fixed inset-0 z-[60] bg-white flex flex-col transition-[padding] duration-300 ${panelCollapsed ? 'lg:pl-[60px]' : 'lg:pl-[340px]'}`}>
         {/* Step Indicator */}
         <div className="h-12 bg-white border-b border-line flex items-center px-4 gap-1 shrink-0">
-          <div className="flex items-center gap-1 mr-4">
+          {/* The wordmark is the way home from EVERY builder screen (setup, cover,
+              pages, preview, phone). The draft is saved on the way out. */}
+          <Link to="/" onClick={() => { try { actions.saveDraftNow(); } catch { /* ignore */ } }}
+            title="Back to the homepage" aria-label="Megy Prints — homepage" data-testid="home-link"
+            className="flex items-center gap-1 mr-4 rounded-md px-1 -mx-1 hover:bg-line-soft transition-colors">
             <span className="font-display text-base italic text-dark">Megy</span>
             <span className="font-body text-base text-dark">Prints</span>
             <span className="w-1.5 h-1.5 rounded-full bg-peach ml-0.5" />
-          </div>
+          </Link>
 
           {SHOW_PHASE_CHIPS && phases.map((phase, i) => {
             const isActive = i === phaseIndex;
