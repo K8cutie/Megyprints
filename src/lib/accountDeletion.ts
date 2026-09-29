@@ -12,16 +12,17 @@
                   blocking order BEFORE the customer commits.
 
      delete     — POSTed to /api/delete-account instead of calling the RPC
-                  directly, for ONE reason: the print-ready PDFs are the only
-                  place the customer's PHOTOS live on our side, and the
-                  customer's own session cannot remove them. The Storage API
-                  looks an object up before deleting it, and migration 0008
-                  deliberately denies customers SELECT on print-pdfs so a paid
-                  album can't be downloaded and taken to another printer — so
-                  the delete 403s before the delete rule is ever consulted.
-                  The endpoint does that one step with a service key and then
-                  calls delete_own_account() with the CUSTOMER's token, so the
-                  database still decides everything else. See api/delete-account.mjs.
+                  directly, for ONE reason: the customer's PHOTOS (print-ready
+                  PDFs) and VIDEOS (memory clips, in a PUBLIC bucket) have to
+                  go too, and the customer's own session cannot remove them.
+                  The Storage API looks an object up before deleting it, and
+                  customers have no SELECT on those buckets (0008 keeps a paid
+                  album from being downloaded and taken to another printer) —
+                  so the delete 403s before the delete rule is ever consulted.
+                  The endpoint removes them with a service key and then calls
+                  delete_own_account() with the CUSTOMER's token, so the
+                  database still decides everything else, and refuses if any
+                  file is still there. See api/delete-account.mjs.
 
    Then, locally: wipe IndexedDB drafts and every megy* key — a cloud deletion
    that leaves the last album sitting in the browser is not a deletion the
@@ -37,6 +38,10 @@ export interface DeletionPreflight {
   albums: number;
   memories: number;
   orders: number;
+  /** Memory videos in the public bucket that go with the account (0035). */
+  videos: number;
+  /** Latest hosting end date still ahead among those videos, ISO; null if none. */
+  videos_hosted_until: string | null;
   blocking: { order_number: string; status: string }[];
 }
 
@@ -44,6 +49,7 @@ export interface DeletionResult {
   deleted_albums: number;
   deleted_memories: number;
   anonymized_orders: number;
+  deleted_videos: number;
 }
 
 /** IndexedDB database holding the in-progress album's photos (useIndexedDBPhotos). */
@@ -60,6 +66,8 @@ export async function preflightAccountDeletion(): Promise<DeletionPreflight> {
     albums: raw.albums ?? 0,
     memories: raw.memories ?? 0,
     orders: raw.orders ?? 0,
+    videos: raw.videos ?? 0,
+    videos_hosted_until: raw.videos_hosted_until ?? null,
     blocking: Array.isArray(raw.blocking) ? raw.blocking : [],
   };
 }
@@ -126,5 +134,6 @@ export async function deleteMyAccount(): Promise<DeletionResult> {
     deleted_albums: raw.deleted_albums ?? 0,
     deleted_memories: raw.deleted_memories ?? 0,
     anonymized_orders: raw.anonymized_orders ?? 0,
+    deleted_videos: raw.deleted_videos ?? 0,
   };
 }

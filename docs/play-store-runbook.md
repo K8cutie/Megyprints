@@ -91,8 +91,10 @@ While the 14 days run, finish Steps 3–5 (all doable immediately).
 Project → Settings → Environment Variables (all environments). Server-only —
 never prefix it with `VITE_`. Without it the endpoint refuses deletion with
 "Account deletion is misconfigured" rather than deleting an account and leaving
-the customer's photos in the bucket. Also apply migration `0027_account_deletion`
-(`npx supabase db push`) before deploying, or the endpoint's RPC won't exist.
+the customer's photos and videos in storage. Also apply migrations
+`0027_account_deletion` and `0035_account_deletion_clips` (`npm run db:push`
+from main); until 0035 is applied the endpoint refuses every deletion ("Could
+not look up your memory videos") rather than leaving the videos public.
 
 ## Step 5 — Payments note (why no Play Billing)
 

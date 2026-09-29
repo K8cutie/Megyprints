@@ -96,8 +96,9 @@ export default function Privacy() {
           </ul>
           <p>
             Deleting removes your sign-in and profile, every album and the photos in it, your QR
-            memory links (printed codes stop working), the print files from your past orders, and
-            the name, phone number and address on those orders.
+            memory links (printed codes stop working) and the videos you uploaded for them, the
+            print files from your past orders, and the name, phone number and address on those
+            orders.
           </p>
           <p>
             <b>What we keep:</b> if you've ordered before, we keep a receipt-only record of that

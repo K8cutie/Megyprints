@@ -75,5 +75,38 @@ begin
   raise notice 'PASS: set_order_status payment-gated state machine intact';
 end $$;
 
+-- ── GUARD 4: account deletion still verifies the photos AND videos are gone ──
+-- Finding (0035): 0027 predated the PUBLIC memory-clips bucket, so deleting an
+-- account left the customer's videos playable by anyone with the link.
+-- delete_own_account() must refuse while any print PDF or clip of the caller is
+-- still in storage, and both buckets must keep versioning off: with it on, a
+-- Storage delete keeps an archived copy, so "deleted" would not mean deleted.
+do $$
+declare src text; bad text;
+begin
+  select pg_get_functiondef(p.oid) into src
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'delete_own_account';
+
+  if src is null then
+    raise exception 'REGRESSION (account deletion): delete_own_account() is MISSING';
+  elsif src not like '%''print-pdfs''%' or src not like '%''memory-clips''%' then
+    raise exception 'REGRESSION (account deletion): delete_own_account() no longer checks print-pdfs AND memory-clips are empty for the caller';
+  elsif to_regprocedure('public.my_memory_clip_names()') is null then
+    raise exception 'REGRESSION (account deletion): my_memory_clip_names() is MISSING, so the endpoint cannot find the videos to remove';
+  elsif has_function_privilege('anon', 'public.my_memory_clip_names()', 'EXECUTE') then
+    raise exception 'REGRESSION (account deletion): anon can call my_memory_clip_names()';
+  end if;
+
+  select string_agg(b.id, ', ') into bad
+  from storage.buckets b
+  where b.id in ('memory-clips', 'print-pdfs')
+    and coalesce(to_jsonb(b) ->> 'versioning_status', 'DISABLED') <> 'DISABLED';
+  if bad is not null then
+    raise exception 'REGRESSION (account deletion): versioning is ON for % — deleted files would be kept as archived copies', bad;
+  end if;
+  raise notice 'PASS: account deletion removes and verifies print PDFs and memory videos';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;

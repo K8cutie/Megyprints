@@ -21,6 +21,12 @@ import {
 const CONFIRM_WORD = 'DELETE';
 const CONTACT = 'megyprintsph@gmail.com';
 
+const fmtMonth = (iso: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+};
+
 type Phase = 'idle' | 'loading' | 'ready' | 'deleting' | 'done';
 
 export default function DeleteAccountSection() {
@@ -64,6 +70,8 @@ export default function DeleteAccountSection() {
   }, [open]);
 
   const blocked = (preflight?.blocking.length ?? 0) > 0;
+  const videos = preflight?.videos ?? 0;
+  const hostedUntil = fmtMonth(preflight?.videos_hosted_until ?? null);
   const armed = typed.trim().toUpperCase() === CONFIRM_WORD && !blocked && phase === 'ready';
 
   const handleDelete = useCallback(async () => {
@@ -96,8 +104,8 @@ export default function DeleteAccountSection() {
       >
         <h3 className="text-lg font-bold text-ink-warm mb-1">Delete my account</h3>
         <p className="text-sm text-taupe mb-4 max-w-2xl">
-          Permanently deletes your account, your albums, your saved photos and any QR memory
-          links. This can&apos;t be undone.
+          Permanently deletes your account, your albums, your saved photos, your memory videos
+          and any QR memory links. This can&apos;t be undone.
         </p>
         <button
           onClick={openDialog}
@@ -131,7 +139,7 @@ export default function DeleteAccountSection() {
                 <div className="p-8 text-center">
                   <h2 className="text-lg font-bold text-ink-warm">Your account is deleted</h2>
                   <p className="text-sm text-taupe mt-2">
-                    Your albums, photos and memory links are gone. Thanks for using Megy Prints.
+                    Your albums, photos, videos and memory links are gone. Thanks for using Megy Prints.
                   </p>
                 </div>
               ) : (
@@ -183,6 +191,12 @@ export default function DeleteAccountSection() {
                         <li>your sign-in and profile</li>
                         <li>{preflight?.albums ?? 0} saved album{preflight?.albums === 1 ? '' : 's'} and the photos in them</li>
                         <li>{preflight?.memories ?? 0} QR memory link{preflight?.memories === 1 ? '' : 's'} — printed codes will stop working</li>
+                        {videos > 0 && (
+                          <li>
+                            {videos} memory video{videos === 1 ? '' : 's'} — deleted from our servers
+                            {hostedUntil ? <>, even though hosting runs until <b>{hostedUntil}</b></> : null}
+                          </li>
+                        )}
                         <li>every print file we hold for your past orders</li>
                       </ul>
 
