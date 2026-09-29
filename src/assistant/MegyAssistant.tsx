@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useBuilderContext } from '../pages/builder/BuilderContext';
 import { parseIntent } from './intentParser';
-import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget } from './wizard';
+import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
@@ -165,15 +165,18 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const [albumTheme, setAlbumThemeState] = useState(readAlbumTheme);
   const setAlbumTheme = (v: string) => { setAlbumThemeState(v); writeAlbumTheme(v); };
   const themeReady = isAlbumThemeReady(albumTheme);
+  // Step 1 also asks the album's NAME (its title in Your Projects) — the same
+  // unskippable gate covers both.
+  const stepOneReady = isStepOneReady(builder.albumTitle, albumTheme);
   const goNext = () => {
     if (wizardStep === 'pick_theme') {
-      if (!themeReady) return;
+      if (!stepOneReady) return;
       void fetchThemeQuotes(albumTheme.trim());
     }
     wizardRef.current.advance();
     setWizardStep(wizardRef.current.state.step);
   };
-  const nextDisabled = wizardStep === 'finalize' || (wizardStep === 'pick_theme' && !themeReady);
+  const nextDisabled = wizardStep === 'finalize' || (wizardStep === 'pick_theme' && !stepOneReady);
 
   /* ── Option A: the wizard is the single source of truth for the journey.
      Mirror its step into the SHARED store AND derive the center screen (phase)
@@ -191,10 +194,11 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   useEffect(() => {
     const eng = wizardRef.current;
     if (builder.wizardStep !== eng.state.step) {
-      // The occasion step cannot be jumped over: a forward jump past it with
-      // no occasion stored lands on it, and the guided card comes back so the
-      // customer actually sees it (a dismissed wizard would otherwise hide it).
-      const target = forwardJumpTarget(eng.state.step, builder.wizardStep, isAlbumThemeReady(readAlbumTheme()));
+      // The first step (name + occasion) cannot be jumped over: a forward
+      // jump past it while it is unanswered lands on it, and the guided card
+      // comes back so the customer actually sees it (a dismissed wizard would
+      // otherwise hide it).
+      const target = forwardJumpTarget(eng.state.step, builder.wizardStep, isStepOneReady(builder.albumTitle, readAlbumTheme()));
       if (target !== builder.wizardStep) {
         eng.state.step = target;
         setShowWizard(true);
@@ -364,7 +368,11 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     }
   }, [builder, showToast]);
   const doRestartWizard = () => {
-    if (!window.confirm('Restart from the beginning? Your current album and photos will be cleared.')) return;
+    // Signed in, the album is saved to the account and keeps its photos (see
+    // reset); signed out, it really is gone.
+    if (!window.confirm(builder.user
+      ? 'Start a new album from the beginning? This one stays saved in Your Projects.'
+      : 'Restart from the beginning? Your current album and photos will be cleared.')) return;
     builder.reset();                              // wipe album + photos
     wizardRef.current.restart();                  // engine → welcome, clear flags
     setShowWizard(true);                          // re-show the guided centerpiece
@@ -472,7 +480,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <div className="p-6 bg-white rounded-2xl border border-peach/20 shadow-xl" key={wizardKey}>
             <h3 className="font-display text-xl font-semibold text-dark mb-2"><TypeText text={msg.title} /></h3>
             {wizardRef.current.state.step === 'pick_theme' ? (
-              <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme} onContinue={goNext} />
+              <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme} onContinue={goNext}
+                name={builder.albumTitle} onNameChange={builder.setAlbumTitle} />
             ) : (wizardRef.current.state.step === 'upload_photos' && builder.uploadedPhotos.length > 0) ? (
               <div className="mb-4">
                 {/* Eye-catching photo count */}
@@ -560,7 +569,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 <button
                   onClick={goNext}
                   disabled={nextDisabled}
-                  title={wizardStep === 'pick_theme' && !themeReady ? 'Pick the occasion first' : undefined}
+                  title={wizardStep === 'pick_theme' && !stepOneReady ? (themeReady ? 'Name your album first' : 'Pick the occasion first') : undefined}
                   className="flex items-center gap-1 px-5 py-2 rounded-lg text-sm font-medium bg-peach text-white hover:bg-blush-pink disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                 >
                   Next →

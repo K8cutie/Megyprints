@@ -5,6 +5,7 @@ import { BookOpen, Plus, Trash2, Loader2, ChevronRight, Clock, Sparkles } from '
 import { useAuth } from '../lib/authContext';
 import { useAlbumSync } from '../lib/useAlbumSync';
 import type { AlbumData } from '../lib/useAlbumSync';
+import { startFreshAlbum } from '../lib/albumSession';
 
 /* ══════════════════════════════════════════════════════════════════════════
    UserProjectsSection — Shows logged-in user's albums on the home page
@@ -85,6 +86,7 @@ export function UserProjectsSection() {
           </div>
           <Link
             to="/builder"
+            onClick={() => startFreshAlbum(user?.id)}
             className="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-peach text-white text-sm font-semibold rounded-xl hover:brightness-105 transition-all"
           >
             <Plus size={16} />
@@ -116,6 +118,7 @@ export function UserProjectsSection() {
             </p>
             <Link
               to="/builder"
+              onClick={() => startFreshAlbum(user?.id)}
               className="inline-flex items-center gap-2 px-6 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all"
             >
               <Sparkles size={16} />
@@ -206,6 +209,7 @@ export function UserProjectsSection() {
             >
               <Link
                 to="/builder"
+                onClick={() => startFreshAlbum(user?.id)}
                 className="flex flex-col items-center justify-center h-full min-h-[200px] rounded-2xl border-2 border-dashed border-blush-deep hover:border-peach hover:bg-blush/30 transition-all group"
               >
                 <div className="w-12 h-12 rounded-full bg-blush flex items-center justify-center mb-3 group-hover:bg-peach group-hover:text-white transition-all">
@@ -223,6 +227,7 @@ export function UserProjectsSection() {
         <div className="sm:hidden mt-6">
           <Link
             to="/builder"
+            onClick={() => startFreshAlbum(user?.id)}
             className="flex items-center justify-center gap-2 w-full py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all"
           >
             <Plus size={18} />
@@ -234,8 +239,8 @@ export function UserProjectsSection() {
   );
 }
 
-/* ── Relative time formatter ── */
-function formatRelativeTime(date: Date): string {
+/* ── Relative time formatter (also the resume prompt's "Last saved …") ── */
+export function formatRelativeTime(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffSec = Math.floor(diffMs / 1000);

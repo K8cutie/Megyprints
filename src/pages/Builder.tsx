@@ -14,6 +14,7 @@ import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
 import MegyAssistant from '../assistant/MegyAssistant';
 import SoftAuthGate from '../components/SoftAuthGate';
 import { useIsMobile } from '../hooks/use-mobile';
+import { cleanAlbumName } from '../lib/albumName';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 const phases = [
@@ -30,6 +31,8 @@ const SetupPhase = memo(function SetupPhase({ actions }: { actions: BuilderConte
       /* Option A: "Start Creating" advances Megy's wizard past the size step to
          the cover step; the center screen (phase) follows the wizard. */
       onNext={() => { actions.setWizardStep('design_cover'); actions.setPhase('cover'); }}
+      albumTitle={actions.albumTitle}
+      onAlbumTitleChange={actions.setAlbumTitle}
     />
   );
 });
@@ -179,6 +182,12 @@ export default function Builder() {
             <span className="font-body text-base text-dark">Prints</span>
             <span className="w-1.5 h-1.5 rounded-full bg-peach ml-0.5" />
           </Link>
+          {/* The album's own name (wizard step 1) — which album this is. */}
+          {cleanAlbumName(actions.albumTitle) && (
+            <span className="min-w-0 truncate text-sm font-medium text-medium" data-testid="album-name-header">
+              {cleanAlbumName(actions.albumTitle)}
+            </span>
+          )}
 
           {SHOW_PHASE_CHIPS && phases.map((phase, i) => {
             const isActive = i === phaseIndex;
