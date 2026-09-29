@@ -47,19 +47,30 @@ export async function createOrderFromLatestAlbum(opts: {
   /** HD (1080p) memory upgrade chosen for this album (0032). */
   hdMemories?: boolean;
 }): Promise<CreatedOrder> {
-  // 1. Load the latest album to freeze into the order.
+  // 1. Load the latest album to freeze into the order. '*' rather than a column
+  //    list so its front cover (cover_front, 0035) comes along when the
+  //    database has it — naming that column fails the whole read on one that
+  //    doesn't yet.
   const { data: albums, error: albErr } = await supabase
     .from('albums')
-    .select('id, title, album_type, album_size, selected_template, photos_per_page, pages, photos, cover_photo')
+    .select('*')
     .eq('user_id', opts.userId)
     .order('updated_at', { ascending: false })
     .limit(1);
 
   if (albErr) throw new Error(`Could not load your album: ${albErr.message}`);
-  const album = albums?.[0];
-  if (!album) {
+  const row = albums?.[0];
+  if (!row) {
     throw new Error('No saved album found to order. Build and save an album first, then place your order.');
   }
+  // The frozen copy. The cover is in it so the order keeps the design the
+  // customer approved even when the best-effort cover PDF upload fails.
+  const album = {
+    id: row.id, title: row.title, album_type: row.album_type, album_size: row.album_size,
+    selected_template: row.selected_template, photos_per_page: row.photos_per_page,
+    pages: row.pages, photos: row.photos, cover_photo: row.cover_photo,
+    cover_front: row.cover_front ?? null,
+  };
 
   const pageCount = Array.isArray(album.pages) ? album.pages.length : 0;
 
