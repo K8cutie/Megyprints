@@ -6,8 +6,9 @@ import type { AlbumSizePreset } from './types';
 import { loadStoreSettings } from '../../lib/storeSettings';
 import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
 import { fetchThemeQuotes } from '../../lib/quotes';
-import { readAlbumTheme, writeAlbumTheme, isAlbumThemeReady } from '../../lib/albumTheme';
+import { readAlbumTheme, writeAlbumTheme } from '../../lib/albumTheme';
 import AlbumThemeStep from '../../assistant/AlbumThemeStep';
+import { isStepOneReady } from '../../assistant/wizard';
 
 /* ═══════════════════════════════════════════════════════════
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
@@ -100,15 +101,18 @@ interface BuilderSetupProps {
   selectedSize: AlbumSizePreset;
   onSizeChange: (size: AlbumSizePreset) => void;
   onNext: () => void;
+  /** The album's name (wizard step 1, asked with the occasion). */
+  albumTitle: string;
+  onAlbumTitleChange: (title: string) => void;
 }
 
-export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: BuilderSetupProps) {
-  // The occasion is asked by the wizard's Step 1; this is the backstop for
-  // every path that reaches the size page without it (wizard dismissed, deep
-  // link, old draft). Same component, same key, same gate.
+export default function BuilderSetup({ selectedSize, onSizeChange, onNext, albumTitle, onAlbumTitleChange }: BuilderSetupProps) {
+  // The name + occasion are asked by the wizard's Step 1; this is the backstop
+  // for every path that reaches the size page without them (wizard dismissed,
+  // deep link, old draft). Same component, same gate.
   const [albumTheme, setAlbumThemeState] = useState(readAlbumTheme);
   const setAlbumTheme = (v: string) => { setAlbumThemeState(v); writeAlbumTheme(v); };
-  const themeReady = isAlbumThemeReady(albumTheme);
+  const themeReady = isStepOneReady(albumTitle, albumTheme);
   // A size is offered only if the owner hasn't hidden it AND it has layouts to
   // build with (see albumSizeOptions). Re-load the store settings once so a cold
   // direct-load to setup still reflects curation, then filter the grid.
@@ -167,11 +171,13 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
           ))}
         </div>
 
-        {/* Occasion backstop — only when nothing is stored yet. */}
+        {/* Step 1 backstop — only while the name or occasion is missing. */}
         {!themeReady && (
           <div className="mb-6 rounded-2xl border border-peach/40 bg-white p-5 text-left shadow-sm" data-testid="occasion-backstop">
-            <h2 className="font-display text-lg font-semibold text-dark mb-1">First — what is this album about?</h2>
-            <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme} onContinue={() => { if (isAlbumThemeReady(albumTheme)) { void fetchThemeQuotes(albumTheme.trim()); onNext(); } }} />
+            <h2 className="font-display text-lg font-semibold text-dark mb-1">First — name your album and tell Megy what it's about</h2>
+            <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme}
+              name={albumTitle} onNameChange={onAlbumTitleChange}
+              onContinue={() => { if (isStepOneReady(albumTitle, albumTheme)) { void fetchThemeQuotes(albumTheme.trim()); onNext(); } }} />
           </div>
         )}
 
@@ -184,12 +190,12 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
         >
           <button
             disabled={!themeReady}
-            title={themeReady ? undefined : 'Pick the occasion first'}
+            title={themeReady ? undefined : 'Name your album and pick the occasion first'}
             onClick={() => {
-              // Unskippable: no occasion, no album. (The button is disabled
-              // too; this guards a stale render.)
+              // Unskippable: no name + occasion, no album. (The button is
+              // disabled too; this guards a stale render.)
               const theme = readAlbumTheme();
-              if (!isAlbumThemeReady(theme)) return;
+              if (!isStepOneReady(albumTitle, theme)) return;
               // Warm the theme's AI quote pool NOW (one cached call) so the
               // album's first generation deals real themed lines instead of
               // waiting on the proxy. Generation tops the pool up to the

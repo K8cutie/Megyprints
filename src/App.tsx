@@ -26,6 +26,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 const BuilderRoute = lazy(() => import('./pages/builder/BuilderRoute'));
 const Admin = lazy(() => import('./pages/Admin'));
 import InstallPrompt from './components/InstallPrompt';
+import ResumePrompt from './components/ResumePrompt';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
 
@@ -57,6 +58,8 @@ export default function App() {
     <AuthProvider>
       <AuthModalProvider>
       <InstallPrompt />
+      {/* "Pick up where you left off?" — once per signed-in visit. */}
+      <ResumePrompt />
       <Suspense fallback={<div className="min-h-screen bg-cream" aria-busy="true" />}>
       <Routes>
         <Route element={<Layout><Outlet /></Layout>}>

@@ -4,6 +4,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { readAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
+import { cleanAlbumName, isAlbumNameReady } from '../lib/albumName';
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AlbumSizePreset } from '../pages/builder/types';
 import { densityRangeLabel } from '../pages/builder/densities';
@@ -46,7 +47,7 @@ export interface WizardState {
    phase (setup/edit/preview) is DERIVED from the step via phaseForStep(). */
 export const WIZARD_ORDER: WizardStep[] = [
   'welcome',
-  'pick_theme',   // unskippable — the occasion seeds the AI quotes
+  'pick_theme',   // unskippable — the album's name + the occasion (seeds the AI quotes)
   'pick_size',
   'design_cover',
   'upload_photos',
@@ -66,7 +67,7 @@ export function phaseForStep(step: WizardStep): 'setup' | 'edit' | 'cover' | 'pr
 
 export const STEP_META: Record<WizardStep, { title: string; description: string; emoji: string }> = {
   welcome: { title: 'Welcome', description: 'Meet Megy and learn the basics', emoji: '👋' },
-  pick_theme: { title: 'Occasion', description: 'What the album is about — seeds the quotes', emoji: '💌' },
+  pick_theme: { title: 'Name & occasion', description: 'The album’s name, and what it is about — seeds the quotes', emoji: '💌' },
   pick_size: { title: 'Album Size', description: 'Choose your album dimensions', emoji: '📐' },
   design_cover: { title: 'Cover', description: 'Design the front·spine·back cover', emoji: '📔' },
   upload_photos: { title: 'Photos', description: 'Upload, then generate', emoji: '📸' },
@@ -77,16 +78,22 @@ export const STEP_META: Record<WizardStep, { title: string; description: string;
 
 /**
  * Where an external forward jump (the size page's "Start Creating", the cover
- * editor's Continue) actually lands. The occasion step is unskippable, so a
- * forward jump that would end past it with no occasion stored lands on it.
- * Backward moves are returned unchanged.
+ * editor's Continue) actually lands. The first step (name + occasion) is
+ * unskippable, so a forward jump that would end past it while it is unanswered
+ * lands on it. Backward moves are returned unchanged.
  */
-export function forwardJumpTarget(from: WizardStep, to: WizardStep, themeReady: boolean): WizardStep {
+export function forwardJumpTarget(from: WizardStep, to: WizardStep, stepOneReady: boolean): WizardStep {
   const f = WIZARD_ORDER.indexOf(from), t = WIZARD_ORDER.indexOf(to), g = WIZARD_ORDER.indexOf('pick_theme');
   // Wherever the engine THINKS it is, a forward move that ends past the
-  // occasion step with no occasion stored goes to the occasion step.
-  if (t > f && t > g && !themeReady) return 'pick_theme';
+  // first step while it is unanswered goes to the first step.
+  if (t > f && t > g && !stepOneReady) return 'pick_theme';
   return to;
+}
+
+/** Step 1 is answered: the album has a name AND an occasion. The one gate the
+ *  engine, Megy's panel and the size-page backstop all share. */
+export function isStepOneReady(albumTitle: string | null | undefined, theme: string = readAlbumTheme()): boolean {
+  return isAlbumNameReady(albumTitle) && isAlbumThemeReady(theme);
 }
 
 export class WizardEngine {
@@ -146,10 +153,14 @@ export class WizardEngine {
       return 'design_cover';
     }
 
-    // Default: welcome on a first visit; then the OCCASION step until it is
-    // answered (unskippable); then the size step (its visual is the center cards).
+    // Default: welcome on a first visit; then the NAME + OCCASION step until it
+    // is answered (unskippable); then the size step (its visual is the center cards).
     if (this.state.isFirstTime && !this.state.completed.includes('welcome')) return 'welcome';
-    return isAlbumThemeReady(readAlbumTheme()) ? 'pick_size' : 'pick_theme';
+    return this.stepOneReady() ? 'pick_size' : 'pick_theme';
+  }
+
+  private stepOneReady(): boolean {
+    return isStepOneReady(this.builder.albumTitle);
   }
 
   /* ── Advance to next step ── */
@@ -157,10 +168,10 @@ export class WizardEngine {
     const currentIdx = WIZARD_ORDER.indexOf(this.state.step);
     if (currentIdx < WIZARD_ORDER.length - 1) {
       const next = WIZARD_ORDER[currentIdx + 1];
-      // The occasion step is unskippable from EVERY direction: whatever step
-      // the engine is on (a seeded state, an old draft, a dismissed card), a
-      // move that would end past it with no occasion stored lands on it.
-      const target = forwardJumpTarget(this.state.step, next, isAlbumThemeReady(readAlbumTheme()));
+      // The first step is unskippable from EVERY direction: whatever step the
+      // engine is on (a seeded state, an old draft, a dismissed card), a move
+      // that would end past it while it is unanswered lands on it.
+      const target = forwardJumpTarget(this.state.step, next, this.stepOneReady());
       if (target !== next) { this.state.step = target; return; }
       this.state.completed.push(this.state.step);
       this.state.step = next;
@@ -172,9 +183,9 @@ export class WizardEngine {
     if (this.state.step === 'pick_theme') return; // unskippable by design
     const idx = WIZARD_ORDER.indexOf(this.state.step);
     const next = WIZARD_ORDER[Math.min(idx + 1, WIZARD_ORDER.length - 1)];
-    // A skip that would end past the occasion step with none stored is not a
-    // skip - it lands on the occasion step and records nothing.
-    if (forwardJumpTarget(this.state.step, next, isAlbumThemeReady(readAlbumTheme())) !== next) {
+    // A skip that would end past the first step while it is unanswered is not
+    // a skip - it lands on the first step and records nothing.
+    if (forwardJumpTarget(this.state.step, next, this.stepOneReady()) !== next) {
       this.state.step = 'pick_theme';
       return;
     }
@@ -201,7 +212,7 @@ export class WizardEngine {
     const { builder } = this;
     switch (step) {
       case 'welcome': return true; // Auto-complete
-      case 'pick_theme': return isAlbumThemeReady(readAlbumTheme()); // Must answer — never skipped
+      case 'pick_theme': return this.stepOneReady(); // Name + occasion — never skipped
       case 'pick_size': return false; // Must click a size in wizard
       case 'design_cover': return true; // Optional — always proceedable
       // Combined upload + generate: "complete" only once the album is generated,
@@ -244,14 +255,15 @@ export class WizardEngine {
 
       case 'pick_theme': {
         const t = readAlbumTheme();
+        const name = cleanAlbumName(builder.albumTitle);
         return {
-          title: "Step 1: What's This Album About? 💌",
-          body: t
-            ? `This album is about **${t}**. Megy writes the quotes on your pages to match — change it here any time.`
-            : "Tell me the occasion first — a wedding, a baptism, a beach trip. Megy writes the quotes on your pages to match it, so this one can't be skipped.",
-          /* Occasion chips + free text render on the center stage (AlbumThemeStep). */
+          title: "Step 1: Name Your Album 💌",
+          body: this.stepOneReady()
+            ? `**${name}** — an album about **${t}**. Megy writes the quotes on your pages to match. Change either one here any time.`
+            : "Give your album a name — it's how you'll find it again in Your Projects. Then pick the occasion: Megy writes the quotes on your pages to match it, so this step can't be skipped.",
+          /* Name box, occasion chips + free text render on the center stage (AlbumThemeStep). */
           actions: [],
-          tips: ["Quotes are 60 % of the little boxes Megy deals into your album — this is what they're about", "Not on the list? Tap 'Something else' and type a few words"],
+          tips: ["When you come back, Megy asks if you want to pick up this album where you left off", "Quotes are 60 % of the little boxes Megy deals into your album — the occasion is what they're about"],
         };
       }
 

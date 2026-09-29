@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep, forwardJumpTarget } from './wizard';
+import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep, forwardJumpTarget, isStepOneReady } from './wizard';
+import { isAlbumNameReady, albumNameToSave, cleanAlbumName, UNNAMED_ALBUM } from '../lib/albumName';
 import { ALBUM_THEME_KEY, isAlbumThemeReady, cleanAlbumTheme } from '../lib/albumTheme';
 import type { BuilderActions as BuilderActions } from '../pages/builder/useBuilderState';
 
@@ -22,8 +23,11 @@ beforeEach(() => {
 });
 afterEach(() => { delete g.localStorage; });
 
-/** The engine only reads a few builder fields for these paths. */
+/** The engine only reads a few builder fields for these paths. The album is
+ *  NAMED by default so the occasion tests below test only the occasion; the
+ *  name gate has its own block. */
 const builderStub = (over: Partial<BuilderActions> = {}) => ({
+  albumTitle: "Maria's Debut",
   phase: 'setup',
   albumPages: [],
   uploadedPhotos: [],
@@ -36,7 +40,7 @@ const builderStub = (over: Partial<BuilderActions> = {}) => ({
 describe('step order and numbering', () => {
   it('the occasion step sits right after welcome, before size', () => {
     expect(WIZARD_ORDER.slice(0, 3)).toEqual(['welcome', 'pick_theme', 'pick_size']);
-    expect(STEP_META.pick_theme.title).toBe('Occasion');
+    expect(STEP_META.pick_theme.title).toBe('Name & occasion');
     expect(phaseForStep('pick_theme')).toBe('setup');
   });
   it('every numbered step title matches the progress label (Step N of 7)', () => {
@@ -146,6 +150,64 @@ describe('the gate the Next button uses', () => {
   it('cleaning collapses whitespace and caps the length', () => {
     expect(cleanAlbumTheme('  Lola\'s   80th  ')).toBe("Lola's 80th");
     expect(cleanAlbumTheme('a'.repeat(100))).toHaveLength(40);
+  });
+});
+
+describe('step 1 also names the album (owner, 2026-09-29) — just as unskippable', () => {
+  it('is incomplete without a name even with an occasion stored', () => {
+    store[ALBUM_THEME_KEY] = 'Wedding';
+    const w = new WizardEngine(builderStub({ albumTitle: '' }), false);
+    expect(w.isStepComplete('pick_theme')).toBe(false);
+    expect(w.detectStep()).toBe('pick_theme');
+  });
+  it('advancing from a later step with no name lands back on step 1', () => {
+    store[ALBUM_THEME_KEY] = 'Wedding';
+    const w = new WizardEngine(builderStub({ albumTitle: '  ' }), false);
+    w.state.step = 'pick_size';
+    w.advance();
+    expect(w.state.step).toBe('pick_theme');
+    w.state.step = 'design_cover';
+    w.skip();
+    expect(w.state.step).toBe('pick_theme');
+    expect(w.state.skipped).toEqual([]);
+  });
+  it('with a name and an occasion the journey goes on to the size', () => {
+    store[ALBUM_THEME_KEY] = 'Wedding';
+    const w = new WizardEngine(builderStub({ albumTitle: 'Ana & Ben' }), false);
+    expect(w.detectStep()).toBe('pick_size');
+    w.state.step = 'pick_theme';
+    w.advance();
+    expect(w.state.step).toBe('pick_size');
+  });
+  it('the gate needs BOTH', () => {
+    expect(isStepOneReady('Ana & Ben', 'Wedding')).toBe(true);
+    expect(isStepOneReady('', 'Wedding')).toBe(false);
+    expect(isStepOneReady('Ana & Ben', '')).toBe(false);
+  });
+  it('the message names the album once both are in', () => {
+    store[ALBUM_THEME_KEY] = 'Wedding';
+    const w = new WizardEngine(builderStub({ albumTitle: '  Ana   &  Ben ' }), false);
+    w.state.step = 'pick_theme';
+    expect(w.getMessage().body).toContain('**Ana & Ben**');
+    const unnamed = new WizardEngine(builderStub({ albumTitle: '' }), false);
+    unnamed.state.step = 'pick_theme';
+    expect(unnamed.getMessage().body).toMatch(/Give your album a name/);
+  });
+});
+
+describe('the album name rules', () => {
+  it('two characters or more after cleaning', () => {
+    expect(isAlbumNameReady('Jo')).toBe(true);
+    expect(isAlbumNameReady(' J ')).toBe(false);
+    expect(isAlbumNameReady(undefined)).toBe(false);
+  });
+  it('cleaning collapses whitespace and caps the length', () => {
+    expect(cleanAlbumName("  Maria's    Debut ")).toBe("Maria's Debut");
+    expect(cleanAlbumName('a'.repeat(100))).toHaveLength(60);
+  });
+  it('an unnamed album is saved under the old default, never blank', () => {
+    expect(albumNameToSave('')).toBe(UNNAMED_ALBUM);
+    expect(albumNameToSave(' Our Trip ')).toBe('Our Trip');
   });
 });
 

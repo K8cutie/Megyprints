@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import BuilderDemoSection from './BuilderDemoSection';
 import { UserProjectsSection } from '../components/UserProjectsSection';
+import { useAuth } from '../lib/authContext';
+import { startFreshAlbum } from '../lib/albumSession';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -586,11 +588,13 @@ function CTASection() {
 /* ═══════════════════════════ HOME PAGE ═══════════════════════════ */
 export default function Home() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const handleMegyAction = useCallback((action: string, payload?: any) => {
     switch (action) {
       case 'go-builder':
-        sessionStorage.setItem('megy-fresh-start', '1');
+        // A new album — which also answers "resume where you left off?".
+        startFreshAlbum(user?.id);
         navigate('/builder');
         break;
       case 'load-album':
@@ -604,7 +608,7 @@ export default function Home() {
       default:
         break;
     }
-  }, [navigate]);
+  }, [navigate, user?.id]);
 
   // Hero welcome card — sends visitors into the builder, where the one true
   // Megy (assistant/MegyAssistant) guides them. No separate home wizard.
