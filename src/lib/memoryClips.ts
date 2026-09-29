@@ -25,6 +25,7 @@
    Every transcode failure degrades to "keep the original file" — a memory is
    never lost to a compression problem.                                     */
 import { supabase, supabaseConfigured } from './supabase';
+import { isAlreadyExists } from './storageUpload';
 import { getPriceSchedule } from './storeSettings';
 import { transcodeToMp4, transcodeSupported, QUALITY_TARGETS, type ClipQuality } from './videoTranscode';
 
@@ -331,11 +332,8 @@ export async function uploadClip(code: string, ext: ClipExt, blob: Blob, opts: {
     upsert: !!opts.replace,
     cacheControl: '31536000',
   });
-  if (!error) return;
-  const msg = (error as { message?: string }).message || '';
-  const status = String((error as { statusCode?: string | number }).statusCode ?? '');
-  if (status === '409' || /already exists|duplicate/i.test(msg)) return; // retry-safe
-  throw new Error(`Could not upload your memory video (${msg || 'storage error'}).`);
+  if (!error || isAlreadyExists(error)) return; // retry-safe
+  throw new Error(`Could not upload your memory video (${error.message || 'storage error'}).`);
 }
 
 export type ClipUploadPhase = 'compress' | 'upload';
