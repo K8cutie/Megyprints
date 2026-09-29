@@ -6,7 +6,7 @@ import { storedCoverPage } from '../pages/builder/pageNormalize';
 import type { StoredPhoto } from './useIndexedDBPhotos';
 
 /* ══════════════════════════════════════════════════════════════════════════
-   The album's FRONT COVER is saved with the album (albums.cover_front, 0035).
+   The album's FRONT COVER is saved with the album (albums.cover_front, 0036).
    It used to live only in the draft on the device, so reopening a saved album
    showed whatever cover that device's draft had — its photo slots pointing
    into another album's photo list.
@@ -77,7 +77,7 @@ describe('cover round trip — save → albums row → load → builder', () => 
     expect('cover_front' in serializeAlbum(album())).toBe(false);
   });
 
-  it('an album saved before 0035 (or read from a database without the column) has no cover', () => {
+  it('an album saved before 0036 (or read from a database without the column) has no cover', () => {
     const row = throughDb(serializeAlbum(album()));
     expect(deserializeAlbum(row).coverFront).toBeNull();
     expect(storedCoverPage(null, '8x8')).toBeNull();
@@ -250,14 +250,14 @@ describe('rebuildPrintJobFromLatestAlbum — cover', () => {
     expect(job?.coverFront).toMatchObject({ id: cover.id, slotFills: [2], size: '8x8' });
   });
 
-  it('album saved before 0035: the draft cover, when the draft IS this album', async () => {
+  it('album saved before 0036: the draft cover, when the draft IS this album', async () => {
     fakeLatestAlbum(savedRow());
     draftOnDevice({ albumId: 'a1', coverFront: cover });
     const job = await rebuildPrintJobFromLatestAlbum('u1', idbGet);
     expect(job?.coverFront).toMatchObject({ id: cover.id });
   });
 
-  it('album saved before 0035: never the cover of a DIFFERENT album in the draft', async () => {
+  it('album saved before 0036: never the cover of a DIFFERENT album in the draft', async () => {
     fakeLatestAlbum(savedRow());
     draftOnDevice({ albumId: 'b2', coverFront: otherCover });
     const job = await rebuildPrintJobFromLatestAlbum('u1', idbGet);

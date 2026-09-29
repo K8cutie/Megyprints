@@ -48,7 +48,7 @@ export async function createOrderFromLatestAlbum(opts: {
   hdMemories?: boolean;
 }): Promise<CreatedOrder> {
   // 1. Load the latest album to freeze into the order. '*' rather than a column
-  //    list so its front cover (cover_front, 0035) comes along when the
+  //    list so its front cover (cover_front, 0036) comes along when the
   //    database has it — naming that column fails the whole read on one that
   //    doesn't yet.
   const { data: albums, error: albErr } = await supabase

@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 0035_album_cover_front.sql  (idempotent; safe to re-run)
+--  MEGY PRINTS — 0036_album_cover_front.sql  (idempotent; safe to re-run)
 --
 --  The album's FRONT COVER is saved with the album. Until now it lived only in
 --  the draft on the device (localStorage), so opening a saved album from Your

@@ -55,7 +55,7 @@ export interface AlbumData {
   createdAt?: string;
   updatedAt?: string;
   coverPhoto?: string | null;
-  /** The front cover — one builder page, stored in albums.cover_front (0035).
+  /** The front cover — one builder page, stored in albums.cover_front (0036).
    *  Its photo slots index `photos`, so it only makes sense with this album.
    *  Loaded: null when the album was saved without one. */
   coverFront?: Record<string, unknown> | null;
@@ -119,7 +119,7 @@ export function deserializeAlbum(row: Record<string, unknown>): AlbumData {
       previewUrl: p.previewUrl ?? undefined,
     })),
     coverPhoto: (row.cover_photo as string) ?? null,
-    // Absent when the database predates 0035 or the query didn't ask for it.
+    // Absent when the database predates 0036 or the query didn't ask for it.
     coverFront: isPlainObject(row.cover_front) ? row.cover_front : null,
     createdAt: (row.created_at as string) ?? undefined,
     updatedAt: (row.updated_at as string) ?? undefined,
@@ -130,7 +130,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
-/** albums.cover_front arrived in migration 0035, and the app can reach a
+/** albums.cover_front arrived in migration 0036, and the app can reach a
  *  database that doesn't have it yet (a deploy lands before db:push). PostgREST
  *  then refuses the WHOLE request over that one column: PGRST204 on a write
  *  ("Could not find the 'cover_front' column of 'albums' in the schema cache"),

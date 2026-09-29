@@ -29,7 +29,7 @@ import { normalizeStoredPageFields, storedCoverPage } from '../pages/builder/pag
 
 // Same key useBuilderState persists the local draft under (STORAGE_KEY there).
 // The draft survives a full reload — unlike the in-memory print job — so it's
-// the fallback for the DESIGNED COVER of an album row saved before 0035 (which
+// the fallback for the DESIGNED COVER of an album row saved before 0036 (which
 // added albums.cover_front, the cover saved with the album itself).
 const DRAFT_KEY = 'megy-album-v5';
 
@@ -43,7 +43,7 @@ function draftCoverDesign(): CoverDesign | undefined {
   }
 }
 
-/** Recover the cover-as-pages FRONT page for an album row saved before 0035
+/** Recover the cover-as-pages FRONT page for an album row saved before 0036
  *  (no cover_front) from the local draft, after the same-device OAuth
  *  round-trip — but only when that draft IS this album: a cover's photo slots
  *  index its own album's photos, so another album's cover would print the
@@ -91,7 +91,7 @@ export async function rebuildPrintJobFromLatestAlbum(
 ): Promise<PrintJob | null> {
   // Load the SAME latest album createOrderFromLatestAlbum freezes, so the PDF
   // is built from the identical pages the order snapshots. '*' so its cover
-  // (cover_front, 0035) comes along when the database has it — naming the
+  // (cover_front, 0036) comes along when the database has it — naming the
   // column would fail the whole read on one that doesn't yet.
   const { data: album, error } = await supabase
     .from('albums')

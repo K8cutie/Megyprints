@@ -2811,7 +2811,7 @@ export function useBuilderState(): BuilderActions {
           setUploadedPhotos(restored);
         }
         // The album's own front cover. Its photo slots index THIS album's
-        // photos, so an album saved without one (before 0035) gets a fresh
+        // photos, so an album saved without one (before 0036) gets a fresh
         // cover, never the one left on screen by the draft on this device.
         // Reopening the SAME album: the cover on screen is its own — keep it.
         const sizeForCover = (albumData.sizePreset as AlbumSizePreset) ?? albumSize;

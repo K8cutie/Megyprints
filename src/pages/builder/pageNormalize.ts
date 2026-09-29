@@ -60,9 +60,9 @@ export function normalizeStoredPageFields(p: any): any {
   };
 }
 
-/** The front cover saved with an album (albums.cover_front, migration 0035)
+/** The front cover saved with an album (albums.cover_front, migration 0036)
  *  back in builder page shape, sized to the album — or null when there is none
- *  to restore (saved before 0035, or not a page object). Its photo slots index
+ *  to restore (saved before 0036, or not a page object). Its photo slots index
  *  THAT album's photo list, so a caller left with null must not fall back to a
  *  cover from any other album. */
 export function storedCoverPage(raw: unknown, size: AlbumSizePreset): AlbumPage | null {
