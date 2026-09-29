@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────
 // Orders — customer-side order creation.
 //
-// When a logged-in user places an order, we take a FROZEN snapshot of their
-// latest saved album and insert it into the `orders` table. The insert runs
+// When a logged-in user places an order, we take a FROZEN snapshot of the
+// album they are ordering and insert it into the `orders` table. The insert runs
 // under the customer's session, so RLS ("auth.uid() = user_id") authorizes it.
 // The operator/fulfillment side reads these later via the backend (service_role).
 // ──────────────────────────────────────────────────────────────────────────
@@ -11,6 +11,7 @@ import { supabase } from './supabase';
 import { generateAlbumPdf, generateCoverWrapPdf } from '../pages/builder/generateAlbumPdf';
 import type { CoverPrintInput } from '../pages/builder/printPipeline';
 import type { PrintJob } from './printQueue';
+import { selectOrderAlbum } from './orderAlbum';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
 
 export interface ShippingDetails {
@@ -30,14 +31,20 @@ export interface CreatedOrder {
   id: string;
   order_number: string;
   status: string;
+  /** The album the order froze. The print PDF must be rebuilt from THIS row. */
+  album_id: string;
 }
 
 /**
- * Create an order for the given user by snapshotting their most recently
- * updated album. Throws a friendly Error if there's no album to order.
+ * Create an order for the given user by snapshotting the album being ordered
+ * (see orderAlbum). Throws a friendly Error if there's no album to order, and
+ * AlbumNotSavedError if the named album isn't in the account.
  */
-export async function createOrderFromLatestAlbum(opts: {
+export async function createOrderFromAlbum(opts: {
   userId: string;
+  /** The album being ordered (print job / device draft). Only when no id is
+   *  known does the order fall back to the most recently updated album. */
+  albumId?: string;
   specs: OrderSpecs;
   shipping: ShippingDetails;
   amount: number;
@@ -47,16 +54,12 @@ export async function createOrderFromLatestAlbum(opts: {
   /** HD (1080p) memory upgrade chosen for this album (0032). */
   hdMemories?: boolean;
 }): Promise<CreatedOrder> {
-  // 1. Load the latest album to freeze into the order.
-  const { data: albums, error: albErr } = await supabase
-    .from('albums')
-    .select('id, title, album_type, album_size, selected_template, photos_per_page, pages, photos, cover_photo')
-    .eq('user_id', opts.userId)
-    .order('updated_at', { ascending: false })
-    .limit(1);
-
-  if (albErr) throw new Error(`Could not load your album: ${albErr.message}`);
-  const album = albums?.[0];
+  // 1. Load the album being ordered to freeze into the order.
+  const album = await selectOrderAlbum<{ id: string; album_size: string | null; pages: unknown }>(supabase, {
+    userId: opts.userId,
+    albumId: opts.albumId,
+    columns: 'id, title, album_type, album_size, selected_template, photos_per_page, pages, photos, cover_photo',
+  });
   if (!album) {
     throw new Error('No saved album found to order. Build and save an album first, then place your order.');
   }
@@ -120,7 +123,7 @@ export async function createOrderFromLatestAlbum(opts: {
   // rather than this frozen DB album, which can lag behind a QR added moments
   // before checkout (throttled cloud save). See ensureMemoriesForFills there.
 
-  return data as CreatedOrder;
+  return { ...(data as Omit<CreatedOrder, 'album_id'>), album_id: album.id };
 }
 
 /**
