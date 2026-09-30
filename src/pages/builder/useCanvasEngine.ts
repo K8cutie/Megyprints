@@ -1387,6 +1387,11 @@ function renderTemplateSlots(
         // printPipeline effFrameStyle = 'none'); this keeps Fabric in step.
         const shadowOff = 4;
         const shadowBlur = 8;
+        // Studio: everything drawn around the photo that must follow its frame
+        // while it is dragged (the re-render after the drop snaps it exactly).
+        type Follower = { left?: number; top?: number; set: (p: { left: number; top: number }) => unknown };
+        const followers: { obj: Follower; left: number; top: number }[] = [];
+        const follow = (obj: Follower) => followers.push({ obj, left: obj.left ?? 0, top: obj.top ?? 0 });
         const fakeShadow = template.fullBleed ? null : new fab.Rect({
           left: sx + shadowOff - shadowBlur / 2,
           top: sy + shadowOff - shadowBlur / 2,
@@ -1406,21 +1411,26 @@ function renderTemplateSlots(
           fakeShadow.slotId = `${SLOT_ID}-shadow-${i}`;
           canvas.add(fakeShadow);
           fakeShadow.sendToBack();
+          follow(fakeShadow);
         }
 
-        // Slot border frame — THE CONTAINER. White outline normally,
-        // becomes thick blue+selectable in container mode for resize/move.
-        const borderStroke = containerMode ? '#3B82F6' : (frameColor ?? '#FFFFFF');
-        // Full-bleed (single-photo, no-textbox) pages draw no frame — but keep the
-        // blue container outline in edit mode so the slot is still selectable.
+        // Slot border frame — THE CONTAINER. Always drawn as the customer's real
+        // border (colour, width, dash). In container mode (Studio — always on
+        // since 2026-09-30) it is also selectable: Fabric's blue handles appear
+        // only on the frame being moved/resized, so the page still looks like
+        // the page. (It used to become a thick blue outline on every photo and
+        // hide the decorative frames — fine for a mode you dip into, wrong for
+        // the only mode there is.)
+        const borderStroke = frameColor ?? '#FFFFFF';
+        // Full-bleed (single-photo, no-textbox) pages draw no frame. A 0-width
+        // outline is still selectable — Fabric hit-tests its box, not its ink.
         const effFrameWidth = adaptedTemplate.fullBleed || slot.masked ? 0 : frameWidth;
-        const borderWidth = containerMode ? 3 : (effFrameWidth ?? 2);
-        // Dashed/dotted border style — only on the real (non-container) outline,
-        // and only when the slot actually draws a border. Mirrors the DOM
-        // (border-style) + print (ctx.setLineDash) renderers.
+        const borderWidth = effFrameWidth ?? 2;
+        // Dashed/dotted border style — only when the slot actually draws a
+        // border. Mirrors the DOM (border-style) + print (ctx.setLineDash).
         const effBorderStyle = borderStyle ?? 'solid';
         let borderDashArray: number[] | undefined;
-        if (!containerMode && borderWidth > 0) {
+        if (borderWidth > 0) {
           if (effBorderStyle === 'dashed') borderDashArray = [borderWidth * 2, borderWidth * 2];
           else if (effBorderStyle === 'dotted') borderDashArray = [1, borderWidth * 2];
         }
@@ -1434,6 +1444,7 @@ function renderTemplateSlots(
           evented: containerMode,
           hasControls: containerMode,
           hasBorders: containerMode,
+          borderColor: containerMode ? '#3B82F6' : undefined,
           cornerColor: containerMode ? '#3B82F6' : undefined,
           cornerSize: containerMode ? 10 : undefined,
           transparentCorners: false,
@@ -1457,6 +1468,9 @@ function renderTemplateSlots(
           borderObj = new fab.Rect({ left: sx, top: sy, width: sw, height: sh, ...borderBase });
         }
         borderObj.slotId = `${SLOT_ID}-border-${i}`;
+        // lockRotation stops the turn but Fabric still draws the rotate stalk —
+        // a handle that does nothing reads as broken. No renderer prints rotation.
+        borderObj.setControlsVisibility?.({ mtr: false });
         // Studio: selecting the frame outline selects the slot (mask chips).
         // A separate field, NOT slotIndex — the generic object:modified handler
         // treats anything with slotIndex as a pannable photo.
@@ -1469,11 +1483,9 @@ function renderTemplateSlots(
         // the Fabric / DOM / print renderers stay in lockstep. Frame objects are
         // tagged `${SLOT_ID}-frame-${i}` so the cleanup pass (filters on
         // SLOT_ID) removes them on every rerender. Suppressed for full-bleed
-        // pages (no border ⇒ no decorative frame) and in container mode (the
-        // blue resize outline owns the slot then).
+        // pages (no border ⇒ no decorative frame).
         const effFrameStyle: FrameStyle = frameStyle ?? 'none';
         if (
-          !containerMode &&
           !adaptedTemplate.fullBleed &&
           !slot.masked &&
           effFrameStyle !== 'none' &&
@@ -1506,6 +1518,7 @@ function renderTemplateSlots(
             dbl.slotId = frameTag;
             canvas.add(dbl);
             dbl.bringToFront();
+            follow(dbl);
           } else if (effFrameStyle === 'thin') {
             // Single 1px inset hairline just inside the slot edge.
             const inset = 1;
@@ -1515,6 +1528,7 @@ function renderTemplateSlots(
             hair.slotId = frameTag;
             canvas.add(hair);
             hair.bringToFront();
+            follow(hair);
           } else if (effFrameStyle === 'matte' || effFrameStyle === 'polaroid') {
             // White mat behind the photo. Polaroid is weighted at the bottom and
             // casts a soft drop shadow; matte is an even mount.
@@ -1546,6 +1560,7 @@ function renderTemplateSlots(
                 });
             mat.slotId = frameTag;
             canvas.add(mat);
+            follow(mat);
             // Mat must sit UNDER the photo but ABOVE the page background. The
             // photo + its border were already added, so drop the mat just below
             // them by re-raising the photo and border back to the front.
@@ -1592,19 +1607,22 @@ function renderTemplateSlots(
             });
           });
 
-          // Moving: sync photo position to follow container
+          // Moving: the photo, its clip, its shadow and its decorative frame all
+          // follow the container. dx/dy are measured from the frame's OWN start
+          // (circle/oval/heart frames are centre-origin; measuring from the slot's
+          // top-left made a round photo jump half its width on the first move).
+          const frameStart = { left: borderObj.left ?? sx, top: borderObj.top ?? sy };
+          const imgStart = { left: img.left ?? 0, top: img.top ?? 0 };
+          const clip = img.clipPath;
+          const clipStart = clip ? { left: clip.left ?? 0, top: clip.top ?? 0 } : null;
           borderObj.on('moving', () => {
-            const dx = (borderObj.left ?? sx) - sx;
-            const dy = (borderObj.top ?? sy) - sy;
-            // For centered shapes, left/top is center — adjust
-            const isCentered = slot.shape === 'circle' || slot.shape === 'oval' || slot.shape === 'heart';
-            const offsetX = isCentered ? dx : dx;
-            const offsetY = isCentered ? dy : dy;
-            // Move the image to follow the border
-            img.set({
-              left: (sx + sw / 2) + offsetX + (slotOffsetsX[i] ?? 0),
-              top: (sy + sh / 2) + offsetY + (slotOffsetsY[i] ?? 0),
-            });
+            const dx = (borderObj.left ?? frameStart.left) - frameStart.left;
+            const dy = (borderObj.top ?? frameStart.top) - frameStart.top;
+            img.set({ left: imgStart.left + dx, top: imgStart.top + dy });
+            // an absolutePositioned clip stays put unless moved — the photo
+            // would show only where the old and new boxes overlap
+            if (clip && clipStart) clip.set({ left: clipStart.left + dx, top: clipStart.top + dy });
+            for (const f of followers) f.obj.set({ left: f.left + dx, top: f.top + dy });
             canvas.requestRenderAll();
           });
         }

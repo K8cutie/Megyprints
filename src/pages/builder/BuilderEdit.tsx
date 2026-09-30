@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, ChevronRight, Sparkles,
-  Wand2, Upload, Home, PanelLeftOpen, Video, PencilRuler,
+  Wand2, Upload, Home, PanelLeftOpen, Video,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -30,8 +30,6 @@ import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
 import { CloudSaveStatus } from '../../components/CloudSaveStatus';
 import { useAuth } from '../../lib/authContext';
-import { studioEnabled } from '../../lib/studioFlag';
-import StudioGate, { STUDIO_GATE_KEY } from './StudioGate';
 import { GUARD_MESSAGES, SOFT_MESSAGE, printSharpness, resolveSlotBox } from './slotGeometry';
 import StudioStrip from './StudioStrip';
 import AddOrnamentModal from './AddOrnamentModal';
@@ -81,15 +79,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
-  const [containerMode, setContainerMode] = useState(false);
+  const [containerMode, setContainerMode] = useState(true);
 
-  /* ── STUDIO (owner, 2026-09-13): the same page with the training wheels off.
-     Behind studioEnabled() until the owner flips it. Studio = Fabric's
-     container mode (frames selectable, movable, resizable) + the guardrails
-     at the state setter + the page marked as the customer's. ── */
-  const studioAvailable = studioEnabled();
-  const [studio, setStudio] = useState(false);
-  const [studioGate, setStudioGate] = useState(false);
+  /* ── STUDIO (owner, 2026-09-13): the page with the training wheels off.
+     Studio = Fabric's container mode (frames selectable, movable, resizable)
+     + the guardrails at the state setter + the page marked as the customer's.
+     Owner, 2026-09-30: no Simple/Studio switch — every Studio tool is always on. ── */
+  const studio = true;
   const [guardMsg, setGuardMsg] = useState<string | null>(null);
   const guardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sayGuard = useCallback((msg: string) => {
@@ -97,13 +93,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     if (guardTimer.current) clearTimeout(guardTimer.current);
     guardTimer.current = setTimeout(() => setGuardMsg(null), 2600);
   }, []);
-  const enterStudio = useCallback(() => {
-    let dismissed = false;
-    try { dismissed = !!sessionStorage.getItem(STUDIO_GATE_KEY); } catch { /* private mode */ }
-    if (!user && !dismissed) { setStudioGate(true); return; }
-    setStudio(true); setContainerMode(true);
-  }, [user]);
-  const leaveStudio = useCallback(() => { setStudio(false); setContainerMode(false); }, []);
   /* Studio stickers: the picker (add) or the editor (swap/remove) for one uid. */
   const [stickerModal, setStickerModal] = useState<{ uid: string | null } | null>(null);
 
@@ -782,9 +771,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {guardMsg}
         </div>
       )}
-      {studioGate && (
-        <StudioGate onContinue={() => { setStudioGate(false); setStudio(true); setContainerMode(true); }} onClose={() => setStudioGate(false)} />
-      )}
       {stickerModal && (
         <AddOrnamentModal
           initial={stickerModal.uid ? (actions.currentPage?.stickers?.find((k) => k.uid === stickerModal.uid) ?? null) : null}
@@ -1044,19 +1030,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             </div>
 
             <div className="flex items-center gap-2">
-              {studioAvailable && actions.phase === 'edit' && (
-                <div className="inline-flex items-center rounded-full border border-line bg-paper p-0.5 gap-0.5" role="group" aria-label="Editing mode" data-testid="studio-switch">
-                  <button type="button" aria-pressed={!studio} onClick={leaveStudio}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 transition-colors ${!studio ? 'bg-blush-pink text-white shadow-sm' : 'text-medium hover:text-dark'}`}>
-                    <Wand2 size={11} /> Simple
-                  </button>
-                  <button type="button" aria-pressed={studio} onClick={enterStudio}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 transition-colors ${studio ? 'bg-blush-pink text-white shadow-sm' : 'text-medium hover:text-dark'}`}>
-                    <PencilRuler size={11} /> Studio
-                  </button>
-                </div>
-              )}
-              {studioAvailable && actions.currentPage?.studio && (
+              {actions.currentPage?.studio && (
                 <>
                   <span className="text-[11px] font-bold text-blush-pink bg-blush rounded-full px-2.5 py-1" data-testid="studio-yours">✎ This page is yours · Regenerate skips it</span>
                   <button type="button" onClick={() => { actions.resetStudioPage(); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }}
