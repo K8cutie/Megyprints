@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, PencilRuler, Wand2, Sparkles, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Replace } from 'lucide-react';
+import { X, Wand2, Sparkles, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Replace } from 'lucide-react';
 import type { AlbumPage, UploadedPhoto, TemplateSlot, OrnamentTransform } from './types';
 import type { GuardReason } from './slotGeometry';
 import { slotRectPx } from './studioPhoneGeom';
@@ -20,22 +20,6 @@ import { pageInches } from './stickers';
    ══════════════════════════════════════════════════════════════════════════ */
 
 const THUMB = 84;
-
-/* ── Simple | Studio ─────────────────────────────────────────────────────── */
-export function StudioToggle({ studio, onSimple, onStudio }: { studio: boolean; onSimple: () => void; onStudio: () => void }) {
-  return (
-    <div className="inline-flex items-center rounded-full border border-line bg-paper p-0.5 gap-0.5" role="group" aria-label="Editing mode" data-testid="studio-switch">
-      <button type="button" aria-pressed={!studio} onClick={onSimple}
-        className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 ${!studio ? 'bg-blush-pink text-white shadow-sm' : 'text-medium'}`}>
-        <Wand2 size={11} /> Simple
-      </button>
-      <button type="button" aria-pressed={studio} onClick={onStudio}
-        className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 ${studio ? 'bg-blush-pink text-white shadow-sm' : 'text-medium'}`}>
-        <PencilRuler size={11} /> Studio
-      </button>
-    </div>
-  );
-}
 
 /* ── The pill above a tapped photo ───────────────────────────────────────── */
 function Pill({ left, top, children, onClose, testid }: { left: number; top: number; children: ReactNode; onClose: () => void; testid: string }) {
