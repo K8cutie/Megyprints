@@ -40,6 +40,7 @@ import { photosToForget } from '../../lib/photoKeeping';
 import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
 import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
 import { detectFaceCenter, computeFaceOffset, initFaceApi } from './faceDetection';
+import { createLimiter } from '../../lib/limit';
 import { templateTracker } from './varietyTracker';
 import { readCaptureTime } from './exif';
 import { normalizeStoredPageFields } from './pageNormalize';
@@ -654,6 +655,9 @@ export interface BuilderActions {
   setSelectedElementId: (id: string | null) => void;
 }
 
+/** Photos stored + measured at a time (see addPhotos). Module-level so back-to-back picks share it. */
+const measureLimit = createLimiter(3);
+
 export function useBuilderState(): BuilderActions {
   // ── Phase 1: Cloud hooks ──
   const { user } = useAuth();
@@ -1223,7 +1227,9 @@ export function useBuilderState(): BuilderActions {
     for (const photo of newPhotos) {
       const file = freshFiles.find((f) => f.name === photo.name && f.size === photo.size);
       if (!file) continue;
-      const task = (async () => {
+      // Bounded: each task fully decodes the photo (createImageBitmap) — all at
+      // once, a 250-photo pick decoded ~12 GB and the phone killed the app.
+      const task = measureLimit(async () => {
         const stored = await idbPhotos.store(file, photo.id);
         // A failed write (e.g. a full disk) returns null — still measure, or the
         // photo stays 0×0 and gets classified by guesswork.
@@ -1240,7 +1246,7 @@ export function useBuilderState(): BuilderActions {
               : p,
           ),
         );
-      })();
+      });
       pendingMeasureRef.current.add(task);
       void task.catch(() => { /* a failed measure must not block generation */ })
         .finally(() => pendingMeasureRef.current.delete(task));

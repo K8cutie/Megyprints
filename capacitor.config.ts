@@ -6,16 +6,19 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.megyprints.app',
   appName: 'Megy Prints',
-  webDir: 'dist',
+  // The shell loads the live site, so only a tiny offline page is bundled
+  // (bundling dist/ made the app 27 MB for nothing).
+  webDir: 'native-shell',
   server: {
     // CAP_SERVER_URL lets a debug build point at a local dev server.
     url: process.env.CAP_SERVER_URL ?? 'https://megyprints.vercel.app',
     cleartext: !!process.env.CAP_SERVER_URL,
     androidScheme: 'https',
+    errorPath: 'offline.html',
   },
   android: {
     path: 'android-native',
-    backgroundColor: '#F05239',
+    backgroundColor: '#FFF8F0', // cream behind the page while it loads
   },
 };
 

@@ -15,11 +15,29 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:screenOrientation="portrait"
             android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Google sign-in return (src/lib/nativeAuth.ts). Verified App Link:
+                 assetlinks.json on megyprints.vercel.app lists this package. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="megyprints.vercel.app" android:path="/auth-native.html" />
+            </intent-filter>
+
+            <!-- Fallback from /auth-native.html: intent:// pinned to this package. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="megyprints" android:host="auth" />
             </intent-filter>
 
         </activity>

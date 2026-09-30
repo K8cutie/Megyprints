@@ -6,7 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { initSentry } from './lib/sentry'
 import { reportError } from './lib/report'
 import { bootTheme } from './lib/theme'
-import { installNativePhotoPicker } from './lib/nativePhotoPicker'
+import { installNativeAuth } from './lib/nativeAuth'
 
 // Initialize Sentry before anything renders. No-op unless VITE_SENTRY_DSN is set.
 initSentry()
@@ -23,7 +23,7 @@ window.addEventListener('error', (e) => {
   reportError(e.error ?? e.message, { kind: 'error' })
 })
 
-installNativePhotoPicker()
+installNativeAuth()
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>

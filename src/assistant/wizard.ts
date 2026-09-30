@@ -9,6 +9,7 @@ import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AlbumSizePreset } from '../pages/builder/types';
 import { densityRangeLabel } from '../pages/builder/densities';
 import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
+import { Capacitor } from '@capacitor/core';
 
 /* The size step's photos-per-page guidance is DERIVED from DENSITY_BY_SIZE
    (the single source of truth in densities.ts), so it can never disagree with
@@ -314,7 +315,10 @@ export class WizardEngine {
             ? `Great! You have **${photoCount}** photo${photoCount > 1 ? 's' : ''} ready. Upload more or let's generate your album!`
             : "Upload your photos and I'll auto-arrange them into beautiful layouts. You can upload as many as you want — I'll pick the best ones for each page.",
           actions: photoCount > 0 ? ["Upload More Photos", "Generate Album →"] : ["Upload Photos"],
-          tips: ["📱 Upload straight from your phone for the best quality — and I'll auto-sort your photos into pages by the moment they were taken", "I'll match photo ratios to frame shapes automatically"],
+          tips: [
+            // Android app: the Files picker has no photo cap but hides "Select all" in its ⋮ menu.
+            ...(Capacitor.isNativePlatform() ? ["📂 Lots of photos? In the picker tap ☰ → Images → open a folder → ⋮ → Select all"] : []),
+            "📱 Upload straight from your phone for the best quality — and I'll auto-sort your photos into pages by the moment they were taken", "I'll match photo ratios to frame shapes automatically"],
         };
 
       case 'review_pages': {
