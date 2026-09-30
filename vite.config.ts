@@ -75,8 +75,12 @@ export default defineConfig(({ command }) => ({
   ],
   server: {
     port: Number(process.env.PORT) || 3000,
+    // The native shell's copied web assets must not trigger reloads.
+    watch: { ignored: ['**/android-native/**', '**/android/**'] },
   },
   optimizeDeps: {
+    // Skip the copied android-native web assets when scanning for deps.
+    entries: ['index.html'],
     include: ['fabric'],
   },
   resolve: {
