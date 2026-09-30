@@ -34,7 +34,11 @@ import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 import { useAuth } from '../../lib/authContext';
 import { useAlbumSync } from '../../lib/useAlbumSync';
 import type { AlbumData } from '../../lib/useAlbumSync';
-import { useIndexedDBPhotos } from '../../lib/useIndexedDBPhotos';
+import { useIndexedDBPhotos, getImageDimensions } from '../../lib/useIndexedDBPhotos';
+import { supabase } from '../../lib/supabase';
+import { photosToForget } from '../../lib/photoKeeping';
+import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
+import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
 import { detectFaceCenter, computeFaceOffset, initFaceApi } from './faceDetection';
 import { templateTracker } from './varietyTracker';
 import { readCaptureTime } from './exif';
@@ -46,7 +50,18 @@ import { normalizeStoredPageFields } from './pageNormalize';
    ══════════════════════════════════════════════════════════════════════════ */
 
 const MIN_PAGES = 40;
-const STORAGE_KEY = 'megy-album-v5';
+const STORAGE_KEY = DRAFT_STORAGE_KEY;
+
+/** A fresh album row id, minted on the device so a draft knows which album it
+ *  is from its first moment (see albumIdRef). */
+function newAlbumId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // RFC 4122 v4 from Math.random — only for engines without randomUUID.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 // AlbumType is not exported from types.ts — define locally
 type AlbumType = 'standard';
@@ -209,6 +224,17 @@ interface SerializedState {
    *  predate it and are migrated from coverDesign on restore. (A stored
    *  coverBack from the pre-reserved-back era is simply ignored.) */
   coverFront: AlbumPage;
+  /** The album's name (wizard step 1) — its title in Your Projects. */
+  title?: string;
+  /** This album's row id in the cloud (see albumIdRef). Absent in old drafts. */
+  albumId?: string;
+  /** The account this draft was worked on under, if any. Sticky: a draft that
+   *  was ever signed in is a saved album, so throwing it away later (even signed
+   *  out) must not delete its photos — see photosToForget. */
+  accountId?: string | null;
+  /** When the album last changed on this device (ms). Decides whether this
+   *  copy or the cloud copy is the newer one. */
+  editedAt?: number;
 }
 
 /* ── Undo snapshot ── */
@@ -252,23 +278,17 @@ function isDeadBlobUrl(url: string | undefined): boolean {
 }
 
 function isStateCorrupted(state: SerializedState): boolean {
-  // Check for common corruption patterns:
-  // 1. Pages with broken photo references (photo indices pointing nowhere)
-  // 2. All pages are empty but state claims to have photos
+  // Corruption = pages with broken photo references (photo indices pointing
+  // nowhere).
   // NOTE: Dead blob URLs are NOT corruption — rehydration effect restores
   // them from IndexedDB on mount. Do NOT purge here.
   if (!state.albumPages || state.albumPages.length === 0) return false; // Clean slate
 
   const totalPhotos = state.uploadedPhotos?.length ?? 0;
 
-  const hasAnyContent = state.albumPages.some((p) =>
-    (p.photos?.length ?? 0) > 0 ||
-    (p.slotFills?.some((f) => f !== null) ?? false) ||
-    (p.textElements?.length ?? 0) > 0
-  );
-
-  // Has photos uploaded but no content anywhere = likely corrupted
-  if (totalPhotos > 0 && !hasAnyContent) return true;
+  // NOTE: "photos uploaded but nothing on the pages" is NOT corruption — it is
+  // every album between the upload step and Generate. Treating it as corrupt
+  // deleted that album the moment the customer came back to it.
 
   // Check for out-of-bounds photo indices in slot fills
   const maxPhotoIndex = totalPhotos - 1;
@@ -354,6 +374,7 @@ function getInitialState(): SerializedState {
       photosPerPage: undefined,
       coverDesign: DEFAULT_COVER_DESIGN,
       coverFront: createCoverPage('8x8'),
+      title: '',
     };
   }
 
@@ -393,6 +414,10 @@ function getInitialState(): SerializedState {
     coverDesign: effectiveSaved?.coverDesign ?? DEFAULT_COVER_DESIGN,
     coverFront: effectiveSaved?.coverFront
       ?? (effectiveSaved?.coverDesign ? coverDesignToFront(effectiveSaved.coverDesign, effectiveSaved?.albumSize ?? defaultSize) : createCoverPage(effectiveSaved?.albumSize ?? defaultSize)),
+    title: effectiveSaved?.title ?? '',
+    albumId: effectiveSaved?.albumId,
+    accountId: effectiveSaved?.accountId ?? null,
+    editedAt: effectiveSaved?.editedAt ?? 0,
   };
 }
 
@@ -438,6 +463,10 @@ export interface BuilderActions {
   setEditScope: (s: 'interior' | 'coverFront') => void;
   /** Apply a cover layout template to the active cover page (respects editScope). */
   applyCoverLayout: (templateId: string) => void;
+
+  /** The album's name, asked on wizard step 1. Saved as its title. */
+  albumTitle: string;
+  setAlbumTitle: (title: string) => void;
 
   // Photos
   uploadedPhotos: UploadedPhoto[];
@@ -635,6 +664,7 @@ export function useBuilderState(): BuilderActions {
   const [albumType, setAlbumTypeState] = useState<AlbumType>(() => getInitialState().albumType);
   const [albumSize, setAlbumSizeState] = useState<AlbumSizePreset>(() => getInitialState().albumSize);
   const [selectedTemplate, setSelectedTemplateState] = useState<TemplateType>(() => getInitialState().selectedTemplate);
+  const [albumTitle, setAlbumTitle] = useState<string>(() => getInitialState().title ?? '');
   const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>(() => getInitialState().uploadedPhotos);
   // Live mirror of uploadedPhotos so addPhotos can dedup against the current set
   // (and same-tick repeats) without a stale closure.
@@ -649,6 +679,25 @@ export function useBuilderState(): BuilderActions {
    *  by the time the measurement promise resolves, so the state (and the ref
    *  mirroring it) can still say 0×0. This map cannot. */
   const measuredRef = useRef<Map<string, { width: number; height: number }>>(new Map());
+  /** This album's row id in the cloud. Minted when the draft starts and kept in
+   *  the draft. It used to come from the first save and was never written
+   *  down, so every new session saved the same album as ANOTHER row — Your
+   *  Projects filled with copies, and a copy could be a stale one. */
+  const albumIdRef = useRef<string | undefined>(undefined);
+  if (albumIdRef.current === undefined) albumIdRef.current = getInitialState().albumId ?? newAlbumId();
+  /** Account this draft belongs to (SerializedState.accountId). */
+  const draftAccountRef = useRef<string | null | undefined>(undefined);
+  if (draftAccountRef.current === undefined) draftAccountRef.current = getInitialState().accountId ?? null;
+  if (user?.id && draftAccountRef.current !== user.id) {
+    // Another account picked this draft up on a shared device. Its album id
+    // belongs to the first account (a save to it would be refused), so from
+    // here on it is a new album of this account.
+    if (draftAccountRef.current) albumIdRef.current = newAlbumId();
+    draftAccountRef.current = user.id;
+  }
+  /** When the album last changed on this device (SerializedState.editedAt). */
+  const editedAtRef = useRef<number | undefined>(undefined);
+  if (editedAtRef.current === undefined) editedAtRef.current = getInitialState().editedAt ?? 0;
   const [albumPages, setAlbumPages] = useState<AlbumPage[]>(() => getInitialState().albumPages);
   const [generating, setGenerating] = useState<GeneratingPhase | null>(null);
   const albumPagesRef = useRef(albumPages);
@@ -806,7 +855,6 @@ export function useBuilderState(): BuilderActions {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cloudAlbumIdRef = useRef<string | undefined>(undefined);
   const skipCloudLoadRef = useRef(false);
 
   const currentPage =
@@ -818,8 +866,8 @@ export function useBuilderState(): BuilderActions {
     // Only sync lightweight metadata to Supabase DB.
     // Actual photo bytes stay in IndexedDB — zero cloud Storage I/O.
     return {
-      id: cloudAlbumIdRef.current,
-      title: 'My Album',
+      id: albumIdRef.current,
+      title: albumNameToSave(albumTitle),
       sizePreset: albumSize,
       pages: albumPages as unknown as AlbumData['pages'],
       photos: uploadedPhotos.map((p) => ({
@@ -829,7 +877,7 @@ export function useBuilderState(): BuilderActions {
       })),
       coverPhoto: pageSnapshotsRef.current[albumPages[0]?.id] ?? null,
     };
-  }, [albumSize, albumPages, uploadedPhotos]);
+  }, [albumTitle, albumSize, albumPages, uploadedPhotos]);
 
   /* ── Persistence strategy ──
      • Local (localStorage): debounced ~30s — cheap and client-only.
@@ -846,7 +894,7 @@ export function useBuilderState(): BuilderActions {
     justLoaded: () => boolean;
   } | null>(null);
   persistRef.current = {
-    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront },
+    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, title: albumTitle, albumId: albumIdRef.current, accountId: draftAccountRef.current },
     serializeAlbum,
     save: albumSync.save,
     userId: user?.id,
@@ -855,18 +903,26 @@ export function useBuilderState(): BuilderActions {
   };
 
   const flushLocal = useCallback(() => {
-    if (persistRef.current) saveState(persistRef.current.local);
+    // editedAt is read at flush time: it is set by the change effect, which
+    // runs AFTER the render that built persistRef.
+    if (persistRef.current) saveState({ ...persistRef.current.local, editedAt: editedAtRef.current });
   }, []);
 
   const flushCloud = useCallback(() => {
     const p = persistRef.current;
     if (!p || !p.userId || p.isLoadingCloud || p.justLoaded() || !cloudDirtyRef.current) return;
+    // Nothing worth keeping yet (no photos, nothing on a page, no name): don't
+    // save it. Opening the builder and leaving used to add an empty "My Album"
+    // to Your Projects every time — one "resume" could then offer.
+    if (!draftHasContent(p.local) && !cleanAlbumName(p.local.title)) return;
     cloudDirtyRef.current = false;
     setCloudSaveStatus('saving');
     p.save(p.userId, p.serializeAlbum())
       .then((result) => {
         if (result.success) {
-          if (result.albumId) cloudAlbumIdRef.current = result.albumId;
+          // The album id is minted with the draft; never adopt one from a
+          // reply — a reply landing after "Start Creating" would point the NEW
+          // album at the old album's row.
           setCloudSaveStatus('saved');
           setLastSavedAt(new Date());
         } else {
@@ -878,12 +934,15 @@ export function useBuilderState(): BuilderActions {
   }, []);
 
   // Any change → mark cloud dirty + debounce the LOCAL save (~30s).
+  const changeEffectRanRef = useRef(false);
   useEffect(() => {
+    if (changeEffectRanRef.current) editedAtRef.current = Date.now();
+    changeEffectRanRef.current = true;
     cloudDirtyRef.current = true;
     if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(flushLocal, 30000);
     return () => { if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current); };
-  }, [albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, flushLocal]);
+  }, [albumType, albumSize, selectedTemplate, albumTitle, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, flushLocal]);
 
   // Cloud backup every 10 minutes (only if something changed).
   useEffect(() => {
@@ -954,12 +1013,12 @@ export function useBuilderState(): BuilderActions {
         // If localStorage has meaningful data (photos, slot fills, text),
         // the user did work locally that hasn't been synced yet.
         // Skip cloud load; local data will auto-save to cloud shortly.
-        const hasLocalData = albumPages.some((p) =>
-          (p.photos?.length ?? 0) > 0 ||
-          (p.slotFills?.some((f) => f !== null) ?? false) ||
-          (p.textElements?.length ?? 0) > 0
-        );
-        if (hasLocalData) {
+        // Uploaded photos ARE local work — an album uploaded but not generated
+        // yet. (That state used to be wiped as "corrupt" on load, so it never
+        // got here; now it survives, and swapping it for the latest cloud
+        // album would lose it. Which album to open is the resume prompt's
+        // question — asked, never assumed.)
+        if (draftHasContent({ uploadedPhotos, albumPages })) {
           setIsLoadingCloud(false);
           return;
         }
@@ -1003,8 +1062,9 @@ export function useBuilderState(): BuilderActions {
             setUploadedPhotos(restored);
           }
           if (albumData.id) {
-            cloudAlbumIdRef.current = albumData.id;
+            albumIdRef.current = albumData.id;
           }
+          setAlbumTitle(albumData.title ?? '');
         }
       } finally {
         if (!cancelled) {
@@ -1084,7 +1144,16 @@ export function useBuilderState(): BuilderActions {
         })
       );
 
-      setUploadedPhotos(rehydrated);
+      // Patch by id, never replace the list: an album opened from Your Projects
+      // or the resume prompt (loadAlbum) can land while this runs, and
+      // overwriting its photos with this draft's pairs its pages with the
+      // wrong photos. Only touch a photo still exactly as we found it.
+      const startedFrom = new Map(uploadedPhotos.map((p) => [p.id, p.previewUrl]));
+      const byId = new Map(rehydrated.map((p) => [p.id, p]));
+      setUploadedPhotos((prev) => prev.map((p) => {
+        const r = byId.get(p.id);
+        return r && p.previewUrl === startedFrom.get(p.id) ? r : p;
+      }));
     }
 
     void rehydrate();
@@ -1156,15 +1225,18 @@ export function useBuilderState(): BuilderActions {
       if (!file) continue;
       const task = (async () => {
         const stored = await idbPhotos.store(file, photo.id);
+        // A failed write (e.g. a full disk) returns null — still measure, or the
+        // photo stays 0×0 and gets classified by guesswork.
+        const dims = stored ?? await getImageDimensions(file);
         const capturedAt = await readCaptureTime(file);
         // Record the size SYNCHRONOUSLY here — see measuredRef.
-        if (stored && stored.width > 0 && stored.height > 0) {
-          measuredRef.current.set(photo.id, { width: stored.width, height: stored.height });
+        if (dims.width > 0 && dims.height > 0) {
+          measuredRef.current.set(photo.id, { width: dims.width, height: dims.height });
         }
         setUploadedPhotos((prev) =>
           prev.map((p) =>
             p.id === photo.id
-              ? { ...p, ...(stored ? { width: stored.width, height: stored.height } : {}), capturedAt }
+              ? { ...p, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), capturedAt }
               : p,
           ),
         );
@@ -2586,9 +2658,6 @@ export function useBuilderState(): BuilderActions {
     setCloudSaveStatus('saving');
     const result = await albumSync.save(user.id, serializeAlbum());
     if (result.success) {
-      if (result.albumId) {
-        cloudAlbumIdRef.current = result.albumId;
-      }
       cloudDirtyRef.current = false;
       setCloudSaveStatus('saved');
       setLastSavedAt(new Date());
@@ -2608,10 +2677,47 @@ export function useBuilderState(): BuilderActions {
 
   /* ── Reset ── */
   const reset = useCallback(() => {
-    // ── LEAK FIX #4: Clear IndexedDB photos ──
-    // Without this, old photos from previous sessions survive reset()
-    // and leak into new albums via the rehydration effect.
-    idbPhotos.clear().catch(() => { /* ignore */ });
+    // ── The album being put away ──
+    // What is on disk (Home → "Start Creating" arrives here with an already-
+    // empty state) plus what is in memory (a restart can land inside the 30 s
+    // local-save debounce).
+    const stored = loadState();
+    const discardedPhotoIds = [...(stored?.uploadedPhotos ?? []), ...uploadedPhotosRef.current].map((p) => p.id);
+    const discardedAccount = stored?.accountId ?? draftAccountRef.current ?? null;
+    const leaving: AlbumData | null = draftHasContent(persistRef.current?.local)
+      ? serializeAlbum()
+      : stored && draftHasContent(stored)
+        ? {
+            id: stored.albumId,
+            title: albumNameToSave(stored.title),
+            sizePreset: stored.albumSize ?? '8x8',
+            pages: (stored.albumPages ?? []) as unknown as AlbumData['pages'],
+            photos: (stored.uploadedPhotos ?? []).map((p) => ({ id: p.id, name: p.name })),
+          }
+        : null;
+    // getSession reads the saved session directly, so this is right even while
+    // the auth context is still loading (it is, on the fresh-start mount).
+    void supabase.auth.getSession().then(async ({ data }) => {
+      const session = data.session;
+      // 1. Its latest version goes to the account before we let go. The cloud
+      //    copy is only refreshed every 10 min or on leaving, so the draft on
+      //    this device can be newer — and it is the album the customer will
+      //    come back to.
+      if (session && leaving && (!discardedAccount || discardedAccount === session.user.id)) {
+        await albumSync.save(session.user.id, leaving);
+      }
+      // 2. Its photos. This used to wipe the WHOLE photo store — which every
+      //    saved album on the device shares — so each "Start Creating" or
+      //    restart left every saved album blank when the customer came back.
+      //    Only a draft that never touched an account loses its photos now.
+      //    (Nothing leaks into the new album: rehydration only looks up the
+      //    ids in uploadedPhotos, which is emptied below.)
+      await idbPhotos.deleteMany(photosToForget({ photoIds: discardedPhotoIds, accountId: discardedAccount }, !!session));
+    }).catch(() => { /* can't tell who is signed in → keep everything */ });
+    draftAccountRef.current = user?.id ?? null;
+    albumIdRef.current = newAlbumId();
+    editedAtRef.current = 0;
+    setAlbumTitle('');
 
     setAlbumTypeState('standard');
     setAlbumSizeState('8x8');
@@ -2628,12 +2734,11 @@ export function useBuilderState(): BuilderActions {
     // ── Phase 1: Clear cloud state ──
     setCloudSaveStatus('idle');
     setLastSavedAt(null);
-    cloudAlbumIdRef.current = undefined;
     skipCloudLoadRef.current = true;  // Prevent cloud load from overwriting fresh state
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     // ── Clear wizard state so it restarts from step 1 ──
     try { localStorage.removeItem('megy_wizard_state'); } catch { /* ignore */ }
-  }, [idbPhotos]);
+  }, [idbPhotos, albumSync, serializeAlbum, user]);
 
   /* ── Load specific album by ID — SAFE: respects local data ── */
   const cloudLoadCompletedRef = useRef<number>(0);
@@ -2646,7 +2751,22 @@ export function useBuilderState(): BuilderActions {
     // localStorage. The guard is kept only in loadFromCloud (auto-load).
     setIsLoadingCloud(true);
     try {
+      // The album on screen is about to be replaced. If it is a DIFFERENT
+      // album with real work in it, push its latest version to the account
+      // first — the draft on this device can be newer than its cloud copy.
+      const onScreen = persistRef.current?.local;
+      if (albumIdRef.current !== albumId && draftHasContent(onScreen)) {
+        void albumSync.save(user.id, serializeAlbum());
+      }
       const albumData = await albumSync.load(user.id, albumId);
+      // SAME album, and this device changed it after the cloud copy was saved
+      // (the cloud is refreshed only every 10 min / on leaving): the copy on
+      // this device is the newer one — keep it, don't roll it back.
+      const cloudSavedAt = Date.parse(albumData?.updatedAt ?? '') || 0;
+      if (albumData && albumIdRef.current === albumId && draftHasContent(onScreen) && (editedAtRef.current ?? 0) >= cloudSavedAt) {
+        setPhase('edit');
+        return;
+      }
       if (albumData) {
         if (albumData.sizePreset) {
           setAlbumSizeState(albumData.sizePreset as AlbumSizePreset);
@@ -2689,15 +2809,17 @@ export function useBuilderState(): BuilderActions {
           setUploadedPhotos(restored);
         }
         if (albumData.id) {
-          cloudAlbumIdRef.current = albumData.id;
+          albumIdRef.current = albumData.id;
         }
+        draftAccountRef.current = user.id;
+        setAlbumTitle(albumData.title ?? '');
         setPhase('edit');
       }
     } finally {
       setIsLoadingCloud(false);
       cloudLoadCompletedRef.current = Date.now();
     }
-  }, [user, albumSync, albumSize, albumPages]);
+  }, [user, albumSync, albumSize, albumPages, serializeAlbum]);
 
   return {
     albumType,
@@ -2706,6 +2828,8 @@ export function useBuilderState(): BuilderActions {
     setAlbumSize: setAlbumSizeState,
     setAlbumType: setAlbumTypeState,
     setSelectedTemplate: setSelectedTemplateState,
+    albumTitle,
+    setAlbumTitle,
     uploadedPhotos,
     addPhotos,
     removePhoto,

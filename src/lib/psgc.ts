@@ -37,20 +37,27 @@ export async function loadProvinces(regionCode: string): Promise<PsgcItem[]> {
   return all.filter((p) => p.regCode === regionCode);
 }
 
-/** Every province across all regions — each carries its regCode so the region
- *  can be derived once a province is chosen (the picker asks for province, not
- *  region). */
+/** Every province across all regions (82 provinces + Metro Manila + the BARMM
+ *  Special Geographic Area — cities are listed under their province, never as
+ *  one; see scripts/build-psgc.mjs). Each carries its regCode. */
 export const loadAllProvinces = () => loadJson<ProvinceItem[]>('provinces.json');
 
-/** Cities/municipalities within a province (provinceCode = regCode+provCode). */
+/** Cities/municipalities listed under a province entry (its `code`). */
 export async function loadCities(provinceCode: string): Promise<PsgcItem[]> {
   const all = await loadJson<Muncity[]>('muncities.json');
   return all.filter((m) => m.provKey === provinceCode);
 }
 
-/** Barangays within a city. Fetches only the selected province's barangay file
- *  (public/psgc/brgy/<provinceCode>.json) then filters to the chosen city. */
-export async function loadBarangays(provinceCode: string, cityCode: string): Promise<PsgcItem[]> {
-  const all = await loadJson<Barangay[]>(`brgy/${provinceCode}.json`);
+/** A city's PSGC province-level unit — the first 5 chars of its code. That's
+ *  its barangay file, and it can differ from the province it's LISTED under
+ *  (Makati is its own unit but listed under Metro Manila). Its first 2 chars
+ *  are the city's region. */
+export const cityUnit = (cityCode: string) => cityCode.slice(0, 5);
+export const cityRegion = (cityCode: string) => cityCode.slice(0, 2);
+
+/** Barangays within a city. Fetches only the city's own barangay file
+ *  (public/psgc/brgy/<unit>.json) then filters to the chosen city. */
+export async function loadBarangays(cityCode: string): Promise<PsgcItem[]> {
+  const all = await loadJson<Barangay[]>(`brgy/${cityUnit(cityCode)}.json`);
   return all.filter((b) => b.cityKey === cityCode);
 }

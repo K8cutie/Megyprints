@@ -86,7 +86,9 @@ function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
     album_size: albumData.sizePreset,
     pages: albumData.pages as unknown as Record<string, unknown>[],
     photos: photosMeta,
-    cover_photo: albumData.coverPhoto ?? null,
+    // Only when the caller has one to say — a save built from a stored draft
+    // has no thumbnail and must not blank the one already saved.
+    ...(albumData.coverPhoto !== undefined ? { cover_photo: albumData.coverPhoto } : {}),
     updated_at: new Date().toISOString(),
   };
 }
@@ -232,7 +234,9 @@ export function useAlbumSync(): UseAlbumSyncReturn {
         .from('albums')
         // List view only needs lightweight columns — NOT the full `pages` JSON.
         // The full album is fetched on demand via load() when one is opened.
-        .select('id, title, album_size, cover_photo, created_at, updated_at')
+        // `photos` is just ids + names; the resume prompt uses it to skip
+        // empty albums.
+        .select('id, title, album_size, photos, cover_photo, created_at, updated_at')
         .eq('user_id', userId)
         .order('updated_at', { ascending: false });
 
