@@ -28,6 +28,7 @@ import type {
 import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset, FrameStyle, SlotText } from './types';
 import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
 import { dedupeSlotFills } from './slotUtils';
+import { pagePhotoKey } from './pagePhotoKey';
 import { textureDataUri } from './textures';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
@@ -761,7 +762,9 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       return; /* Same page, still editing — skip render */
     }
 
-    const fingerprint = pageFingerprint(actions.currentPageIndex, currentPage) + '|cm:' + (containerModeRef.current ? '1' : '0');
+    // + the URLs of the photos this page draws: after a reload IndexedDB swaps
+    // in live URLs for the same indexes, and the page must repaint to show them.
+    const fingerprint = pageFingerprint(actions.currentPageIndex, currentPage) + '|ph:' + pagePhotoKey(currentPage, uploadedPhotos) + '|cm:' + (containerModeRef.current ? '1' : '0');
     if (lastStructuralRef.current === fingerprint) return;
     lastStructuralRef.current = fingerprint;
 

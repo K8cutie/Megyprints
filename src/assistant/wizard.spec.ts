@@ -211,6 +211,35 @@ describe('the album name rules', () => {
   });
 });
 
+describe('a returning customer reloads straight onto Review (2026-09-30)', () => {
+  /* The engine used to start a returning customer at pick_size (phase setup)
+     and only reach review after mount, so the center flipped edit → setup →
+     edit in one tick; AnimatePresence mode="wait" then stranded the size
+     picker on screen. The panel now reconciles the new engine BEFORE its first
+     render reads the step. */
+  const filled = { slotFills: [0], photos: [], textElements: [] };
+  const album = Array.from({ length: 40 }, () => filled);
+
+  it('a generated album: the engine lands on review, so the first phase is edit', () => {
+    const w = new WizardEngine(builderStub({ phase: 'edit', albumPages: album } as unknown as Partial<BuilderActions>), false);
+    expect(w.state.step).toBe('pick_size'); // what the constructor alone gives
+    expect(w.reconcileForward()).toBe(true);
+    expect(w.state.step).toBe('review_pages');
+    expect(phaseForStep(w.state.step)).toBe('edit');
+    expect(w.state.completed).toEqual(['pick_size', 'design_cover', 'upload_photos']);
+  });
+
+  it('never moves backward, and leaves a first visit on welcome', () => {
+    const w = new WizardEngine(builderStub({ phase: 'edit' }), false);
+    w.state.step = 'review_pages';
+    expect(w.reconcileForward()).toBe(false); // an empty album is not a reason to go back
+    expect(w.state.step).toBe('review_pages');
+    const first = new WizardEngine(builderStub(), true);
+    expect(first.reconcileForward()).toBe(false);
+    expect(first.state.step).toBe('welcome');
+  });
+});
+
 describe('the Style step is gone (owner, 2026-09-14)', () => {
   it('seven steps; the cover hands straight to photos', () => {
     expect(WIZARD_ORDER).toEqual(['welcome', 'pick_theme', 'pick_size', 'design_cover', 'upload_photos', 'review_pages', 'add_text', 'finalize']);

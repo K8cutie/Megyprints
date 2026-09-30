@@ -145,7 +145,17 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   /* ── Wizard state ── */
   const isFirstTime = !localStorage.getItem(WIZARD_STORAGE_KEY);
-  const wizardRef = useRef(new WizardEngine(builder, isFirstTime));
+  // Built ONCE and reconciled BEFORE the first render reads its step. A
+  // returning customer's engine starts at pick_size (phase setup) and used to
+  // reach review only after mount — the center flipped edit → setup → edit in
+  // one tick, and AnimatePresence mode="wait" stranded the size picker on
+  // screen with the finished album loaded behind it.
+  const [engine] = useState(() => {
+    const e = new WizardEngine(builder, isFirstTime);
+    e.reconcileForward();
+    return e;
+  });
+  const wizardRef = useRef(engine);
   // Keep the wizard's builder in sync DURING render (not in an effect) so
   // getMessage() always reads the current page/state — otherwise the review
   // message lags a render behind page navigation.
@@ -155,7 +165,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   /* ── Auto-sync wizard when builder PHASE changes ──
      Only sync when user explicitly transitions phases (setup→edit→preview).
      During setup, the wizard stays at whatever step the user is on. */
-  const [wizardStep, setWizardStep] = useState(wizardRef.current.state.step);
+  const [wizardStep, setWizardStep] = useState(engine.state.step);
   const prevPhaseRef = useRef(builder.phase);
 
   /* ── Album occasion (pick_theme, unskippable) ──
@@ -225,21 +235,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
      size step. Never yanks the user backward mid-setup. ── */
   useEffect(() => {
     prevPhaseRef.current = builder.phase;
-    const detected = wizardRef.current.detectStep();
-    const current = wizardRef.current.state.step;
-    if (detected !== current) {
-      const currentIdx = WIZARD_ORDER.indexOf(current);
-      const detectedIdx = WIZARD_ORDER.indexOf(detected);
-      if (detectedIdx > currentIdx) {
-        for (let i = currentIdx; i < detectedIdx; i++) {
-          if (!wizardRef.current.state.completed.includes(WIZARD_ORDER[i])) {
-            wizardRef.current.state.completed.push(WIZARD_ORDER[i]);
-          }
-        }
-        wizardRef.current.state.step = detected;
-        setWizardStep(detected);
-      }
-    }
+    if (wizardRef.current.reconcileForward()) setWizardStep(wizardRef.current.state.step);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [builder.phase, builder.albumPages.length]);
 
