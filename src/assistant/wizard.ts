@@ -163,6 +163,22 @@ export class WizardEngine {
     return isStepOneReady(this.builder.albumTitle);
   }
 
+  /* ── Reconcile FORWARD to reality ──
+     Jump to detectStep() when it is AHEAD of the current step, marking the
+     steps in between complete. Never moves backward — mid-setup, the step the
+     customer is on is theirs. Returns whether the step moved. */
+  reconcileForward(): boolean {
+    const detected = this.detectStep();
+    const from = WIZARD_ORDER.indexOf(this.state.step);
+    const to = WIZARD_ORDER.indexOf(detected);
+    if (to <= from) return false;
+    for (let i = from; i < to; i++) {
+      if (!this.state.completed.includes(WIZARD_ORDER[i])) this.state.completed.push(WIZARD_ORDER[i]);
+    }
+    this.state.step = detected;
+    return true;
+  }
+
   /* ── Advance to next step ── */
   advance() {
     const currentIdx = WIZARD_ORDER.indexOf(this.state.step);
