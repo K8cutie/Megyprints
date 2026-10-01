@@ -4,10 +4,11 @@ import { afterEach, beforeEach, vi, type MockInstance } from 'vitest';
    SEEDED Math.random FOR THE ALBUM-GENERATOR SPECS (2026-10-02).
    generateAlbum deals with Math.random (box rolls, shuffle bags, the fill
    plan, hero cadence), so every `npm test` used to build different albums.
-   A spec asserting "a healthy number of quotes" failed about 1 run in 70 and
-   could randomly fail a PR's required `verify` check. Seeding the specs —
-   never the product — makes every run build the same albums, in the full
-   suite or in isolation.
+   Two specs fail on an unlucky one: "quotes still land" (about 1 album in
+   70) and the 6x6 rhythm check (about 1 in 100). Unseeded, 4 of 150 runs
+   went red, and any of them would have failed a PR's required `verify`
+   check. Seeding the specs (never the product) makes every run build the
+   same albums, whether a test runs in the full suite or alone.
 
    Other seeds are still worth a look after a generator change:
      TEST_SEED=7 npx vitest run src/pages/builder
