@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep, forwardJumpTarget, isStepOneReady } from './wizard';
+import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep, forwardJumpTarget, isStepOneReady, bootWizard, readSavedWizard, WIZARD_STORAGE_KEY, type WizardStep } from './wizard';
 import { isAlbumNameReady, albumNameToSave, cleanAlbumName, UNNAMED_ALBUM } from '../lib/albumName';
 import { ALBUM_THEME_KEY, isAlbumThemeReady, cleanAlbumTheme } from '../lib/albumTheme';
+import { FRESH_START_KEY } from '../lib/albumSession';
 import type { BuilderActions as BuilderActions } from '../pages/builder/useBuilderState';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -237,6 +238,158 @@ describe('a returning customer reloads straight onto Review (2026-09-30)', () =>
     const first = new WizardEngine(builderStub(), true);
     expect(first.reconcileForward()).toBe(false);
     expect(first.state.step).toBe('welcome');
+  });
+});
+
+describe('a reload restores the saved journey (2026-10-02)', () => {
+  /* Nothing read the saved state back (deserialize had no caller), and only
+     the ✕ ever wrote it. A returning engine restarted at pick_size with
+     nothing completed, so a customer with photos in re-walked size → cover →
+     upload after every reload. The panel now saves the journey on every step
+     change and boots from it (bootWizard). */
+  const empty = { slotFills: [], photos: [], textElements: [] };
+  const filled = { slotFills: [0], photos: [], textElements: [] };
+  const unbuilt = Array.from({ length: 40 }, () => empty);
+  const built = Array.from({ length: 40 }, () => filled);
+  const photos = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const saved = (state: { step: string; completed?: string[]; skipped?: string[]; isFirstTime?: boolean }) =>
+    JSON.stringify({ completed: [], skipped: [], isFirstTime: false, ...state });
+  /** The state from the report: the cover is done, the customer is on the upload step. */
+  const UPLOAD = saved({ step: 'upload_photos', completed: ['welcome', 'pick_theme', 'pick_size', 'design_cover'] });
+  /** Photos in, album not generated yet — the builder opens on 'setup'. */
+  const notGenerated = (over: Partial<BuilderActions> = {}) =>
+    builderStub({ phase: 'setup', albumPages: unbuilt, uploadedPhotos: photos, ...over } as unknown as Partial<BuilderActions>);
+  const generated = () =>
+    builderStub({ phase: 'edit', albumPages: built, uploadedPhotos: photos } as unknown as Partial<BuilderActions>);
+  beforeEach(() => { store[ALBUM_THEME_KEY] = 'Wedding'; });
+
+  it('the reported case: photos in, not generated — the reload lands on the upload card, not the size step', () => {
+    const { engine } = bootWizard(notGenerated(), UPLOAD);
+    expect(engine.state.step).toBe('upload_photos');
+    expect(phaseForStep(engine.state.step)).toBe('edit');
+    expect(engine.state.completed).toEqual(['welcome', 'pick_theme', 'pick_size', 'design_cover']);
+    expect(engine.getMessage().title).toBe('Step 4: Photos Uploaded (3) 📸');
+  });
+
+  it('skipped comes back too — a skipped cover still leads to the upload step', () => {
+    const { engine } = bootWizard(notGenerated(), saved({ step: 'upload_photos', completed: ['welcome', 'pick_theme', 'pick_size'], skipped: ['design_cover'] }));
+    expect(engine.state.step).toBe('upload_photos');
+    expect(engine.state.skipped).toEqual(['design_cover']);
+    expect(engine.detectStep()).toBe('upload_photos'); // the flags agree, so a later reconcile holds the step
+  });
+
+  it('a reload on the cover step opens the cover', () => {
+    const { engine } = bootWizard(notGenerated({ uploadedPhotos: [] }), saved({ step: 'design_cover', completed: ['welcome', 'pick_theme', 'pick_size'] }));
+    expect(engine.state.step).toBe('design_cover');
+    expect(phaseForStep(engine.state.step)).toBe('cover');
+  });
+
+  it('step 1 still guards a restore: no occasion, or no name, lands on it — and nothing after it counts as done', () => {
+    delete store[ALBUM_THEME_KEY];
+    const noTheme = bootWizard(notGenerated(), UPLOAD).engine;
+    expect(noTheme.state.step).toBe('pick_theme');
+    expect(noTheme.state.completed).toEqual(['welcome']);
+    expect(phaseForStep(noTheme.state.step)).toBe('setup');
+
+    store[ALBUM_THEME_KEY] = 'Wedding';
+    const noName = bootWizard(notGenerated({ albumTitle: '' }), UPLOAD).engine;
+    expect(noName.state.step).toBe('pick_theme');
+    expect(noName.state.completed).toEqual(['welcome']);
+    // Answering it walks on to the size step; the old flags don't fling the
+    // customer past size and cover.
+    noName.builder = notGenerated({ albumTitle: 'Ana & Ben' });
+    noName.advance();
+    expect(noName.state.step).toBe('pick_size');
+    expect(noName.reconcileForward()).toBe(false);
+  });
+
+  it('stale flags cannot carry a reconcile past an unanswered step 1', () => {
+    // Saved ON step 1 (the customer went back to it) with later steps done.
+    delete store[ALBUM_THEME_KEY];
+    const { engine } = bootWizard(notGenerated(), saved({ step: 'pick_theme', completed: ['welcome', 'pick_theme', 'pick_size', 'design_cover'] }));
+    expect(engine.state.step).toBe('pick_theme');
+    expect(engine.state.completed).toEqual(['welcome']);
+  });
+
+  it('review, text and finalize need a BUILT album — without one the journey resumes at upload', () => {
+    for (const step of ['review_pages', 'add_text', 'finalize']) {
+      const { engine } = bootWizard(notGenerated(), saved({ step, completed: ['welcome', 'pick_theme', 'pick_size', 'design_cover', 'upload_photos'] }));
+      expect(engine.state.step, step).toBe('upload_photos');
+    }
+  });
+
+  it('keeps #39: a generated album boots onto its own step from ANY save — never through setup', () => {
+    for (const answered of [true, false]) {
+      if (answered) store[ALBUM_THEME_KEY] = 'Wedding'; else delete store[ALBUM_THEME_KEY];
+      for (const step of WIZARD_ORDER) {
+        const { engine } = bootWizard(generated(), saved({ step, completed: WIZARD_ORDER.slice(0, WIZARD_ORDER.indexOf(step)) }));
+        // Text and finalize are ahead of Review and come back as they were;
+        // everything earlier is carried forward to Review. Unanswered step 1
+        // does not pull a built album back to setup (the quotes are dealt).
+        const expected: WizardStep = answered && (step === 'add_text' || step === 'finalize') ? step : 'review_pages';
+        const label = `${step}, step 1 ${answered ? 'answered' : 'unanswered'}`;
+        expect(engine.state.step, label).toBe(expected);
+        expect(phaseForStep(engine.state.step), label).not.toBe('setup');
+      }
+    }
+  });
+
+  it('anything unreadable falls back safely — a retired step, junk fields, not JSON at all', () => {
+    // The Style step (pick_background) was retired 2026-09-14. A save from
+    // before then still carries its completed steps forward.
+    const retired = bootWizard(notGenerated(), saved({ step: 'pick_background', completed: ['welcome', 'pick_theme', 'pick_size', 'design_cover', 'pick_background'] })).engine;
+    expect(retired.state.step).toBe('upload_photos');
+    expect(retired.state.completed).not.toContain('pick_background');
+
+    const junk = bootWizard(notGenerated(), JSON.stringify({ step: 42, completed: 'all', skipped: null })).engine;
+    expect(junk.state.step).toBe('pick_size'); // a returning customer's start
+    expect(junk.state.completed).toEqual([]);
+    expect(junk.state.skipped).toEqual([]);
+
+    for (const raw of ['{not json', 'null', '[]', '"upload_photos"']) {
+      expect(bootWizard(notGenerated(), raw).engine.state.step, raw).toBe('pick_size');
+    }
+  });
+
+  it('no save is a first visit; a dismissed card stays dismissed; an old key (only ✕ wrote one) counts as dismissed', () => {
+    const first = bootWizard(notGenerated(), null);
+    expect(first.engine.state.step).toBe('welcome');
+    expect(first.dismissed).toBe(false);
+
+    const onCover = new WizardEngine(notGenerated(), false);
+    onCover.state.step = 'design_cover';
+    expect(bootWizard(notGenerated(), onCover.serialize(false)).dismissed).toBe(false);
+    expect(bootWizard(notGenerated(), onCover.serialize(true)).dismissed).toBe(true);
+    expect(bootWizard(notGenerated(), saved({ step: 'design_cover' })).dismissed).toBe(true);
+  });
+
+  it('what serialize saves, boot restores — step, completed and skipped', () => {
+    const before = new WizardEngine(notGenerated(), true);
+    before.advance(); // welcome → pick_theme
+    before.advance(); // → pick_size
+    before.advance(); // → design_cover
+    before.skip();    // cover skipped → upload_photos
+    expect(before.state.step).toBe('upload_photos');
+    const after = bootWizard(notGenerated(), before.serialize()).engine;
+    expect(after.state).toEqual(before.state);
+  });
+
+  it('a fresh start (Home → Create New Album) never brings the old journey back', () => {
+    store[WIZARD_STORAGE_KEY] = UPLOAD;
+    expect(readSavedWizard()).toBe(UPLOAD);
+    const s = globalThis as unknown as { sessionStorage?: unknown };
+    s.sessionStorage = { getItem: (k: string) => (k === FRESH_START_KEY ? '1' : null) };
+    try {
+      expect(readSavedWizard()).toBeNull();
+      expect(bootWizard(notGenerated(), readSavedWizard()).engine.state.step).toBe('welcome');
+    } finally {
+      delete s.sessionStorage;
+    }
+  });
+
+  it('storage that throws (private mode) is a first visit, not a crash', () => {
+    g.localStorage = { getItem: () => { throw new Error('denied'); } };
+    expect(readSavedWizard()).toBeNull();
   });
 });
 

@@ -5,6 +5,7 @@
 
 import { readAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
 import { cleanAlbumName, isAlbumNameReady } from '../lib/albumName';
+import { FRESH_START_KEY } from '../lib/albumSession';
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AlbumSizePreset } from '../pages/builder/types';
 import { densityRangeLabel } from '../pages/builder/densities';
@@ -131,16 +132,8 @@ export class WizardEngine {
     // Album finalized → finalize
     if (builder.phase === 'preview') return 'finalize';
 
-    // If a REAL (non-empty) album exists → review. Gating on filled content,
-    // not just page count, covers both an in-session generate and a reloaded
-    // album whose completed[] flags were lost — while preventing a freshly
-    // reset album (exactly 40 EMPTY pages) from dumping the user onto Review.
-    const hasFilledPages = builder.albumPages.some(
-      (p) => (p.slotFills?.some((f) => f != null) ?? false) || p.photos.length > 0,
-    );
-    if (builder.albumPages.length >= 40 && hasFilledPages) {
-      return 'review_pages';
-    }
+    // A REAL album exists → review.
+    if (this.hasBuiltAlbum()) return 'review_pages';
 
     // Cover done (or skipped) → the combined upload + generate step.
     // (The Style step — background / border / frame — was removed 2026-09-14:
@@ -162,6 +155,17 @@ export class WizardEngine {
 
   private stepOneReady(): boolean {
     return isStepOneReady(this.builder.albumTitle);
+  }
+
+  /* A REAL (non-empty) album exists. Gating on filled content, not just page
+     count, covers both an in-session generate and a reloaded album whose
+     completed[] flags were lost — while preventing a freshly reset album
+     (exactly 40 EMPTY pages) from dumping the user onto Review. */
+  private hasBuiltAlbum(): boolean {
+    const pages = this.builder.albumPages;
+    return pages.length >= 40 && pages.some(
+      (p) => (p.slotFills?.some((f) => f != null) ?? false) || p.photos.length > 0,
+    );
   }
 
   /* ── Reconcile FORWARD to reality ──
@@ -368,19 +372,89 @@ export class WizardEngine {
     }
   }
 
-  /* ── Serialize for storage ── */
-  serialize(): string {
-    return JSON.stringify(this.state);
+  /* ── Serialize for storage ──
+     The panel saves this on every step change, plus whether the guided card
+     was dismissed (✕), so a reload picks the journey up where it was. */
+  serialize(dismissed = false): string {
+    return JSON.stringify({ ...this.state, dismissed });
   }
 
-  /* ── Deserialize from storage ── */
+  /* ── Deserialize from storage ──
+     The saved step, completed and skipped come back as they were; anything
+     unreadable (junk, a retired step) falls back to a returning customer's
+     start. Two rules hold on the way in:
+       • review, text and finalize are about a BUILT album. Without one the
+         journey resumes where its completed steps point (upload, usually).
+       • the first step is unskippable. A restore is a jump from the start of
+         the journey, so while the name + occasion are unanswered it lands on
+         them, and nothing after them counts as done — or the next reconcile
+         would carry the customer straight past them on the old flags. */
   static deserialize(data: string, builder: BuilderActions): WizardEngine {
-    const parsed = JSON.parse(data);
+    const saved = parseSaved(data);
+    const steps = (v: unknown): WizardStep[] => (Array.isArray(v) ? v.filter(isWizardStep) : []);
     const engine = new WizardEngine(builder, false);
-    engine.state = { ...engine.state, ...parsed };
+    engine.state = {
+      step: isWizardStep(saved.step) ? saved.step : engine.state.step,
+      completed: steps(saved.completed),
+      skipped: steps(saved.skipped),
+      isFirstTime: saved.isFirstTime === true,
+    };
+    const { state } = engine;
+    if (WIZARD_ORDER.indexOf(state.step) > WIZARD_ORDER.indexOf('upload_photos') && !engine.hasBuiltAlbum()) {
+      state.step = engine.detectStep();
+    }
+    if (!engine.stepOneReady()) {
+      state.step = forwardJumpTarget('welcome', state.step, false);
+      state.completed = state.completed.filter((s) => s === 'welcome');
+      state.skipped = state.skipped.filter((s) => s === 'welcome');
+    }
     return engine;
+  }
+}
+
+function isWizardStep(v: unknown): v is WizardStep {
+  return WIZARD_ORDER.includes(v as WizardStep);
+}
+
+/** The saved object, or {} for anything that is not one. Never throws. */
+function parseSaved(data: string): Record<string, unknown> {
+  try {
+    const v: unknown = JSON.parse(data);
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
   }
 }
 
 /* ── Local storage key ── */
 export const WIZARD_STORAGE_KEY = 'megy_wizard_state';
+
+/** What a previous visit saved, or null for a first visit. Also null when the
+ *  customer just asked for a NEW album (Home → Create New Album): the builder
+ *  resets on mount, and the old album's journey must not come back with it. */
+export function readSavedWizard(): string | null {
+  try {
+    if (sessionStorage.getItem(FRESH_START_KEY) === '1') return null;
+  } catch { /* no sessionStorage: not a fresh start */ }
+  try {
+    return localStorage.getItem(WIZARD_STORAGE_KEY);
+  } catch {
+    return null; // storage blocked: this visit starts like a first one
+  }
+}
+
+/**
+ * The panel's engine on mount: the saved journey when there is one, a first
+ * visit's otherwise — then reconciled FORWARD to the album (a generated album
+ * moves on to Review) before the first render reads its step. Also returns
+ * whether the guided card was dismissed. Until every step was saved, the ✕
+ * was the only thing that wrote the key, so a save without the flag counts
+ * as a dismissal.
+ */
+export function bootWizard(builder: BuilderActions, saved: string | null): { engine: WizardEngine; dismissed: boolean } {
+  const engine = saved == null ? new WizardEngine(builder, true) : WizardEngine.deserialize(saved, builder);
+  engine.reconcileForward();
+  if (saved == null) return { engine, dismissed: false };
+  const { dismissed } = parseSaved(saved);
+  return { engine, dismissed: typeof dismissed === 'boolean' ? dismissed : true };
+}
