@@ -6,9 +6,11 @@ import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, Pa
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_ALBUM_SIZE, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
-import { createOrderFromLatestAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } from '../lib/orders';
-import { getPendingPrintJob } from '../lib/printQueue';
-import { rebuildPrintJobFromLatestAlbum } from '../lib/printJobRebuild';
+import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } from '../lib/orders';
+import { getPendingPrintJob, readOrderHandoff } from '../lib/printQueue';
+import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
+import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError } from '../lib/orderAlbum';
+import { readLocalDraftSummary } from '../lib/localDraft';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
@@ -43,8 +45,9 @@ export default function Order() {
   // print/cover PDF must be built from these frozen specs, not the live pickers
   // (which the user may change between a failed attempt and the retry), or the
   // stored order and the uploaded PDF silently diverge.
+  // albumId = the album the order row froze; a PDF rebuild must read that one.
   const createdOrderRef = useRef<
-    { id: string; order_number: string; material: MaterialType; cover: CoverType; albumSize: AlbumSizePreset } | null
+    { id: string; order_number: string; albumId: string; material: MaterialType; cover: CoverType; albumSize: AlbumSizePreset } | null
   >(null);
   const [material, setMaterial] = useState<MaterialType>('matte');
   const [cover, setCover] = useState<CoverType>('softcover');
@@ -57,6 +60,8 @@ export default function Order() {
   const [step, setStep] = useState<Step>('form');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  // The album isn't in the account (a guest who signed in here): offer the way back to it.
+  const [albumNotSaved, setAlbumNotSaved] = useState(false);
   const [orderNumber, setOrderNumber] = useState('');
   const [trackStage, setTrackStage] = useState(0);
   const [prepMsg, setPrepMsg] = useState('');
@@ -169,6 +174,7 @@ export default function Order() {
   // leave the user on the Pay button to retry.
   const placeOrder = async () => {
     setErrorMsg('');
+    setAlbumNotSaved(false);
     setSubmitting(true);
     try {
       // 1. Create the order — but only once. A retry after a failed upload reuses
@@ -176,10 +182,18 @@ export default function Order() {
       //    the earlier attempt counts as uploaded.
       let order = createdOrderRef.current;
       if (!order) {
-        const created = await createOrderFromLatestAlbum({
+        // WHICH album: the one handed over from the Preview, or — when a reload
+        // (the Google sign-in round-trip) wiped that — the album in this
+        // device's draft. Never simply "the latest": a customer keeps several.
+        const albumId = resolveOrderAlbumId(getPendingPrintJob(), readLocalDraftSummary());
+        // A guest's album never reached the account (the builder saves it on the
+        // way to checkout, but only for a signed-in customer).
+        assertAlbumSavedForOrder(readOrderHandoff(), albumId);
+        const created = await createOrderFromAlbum({
           userId: user!.id,
+          albumId,
           specs: { material, cover, size: albumSize },
-          // createOrderFromLatestAlbum normalizes name/phone + composes the address
+          // createOrderFromAlbum normalizes name/phone + composes the address
           // from these structured PSGC parts (single source of truth).
           shipping: { name, phone, address },
           amount: totalPrice,
@@ -187,7 +201,7 @@ export default function Order() {
           hdMemories,
         });
         createdOrderRef.current = {
-          id: created.id, order_number: created.order_number,
+          id: created.id, order_number: created.order_number, albumId: created.album_id,
           material, cover, albumSize, // freeze the specs the order row was built with
         };
         order = createdOrderRef.current;
@@ -196,12 +210,12 @@ export default function Order() {
 
       // 2. Resolve the print job durably. The in-memory job (getPendingPrintJob)
       //    is wiped by any full reload — most commonly the Google sign-in redirect
-      //    at checkout — so when it's gone we rebuild it from the SAME latest album
-      //    the order snapshots + the photo blobs in this browser's IndexedDB.
+      //    at checkout — so when it's gone we rebuild it from the SAME album the
+      //    order froze + the photo blobs in this browser's IndexedDB.
       setPrepMsg('Preparing your album for printing…');
       let printJob = getPendingPrintJob();
       if (!printJob || printJob.pages.length === 0) {
-        printJob = await rebuildPrintJobFromLatestAlbum(user!.id, idbPhotos.get);
+        printJob = await rebuildPrintJobFromAlbum(user!.id, idbPhotos.get, order.albumId);
       }
       if (!printJob || printJob.pages.length === 0) {
         throw new Error(
@@ -301,6 +315,7 @@ export default function Order() {
       // the message, and the operator/owner sees the cause in Sentry/the endpoint.
       reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong placing your order.');
+      setAlbumNotSaved(err instanceof AlbumNotSavedError);
     } finally {
       setSubmitting(false);
     }
@@ -653,7 +668,13 @@ export default function Order() {
                       : <>Pricing unavailable — please refresh</>}
               </button>
               {errorMsg && (
-                <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>
+                <p className="mt-3 text-xs text-red-500 text-center" role="alert">{errorMsg}</p>
+              )}
+              {albumNotSaved && (
+                <button onClick={() => navigate('/builder')} data-testid="order-open-album"
+                  className="w-full mt-3 py-2.5 rounded-xl border border-peach text-cocoa text-sm font-semibold hover:bg-blush transition-colors flex items-center justify-center gap-2">
+                  <BookOpen size={16} /> Open my album
+                </button>
               )}
             </div>
           </div>
