@@ -509,6 +509,16 @@ export const DEFAULT_COVER_DESIGN: CoverDesign = {
  *  photos into caption boxes — that stays a manual choice.) */
 export type BoxRoll = 'quote' | 'text' | 'qr';
 
+/** What box j's invitation offers. 'qr' was retired from combo boxes (owner,
+ *  2026-10-02: "remove templates with add a QR" — video memories live on
+ *  full-page photos now), so a box an older album dealt 'qr' is an ordinary
+ *  undealt box: the plain hint, and the tap opens the quote / text chooser.
+ *  Every surface that reads a roll reads it through here. */
+export function dealtBoxRoll(page: { textSlotRoll?: (BoxRoll | null)[] }, j: number): Exclude<BoxRoll, 'qr'> | null {
+  const r = page.textSlotRoll?.[j] ?? null;
+  return r === 'qr' ? null : r;
+}
+
 export interface AlbumPage {
   id: string;
   layout: LayoutStyle;

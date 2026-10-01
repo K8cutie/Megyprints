@@ -18,12 +18,12 @@ import type {
   FrameStyle,
   TextStyle,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
@@ -1402,7 +1402,27 @@ export function useBuilderState(): BuilderActions {
     const { kept, used } = splitStudioPages(albumPagesRef.current);
     const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i));
     const pool = poolMap.map((i) => photos[i]);
-    let newPages = generateAlbum(pool, albumSize, photosPerPage, bg, { ...options, border, cornerBase, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    // MEMORY PAGES (owner, 2026-10-02): the album's video memories go on
+    // full-page photos, which take the photos that crop least. Only an album
+    // SHORT of those has to crop others — and then it should crop the ones
+    // whose faces survive, so find the faces first (bounded; skipped
+    // entirely in the common case, and harmless when detection fails).
+    let faceCenters: Record<number, { x: number; y: number }> | undefined;
+    const faceCands = memoryFaceCandidates(pool, albumSize);
+    if (faceCands.length > 0) {
+      faceCenters = {};
+      try {
+        await initFaceApi();
+        const deadline = Date.now() + 8000;
+        for (const i of faceCands) {
+          if (Date.now() > deadline) break;
+          const url = pool[i]?.previewUrl;
+          const c = url ? await detectFaceCenter(url) : null;
+          if (c) faceCenters[i] = c;
+        }
+      } catch { /* no faces known → least-crop order */ }
+    }
+    let newPages = generateAlbum(pool, albumSize, photosPerPage, bg, { ...options, border, cornerBase, faceCenters, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     setGenerating('quotes');
@@ -1817,20 +1837,10 @@ export function useBuilderState(): BuilderActions {
   stateRefForQr.current = { page: currentPage ?? null, photos: uploadedPhotos, size: albumSize };
 
   /** Is the current page a plain single-photo page that a living-memory QR
-   *  badge can be applied to? (Exactly one photo slot, with a photo in it.) */
-  const canAddMemoryQr = useMemo(() => {
-    const t = currentPage?.templateId ? getTemplateById(currentPage.templateId) : null;
-    if (!t) return false;
-    const filled = (currentPage?.slotFills ?? []).some((f) => f != null);
-    // Gate on an ACTIVE QR (a filled qrFill), not merely a qr SLOT: a badge page
-    // whose QR was removed has an empty qr slot but should re-offer the button
-    // (otherwise removing a memory strands the page). Exclude caption-bearing
-    // pages — the badge template has no textSlots, so a bound caption would be
-    // orphaned (invisible) after the swap.
-    const hasActiveQr = (currentPage?.qrFills ?? []).some((q) => q != null)
-      || (currentPage?.textSlotQr ?? []).some((q) => q != null);
-    return photoSlotCount(t) === 1 && filled && !hasActiveQr && !(t.textSlots?.length);
-  }, [currentPage]);
+   *  badge can be applied to? The SAME rule the generator uses to guarantee
+   *  the album's memory pages (canTakeMemoryQr) — one source, so the button
+   *  and the floor can never disagree. */
+  const canAddMemoryQr = useMemo(() => (currentPage ? canTakeMemoryQr(currentPage) : false), [currentPage]);
 
   /** Turn the current single-photo page into a full-bleed QR living-memory
    *  badge: keep the photo full-bleed, tuck the scannable QR chip into the

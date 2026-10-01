@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw, Sparkles, X } from 'lucide-react';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
-import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
+import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss, dealtBoxRoll } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { setPendingPrintJob } from '../../lib/printQueue';
 import { getCanvasDimensions } from './layouts';
@@ -17,7 +17,6 @@ import { BOOK } from './bookFeel';
 import { resolveSlotBox } from './slotGeometry';
 import { applyMask, isMaskId } from './masks';
 import { lookCss, isLookId } from './looks';
-import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
@@ -106,18 +105,18 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
 /** One-line invitation per DEALT box kind (textSlotRoll). Keep these in step
  *  with the Fabric labels in useCanvasEngine's empty-textbox block — the two
  *  are SEPARATE and drift silently. */
-const ROLL_LABELS: Record<BoxRoll, string> = {
+const ROLL_LABELS: Record<Exclude<BoxRoll, 'qr'>, string> = {
   quote: 'Add a quote',
   text: 'Your words here',
-  qr: QR_INVITATION_LABEL,
 };
 
 function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex, roll, onMore }: {
   rectKey: string; left: number; top: number; width: number; height: number;
   sx: number; showList: boolean; options: string[]; onTap: () => void; zIndex: number;
   /** Megy's dealt kind for this box — replaces the option list with a single
-   *  invitation (the tap routes straight to that kind's editor upstream). */
-  roll?: BoxRoll | null;
+   *  invitation (the tap routes straight to that kind's editor upstream).
+   *  Read through dealtBoxRoll, so never the retired 'qr'. */
+  roll?: Exclude<BoxRoll, 'qr'> | null;
   /** The dealt box's ⋯ badge → the full chooser (override the roll). */
   onMore?: () => void;
 }) {
@@ -143,24 +142,6 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         const label = ROLL_LABELS[roll];
         const innerW = width - 24;  // padding + dashed border
         const innerH = height - 24;
-        // A video box: the label, then a QR image (owner, 2026-09-12). Shared
-        // layout with the canvas renderer — see qrInvitation.ts.
-        if (roll === 'qr') {
-          // Reserve the ⋯ badge's row (22 px at top-right) so a narrow band
-          // never runs the label under it; the canvas twin does the same.
-          const lay = qrInvitationLayout(width, height - 20, 12, fs);
-          if (lay.qrSide > 0 && lay.fontSize >= 10) {
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 20 }}>
-                <span style={{ fontWeight: 800, fontSize: lay.fontSize, lineHeight: 1.2, letterSpacing: '0.01em', wordBreak: 'break-word', maxWidth: '100%' }}>
-                  {label}
-                </span>
-                <img src={QR_INVITATION_IMAGE} alt="" aria-hidden="true" draggable={false}
-                  style={{ width: lay.qrSide, height: lay.qrSide, imageRendering: 'pixelated', opacity: 0.9, marginTop: lay.gap }} />
-              </div>
-            );
-          }
-        }
         const longestWord = label.split(' ').reduce((a, b) => (b.length > a.length ? b : a), '');
         const fontSize = Math.min(fs, innerW / (longestWord.length * 0.72));
         if (fontSize >= 10 && innerH >= fontSize * 2.2) {
@@ -610,8 +591,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}
               left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
               showList={!!onChooseTextSlot && Math.min(boxW, boxH) >= 84}
-              options={['Quote', 'Text', 'QR']}
-              roll={page.textSlotRoll?.[i] ?? null}
+              options={['Quote', 'Text']}
+              roll={dealtBoxRoll(page, i)}
               onMore={onChooseTextSlotMenu ? () => onChooseTextSlotMenu(i) : undefined}
               onTap={() => onChooseTextSlot(i)} />
           );
