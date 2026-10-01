@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateAlbum, dealAlbumBoxes, sweepFillQuotes, isMemoryReady, canTakeMemoryQr, MIN_MEMORY_PAGES, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, dealAlbumBoxes, sweepFillQuotes, isMemoryReady, canTakeMemoryQr, memoryShortfall, MIN_MEMORY_PAGES, type BoxContentOptions } from './generateAlbum';
 import { getTemplateById, getTemplatesForAlbum, photoSlotCount, migrateRetiredPages } from './pageTemplates';
 import { MIN_ALBUM_PAGES } from './densities';
 import type { AlbumPage, AlbumSizePreset, QrFill, UploadedPhoto } from './types';
@@ -142,6 +142,40 @@ describe('bordered single-photo layouts are retired — never dealt, still resol
     expect(getTemplateById('t88-solo-portrait')).toBeDefined();
     expect(migrateRetiredPages([saved], '8x8')[0]).toBe(saved);
     expect(canTakeMemoryQr(saved)).toBe(true);
+  });
+});
+
+describe('memoryShortfall — the upload-step nudge when photos don\'t fit the album\'s full pages', () => {
+  const SIZES_OFFERED: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8'];
+  const withLandscapes = (portraitN: number, landscapeN: number) => [
+    ...Array.from({ length: portraitN }, (_, i) => ph(`v${i}`, 3024, 4032, i)),
+    ...Array.from({ length: landscapeN }, (_, i) => ph(`h${i}`, 4032, 3024, portraitN + i)),
+  ];
+  it('all portraits in an 8×6: 0 of 7 fit — add 7 landscapes, or switch to 6×8', () => {
+    expect(memoryShortfall(portraits(100), '8x6', SIZES_OFFERED)).toEqual({ have: 0, missing: 7, shape: 'landscape', betterSize: '6x8' });
+  });
+  it('3 landscapes among portraits: add 4 more', () => {
+    expect(memoryShortfall(withLandscapes(97, 3), '8x6', SIZES_OFFERED)).toEqual({ have: 3, missing: 4, shape: 'landscape', betterSize: '6x8' });
+  });
+  it('all landscapes in a 6×8: add portraits, or switch to 8×6', () => {
+    expect(memoryShortfall(landscapes(60), '6x8', SIZES_OFFERED)).toMatchObject({ have: 0, missing: 7, shape: 'portrait', betterSize: '8x6' });
+  });
+  it('no nudge when the album already has 7 that fit, on a square album (portraits fit there), or with under 7 photos', () => {
+    expect(memoryShortfall(withLandscapes(93, 7), '8x6', SIZES_OFFERED)).toBeNull();
+    expect(memoryShortfall(mixed(100), '6x8', SIZES_OFFERED)).toBeNull();
+    expect(memoryShortfall(portraits(100), '8x8', SIZES_OFFERED)).toBeNull();
+    expect(memoryShortfall(portraits(5), '8x6', SIZES_OFFERED)).toBeNull();
+  });
+  it('ignores photos still being measured (0×0), and offers no switch when no offered size fits', () => {
+    const unmeasured = Array.from({ length: 20 }, (_, i) => ph(`u${i}`, 0, 0, i));
+    expect(memoryShortfall(unmeasured, '8x6', SIZES_OFFERED)).toBeNull();
+    expect(memoryShortfall(portraits(100), '8x6', ['8x6'])).toEqual({ have: 0, missing: 7, shape: 'landscape' });
+  });
+  it('the nudge agrees with what generation does: follow it and the album gets its 7', () => {
+    const photos = withLandscapes(93, 7);
+    expect(memoryShortfall(photos, '8x6', SIZES_OFFERED)).toBeNull();
+    expect(memoryIdx(generateAlbum(photos, '8x6')).length).toBeGreaterThanOrEqual(MIN_MEMORY_PAGES);
+    expect(memoryIdx(generateAlbum(portraits(100), '6x8')).length).toBeGreaterThanOrEqual(MIN_MEMORY_PAGES); // the suggested switch
   });
 });
 

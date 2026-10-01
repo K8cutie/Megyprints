@@ -325,6 +325,37 @@ export function memoryFaceCandidates(photos: UploadedPhoto[], size: AlbumSizePre
     .slice(0, max);
 }
 
+/** Why this album would get fewer than MIN_MEMORY_PAGES video memories — its
+ *  photos are the wrong shape for its full pages — and the no-crop fixes:
+ *  more photos of the shape those pages need, or an offered size whose full
+ *  pages already fit them (the flipped orientation first: 8×6 ↔ 6×8). null
+ *  when the album isn't short, or has under MIN_MEMORY_PAGES photos at all
+ *  (that's "add photos", which the fill estimate already says). Photos still
+ *  being measured (0×0) don't count either way. Same rule as generation. */
+export interface MemoryShortfall {
+  have: number;
+  missing: number;
+  shape: 'landscape' | 'portrait';
+  betterSize?: AlbumSizePreset;
+}
+export function memoryShortfall(photos: UploadedPhoto[], size: AlbumSizePreset, offered: AlbumSizePreset[]): MemoryShortfall | null {
+  const measured = photos.filter((p) => p.width > 0 && p.height > 0);
+  if (measured.length < MIN_MEMORY_PAGES) return null;
+  const fitOn = (s: AlbumSizePreset) => {
+    const aspect = PAGE_ASPECT[s] ?? 1;
+    return measured.filter((p) => allowedOnFullPage(p, aspect)).length;
+  };
+  const have = fitOn(size);
+  if (have >= MIN_MEMORY_PAGES) return null;
+  const aspect = PAGE_ASPECT[size] ?? 1;
+  const shape = aspect < 0.95 ? 'portrait' : 'landscape';
+  const flip = (s: AlbumSizePreset) => Math.abs(Math.log((PAGE_ASPECT[s] ?? 1) * aspect));
+  const betterSize = offered
+    .filter((s) => s !== size && memorySingleTemplate(s) && fitOn(s) >= MIN_MEMORY_PAGES)
+    .sort((a, b) => flip(a) - flip(b) || fitOn(b) - fitOn(a))[0];
+  return { have, missing: MIN_MEMORY_PAGES - have, shape, ...(betterSize ? { betterSize } : {}) };
+}
+
 /** Pick `k` memory photos spread across the album's chronological order:
  *  each of k equal stretches gives its best FITTING photo nearest its middle;
  *  a stretch with none borrows a spare fitting photo from elsewhere (kept a
