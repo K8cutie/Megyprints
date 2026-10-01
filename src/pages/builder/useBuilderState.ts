@@ -39,7 +39,8 @@ import { supabase } from '../../lib/supabase';
 import { photosToForget } from '../../lib/photoKeeping';
 import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
 import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
-import { detectFaceCenter, computeFaceOffset, initFaceApi } from './faceDetection';
+import { detectFaceCenter, initFaceApi } from './faceDetection';
+import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
 import { createLimiter } from '../../lib/limit';
 import { templateTracker } from './varietyTracker';
 import { readCaptureTime } from './exif';
@@ -156,6 +157,28 @@ function dominantPageRatio(
     if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; }
   }
   return pageRatio;
+}
+
+/** Auto-fill's choice for a page: every EMPTY photo slot (not a QR slot, not
+ *  claimed by a QR/text/ornament) gets the next photo not already on it. */
+function autoFillPlan(page: AlbumPage, photoCount: number): (number | null)[] {
+  const tmplForFill = PAGE_TEMPLATES.find((t) => t.id === page.templateId);
+  const fills = [...(page.slotFills ?? [])];
+  let photoIdx = 0;
+  for (let i = 0; i < fills.length; i++) {
+    if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
+    if (page.qrFills?.[i] || page.slotTexts?.[i] || page.ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
+    if (fills[i] === null && photoIdx < photoCount) {
+      while (photoIdx < photoCount && fills.includes(photoIdx)) {
+        photoIdx++;
+      }
+      if (photoIdx < photoCount) {
+        fills[i] = photoIdx;
+        photoIdx++;
+      }
+    }
+  }
+  return fills;
 }
 
 function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
@@ -1631,6 +1654,41 @@ export function useBuilderState(): BuilderActions {
     });
   }, [currentPageIndex]);
 
+  /* ── Face-centred auto-pan ──
+     detectFaceCenter gives the face as a 0–1 point on the photo; every renderer
+     reads the pan in DESIGN px (slotPhotoFit). Writing computeFaceOffset's −1…+1
+     straight into slotOffsets moved the photo by at most 1 px, so it never
+     centred anything. faceCentrePan converts against the slot's real box,
+     worked out when the result lands, on the page it lands on — so a moved or
+     zoomed frame, or the cover panel, uses its own box. A slot whose photo
+     changed in the meantime is left alone. */
+  const centreOnFace = useCallback((slotIndex: number, photoIndex: number) => {
+    const photoUrl = uploadedPhotos[photoIndex]?.previewUrl;
+    if (!photoUrl) return;
+    const pageIndex = currentPageIndex;
+    void detectFaceCenter(photoUrl).then((face) => {
+      if (!face) return;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const natural = { w: img.naturalWidth, h: img.naturalHeight };
+        const coverMode = editScopeRef.current === 'coverFront';
+        updateCurrentPage((p) => {
+          if ((p.slotFills ?? [])[slotIndex] !== photoIndex) return p;
+          const slot = slotDesignSize(p, slotIndex, albumSize, pageIndex, coverMode);
+          if (!slot) return p;
+          const pan = faceCentrePan(face, natural, slot, p.slotScales?.[slotIndex]);
+          const offsetsX = [...(p.slotOffsetsX ?? [])];
+          const offsetsY = [...(p.slotOffsetsY ?? [])];
+          offsetsX[slotIndex] = pan.x;
+          offsetsY[slotIndex] = pan.y;
+          return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
+        });
+      };
+      img.src = photoUrl;
+    });
+  }, [uploadedPhotos, currentPageIndex, updateCurrentPage, albumSize]);
+
   /* ── Slot management ── */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
     pushSnapshot();
@@ -1660,34 +1718,8 @@ export function useBuilderState(): BuilderActions {
       fills[slotIndex] = photoIndex;
       return { ...page, slotFills: fills, qrFills, slotTexts, ornamentFills };
     });
-
-    // ── Face-centered auto-pan ──
-    const photo = uploadedPhotos[photoIndex];
-    if (!photo) return;
-    const photoUrl = photo.previewUrl;
-    if (!photoUrl) return;
-    const template = PAGE_TEMPLATES.find((t) => t.id === (albumPages[currentPageIndex]?.templateId ?? ''));
-    const slot = template?.slots?.[slotIndex];
-
-    detectFaceCenter(photoUrl).then((faceCenter) => {
-      if (!faceCenter || !slot) return;
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const photoAspect = img.naturalWidth / img.naturalHeight;
-        const slotAspect = slot.width / slot.height;
-        const { offsetX, offsetY } = computeFaceOffset(faceCenter, photoAspect, slotAspect);
-        updateCurrentPage((p) => {
-          const offsetsX = [...(p.slotOffsetsX ?? [])];
-          const offsetsY = [...(p.slotOffsetsY ?? [])];
-          offsetsX[slotIndex] = offsetX;
-          offsetsY[slotIndex] = offsetY;
-          return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
-        });
-      };
-      img.src = photoUrl;
-    });
-  }, [updateCurrentPage, uploadedPhotos, albumPages, currentPageIndex]);
+    centreOnFace(slotIndex, photoIndex);
+  }, [updateCurrentPage, centreOnFace, pushSnapshot]);
 
   const clearSlot = useCallback((slotIndex: number) => {
     pushSnapshot();
@@ -2147,62 +2179,16 @@ export function useBuilderState(): BuilderActions {
   /* ── Auto-fill ── */
   const autoFillSlots = useCallback(() => {
     pushSnapshot();
-    updateCurrentPage((page) => {
-      const tmplForFill = PAGE_TEMPLATES.find((t) => t.id === page.templateId);
-      const slotCount = page.slotFills?.length ?? 0;
-      if (slotCount === 0) return page;
-      const fills = [...(page.slotFills ?? [])];
-      let photoIdx = 0;
-      for (let i = 0; i < slotCount; i++) {
-        if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
-        if (page.qrFills?.[i] || page.slotTexts?.[i] || page.ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
-        if (fills[i] === null && photoIdx < uploadedPhotos.length) {
-          while (photoIdx < uploadedPhotos.length && fills.includes(photoIdx)) {
-            photoIdx++;
-          }
-          if (photoIdx < uploadedPhotos.length) {
-            fills[i] = photoIdx;
-            photoIdx++;
-          }
-        }
-      }
-      return { ...page, slotFills: fills };
+    updateCurrentPage((page) => (page.slotFills?.length ? { ...page, slotFills: autoFillPlan(page, uploadedPhotos.length) } : page));
+    // Face-centre the photos this just placed — and only those; a photo already
+    // on the page keeps its framing. (This used to walk the page as it was
+    // BEFORE the fill, so it re-panned the photos already there and skipped
+    // the new ones.)
+    const before = currentPage.slotFills ?? [];
+    autoFillPlan(currentPage, uploadedPhotos.length).forEach((fill, slotIndex) => {
+      if (fill != null && before[slotIndex] == null) centreOnFace(slotIndex, fill);
     });
-
-    // ── Face-centered auto-pan for all filled slots ──
-    const page = albumPages[currentPageIndex];
-    const template = PAGE_TEMPLATES.find((t) => t.id === (page?.templateId ?? ''));
-    if (!template) return;
-
-    (page?.slotFills ?? []).forEach((fill, slotIndex) => {
-      if (fill === null) return;
-      const photo = uploadedPhotos[fill];
-      if (!photo) return;
-      const photoUrl = photo.previewUrl;
-      if (!photoUrl) return;
-      const slot = template.slots?.[slotIndex];
-      if (!slot) return;
-
-      detectFaceCenter(photoUrl).then((faceCenter) => {
-        if (!faceCenter) return;
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const photoAspect = img.naturalWidth / img.naturalHeight;
-          const slotAspect = slot.width / slot.height;
-          const { offsetX, offsetY } = computeFaceOffset(faceCenter, photoAspect, slotAspect);
-          updateCurrentPage((p) => {
-            const offsetsX = [...(p.slotOffsetsX ?? [])];
-            const offsetsY = [...(p.slotOffsetsY ?? [])];
-            offsetsX[slotIndex] = offsetX;
-            offsetsY[slotIndex] = offsetY;
-            return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
-          });
-        };
-        img.src = photoUrl;
-      });
-    });
-  }, [updateCurrentPage, uploadedPhotos, albumPages, currentPageIndex]);
+  }, [pushSnapshot, updateCurrentPage, uploadedPhotos, currentPage, centreOnFace]);
 
   const clearAllSlots = useCallback(() => {
     pushSnapshot();
