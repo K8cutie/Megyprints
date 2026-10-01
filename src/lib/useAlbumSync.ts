@@ -55,6 +55,10 @@ export interface AlbumData {
   createdAt?: string;
   updatedAt?: string;
   coverPhoto?: string | null;
+  /** The front cover — one builder page, stored in albums.cover_front (0036).
+   *  Its photo slots index `photos`, so it only makes sense with this album.
+   *  Loaded: null when the album was saved without one. */
+  coverFront?: Record<string, unknown> | null;
 }
 
 export interface UseAlbumSyncReturn {
@@ -71,7 +75,7 @@ export interface UseAlbumSyncReturn {
 // Helper: Serialize album for DB storage (pages -> JSON)
 // =============================================================================
 
-function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
+export function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
   // Only save lightweight photo metadata — the actual File bytes stay in
   // IndexedDB.  This keeps DB writes tiny (KBs) and eliminates all
   // Supabase Storage Disk I/O.
@@ -89,11 +93,13 @@ function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
     // Only when the caller has one to say — a save built from a stored draft
     // has no thumbnail and must not blank the one already saved.
     ...(albumData.coverPhoto !== undefined ? { cover_photo: albumData.coverPhoto } : {}),
+    // Same rule for the cover: a save that has none to say keeps the saved one.
+    ...(albumData.coverFront !== undefined ? { cover_front: albumData.coverFront } : {}),
     updated_at: new Date().toISOString(),
   };
 }
 
-function deserializeAlbum(row: Record<string, unknown>): AlbumData {
+export function deserializeAlbum(row: Record<string, unknown>): AlbumData {
   const dbPhotos = Array.isArray(row.photos)
     ? (row.photos as Array<{ id: string; name: string; cloudUrl?: string; storagePath?: string; previewUrl?: string }>)
     : [];
@@ -113,9 +119,38 @@ function deserializeAlbum(row: Record<string, unknown>): AlbumData {
       previewUrl: p.previewUrl ?? undefined,
     })),
     coverPhoto: (row.cover_photo as string) ?? null,
+    // Absent when the database predates 0036 or the query didn't ask for it.
+    coverFront: isPlainObject(row.cover_front) ? row.cover_front : null,
     createdAt: (row.created_at as string) ?? undefined,
     updatedAt: (row.updated_at as string) ?? undefined,
   };
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/** albums.cover_front arrived in migration 0036, and the app can reach a
+ *  database that doesn't have it yet (a deploy lands before db:push). PostgREST
+ *  then refuses the WHOLE request over that one column: PGRST204 on a write
+ *  ("Could not find the 'cover_front' column of 'albums' in the schema cache"),
+ *  42703 on a read that names it. */
+export function isMissingCoverFrontColumn(err: { code?: string; message?: string } | null | undefined): boolean {
+  return !!err
+    && (err.code === 'PGRST204' || err.code === '42703')
+    && (err.message ?? '').includes('cover_front');
+}
+
+/** Upsert one album row. If the database has no cover_front column yet, the
+ *  album is saved again without its cover rather than not at all. */
+export async function upsertAlbumRow(row: Record<string, unknown>) {
+  const write = (r: Record<string, unknown>) =>
+    supabase.from('albums').upsert(r, { onConflict: 'id' }).select('id').single();
+  const first = await write(row);
+  if (!first.error || !('cover_front' in row) || !isMissingCoverFrontColumn(first.error)) return first;
+  const withoutCover = { ...row };
+  delete withoutCover.cover_front;
+  return write(withoutCover);
 }
 
 // =============================================================================
@@ -155,11 +190,7 @@ export function useAlbumSync(): UseAlbumSyncReturn {
           ...(albumData.id ? { id: albumData.id } : {}),
         };
 
-        const { data, error: upsertError } = await supabase
-          .from('albums')
-          .upsert(payload, { onConflict: 'id' })
-          .select('id')
-          .single();
+        const { data, error: upsertError } = await upsertAlbumRow(payload);
 
         if (upsertError) {
           throw upsertError;
