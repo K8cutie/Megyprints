@@ -101,6 +101,8 @@ export function isStepOneReady(albumTitle: string | null | undefined, theme: str
 export class WizardEngine {
   state: WizardState;
   builder: BuilderActions;
+  /** Whether the album was built the last time reconcileOnChange() looked. */
+  private albumWasBuilt: boolean;
 
   constructor(builder: BuilderActions, isFirstTime: boolean = true) {
     this.builder = builder;
@@ -110,11 +112,12 @@ export class WizardEngine {
       skipped: [],
       isFirstTime,
     };
+    this.albumWasBuilt = this.hasBuiltAlbum();
   }
 
   /** Restart Wizard — wipe the journey back to the very first step (welcome).
       Marks first-time so detectStep() holds at welcome instead of jumping to
-      pick_size on the next reconcile. */
+      pick_size. */
   restart() {
     this.state.step = 'welcome';
     this.state.completed = [];
@@ -123,9 +126,10 @@ export class WizardEngine {
   }
 
   /* ── Step detection ──
-     Only auto-detect forward when the BUILDER PHASE changes (user clicked
-     "Start Creating" in the center screen). During setup, the wizard should
-     stay at whatever step the user is actively on. */
+     Where the journey stands from the album AND the completed/skipped flags.
+     It places a restored journey whose saved step can't be used. It never
+     moves a live journey: that is reconcileForward(), which follows only the
+     album and the screen. */
   detectStep(): WizardStep {
     const { builder } = this;
 
@@ -161,7 +165,7 @@ export class WizardEngine {
      count, covers both an in-session generate and a reloaded album whose
      completed[] flags were lost — while preventing a freshly reset album
      (exactly 40 EMPTY pages) from dumping the user onto Review. */
-  private hasBuiltAlbum(): boolean {
+  hasBuiltAlbum(): boolean {
     const pages = this.builder.albumPages;
     return pages.length >= 40 && pages.some(
       (p) => (p.slotFills?.some((f) => f != null) ?? false) || p.photos.length > 0,
@@ -169,19 +173,43 @@ export class WizardEngine {
   }
 
   /* ── Reconcile FORWARD to reality ──
-     Jump to detectStep() when it is AHEAD of the current step, marking the
-     steps in between complete. Never moves backward — mid-setup, the step the
-     customer is on is theirs. Returns whether the step moved. */
+     Only reality moves the journey on: the preview is open → finalize; a
+     built album → review. Never the completed/skipped flags. Every forward
+     move (Next, a size pick, Continue) sets the step itself, so the step only
+     sits behind its own flags after the customer went BACK — and reading the
+     flags there flung them forward again: ← Previous on the upload step
+     flashed the cover and bounced straight back. Marks the steps in between
+     complete; never moves backward. Returns whether the step moved. */
   reconcileForward(): boolean {
-    const detected = this.detectStep();
+    const target: WizardStep | null =
+      this.builder.phase === 'preview' ? 'finalize'
+      : this.hasBuiltAlbum() ? 'review_pages'
+      : null;
+    if (!target) return false;
     const from = WIZARD_ORDER.indexOf(this.state.step);
-    const to = WIZARD_ORDER.indexOf(detected);
+    const to = WIZARD_ORDER.indexOf(target);
     if (to <= from) return false;
     for (let i = from; i < to; i++) {
       if (!this.state.completed.includes(WIZARD_ORDER[i])) this.state.completed.push(WIZARD_ORDER[i]);
     }
-    this.state.step = detected;
+    this.state.step = target;
     return true;
+  }
+
+  /* ── The screen or the album changed ──
+     The panel calls this whenever the builder's phase or the album's built
+     state changes. The screen follows the step (phaseForStep), so a screen
+     the CURRENT step asks for is the wizard's own move — ← Previous, Next,
+     the cover editor's Continue / ← Back — and the step the customer chose
+     stands, built album or not. Reality moves it on only when the screen
+     changed WITHOUT the step (the preview opened from the pages, a saved
+     album loaded) or an album was just built. Returns whether it moved. */
+  reconcileOnChange(): boolean {
+    const built = this.hasBuiltAlbum();
+    const justBuilt = built && !this.albumWasBuilt;
+    this.albumWasBuilt = built;
+    if (!justBuilt && this.builder.phase === phaseForStep(this.state.step)) return false;
+    return this.reconcileForward();
   }
 
   /* ── Advance to next step ── */
@@ -194,7 +222,8 @@ export class WizardEngine {
       // that would end past it while it is unanswered lands on it.
       const target = forwardJumpTarget(this.state.step, next, this.stepOneReady());
       if (target !== next) { this.state.step = target; return; }
-      this.state.completed.push(this.state.step);
+      // Once: after ← Previous the step being left can already be complete.
+      if (!this.state.completed.includes(this.state.step)) this.state.completed.push(this.state.step);
       this.state.step = next;
     }
   }
@@ -380,9 +409,10 @@ export class WizardEngine {
   }
 
   /* ── Deserialize from storage ──
-     The saved step, completed and skipped come back as they were; anything
-     unreadable (junk, a retired step) falls back to a returning customer's
-     start. Two rules hold on the way in:
+     The saved step, completed and skipped come back as they were. A step
+     that can't be read (junk, a retired step) falls back to where the
+     completed steps point — a returning customer's start when there are
+     none. Two rules hold on the way in:
        • review, text and finalize are about a BUILT album. Without one the
          journey resumes where its completed steps point (upload, usually).
        • the first step is unskippable. A restore is a jump from the start of
@@ -394,12 +424,13 @@ export class WizardEngine {
     const steps = (v: unknown): WizardStep[] => (Array.isArray(v) ? v.filter(isWizardStep) : []);
     const engine = new WizardEngine(builder, false);
     engine.state = {
-      step: isWizardStep(saved.step) ? saved.step : engine.state.step,
+      step: engine.state.step,
       completed: steps(saved.completed),
       skipped: steps(saved.skipped),
       isFirstTime: saved.isFirstTime === true,
     };
     const { state } = engine;
+    state.step = isWizardStep(saved.step) ? saved.step : engine.detectStep();
     if (WIZARD_ORDER.indexOf(state.step) > WIZARD_ORDER.indexOf('upload_photos') && !engine.hasBuiltAlbum()) {
       state.step = engine.detectStep();
     }
