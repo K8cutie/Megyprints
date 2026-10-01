@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Wand2, Sparkles, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Replace } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Replace } from 'lucide-react';
 import type { AlbumPage, UploadedPhoto, TemplateSlot, OrnamentTransform } from './types';
 import type { GuardReason } from './slotGeometry';
 import { slotRectPx } from './studioPhoneGeom';
@@ -203,22 +203,3 @@ export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, on
     </>
   );
 }
-
-/* ── The Studio tray under the page ──────────────────────────────────────── */
-export function StudioTray({ pageIsYours, onAddSticker, onFix }: { pageIsYours: boolean; onAddSticker: () => void; onFix: () => void }) {
-  return (
-    <div className="flex items-center gap-2 mt-3" data-testid="studio-tray">
-      <button type="button" onClick={onAddSticker} data-testid="studio-add-sticker"
-        className="flex-1 h-11 rounded-xl bg-blush-pink text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-        <Sparkles size={16} /> Add sticker
-      </button>
-      {pageIsYours && (
-        <button type="button" onClick={onFix} data-testid="studio-fix"
-          className="h-11 px-3 rounded-xl border border-peach text-blush-pink font-semibold text-sm flex items-center justify-center gap-1 active:scale-[0.98] transition-transform whitespace-nowrap">
-          <Wand2 size={14} /> Megy, fix this page
-        </button>
-      )}
-    </div>
-  );
-}
-

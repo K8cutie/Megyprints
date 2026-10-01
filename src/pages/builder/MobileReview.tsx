@@ -1,13 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════════
    MobileReview — the phone review experience: "Megy does it, you approve."
-   Each page fills the screen; swipe (or arrows) to move freely. "Change layout"
-   opens a picker of the available templates for that page. "Done" appears only on
-   the LAST page → a brief "Loading album preview…" beat → Preview.
+   Each page fills the screen; swipe (or "Next page") to move freely. "Change layout"
+   opens a picker of the available templates for that page. On the LAST page "Next
+   page" becomes "Done" → a brief "Loading album preview…" beat → Preview.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Video, ImagePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Video, ImagePlus, Sparkles, Wand2 } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -19,10 +19,13 @@ import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
 import AddOrnamentModal from './AddOrnamentModal';
-import { StudioSheet, StudioLayer, StudioTray } from './StudioPhone';
+import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
+
+/** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
+const TOOL = 'h-14 rounded-xl bg-cream text-medium text-[12px] font-semibold flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform';
 
 export default function MobileReview({ actions, onDone }: { actions: BuilderContextValue; onDone: () => void }) {
   const pages = actions.albumPages;
@@ -195,8 +198,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         <span data-testid="page-counter">Page {idx + 1} of {total} · tap a photo or a sticker</span>
       </div>
       {page?.studio && (
-        <div className="shrink-0 text-center -mt-1 pb-1">
+        <div className="shrink-0 flex flex-wrap items-center justify-center gap-1.5 -mt-1 pb-1 px-3">
           <span className="text-[11px] font-bold text-blush-pink bg-blush rounded-full px-2.5 py-0.5" data-testid="studio-yours">✎ This page is yours · Regenerate skips it</span>
+          <button type="button" data-testid="studio-fix"
+            onClick={() => { actions.resetStudioPage(); setStudioSlot(null); setStudioSticker(null); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }}
+            className="text-[11px] font-bold text-blush-pink border border-peach rounded-full px-2.5 py-0.5 flex items-center gap-1 whitespace-nowrap active:scale-95 transition-transform">
+            <Wand2 size={11} /> Megy, fix this page
+          </button>
         </div>
       )}
 
@@ -270,29 +278,18 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         {uploadMsg && (
           <p className="mb-2 text-center text-xs font-semibold text-success">{uploadMsg}</p>
         )}
-        <div className="flex items-center gap-3">
-          <button onClick={goPrev} disabled={idx === 0}
-            className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-medium disabled:opacity-30 transition-opacity">
-            <ChevronLeft size={22} />
+        {/* Tools — quiet, so the one loud button on the screen is the way on. */}
+        <div className="grid grid-cols-3 gap-2" data-testid="studio-tray">
+          <button onClick={() => uploadRef.current?.click()} className={TOOL}>
+            <ImagePlus size={18} /> Add photos
           </button>
-          <button onClick={() => uploadRef.current?.click()} title="Add more photos"
-            className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-medium active:scale-95 transition-transform">
-            <ImagePlus size={20} />
-          </button>
-          <button onClick={() => actions.setLayoutPickerOpen(true)}
-            className="flex-1 h-12 rounded-xl bg-peach text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+          <button onClick={() => actions.setLayoutPickerOpen(true)} className={TOOL}>
             <LayoutGrid size={18} /> Change layout
           </button>
-          <button onClick={goNext} disabled={isLast}
-            className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-medium disabled:opacity-30 transition-opacity">
-            <ChevronRight size={22} />
+          <button onClick={() => setStickerModal({ uid: null })} className={TOOL} data-testid="studio-add-sticker">
+            <Sparkles size={18} /> Add sticker
           </button>
         </div>
-        {studio && (
-          <StudioTray pageIsYours={!!page?.studio}
-            onAddSticker={() => setStickerModal({ uid: null })}
-            onFix={() => { actions.resetStudioPage(); setStudioSlot(null); setStudioSticker(null); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }} />
-        )}
         {/* Living-memory QR — offered on a single full photo page; turns it into
             a full-bleed photo with a scannable corner badge (face-picked corner). */}
         {actions.canAddMemoryQr && (
@@ -301,12 +298,25 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             <Video size={18} /> Add a video memory
           </button>
         )}
-        {isLast && (
-          <button onClick={handleDone}
-            className="w-full mt-3 h-12 rounded-xl bg-success text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-            <Check size={18} /> Done — Preview my album
+        {/* Page turn, in words: testers read a bare › as decoration and stopped
+            on page 1. The last page turns it into Done, in the same spot. */}
+        <div className="flex items-center gap-2 mt-3">
+          <button onClick={goPrev} disabled={idx === 0} aria-label="Previous page"
+            className="w-12 h-12 shrink-0 rounded-full bg-cream flex items-center justify-center text-medium disabled:opacity-30 transition-opacity">
+            <ChevronLeft size={22} />
           </button>
-        )}
+          {isLast ? (
+            <button onClick={handleDone}
+              className="flex-1 h-12 rounded-xl bg-success text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+              <Check size={18} /> Done — Preview my album
+            </button>
+          ) : (
+            <button onClick={goNext} data-testid="next-page"
+              className="flex-1 h-12 rounded-xl bg-peach text-white text-base font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-transform">
+              Next page <ChevronRight size={20} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* STUDIO: mask / look sheets, the sticker picker, the sign-in nudge, the guardrail line */}
