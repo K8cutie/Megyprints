@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Video, ImagePlus, Sparkles, Wand2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Video, ImagePlus, Wand2 } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -18,7 +18,6 @@ import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
-import AddOrnamentModal from './AddOrnamentModal';
 import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
@@ -49,7 +48,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const setStudioSlot = (slot: number | null) => setStudioSel((s) => ({ pageIdx: idx, slot, sticker: slot != null ? null : (s.pageIdx === idx ? s.sticker : null), sheet: slot != null ? (s.pageIdx === idx ? s.sheet : null) : null }));
   const setStudioSticker = (sticker: string | null) => setStudioSel((s) => ({ pageIdx: idx, slot: sticker != null ? null : (s.pageIdx === idx ? s.slot : null), sticker, sheet: null }));
   const setStudioSheet = (sheet: 'mask' | 'look' | null) => setStudioSel((s) => ({ pageIdx: idx, slot: s.pageIdx === idx ? s.slot : null, sticker: s.pageIdx === idx ? s.sticker : null, sheet }));
-  const [stickerModal, setStickerModal] = useState<{ uid: string | null } | null>(null);
   const [guard, setGuard] = useState<string | null>(null);
   const guardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sayGuard = (msg: string) => {
@@ -195,7 +193,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   return (
     <div className="h-full flex flex-col bg-paper relative">
       <div className="shrink-0 flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-medium">
-        <span data-testid="page-counter">Page {idx + 1} of {total} · tap a photo or a sticker</span>
+        <span data-testid="page-counter">Page {idx + 1} of {total} · tap a photo to style it</span>
       </div>
       {page?.studio && (
         <div className="shrink-0 flex flex-wrap items-center justify-center gap-1.5 -mt-1 pb-1 px-3">
@@ -264,7 +262,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                 onOpenSheet={setStudioSheet}
                 onWorn={() => { if (studioSlot != null) { actions.setSlotMask(studioSlot, 'brushed'); actions.setSlotLook(studioSlot, 'faded'); sayGuard('Worn: brushed edge + faded look. Keep faces away from the edge.'); } }}
                 onStickerGeom={(uid, geom) => afterGuard(actions.updateStickerGeom(uid, geom))}
-                onStickerSwap={(uid) => setStickerModal({ uid })}
                 onStickerRemove={(uid) => { actions.removeSticker(uid); setStudioSticker(null); }} />
             )}
           </motion.div>
@@ -279,15 +276,12 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           <p className="mb-2 text-center text-xs font-semibold text-success">{uploadMsg}</p>
         )}
         {/* Tools — quiet, so the one loud button on the screen is the way on. */}
-        <div className="grid grid-cols-3 gap-2" data-testid="studio-tray">
+        <div className="grid grid-cols-2 gap-2" data-testid="studio-tray">
           <button onClick={() => uploadRef.current?.click()} className={TOOL}>
             <ImagePlus size={18} /> Add photos
           </button>
           <button onClick={() => actions.setLayoutPickerOpen(true)} className={TOOL}>
             <LayoutGrid size={18} /> Change layout
-          </button>
-          <button onClick={() => setStickerModal({ uid: null })} className={TOOL} data-testid="studio-add-sticker">
-            <Sparkles size={18} /> Add sticker
           </button>
         </div>
         {/* Living-memory QR — offered on a single full photo page; turns it into
@@ -319,25 +313,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         </div>
       </div>
 
-      {/* STUDIO: mask / look sheets, the sticker picker, the sign-in nudge, the guardrail line */}
+      {/* STUDIO: mask / look sheets, the guardrail line */}
       {studio && studioSheet && studioSlot != null && page && (
         <StudioSheet kind={studioSheet}
           photo={page.slotFills?.[studioSlot] != null ? actions.uploadedPhotos[page.slotFills[studioSlot] as number] : undefined}
           currentMask={isMaskId(page.slotMasks?.[studioSlot]) ? (page.slotMasks?.[studioSlot] as MaskId) : 'none'}
           currentLook={isLookId(page.slotLooks?.[studioSlot]) ? (page.slotLooks?.[studioSlot] as LookId) : 'none'}
           onPickMask={pickMask} onPickLook={pickLook} onClose={() => setStudioSheet(null)} />
-      )}
-      {stickerModal && (
-        <AddOrnamentModal
-          initial={stickerModal.uid ? (page?.stickers?.find((k) => k.uid === stickerModal.uid) ?? null) : null}
-          onSave={(fill) => {
-            if (stickerModal.uid) actions.replaceStickerFill(stickerModal.uid, fill);
-            else { actions.addSticker(fill); sayGuard('Sticker added — drag it with a finger, pinch to resize, tap it for fine nudges.'); }
-            setStickerModal(null);
-          }}
-          onRemove={() => { if (stickerModal.uid) actions.removeSticker(stickerModal.uid); setStickerModal(null); setStudioSticker(null); }}
-          onClose={() => setStickerModal(null)}
-        />
       )}
       {guard && (
         <div role="status" aria-live="polite" data-testid="studio-guard"

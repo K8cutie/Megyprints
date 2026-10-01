@@ -10,6 +10,12 @@ import { safeAreaInches, type GuardContext, type GuardReason } from './slotGeome
    caption-box graphics already use, so all three renderers draw it with the
    code they already have. The guardrails mirror the frame ones: inside the
    safe area (margin + spine keep-out), never under STICKER_MIN_INCHES.
+
+   RETIRED (owner, 2026-10-01): nothing can add or swap a sticker any more.
+   Placed ones still render and print (dropping the render path would change
+   a customer's page under them), can still be moved — so the clamp below
+   still guards them — and can be removed. Sweep this module and the three
+   sticker render paths once no saved album holds one.
    ══════════════════════════════════════════════════════════════════════════ */
 
 export interface Sticker extends OrnamentFill {
@@ -18,23 +24,11 @@ export interface Sticker extends OrnamentFill {
 }
 
 export const STICKER_MIN_INCHES = 0.5;
-/** A new sticker's side as a fraction of the page's shorter side. */
-export const STICKER_DEFAULT_FRACTION = 0.22;
-
 const r4 = (v: number) => Math.round(v * 10000) / 10000;
 const TOL = 0.004;
 
 export function pageInches(albumSize: string): { w: number; h: number } {
   return ALBUM_INCHES[albumSize as keyof typeof ALBUM_INCHES] ?? { w: 8, h: 8 };
-}
-
-/** Where a fresh sticker lands: centred in the safe area, square, DEFAULT size. */
-export function defaultStickerGeom(ctx: GuardContext): OrnamentTransform {
-  const page = pageInches(ctx.albumSize);
-  const { margin } = safeAreaInches(ctx);
-  const sideIn = STICKER_DEFAULT_FRACTION * Math.min(page.w, page.h);
-  const geom = { cx: (margin.left + (1 - margin.right)) / 2, cy: (margin.top + (1 - margin.bottom)) / 2, w: sideIn / page.w, h: sideIn / page.h, rot: 0 };
-  return clampStickerGeom(geom, ctx).geom;
 }
 
 /** Keep a sticker printable: its box inside the safe area, its side at least
@@ -68,8 +62,4 @@ export function clampStickerGeom(geom: OrnamentTransform, ctx: GuardContext): { 
   if (cy + h / 2 > bottom) { if (cy + h / 2 - bottom > TOL) reasons.add('edge'); cy = bottom - h / 2; }
   const order: GuardReason[] = ['spine', 'floor', 'edge'];
   return { geom: { cx: r4(cx), cy: r4(cy), w: r4(w), h: r4(h), rot: Math.round(rot * 10) / 10 }, reasons: order.filter((k) => reasons.has(k)) };
-}
-
-export function newStickerUid(): string {
-  return `stk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }

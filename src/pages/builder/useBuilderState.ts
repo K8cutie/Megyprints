@@ -27,7 +27,7 @@ import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotes
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
-import { clampStickerGeom, defaultStickerGeom, newStickerUid, type Sticker } from './stickers';
+import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
@@ -525,12 +525,9 @@ export interface BuilderActions {
   setSlotMask: (slotIndex: number, mask: MaskId | null) => void;
   /** STUDIO looks: a colour treatment on one photo slot (null = as shot). Marks the page yours. */
   setSlotLook: (slotIndex: number, look: LookId | null) => void;
-  /** STUDIO stickers: add a graphic at the page centre (clamped). Marks the page yours. */
-  addSticker: (fill: OrnamentFill) => GuardReason[];
-  /** Move / resize / rotate a sticker — clamped to the safe area and the size floor. */
+  /** Move / resize / rotate a placed sticker — clamped to the safe area and the
+   *  size floor. (Stickers are retired: none can be added or swapped.) */
   updateStickerGeom: (uid: string, geom: OrnamentTransform) => GuardReason[];
-  /** Swap a sticker's graphic, keeping its place. */
-  replaceStickerFill: (uid: string, fill: OrnamentFill) => void;
   removeSticker: (uid: string) => void;
   setQrFill: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
   /** True when the current page is a single-photo page a living-memory QR badge
@@ -1771,24 +1768,13 @@ export function useBuilderState(): BuilderActions {
     });
   }, [updateCurrentPage, pushSnapshot]);
 
-  const addSticker = useCallback((fill: OrnamentFill): GuardReason[] => {
-    const geom = defaultStickerGeom(studioCtx());
-    const sticker: Sticker = { ...fill, uid: newStickerUid(), geom };
-    pushSnapshot();
-    updateCurrentPage((p) => ({ ...p, stickers: [...(p.stickers ?? []), sticker], studio: true }));
-    return [];
-  }, [updateCurrentPage, pushSnapshot, studioCtx]);
-
+  /* Stickers are retired (owner, 2026-10-01): none can be added or swapped.
+     Placed ones still render and print, so they can still be moved and removed. */
   const updateStickerGeom = useCallback((uid: string, geom: OrnamentTransform): GuardReason[] => {
     const { geom: clamped, reasons } = clampStickerGeom(geom, studioCtx());
     updateCurrentPage((p) => ({ ...p, stickers: (p.stickers ?? []).map((k) => (k.uid === uid ? { ...k, geom: clamped } : k)) }));
     return reasons;
   }, [updateCurrentPage, studioCtx]);
-
-  const replaceStickerFill = useCallback((uid: string, fill: OrnamentFill) => {
-    pushSnapshot();
-    updateCurrentPage((p) => ({ ...p, stickers: (p.stickers ?? []).map((k) => (k.uid === uid ? { ...k, ...fill, uid, geom: k.geom } : k)) }));
-  }, [updateCurrentPage, pushSnapshot]);
 
   const removeSticker = useCallback((uid: string) => {
     pushSnapshot();
@@ -2866,9 +2852,7 @@ export function useBuilderState(): BuilderActions {
     resetStudioPage,
     setSlotMask,
     setSlotLook,
-    addSticker,
     updateStickerGeom,
-    replaceStickerFill,
     removeSticker,
     setQrFill,
     canAddMemoryQr,
