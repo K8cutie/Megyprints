@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Wand2, Sparkles, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2, Replace } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import type { AlbumPage, UploadedPhoto, TemplateSlot, OrnamentTransform } from './types';
 import type { GuardReason } from './slotGeometry';
 import { slotRectPx } from './studioPhoneGeom';
@@ -13,10 +13,11 @@ import { pageInches } from './stickers';
    STUDIO ON THE PHONE (owner, 2026-09-13: "I want to see the mobile version").
    Not a squeezed desktop: the page stays the hero, tools live on the thing
    you tap. Tap a photo → a pill (Mask · Look · Worn); Mask / Look open a
-   bottom sheet of THUMBNAILS of that very photo, so you pick by eye. Tap a
-   sticker → a pill with 1 mm nudge arrows, Swap, Remove; drag it with a
-   finger, pinch to resize. Every change goes through the same setters the
-   desktop uses, so the same guardrails and the same three renderers apply.
+   bottom sheet of THUMBNAILS of that very photo, so you pick by eye. Stickers
+   are retired (owner, 2026-10-01) — none can be added — but a placed one
+   still shows and prints: tap it → a pill with 1 mm nudge arrows and Remove;
+   drag it with a finger, pinch to resize. Every change goes through the same
+   setters the desktop uses, so the same guardrails and three renderers apply.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const THUMB = 84;
@@ -89,7 +90,7 @@ export function StudioSheet({ kind, photo, currentMask, currentLook, onPickMask,
 }
 
 /* ── The layer over the page: the photo pill, the sticker hit areas + pill ── */
-export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, onSelectSlot, selectedSticker, onSelectSticker, onOpenSheet, onWorn, onStickerGeom, onStickerSwap, onStickerRemove }: {
+export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, onSelectSlot, selectedSticker, onSelectSticker, onOpenSheet, onWorn, onStickerGeom, onStickerRemove }: {
   page: AlbumPage;
   pageIndex: number;
   W: number; H: number;
@@ -101,7 +102,6 @@ export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, on
   onOpenSheet: (kind: 'mask' | 'look') => void;
   onWorn: () => void;
   onStickerGeom: (uid: string, geom: OrnamentTransform) => GuardReason[];
-  onStickerSwap: (uid: string) => void;
   onStickerRemove: (uid: string) => void;
 }) {
   const rect = selectedSlot != null ? slotRectPx(page, pageIndex, selectedSlot, W, H, albumSize) : null;
@@ -196,29 +196,9 @@ export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, on
           <button type="button" aria-label="Nudge up" className="w-7 h-7 rounded-full flex items-center justify-center active:bg-white/15" onClick={() => nudge(selSticker.uid, 0, -mm.y)}><ChevronUp size={14} /></button>
           <button type="button" aria-label="Nudge down" className="w-7 h-7 rounded-full flex items-center justify-center active:bg-white/15" onClick={() => nudge(selSticker.uid, 0, mm.y)}><ChevronDown size={14} /></button>
           <button type="button" aria-label="Nudge right" className="w-7 h-7 rounded-full flex items-center justify-center active:bg-white/15" onClick={() => nudge(selSticker.uid, mm.x, 0)}><ChevronRight size={14} /></button>
-          <button type="button" className={pillBtn + ' flex items-center gap-1'} onClick={() => onStickerSwap(selSticker.uid)}><Replace size={12} /> Swap</button>
           <button type="button" className={pillBtn + ' flex items-center gap-1 text-red-300'} onClick={() => onStickerRemove(selSticker.uid)} data-testid="sticker-remove"><Trash2 size={12} /></button>
         </Pill>
       )}
     </>
   );
 }
-
-/* ── The Studio tray under the page ──────────────────────────────────────── */
-export function StudioTray({ pageIsYours, onAddSticker, onFix }: { pageIsYours: boolean; onAddSticker: () => void; onFix: () => void }) {
-  return (
-    <div className="flex items-center gap-2 mt-3" data-testid="studio-tray">
-      <button type="button" onClick={onAddSticker} data-testid="studio-add-sticker"
-        className="flex-1 h-11 rounded-xl bg-blush-pink text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-        <Sparkles size={16} /> Add sticker
-      </button>
-      {pageIsYours && (
-        <button type="button" onClick={onFix} data-testid="studio-fix"
-          className="h-11 px-3 rounded-xl border border-peach text-blush-pink font-semibold text-sm flex items-center justify-center gap-1 active:scale-[0.98] transition-transform whitespace-nowrap">
-          <Wand2 size={14} /> Megy, fix this page
-        </button>
-      )}
-    </div>
-  );
-}
-
