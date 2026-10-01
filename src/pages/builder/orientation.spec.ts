@@ -4,6 +4,9 @@ import { getTemplateById, getTemplatesForAlbum, orientationOfRatio } from './pag
 import { isSizeOfferable } from './albumSizeOptions';
 import { analyzePhotos } from './photoAnalyzer';
 import type { AlbumSizePreset, UploadedPhoto } from './types';
+import { seedMathRandom } from '../../test/seededRandom';
+
+seedMathRandom(); // same albums every run (generateAlbum deals with Math.random)
 
 /* ══════════════════════════════════════════════════════════════════════════
    NO PHOTO MAY LAND IN A FRAME OF THE OPPOSITE ORIENTATION.

@@ -6,6 +6,9 @@ import { BINDING_INCHES } from './binding';
 import { detectOverlaps } from './templateValidation';
 import { generateAlbum, dealAlbumBoxes, sweepFillQuotes, pageSpeaks, QUOTE_CADENCE, type BoxContentOptions } from './generateAlbum';
 import type { AlbumSizePreset, UploadedPhoto, AlbumPage } from './types';
+import { seedMathRandom } from '../../test/seededRandom';
+
+seedMathRandom(); // same albums every run (generateAlbum deals with Math.random)
 
 /* ══════════════════════════════════════════════════════════════════════════
    4-PHOTO PAGES FOR THE SQUARE ALBUMS + THE QUOTE CADENCE (owner, 2026-09-12).

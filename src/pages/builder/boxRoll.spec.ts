@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { generateAlbum, dealBoxContent, makeQuoteDealer, rollBoxKind, sweepFillQuotes, BOX_ROLL_WEIGHTS, type BoxContentOptions } from './generateAlbum';
 import { getTemplatesForAlbum } from './pageTemplates';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto, BoxRoll } from './types';
+import { seedMathRandom } from '../../test/seededRandom';
+
+seedMathRandom(); // same albums every run (generateAlbum deals with Math.random)
 
 /* ══════════════════════════════════════════════════════════════════════════
    MEGY DEALS THE COMBO BOXES.

@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { generateAlbum } from './generateAlbum';
 import type { AlbumSizePreset, UploadedPhoto } from './types';
+import { seedMathRandom } from '../../test/seededRandom';
+
+seedMathRandom(); // same albums every run (generateAlbum deals with Math.random)
 
 /* ══════════════════════════════════════════════════════════════════════════
    AN ALBUM MUST HAVE RHYTHM, NOT JUST VARIED LAYOUTS.
