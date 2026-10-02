@@ -59,7 +59,7 @@ describe('box dealing', () => {
       expect(p.textSlotRoll, `box page ${p.id} missing its deal`).toBeDefined();
       expect(p.textSlotRoll!.length).toBe(boxes);
       p.textSlotRoll!.forEach((r, j) => {
-        expect(r === 'quote' || r === 'text' || r === 'qr', `page ${p.id} box ${j} kind ${r}`).toBe(true);
+        expect(r === 'quote' || r === 'text', `page ${p.id} box ${j} kind ${r}`).toBe(true);
         const caption = p.textElements.find((t) => t.boxIndex === j);
         if (r === 'quote') {
           // Materialized NOW, in setBoxText's shape, from the pool.
@@ -82,7 +82,8 @@ describe('box dealing', () => {
     expect(sawBoxPage).toBe(true);
   });
 
-  it('roll odds hit the owner-set 60/25/15 (±3% at N=10k)', () => {
+  it('roll odds hit the owner-set 70/30 (±3% at N=10k) and NEVER deal a QR (retired from boxes 2026-10-02)', () => {
+    expect(BOX_ROLL_WEIGHTS).toEqual({ quote: 0.70, text: 0.30, qr: 0 });
     const n = 10_000;
     const counts: Record<BoxRoll, number> = { quote: 0, text: 0, qr: 0 };
     for (let i = 0; i < n; i++) counts[rollBoxKind()]++;
@@ -90,8 +91,7 @@ describe('box dealing', () => {
     expect(counts.quote / n).toBeLessThan(BOX_ROLL_WEIGHTS.quote + 0.03);
     expect(counts.text / n).toBeGreaterThan(BOX_ROLL_WEIGHTS.text - 0.03);
     expect(counts.text / n).toBeLessThan(BOX_ROLL_WEIGHTS.text + 0.03);
-    expect(counts.qr / n).toBeGreaterThan(BOX_ROLL_WEIGHTS.qr - 0.03);
-    expect(counts.qr / n).toBeLessThan(BOX_ROLL_WEIGHTS.qr + 0.03);
+    expect(counts.qr).toBe(0);
   });
 
   it('an empty quote pool degrades quote rolls to text invitations, never blanks', () => {
@@ -106,7 +106,7 @@ describe('box dealing', () => {
         background: { type: 'solid', solid: '#FFFFFF' },
       } as unknown as AlbumPage;
       dealBoxContent(page, template, { ...BOX, quotePool: [] }, makeQuoteDealer([]));
-      expect(page.textSlotRoll!.every((r) => r === 'text' || r === 'qr')).toBe(true);
+      expect(page.textSlotRoll!.every((r) => r === 'text')).toBe(true);
       expect(page.textElements.length).toBe(0);
     }
   });
@@ -234,7 +234,7 @@ describe('quote pool sized to the album', () => {
     expect(lastQuotedIdx).toBeLessThan(pages.length - 1);
     for (const p of pages.slice(lastQuotedIdx + 1)) {
       if (boxCountOf(p, '8x8') === 0) continue;
-      expect(p.textSlotRoll!.every((r) => r === 'text' || r === 'qr')).toBe(true);
+      expect(p.textSlotRoll!.every((r) => r === 'text')).toBe(true);
     }
   });
 
@@ -252,14 +252,14 @@ describe('quote pool sized to the album', () => {
       if (prevHadQuote) {
         // The page after a quote page is held back entirely: invitations only.
         expect(caps, `page ${p.id} right after a quote page still got one`).toHaveLength(0);
-        expect(p.textSlotRoll!.every((r) => r === 'text' || r === 'qr')).toBe(true);
+        expect(p.textSlotRoll!.every((r) => r === 'text')).toBe(true);
         prevHadQuote = false;
         continue;
       }
       // Eligible page: exactly ONE quote (box 0), the other boxes are invitations.
       expect(caps, `page ${p.id} should carry exactly one quote`).toHaveLength(1);
       expect(p.textSlotRoll![0]).toBe('quote');
-      p.textSlotRoll!.slice(1).forEach((r) => expect(r === 'text' || r === 'qr').toBe(true));
+      p.textSlotRoll!.slice(1).forEach((r) => expect(r === 'text').toBe(true));
       dealt.push(caps[0].text);
       prevHadQuote = true;
     }

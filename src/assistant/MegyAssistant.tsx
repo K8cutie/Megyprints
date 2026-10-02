@@ -11,6 +11,9 @@ import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isSt
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
+import { memoryShortfall, MIN_MEMORY_PAGES } from '../pages/builder/generateAlbum';
+import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
+import { SIZE_LABELS } from '../lib/pricing';
 import type { AssistantMessage } from './types';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
 import { getThemeBackgroundVariants } from '../pages/builder/types';
@@ -543,6 +546,37 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                     <p className="text-xs text-[#B8791F] mt-3 leading-relaxed">
                       These fill about <b>{est.estimatedPages}</b> of {MIN_ALBUM_PAGES} pages. Add ~<b>{est.shortBy}</b> more photos to fill the album — or generate now and leave the extra pages blank to fill later.
                     </p>
+                  );
+                })()}
+                {(() => {
+                  // VIDEO MEMORIES go on full-page photos that fit the page
+                  // (owner, 2026-10-02). Photos all the wrong shape for this
+                  // size can't make them without a crop, so say so HERE — while
+                  // adding photos or switching size is still one tap — instead
+                  // of cropping to make up the number.
+                  const short = memoryShortfall(builder.uploadedPhotos, builder.albumSize, offerableAlbumSizes().map((s) => s.preset));
+                  if (!short) return null;
+                  const sizeLabel = SIZE_LABELS[builder.albumSize] ?? builder.albumSize;
+                  const better = short.betterSize ? (SIZE_LABELS[short.betterSize] ?? short.betterSize) : null;
+                  const nudgeBtn = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-[#E8C98A] text-[#8A5A12] hover:bg-[#FFF0D1] transition-colors';
+                  return (
+                    <div className="mt-3 p-3 rounded-xl bg-[#FFF6E5] border border-[#F0D9A8]" data-testid="memory-nudge">
+                      <p className="text-xs text-[#8A5A12] leading-relaxed">
+                        Your {sizeLabel} album puts its {MIN_MEMORY_PAGES} video memories on full-page {short.shape} photos, and you have <b>{short.have}</b>.
+                        {' '}Add <b>{short.missing}</b> more {short.shape} photo{short.missing === 1 ? '' : 's'}{better ? <> — or switch to <b>{better}</b>, which fits your photos</> : null}.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className={nudgeBtn} data-testid="memory-nudge-add">
+                          Add {short.shape} photos
+                        </button>
+                        {short.betterSize && (
+                          <button type="button" className={nudgeBtn} data-testid="memory-nudge-switch"
+                            onClick={() => { void builder.dispatch({ type: 'change_size', payload: { size: short.betterSize }, rawMessage: `change size to ${short.betterSize}` }); showToast(`Size set: ${better}`); }}>
+                            Switch to {better}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   );
                 })()}
               </div>
