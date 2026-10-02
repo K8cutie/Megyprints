@@ -20,6 +20,7 @@ import {
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
+import { dealtBoxRoll } from './types';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
@@ -186,9 +187,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       // already answered "which kind?". Undealt boxes (old drafts, boxes a
       // template swap added) keep the 3-way chooser; the box's ⋯ badge
       // (onTextSlotChooserClick below) is the always-available override.
-      const roll = actions.currentPage?.textSlotRoll?.[slotIndex] ?? null;
+      const roll = actions.currentPage ? dealtBoxRoll(actions.currentPage, slotIndex) : null;
       if (roll === 'text') setTextEditSlot(slotIndex);
-      else if (roll === 'qr') setTextSlotQrEditSlot(slotIndex);
       else if (roll === 'quote') setBoxQuoteSlot(slotIndex);
       else setChooserTextSlot(slotIndex);
     }, [containerMode, actions.currentPage]),
@@ -823,14 +823,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* Empty combo/caption-box chooser — Quote / Your Text / QR Code.
+      {/* Empty combo/caption-box chooser — Quote / Your Text (QR left the boxes 2026-10-02: video memories live on full-page photos).
           (Clipart was sunset: fetching + rasterizing icon packs dragged on old
           phones. Placed cliparts still render — see textSlotOrnament below.) */}
       {chooserTextSlot !== null && (
         <SlotChooser
           onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setTextEditSlot(chooserTextSlot)}
-          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
       )}

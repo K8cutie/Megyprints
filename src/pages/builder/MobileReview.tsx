@@ -18,6 +18,7 @@ import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
+import { dealtBoxRoll } from './types';
 import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
@@ -245,9 +246,8 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                 // A DEALT box (textSlotRoll) opens its kind's editor directly;
                 // undealt boxes keep the 3-way chooser. The ⋯ badge below is
                 // the always-available override.
-                const roll = page.textSlotRoll?.[slotIndex] ?? null;
+                const roll = dealtBoxRoll(page, slotIndex);
                 if (roll === 'text') setEditSlot(slotIndex);
-                else if (roll === 'qr') setTextSlotQrEditSlot(slotIndex);
                 else if (roll === 'quote') setBoxQuoteSlot(slotIndex);
                 else setChooserTextSlot(slotIndex);
               }}
@@ -339,14 +339,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         />
       )}
 
-      {/* Empty combo/caption-box chooser — Quote / Your Text / QR Code.
+      {/* Empty combo/caption-box chooser — Quote / Your Text (QR left the boxes 2026-10-02: video memories live on full-page photos).
           (Clipart was sunset — old-phone drag; placed ones still render.) */}
       {chooserTextSlot !== null && (
         <SlotChooser
           mobile
           onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setEditSlot(chooserTextSlot)}
-          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
       )}

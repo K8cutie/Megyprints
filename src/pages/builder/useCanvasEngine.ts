@@ -11,13 +11,12 @@ import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoRect } from './slotPhotoFit';
 import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, applyTextureAlpha, type MaskId } from './masks';
 import { applyLookPixels, isLookId, type LookId } from './looks';
-import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
 import { WORDART_SHADOW, TEXT_LINE_HEIGHT, resolveTextSlotAlign } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import type { QrFill, OrnamentFill } from './types';
-import { clampQrGeom } from './types';
+import { clampQrGeom, dealtBoxRoll } from './types';
 import type {
   FabricCanvas,
   FabricObject,
@@ -2149,10 +2148,11 @@ function renderScene(
     // keep the generic label + 3-way chooser. Keep these labels in step with
     // the DOM hint (BuilderPreview EmptyChooserBox) — the two are SEPARATE and
     // drift silently.
-    const roll = page.textSlotRoll?.[i] ?? null;
+    // (Read through dealtBoxRoll: a box an older album dealt the retired 'qr'
+    // is an ordinary undealt box now.)
+    const roll = dealtBoxRoll(page, i);
     const labelText =
       roll === 'text' ? 'Your words here' :
-      roll === 'qr' ? QR_INVITATION_LABEL :
       roll === 'quote' ? 'Add a quote' : 'Tap to add';
     // WRAP, don't clip. A single-line fab.Text sized by an estimated glyph
     // width still clipped the longer labels on tall-narrow bands; a Textbox
@@ -2172,30 +2172,9 @@ function renderScene(
     label.slotId = `${SLOT_ID}-textbox-label-${i}`;
     canvas.add(box);
     canvas.add(label);
-    // A video box: the label sits at the top and a QR image fills the room
-    // below it (owner, 2026-09-12). Same layout as the DOM twin — qrInvitation.ts.
-    if (roll === 'qr') {
-      // Start below the ⋯ badge (drawn top-right, see below) so a narrow band
-      // never runs the label under it.
-      const brHint = Math.max(9, Math.min(14, Math.min(r.width, r.height) * 0.10));
-      const topPad = 6 + brHint * 2 + 6;
-      const lay = qrInvitationLayout(r.width, r.height - (topPad - 12), 12, labelFs);
-      if (lay.qrSide > 0) {
-        label.set({ top: r.top + topPad + lay.labelH / 2 });
-        const qrTop = r.top + topPad + lay.labelH + lay.gap;
-        fab.Image.fromURL(QR_INVITATION_IMAGE, (img: Parameters<typeof canvas.add>[0] & { slotId?: string; imageSmoothing?: boolean; scaleToWidth: (w: number) => unknown }) => {
-          if (thisRenderId !== currentRenderId) return;
-          img.set({ left: r.left + r.width / 2, top: qrTop + lay.qrSide / 2, originX: 'center', originY: 'center', opacity: 0.9, imageSmoothing: false, selectable: false, evented: false });
-          img.scaleToWidth(lay.qrSide);
-          img.slotId = `${SLOT_ID}-textbox-qrhint-${i}`;
-          canvas.add(img);
-          canvas.renderAll();
-        });
-      }
-    }
     box.on('mousedown', () => onTextSlotEmptyClick(i));
     // A dealt box also gets a ⋯ badge → ALWAYS the full chooser, so the roll
-    // stays a default, never a cage (turn a dealt QR box into a quote, etc.).
+    // stays a default, never a cage (turn a dealt text box into a quote, etc.).
     if (roll) {
       const br = Math.max(9, Math.min(14, Math.min(r.width, r.height) * 0.10));
       const moreDot = new fab.Circle({
