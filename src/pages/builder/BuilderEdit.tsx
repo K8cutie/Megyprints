@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, ChevronRight, Sparkles,
+  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles,
   Wand2, Upload, Home, PanelLeftOpen, Video,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
@@ -29,6 +29,7 @@ import SlotChooser from './SlotChooser';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
+import PageTurnBar from './PageTurnBar';
 import { CloudSaveStatus } from '../../components/CloudSaveStatus';
 import { useAuth } from '../../lib/authContext';
 import { GUARD_MESSAGES, SOFT_MESSAGE, printSharpness, resolveSlotBox } from './slotGeometry';
@@ -1183,29 +1184,17 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               </AnimatePresence>
             </motion.div>
 
-              {/* Page navigation — prev / next arrows below the page */}
-              {actions.albumPages.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => actions.goToPage(actions.currentPageIndex - 1)}
-                    disabled={actions.currentPageIndex === 0}
-                    title="Previous page"
-                    aria-label="Previous page"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-line text-medium hover:bg-blush hover:text-blush-pink hover:border-peach disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  <div className="w-px h-5 bg-line" />
-                  <button
-                    onClick={() => actions.goToPage(actions.currentPageIndex + 1)}
-                    disabled={actions.currentPageIndex >= actions.albumPages.length - 1}
-                    title="Next page"
-                    aria-label="Next page"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-line text-medium hover:bg-blush hover:text-blush-pink hover:border-peach disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
+              {/* Page turn below the page, in words both ways — the same bar as
+                  the phone (PageTurnBar). The last page offers Done → Preview.
+                  STICKY: the page fits the WIDTH, so on a 1366×768 or 1440×900
+                  laptop it runs past the window and the row sat ~170 px below
+                  the fold. It now rides the bottom edge until you scroll down
+                  to it, then rests under the page. */}
+              {actions.albumPages.length > 0 && (
+                <PageTurnBar variant="desktop" className="sticky bottom-4 z-20 mb-4" index={actions.currentPageIndex} total={actions.albumPages.length}
+                  onPrev={() => actions.goToPage(actions.currentPageIndex - 1)}
+                  onNext={() => actions.goToPage(actions.currentPageIndex + 1)}
+                  onDone={() => { void dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }} />
               )}
             </div>
           </div>
