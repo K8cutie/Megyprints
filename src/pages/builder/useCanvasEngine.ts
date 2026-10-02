@@ -69,6 +69,13 @@ const SLOT_IMAGE_LOCK = {
  *  Used to cancel stale async image callbacks from previous renders. */
 let currentRenderId = 0;
 
+/** Start a render: every callback still waiting on an older one is now stale.
+ *  Exported for the spec (a page turn while a textured edge is loading). */
+export function nextRenderId(): number {
+  currentRenderId += 1;
+  return currentRenderId;
+}
+
 /* ── Snap helpers ──────────────────────────────────────────────────────── */
 
 function snapToGrid(value: number, gridSize: number): number {
@@ -1137,7 +1144,8 @@ function raiseOverlays(canvas: FabricCanvas): void {
   objs.filter((o) => has(o, '-sticker-')).forEach((o) => canvas.bringToFront(o));
 }
 
-function renderTemplateSlots(
+/** Exported for the spec (bakedFrame.spec.ts drives it with a stand-in Fabric). */
+export function renderTemplateSlots(
   fab: any,
   canvas: FabricCanvas,
   template: any,
@@ -1277,7 +1285,9 @@ function renderTemplateSlots(
 
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
       const photoUrl = uploadedPhotos[photoIndex].previewUrl;
-      fab.Image.fromURL(photoUrl, (img: any) => {
+      // async: a textured edge waits for its texture (see the bake below) and
+      // nothing of this slot is drawn until it lands — photo and frame together.
+      fab.Image.fromURL(photoUrl, async (img: any) => {
         /* Skip if a newer render has started — prevents stale images
            from appearing when switching pages rapidly */
         if (renderId !== currentRenderId) return;
@@ -1302,10 +1312,6 @@ function renderTemplateSlots(
              manually moved, scaled, or rotated. See SLOT_IMAGE_LOCK. */
           ...SLOT_IMAGE_LOCK,
         });
-        img.slotId = `${SLOT_ID}-photo-${i}`;
-        img.photoIndex = photoIndex;
-        img.slotIndex = i;
-        img.photoId = `slot-photo-${i}`;
 
         // Shape clipPath
         const clipCx = sx + sw / 2;
@@ -1347,6 +1353,12 @@ function renderTemplateSlots(
           img.set('clipPath', clip);
         }
 
+        // The image this slot shows: the photo, or its bake. ONLY the image is
+        // swapped — the shadow, the frame Studio moves and resizes, the
+        // decorative frame and the drag followers below are built the same for
+        // both. (The bake used to return before any of them, so a photo with a
+        // look or an edge could be re-styled on desktop but never moved.)
+        let photo = img;
         const rawLook = slotLooks?.[i];
         const look: LookId | null = isLookId(rawLook) ? rawLook : null;
         if (slot.feather || slot.texture || look) {
@@ -1355,41 +1367,47 @@ function renderTemplateSlots(
           // apply the look to the pixels (the same matrices the DOM's CSS
           // filter uses), then the soft or textured edge on the alpha — and
           // show that instead of the raw image. Exactly what print does.
+          let off: HTMLCanvasElement | null = null;
+          let octx: CanvasRenderingContext2D | null = null;
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const el = img.getElement ? img.getElement() : (img as any)._element;
-            const off = document.createElement('canvas');
+            off = document.createElement('canvas');
             off.width = Math.max(1, Math.round(sw));
             off.height = Math.max(1, Math.round(sh));
-            const octx = off.getContext('2d');
-            if (el && octx) {
+            octx = el ? off.getContext('2d') : null;
+            if (octx) {
               octx.drawImage(el, fit.x, fit.y, fit.w, fit.h);
               if (look) applyLookPixels(octx, 0, 0, off.width, off.height, look);
               if (slot.feather) featherAlpha(octx, 0, 0, off.width, off.height, slot.feather, slot.featherSide);
-              const show = () => {
-                if (renderId !== currentRenderId) return;
-                const baked = new fab.Image(off, { left: sx, top: sy, originX: 'left', originY: 'top', ...SLOT_IMAGE_LOCK });
-                baked.slotId = `${SLOT_ID}-photo-${i}`;
-                baked.photoIndex = photoIndex;
-                baked.slotIndex = i;
-                baked.photoId = `slot-photo-${i}`;
-                canvas.add(baked);
-                raiseOverlays(canvas); // a late photo must not paint over a QR badge / sticker
-                canvas.renderAll();
-              };
-              if (slot.texture) {
-                loadMaskTexture(slot.texture)
-                  .then((tex) => { applyTextureAlpha(octx, tex, 0, 0, off.width, off.height); show(); })
-                  .catch(() => show());
-              } else {
-                show();
-              }
-              return;
             }
-          } catch { /* fall through to the plain image */ }
+          } catch { octx = null; /* show the plain image */ }
+          if (off && octx) {
+            if (slot.texture) {
+              try { applyTextureAlpha(octx, await loadMaskTexture(slot.texture), 0, 0, off.width, off.height); }
+              catch { /* texture missing — the photo without the edge, as print does */ }
+              // the texture loads async: a newer render may have started since
+              if (renderId !== currentRenderId) return;
+            }
+            // Same centre, turn and shape clip as the raw image it replaces (a
+            // look on a circle is still a circle — print clips the bake too).
+            photo = new fab.Image(off, {
+              left: sx + sw / 2,
+              top: sy + sh / 2,
+              originX: 'center',
+              originY: 'center',
+              angle: slot.rotation ?? 0,
+              clipPath: img.clipPath,
+              ...SLOT_IMAGE_LOCK,
+            });
+          }
         }
+        photo.slotId = `${SLOT_ID}-photo-${i}`;
+        photo.photoIndex = photoIndex;
+        photo.slotIndex = i;
+        photo.photoId = `slot-photo-${i}`;
 
-        canvas.add(img);
+        canvas.add(photo);
 
         // Fake shadow — dark semi-transparent rect behind photo.
         // NOT using Fabric.js shadow (unreliable with clipPath).
@@ -1404,6 +1422,11 @@ function renderTemplateSlots(
         // both show a clean background hairline. Those two renderers already
         // suppress all framing for fullBleed (BuilderPreview frameCss = {},
         // printPipeline effFrameStyle = 'none'); this keeps Fabric in step.
+        //
+        // NOR on a masked photo: a mask drops the border and the decorative
+        // frame in all three renderers, and this rectangle is framing too — a
+        // grey box behind a circle, or behind a soft edge that should fade into
+        // the page. Neither the preview nor the print draws it.
         const shadowOff = 4;
         const shadowBlur = 8;
         // Studio: everything drawn around the photo that must follow its frame
@@ -1411,7 +1434,7 @@ function renderTemplateSlots(
         type Follower = { left?: number; top?: number; set: (p: { left: number; top: number }) => unknown };
         const followers: { obj: Follower; left: number; top: number }[] = [];
         const follow = (obj: Follower) => followers.push({ obj, left: obj.left ?? 0, top: obj.top ?? 0 });
-        const fakeShadow = template.fullBleed ? null : new fab.Rect({
+        const fakeShadow = template.fullBleed || slot.masked ? null : new fab.Rect({
           left: sx + shadowOff - shadowBlur / 2,
           top: sy + shadowOff - shadowBlur / 2,
           width: sw + shadowBlur,
@@ -1583,7 +1606,7 @@ function renderTemplateSlots(
             // Mat must sit UNDER the photo but ABOVE the page background. The
             // photo + its border were already added, so drop the mat just below
             // them by re-raising the photo and border back to the front.
-            img.bringToFront();
+            photo.bringToFront();
             borderObj.bringToFront();
           }
         }
@@ -1631,13 +1654,13 @@ function renderTemplateSlots(
           // (circle/oval/heart frames are centre-origin; measuring from the slot's
           // top-left made a round photo jump half its width on the first move).
           const frameStart = { left: borderObj.left ?? sx, top: borderObj.top ?? sy };
-          const imgStart = { left: img.left ?? 0, top: img.top ?? 0 };
-          const clip = img.clipPath;
+          const photoStart = { left: photo.left ?? 0, top: photo.top ?? 0 };
+          const clip = photo.clipPath;
           const clipStart = clip ? { left: clip.left ?? 0, top: clip.top ?? 0 } : null;
           borderObj.on('moving', () => {
             const dx = (borderObj.left ?? frameStart.left) - frameStart.left;
             const dy = (borderObj.top ?? frameStart.top) - frameStart.top;
-            img.set({ left: imgStart.left + dx, top: imgStart.top + dy });
+            photo.set({ left: photoStart.left + dx, top: photoStart.top + dy });
             // an absolutePositioned clip stays put unless moved — the photo
             // would show only where the old and new boxes overlap
             if (clip && clipStart) clip.set({ left: clipStart.left + dx, top: clipStart.top + dy });
@@ -1744,8 +1767,7 @@ function renderScene(
   onStickerClick: (uid: string) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
-  currentRenderId += 1;
-  const thisRenderId = currentRenderId;
+  const thisRenderId = nextRenderId();
 
   // 1. Remove all managed objects
   const toRemove = canvas.getObjects().filter((obj: any) =>
