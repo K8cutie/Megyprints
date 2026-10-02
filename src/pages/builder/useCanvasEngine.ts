@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveSlotBox } from './slotGeometry';
+import { slotPhotoRect } from './slotPhotoFit';
 import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, applyTextureAlpha, type MaskId } from './masks';
 import { applyLookPixels, isLookId, type LookId } from './looks';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
@@ -1128,6 +1129,22 @@ function createBackgroundObject(
  *  Template Slot Renderer
  *  ══════════════════════════════════════════════════════════════════════════ */
 
+/** Overlays sit above photos and their frame outlines — QR / graphics, then
+ *  text, then caption-box graphics, then stickers on top of everything — as
+ *  the DOM preview and the print draw them. Photos load async and a late one
+ *  lands on top; with Studio always on its frame outline is CLICKABLE, so
+ *  whatever it covered (a QR badge, a caption, a sticker) stopped taking
+ *  clicks. So this runs after the scene renders AND after every photo loads.
+ *  (`-ornament-`/`-qr-` don't match the `-textornament-`/`-textqr-` ids.) */
+function raiseOverlays(canvas: FabricCanvas): void {
+  const objs = [...canvas.getObjects()]; // a snapshot: bringToFront reorders the live list
+  const has = (o: FabricObject, ...ids: string[]) => typeof o.slotId === 'string' && ids.some((id) => (o.slotId as string).includes(id));
+  objs.filter((o) => has(o, '-qr-', '-qrbg-', '-ornament-')).forEach((o) => canvas.bringToFront(o));
+  objs.filter((o) => o.textId).forEach((o) => canvas.bringToFront(o));
+  objs.filter((o) => has(o, '-textornament-', '-textqr-', '-textqrbg-')).forEach((o) => canvas.bringToFront(o));
+  objs.filter((o) => has(o, '-sticker-')).forEach((o) => canvas.bringToFront(o));
+}
+
 /** Exported for the spec (bakedFrame.spec.ts drives it with a stand-in Fabric). */
 export function renderTemplateSlots(
   fab: any,
@@ -1277,19 +1294,19 @@ export function renderTemplateSlots(
         if (renderId !== currentRenderId) return;
         const imgW = img.width || sw;
         const imgH = img.height || sh;
-        const coverScale = Math.max(sw / imgW, sh / imgH);
-        const userScale = slotScales[i] ?? 1;
-        const finalScale = (userScale !== 1 && userScale > 0) ? userScale : coverScale;
-        const offsetX = slotOffsetsX[i] ?? 0;
-        const offsetY = slotOffsetsY[i] ?? 0;
+        // The ONE fit print + the DOM preview draw with (slotPhotoFit): cover ×
+        // the zoom (a multiplier on cover, as print reads it — this used to
+        // treat any zoom but 1 as a raw image scale), then the pan, held to
+        // the overflow. Fabric works in design px, so the pan goes in as is.
+        const fit = slotPhotoRect({ w: imgW, h: imgH }, { w: sw, h: sh }, slotScales[i], { x: slotOffsetsX[i] ?? 0, y: slotOffsetsY[i] ?? 0 });
 
         img.set({
-          left: sx + sw / 2 + offsetX,
-          top: sy + sh / 2 + offsetY,
+          left: sx + fit.x + fit.w / 2,
+          top: sy + fit.y + fit.h / 2,
           originX: 'center',
           originY: 'center',
-          scaleX: finalScale,
-          scaleY: finalScale,
+          scaleX: fit.w / imgW,
+          scaleY: fit.w / imgW,
           angle: slot.rotation ?? 0,
           /* Megy is the sole orchestrator. The canvas is a RENDERER: a slot
              photo can be selected (to delete/replace via Megy) but never
@@ -1361,8 +1378,7 @@ export function renderTemplateSlots(
             off.height = Math.max(1, Math.round(sh));
             octx = el ? off.getContext('2d') : null;
             if (octx) {
-              const drawW = imgW * finalScale, drawH = imgH * finalScale;
-              octx.drawImage(el, sw / 2 + offsetX - drawW / 2, sh / 2 + offsetY - drawH / 2, drawW, drawH);
+              octx.drawImage(el, fit.x, fit.y, fit.w, fit.h);
               if (look) applyLookPixels(octx, 0, 0, off.width, off.height, look);
               if (slot.feather) featherAlpha(octx, 0, 0, off.width, off.height, slot.feather, slot.featherSide);
             }
@@ -1654,6 +1670,7 @@ export function renderTemplateSlots(
           });
         }
 
+        raiseOverlays(canvas); // this photo may have loaded after the overlays above it
         canvas.requestRenderAll();
       });
     } else {
@@ -2009,6 +2026,7 @@ function renderScene(
         img.photoId = `text-slot-photo-${i}`;
         img.on('mousedown', () => onTextSlotPhotoClick(i));
         canvas.add(img);
+        raiseOverlays(canvas); // a late photo must not cover a dragged graphic or a sticker
         canvas.renderAll();
       });
     }
@@ -2018,7 +2036,6 @@ function renderScene(
   // Text is collected first, added to canvas, then brought to front.
   // Slot images load async via fab.Image.fromURL — they may be added
   // AFTER text, covering it. We re-bring text to front after a delay.
-  const textObjects: any[] = [];
   page.textElements.forEach((text: TextElement) => {
     const slotRect = text.boxIndex != null ? textSlotRect(text.boxIndex) : null;
     const autoWidth = Math.max(text.text.length * text.fontSize * 0.6, 100);
@@ -2068,7 +2085,6 @@ function renderScene(
       fabricText.on('mousedown', () => onTextSlotClick(bi));
     }
     canvas.add(fabricText);
-    textObjects.push(fabricText);
   });
 
   // 4a-bis. STUDIO stickers — free graphics: drag to move, corner handles to
@@ -2204,25 +2220,9 @@ function renderScene(
   // ornament and paint over it, hiding it in the editor until the next re-render
   // — which would desync the Fabric editor from the DOM preview + print, where
   // QR/ornament always render on top.)
-  const bringOverlaysToFront = () => {
-    canvas.getObjects().forEach((o: any) => {
-      if (typeof o.slotId === 'string' && (o.slotId.includes('-qr-') || o.slotId.includes('-qrbg-') || o.slotId.includes('-ornament-'))) {
-        canvas.bringToFront(o);
-      }
-    });
-    textObjects.forEach((t) => { if (canvas.contains(t)) canvas.bringToFront(t); });
-    // Free-transform caption-box GRAPHICS sit ON TOP — they can be dragged over a
-    // caption, so they must stay visible. (`-ornament-` above doesn't match the
-    // `-textornament-` id, so bring them last, above the text objects.)
-    canvas.getObjects().forEach((o: any) => {
-      if (typeof o.slotId === 'string' && (o.slotId.includes('-textornament-') || o.slotId.includes('-textqr-') || o.slotId.includes('-textqrbg-'))) {
-        canvas.bringToFront(o);
-      }
-    });
-  };
-  bringOverlaysToFront();
-  setTimeout(bringOverlaysToFront, 50);
-  setTimeout(bringOverlaysToFront, 150);
+  raiseOverlays(canvas);
+  setTimeout(() => raiseOverlays(canvas), 50);
+  setTimeout(() => raiseOverlays(canvas), 150);
 
   // 5. Layflat crease guide
   if (albumType === 'layflat') {

@@ -101,7 +101,7 @@ function TrustBarSection() {
     {
       icon: <Upload size={28} className="text-peach" />,
       label: 'Easy Photo Upload',
-      desc: 'Upload 20\u2013100 photos in seconds',
+      desc: 'Add as many photos as you like',
     },
     {
       icon: <LayoutGrid size={28} className="text-soft-lavender" />,

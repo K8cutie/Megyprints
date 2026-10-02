@@ -1,5 +1,5 @@
 import type { WizardStep } from '../../assistant/wizard';
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import type {
   AlbumSizePreset,
   AlbumPage,
@@ -27,7 +27,7 @@ import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotes
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
-import { clampStickerGeom, defaultStickerGeom, newStickerUid, type Sticker } from './stickers';
+import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
@@ -39,7 +39,9 @@ import { supabase } from '../../lib/supabase';
 import { photosToForget } from '../../lib/photoKeeping';
 import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
 import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
-import { detectFaceCenter, computeFaceOffset, initFaceApi } from './faceDetection';
+import { detectFaceCenter, initFaceApi } from './faceDetection';
+import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
+import { createLimiter } from '../../lib/limit';
 import { templateTracker } from './varietyTracker';
 import { readCaptureTime } from './exif';
 import { normalizeStoredPageFields } from './pageNormalize';
@@ -155,6 +157,28 @@ function dominantPageRatio(
     if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; }
   }
   return pageRatio;
+}
+
+/** Auto-fill's choice for a page: every EMPTY photo slot (not a QR slot, not
+ *  claimed by a QR/text/ornament) gets the next photo not already on it. */
+function autoFillPlan(page: AlbumPage, photoCount: number): (number | null)[] {
+  const tmplForFill = PAGE_TEMPLATES.find((t) => t.id === page.templateId);
+  const fills = [...(page.slotFills ?? [])];
+  let photoIdx = 0;
+  for (let i = 0; i < fills.length; i++) {
+    if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
+    if (page.qrFills?.[i] || page.slotTexts?.[i] || page.ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
+    if (fills[i] === null && photoIdx < photoCount) {
+      while (photoIdx < photoCount && fills.includes(photoIdx)) {
+        photoIdx++;
+      }
+      if (photoIdx < photoCount) {
+        fills[i] = photoIdx;
+        photoIdx++;
+      }
+    }
+  }
+  return fills;
 }
 
 function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
@@ -524,12 +548,9 @@ export interface BuilderActions {
   setSlotMask: (slotIndex: number, mask: MaskId | null) => void;
   /** STUDIO looks: a colour treatment on one photo slot (null = as shot). Marks the page yours. */
   setSlotLook: (slotIndex: number, look: LookId | null) => void;
-  /** STUDIO stickers: add a graphic at the page centre (clamped). Marks the page yours. */
-  addSticker: (fill: OrnamentFill) => GuardReason[];
-  /** Move / resize / rotate a sticker — clamped to the safe area and the size floor. */
+  /** Move / resize / rotate a placed sticker — clamped to the safe area and the
+   *  size floor. (Stickers are retired: none can be added or swapped.) */
   updateStickerGeom: (uid: string, geom: OrnamentTransform) => GuardReason[];
-  /** Swap a sticker's graphic, keeping its place. */
-  replaceStickerFill: (uid: string, fill: OrnamentFill) => void;
   removeSticker: (uid: string) => void;
   setQrFill: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
   /** True when the current page is a single-photo page a living-memory QR badge
@@ -653,6 +674,9 @@ export interface BuilderActions {
   setSelectedSlotIndex: (index: number | null) => void;
   setSelectedElementId: (id: string | null) => void;
 }
+
+/** Photos stored + measured at a time (see addPhotos). Module-level so back-to-back picks share it. */
+const measureLimit = createLimiter(3);
 
 export function useBuilderState(): BuilderActions {
   // ── Phase 1: Cloud hooks ──
@@ -787,37 +811,33 @@ export function useBuilderState(): BuilderActions {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
+  /** The album as of the last commit: what an undo step saves and gives back.
+   *  Read from a ref, never a closure. Most actions that call pushSnapshot are
+   *  memoized on their own deps (clearSlot only changes with the page, the
+   *  apply-to-all-pages ones never do), so a closure pushSnapshot saved the
+   *  album as it was when the ACTION was last made, and undo threw away every
+   *  edit since. A layout effect keeps it current before any tap, chat command
+   *  or useEffect can run. */
+  const undoableRef = useRef<Snapshot>({ albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate });
+  useLayoutEffect(() => {
+    undoableRef.current = { albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate };
+  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+
   /** Capture current state for undo */
   const pushSnapshot = useCallback(() => {
-    const snapshot: Snapshot = {
-      albumPages,
-      uploadedPhotos,
-      currentPageIndex,
-      albumSize,
-      photosPerPage,
-      selectedTemplate,
-    };
-    undoStackRef.current.push(snapshot);
+    undoStackRef.current.push(undoableRef.current);
     if (undoStackRef.current.length > MAX_UNDO_DEPTH) {
       undoStackRef.current.shift(); // drop oldest
     }
     redoStackRef.current = []; // clear redo on new action
     setCanUndo(true);
     setCanRedo(false);
-  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+  }, []);
 
   const undo = useCallback(() => {
     if (undoStackRef.current.length === 0) return;
-    const current: Snapshot = {
-      albumPages,
-      uploadedPhotos,
-      currentPageIndex,
-      albumSize,
-      photosPerPage,
-      selectedTemplate,
-    };
     const snapshot = undoStackRef.current.pop()!;
-    redoStackRef.current.push(current);
+    redoStackRef.current.push(undoableRef.current);
     setAlbumPages(snapshot.albumPages);
     setUploadedPhotos(snapshot.uploadedPhotos);
     setCurrentPageIndex(snapshot.currentPageIndex);
@@ -826,20 +846,12 @@ export function useBuilderState(): BuilderActions {
     setSelectedTemplateState(snapshot.selectedTemplate);
     setCanUndo(undoStackRef.current.length > 0);
     setCanRedo(true);
-  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+  }, []);
 
   const redo = useCallback(() => {
     if (redoStackRef.current.length === 0) return;
-    const current: Snapshot = {
-      albumPages,
-      uploadedPhotos,
-      currentPageIndex,
-      albumSize,
-      photosPerPage,
-      selectedTemplate,
-    };
     const snapshot = redoStackRef.current.pop()!;
-    undoStackRef.current.push(current);
+    undoStackRef.current.push(undoableRef.current);
     setAlbumPages(snapshot.albumPages);
     setUploadedPhotos(snapshot.uploadedPhotos);
     setCurrentPageIndex(snapshot.currentPageIndex);
@@ -848,7 +860,7 @@ export function useBuilderState(): BuilderActions {
     setSelectedTemplateState(snapshot.selectedTemplate);
     setCanUndo(true);
     setCanRedo(redoStackRef.current.length > 0);
-  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+  }, []);
 
   // ── Phase 1: Cloud state ──
   const [cloudSaveStatus, setCloudSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -1223,7 +1235,9 @@ export function useBuilderState(): BuilderActions {
     for (const photo of newPhotos) {
       const file = freshFiles.find((f) => f.name === photo.name && f.size === photo.size);
       if (!file) continue;
-      const task = (async () => {
+      // Bounded: each task fully decodes the photo (createImageBitmap) — all at
+      // once, a 250-photo pick decoded ~12 GB and the phone killed the app.
+      const task = measureLimit(async () => {
         const stored = await idbPhotos.store(file, photo.id);
         // A failed write (e.g. a full disk) returns null — still measure, or the
         // photo stays 0×0 and gets classified by guesswork.
@@ -1240,7 +1254,7 @@ export function useBuilderState(): BuilderActions {
               : p,
           ),
         );
-      })();
+      });
       pendingMeasureRef.current.add(task);
       void task.catch(() => { /* a failed measure must not block generation */ })
         .finally(() => pendingMeasureRef.current.delete(task));
@@ -1628,6 +1642,41 @@ export function useBuilderState(): BuilderActions {
     });
   }, [currentPageIndex]);
 
+  /* ── Face-centred auto-pan ──
+     detectFaceCenter gives the face as a 0–1 point on the photo; every renderer
+     reads the pan in DESIGN px (slotPhotoFit). Writing computeFaceOffset's −1…+1
+     straight into slotOffsets moved the photo by at most 1 px, so it never
+     centred anything. faceCentrePan converts against the slot's real box,
+     worked out when the result lands, on the page it lands on — so a moved or
+     zoomed frame, or the cover panel, uses its own box. A slot whose photo
+     changed in the meantime is left alone. */
+  const centreOnFace = useCallback((slotIndex: number, photoIndex: number) => {
+    const photoUrl = uploadedPhotos[photoIndex]?.previewUrl;
+    if (!photoUrl) return;
+    const pageIndex = currentPageIndex;
+    void detectFaceCenter(photoUrl).then((face) => {
+      if (!face) return;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const natural = { w: img.naturalWidth, h: img.naturalHeight };
+        const coverMode = editScopeRef.current === 'coverFront';
+        updateCurrentPage((p) => {
+          if ((p.slotFills ?? [])[slotIndex] !== photoIndex) return p;
+          const slot = slotDesignSize(p, slotIndex, albumSize, pageIndex, coverMode);
+          if (!slot) return p;
+          const pan = faceCentrePan(face, natural, slot, p.slotScales?.[slotIndex]);
+          const offsetsX = [...(p.slotOffsetsX ?? [])];
+          const offsetsY = [...(p.slotOffsetsY ?? [])];
+          offsetsX[slotIndex] = pan.x;
+          offsetsY[slotIndex] = pan.y;
+          return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
+        });
+      };
+      img.src = photoUrl;
+    });
+  }, [uploadedPhotos, currentPageIndex, updateCurrentPage, albumSize]);
+
   /* ── Slot management ── */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
     pushSnapshot();
@@ -1657,34 +1706,8 @@ export function useBuilderState(): BuilderActions {
       fills[slotIndex] = photoIndex;
       return { ...page, slotFills: fills, qrFills, slotTexts, ornamentFills };
     });
-
-    // ── Face-centered auto-pan ──
-    const photo = uploadedPhotos[photoIndex];
-    if (!photo) return;
-    const photoUrl = photo.previewUrl;
-    if (!photoUrl) return;
-    const template = PAGE_TEMPLATES.find((t) => t.id === (albumPages[currentPageIndex]?.templateId ?? ''));
-    const slot = template?.slots?.[slotIndex];
-
-    detectFaceCenter(photoUrl).then((faceCenter) => {
-      if (!faceCenter || !slot) return;
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const photoAspect = img.naturalWidth / img.naturalHeight;
-        const slotAspect = slot.width / slot.height;
-        const { offsetX, offsetY } = computeFaceOffset(faceCenter, photoAspect, slotAspect);
-        updateCurrentPage((p) => {
-          const offsetsX = [...(p.slotOffsetsX ?? [])];
-          const offsetsY = [...(p.slotOffsetsY ?? [])];
-          offsetsX[slotIndex] = offsetX;
-          offsetsY[slotIndex] = offsetY;
-          return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
-        });
-      };
-      img.src = photoUrl;
-    });
-  }, [updateCurrentPage, uploadedPhotos, albumPages, currentPageIndex]);
+    centreOnFace(slotIndex, photoIndex);
+  }, [updateCurrentPage, centreOnFace, pushSnapshot]);
 
   const clearSlot = useCallback((slotIndex: number) => {
     pushSnapshot();
@@ -1765,24 +1788,13 @@ export function useBuilderState(): BuilderActions {
     });
   }, [updateCurrentPage, pushSnapshot]);
 
-  const addSticker = useCallback((fill: OrnamentFill): GuardReason[] => {
-    const geom = defaultStickerGeom(studioCtx());
-    const sticker: Sticker = { ...fill, uid: newStickerUid(), geom };
-    pushSnapshot();
-    updateCurrentPage((p) => ({ ...p, stickers: [...(p.stickers ?? []), sticker], studio: true }));
-    return [];
-  }, [updateCurrentPage, pushSnapshot, studioCtx]);
-
+  /* Stickers are retired (owner, 2026-10-01): none can be added or swapped.
+     Placed ones still render and print, so they can still be moved and removed. */
   const updateStickerGeom = useCallback((uid: string, geom: OrnamentTransform): GuardReason[] => {
     const { geom: clamped, reasons } = clampStickerGeom(geom, studioCtx());
     updateCurrentPage((p) => ({ ...p, stickers: (p.stickers ?? []).map((k) => (k.uid === uid ? { ...k, geom: clamped } : k)) }));
     return reasons;
   }, [updateCurrentPage, studioCtx]);
-
-  const replaceStickerFill = useCallback((uid: string, fill: OrnamentFill) => {
-    pushSnapshot();
-    updateCurrentPage((p) => ({ ...p, stickers: (p.stickers ?? []).map((k) => (k.uid === uid ? { ...k, ...fill, uid, geom: k.geom } : k)) }));
-  }, [updateCurrentPage, pushSnapshot]);
 
   const removeSticker = useCallback((uid: string) => {
     pushSnapshot();
@@ -2155,62 +2167,16 @@ export function useBuilderState(): BuilderActions {
   /* ── Auto-fill ── */
   const autoFillSlots = useCallback(() => {
     pushSnapshot();
-    updateCurrentPage((page) => {
-      const tmplForFill = PAGE_TEMPLATES.find((t) => t.id === page.templateId);
-      const slotCount = page.slotFills?.length ?? 0;
-      if (slotCount === 0) return page;
-      const fills = [...(page.slotFills ?? [])];
-      let photoIdx = 0;
-      for (let i = 0; i < slotCount; i++) {
-        if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
-        if (page.qrFills?.[i] || page.slotTexts?.[i] || page.ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
-        if (fills[i] === null && photoIdx < uploadedPhotos.length) {
-          while (photoIdx < uploadedPhotos.length && fills.includes(photoIdx)) {
-            photoIdx++;
-          }
-          if (photoIdx < uploadedPhotos.length) {
-            fills[i] = photoIdx;
-            photoIdx++;
-          }
-        }
-      }
-      return { ...page, slotFills: fills };
+    updateCurrentPage((page) => (page.slotFills?.length ? { ...page, slotFills: autoFillPlan(page, uploadedPhotos.length) } : page));
+    // Face-centre the photos this just placed — and only those; a photo already
+    // on the page keeps its framing. (This used to walk the page as it was
+    // BEFORE the fill, so it re-panned the photos already there and skipped
+    // the new ones.)
+    const before = currentPage.slotFills ?? [];
+    autoFillPlan(currentPage, uploadedPhotos.length).forEach((fill, slotIndex) => {
+      if (fill != null && before[slotIndex] == null) centreOnFace(slotIndex, fill);
     });
-
-    // ── Face-centered auto-pan for all filled slots ──
-    const page = albumPages[currentPageIndex];
-    const template = PAGE_TEMPLATES.find((t) => t.id === (page?.templateId ?? ''));
-    if (!template) return;
-
-    (page?.slotFills ?? []).forEach((fill, slotIndex) => {
-      if (fill === null) return;
-      const photo = uploadedPhotos[fill];
-      if (!photo) return;
-      const photoUrl = photo.previewUrl;
-      if (!photoUrl) return;
-      const slot = template.slots?.[slotIndex];
-      if (!slot) return;
-
-      detectFaceCenter(photoUrl).then((faceCenter) => {
-        if (!faceCenter) return;
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const photoAspect = img.naturalWidth / img.naturalHeight;
-          const slotAspect = slot.width / slot.height;
-          const { offsetX, offsetY } = computeFaceOffset(faceCenter, photoAspect, slotAspect);
-          updateCurrentPage((p) => {
-            const offsetsX = [...(p.slotOffsetsX ?? [])];
-            const offsetsY = [...(p.slotOffsetsY ?? [])];
-            offsetsX[slotIndex] = offsetX;
-            offsetsY[slotIndex] = offsetY;
-            return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
-          });
-        };
-        img.src = photoUrl;
-      });
-    });
-  }, [updateCurrentPage, uploadedPhotos, albumPages, currentPageIndex]);
+  }, [pushSnapshot, updateCurrentPage, uploadedPhotos, currentPage, centreOnFace]);
 
   const clearAllSlots = useCallback(() => {
     pushSnapshot();
@@ -2860,9 +2826,7 @@ export function useBuilderState(): BuilderActions {
     resetStudioPage,
     setSlotMask,
     setSlotLook,
-    addSticker,
     updateStickerGeom,
-    replaceStickerFill,
     removeSticker,
     setQrFill,
     canAddMemoryQr,

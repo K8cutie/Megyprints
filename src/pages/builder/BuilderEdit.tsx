@@ -32,7 +32,6 @@ import { CloudSaveStatus } from '../../components/CloudSaveStatus';
 import { useAuth } from '../../lib/authContext';
 import { GUARD_MESSAGES, SOFT_MESSAGE, printSharpness, resolveSlotBox } from './slotGeometry';
 import StudioStrip from './StudioStrip';
-import AddOrnamentModal from './AddOrnamentModal';
 /* PropertiesPanel is now rendered inside UnifiedPanel */
 import { getCanvasDimensions } from './layouts';
 import { PAGE_TEMPLATES, hasQrSlot } from './pageTemplates';
@@ -93,8 +92,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     if (guardTimer.current) clearTimeout(guardTimer.current);
     guardTimer.current = setTimeout(() => setGuardMsg(null), 2600);
   }, []);
-  /* Studio stickers: the picker (add) or the editor (swap/remove) for one uid. */
-  const [stickerModal, setStickerModal] = useState<{ uid: string | null } | null>(null);
+  /* Stickers were retired (owner, 2026-10-01): placed ones still show, print and
+     move; a double-click offers the one thing left to do — take it off. */
+  const [stickerToRemove, setStickerToRemove] = useState<string | null>(null);
 
   /* ── Sidebar hidden by default — Megy Assistant is the primary control ── */
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -222,7 +222,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       const reasons = actions.updateStickerGeom(uid, geom);
       if (reasons.length) sayGuard(GUARD_MESSAGES[reasons[0]]);
     }, [actions, sayGuard]),
-    onStickerClick: useCallback((uid: string) => setStickerModal({ uid }), []),
+    onStickerClick: useCallback((uid: string) => setStickerToRemove(uid), []),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {
@@ -771,16 +771,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {guardMsg}
         </div>
       )}
-      {stickerModal && (
-        <AddOrnamentModal
-          initial={stickerModal.uid ? (actions.currentPage?.stickers?.find((k) => k.uid === stickerModal.uid) ?? null) : null}
-          onSave={(fill) => {
-            if (stickerModal.uid) actions.replaceStickerFill(stickerModal.uid, fill);
-            else { actions.addSticker(fill); sayGuard('Sticker added — drag it anywhere inside the safe area, corner handles resize and rotate.'); }
-            setStickerModal(null);
-          }}
-          onRemove={() => { if (stickerModal.uid) actions.removeSticker(stickerModal.uid); setStickerModal(null); }}
-          onClose={() => setStickerModal(null)}
+      {stickerToRemove && (
+        <RemoveGraphicModal kind="sticker"
+          onRemove={() => { actions.removeSticker(stickerToRemove); setStickerToRemove(null); }}
+          onClose={() => setStickerToRemove(null)}
         />
       )}
       {/* Caption editor — same component the mobile review + preview use, so the
@@ -1109,11 +1103,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             </div>
           </div>
 
-          {/* STUDIO strip — masks + looks for the selected photo, stickers for the page */}
+          {/* STUDIO strip — masks + looks for the selected photo */}
           {studio && (
             <StudioStrip page={actions.currentPage} selectedSlotIndex={selectedSlotIndex}
               onMask={(i, m) => actions.setSlotMask(i, m)} onLook={(i, l) => actions.setSlotLook(i, l)}
-              onGuard={sayGuard} onAddSticker={() => setStickerModal({ uid: null })} />
+              onGuard={sayGuard} />
           )}
 
           {/* Canvas */}

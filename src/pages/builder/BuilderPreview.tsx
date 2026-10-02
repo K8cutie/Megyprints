@@ -15,6 +15,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import { BOOK } from './bookFeel';
 import { resolveSlotBox } from './slotGeometry';
+import { slotPhotoDomBox } from './slotPhotoFit';
 import { applyMask, isMaskId } from './masks';
 import { lookCss, isLookId } from './looks';
 import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
@@ -411,16 +412,18 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         }
 
         const { style: shapeStyle, width, height, leftOffset, topOffset } =
-          slotShapeStyle(slot, slot.width * safeW, slot.height * safeH);
-        const left = safeX + slot.x * safeW + leftOffset;
-        const top = safeY + slot.y * safeH + topOffset;
-        const slotScale = page.slotScales?.[idx] ?? 1;
-        const slotOffsetX = page.slotOffsetsX?.[idx] ?? 0;
-        const slotOffsetY = page.slotOffsetsY?.[idx] ?? 0;
-        const imgW = width * slotScale;
-        const imgH = height * slotScale;
-        const imgLeft = (width - imgW) / 2 + slotOffsetX * sx;
-        const imgTop = (height - imgH) / 2 + slotOffsetY * sy;
+          slotShapeStyle(slot, slotW, slotH);
+        const left = slotLeft + leftOffset;
+        const top = slotTop + topOffset;
+        // The ONE fit print + the editor draw with (slotPhotoFit): cover-fitted
+        // to the FULL slot rect, zoomed about its centre, panned INSIDE the
+        // overflow (object-position) — never by moving the photo box, which at
+        // zoom 1 slid the whole photo and left an empty strip. A circle/heart/
+        // star wrapper is the centred square, so the rect sits at −offset in it.
+        // maxWidth 'none': the base `img { max-width: 100% }` rule would hold a
+        // zoomed box to the frame's width and open a strip on the right.
+        const photoBox = slotPhotoDomBox({ w: slotW, h: slotH }, page.slotScales?.[idx],
+          { x: (page.slotOffsetsX?.[idx] ?? 0) * sx, y: (page.slotOffsetsY?.[idx] ?? 0) * sy });
         // Theme-baked frame overrides the per-slot template border when present.
         // Full-bleed (single-photo, no-textbox) pages get no frame at all.
         const frameWidth = template.fullBleed || slot.masked ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
@@ -432,8 +435,10 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           ? {}
           : frameStyleToCss(page.frameStyle, frameColor);
         // Outer drop shadows (polaroid / shadowbox) need overflow visible to show;
-        // any other frame keeps the photo clipped to the slot/shape.
-        const frameClips = !(page.frameStyle === 'polaroid' || page.frameStyle === 'shadowbox');
+        // any other frame keeps the photo clipped to the slot/shape. A masked or
+        // full-bleed slot draws no frame, so it always clips — otherwise a
+        // circle mask on a polaroid page showed the photo's whole box.
+        const frameClips = template.fullBleed || slot.masked || !(page.frameStyle === 'polaroid' || page.frameStyle === 'shadowbox');
 
         return (
           <div key={`slot-${idx}`} className="absolute" data-slot={idx}
@@ -448,7 +453,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           }}>
             <img src={uploaded.previewUrl} alt="" draggable={false}
               className="absolute object-cover"
-              style={{ left: imgLeft, top: imgTop, width: imgW, height: imgH, ...frameCss.inner,
+              style={{ left: photoBox.left - leftOffset, top: photoBox.top - topOffset, width: photoBox.width, height: photoBox.height,
+                maxWidth: 'none', objectPosition: photoBox.objectPosition, ...frameCss.inner,
                 // STUDIO look — the same filter functions the editor + print apply to pixels.
                 ...(isLookId(page.slotLooks?.[idx]) ? { filter: lookCss(page.slotLooks?.[idx] as never) } : {}) }} />
             {editable && onRemoveFromSlot && (
