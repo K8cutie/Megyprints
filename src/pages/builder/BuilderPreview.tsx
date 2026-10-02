@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw, Sparkles, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw, Sparkles } from 'lucide-react';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss, dealtBoxRoll } from './types';
@@ -13,6 +13,8 @@ import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
+import EndOfAlbumPrompt from './EndOfAlbumPrompt';
+import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
 import { BOOK } from './bookFeel';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoDomBox } from './slotPhotoFit';
@@ -812,14 +814,11 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const hasPrev = spreadLeftIndex > 0;
   const hasNext = spreadLeftIndex + 2 < total;
 
-  // End-of-album prompt — shows once when they reach the last spread. It can
-  // be dismissed (keep browsing) and it offers a real way back to the pages
-  // (owner, 2026-09-13: "there doesn't seem to be a way to go back").
-  const [showOrderCta, setShowOrderCta] = useState(false);
-  const [ctaSeen, setCtaSeen] = useState(false);
-  useEffect(() => {
-    if (!hasNext && total > 0 && !ctaSeen) { setShowOrderCta(true); setCtaSeen(true); }
-  }, [hasNext, total, ctaSeen]);
+  // End-of-album prompt — opens EVERY time they arrive at the last spread
+  // (useEndOfAlbumPrompt). It can be dismissed (keep browsing) and it offers a
+  // real way back to the pages (owner, 2026-09-13: "there doesn't seem to be a
+  // way to go back").
+  const endPrompt = useEndOfAlbumPrompt(!hasNext && total > 0);
 
   return (
     <div style={landscapeRotate
@@ -949,36 +948,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         </div>
       </div>
 
-      {/* End-of-album prompt — shows once on the last spread. Tap outside or ✕ to
-          keep browsing; "Back to my pages" is a real button, not a footnote. */}
-      {showOrderCta && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6" onClick={() => setShowOrderCta(false)} data-testid="end-prompt">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 text-center relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowOrderCta(false)} aria-label="Keep browsing" className="absolute top-3 right-3 text-light hover:text-medium p-1"><X size={18} /></button>
-            <div className="text-4xl mb-2">📦</div>
-            <h3 className="font-display text-2xl font-semibold text-dark mb-1">You've reached the end</h3>
-            <p className="text-sm text-medium mb-5">Your album looks beautiful. Give it a cover, then make it real.</p>
-            <button
-              onClick={() => setCoverOpen(true)}
-              className="w-full py-3 mb-3 bg-white border-2 border-blush-pink text-[#C56B4E] text-base font-semibold rounded-xl hover:bg-blush active:scale-[0.98] transition-all"
-            >
-              🎨 Design your cover
-            </button>
-            <button
-              onClick={handleOrder}
-              className="w-full py-4 bg-blush-pink text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md"
-            >
-              ORDER ALBUM
-            </button>
-            <button
-              onClick={onBack}
-              data-testid="end-prompt-back"
-              className="w-full mt-3 py-3 rounded-xl border border-line text-cocoa text-sm font-semibold hover:bg-blush active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
-            >
-              <ChevronLeft size={16} /> Back to my pages — I want to change something
-            </button>
-          </div>
-        </div>
+      {/* End-of-album prompt — on every arrival at the last spread. Tap outside
+          or ✕ to keep browsing; "Continue editing" is a real button. */}
+      {endPrompt.open && (
+        <EndOfAlbumPrompt onClose={endPrompt.close} onCheckCover={() => setCoverOpen(true)} onOrder={handleOrder} onContinueEditing={onBack} />
       )}
 
       {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too).
