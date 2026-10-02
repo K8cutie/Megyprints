@@ -15,6 +15,13 @@
 // the album: ensureThemeQuotes(theme, need) tops the cached set up in batches
 // of up to 60 lines per call, each call carrying the lines already held so the
 // model writes NEW ones. Generation asks for one line per caption box.
+//
+// PRE-LOADED FIRST (owner, 2026-10-02): an occasion the bank knows (Wedding,
+// Baptism, Birthday, Baby, Graduation, Family, Vacation — the quick picks, or
+// typed words that map to them) deals from its 100 shipped lines with NO call.
+// The AI only writes the EXTRA lines a bigger album needs, told to avoid the
+// bank. A typed occasion the bank doesn't recognise is still AI-first (lines
+// written for "Company outing" beat generic ones), with the general set behind.
 
 import { THEME_QUOTES } from '../pages/builder/themeQuotes';
 import type { TemplateType } from '../pages/builder/types';
@@ -62,8 +69,34 @@ const THEME_ALIASES: { match: RegExp; theme: TemplateType }[] = [
 
 /** The curated theme whose lines best fit this free-text theme. */
 export function curatedThemeFor(theme: string): TemplateType {
+  return matchedTheme(theme) ?? 'classic';
+}
+
+/** The bank category this free-text theme names, or null when nothing matched
+ *  (then the album gets lines written for its own words — AI-first). */
+export function matchedTheme(theme: string): TemplateType | null {
   for (const { match, theme: t } of THEME_ALIASES) if (match.test(theme)) return t;
-  return 'classic';
+  return null;
+}
+
+/** The pre-loaded lines that come FIRST for this theme, or null when the
+ *  theme isn't one the bank knows. */
+function bankFor(theme: string): string[] | null {
+  const t = matchedTheme(theme);
+  return t ? withinLimit(THEME_QUOTES[t] ?? []) : null;
+}
+
+/** Bank first, then the extra lines, never the same line twice. */
+function merged(base: string[], extra: string[]): string[] {
+  const seen = new Set(base.map(norm));
+  const out = [...base];
+  for (const l of extra) {
+    const k = norm(l);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(l);
+  }
+  return out;
 }
 
 /** The shipped lines for a free-text theme — the always-available $0 answer. */
@@ -146,13 +179,15 @@ async function requestLines(theme: string, count: number, avoid: string[]): Prom
   }
 }
 
-/** Grow the theme's cached pool toward `job.target`, one batch per call. */
-async function runTopup(key: string, theme: string, job: { target: number }): Promise<void> {
+/** Grow the theme's cached pool toward `job.target`, one batch per call.
+ *  `base` = the bank lines already in the album's pool: the model is told to
+ *  avoid them, and they count toward the per-theme cap. */
+async function runTopup(key: string, theme: string, job: { target: number }, base: string[] = []): Promise<void> {
   for (let calls = 0; calls < MAX_TOPUP_CALLS; calls++) {
     const have = cache.get(key) ?? [];
-    const short = Math.min(job.target, QUOTES_PER_THEME_MAX) - have.length;
+    const short = Math.min(job.target, QUOTES_PER_THEME_MAX - base.length) - have.length;
     if (short <= 0) return;
-    const fresh = await requestLines(theme, Math.min(QUOTE_BATCH_MAX, short), have);
+    const fresh = await requestLines(theme, Math.min(QUOTE_BATCH_MAX, short), [...base, ...have]);
     if (!fresh || fresh.length === 0) return;        // failed or dry — stop spending
     // Re-read: the cache may have been cleared/replaced while we were away.
     const now = cache.get(key) ?? [];
@@ -178,14 +213,17 @@ export async function ensureThemeQuotes(
   if (!t) return withinLimit(curatedQuotesFor(t));
   hydrate();
   const key = t.toLowerCase();
-  const target = Math.min(QUOTES_PER_THEME_MAX, Math.max(1, Math.floor(min)));
-  if ((cache.get(key)?.length ?? 0) < target) {
+  const bank = bankFor(t) ?? [];
+  // A known occasion's pre-loaded lines count toward the album's need; only
+  // the shortfall is written by the AI (none at all for most albums).
+  const target = Math.max(0, Math.min(QUOTES_PER_THEME_MAX, Math.max(1, Math.floor(min))) - bank.length);
+  if (target > 0 && (cache.get(key)?.length ?? 0) < target) {
     let job = topups.get(key);
     if (job) {
       job.target = Math.max(job.target, target);
     } else {
       const j = { target, done: Promise.resolve() };
-      j.done = runTopup(key, t, j).finally(() => { if (topups.get(key) === j) topups.delete(key); });
+      j.done = runTopup(key, t, j, bank).finally(() => { if (topups.get(key) === j) topups.delete(key); });
       topups.set(key, j);
       job = j;
     }
@@ -202,6 +240,8 @@ export async function fetchThemeQuotes(theme: string): Promise<QuoteSet> {
   const t = theme.trim();
   const curated = { quotes: withinLimit(curatedQuotesFor(t)), source: 'curated' as const };
   if (!t) return curated;
+  // A known occasion: the pre-loaded lines ARE the answer — no call.
+  if (bankFor(t)) return { quotes: quotesForThemeNow(t), source: hasExtras(t) ? 'ai' : 'curated' };
   await ensureThemeQuotes(t, DEFAULT_QUOTE_COUNT);
   const ai = cache.get(t.toLowerCase());
   return ai?.length ? { quotes: withinLimit(ai), source: 'ai' } : curated;
@@ -214,6 +254,16 @@ export async function moreThemeQuotes(theme: string): Promise<QuoteSet> {
   const t = theme.trim();
   if (!t) return fetchThemeQuotes(t);
   hydrate();
+  const bank = bankFor(t);
+  if (bank) {
+    // Past the bank: "More lines" asks the AI for a page of extras the bank
+    // doesn't have (it avoids the bank), and keeps everything already held.
+    const extras = cache.get(t.toLowerCase())?.length ?? 0;
+    if (bank.length + extras >= QUOTES_PER_THEME_MAX) forgetThemeQuotes(t);
+    const held = bank.length + (cache.get(t.toLowerCase())?.length ?? 0);
+    await ensureThemeQuotes(t, held + DEFAULT_QUOTE_COUNT);
+    return { quotes: quotesForThemeNow(t), source: hasExtras(t) ? 'ai' : 'curated' };
+  }
   const have = cache.get(t.toLowerCase())?.length ?? 0;
   if (have >= QUOTES_PER_THEME_MAX) forgetThemeQuotes(t);
   await ensureThemeQuotes(t, have >= QUOTES_PER_THEME_MAX ? DEFAULT_QUOTE_COUNT : have + DEFAULT_QUOTE_COUNT);
@@ -230,9 +280,17 @@ export function quotesForThemeNow(theme: string): string[] {
   if (t) {
     hydrate();
     const cached = cache.get(t.toLowerCase());
+    const bank = bankFor(t);
+    if (bank) return merged(bank, withinLimit(cached ?? []));
     if (cached?.length) return withinLimit(cached);
   }
   return withinLimit(curatedQuotesFor(t));
+}
+
+/** Has the AI written extra lines for this theme on this device? */
+function hasExtras(theme: string): boolean {
+  hydrate();
+  return (cache.get(theme.trim().toLowerCase())?.length ?? 0) > 0;
 }
 
 /** The album theme the customer typed at setup (BuilderSetup writes this). */
