@@ -172,7 +172,6 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
      Only sync when user explicitly transitions phases (setup→edit→preview).
      During setup, the wizard stays at whatever step the user is on. */
   const [wizardStep, setWizardStep] = useState(engine.state.step);
-  const prevPhaseRef = useRef(builder.phase);
 
   /* ── Album occasion (pick_theme, unskippable) ──
      Written to the same local key the quote engine reads. Next is gated on
@@ -242,14 +241,17 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [builder.wizardStep]);
   /* ── Option A: reconcile the wizard to reality (FORWARD only).
-     Runs on mount and whenever the phase OR the generated-album state changes,
-     so a returning user with a finished album lands on "Review" instead of the
-     size step. Never yanks the user backward mid-setup. ── */
+     Runs whenever the phase OR the album's built state changes: an album just
+     built moves on to Review, the preview opened from the pages moves on to
+     Finalize. A phase the step itself asked for (← Previous, Next, the cover
+     editor's ← Back) changes nothing — reading it as news bounced ← Previous
+     on the upload step straight back off the cover. A reload is reconciled in
+     bootWizard, before the first render. ── */
+  const albumBuilt = engine.hasBuiltAlbum();
   useEffect(() => {
-    prevPhaseRef.current = builder.phase;
-    if (wizardRef.current.reconcileForward()) setWizardStep(wizardRef.current.state.step);
+    if (wizardRef.current.reconcileOnChange()) setWizardStep(wizardRef.current.state.step);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [builder.phase, builder.albumPages.length]);
+  }, [builder.phase, albumBuilt]);
 
   /* Save the journey on every step change and on the ✕, so a reload restores
      it. Declared after the effects above, so it saves what they settled on. */
@@ -577,8 +579,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               </button>
               {/* No footer Next on the upload step: "Generate Album →" is the
                   real way forward (it generates AND advances), and an unguarded
-                  Next with zero photos skips into an empty review. */}
-              {wizardRef.current.state.step !== 'upload_photos' && (
+                  Next with zero photos skips into an empty review. Once an
+                  album is built (the customer came back from Review), Next
+                  returns to it without rebuilding the pages. */}
+              {(wizardRef.current.state.step !== 'upload_photos' || albumBuilt) && (
                 <button
                   onClick={goNext}
                   disabled={nextDisabled}
@@ -737,8 +741,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 ← Previous
               </button>
               {/* No footer Next on the upload step — same rule as the desktop
-                  panel: "Generate Album →" advances; Next would skip with 0 photos. */}
-              {wizardRef.current.state.step !== 'upload_photos' && (
+                  panel: "Generate Album →" advances; Next would skip with 0 photos.
+                  With an album already built, Next goes back to it. */}
+              {(wizardRef.current.state.step !== 'upload_photos' || albumBuilt) && (
                 <button
                   onClick={goNext}
                   disabled={nextDisabled}
