@@ -5,6 +5,7 @@
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { resolveSlotBox } from './slotGeometry';
+import { slotPhotoRect } from './slotPhotoFit';
 import { applyMask, isMaskId, archRy, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, applyTextureAlpha } from './masks';
 import { applyLookPixels, isLookId } from './looks';
 import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
@@ -97,7 +98,7 @@ async function renderPageManually(
   // enlarged every 750-authored size (6×6/8×8/6×4/11.5×8/9×9) by 750/576 ≈ 1.3×
   // on the printed page vs. what the customer designed. Scale by W/uiW so print
   // matches the WYSIWYG preview for every size.
-  const uiW = getCanvasDimensions(albumSize).width;
+  const { width: uiW, height: uiH } = getCanvasDimensions(albumSize);
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -163,7 +164,7 @@ async function renderPageManually(
       const photo = photos[photoIdx];
       if (!photo) continue;
 
-      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false, W / uiW);
+      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false, { x: W / uiW, y: H / uiH });
     }
   }
 
@@ -437,7 +438,7 @@ async function renderBackground(
       try {
         const tile = await loadImage(textureDataUri((bg as any).texture, (bg as any).textureColor));
         // TEXTURE_TILE_PX is a DESIGN-px size (the 750-wide editor space), so
-        // the print tile scales by W/uiW — the same factor text and pan use.
+        // the print tile scales by W/uiW — the same factor text and the X pan use.
         // (The old code divided by a stale local size table, printing tiles
         // ~30% larger than the editor showed; worst on 9x9, which the table
         // didn't even list.)
@@ -517,7 +518,9 @@ async function renderSlotOrnament(
 }
 
 /** Render a single slot photo at print resolution.
- *  `printScale` = W/uiW — converts DESIGN-px slot pan offsets to print px. */
+ *  `printScale` = print px per DESIGN px on each axis (W/uiW, H/uiH) — converts
+ *  the slot pan offsets the same way the DOM preview does (its sx, sy), so a
+ *  size whose editor canvas rounds (8×6, 8.5×11 …) pans identically in both. */
 async function renderSlotPhoto(
   ctx: CanvasRenderingContext2D,
   photo: UploadedPhoto,
@@ -529,7 +532,7 @@ async function renderSlotPhoto(
   page: AlbumPage,
   slotIndex: number,
   fullBleed: boolean,
-  printScale: number,
+  printScale: { x: number; y: number },
 ) {
   // Load original photo at full resolution
   let img: HTMLImageElement;
@@ -618,36 +621,22 @@ async function renderSlotPhoto(
     ctx.translate(-(sx + sw / 2), -(sy + sh / 2));
   }
 
-  // Apply slot transform (scale/offset from user editing)
-  const slotScale = page.slotScales?.[slotIndex] ?? 1;
-  const slotOffsetX = page.slotOffsetsX?.[slotIndex] ?? 0;
-  const slotOffsetY = page.slotOffsetsY?.[slotIndex] ?? 0;
-
-  // Cover-fit calculation at print resolution
-  const imgAspect = img.naturalWidth / img.naturalHeight;
-  const slotAspect = sw / sh;
-  let drawW: number, drawH: number;
-  if (imgAspect > slotAspect) {
-    drawH = sh;
-    drawW = drawH * imgAspect;
-  } else {
-    drawW = sw;
-    drawH = drawW / imgAspect;
-  }
-
-  // Apply user zoom
-  if (slotScale !== 1) {
-    drawW *= slotScale;
-    drawH *= slotScale;
-  }
-
-  // Center and apply the user's pan. Offsets are stored in DESIGN px (the
-  // Fabric editor writes canvas px; the DOM preview consumes them × its own
-  // display scale), so print converts with the same W/uiW factor as text.
-  // The old `* (sw / 100)` treated them as percent-of-slot, printing a panned
-  // photo displaced ~2.5–7× further than designed (error grew with slot size).
-  const drawX = sx + sw / 2 - drawW / 2 + slotOffsetX * printScale;
-  const drawY = sy + sh / 2 - drawH / 2 + slotOffsetY * printScale;
+  // Cover-fit × the user's zoom, centred, then the user's pan — the ONE fit the
+  // editor and the preview draw with too (slotPhotoFit), held to the photo's
+  // overflow so a pan can't uncover the slot. Offsets are stored in DESIGN px,
+  // so print converts them with printScale. (The old `* (sw / 100)` treated
+  // them as percent-of-slot, printing a panned photo displaced ~2.5–7×
+  // further than designed.)
+  const fit = slotPhotoRect(
+    { w: img.naturalWidth, h: img.naturalHeight },
+    { w: sw, h: sh },
+    page.slotScales?.[slotIndex],
+    { x: (page.slotOffsetsX?.[slotIndex] ?? 0) * printScale.x, y: (page.slotOffsetsY?.[slotIndex] ?? 0) * printScale.y },
+  );
+  const drawX = sx + fit.x;
+  const drawY = sy + fit.y;
+  const drawW = fit.w;
+  const drawH = fit.h;
 
   const rawLook = page.slotLooks?.[slotIndex];
   const look = isLookId(rawLook) ? rawLook : null;

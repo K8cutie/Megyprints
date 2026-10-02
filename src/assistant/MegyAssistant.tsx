@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useBuilderContext } from '../pages/builder/BuilderContext';
 import { parseIntent } from './intentParser';
-import { WizardEngine, WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady } from './wizard';
+import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, bootWizard, readSavedWizard } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
@@ -19,6 +19,7 @@ import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackgro
 import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
+import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
 import {
@@ -49,6 +50,12 @@ function TypeText({ text, speed = 22 }: { text: string; speed?: number }) {
     return () => clearInterval(t);
   }, [text, speed]);
   return <>{shown}</>;
+}
+
+/* Megy's messages mark key words with **bold** — show them bold, not as
+   asterisks. Plain text nodes and <strong>, so nothing is parsed as HTML. */
+function BoldText({ text }: { text: string }) {
+  return <>{splitBold(text).map((run, i) => (run.bold ? <strong key={i}>{run.text}</strong> : run.text))}</>;
 }
 
 /* ── Constants matching PropertiesPanel ── */
@@ -146,30 +153,28 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   const builder = useBuilderContext();
 
-  /* ── Wizard state ── */
-  const isFirstTime = !localStorage.getItem(WIZARD_STORAGE_KEY);
-  // Built ONCE and reconciled BEFORE the first render reads its step. A
-  // returning customer's engine starts at pick_size (phase setup) and used to
-  // reach review only after mount — the center flipped edit → setup → edit in
-  // one tick, and AnimatePresence mode="wait" stranded the size picker on
-  // screen with the finished album loaded behind it.
-  const [engine] = useState(() => {
-    const e = new WizardEngine(builder, isFirstTime);
-    e.reconcileForward();
-    return e;
-  });
+  /* ── Wizard state ──
+     Booted from the journey saved on the last visit (saved on every step
+     change, below), so a reload lands on the step the customer was on — the
+     upload card stays the upload card instead of falling back to the size
+     picker. Built ONCE and reconciled BEFORE the first render reads its step:
+     an engine that reached review only after mount flipped the center
+     edit → setup → edit in one tick, and AnimatePresence mode="wait"
+     stranded the size picker on screen with the finished album behind it. */
+  const [{ engine, dismissed }] = useState(() => bootWizard(builder, readSavedWizard()));
   const wizardRef = useRef(engine);
   // Keep the wizard's builder in sync DURING render (not in an effect) so
   // getMessage() always reads the current page/state — otherwise the review
   // message lags a render behind page navigation.
   wizardRef.current.builder = builder;
-  const [showWizard, setShowWizard] = useState(isFirstTime || builder.phase === 'setup');
+  // A dismissed (✕) guided card stays closed across a reload — except during
+  // setup, where it IS the screen.
+  const [showWizard, setShowWizard] = useState(!dismissed || builder.phase === 'setup');
 
   /* ── Auto-sync wizard when builder PHASE changes ──
      Only sync when user explicitly transitions phases (setup→edit→preview).
      During setup, the wizard stays at whatever step the user is on. */
   const [wizardStep, setWizardStep] = useState(engine.state.step);
-  const prevPhaseRef = useRef(builder.phase);
 
   /* ── Album occasion (pick_theme, unskippable) ──
      Written to the same local key the quote engine reads. Next is gated on
@@ -203,8 +208,14 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   /* External writes to the shared step (e.g. the center "Start Creating"
      button) flow back into the wizard engine + panel. Forward jumps mark the
-     skipped-over steps complete so detectStep stays consistent. */
+     skipped-over steps complete so detectStep stays consistent.
+     Only a CHANGE of the store's step is a write. Its first value is the
+     store's default ('welcome'), and reading that as a backward jump dragged
+     a restored engine back to welcome on mount. */
+  const storeStepRef = useRef(builder.wizardStep);
   useEffect(() => {
+    if (storeStepRef.current === builder.wizardStep) return;
+    storeStepRef.current = builder.wizardStep;
     const eng = wizardRef.current;
     if (builder.wizardStep !== eng.state.step) {
       // The first step (name + occasion) cannot be jumped over: a forward
@@ -233,14 +244,23 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [builder.wizardStep]);
   /* ── Option A: reconcile the wizard to reality (FORWARD only).
-     Runs on mount and whenever the phase OR the generated-album state changes,
-     so a returning user with a finished album lands on "Review" instead of the
-     size step. Never yanks the user backward mid-setup. ── */
+     Runs whenever the phase OR the album's built state changes: an album just
+     built moves on to Review, the preview opened from the pages moves on to
+     Finalize. A phase the step itself asked for (← Previous, Next, the cover
+     editor's ← Back) changes nothing — reading it as news bounced ← Previous
+     on the upload step straight back off the cover. A reload is reconciled in
+     bootWizard, before the first render. ── */
+  const albumBuilt = engine.hasBuiltAlbum();
   useEffect(() => {
-    prevPhaseRef.current = builder.phase;
-    if (wizardRef.current.reconcileForward()) setWizardStep(wizardRef.current.state.step);
+    if (wizardRef.current.reconcileOnChange()) setWizardStep(wizardRef.current.state.step);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [builder.phase, builder.albumPages.length]);
+  }, [builder.phase, albumBuilt]);
+
+  /* Save the journey on every step change and on the ✕, so a reload restores
+     it. Declared after the effects above, so it saves what they settled on. */
+  useEffect(() => {
+    try { localStorage.setItem(WIZARD_STORAGE_KEY, wizardRef.current.serialize(!showWizard)); } catch { /* storage blocked: this visit only */ }
+  }, [wizardStep, showWizard]);
 
   // Force re-render when wizard step changes via key
   const wizardKey = `wizard-${wizardStep}`;
@@ -294,8 +314,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           wizardRef.current.advance();
           setWizardStep(wizardRef.current.state.step);
         } else if (action.includes('Skip')) {
-          setShowWizard(false);
-          localStorage.setItem(WIZARD_STORAGE_KEY, wizardRef.current.serialize());
+          setShowWizard(false); // saved by the effect above
         }
         break;
       case 'pick_size':
@@ -562,7 +581,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 })()}
               </div>
             ) : (
-              <p className="text-sm text-ink-mid leading-relaxed mb-4">{msg.body}</p>
+              <p className="text-sm text-ink-mid leading-relaxed mb-4"><BoldText text={msg.body} /></p>
             )}
             {(
               <div className="flex flex-col gap-2.5">
@@ -594,8 +613,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               </button>
               {/* No footer Next on the upload step: "Generate Album →" is the
                   real way forward (it generates AND advances), and an unguarded
-                  Next with zero photos skips into an empty review. */}
-              {wizardRef.current.state.step !== 'upload_photos' && (
+                  Next with zero photos skips into an empty review. Once an
+                  album is built (the customer came back from Review), Next
+                  returns to it without rebuilding the pages. */}
+              {(wizardRef.current.state.step !== 'upload_photos' || albumBuilt) && (
                 <button
                   onClick={goNext}
                   disabled={nextDisabled}
@@ -708,7 +729,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               {wizardRef.current.getProgress().label}
             </span>
             <button
-              onClick={() => { setShowWizard(false); localStorage.setItem(WIZARD_STORAGE_KEY, wizardRef.current.serialize()); }}
+              onClick={() => setShowWizard(false)}
               className="text-[10px] text-light hover:text-dark"
             >
               ✕
@@ -727,7 +748,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               <TypeText text={wizardRef.current.getMessage().title} />
             </h3>
             <p className="text-[11px] text-ink-mid leading-relaxed mb-2">
-              {wizardRef.current.getMessage().body}
+              <BoldText text={wizardRef.current.getMessage().body} />
             </p>
             <div className="flex flex-wrap gap-2">
               {wizardRef.current.getMessage().actions.map((action) => (
@@ -754,8 +775,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 ← Previous
               </button>
               {/* No footer Next on the upload step — same rule as the desktop
-                  panel: "Generate Album →" advances; Next would skip with 0 photos. */}
-              {wizardRef.current.state.step !== 'upload_photos' && (
+                  panel: "Generate Album →" advances; Next would skip with 0 photos.
+                  With an album already built, Next goes back to it. */}
+              {(wizardRef.current.state.step !== 'upload_photos' || albumBuilt) && (
                 <button
                   onClick={goNext}
                   disabled={nextDisabled}
@@ -1034,7 +1056,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-1 space-y-2 min-h-[80px] max-h-[180px]">
             {messages.slice(-4).map((msg) => (
-              <div key={msg.id} className={`text-[11px] leading-relaxed px-2 py-1 rounded-lg ${msg.role === 'user' ? 'bg-dark text-white ml-4' : 'bg-white text-dark mr-4'}`}>{msg.content}</div>
+              <div key={msg.id} className={`text-[11px] leading-relaxed whitespace-pre-line px-2 py-1 rounded-lg ${msg.role === 'user' ? 'bg-dark text-white ml-4' : 'bg-white text-dark mr-4'}`}>{msg.role === 'assistant' ? <BoldText text={msg.content} /> : msg.content}</div>
             ))}
             {isThinking && <div className="flex gap-1 px-2"><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" /><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" style={{ animationDelay: '150ms' }} /><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" style={{ animationDelay: '300ms' }} /></div>}
           </div>

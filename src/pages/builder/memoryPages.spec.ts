@@ -3,6 +3,9 @@ import { generateAlbum, dealAlbumBoxes, sweepFillQuotes, isMemoryReady, canTakeM
 import { getTemplateById, getTemplatesForAlbum, photoSlotCount, migrateRetiredPages } from './pageTemplates';
 import { MIN_ALBUM_PAGES } from './densities';
 import type { AlbumPage, AlbumSizePreset, QrFill, UploadedPhoto } from './types';
+import { seedMathRandom } from '../../test/seededRandom';
+
+seedMathRandom(); // same albums every run (generateAlbum deals with Math.random)
 
 /* ══════════════════════════════════════════════════════════════════════════
    VIDEO MEMORIES LIVE ON FULL-PAGE PHOTOS (owner, 2026-10-02).

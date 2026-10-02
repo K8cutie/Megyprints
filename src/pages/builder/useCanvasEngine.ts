@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveSlotBox } from './slotGeometry';
+import { slotPhotoRect } from './slotPhotoFit';
 import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, applyTextureAlpha, type MaskId } from './masks';
 import { applyLookPixels, isLookId, type LookId } from './looks';
 import { qrRect } from '../../lib/qrMemory';
@@ -1282,19 +1283,19 @@ function renderTemplateSlots(
         if (renderId !== currentRenderId) return;
         const imgW = img.width || sw;
         const imgH = img.height || sh;
-        const coverScale = Math.max(sw / imgW, sh / imgH);
-        const userScale = slotScales[i] ?? 1;
-        const finalScale = (userScale !== 1 && userScale > 0) ? userScale : coverScale;
-        const offsetX = slotOffsetsX[i] ?? 0;
-        const offsetY = slotOffsetsY[i] ?? 0;
+        // The ONE fit print + the DOM preview draw with (slotPhotoFit): cover ×
+        // the zoom (a multiplier on cover, as print reads it — this used to
+        // treat any zoom but 1 as a raw image scale), then the pan, held to
+        // the overflow. Fabric works in design px, so the pan goes in as is.
+        const fit = slotPhotoRect({ w: imgW, h: imgH }, { w: sw, h: sh }, slotScales[i], { x: slotOffsetsX[i] ?? 0, y: slotOffsetsY[i] ?? 0 });
 
         img.set({
-          left: sx + sw / 2 + offsetX,
-          top: sy + sh / 2 + offsetY,
+          left: sx + fit.x + fit.w / 2,
+          top: sy + fit.y + fit.h / 2,
           originX: 'center',
           originY: 'center',
-          scaleX: finalScale,
-          scaleY: finalScale,
+          scaleX: fit.w / imgW,
+          scaleY: fit.w / imgW,
           angle: slot.rotation ?? 0,
           /* Megy is the sole orchestrator. The canvas is a RENDERER: a slot
              photo can be selected (to delete/replace via Megy) but never
@@ -1362,8 +1363,7 @@ function renderTemplateSlots(
             off.height = Math.max(1, Math.round(sh));
             const octx = off.getContext('2d');
             if (el && octx) {
-              const drawW = imgW * finalScale, drawH = imgH * finalScale;
-              octx.drawImage(el, sw / 2 + offsetX - drawW / 2, sh / 2 + offsetY - drawH / 2, drawW, drawH);
+              octx.drawImage(el, fit.x, fit.y, fit.w, fit.h);
               if (look) applyLookPixels(octx, 0, 0, off.width, off.height, look);
               if (slot.feather) featherAlpha(octx, 0, 0, off.width, off.height, slot.feather, slot.featherSide);
               const show = () => {
