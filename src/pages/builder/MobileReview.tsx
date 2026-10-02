@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Video, ImagePlus, Wand2 } from 'lucide-react';
+import { LayoutGrid, Loader2, X, Video, ImagePlus, Wand2 } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -23,6 +23,7 @@ import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
+import PageTurnBar from './PageTurnBar';
 
 /** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
 const TOOL = 'h-14 rounded-xl bg-cream text-medium text-[12px] font-semibold flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform';
@@ -32,7 +33,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const idx = actions.currentPageIndex;
   const total = pages.length;
   const page = pages[idx];
-  const isLast = idx >= total - 1;
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
 
@@ -292,25 +292,10 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             <Video size={18} /> Add a video memory
           </button>
         )}
-        {/* Page turn, in words: testers read a bare › as decoration and stopped
-            on page 1. The last page turns it into Done, in the same spot. */}
-        <div className="flex items-center gap-2 mt-3">
-          <button onClick={goPrev} disabled={idx === 0} aria-label="Previous page"
-            className="w-12 h-12 shrink-0 rounded-full bg-cream flex items-center justify-center text-medium disabled:opacity-30 transition-opacity">
-            <ChevronLeft size={22} />
-          </button>
-          {isLast ? (
-            <button onClick={handleDone}
-              className="flex-1 h-12 rounded-xl bg-success text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-              <Check size={18} /> Done — Preview my album
-            </button>
-          ) : (
-            <button onClick={goNext} data-testid="next-page"
-              className="flex-1 h-12 rounded-xl bg-peach text-white text-base font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-transform">
-              Next page <ChevronRight size={20} />
-            </button>
-          )}
-        </div>
+        {/* Page turn, in words both ways — see PageTurnBar. The last page turns
+            Next into Done, in the same spot. */}
+        <PageTurnBar variant="phone" className="mt-3" index={idx} total={total}
+          onPrev={goPrev} onNext={goNext} onDone={handleDone} />
       </div>
 
       {/* STUDIO: mask / look sheets, the guardrail line */}
