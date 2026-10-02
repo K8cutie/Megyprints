@@ -16,6 +16,7 @@ import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackgro
 import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
+import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
 import {
@@ -46,6 +47,12 @@ function TypeText({ text, speed = 22 }: { text: string; speed?: number }) {
     return () => clearInterval(t);
   }, [text, speed]);
   return <>{shown}</>;
+}
+
+/* Megy's messages mark key words with **bold** — show them bold, not as
+   asterisks. Plain text nodes and <strong>, so nothing is parsed as HTML. */
+function BoldText({ text }: { text: string }) {
+  return <>{splitBold(text).map((run, i) => (run.bold ? <strong key={i}>{run.text}</strong> : run.text))}</>;
 }
 
 /* ── Constants matching PropertiesPanel ── */
@@ -540,7 +547,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 })()}
               </div>
             ) : (
-              <p className="text-sm text-ink-mid leading-relaxed mb-4">{msg.body}</p>
+              <p className="text-sm text-ink-mid leading-relaxed mb-4"><BoldText text={msg.body} /></p>
             )}
             {(
               <div className="flex flex-col gap-2.5">
@@ -707,7 +714,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               <TypeText text={wizardRef.current.getMessage().title} />
             </h3>
             <p className="text-[11px] text-ink-mid leading-relaxed mb-2">
-              {wizardRef.current.getMessage().body}
+              <BoldText text={wizardRef.current.getMessage().body} />
             </p>
             <div className="flex flex-wrap gap-2">
               {wizardRef.current.getMessage().actions.map((action) => (
@@ -1015,7 +1022,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-1 space-y-2 min-h-[80px] max-h-[180px]">
             {messages.slice(-4).map((msg) => (
-              <div key={msg.id} className={`text-[11px] leading-relaxed px-2 py-1 rounded-lg ${msg.role === 'user' ? 'bg-dark text-white ml-4' : 'bg-white text-dark mr-4'}`}>{msg.content}</div>
+              <div key={msg.id} className={`text-[11px] leading-relaxed whitespace-pre-line px-2 py-1 rounded-lg ${msg.role === 'user' ? 'bg-dark text-white ml-4' : 'bg-white text-dark mr-4'}`}>{msg.role === 'assistant' ? <BoldText text={msg.content} /> : msg.content}</div>
             ))}
             {isThinking && <div className="flex gap-1 px-2"><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" /><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" style={{ animationDelay: '150ms' }} /><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" style={{ animationDelay: '300ms' }} /></div>}
           </div>

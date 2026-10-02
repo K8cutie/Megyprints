@@ -1,5 +1,5 @@
 import type { WizardStep } from '../../assistant/wizard';
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import type {
   AlbumSizePreset,
   AlbumPage,
@@ -811,37 +811,33 @@ export function useBuilderState(): BuilderActions {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
+  /** The album as of the last commit: what an undo step saves and gives back.
+   *  Read from a ref, never a closure. Most actions that call pushSnapshot are
+   *  memoized on their own deps (clearSlot only changes with the page, the
+   *  apply-to-all-pages ones never do), so a closure pushSnapshot saved the
+   *  album as it was when the ACTION was last made, and undo threw away every
+   *  edit since. A layout effect keeps it current before any tap, chat command
+   *  or useEffect can run. */
+  const undoableRef = useRef<Snapshot>({ albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate });
+  useLayoutEffect(() => {
+    undoableRef.current = { albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate };
+  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+
   /** Capture current state for undo */
   const pushSnapshot = useCallback(() => {
-    const snapshot: Snapshot = {
-      albumPages,
-      uploadedPhotos,
-      currentPageIndex,
-      albumSize,
-      photosPerPage,
-      selectedTemplate,
-    };
-    undoStackRef.current.push(snapshot);
+    undoStackRef.current.push(undoableRef.current);
     if (undoStackRef.current.length > MAX_UNDO_DEPTH) {
       undoStackRef.current.shift(); // drop oldest
     }
     redoStackRef.current = []; // clear redo on new action
     setCanUndo(true);
     setCanRedo(false);
-  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+  }, []);
 
   const undo = useCallback(() => {
     if (undoStackRef.current.length === 0) return;
-    const current: Snapshot = {
-      albumPages,
-      uploadedPhotos,
-      currentPageIndex,
-      albumSize,
-      photosPerPage,
-      selectedTemplate,
-    };
     const snapshot = undoStackRef.current.pop()!;
-    redoStackRef.current.push(current);
+    redoStackRef.current.push(undoableRef.current);
     setAlbumPages(snapshot.albumPages);
     setUploadedPhotos(snapshot.uploadedPhotos);
     setCurrentPageIndex(snapshot.currentPageIndex);
@@ -850,20 +846,12 @@ export function useBuilderState(): BuilderActions {
     setSelectedTemplateState(snapshot.selectedTemplate);
     setCanUndo(undoStackRef.current.length > 0);
     setCanRedo(true);
-  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+  }, []);
 
   const redo = useCallback(() => {
     if (redoStackRef.current.length === 0) return;
-    const current: Snapshot = {
-      albumPages,
-      uploadedPhotos,
-      currentPageIndex,
-      albumSize,
-      photosPerPage,
-      selectedTemplate,
-    };
     const snapshot = redoStackRef.current.pop()!;
-    undoStackRef.current.push(current);
+    undoStackRef.current.push(undoableRef.current);
     setAlbumPages(snapshot.albumPages);
     setUploadedPhotos(snapshot.uploadedPhotos);
     setCurrentPageIndex(snapshot.currentPageIndex);
@@ -872,7 +860,7 @@ export function useBuilderState(): BuilderActions {
     setSelectedTemplateState(snapshot.selectedTemplate);
     setCanUndo(true);
     setCanRedo(redoStackRef.current.length > 0);
-  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+  }, []);
 
   // ── Phase 1: Cloud state ──
   const [cloudSaveStatus, setCloudSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
