@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { generateAlbum, dealAlbumBoxes, sweepFillQuotes, ensureMemoryPages, isMemoryReady, MIN_MEMORY_PAGES, type BoxContentOptions } from './generateAlbum';
 import { MIN_ALBUM_PAGES } from './densities';
 import type { AlbumSizePreset, UploadedPhoto } from './types';
+import { seedMathRandom } from '../../test/seededRandom';
+
+seedMathRandom(); // same albums every run (generateAlbum deals with Math.random)
 
 /* ══════════════════════════════════════════════════════════════════════════
    AT LEAST 7 VIDEO-READY PAGES (owner, 2026-09-12): "7 QR links as the
