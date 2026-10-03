@@ -45,7 +45,7 @@
 --  buckets have versioning DISABLED today, so a Storage delete removes the row.
 --  If versioning were ever turned on, a delete would keep an archived copy, the
 --  guard would see it, and deletion would refuse (fail closed) instead of
---  claiming the files are gone. regression-checks.sql GUARD 4 pins this.
+--  claiming the files are gone. regression-checks.sql GUARD 6 pins this.
 --
 --  Numbered 0035 because 0034 is taken by the storage policy repairs (open at
 --  the time of writing). The two are independent; either order works.

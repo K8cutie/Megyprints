@@ -6,6 +6,17 @@ undo what is live.
 
 ## The product shape the owner decided (2026-09-13)
 
+**UPDATE 2026-09-30 — the switch is gone.** The owner dropped Simple | Studio: every Studio
+tool (frame move/resize, masks, looks, stickers, "Megy, fix this page") is always on, desktop
+and phone. `src/lib/studioFlag.ts`, `StudioGate.tsx` and the phone `StudioToggle` were deleted;
+Megy still lays the album out first. The history below explains how it got here.
+
+**UPDATE 2026-10-01 — a baked photo is a photo.** The desktop editor bakes a look, soft edge or
+textured edge into one image (Fabric clips have no alpha). That bake replaces ONLY the image:
+the shape clip, the frame Studio moves and resizes, the border, the decorative frame and the
+drag followers are built exactly as for a plain photo (`bakedFrame.spec.ts`). A masked photo
+draws no border, no decorative frame and no editor shadow, in both paths.
+
 **One album, two modes, per page.** NOT two branches at the front door.
 
 - **Simple** = what customers have today. Megy lays out the pages; the customer can change

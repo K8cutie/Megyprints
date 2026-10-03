@@ -75,7 +75,47 @@ begin
   raise notice 'PASS: set_order_status payment-gated state machine intact';
 end $$;
 
--- ── GUARD 4: account deletion still verifies the photos AND videos are gone ──
+-- ── GUARD 4: every storage policy is pinned to a bucket ─────────────────────
+-- Finding (0034, HIGH): dashboard-made "own photos" policies had no bucket_id
+-- filter, so any signed-in user could write "<uid>/<anything>" into EVERY
+-- bucket, including the PUBLIC memory-clips bucket (free file hosting). A policy
+-- made in the dashboard never passes through a migration, so this is the only
+-- place that would notice a new one.
+do $$
+declare bad text;
+begin
+  select string_agg(policyname || ' (' || cmd || ')', ', ') into bad
+  from pg_policies
+  where schemaname = 'storage' and tablename = 'objects'
+    and coalesce(qual, '') || coalesce(with_check, '') not like '%bucket_id%';
+
+  if bad is not null then
+    raise exception 'REGRESSION (storage): policy/policies with NO bucket_id filter -> %', bad;
+  end if;
+  raise notice 'PASS: every storage.objects policy names its bucket';
+end $$;
+
+-- ── GUARD 5: memory-clips owners can see their own rows ─────────────────────
+-- Finding (0034): with no owner SELECT policy, "Change video" (an upsert, whose
+-- conflict check + RETURNING need read access) failed for every customer, and
+-- the 200-clips cap counted 0 under the customer's RLS, so it never triggered.
+do $$
+declare q text;
+begin
+  select qual into q
+  from pg_policies
+  where schemaname = 'storage' and tablename = 'objects'
+    and policyname = 'Owners read own memory clips' and cmd = 'SELECT';
+
+  if q is null then
+    raise exception 'REGRESSION (memory-clips): owner SELECT policy "Owners read own memory clips" is MISSING (clip replace + 200 cap break)';
+  elsif q not like '%memory-clips%' or q not like '%owner_id%' then
+    raise exception 'REGRESSION (memory-clips): owner SELECT policy is no longer scoped to the uploader. qual = %', q;
+  end if;
+  raise notice 'PASS: memory-clips owner read policy intact';
+end $$;
+
+-- ── GUARD 6: account deletion still verifies the photos AND videos are gone ──
 -- Finding (0035): 0027 predated the PUBLIC memory-clips bucket, so deleting an
 -- account left the customer's videos playable by anyone with the link.
 -- delete_own_account() must refuse while any print PDF or clip of the caller is

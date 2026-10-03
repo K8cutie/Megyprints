@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { generateAlbum, planPageCounts } from './generateAlbum';
 import { MIN_ALBUM_PAGES } from './densities';
 import type { AlbumSizePreset, UploadedPhoto } from './types';
+import { seedMathRandom } from '../../test/seededRandom';
+
+seedMathRandom(); // same albums every run (generateAlbum deals with Math.random)
 
 /* ══════════════════════════════════════════════════════════════════════════
    FILL MODE KEEPS ITS RHYTHM (owner, 2026-09-12).
