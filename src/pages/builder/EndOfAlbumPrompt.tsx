@@ -5,15 +5,22 @@
    to say "Design your cover" / "Give it a cover", as if they hadn't); and
    "Continue editing" back to the pages (owner, 2026-10-02). Tap outside or ✕
    to keep browsing.
+   While the album is saved on its way to checkout, Order says so and waits;
+   if the save fails, the reason shows under it (lib/orderAlbum).
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { ChevronLeft, X } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { ChevronLeft, Loader2, X } from 'lucide-react';
 
-export default function EndOfAlbumPrompt({ onClose, onCheckCover, onOrder, onContinueEditing }: {
+export default function EndOfAlbumPrompt({ onClose, onCheckCover, onOrder, onContinueEditing, saving = false, error = null }: {
   onClose: () => void;
   onCheckCover: () => void;
   onOrder: () => void;
   onContinueEditing: () => void;
+  /** The album is being saved to the account on its way to checkout. */
+  saving?: boolean;
+  /** Why the album could not go to checkout (the save failed). */
+  error?: ReactNode;
 }) {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6" onClick={onClose} data-testid="end-prompt">
@@ -31,11 +38,13 @@ export default function EndOfAlbumPrompt({ onClose, onCheckCover, onOrder, onCon
         </button>
         <button
           onClick={onOrder}
+          disabled={saving}
           data-testid="end-prompt-order"
-          className="w-full py-4 bg-blush-pink text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md"
+          className="w-full py-4 bg-blush-pink text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait"
         >
-          ORDER ALBUM
+          {saving ? <><Loader2 size={18} className="animate-spin" /> Saving your album…</> : 'ORDER ALBUM'}
         </button>
+        {error && <div className="mt-3">{error}</div>}
         <button
           onClick={onContinueEditing}
           data-testid="end-prompt-back"

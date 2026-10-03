@@ -17,6 +17,10 @@ export interface PrintJob {
   pages: AlbumPage[];
   photos: UploadedPhoto[];
   albumSize: AlbumSizePreset;
+  /** The album being ordered — its row id in the cloud (useBuilderState's
+   *  albumIdRef). Checkout freezes THIS row, not the latest saved album: a
+   *  customer with several albums would otherwise pay for the wrong one. */
+  albumId?: string;
   /** LEGACY designed front·spine·back cover artwork (old drafts). Optional for
    *  back-compat; the wrap falls back to this when cover PAGES are absent.
    *  The cover MATERIAL (soft/hard) is chosen at checkout, not stored here. */
@@ -35,4 +39,37 @@ export function setPendingPrintJob(job: PrintJob): void {
 
 export function getPendingPrintJob(): PrintJob | null {
   return pending;
+}
+
+// ── The hand-off note ──
+// Whether the album went to checkout SAVED to the customer's account. The
+// builder saves it on the way (Builder.handleOrder) — but only a signed-in
+// customer can be saved, and a guest signs in at checkout, where the builder
+// isn't running to save anything. Then the account holds no copy of the album,
+// or an older one, and the order would freeze that instead of what is on screen.
+//
+// Kept in sessionStorage, not with the job above: the Google sign-in round-trip
+// at checkout reloads the page, which wipes the job but not this (same tab).
+
+const HANDOFF_KEY = 'megy-order-handoff';
+
+export interface OrderHandoff {
+  albumId: string;
+  /** The cloud row holds the album exactly as it left the builder. */
+  saved: boolean;
+}
+
+export function noteOrderHandoff(handoff: OrderHandoff): void {
+  try { sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(handoff)); } catch { /* private mode */ }
+}
+
+export function readOrderHandoff(): OrderHandoff | null {
+  try {
+    const raw = sessionStorage.getItem(HANDOFF_KEY);
+    if (!raw) return null;
+    const h = JSON.parse(raw) as Partial<OrderHandoff>;
+    return typeof h?.albumId === 'string' ? { albumId: h.albumId, saved: h.saved === true } : null;
+  } catch {
+    return null;
+  }
 }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronLeft, ShoppingCart, Plus, Trash2, RotateCw, Sparkles } from 'lucide-react';
+import { ChevronLeft, ShoppingCart, Plus, Trash2, RotateCw, Sparkles, X, Loader2 } from 'lucide-react';
 import SpreadTurnButton, { SPREAD_TURN_W } from './SpreadTurnButton';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
@@ -42,6 +42,11 @@ interface BuilderPreviewProps {
   onGoToPage: (index: number) => void;
   onBack: () => void;
   onOrder: () => void;
+  /** The album is being saved to the account on its way to checkout. */
+  orderSaving?: boolean;
+  /** Why the album could not go to checkout (the save failed). */
+  orderError?: string | null;
+  onDismissOrderError?: () => void;
 }
 
 function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = false, displayScale = 1): React.CSSProperties {
@@ -672,9 +677,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   );
 }
 
-export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
+export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError }: BuilderPreviewProps) {
   const total = pages.length;
-  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes } = useBuilderContext();
+  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId } = useBuilderContext();
 
   // "Megy finishes it" — count the caption boxes still sitting empty (unfilled
   // invitations, deleted quotes, legacy empties). The chooser CTA in the
@@ -807,10 +812,21 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // it first, checkout falls back to a stale/other job → wrong size, wrong price,
   // and a cover PDF that doesn't match the album. The toolbar button and the
   // end-of-album CTA must BOTH go through here so they can never drift apart.
+  // The album id tells checkout WHICH saved album this is (lib/orderAlbum).
   const handleOrder = () => {
-    setPendingPrintJob({ pages, photos, albumSize, coverDesign, coverFront });
+    if (orderSaving) return;
+    setPendingPrintJob({ pages, photos, albumSize, albumId: getAlbumId(), coverDesign, coverFront });
     onOrder();
   };
+  const orderErrorBanner = orderError && (
+    <div role="alert" data-testid="order-save-error"
+      className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 text-left">
+      <span className="flex-1">{orderError}</span>
+      {onDismissOrderError && (
+        <button onClick={onDismissOrderError} aria-label="Dismiss" className="shrink-0 text-red-400 hover:text-red-700"><X size={14} /></button>
+      )}
+    </div>
+  );
 
   const hasPrev = spreadLeftIndex > 0;
   const hasNext = spreadLeftIndex + 2 < total;
@@ -861,12 +877,17 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               album can't be downloaded and printed elsewhere. */}
           <button
             onClick={handleOrder}
-            className="px-4 py-2 bg-blush-pink text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5"
+            disabled={orderSaving}
+            data-testid="preview-order"
+            className="px-4 py-2 bg-blush-pink text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5 disabled:opacity-70 disabled:cursor-wait"
           >
-            <ShoppingCart size={14} /> Order
+            {orderSaving
+              ? <><Loader2 size={14} className="animate-spin" /> Saving your album…</>
+              : <><ShoppingCart size={14} /> Order</>}
           </button>
         </div>
       </div>
+      {orderErrorBanner && <div className="px-5 pt-2 bg-paper">{orderErrorBanner}</div>}
 
       {/* Page display with the page turn on each side — small labelled
           buttons, not bare ‹ › arrows (SpreadTurnButton). */}
@@ -937,7 +958,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       {/* End-of-album prompt — on every arrival at the last spread. Tap outside
           or ✕ to keep browsing; "Continue editing" is a real button. */}
       {endPrompt.open && (
-        <EndOfAlbumPrompt onClose={endPrompt.close} onCheckCover={() => setCoverOpen(true)} onOrder={handleOrder} onContinueEditing={onBack} />
+        <EndOfAlbumPrompt onClose={endPrompt.close} onCheckCover={() => setCoverOpen(true)} onOrder={handleOrder} onContinueEditing={onBack}
+          saving={orderSaving} error={orderErrorBanner || null} />
       )}
 
       {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too).

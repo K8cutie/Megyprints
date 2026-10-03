@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { supabase } from './supabase';
 import { serializeAlbum, deserializeAlbum, upsertAlbumRow, isMissingCoverFrontColumn, type AlbumData } from './useAlbumSync';
-import { rebuildPrintJobFromLatestAlbum } from './printJobRebuild';
+import { rebuildPrintJobFromAlbum } from './printJobRebuild';
 import { storedCoverPage } from '../pages/builder/pageNormalize';
 import type { StoredPhoto } from './useIndexedDBPhotos';
 
@@ -241,11 +241,11 @@ const savedRow = (over: Record<string, unknown> = {}) => ({
 
 const otherCover = { ...cover, id: 'cover-of-another-album', slotFills: [0] };
 
-describe('rebuildPrintJobFromLatestAlbum — cover', () => {
+describe('rebuildPrintJobFromAlbum — cover', () => {
   it('uses the cover saved WITH the album, over the draft on this device', async () => {
     const selected = fakeLatestAlbum(savedRow({ cover_front: JSON.parse(JSON.stringify(cover)) }));
     draftOnDevice({ albumId: 'b2', coverFront: otherCover });
-    const job = await rebuildPrintJobFromLatestAlbum('u1', idbGet);
+    const job = await rebuildPrintJobFromAlbum('u1', idbGet, 'a1');
     expect(selected).toEqual(['*']); // never names the column (a DB without it would fail the read)
     expect(job?.coverFront).toMatchObject({ id: cover.id, slotFills: [2], size: '8x8' });
   });
@@ -253,14 +253,14 @@ describe('rebuildPrintJobFromLatestAlbum — cover', () => {
   it('album saved before 0036: the draft cover, when the draft IS this album', async () => {
     fakeLatestAlbum(savedRow());
     draftOnDevice({ albumId: 'a1', coverFront: cover });
-    const job = await rebuildPrintJobFromLatestAlbum('u1', idbGet);
+    const job = await rebuildPrintJobFromAlbum('u1', idbGet, 'a1');
     expect(job?.coverFront).toMatchObject({ id: cover.id });
   });
 
   it('album saved before 0036: never the cover of a DIFFERENT album in the draft', async () => {
     fakeLatestAlbum(savedRow());
     draftOnDevice({ albumId: 'b2', coverFront: otherCover });
-    const job = await rebuildPrintJobFromLatestAlbum('u1', idbGet);
+    const job = await rebuildPrintJobFromAlbum('u1', idbGet, 'a1');
     expect(job).not.toBeNull();
     expect(job?.coverFront).toBeUndefined();
   });
@@ -268,7 +268,7 @@ describe('rebuildPrintJobFromLatestAlbum — cover', () => {
   it('a draft from before album ids were kept is trusted, as it always was', async () => {
     fakeLatestAlbum(savedRow());
     draftOnDevice({ coverFront: cover });
-    const job = await rebuildPrintJobFromLatestAlbum('u1', idbGet);
+    const job = await rebuildPrintJobFromAlbum('u1', idbGet, 'a1');
     expect(job?.coverFront).toMatchObject({ id: cover.id });
   });
 });

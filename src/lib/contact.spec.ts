@@ -4,7 +4,7 @@ import {
   isValidZip, validateAddress, composeAddress, EMPTY_ADDRESS, type AddressValue,
 } from './contact';
 
-// Shipping normalization is load-bearing: createOrderFromLatestAlbum stores what
+// Shipping normalization is load-bearing: createOrderFromAlbum stores what
 // these return, so a regression writes un-routable addresses / un-callable phones
 // onto real orders.
 

@@ -653,9 +653,13 @@ export interface BuilderActions {
   cloudSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   lastSavedAt: Date | null;
   isLoadingCloud: boolean;
-  manualSave: () => Promise<void>;
+  /** Save the album to the account now. Resolves true once the cloud row
+   *  holds it, false when it could not be saved (or no one is signed in). */
+  manualSave: () => Promise<boolean>;
   /** Synchronous localStorage flush of the current draft (see return note). */
   saveDraftNow: () => void;
+  /** The album's row id in the cloud (albumIdRef) — which album this is. */
+  getAlbumId: () => string | undefined;
 
   // ── Phase 1: Photo URL resolution ──
   getPhotoUrl: (photoOrId: UploadedPhoto | string) => string;
@@ -2630,8 +2634,8 @@ export function useBuilderState(): BuilderActions {
   }, []);
 
   /* ── Phase 1: Manual cloud save ── */
-  const manualSave = useCallback(async () => {
-    if (!user) return;
+  const manualSave = useCallback(async (): Promise<boolean> => {
+    if (!user) return false;
     setCloudSaveStatus('saving');
     const result = await albumSync.save(user.id, serializeAlbum());
     if (result.success) {
@@ -2641,7 +2645,10 @@ export function useBuilderState(): BuilderActions {
     } else {
       setCloudSaveStatus('error');
     }
+    return result.success;
   }, [user, albumSync, serializeAlbum]);
+
+  const getAlbumId = useCallback(() => albumIdRef.current, []);
 
   /* ── Resolve photo URL (all photos are local — IndexedDB) ── */
   const getPhotoUrl = useCallback((photoOrId: UploadedPhoto | string): string => {
@@ -2916,6 +2923,7 @@ export function useBuilderState(): BuilderActions {
      *  teardown (unlike the async cloud save) — used by the mobile back-button
      *  guard so an accidental Back never loses work in the 30s debounce window. */
     saveDraftNow: flushLocal,
+    getAlbumId,
     getPhotoUrl,
     user,
     loadAlbum,

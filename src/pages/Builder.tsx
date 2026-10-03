@@ -15,6 +15,7 @@ import MegyAssistant from '../assistant/MegyAssistant';
 import SoftAuthGate from '../components/SoftAuthGate';
 import { useIsMobile } from '../hooks/use-mobile';
 import { cleanAlbumName } from '../lib/albumName';
+import { noteOrderHandoff } from '../lib/printQueue';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 const phases = [
@@ -66,7 +67,13 @@ const EditPhase = memo(function EditPhase({
   );
 });
 
-const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions: BuilderContextValue; onOrder: () => void }) {
+const PreviewPhase = memo(function PreviewPhase({ actions, onOrder, orderSaving, orderError, onDismissOrderError }: {
+  actions: BuilderContextValue;
+  onOrder: () => void;
+  orderSaving: boolean;
+  orderError: string | null;
+  onDismissOrderError: () => void;
+}) {
   return (
     <BuilderPreview
       pages={actions.albumPages}
@@ -76,6 +83,9 @@ const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions:
       onGoToPage={actions.goToPage}
       onBack={() => { actions.setWizardStep('review_pages'); actions.setPhase('edit'); }}
       onOrder={onOrder}
+      orderSaving={orderSaving}
+      orderError={orderError}
+      onDismissOrderError={onDismissOrderError}
       getPageSnapshot={actions.getPageSnapshot}
     />
   );
@@ -128,9 +138,40 @@ export default function Builder() {
     setErrorKey((k) => k + 1);
   }, [actions]);
 
-  const handleOrder = useCallback(() => {
+  // Checkout freezes this album's row in the account (lib/orderAlbum), and the
+  // builder only saves it to the cloud every 10 min or on leaving. So Order
+  // saves it NOW and waits: checkout must read the album as it is on screen.
+  // A failed save stops here, loud — the order would freeze an older copy.
+  const [orderSaving, setOrderSaving] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const orderSavingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  const handleOrder = useCallback(async () => {
+    if (orderSavingRef.current) return;
+    const albumId = actions.getAlbumId();
+    if (!actions.user) {
+      // A guest can't be saved to an account. Checkout asks them to sign in,
+      // and the note tells it this album never reached the account.
+      if (albumId) noteOrderHandoff({ albumId, saved: false });
+      navigate('/order');
+      return;
+    }
+    orderSavingRef.current = true;
+    setOrderSaving(true);
+    setOrderError(null);
+    const saved = await actions.manualSave().catch(() => false);
+    orderSavingRef.current = false;
+    if (!mountedRef.current) return; // left the builder while it saved
+    setOrderSaving(false);
+    if (!saved) {
+      setOrderError("We couldn't save your album to your account, so it can't be ordered yet. Check your connection and tap Order again.");
+      return;
+    }
+    if (albumId) noteOrderHandoff({ albumId, saved: true });
     navigate('/order');
-  }, [navigate]);
+  }, [actions, navigate]);
+  const dismissOrderError = useCallback(() => setOrderError(null), []);
 
   /* Minimal action handler for BuilderEdit internal triggers */
   const handleAction = useCallback((actionId: string, _payload?: Record<string, unknown>) => {
@@ -247,7 +288,7 @@ export default function Builder() {
             {actions.phase === 'preview' && (
               <motion.div key="preview" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="h-full">
-                <PreviewPhase actions={actions} onOrder={handleOrder} />
+                <PreviewPhase actions={actions} onOrder={handleOrder} orderSaving={orderSaving} orderError={orderError} onDismissOrderError={dismissOrderError} />
               </motion.div>
             )}
           </AnimatePresence>
