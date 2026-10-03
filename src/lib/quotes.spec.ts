@@ -60,7 +60,7 @@ describe('ensureThemeQuotes — pool grows to the album', () => {
   it('tops up in ≤60-line batches until the pool holds `need` lines, sending held lines as avoid', async () => {
     const { fetch, calls } = fakeProxy();
     vi.stubGlobal('fetch', fetch);
-    const pool = await q.ensureThemeQuotes('Marriage', 80);
+    const pool = await q.ensureThemeQuotes('Company outing', 80);
     expect(pool.length).toBe(80);
     expect(new Set(pool).size).toBe(80);
     expect(calls.map((c) => c.count)).toEqual([60, 20]);
@@ -68,22 +68,22 @@ describe('ensureThemeQuotes — pool grows to the album', () => {
     expect(calls[1].avoid.length).toBe(60);           // the second batch knows the first
     expect(calls[1].avoid).toContain('Line 1');
     // Persisted for the next consumer (sweep / picker / next generation).
-    expect(JSON.parse(storage.getItem('megy-theme-quotes')!).marriage.length).toBe(80);
+    expect(JSON.parse(storage.getItem('megy-theme-quotes')!)['company outing'].length).toBe(80);
   });
 
   it('a pool already big enough makes NO paid call', async () => {
     const { fetch } = fakeProxy();
     vi.stubGlobal('fetch', fetch);
-    await q.ensureThemeQuotes('Marriage', 30);
+    await q.ensureThemeQuotes('Company outing', 30);
     expect(fetch).toHaveBeenCalledTimes(1);
-    await q.ensureThemeQuotes('marriage ', 25);        // same theme, case/space-insensitive
+    await q.ensureThemeQuotes('company outing ', 25);  // same theme, case/space-insensitive
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('lines the model echoes back despite `avoid` never enter the pool twice', async () => {
     const { fetch } = fakeProxy({ overlap: 5 });
     vi.stubGlobal('fetch', fetch);
-    const pool = await q.ensureThemeQuotes('Baby', 100);
+    const pool = await q.ensureThemeQuotes('Team summit', 100);
     expect(new Set(pool.map((l) => l.toLowerCase())).size).toBe(pool.length);
     expect(pool.length).toBe(100);
   });
@@ -91,7 +91,7 @@ describe('ensureThemeQuotes — pool grows to the album', () => {
   it('caps at the per-theme maximum and stops after a bounded number of calls', async () => {
     const { fetch, calls } = fakeProxy();
     vi.stubGlobal('fetch', fetch);
-    const pool = await q.ensureThemeQuotes('Travel', 10_000);
+    const pool = await q.ensureThemeQuotes('Office party', 10_000);
     expect(pool.length).toBe(q.QUOTES_PER_THEME_MAX);
     expect(calls.length).toBeLessThanOrEqual(5);
   });
@@ -100,18 +100,18 @@ describe('ensureThemeQuotes — pool grows to the album', () => {
     let down = true;
     const { fetch } = fakeProxy({ fail: () => down });
     vi.stubGlobal('fetch', fetch);
-    const first = await q.ensureThemeQuotes('Wedding', 80);
-    expect(first).toEqual(q.curatedQuotesFor('Wedding'));
+    const first = await q.ensureThemeQuotes('Book club', 80);
+    expect(first).toEqual(q.curatedQuotesFor('Book club'));
     expect(storage.getItem('megy-theme-quotes')).toBeNull();
     down = false;
-    const second = await q.ensureThemeQuotes('Wedding', 80);
+    const second = await q.ensureThemeQuotes('Book club', 80);
     expect(second.length).toBe(80);
   });
 
   it('a proxy that returns nothing new stops the loop (no runaway spend)', async () => {
     const fetch = vi.fn(async () => ({ ok: true, json: async () => ({ quotes: ['Same line', 'Same line'], source: 'haiku' }) }));
     vi.stubGlobal('fetch', fetch);
-    const pool = await q.ensureThemeQuotes('Kids', 80);
+    const pool = await q.ensureThemeQuotes('Parish fiesta', 80);
     expect(pool).toEqual(['Same line']);
     expect(fetch).toHaveBeenCalledTimes(2);          // first landed 1 line; second landed 0 → stop
   });
@@ -121,12 +121,12 @@ describe('ensureThemeQuotes — pool grows to the album', () => {
     try {
       const { fetch } = fakeProxy({ delayMs: 1000 });
       vi.stubGlobal('fetch', fetch);
-      const p = q.ensureThemeQuotes('Graduation', 80, { budgetMs: 1500 });
+      const p = q.ensureThemeQuotes('Science fair', 80, { budgetMs: 1500 });
       await vi.advanceTimersByTimeAsync(1500);
       const partial = await p;
       expect(partial.length).toBe(60);               // first batch landed, second still in flight
       await vi.advanceTimersByTimeAsync(1500);
-      expect(q.quotesForThemeNow('Graduation').length).toBe(80);
+      expect(q.quotesForThemeNow('Science fair').length).toBe(80);
     } finally {
       vi.useRealTimers();
     }
@@ -137,8 +137,8 @@ describe('ensureThemeQuotes — pool grows to the album', () => {
     try {
       const { fetch, calls } = fakeProxy({ delayMs: 100 });
       vi.stubGlobal('fetch', fetch);
-      const a = q.ensureThemeQuotes('Family', 25);
-      const b = q.ensureThemeQuotes('Family', 80);
+      const a = q.ensureThemeQuotes('Sports day', 25);
+      const b = q.ensureThemeQuotes('Sports day', 80);
       await vi.advanceTimersByTimeAsync(1000);
       const [pa, pb] = await Promise.all([a, b]);
       expect(pb.length).toBe(80);
@@ -162,20 +162,82 @@ describe('fetchThemeQuotes / moreThemeQuotes on the same pool', () => {
   it('fetchThemeQuotes = one 25-line call, then served from cache', async () => {
     const { fetch, calls } = fakeProxy();
     vi.stubGlobal('fetch', fetch);
-    const set = await q.fetchThemeQuotes('Marriage');
+    const set = await q.fetchThemeQuotes('Company outing');
     expect(set.source).toBe('ai');
     expect(set.quotes.length).toBe(25);
     expect(calls.map((c) => c.count)).toEqual([25]);
-    await q.fetchThemeQuotes('Marriage');
+    await q.fetchThemeQuotes('Company outing');
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('"More lines" grows the pool by another page and keeps the held lines', async () => {
     const { fetch } = fakeProxy();
     vi.stubGlobal('fetch', fetch);
-    const first = await q.fetchThemeQuotes('Marriage');
-    const more = await q.moreThemeQuotes('Marriage');
+    const first = await q.fetchThemeQuotes('Company outing');
+    const more = await q.moreThemeQuotes('Company outing');
     expect(more.quotes.length).toBe(50);
     for (const l of first.quotes) expect(more.quotes).toContain(l);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PRE-LOADED FIRST (owner, 2026-10-02): an occasion the bank knows deals from
+   its 100 shipped lines with no call; the AI only writes what a bigger album
+   needs beyond them, told to avoid the bank.
+   ══════════════════════════════════════════════════════════════════════════ */
+describe('a known occasion deals from the pre-loaded bank first', () => {
+  const QUICK_PICKS = ['Wedding', 'Baptism', 'Birthday', 'Baby', 'Graduation', 'Family', 'Vacation'];
+
+  it('every quick pick (and the words people type for them) gets 100 lines with NO call', async () => {
+    const { fetch } = fakeProxy();
+    vi.stubGlobal('fetch', fetch);
+    for (const theme of [...QUICK_PICKS, 'Marriage', 'Kasal', 'Binyag', 'Debut', 'Our Palawan trip']) {
+      const pool = await q.ensureThemeQuotes(theme, 60);
+      expect(pool.length, theme).toBe(100);
+      expect(pool, theme).toEqual(q.curatedQuotesFor(theme));
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('a bigger album: the AI writes only the shortfall, avoiding every bank line', async () => {
+    const { fetch, calls } = fakeProxy();
+    vi.stubGlobal('fetch', fetch);
+    const bank = q.curatedQuotesFor('Wedding');
+    const pool = await q.ensureThemeQuotes('Wedding', 130);
+    expect(calls.map((c) => c.count)).toEqual([30]);
+    for (const l of bank) expect(calls[0].avoid).toContain(l);
+    expect(pool.length).toBe(130);
+    expect(pool.slice(0, 100)).toEqual(bank);          // the bank comes first
+  });
+
+  it('proxy down on a bigger album → the bank alone, nothing cached', async () => {
+    const { fetch } = fakeProxy({ fail: () => true });
+    vi.stubGlobal('fetch', fetch);
+    const pool = await q.ensureThemeQuotes('Wedding', 130);
+    expect(pool).toEqual(q.curatedQuotesFor('Wedding'));
+    expect(storage.getItem('megy-theme-quotes')).toBeNull();
+  });
+
+  it('the picker gets the bank straight away; "More lines" adds AI extras on top', async () => {
+    const { fetch, calls } = fakeProxy();
+    vi.stubGlobal('fetch', fetch);
+    const set = await q.fetchThemeQuotes('Vacation');
+    expect(set.source).toBe('curated');
+    expect(set.quotes).toEqual(q.curatedQuotesFor('Vacation'));
+    expect(fetch).not.toHaveBeenCalled();
+    const more = await q.moreThemeQuotes('Vacation');
+    expect(calls.map((c) => c.count)).toEqual([25]);
+    expect(more.quotes.length).toBe(125);
+    expect(more.quotes.slice(0, 100)).toEqual(set.quotes);
+    expect(more.source).toBe('ai');
+  });
+
+  it('an occasion the bank does not know is still AI-first', async () => {
+    const { fetch } = fakeProxy();
+    vi.stubGlobal('fetch', fetch);
+    const set = await q.fetchThemeQuotes('Company outing');
+    expect(set.source).toBe('ai');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(q.matchedTheme('Company outing')).toBeNull();
   });
 });

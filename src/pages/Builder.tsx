@@ -168,7 +168,10 @@ export default function Builder() {
       <BuilderBackGuard
         flush={actions.saveDraftNow}
         phase={actions.phase}
-        onStepBack={() => actions.setPhase('edit')}
+        /* Same as the preview's own Back: the wizard step moves with the
+           screen. The step is saved, so a stale 'finalize' would reopen
+           Preview on the next reload. */
+        onStepBack={() => { actions.setWizardStep('review_pages'); actions.setPhase('edit'); }}
       />
       <div className={`fixed inset-0 z-[60] bg-white flex flex-col transition-[padding] duration-300 ${panelCollapsed ? 'lg:pl-[60px]' : 'lg:pl-[340px]'}`}>
         {/* Step Indicator */}

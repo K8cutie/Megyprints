@@ -8,6 +8,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 import { supabase } from './supabase';
+import { uploadOnce } from './storageUpload';
 import { generateAlbumPdf, generateCoverWrapPdf } from '../pages/builder/generateAlbumPdf';
 import type { CoverPrintInput } from '../pages/builder/printPipeline';
 import type { PrintJob } from './printQueue';
@@ -139,26 +140,24 @@ export async function createOrderFromLatestAlbum(opts: {
  * `print-pdfs` bucket (path "<order_id>.pdf"). MUST run on the customer's device
  * — the photos live only in their browser (the print job carries them). Only
  * operators can later download it, so the album can't be printed elsewhere.
- * Throws on failure so the caller can surface it.
+ * Create-only (see storageUpload.ts): a retry that finds the file already there
+ * counts as done. Throws on failure so the caller can surface it.
  */
 export async function uploadOrderPrintPdf(orderId: string, job: PrintJob): Promise<void> {
   const blob = await generateAlbumPdf(job.pages, job.photos, job.albumSize);
-  const { error } = await supabase.storage
-    .from('print-pdfs')
-    .upload(`${orderId}.pdf`, blob, { contentType: 'application/pdf', upsert: true });
+  const error = await uploadOnce('print-pdfs', `${orderId}.pdf`, blob, { contentType: 'application/pdf' });
   if (error) throw new Error(`Print file upload failed: ${error.message}`);
 }
 
 /**
  * Build the front·spine·back cover wrap and upload it as its OWN object
- * ("<order_id>-cover.pdf") next to the interior PDF. Same device constraint +
- * operator-only read as uploadOrderPrintPdf. Requires migration 0017 (the RLS
- * name gate) to be applied, or the upload is rejected. Throws on failure.
+ * ("<order_id>-cover.pdf") next to the interior PDF. Same device constraint,
+ * operator-only read and create-only upload as uploadOrderPrintPdf. Requires
+ * migration 0017 (the RLS name gate) to be applied, or the upload is rejected.
+ * Throws on failure.
  */
 export async function uploadOrderCoverPdf(orderId: string, input: CoverPrintInput): Promise<void> {
   const blob = await generateCoverWrapPdf(input);
-  const { error } = await supabase.storage
-    .from('print-pdfs')
-    .upload(`${orderId}-cover.pdf`, blob, { contentType: 'application/pdf', upsert: true });
+  const error = await uploadOnce('print-pdfs', `${orderId}-cover.pdf`, blob, { contentType: 'application/pdf' });
   if (error) throw new Error(`Cover file upload failed: ${error.message}`);
 }

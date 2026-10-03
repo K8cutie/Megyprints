@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { User, Session, Provider } from '@supabase/supabase-js';
 import { AuthError } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from './supabase';
+import { isNativeShell, nativeSignInWithOAuth } from './nativeAuth';
 
 // =============================================================================
 // Types
@@ -174,6 +175,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // fragments), so on a HashRouter SPA the return lands on a bare path →
       // Home, silently dropping an in-progress builder. App.tsx restores this.
       try { sessionStorage.setItem('megy-auth-return', window.location.hash || '#/'); } catch { /* ignore */ }
+      // Native Android shell: Google blocks OAuth in a WebView — go via a Custom Tab.
+      if (isNativeShell()) { await nativeSignInWithOAuth(provider); return; }
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

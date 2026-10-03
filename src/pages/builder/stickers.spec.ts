@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { clampStickerGeom, defaultStickerGeom, STICKER_MIN_INCHES, pageInches } from './stickers';
+import { clampStickerGeom, STICKER_MIN_INCHES, pageInches } from './stickers';
 import { getTemplatesForAlbum } from './pageTemplates';
 
-/* STUDIO stickers (owner, 2026-09-13): free, but printable. */
+/* STUDIO stickers (owner, 2026-09-13): free, but printable. Retired 2026-10-01
+   (none can be added), but placed ones can still be moved, so the clamp still
+   keeps every one of them printable. */
 const ctx = (albumSize: string, pageIndex: number, coverMode = false) => ({ albumSize, pageIndex, template: getTemplatesForAlbum(albumSize as never).find((t) => !t.fullBleed) ?? null, coverMode });
 
 describe('clampStickerGeom', () => {
@@ -31,14 +33,5 @@ describe('clampStickerGeom', () => {
     const once = clampStickerGeom({ cx: 0.9, cy: -1, w: 0.3, h: 0.3, rot: -30 }, c);
     expect(once.geom.rot).toBe(330);
     expect(clampStickerGeom(once.geom, c)).toEqual({ geom: once.geom, reasons: [] });
-  });
-  it('a fresh sticker lands centred in the safe area, square in inches, and legal', () => {
-    for (const size of ['6x6', '8x8', '8x6', '6x8'] as const) {
-      const c = ctx(size, 1);
-      const g = defaultStickerGeom(c);
-      const page = pageInches(size);
-      expect(g.w * page.w).toBeCloseTo(g.h * page.h, 6);
-      expect(clampStickerGeom(g, c).reasons).toEqual([]);
-    }
   });
 });

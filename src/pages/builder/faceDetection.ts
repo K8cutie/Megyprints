@@ -125,60 +125,9 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Calculate the slot offset needed to center a face in a slot.
-
-    @param faceCenter   — {x, y} from detectFaceCenter (0-1, relative to photo)
-    @param photoAspect  — photo width / height
-    @param slotAspect   — slot width / height
-    @returns            — { offsetX, offsetY } in slot-relative units (-1 to +1)
-                          where 0 = center, -1 = far left/top, +1 = far right/bottom
-
-    EDGE CASE HANDLING:
-    If the face is at the extreme edge of the photo (e.g. x=0.05 or x=0.95),
-    centering it would reveal empty space on the other side. We clamp the face
-    center to the "safe zone" — the portion of the photo that can be centered
-    without showing the photo's edge.
-*/
-export function computeFaceOffset(
-  faceCenter: { x: number; y: number },
-  photoAspect: number,
-  slotAspect: number,
-): { offsetX: number; offsetY: number } {
-  // "Cover" mode: photo fills slot, one axis gets cropped.
-  // Calculate how much of each axis is VISIBLE (0-1 range).
-  let visibleWidth: number;
-  let visibleHeight: number;
-
-  if (photoAspect > slotAspect) {
-    // Photo is wider → width gets cropped
-    visibleHeight = 1;
-    visibleWidth = slotAspect / photoAspect;
-  } else {
-    // Photo is taller → height gets cropped
-    visibleWidth = 1;
-    visibleHeight = photoAspect / slotAspect;
-  }
-
-  // The "safe zone" is the region that can be centered without revealing edges.
-  // It's half the visible width/height from the center of the photo.
-  // e.g. if 60% of width is visible, safe zone is 20%-80% of the photo.
-  const safeMinX = 0.5 - visibleWidth / 2;
-  const safeMaxX = 0.5 + visibleWidth / 2;
-  const safeMinY = 0.5 - visibleHeight / 2;
-  const safeMaxY = 0.5 + visibleHeight / 2;
-
-  // Clamp face center to safe zone — prevents showing empty photo edges
-  const clampedX = Math.max(safeMinX, Math.min(safeMaxX, faceCenter.x));
-  const clampedY = Math.max(safeMinY, Math.min(safeMaxY, faceCenter.y));
-
-  // Convert to offset: how far from photo center (0-1) → slot offset (-1 to +1)
-  // A face at photo center (0.5) → offset 0 (no pan needed)
-  // A face at left edge of safe zone → offset -1 (pan right to show it)
-  const offsetX = (clampedX - 0.5) / (visibleWidth / 2);
-  const offsetY = (clampedY - 0.5) / (visibleHeight / 2);
-
-  return { offsetX, offsetY };
-}
+/* Turning a face centre into a slot pan (computeFaceOffset → faceCentrePan)
+   lives in slotPhotoFit.ts, next to the fit every renderer draws with — pure
+   maths, so it is tested without loading face-api. */
 
 /** Synchronous version: just returns center-crop offset (0, 0).
     Used as fallback when face detection hasn't completed yet. */

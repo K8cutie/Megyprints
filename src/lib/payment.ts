@@ -12,6 +12,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { supabase } from './supabase';
+import { uploadOnce } from './storageUpload';
 
 export const PAYEE = {
   bank: 'GoTyme Bank',
@@ -67,16 +68,15 @@ export function cleanReference(raw: string): string {
   return raw.replace(/[^A-Za-z0-9 _./-]/g, '').trim().slice(0, 64);
 }
 
-/** Upload the receipt to the private bucket. Upsert: a re-pick replaces it. */
+/** Upload the receipt to the private bucket. Create-only (see storageUpload.ts):
+ *  customers can't read this bucket, so they can't overwrite in it either. A
+ *  retry after a failed "record" step finds the receipt already there and
+ *  counts it as done. */
 export async function uploadPaymentProof(orderId: string, file: File): Promise<string> {
   const ext = proofExtFor(file);
   if (!ext) throw new Error('Please attach a screenshot (JPG, PNG, WebP) or a PDF receipt.');
   const path = proofObjectPath(orderId, ext);
-  const { error } = await supabase.storage.from(PROOF_BUCKET).upload(path, file, {
-    contentType: proofMimeFor(ext),
-    upsert: true,
-    cacheControl: '0',
-  });
+  const error = await uploadOnce(PROOF_BUCKET, path, file, { contentType: proofMimeFor(ext), cacheControl: '0' });
   if (error) throw new Error(`Could not upload your receipt (${error.message}). You can still tap "I've sent the payment" — we'll confirm from our bank app.`);
   return path;
 }

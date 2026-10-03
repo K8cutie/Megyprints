@@ -91,8 +91,10 @@ While the 14 days run, finish Steps 3–5 (all doable immediately).
 Project → Settings → Environment Variables (all environments). Server-only —
 never prefix it with `VITE_`. Without it the endpoint refuses deletion with
 "Account deletion is misconfigured" rather than deleting an account and leaving
-the customer's photos in the bucket. Also apply migration `0027_account_deletion`
-(`npx supabase db push`) before deploying, or the endpoint's RPC won't exist.
+the customer's photos and videos in storage. Also apply migrations
+`0027_account_deletion` and `0035_account_deletion_clips` (`npm run db:push`
+from main); until 0035 is applied the endpoint refuses every deletion ("Could
+not look up your memory videos") rather than leaving the videos public.
 
 ## Step 5 — Payments note (why no Play Billing)
 
@@ -130,11 +132,64 @@ the installed app opens with a **browser URL bar** (verification fails).
 2. Promote the tested release to **Production** → choose countries
    (start: Philippines) → submit for review (typically hours–3 days).
 
+## 1.1.0 — native shell replaces the TWA (2026-10-01)
+
+**Why:** in the TWA the photo button opened Android's Photo Picker, which stops
+at ~100 photos per pick. The app is now a Capacitor shell (`android-native/`)
+that still loads the live site, but its file chooser opens the Files picker
+instead: no cap, and **⋮ → Select all** in a folder. Same package id
+(`com.megyprints.app`) and same upload key, so it's an ordinary update of the
+same listing. Emulator-proven: 250 twelve-megapixel photos in one pick (~6 s),
+94-page album generated on a 2.5 GB phone.
+
+**Order matters — web first, then the app:**
+1. Merge the web PR and let Vercel deploy. The app needs the web side for Google
+   sign-in (Google blocks sign-in inside an app WebView; the site hands it to a
+   Chrome tab) and for the memory fix (without it, generating from ~250
+   full-size photos runs a phone out of memory).
+2. Check the deploy: `https://megyprints.vercel.app/auth-native.html` must show
+   "You're signed in" (not the app's home page).
+3. Upload `android-native/release/megyprints-1.1.0-code2.aab` (versionCode 2) to
+   the **closed track (Alpha)** → release notes: "Pick as many photos as you
+   like — no more 100-photo limit." Google's rule is 12+ testers opted in for
+   14 days straight; pushing an update to the same track isn't listed as
+   resetting that — keep testers opted in and don't pause the track.
+4. Nothing in App content changes: still INTERNET-only, no ads/analytics SDKs,
+   same data handling.
+
+**Phone check before telling testers (5 min):**
+- Upload → ☰ → Images → a camera folder → ⋮ → Select all → Select (try 150+).
+- Generate the album; flip a few pages — photos show.
+- Log in → Sign in with Google → a Chrome tab opens → pick the account → you
+  land back in the app, signed in.
+- Airplane mode → open the app → "You're offline" page, not a browser error.
+
+**Rebuilding** (JDK 21 at `C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot`;
+signing reads the gitignored `android-native/keystore.properties`):
+
+```bash
+npx cap sync android
+```
+
+```bash
+cd android-native && ./gradlew.bat bundleRelease
+```
+
+Bump `versionCode`/`versionName` in `android-native/app/build.gradle` first.
+For a debug build that loads a local dev server, sync with
+`CAP_SERVER_URL=http://10.0.2.2:5173` — and re-sync WITHOUT it before any
+release build (the release must point at megyprints.vercel.app).
+
+The old `android/` TWA project is kept for reference only; don't build from it.
+
 ## Updating the app later
 
 - **Web changes** (layouts, quotes, checkout…): just deploy to Vercel. Store app
   updates instantly. No Play work at all.
-- **Wrapper changes** (final icon art, app name, splash): bump
+- **Shell changes** (icon, splash, native code): see the 1.1.0 section above —
+  bump versionCode, `bundleRelease`, upload. (The TWA instructions below are
+  historical.)
+- **Wrapper changes (TWA — historical)** (final icon art, app name, splash): bump
   `appVersionCode` (+1) and `appVersion` in `android/twa-manifest.json`, then:
 
 ```bash
