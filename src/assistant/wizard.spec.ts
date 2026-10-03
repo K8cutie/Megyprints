@@ -665,3 +665,58 @@ describe('one way forward on every guided screen (tester, 2026-10-04)', () => {
     }
   });
 });
+
+describe('one way forward after the album too: cover, Review, Preview (owner, 2026-10-04)', () => {
+  /* The same eager tapper further on. On the cover, Megy's ← Previous / Next →
+     repeated the cover's own "← Back" / "Continue to photos →". On Review,
+     Megy's Next → sat beside "Next page ›" under the page and jumped past
+     every page to Step 6. On Preview & Order Megy showed a greyed Next → —
+     the same dead tap that left the first tester stuck. */
+  const filled = { slotFills: [0], photos: [], textElements: [] };
+  const built = Array.from({ length: 40 }, () => filled);
+  const photos = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const generated = (phase = 'edit') =>
+    builderStub({ phase, albumPages: built, uploadedPhotos: photos } as unknown as Partial<BuilderActions>);
+  beforeEach(() => { store[ALBUM_THEME_KEY] = 'Wedding'; });
+  /** An engine on `step` with every step before it done. */
+  const at = (step: WizardStep, b: BuilderActions = generated()) => {
+    const w = new WizardEngine(b, false);
+    w.state.step = step;
+    w.state.completed = WIZARD_ORDER.slice(0, WIZARD_ORDER.indexOf(step));
+    return w;
+  };
+
+  it('the cover: Megy shows neither ← Previous nor Next → — the cover has its own ← Back and Continue', () => {
+    const w = at('design_cover');
+    expect(w.showsNext()).toBe(false);
+    expect(w.showsPrevious()).toBe(false);
+    expect(w.getMessage().body).toContain('**Continue to photos**');
+  });
+
+  it('Review: no Next → (it skipped every page to Step 6); ← Previous stays', () => {
+    const w = at('review_pages');
+    expect(w.showsNext()).toBe(false);
+    expect(w.showsPrevious()).toBe(true);
+  });
+
+  it('Review: Megy points at "Next page", not at ‹ › arrows (they are words since #50)', () => {
+    const body = at('review_pages').getMessage().body;
+    expect(body).toContain('**Next page**');
+    expect(body).not.toMatch(/‹|›|arrows/);
+  });
+
+  it('Preview & Order: no greyed Next → — there is nothing after it', () => {
+    const w = at('finalize', generated('preview'));
+    expect(w.showsNext()).toBe(false);
+    expect(w.showsPrevious()).toBe(true);
+  });
+
+  it('no step shows a Next that does nothing: wherever it shows, a tap moves the journey on', () => {
+    for (const step of WIZARD_ORDER) {
+      const w = at(step);
+      if (!w.showsNext()) continue;
+      w.advance();
+      expect(w.state.step, `Next on ${step}`).not.toBe(step);
+    }
+  });
+});

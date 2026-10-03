@@ -199,7 +199,6 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     wizardRef.current.advance();
     setWizardStep(wizardRef.current.state.step);
   };
-  const nextDisabled = wizardStep === 'finalize';
 
   /* ── Option A: the wizard is the single source of truth for the journey.
      Mirror its step into the SHARED store AND derive the center screen (phase)
@@ -630,9 +629,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               {showNext && (
                 <button
                   onClick={goNext}
-                  disabled={nextDisabled}
                   title={wizardStep === 'pick_theme' && !stepOneReady ? (themeReady ? 'Name your album first' : 'Pick the occasion first') : undefined}
-                  className="ml-auto flex items-center gap-1 px-5 py-2 rounded-lg text-sm font-medium bg-peach text-white hover:bg-blush-pink disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="ml-auto flex items-center gap-1 px-5 py-2 rounded-lg text-sm font-medium bg-peach text-white hover:bg-blush-pink transition-all"
                 >
                   Next →
                 </button>
@@ -778,7 +776,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               ))}
             </div>
             {/* Navigation: Previous / Next — the same one-way-on rule as the
-                center card (WizardEngine.showsNext / showsPrevious). */}
+                center card (WizardEngine.showsNext / showsPrevious): none on
+                the cover (it has its own bar), no Next on Review (Next page
+                under the page) or on Preview & Order (the last step). Never a
+                greyed button: Next shows only where a tap moves on. */}
             {(showPrevious || showNext) && (
             <div className="flex items-center justify-between mt-3 pt-2 border-t border-line-soft">
               {showPrevious && (
@@ -792,8 +793,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               {showNext && (
                 <button
                   onClick={goNext}
-                  disabled={nextDisabled}
-                  className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-peach text-white hover:bg-blush-pink disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-peach text-white hover:bg-blush-pink transition-all"
                 >
                   Next →
                 </button>
