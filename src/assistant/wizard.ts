@@ -98,6 +98,13 @@ export function isStepOneReady(albumTitle: string | null | undefined, theme: str
   return isAlbumNameReady(albumTitle) && isAlbumThemeReady(theme);
 }
 
+/** A step action drawn as the big filled button: the one that moves the
+ *  customer on. "Upload Photos" has no → but it is the only way on from an
+ *  empty upload step, and a pale cream button there read as a dead end. */
+export function isPrimaryAction(action: string): boolean {
+  return action.includes('→') || action.includes('Now') || action === 'Upload Photos';
+}
+
 export class WizardEngine {
   state: WizardState;
   builder: BuilderActions;
@@ -248,6 +255,28 @@ export class WizardEngine {
     const currentIdx = WIZARD_ORDER.indexOf(this.state.step);
     if (currentIdx > 0) {
       this.state.step = WIZARD_ORDER[currentIdx - 1];
+    }
+  }
+
+  /* ── The card's footer: ← Previous and Next → ──
+     One way on per screen (tester, 2026-10-04): an eager tester tapped Next on
+     every screen instead of what the screen asked. So Next shows only where
+     it IS the way on. On Welcome "Let's Get Started →" is; on the size step
+     the sizes are (Next skipped the choice and kept 8×8) until one was picked;
+     on the upload step Generate is, until an album is built. Step 1's Next
+     stays: it is the way on there, and the panel turns a tap before the step
+     is answered into a pointer at what is missing. Welcome has nothing to go
+     back to, so no ← Previous at all rather than a greyed one. */
+  showsPrevious(): boolean {
+    return this.state.step !== 'welcome';
+  }
+
+  showsNext(): boolean {
+    switch (this.state.step) {
+      case 'welcome': return false;
+      case 'pick_size': return this.state.completed.includes('pick_size');
+      case 'upload_photos': return this.hasBuiltAlbum();
+      default: return true;
     }
   }
 

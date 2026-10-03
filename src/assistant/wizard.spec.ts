@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep, forwardJumpTarget, isStepOneReady, bootWizard, readSavedWizard, WIZARD_STORAGE_KEY, type WizardStep } from './wizard';
+import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, WIZARD_STORAGE_KEY, type WizardStep } from './wizard';
 import { isAlbumNameReady, albumNameToSave, cleanAlbumName, UNNAMED_ALBUM } from '../lib/albumName';
 import { ALBUM_THEME_KEY, isAlbumThemeReady, cleanAlbumTheme } from '../lib/albumTheme';
 import { FRESH_START_KEY } from '../lib/albumSession';
@@ -578,5 +578,90 @@ describe('the Style step is gone (owner, 2026-09-14)', () => {
     w.advance();
     expect(w.state.step).toBe('upload_photos');
     expect(w.getMessage().title).toMatch(/^Step 4/);
+  });
+});
+
+describe('one way forward on every guided screen (tester, 2026-10-04)', () => {
+  /* An eager tester tapped the footer "Next →" on every screen instead of
+     doing what the screen asked. Welcome had TWO ways on ("Let's Get
+     Started →" and Next) and a greyed ← Previous; on the size step Next
+     skipped the choice and quietly kept 8×8; the upload step had no Next and
+     its only way on, "Upload Photos", was a pale cream button. The footer
+     Next now shows only where it IS the way on, and the way on is the filled
+     button. */
+  const empty = { slotFills: [], photos: [], textElements: [] };
+  const filled = { slotFills: [0], photos: [], textElements: [] };
+  const unbuilt = Array.from({ length: 40 }, () => empty);
+  const built = Array.from({ length: 40 }, () => filled);
+  const photos = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const fresh = (over: Partial<BuilderActions> = {}) =>
+    builderStub({ albumPages: unbuilt, ...over } as unknown as Partial<BuilderActions>);
+  beforeEach(() => { store[ALBUM_THEME_KEY] = 'Wedding'; });
+
+  const on = (step: WizardStep, b: BuilderActions = fresh()) => {
+    const w = new WizardEngine(b, true);
+    while (w.state.step !== step) w.advance();
+    return w;
+  };
+  const primaries = (w: WizardEngine) => w.getMessage().actions.filter(isPrimaryAction);
+
+  it('Welcome: "Let\'s Get Started →" is the only way on — no footer Next, no greyed ← Previous', () => {
+    const w = on('welcome');
+    expect(w.showsNext()).toBe(false);
+    expect(w.showsPrevious()).toBe(false);
+    expect(primaries(w)).toEqual(["Let's Get Started →"]);
+  });
+
+  it('Step 1: Next is the way on, so it shows (the gate holds — advancing unanswered stays put)', () => {
+    const w = on('pick_theme');
+    expect(w.showsNext()).toBe(true);
+    expect(w.showsPrevious()).toBe(true);
+    delete store[ALBUM_THEME_KEY];
+    w.advance();
+    expect(w.state.step).toBe('pick_theme');
+  });
+
+  it('Step 2: the size buttons are the way on — no Next until a size was picked', () => {
+    const w = on('pick_size');
+    expect(w.showsNext()).toBe(false);
+    expect(w.showsPrevious()).toBe(true);
+    expect(w.getMessage().actions.every((a) => / photos per page$/.test(a))).toBe(true);
+    // The pick advances (handleWizardAction: change_size, then advance()).
+    w.advance();
+    expect(w.state.step).toBe('design_cover');
+    // Back from the cover, the size is chosen: Next keeps it.
+    w.back();
+    expect(w.state.step).toBe('pick_size');
+    expect(w.showsNext()).toBe(true);
+  });
+
+  it('Step 4 with no photos: "Upload Photos" is the way on, filled — and no Next', () => {
+    const w = on('upload_photos');
+    expect(w.showsNext()).toBe(false);
+    expect(primaries(w)).toEqual(['Upload Photos']);
+  });
+
+  it('Step 4 with photos in: "Generate Album →" is the one filled button', () => {
+    const w = on('upload_photos', fresh({ uploadedPhotos: photos } as unknown as Partial<BuilderActions>));
+    expect(w.showsNext()).toBe(false);
+    expect(primaries(w)).toEqual(['Generate Album →']);
+    expect(isPrimaryAction('Upload More Photos')).toBe(false);
+  });
+
+  it('Step 4 with a built album (came back from Review): Next returns to it', () => {
+    const w = new WizardEngine(builderStub({ phase: 'edit', albumPages: built, uploadedPhotos: photos } as unknown as Partial<BuilderActions>), false);
+    w.state.step = 'upload_photos';
+    expect(w.showsNext()).toBe(true);
+  });
+
+  it('before the album is built, every screen offers exactly one way on', () => {
+    // Every screen before the album offers exactly one way on: Next where it
+    // shows, otherwise ONE filled button (or the size choices).
+    for (const step of ['welcome', 'pick_theme', 'pick_size', 'upload_photos'] as WizardStep[]) {
+      const w = on(step);
+      const ways = (w.showsNext() ? 1 : 0) + primaries(w).length;
+      if (step === 'pick_size') expect(ways, step).toBe(0); // the six sizes are the way on
+      else expect(ways, step).toBe(1);
+    }
   });
 });
