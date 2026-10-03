@@ -21,7 +21,9 @@ import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
 import { deriveSpine } from './coverLayout';
-import { FONTS, COLORS } from './MobileTextEditor';
+import { COLORS } from './MobileTextEditor';
+import { FONTS } from './fonts';
+import { FontSelect } from './FontList';
 import { DEFAULT_COVER, type AlbumPage, type TextStyle } from './types';
 
 const SPINE_STRIP_W = 26;
@@ -294,17 +296,12 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block">
+            <div>
               <span className="block text-[11px] font-medium text-stone mb-1">Font</span>
-              <select
-                value={title.fontFamily}
-                onChange={(e) => updateTitle({ fontFamily: e.target.value })}
-                style={{ fontFamily: title.fontFamily }}
-                className="w-full px-3 py-2.5 rounded-xl border border-line bg-white text-[14px] outline-none focus:border-blush-pink"
-              >
-                {FONTS.map((f) => <option key={f.name} value={f.family} style={{ fontFamily: f.family }}>{f.name}</option>)}
-              </select>
-            </label>
+              {/* Each font shown in its own face — the page editor's list. A native
+                  dropdown can't: Android draws its list in the system font. */}
+              <FontSelect value={title.fontFamily} onChange={(f) => updateTitle({ fontFamily: f })} />
+            </div>
             <div>
               <span className="block text-[11px] font-medium text-stone mb-1">Colour</span>
               <div className="flex flex-wrap gap-1.5 pt-1">

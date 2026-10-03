@@ -8,15 +8,15 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveSlotBox } from './slotGeometry';
+import { slotPhotoRect } from './slotPhotoFit';
 import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, applyTextureAlpha, type MaskId } from './masks';
 import { applyLookPixels, isLookId, type LookId } from './looks';
-import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
 import { WORDART_SHADOW, TEXT_LINE_HEIGHT, resolveTextSlotAlign } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import type { QrFill, OrnamentFill } from './types';
-import { clampQrGeom } from './types';
+import { clampQrGeom, dealtBoxRoll } from './types';
 import type {
   FabricCanvas,
   FabricObject,
@@ -28,6 +28,7 @@ import type {
 import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset, FrameStyle, SlotText } from './types';
 import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
 import { dedupeSlotFills } from './slotUtils';
+import { pagePhotoKey } from './pagePhotoKey';
 import { textureDataUri } from './textures';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
@@ -67,6 +68,13 @@ const SLOT_IMAGE_LOCK = {
 /** Monotonic render ID — increments on every renderScene call.
  *  Used to cancel stale async image callbacks from previous renders. */
 let currentRenderId = 0;
+
+/** Start a render: every callback still waiting on an older one is now stale.
+ *  Exported for the spec (a page turn while a textured edge is loading). */
+export function nextRenderId(): number {
+  currentRenderId += 1;
+  return currentRenderId;
+}
 
 /* ── Snap helpers ──────────────────────────────────────────────────────── */
 
@@ -754,7 +762,9 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       return; /* Same page, still editing — skip render */
     }
 
-    const fingerprint = pageFingerprint(actions.currentPageIndex, currentPage) + '|cm:' + (containerModeRef.current ? '1' : '0');
+    // + the URLs of the photos this page draws: after a reload IndexedDB swaps
+    // in live URLs for the same indexes, and the page must repaint to show them.
+    const fingerprint = pageFingerprint(actions.currentPageIndex, currentPage) + '|ph:' + pagePhotoKey(currentPage, uploadedPhotos) + '|cm:' + (containerModeRef.current ? '1' : '0');
     if (lastStructuralRef.current === fingerprint) return;
     lastStructuralRef.current = fingerprint;
 
@@ -1118,7 +1128,24 @@ function createBackgroundObject(
  *  Template Slot Renderer
  *  ══════════════════════════════════════════════════════════════════════════ */
 
-function renderTemplateSlots(
+/** Overlays sit above photos and their frame outlines — QR / graphics, then
+ *  text, then caption-box graphics, then stickers on top of everything — as
+ *  the DOM preview and the print draw them. Photos load async and a late one
+ *  lands on top; with Studio always on its frame outline is CLICKABLE, so
+ *  whatever it covered (a QR badge, a caption, a sticker) stopped taking
+ *  clicks. So this runs after the scene renders AND after every photo loads.
+ *  (`-ornament-`/`-qr-` don't match the `-textornament-`/`-textqr-` ids.) */
+function raiseOverlays(canvas: FabricCanvas): void {
+  const objs = [...canvas.getObjects()]; // a snapshot: bringToFront reorders the live list
+  const has = (o: FabricObject, ...ids: string[]) => typeof o.slotId === 'string' && ids.some((id) => (o.slotId as string).includes(id));
+  objs.filter((o) => has(o, '-qr-', '-qrbg-', '-ornament-')).forEach((o) => canvas.bringToFront(o));
+  objs.filter((o) => o.textId).forEach((o) => canvas.bringToFront(o));
+  objs.filter((o) => has(o, '-textornament-', '-textqr-', '-textqrbg-')).forEach((o) => canvas.bringToFront(o));
+  objs.filter((o) => has(o, '-sticker-')).forEach((o) => canvas.bringToFront(o));
+}
+
+/** Exported for the spec (bakedFrame.spec.ts drives it with a stand-in Fabric). */
+export function renderTemplateSlots(
   fab: any,
   canvas: FabricCanvas,
   template: any,
@@ -1258,35 +1285,33 @@ function renderTemplateSlots(
 
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
       const photoUrl = uploadedPhotos[photoIndex].previewUrl;
-      fab.Image.fromURL(photoUrl, (img: any) => {
+      // async: a textured edge waits for its texture (see the bake below) and
+      // nothing of this slot is drawn until it lands — photo and frame together.
+      fab.Image.fromURL(photoUrl, async (img: any) => {
         /* Skip if a newer render has started — prevents stale images
            from appearing when switching pages rapidly */
         if (renderId !== currentRenderId) return;
         const imgW = img.width || sw;
         const imgH = img.height || sh;
-        const coverScale = Math.max(sw / imgW, sh / imgH);
-        const userScale = slotScales[i] ?? 1;
-        const finalScale = (userScale !== 1 && userScale > 0) ? userScale : coverScale;
-        const offsetX = slotOffsetsX[i] ?? 0;
-        const offsetY = slotOffsetsY[i] ?? 0;
+        // The ONE fit print + the DOM preview draw with (slotPhotoFit): cover ×
+        // the zoom (a multiplier on cover, as print reads it — this used to
+        // treat any zoom but 1 as a raw image scale), then the pan, held to
+        // the overflow. Fabric works in design px, so the pan goes in as is.
+        const fit = slotPhotoRect({ w: imgW, h: imgH }, { w: sw, h: sh }, slotScales[i], { x: slotOffsetsX[i] ?? 0, y: slotOffsetsY[i] ?? 0 });
 
         img.set({
-          left: sx + sw / 2 + offsetX,
-          top: sy + sh / 2 + offsetY,
+          left: sx + fit.x + fit.w / 2,
+          top: sy + fit.y + fit.h / 2,
           originX: 'center',
           originY: 'center',
-          scaleX: finalScale,
-          scaleY: finalScale,
+          scaleX: fit.w / imgW,
+          scaleY: fit.w / imgW,
           angle: slot.rotation ?? 0,
           /* Megy is the sole orchestrator. The canvas is a RENDERER: a slot
              photo can be selected (to delete/replace via Megy) but never
              manually moved, scaled, or rotated. See SLOT_IMAGE_LOCK. */
           ...SLOT_IMAGE_LOCK,
         });
-        img.slotId = `${SLOT_ID}-photo-${i}`;
-        img.photoIndex = photoIndex;
-        img.slotIndex = i;
-        img.photoId = `slot-photo-${i}`;
 
         // Shape clipPath
         const clipCx = sx + sw / 2;
@@ -1328,6 +1353,12 @@ function renderTemplateSlots(
           img.set('clipPath', clip);
         }
 
+        // The image this slot shows: the photo, or its bake. ONLY the image is
+        // swapped — the shadow, the frame Studio moves and resizes, the
+        // decorative frame and the drag followers below are built the same for
+        // both. (The bake used to return before any of them, so a photo with a
+        // look or an edge could be re-styled on desktop but never moved.)
+        let photo = img;
         const rawLook = slotLooks?.[i];
         const look: LookId | null = isLookId(rawLook) ? rawLook : null;
         if (slot.feather || slot.texture || look) {
@@ -1336,41 +1367,47 @@ function renderTemplateSlots(
           // apply the look to the pixels (the same matrices the DOM's CSS
           // filter uses), then the soft or textured edge on the alpha — and
           // show that instead of the raw image. Exactly what print does.
+          let off: HTMLCanvasElement | null = null;
+          let octx: CanvasRenderingContext2D | null = null;
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const el = img.getElement ? img.getElement() : (img as any)._element;
-            const off = document.createElement('canvas');
+            off = document.createElement('canvas');
             off.width = Math.max(1, Math.round(sw));
             off.height = Math.max(1, Math.round(sh));
-            const octx = off.getContext('2d');
-            if (el && octx) {
-              const drawW = imgW * finalScale, drawH = imgH * finalScale;
-              octx.drawImage(el, sw / 2 + offsetX - drawW / 2, sh / 2 + offsetY - drawH / 2, drawW, drawH);
+            octx = el ? off.getContext('2d') : null;
+            if (octx) {
+              octx.drawImage(el, fit.x, fit.y, fit.w, fit.h);
               if (look) applyLookPixels(octx, 0, 0, off.width, off.height, look);
               if (slot.feather) featherAlpha(octx, 0, 0, off.width, off.height, slot.feather, slot.featherSide);
-              const show = () => {
-                if (renderId !== currentRenderId) return;
-                const baked = new fab.Image(off, { left: sx, top: sy, originX: 'left', originY: 'top', ...SLOT_IMAGE_LOCK });
-                baked.slotId = `${SLOT_ID}-photo-${i}`;
-                baked.photoIndex = photoIndex;
-                baked.slotIndex = i;
-                baked.photoId = `slot-photo-${i}`;
-                canvas.add(baked);
-                canvas.renderAll();
-              };
-              if (slot.texture) {
-                loadMaskTexture(slot.texture)
-                  .then((tex) => { applyTextureAlpha(octx, tex, 0, 0, off.width, off.height); show(); })
-                  .catch(() => show());
-              } else {
-                show();
-              }
-              return;
             }
-          } catch { /* fall through to the plain image */ }
+          } catch { octx = null; /* show the plain image */ }
+          if (off && octx) {
+            if (slot.texture) {
+              try { applyTextureAlpha(octx, await loadMaskTexture(slot.texture), 0, 0, off.width, off.height); }
+              catch { /* texture missing — the photo without the edge, as print does */ }
+              // the texture loads async: a newer render may have started since
+              if (renderId !== currentRenderId) return;
+            }
+            // Same centre, turn and shape clip as the raw image it replaces (a
+            // look on a circle is still a circle — print clips the bake too).
+            photo = new fab.Image(off, {
+              left: sx + sw / 2,
+              top: sy + sh / 2,
+              originX: 'center',
+              originY: 'center',
+              angle: slot.rotation ?? 0,
+              clipPath: img.clipPath,
+              ...SLOT_IMAGE_LOCK,
+            });
+          }
         }
+        photo.slotId = `${SLOT_ID}-photo-${i}`;
+        photo.photoIndex = photoIndex;
+        photo.slotIndex = i;
+        photo.photoId = `slot-photo-${i}`;
 
-        canvas.add(img);
+        canvas.add(photo);
 
         // Fake shadow — dark semi-transparent rect behind photo.
         // NOT using Fabric.js shadow (unreliable with clipPath).
@@ -1385,9 +1422,19 @@ function renderTemplateSlots(
         // both show a clean background hairline. Those two renderers already
         // suppress all framing for fullBleed (BuilderPreview frameCss = {},
         // printPipeline effFrameStyle = 'none'); this keeps Fabric in step.
+        //
+        // NOR on a masked photo: a mask drops the border and the decorative
+        // frame in all three renderers, and this rectangle is framing too — a
+        // grey box behind a circle, or behind a soft edge that should fade into
+        // the page. Neither the preview nor the print draws it.
         const shadowOff = 4;
         const shadowBlur = 8;
-        const fakeShadow = template.fullBleed ? null : new fab.Rect({
+        // Studio: everything drawn around the photo that must follow its frame
+        // while it is dragged (the re-render after the drop snaps it exactly).
+        type Follower = { left?: number; top?: number; set: (p: { left: number; top: number }) => unknown };
+        const followers: { obj: Follower; left: number; top: number }[] = [];
+        const follow = (obj: Follower) => followers.push({ obj, left: obj.left ?? 0, top: obj.top ?? 0 });
+        const fakeShadow = template.fullBleed || slot.masked ? null : new fab.Rect({
           left: sx + shadowOff - shadowBlur / 2,
           top: sy + shadowOff - shadowBlur / 2,
           width: sw + shadowBlur,
@@ -1406,21 +1453,26 @@ function renderTemplateSlots(
           fakeShadow.slotId = `${SLOT_ID}-shadow-${i}`;
           canvas.add(fakeShadow);
           fakeShadow.sendToBack();
+          follow(fakeShadow);
         }
 
-        // Slot border frame — THE CONTAINER. White outline normally,
-        // becomes thick blue+selectable in container mode for resize/move.
-        const borderStroke = containerMode ? '#3B82F6' : (frameColor ?? '#FFFFFF');
-        // Full-bleed (single-photo, no-textbox) pages draw no frame — but keep the
-        // blue container outline in edit mode so the slot is still selectable.
+        // Slot border frame — THE CONTAINER. Always drawn as the customer's real
+        // border (colour, width, dash). In container mode (Studio — always on
+        // since 2026-09-30) it is also selectable: Fabric's blue handles appear
+        // only on the frame being moved/resized, so the page still looks like
+        // the page. (It used to become a thick blue outline on every photo and
+        // hide the decorative frames — fine for a mode you dip into, wrong for
+        // the only mode there is.)
+        const borderStroke = frameColor ?? '#FFFFFF';
+        // Full-bleed (single-photo, no-textbox) pages draw no frame. A 0-width
+        // outline is still selectable — Fabric hit-tests its box, not its ink.
         const effFrameWidth = adaptedTemplate.fullBleed || slot.masked ? 0 : frameWidth;
-        const borderWidth = containerMode ? 3 : (effFrameWidth ?? 2);
-        // Dashed/dotted border style — only on the real (non-container) outline,
-        // and only when the slot actually draws a border. Mirrors the DOM
-        // (border-style) + print (ctx.setLineDash) renderers.
+        const borderWidth = effFrameWidth ?? 2;
+        // Dashed/dotted border style — only when the slot actually draws a
+        // border. Mirrors the DOM (border-style) + print (ctx.setLineDash).
         const effBorderStyle = borderStyle ?? 'solid';
         let borderDashArray: number[] | undefined;
-        if (!containerMode && borderWidth > 0) {
+        if (borderWidth > 0) {
           if (effBorderStyle === 'dashed') borderDashArray = [borderWidth * 2, borderWidth * 2];
           else if (effBorderStyle === 'dotted') borderDashArray = [1, borderWidth * 2];
         }
@@ -1434,6 +1486,7 @@ function renderTemplateSlots(
           evented: containerMode,
           hasControls: containerMode,
           hasBorders: containerMode,
+          borderColor: containerMode ? '#3B82F6' : undefined,
           cornerColor: containerMode ? '#3B82F6' : undefined,
           cornerSize: containerMode ? 10 : undefined,
           transparentCorners: false,
@@ -1457,6 +1510,9 @@ function renderTemplateSlots(
           borderObj = new fab.Rect({ left: sx, top: sy, width: sw, height: sh, ...borderBase });
         }
         borderObj.slotId = `${SLOT_ID}-border-${i}`;
+        // lockRotation stops the turn but Fabric still draws the rotate stalk —
+        // a handle that does nothing reads as broken. No renderer prints rotation.
+        borderObj.setControlsVisibility?.({ mtr: false });
         // Studio: selecting the frame outline selects the slot (mask chips).
         // A separate field, NOT slotIndex — the generic object:modified handler
         // treats anything with slotIndex as a pannable photo.
@@ -1469,11 +1525,9 @@ function renderTemplateSlots(
         // the Fabric / DOM / print renderers stay in lockstep. Frame objects are
         // tagged `${SLOT_ID}-frame-${i}` so the cleanup pass (filters on
         // SLOT_ID) removes them on every rerender. Suppressed for full-bleed
-        // pages (no border ⇒ no decorative frame) and in container mode (the
-        // blue resize outline owns the slot then).
+        // pages (no border ⇒ no decorative frame).
         const effFrameStyle: FrameStyle = frameStyle ?? 'none';
         if (
-          !containerMode &&
           !adaptedTemplate.fullBleed &&
           !slot.masked &&
           effFrameStyle !== 'none' &&
@@ -1506,6 +1560,7 @@ function renderTemplateSlots(
             dbl.slotId = frameTag;
             canvas.add(dbl);
             dbl.bringToFront();
+            follow(dbl);
           } else if (effFrameStyle === 'thin') {
             // Single 1px inset hairline just inside the slot edge.
             const inset = 1;
@@ -1515,6 +1570,7 @@ function renderTemplateSlots(
             hair.slotId = frameTag;
             canvas.add(hair);
             hair.bringToFront();
+            follow(hair);
           } else if (effFrameStyle === 'matte' || effFrameStyle === 'polaroid') {
             // White mat behind the photo. Polaroid is weighted at the bottom and
             // casts a soft drop shadow; matte is an even mount.
@@ -1546,10 +1602,11 @@ function renderTemplateSlots(
                 });
             mat.slotId = frameTag;
             canvas.add(mat);
+            follow(mat);
             // Mat must sit UNDER the photo but ABOVE the page background. The
             // photo + its border were already added, so drop the mat just below
             // them by re-raising the photo and border back to the front.
-            img.bringToFront();
+            photo.bringToFront();
             borderObj.bringToFront();
           }
         }
@@ -1592,23 +1649,27 @@ function renderTemplateSlots(
             });
           });
 
-          // Moving: sync photo position to follow container
+          // Moving: the photo, its clip, its shadow and its decorative frame all
+          // follow the container. dx/dy are measured from the frame's OWN start
+          // (circle/oval/heart frames are centre-origin; measuring from the slot's
+          // top-left made a round photo jump half its width on the first move).
+          const frameStart = { left: borderObj.left ?? sx, top: borderObj.top ?? sy };
+          const photoStart = { left: photo.left ?? 0, top: photo.top ?? 0 };
+          const clip = photo.clipPath;
+          const clipStart = clip ? { left: clip.left ?? 0, top: clip.top ?? 0 } : null;
           borderObj.on('moving', () => {
-            const dx = (borderObj.left ?? sx) - sx;
-            const dy = (borderObj.top ?? sy) - sy;
-            // For centered shapes, left/top is center — adjust
-            const isCentered = slot.shape === 'circle' || slot.shape === 'oval' || slot.shape === 'heart';
-            const offsetX = isCentered ? dx : dx;
-            const offsetY = isCentered ? dy : dy;
-            // Move the image to follow the border
-            img.set({
-              left: (sx + sw / 2) + offsetX + (slotOffsetsX[i] ?? 0),
-              top: (sy + sh / 2) + offsetY + (slotOffsetsY[i] ?? 0),
-            });
+            const dx = (borderObj.left ?? frameStart.left) - frameStart.left;
+            const dy = (borderObj.top ?? frameStart.top) - frameStart.top;
+            photo.set({ left: photoStart.left + dx, top: photoStart.top + dy });
+            // an absolutePositioned clip stays put unless moved — the photo
+            // would show only where the old and new boxes overlap
+            if (clip && clipStart) clip.set({ left: clipStart.left + dx, top: clipStart.top + dy });
+            for (const f of followers) f.obj.set({ left: f.left + dx, top: f.top + dy });
             canvas.requestRenderAll();
           });
         }
 
+        raiseOverlays(canvas); // this photo may have loaded after the overlays above it
         canvas.requestRenderAll();
       });
     } else {
@@ -1706,8 +1767,7 @@ function renderScene(
   onStickerClick: (uid: string) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
-  currentRenderId += 1;
-  const thisRenderId = currentRenderId;
+  const thisRenderId = nextRenderId();
 
   // 1. Remove all managed objects
   const toRemove = canvas.getObjects().filter((obj: any) =>
@@ -1965,6 +2025,7 @@ function renderScene(
         img.photoId = `text-slot-photo-${i}`;
         img.on('mousedown', () => onTextSlotPhotoClick(i));
         canvas.add(img);
+        raiseOverlays(canvas); // a late photo must not cover a dragged graphic or a sticker
         canvas.renderAll();
       });
     }
@@ -1974,7 +2035,6 @@ function renderScene(
   // Text is collected first, added to canvas, then brought to front.
   // Slot images load async via fab.Image.fromURL — they may be added
   // AFTER text, covering it. We re-bring text to front after a delay.
-  const textObjects: any[] = [];
   page.textElements.forEach((text: TextElement) => {
     const slotRect = text.boxIndex != null ? textSlotRect(text.boxIndex) : null;
     const autoWidth = Math.max(text.text.length * text.fontSize * 0.6, 100);
@@ -2024,7 +2084,6 @@ function renderScene(
       fabricText.on('mousedown', () => onTextSlotClick(bi));
     }
     canvas.add(fabricText);
-    textObjects.push(fabricText);
   });
 
   // 4a-bis. STUDIO stickers — free graphics: drag to move, corner handles to
@@ -2089,10 +2148,11 @@ function renderScene(
     // keep the generic label + 3-way chooser. Keep these labels in step with
     // the DOM hint (BuilderPreview EmptyChooserBox) — the two are SEPARATE and
     // drift silently.
-    const roll = page.textSlotRoll?.[i] ?? null;
+    // (Read through dealtBoxRoll: a box an older album dealt the retired 'qr'
+    // is an ordinary undealt box now.)
+    const roll = dealtBoxRoll(page, i);
     const labelText =
       roll === 'text' ? 'Your words here' :
-      roll === 'qr' ? QR_INVITATION_LABEL :
       roll === 'quote' ? 'Add a quote' : 'Tap to add';
     // WRAP, don't clip. A single-line fab.Text sized by an estimated glyph
     // width still clipped the longer labels on tall-narrow bands; a Textbox
@@ -2112,30 +2172,9 @@ function renderScene(
     label.slotId = `${SLOT_ID}-textbox-label-${i}`;
     canvas.add(box);
     canvas.add(label);
-    // A video box: the label sits at the top and a QR image fills the room
-    // below it (owner, 2026-09-12). Same layout as the DOM twin — qrInvitation.ts.
-    if (roll === 'qr') {
-      // Start below the ⋯ badge (drawn top-right, see below) so a narrow band
-      // never runs the label under it.
-      const brHint = Math.max(9, Math.min(14, Math.min(r.width, r.height) * 0.10));
-      const topPad = 6 + brHint * 2 + 6;
-      const lay = qrInvitationLayout(r.width, r.height - (topPad - 12), 12, labelFs);
-      if (lay.qrSide > 0) {
-        label.set({ top: r.top + topPad + lay.labelH / 2 });
-        const qrTop = r.top + topPad + lay.labelH + lay.gap;
-        fab.Image.fromURL(QR_INVITATION_IMAGE, (img: Parameters<typeof canvas.add>[0] & { slotId?: string; imageSmoothing?: boolean; scaleToWidth: (w: number) => unknown }) => {
-          if (thisRenderId !== currentRenderId) return;
-          img.set({ left: r.left + r.width / 2, top: qrTop + lay.qrSide / 2, originX: 'center', originY: 'center', opacity: 0.9, imageSmoothing: false, selectable: false, evented: false });
-          img.scaleToWidth(lay.qrSide);
-          img.slotId = `${SLOT_ID}-textbox-qrhint-${i}`;
-          canvas.add(img);
-          canvas.renderAll();
-        });
-      }
-    }
     box.on('mousedown', () => onTextSlotEmptyClick(i));
     // A dealt box also gets a ⋯ badge → ALWAYS the full chooser, so the roll
-    // stays a default, never a cage (turn a dealt QR box into a quote, etc.).
+    // stays a default, never a cage (turn a dealt text box into a quote, etc.).
     if (roll) {
       const br = Math.max(9, Math.min(14, Math.min(r.width, r.height) * 0.10));
       const moreDot = new fab.Circle({
@@ -2160,25 +2199,9 @@ function renderScene(
   // ornament and paint over it, hiding it in the editor until the next re-render
   // — which would desync the Fabric editor from the DOM preview + print, where
   // QR/ornament always render on top.)
-  const bringOverlaysToFront = () => {
-    canvas.getObjects().forEach((o: any) => {
-      if (typeof o.slotId === 'string' && (o.slotId.includes('-qr-') || o.slotId.includes('-qrbg-') || o.slotId.includes('-ornament-'))) {
-        canvas.bringToFront(o);
-      }
-    });
-    textObjects.forEach((t) => { if (canvas.contains(t)) canvas.bringToFront(t); });
-    // Free-transform caption-box GRAPHICS sit ON TOP — they can be dragged over a
-    // caption, so they must stay visible. (`-ornament-` above doesn't match the
-    // `-textornament-` id, so bring them last, above the text objects.)
-    canvas.getObjects().forEach((o: any) => {
-      if (typeof o.slotId === 'string' && (o.slotId.includes('-textornament-') || o.slotId.includes('-textqr-') || o.slotId.includes('-textqrbg-'))) {
-        canvas.bringToFront(o);
-      }
-    });
-  };
-  bringOverlaysToFront();
-  setTimeout(bringOverlaysToFront, 50);
-  setTimeout(bringOverlaysToFront, 150);
+  raiseOverlays(canvas);
+  setTimeout(() => raiseOverlays(canvas), 50);
+  setTimeout(() => raiseOverlays(canvas), 150);
 
   // 5. Layflat crease guide
   if (albumType === 'layflat') {

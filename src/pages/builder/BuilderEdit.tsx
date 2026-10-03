@@ -14,12 +14,13 @@ import { Link } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, ChevronRight, Sparkles,
-  Wand2, Upload, Home, PanelLeftOpen, Video, PencilRuler,
+  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles,
+  Wand2, Upload, Home, PanelLeftOpen, Video,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
+import { dealtBoxRoll } from './types';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
@@ -28,13 +29,11 @@ import SlotChooser from './SlotChooser';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
+import PageTurnBar from './PageTurnBar';
 import { CloudSaveStatus } from '../../components/CloudSaveStatus';
 import { useAuth } from '../../lib/authContext';
-import { studioEnabled } from '../../lib/studioFlag';
-import StudioGate, { STUDIO_GATE_KEY } from './StudioGate';
 import { GUARD_MESSAGES, SOFT_MESSAGE, printSharpness, resolveSlotBox } from './slotGeometry';
 import StudioStrip from './StudioStrip';
-import AddOrnamentModal from './AddOrnamentModal';
 /* PropertiesPanel is now rendered inside UnifiedPanel */
 import { getCanvasDimensions } from './layouts';
 import { PAGE_TEMPLATES, hasQrSlot } from './pageTemplates';
@@ -81,15 +80,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
-  const [containerMode, setContainerMode] = useState(false);
+  const [containerMode, setContainerMode] = useState(true);
 
-  /* ── STUDIO (owner, 2026-09-13): the same page with the training wheels off.
-     Behind studioEnabled() until the owner flips it. Studio = Fabric's
-     container mode (frames selectable, movable, resizable) + the guardrails
-     at the state setter + the page marked as the customer's. ── */
-  const studioAvailable = studioEnabled();
-  const [studio, setStudio] = useState(false);
-  const [studioGate, setStudioGate] = useState(false);
+  /* ── STUDIO (owner, 2026-09-13): the page with the training wheels off.
+     Studio = Fabric's container mode (frames selectable, movable, resizable)
+     + the guardrails at the state setter + the page marked as the customer's.
+     Owner, 2026-09-30: no Simple/Studio switch — every Studio tool is always on. ── */
+  const studio = true;
   const [guardMsg, setGuardMsg] = useState<string | null>(null);
   const guardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sayGuard = useCallback((msg: string) => {
@@ -97,15 +94,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     if (guardTimer.current) clearTimeout(guardTimer.current);
     guardTimer.current = setTimeout(() => setGuardMsg(null), 2600);
   }, []);
-  const enterStudio = useCallback(() => {
-    let dismissed = false;
-    try { dismissed = !!sessionStorage.getItem(STUDIO_GATE_KEY); } catch { /* private mode */ }
-    if (!user && !dismissed) { setStudioGate(true); return; }
-    setStudio(true); setContainerMode(true);
-  }, [user]);
-  const leaveStudio = useCallback(() => { setStudio(false); setContainerMode(false); }, []);
-  /* Studio stickers: the picker (add) or the editor (swap/remove) for one uid. */
-  const [stickerModal, setStickerModal] = useState<{ uid: string | null } | null>(null);
+  /* Stickers were retired (owner, 2026-10-01): placed ones still show, print and
+     move; a double-click offers the one thing left to do — take it off. */
+  const [stickerToRemove, setStickerToRemove] = useState<string | null>(null);
 
   /* ── Sidebar hidden by default — Megy Assistant is the primary control ── */
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -197,9 +188,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       // already answered "which kind?". Undealt boxes (old drafts, boxes a
       // template swap added) keep the 3-way chooser; the box's ⋯ badge
       // (onTextSlotChooserClick below) is the always-available override.
-      const roll = actions.currentPage?.textSlotRoll?.[slotIndex] ?? null;
+      const roll = actions.currentPage ? dealtBoxRoll(actions.currentPage, slotIndex) : null;
       if (roll === 'text') setTextEditSlot(slotIndex);
-      else if (roll === 'qr') setTextSlotQrEditSlot(slotIndex);
       else if (roll === 'quote') setBoxQuoteSlot(slotIndex);
       else setChooserTextSlot(slotIndex);
     }, [containerMode, actions.currentPage]),
@@ -233,7 +223,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       const reasons = actions.updateStickerGeom(uid, geom);
       if (reasons.length) sayGuard(GUARD_MESSAGES[reasons[0]]);
     }, [actions, sayGuard]),
-    onStickerClick: useCallback((uid: string) => setStickerModal({ uid }), []),
+    onStickerClick: useCallback((uid: string) => setStickerToRemove(uid), []),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {
@@ -782,19 +772,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {guardMsg}
         </div>
       )}
-      {studioGate && (
-        <StudioGate onContinue={() => { setStudioGate(false); setStudio(true); setContainerMode(true); }} onClose={() => setStudioGate(false)} />
-      )}
-      {stickerModal && (
-        <AddOrnamentModal
-          initial={stickerModal.uid ? (actions.currentPage?.stickers?.find((k) => k.uid === stickerModal.uid) ?? null) : null}
-          onSave={(fill) => {
-            if (stickerModal.uid) actions.replaceStickerFill(stickerModal.uid, fill);
-            else { actions.addSticker(fill); sayGuard('Sticker added — drag it anywhere inside the safe area, corner handles resize and rotate.'); }
-            setStickerModal(null);
-          }}
-          onRemove={() => { if (stickerModal.uid) actions.removeSticker(stickerModal.uid); setStickerModal(null); }}
-          onClose={() => setStickerModal(null)}
+      {stickerToRemove && (
+        <RemoveGraphicModal kind="sticker"
+          onRemove={() => { actions.removeSticker(stickerToRemove); setStickerToRemove(null); }}
+          onClose={() => setStickerToRemove(null)}
         />
       )}
       {/* Caption editor — same component the mobile review + preview use, so the
@@ -843,14 +824,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* Empty combo/caption-box chooser — Quote / Your Text / QR Code.
+      {/* Empty combo/caption-box chooser — Quote / Your Text (QR left the boxes 2026-10-02: video memories live on full-page photos).
           (Clipart was sunset: fetching + rasterizing icon packs dragged on old
           phones. Placed cliparts still render — see textSlotOrnament below.) */}
       {chooserTextSlot !== null && (
         <SlotChooser
           onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setTextEditSlot(chooserTextSlot)}
-          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
       )}
@@ -1044,19 +1024,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             </div>
 
             <div className="flex items-center gap-2">
-              {studioAvailable && actions.phase === 'edit' && (
-                <div className="inline-flex items-center rounded-full border border-line bg-paper p-0.5 gap-0.5" role="group" aria-label="Editing mode" data-testid="studio-switch">
-                  <button type="button" aria-pressed={!studio} onClick={leaveStudio}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 transition-colors ${!studio ? 'bg-blush-pink text-white shadow-sm' : 'text-medium hover:text-dark'}`}>
-                    <Wand2 size={11} /> Simple
-                  </button>
-                  <button type="button" aria-pressed={studio} onClick={enterStudio}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 transition-colors ${studio ? 'bg-blush-pink text-white shadow-sm' : 'text-medium hover:text-dark'}`}>
-                    <PencilRuler size={11} /> Studio
-                  </button>
-                </div>
-              )}
-              {studioAvailable && actions.currentPage?.studio && (
+              {actions.currentPage?.studio && (
                 <>
                   <span className="text-[11px] font-bold text-blush-pink bg-blush rounded-full px-2.5 py-1" data-testid="studio-yours">✎ This page is yours · Regenerate skips it</span>
                   <button type="button" onClick={() => { actions.resetStudioPage(); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }}
@@ -1135,11 +1103,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             </div>
           </div>
 
-          {/* STUDIO strip — masks + looks for the selected photo, stickers for the page */}
+          {/* STUDIO strip — masks + looks for the selected photo */}
           {studio && (
             <StudioStrip page={actions.currentPage} selectedSlotIndex={selectedSlotIndex}
               onMask={(i, m) => actions.setSlotMask(i, m)} onLook={(i, l) => actions.setSlotLook(i, l)}
-              onGuard={sayGuard} onAddSticker={() => setStickerModal({ uid: null })} />
+              onGuard={sayGuard} />
           )}
 
           {/* Canvas */}
@@ -1216,29 +1184,17 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               </AnimatePresence>
             </motion.div>
 
-              {/* Page navigation — prev / next arrows below the page */}
-              {actions.albumPages.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => actions.goToPage(actions.currentPageIndex - 1)}
-                    disabled={actions.currentPageIndex === 0}
-                    title="Previous page"
-                    aria-label="Previous page"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-line text-medium hover:bg-blush hover:text-blush-pink hover:border-peach disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  <div className="w-px h-5 bg-line" />
-                  <button
-                    onClick={() => actions.goToPage(actions.currentPageIndex + 1)}
-                    disabled={actions.currentPageIndex >= actions.albumPages.length - 1}
-                    title="Next page"
-                    aria-label="Next page"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-line text-medium hover:bg-blush hover:text-blush-pink hover:border-peach disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
+              {/* Page turn below the page, in words both ways — the same bar as
+                  the phone (PageTurnBar). The last page offers Done → Preview.
+                  STICKY: the page fits the WIDTH, so on a 1366×768 or 1440×900
+                  laptop it runs past the window and the row sat ~170 px below
+                  the fold. It now rides the bottom edge until you scroll down
+                  to it, then rests under the page. */}
+              {actions.albumPages.length > 0 && (
+                <PageTurnBar variant="desktop" className="sticky bottom-4 z-20 mb-4" index={actions.currentPageIndex} total={actions.albumPages.length}
+                  onPrev={() => actions.goToPage(actions.currentPageIndex - 1)}
+                  onNext={() => actions.goToPage(actions.currentPageIndex + 1)}
+                  onDone={() => { void dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }} />
               )}
             </div>
           </div>

@@ -6,7 +6,7 @@
   "installCommand": "npm install",
   "rewrites": [
     { "source": "/m/:code", "destination": "/api/m?code=:code" },
-    { "source": "/((?!api/|m/|.well-known/|delete-account.html).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|m/|.well-known/|delete-account.html|auth-native.html|auth-native.js).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

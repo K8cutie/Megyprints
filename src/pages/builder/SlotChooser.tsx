@@ -4,7 +4,7 @@
    becomes the slot's content, on EVERY template + album size. Two shapes:
 
      COMBO / CAPTION box (template.textSlots) — the full content box:
-       Add Quote · Your Text · QR Code
+       Add Quote · Your Text
      PHOTO slot (template.slots) — a photo, or words instead of one:
        Add Photo · Add Quote · Your Text
 
@@ -15,25 +15,22 @@
    Whatever is picked REPLACES whatever was there: the state setters null the
    sibling arrays at that index, so one box always holds exactly one thing.
 
-   (A full-bleed corner QR badge is a separate flow — the "Add memory video"
-   button on a single-photo page. The QR option here puts the code INSIDE the
-   box instead.)
+   (QR left the boxes on 2026-10-02 — owner: video memories live on full-page
+   photos, via the "Add a video memory" button on a single-photo page. A QR
+   already placed in a box still renders and opens its own editor.)
 
    On mobile it renders as a bottom sheet (matching the "Add a photo" sheet in
    MobileReview); on desktop as a small centered modal.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon, Type, Quote, QrCode, X } from 'lucide-react';
+import { Image as ImageIcon, Type, Quote, X } from 'lucide-react';
 
 interface SlotChooserProps {
   /** Open the photo picker. Optional — when omitted, the Photo option is hidden
-   *  (a combo/caption box takes words or a QR, not a photo). */
+   *  (a combo/caption box takes words, not a photo). */
   onPhoto?: () => void;
   onText: () => void;
-  /** Put a QR "living memory" code inside this box. Optional — when omitted,
-   *  the QR option is hidden (photo slots use the corner-badge flow instead). */
-  onQr?: () => void;
   /** Open the themed-quote picker (AI lines for the album's theme, curated
    *  lines as the fallback). Optional — when omitted, the Quote option is hidden. */
   onQuote?: () => void;
@@ -43,19 +40,18 @@ interface SlotChooserProps {
 }
 
 interface Option {
-  key: 'photo' | 'quote' | 'text' | 'qr';
+  key: 'photo' | 'quote' | 'text';
   label: string;
   desc: string;
   Icon: typeof ImageIcon;
   run: () => void;
 }
 
-export default function SlotChooser({ onPhoto, onText, onQuote, onQr, onClose, mobile }: SlotChooserProps) {
+export default function SlotChooser({ onPhoto, onText, onQuote, onClose, mobile }: SlotChooserProps) {
   const options: Option[] = [
     ...(onPhoto ? [{ key: 'photo' as const, label: 'Add Photo', desc: 'Place one of your photos here', Icon: ImageIcon, run: onPhoto }] : []),
     ...(onQuote ? [{ key: 'quote' as const, label: 'Add Quote', desc: 'A line written for your album’s theme', Icon: Quote, run: onQuote }] : []),
     { key: 'text', label: 'Your Text', desc: 'Type your own caption or title', Icon: Type, run: onText },
-    ...(onQr ? [{ key: 'qr' as const, label: 'Video memory', desc: 'A video that plays when this page is scanned', Icon: QrCode, run: onQr }] : []),
   ];
 
   const pick = (run: () => void) => { run(); onClose(); };

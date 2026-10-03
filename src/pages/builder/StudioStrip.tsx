@@ -1,19 +1,18 @@
-import { Sparkles } from 'lucide-react';
 import { MASKS, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
 import { LOOKS, type LookId } from './looks';
 import type { AlbumPage } from './types';
 
 /* The STUDIO strip under the desktop toolbar: masks + looks for the selected
-   photo, the Worn preset, "Add sticker" for the page. A real component (not
-   an inline function in BuilderEdit's render) so the hooks linter can see
-   it never touches refs during render. */
-export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, onGuard, onAddSticker }: {
+   photo, the Worn preset. (It also offered "Add sticker" until stickers were
+   retired, owner 2026-10-01.) A real component (not an inline function in
+   BuilderEdit's render) so the hooks linter can see it never touches refs
+   during render. */
+export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, onGuard }: {
   page: AlbumPage | undefined;
   selectedSlotIndex: number | null;
   onMask: (slotIndex: number, mask: MaskId | null) => void;
   onLook: (slotIndex: number, look: LookId | null) => void;
   onGuard: (msg: string) => void;
-  onAddSticker: () => void;
 }) {
   const slotIdx = selectedSlotIndex;
   const hasPhoto = slotIdx != null && page?.slotFills?.[slotIdx] != null;
@@ -42,11 +41,6 @@ export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, o
         ) : (
           <span className="text-[11px] text-light">Select a photo to mask it or change its look · drag a frame to move it</span>
         )}
-        <div className="ml-auto" />
-        <button type="button" onClick={onAddSticker} data-testid="studio-add-sticker"
-          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blush-pink text-white hover:brightness-105 flex items-center gap-1 whitespace-nowrap">
-          <Sparkles size={11} /> Add sticker
-        </button>
       </div>
       {hasPhoto && (
         <div className="h-8 flex items-center gap-2 px-3 overflow-x-auto border-t border-line-soft">
