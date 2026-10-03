@@ -36,6 +36,13 @@ export interface CreatedOrder {
   album_id: string;
 }
 
+/** The album columns an order freezes (cover_front only once 0036 is applied). */
+type OrderAlbumRow = {
+  id: string; title: string | null; album_type: string | null; album_size: string | null;
+  selected_template: string | null; photos_per_page: number | null;
+  pages: unknown; photos: unknown; cover_photo: string | null; cover_front?: unknown;
+};
+
 /**
  * Create an order for the given user by snapshotting the album being ordered
  * (see orderAlbum). Throws a friendly Error if there's no album to order, and
@@ -55,15 +62,26 @@ export async function createOrderFromAlbum(opts: {
   /** HD (1080p) memory upgrade chosen for this album (0032). */
   hdMemories?: boolean;
 }): Promise<CreatedOrder> {
-  // 1. Load the album being ordered to freeze into the order.
-  const album = await selectOrderAlbum<{ id: string; album_size: string | null; pages: unknown }>(supabase, {
+  // 1. Load the album being ordered to freeze into the order. '*' rather than a
+  //    column list so its front cover (cover_front, 0036) comes along when the
+  //    database has it — naming that column fails the whole read on one that
+  //    doesn't yet.
+  const row = await selectOrderAlbum<OrderAlbumRow>(supabase, {
     userId: opts.userId,
     albumId: opts.albumId,
-    columns: 'id, title, album_type, album_size, selected_template, photos_per_page, pages, photos, cover_photo',
+    columns: '*',
   });
-  if (!album) {
+  if (!row) {
     throw new Error('No saved album found to order. Build and save an album first, then place your order.');
   }
+  // The frozen copy. The cover is in it so the order keeps the design the
+  // customer approved even when the best-effort cover PDF upload fails.
+  const album = {
+    id: row.id, title: row.title, album_type: row.album_type, album_size: row.album_size,
+    selected_template: row.selected_template, photos_per_page: row.photos_per_page,
+    pages: row.pages, photos: row.photos, cover_photo: row.cover_photo,
+    cover_front: row.cover_front ?? null,
+  };
 
   const pageCount = Array.isArray(album.pages) ? album.pages.length : 0;
 

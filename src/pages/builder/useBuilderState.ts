@@ -44,7 +44,7 @@ import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
 import { createLimiter } from '../../lib/limit';
 import { templateTracker } from './varietyTracker';
 import { readCaptureTime } from './exif';
-import { normalizeStoredPageFields } from './pageNormalize';
+import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 
 /* ══════════════════════════════════════════════════════════════════════════
    useBuilderState — All builder state + localStorage persistence
@@ -892,8 +892,9 @@ export function useBuilderState(): BuilderActions {
         // No cloudUrl, no storagePath — all local-only now.
       })),
       coverPhoto: pageSnapshotsRef.current[albumPages[0]?.id] ?? null,
+      coverFront: coverFront as unknown as AlbumData['coverFront'],
     };
-  }, [albumTitle, albumSize, albumPages, uploadedPhotos]);
+  }, [albumTitle, albumSize, albumPages, uploadedPhotos, coverFront]);
 
   /* ── Persistence strategy ──
      • Local (localStorage): debounced ~30s — cheap and client-only.
@@ -2676,6 +2677,7 @@ export function useBuilderState(): BuilderActions {
             sizePreset: stored.albumSize ?? '8x8',
             pages: (stored.albumPages ?? []) as unknown as AlbumData['pages'],
             photos: (stored.uploadedPhotos ?? []).map((p) => ({ id: p.id, name: p.name })),
+            ...(stored.coverFront ? { coverFront: stored.coverFront as unknown as AlbumData['coverFront'] } : {}),
           }
         : null;
     // getSession reads the saved session directly, so this is right even while
@@ -2791,6 +2793,14 @@ export function useBuilderState(): BuilderActions {
           );
           setUploadedPhotos(restored);
         }
+        // The album's own front cover. Its photo slots index THIS album's
+        // photos, so an album saved without one (before 0036) gets a fresh
+        // cover, never the one left on screen by the draft on this device.
+        // Reopening the SAME album: the cover on screen is its own — keep it.
+        const sizeForCover = (albumData.sizePreset as AlbumSizePreset) ?? albumSize;
+        const savedCover: AlbumPage | null = storedCoverPage(albumData.coverFront, sizeForCover);
+        if (savedCover) setCoverFrontPage(savedCover);
+        else if (albumIdRef.current !== albumId) setCoverFrontPage(createCoverPage(sizeForCover));
         if (albumData.id) {
           albumIdRef.current = albumData.id;
         }

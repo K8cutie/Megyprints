@@ -27,13 +27,13 @@ import { selectOrderAlbum, AlbumNotSavedError } from './orderAlbum';
 import { DRAFT_STORAGE_KEY } from './localDraft';
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, CoverDesign } from '../pages/builder/types';
 import type { StoredPhoto } from './useIndexedDBPhotos';
-import { normalizeStoredPageFields } from '../pages/builder/pageNormalize';
+import { normalizeStoredPageFields, storedCoverPage } from '../pages/builder/pageNormalize';
 
 // The local draft (DRAFT_STORAGE_KEY, written by useBuilderState) survives a
-// full reload — unlike the in-memory print job — so it's how we recover the
-// DESIGNED COVER after the same-device OAuth round-trip at checkout. (The cover
-// isn't in the cloud album row; keeping it out of the DB avoids a schema
-// migration that could break album saves if unapplied.)
+// full reload — unlike the in-memory print job — so it's the fallback for the
+// DESIGNED COVER of an album row saved before 0036 (which added
+// albums.cover_front, the cover saved with the album itself), recovered after
+// the same-device OAuth round-trip at checkout.
 //
 // The draft is ONE album: the one last open on this device. Its cover is only
 // this order's cover when the draft IS the ordered album — another album's
@@ -56,20 +56,21 @@ function draftCoverDesign(albumId: string | undefined): CoverDesign | undefined 
   return readDraftCover(albumId)?.coverDesign;
 }
 
-/** Recover the cover-as-pages FRONT page from the local draft after the
- *  same-device OAuth round-trip (it isn't in the cloud album row). It is
- *  normalized through the same sanitizer the interior pages use (shape + ornament
- *  data-URI validation). The back cover is NOT recovered — it's the reserved
- *  Megy Prints panel, derived from the front at wrap time. The cover upload is
- *  best-effort, so a missing cover photo degrades the cover only — it does NOT
- *  fail the interior job. */
-function draftCoverPages(albumId: string | undefined): { coverFront?: AlbumPage } {
+/** Recover the cover-as-pages FRONT page for an album row saved before 0036
+ *  (no cover_front) from the local draft, after the same-device OAuth
+ *  round-trip — but only when that draft IS this album (readDraftCover): a
+ *  cover's photo slots index its own album's photos, so another album's cover
+ *  would print the wrong ones. (A draft from before album ids were kept can't
+ *  say; it is trusted, as it always was.) It is normalized through the same
+ *  sanitizer the interior pages use (shape + ornament data-URI validation). The
+ *  back cover is NOT recovered — it's the reserved Megy Prints panel, derived
+ *  from the front at wrap time. The cover upload is best-effort, so a missing
+ *  cover photo degrades the cover only — it does NOT fail the interior job. */
+function draftCoverPages(albumId: string, albumSize: AlbumSizePreset): { coverFront?: AlbumPage } {
   try {
     const d = readDraftCover(albumId);
     if (!d) return {};
-    return {
-      coverFront: d.coverFront ? normalizeStoredPage(d.coverFront) : undefined,
-    };
+    return { coverFront: storedCoverPage(d.coverFront, albumSize) ?? undefined };
   } catch {
     return {};
   }
@@ -104,10 +105,12 @@ export async function rebuildPrintJobFromAlbum(
   albumId: string | undefined,
 ): Promise<PrintJob | null> {
   // Load the SAME album createOrderFromAlbum froze, so the PDF is built from
-  // the identical pages the order snapshots.
-  let album: { id: string; album_size: string | null; pages: unknown; photos: unknown } | null;
+  // the identical pages the order snapshots. '*' so its cover (cover_front,
+  // 0036) comes along when the database has it — naming the column would fail
+  // the whole read on one that doesn't yet.
+  let album: { id: string; album_size: string | null; pages: unknown; photos: unknown; cover_front?: unknown } | null;
   try {
-    album = await selectOrderAlbum(supabase, { userId, albumId, columns: 'id, album_size, pages, photos' });
+    album = await selectOrderAlbum(supabase, { userId, albumId, columns: '*' });
   } catch (e) {
     if (e instanceof AlbumNotSavedError) throw e;
     return null;
@@ -183,5 +186,10 @@ export async function rebuildPrintJobFromAlbum(
     if (!photos[i]?.previewUrl) return null;
   }
 
-  return { pages, photos, albumSize, albumId: album.id, coverDesign: draftCoverDesign(album.id), ...draftCoverPages(album.id) };
+  // The cover saved with this album — its slots index these same photos.
+  // Without one (saved before 0036), this album's own draft cover.
+  const savedCover: AlbumPage | null = storedCoverPage(album.cover_front, albumSize);
+  const cover = savedCover ? { coverFront: savedCover } : draftCoverPages(album.id, albumSize);
+
+  return { pages, photos, albumSize, albumId: album.id, coverDesign: draftCoverDesign(album.id), ...cover };
 }

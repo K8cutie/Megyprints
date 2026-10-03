@@ -247,3 +247,47 @@ describe('rebuildPrintJobFromAlbum — the PDF after the sign-in reload', () => 
     await expect(rebuildPrintJobFromAlbum(ME, idbGet, DEBUT.id)).rejects.toBeInstanceOf(AlbumNotSavedError);
   });
 });
+
+describe('the album id (#36) and the cover saved with the album (#37) together', () => {
+  /* #36 reads the ordered album by id; #37 saved the front cover in the album
+     row (albums.cover_front, 0036). Merged, the order and its PDF must read
+     THAT album with '*' (so cover_front comes along without naming a column a
+     database might not have yet) and keep its own cover. */
+  const savedCover = { id: 'debut-cover', templateId: 't1', slotFills: [0], photos: [], textElements: [] };
+  const draftCover = { id: 'boracay-cover', templateId: 't1', slotFills: [0], photos: [], textElements: [] };
+  // localStorage is the stub the PDF block above installed (a second stub would
+  // replace it for that block too).
+  const idbGet = async (id: string): Promise<StoredPhoto | null> => ({
+    id, name: `${id}.jpg`, url: `blob:${id}`, type: 'image/jpeg', size: 1, width: 10, height: 10,
+  } as unknown as StoredPhoto);
+  beforeEach(() => {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    const debut = db.state.albums.find((a) => a.id === DEBUT.id)!;
+    debut.cover_front = savedCover;
+  });
+
+  it('the order freezes the named album WITH its own saved cover, reading it by id with *', async () => {
+    const created = await orderFor(DEBUT.id);
+    expect(created.album_id).toBe(DEBUT.id);
+    const snap = db.state.orders[0].album_snapshot as Row;
+    expect(snap.title).toBe("Maria's Debut");
+    expect((snap.cover_front as Row).id).toBe('debut-cover');
+    const read = db.state.queries.find((q) => q.table === 'albums')!;
+    expect(read.ops).toEqual(['select(*)', `eq(user_id,${ME})`, `eq(id,${DEBUT.id})`]);
+  });
+
+  it('the PDF rebuild takes the cover saved with that album, over another album\'s draft on this device', async () => {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ albumId: BORACAY.id, coverFront: draftCover }));
+    const job = await rebuildPrintJobFromAlbum(ME, idbGet, DEBUT.id);
+    expect(job?.albumId).toBe(DEBUT.id);
+    expect(job?.coverFront?.id).toBe('debut-cover');
+    const read = db.state.queries.find((q) => q.table === 'albums')!;
+    expect(read.ops[0]).toBe('select(*)');
+  });
+
+  it('an album saved before 0036 (no cover_front) still orders, with a null cover in the snapshot', async () => {
+    delete db.state.albums.find((a) => a.id === DEBUT.id)!.cover_front;
+    await orderFor(DEBUT.id);
+    expect((db.state.orders[0].album_snapshot as Row).cover_front).toBeNull();
+  });
+});
