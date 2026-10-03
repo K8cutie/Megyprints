@@ -98,6 +98,13 @@ export function isStepOneReady(albumTitle: string | null | undefined, theme: str
   return isAlbumNameReady(albumTitle) && isAlbumThemeReady(theme);
 }
 
+/** A step action drawn as the big filled button: the one that moves the
+ *  customer on. "Upload Photos" has no → but it is the only way on from an
+ *  empty upload step, and a pale cream button there read as a dead end. */
+export function isPrimaryAction(action: string): boolean {
+  return action.includes('→') || action.includes('Now') || action === 'Upload Photos';
+}
+
 export class WizardEngine {
   state: WizardState;
   builder: BuilderActions;
@@ -251,6 +258,35 @@ export class WizardEngine {
     }
   }
 
+  /* ── The card's footer: ← Previous and Next → ──
+     One way on per screen (tester, 2026-10-04): an eager tester tapped Next on
+     every screen instead of what the screen asked. So Next shows only where
+     it IS the way on. On Welcome "Let's Get Started →" is; on the size step
+     the sizes are (Next skipped the choice and kept 8×8) until one was picked;
+     on the upload step Generate is, until an album is built. Step 1's Next
+     stays: it is the way on there, and the panel turns a tap before the step
+     is answered into a pointer at what is missing. Welcome has nothing to go
+     back to, so no ← Previous at all rather than a greyed one.
+     After that: the cover editor has its own "← Back" and "Continue to
+     photos →", so Megy shows neither. Review moves on by "Next page" under
+     the page; Megy's Next there skipped every page to Step 6. Preview & Order
+     is the last step, and a greyed Next there was the same dead tap. */
+  showsPrevious(): boolean {
+    return this.state.step !== 'welcome' && this.state.step !== 'design_cover';
+  }
+
+  showsNext(): boolean {
+    switch (this.state.step) {
+      case 'welcome': return false;
+      case 'pick_size': return this.state.completed.includes('pick_size');
+      case 'design_cover': return false;
+      case 'upload_photos': return this.hasBuiltAlbum();
+      case 'review_pages': return false;
+      case 'finalize': return false;
+      default: return true;
+    }
+  }
+
   /* ── Check if step is complete ──
      A step is complete ONLY if the user explicitly advanced through it
      via the wizard buttons. Builder defaults do NOT count. */
@@ -333,7 +369,7 @@ export class WizardEngine {
       case 'design_cover':
         return {
           title: "Step 3: Design Your Cover 📔",
-          body: `Give your ${builder.albumSize} album a cover — the front (title, subtitle, hero photo), the spine text, and the back. It prints as one wrap around the book. The hero photo goes on after you upload your photos, but you can set the title and style now. This step is optional — skip it and design the cover later from the Preview screen.`,
+          body: `Give your ${builder.albumSize} album a cover — the front (title, subtitle, hero photo), the spine text, and the back. It prints as one wrap around the book. The hero photo goes on after you upload your photos, but you can set the title and style now. This step is optional — tap **Continue to photos** to skip it and design the cover later from the Preview screen.`,
           /* The cover editor renders on the center stage (phase 'cover'); its own
              Continue/Back drive the wizard, so no panel actions here. */
           actions: [],
@@ -377,7 +413,7 @@ export class WizardEngine {
         }
         return {
           title: "Step 5: Review Each Page 🔍",
-          body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then use the ‹ › arrows to move through your album.`,
+          body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then tap **Next page** under the page to move through your album.`,
           actions: ["Change layout"],
           tips: ["Go page by page — each can have its own layout", "🎬 Any full-photo page can carry a video: tap Add a video memory and it plays when the printed QR is scanned — 7 are included", "When every page looks right, you'll order from the last page"],
         };

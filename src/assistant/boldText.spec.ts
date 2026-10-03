@@ -87,9 +87,9 @@ describe('every wizard message shows its bold words, never asterisks', () => {
     ['welcome', ['Megy']],
     ['pick_theme', ["Maria's Debut", 'Wedding']],
     ['pick_size', ['8x8']],
-    ['design_cover', []],
+    ['design_cover', ['Continue to photos']],
     ['upload_photos', ['3']],
-    ['review_pages', ['page 1 of 3']],
+    ['review_pages', ['page 1 of 3', 'Next page']],
     ['add_text', []],
     ['finalize', []],
   ])('%s', (step, bolds) => {
