@@ -100,6 +100,35 @@ describe('EndOfAlbumPrompt — the wording and the buttons', () => {
   });
 });
 
+describe('EndOfAlbumPrompt — Order saves the album on its way to checkout (#36)', () => {
+  const render = (props: { saving?: boolean; error?: unknown }) => {
+    const h = { onClose: vi.fn(), onCheckCover: vi.fn(), onOrder: vi.fn(), onContinueEditing: vi.fn() };
+    act(() => root.render(createElement(EndOfAlbumPrompt, { ...h, ...props } as never)));
+    return { h, order: host.querySelector<HTMLButtonElement>('[data-testid="end-prompt-order"]')! };
+  };
+
+  it('while saving, Order says so and waits (a second tap does nothing)', () => {
+    const { h, order } = render({ saving: true });
+    expect(order.textContent).toContain('Saving your album…');
+    expect(order.disabled).toBe(true);
+    act(() => order.click());
+    expect(h.onOrder).not.toHaveBeenCalled();
+  });
+
+  it('a failed save shows why, under Order, and Order works again', () => {
+    const { h, order } = render({ error: createElement('div', { role: 'alert' }, "We couldn't save your album") });
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe("We couldn't save your album");
+    expect(order.textContent).toBe('ORDER ALBUM');
+    act(() => order.click());
+    expect(h.onOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('the preview hands its save state and error banner to the prompt', () => {
+    const s = readFileSync(resolve(__dirname, 'BuilderPreview.tsx'), 'utf8');
+    expect(s).toMatch(/<EndOfAlbumPrompt[\s\S]*?saving=\{orderSaving\}[\s\S]*?error=\{orderErrorBanner[\s\S]*?\/>/);
+  });
+});
+
 describe('the preview uses them', () => {
   it('BuilderPreview opens EndOfAlbumPrompt through useEndOfAlbumPrompt — no once-only latch', () => {
     const s = readFileSync(resolve(__dirname, 'BuilderPreview.tsx'), 'utf8');
