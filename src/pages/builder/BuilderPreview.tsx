@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw, Sparkles } from 'lucide-react';
+import { ChevronLeft, ShoppingCart, Plus, Trash2, RotateCw, Sparkles } from 'lucide-react';
+import SpreadTurnButton, { SPREAD_TURN_W } from './SpreadTurnButton';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss, dealtBoxRoll } from './types';
@@ -781,7 +782,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     const compute = () => {
       // The builder root already reserves the Megy panel's width, so the stage
       // measures only the space available beside it.
-      const chromeW = 2 * 56 + 48 + 48;            // nav arrows + gaps + horizontal padding
+      const chromeW = 2 * SPREAD_TURN_W + 48 + 48; // page-turn buttons + gaps + horizontal padding
       const chromeH = 48 + 34;                     // vertical padding + page-number labels
       const availW = el.clientWidth - chromeW;
       const availH = el.clientHeight - chromeH;
@@ -867,18 +868,11 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         </div>
       </div>
 
-      {/* Page display with side arrows */}
+      {/* Page display with the page turn on each side — small labelled
+          buttons, not bare ‹ › arrows (SpreadTurnButton). */}
       <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 overflow-auto" style={BOOK.table}>
         <div className="flex items-center gap-6">
-          {/* Prev Arrow — left side */}
-          <button
-            onClick={navPrev}
-            disabled={!hasPrev}
-            className="flex items-center justify-center rounded-full hover:bg-blush-pink/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-            style={{ width: 56, height: 56 }}
-          >
-            <ChevronLeft size={40} className="text-blush-pink" />
-          </button>
+          <SpreadTurnButton dir="prev" show={hasPrev} onClick={navPrev} />
 
           {/* Pages */}
           <div className="flex flex-col items-center gap-3">
@@ -936,15 +930,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             </span>
           </div>
 
-          {/* Next Arrow — right side */}
-          <button
-            onClick={navNext}
-            disabled={!hasNext}
-            className="flex items-center justify-center rounded-full hover:bg-blush-pink/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-            style={{ width: 56, height: 56 }}
-          >
-            <ChevronRight size={40} className="text-blush-pink" />
-          </button>
+          <SpreadTurnButton dir="next" show={hasNext} onClick={navNext} />
         </div>
       </div>
 
