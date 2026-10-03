@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { clampSlotBox, clampSlotGeometry, resolveSlotBox, printSharpness, safeAreaInches, GUARD_MESSAGES } from './slotGeometry';
-import { getTemplatesForAlbum } from './pageTemplates';
+import { getTemplatesForAlbum, PAGE_TEMPLATES } from './pageTemplates';
 import { MIN_FRAME_INCHES } from './templateKit';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -8,7 +8,12 @@ import { MIN_FRAME_INCHES } from './templateKit';
    frame; the page may never store a frame that prints badly. Spine, safe
    area, 2" floor — same rules on every size, page side and template.
    ══════════════════════════════════════════════════════════════════════════ */
-const tpl = (size: string) => getTemplatesForAlbum(size as never).find((t) => !t.fullBleed) ?? null;
+// A MARGINED template of the size (the safe-area maths needs a margin). 8x8's
+// only margined layouts were its bordered singles, retired from new albums on
+// 2026-10-02 but still built for saved albums — so the fixture is the one the
+// album used to offer first, the 2:3 portrait single.
+const tpl = (size: string) => getTemplatesForAlbum(size as never).find((t) => !t.fullBleed)
+  ?? PAGE_TEMPLATES.find((t) => t.albumSizes.includes(size as never) && !t.fullBleed && t.id.endsWith('-solo-portrait')) ?? null;
 const ctx = (albumSize: string, pageIndex: number, coverMode = false) => ({ albumSize, pageIndex, template: tpl(albumSize), coverMode });
 
 describe('resolveSlotBox', () => {

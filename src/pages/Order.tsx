@@ -178,7 +178,8 @@ export default function Order() {
     setSubmitting(true);
     try {
       // 1. Create the order — but only once. A retry after a failed upload reuses
-      //    the same order row (no duplicate) since the storage upload upserts.
+      //    the same order row (no duplicate); a PDF already in the bucket from
+      //    the earlier attempt counts as uploaded.
       let order = createdOrderRef.current;
       if (!order) {
         // WHICH album: the one handed over from the Preview, or — when a reload
@@ -240,7 +241,8 @@ export default function Order() {
 
       // 3. REQUIRED: build + upload the print PDF. If gen throws or the upload
       //    errors it propagates to the outer catch, the order does NOT advance,
-      //    and the user stays on Pay to retry. (upsert:true → re-upload is safe.)
+      //    and the user stays on Pay to retry. (Create-only upload, never upsert:
+      //    customers can't read this bucket, so an upsert is refused by RLS.)
       await uploadOrderPrintPdf(order.id, printJob);
 
       // 3b. BEST-EFFORT: build + upload the front·spine·back cover wrap as its own

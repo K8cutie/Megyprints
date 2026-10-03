@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { generateAlbum, splitStudioPages, remapSlotFills, mergeStudioPages } from './generateAlbum';
 import { MIN_ALBUM_PAGES } from './densities';
 import type { UploadedPhoto } from './types';
+import { seedMathRandom } from '../../test/seededRandom';
+
+seedMathRandom(); // same albums every run (generateAlbum deals with Math.random)
 
 /* STUDIO pages survive Regenerate / Surprise Me (owner, 2026-09-13). */
 const sq = (n: number): UploadedPhoto[] => Array.from({ length: n }, (_, i) => ({ id: `q${i}`, previewUrl: '', name: `q${i}.jpg`, type: 'image/jpeg', size: 1, width: 3000, height: 3000, capturedAt: i }));

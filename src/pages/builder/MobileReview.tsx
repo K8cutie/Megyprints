@@ -1,13 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════════
    MobileReview — the phone review experience: "Megy does it, you approve."
-   Each page fills the screen; swipe (or arrows) to move freely. "Change layout"
-   opens a picker of the available templates for that page. "Done" appears only on
-   the LAST page → a brief "Loading album preview…" beat → Preview.
+   Each page fills the screen; swipe (or "Next page") to move freely. "Change layout"
+   opens a picker of the available templates for that page. On the LAST page "Next
+   page" becomes "Done" → a brief "Loading album preview…" beat → Preview.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Video, ImagePlus } from 'lucide-react';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { LayoutGrid, Loader2, X, Video, ImagePlus, Wand2 } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -18,45 +18,27 @@ import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
-import { studioEnabled, setStudioFlag } from '../../lib/studioFlag';
-import StudioGate, { STUDIO_GATE_KEY } from './StudioGate';
-import AddOrnamentModal from './AddOrnamentModal';
-import { StudioToggle, StudioSheet, StudioLayer, StudioTray } from './StudioPhone';
+import { dealtBoxRoll } from './types';
+import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
-import { useAuth } from '../../lib/authContext';
+import PageTurnBar from './PageTurnBar';
+
+/** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
+const TOOL = 'h-14 rounded-xl bg-cream text-medium text-[12px] font-semibold flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform';
 
 export default function MobileReview({ actions, onDone }: { actions: BuilderContextValue; onDone: () => void }) {
   const pages = actions.albumPages;
   const idx = actions.currentPageIndex;
   const total = pages.length;
   const page = pages[idx];
-  const isLast = idx >= total - 1;
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
 
-  /* ── STUDIO on the phone (behind the flag; album-wide on the phone) ── */
-  const { user } = useAuth();
-  // Unlock without a URL (the installed app has no address bar): five taps on
-  // the page counter turns the flag on for this phone; five more turn it off.
-  const [studioAvailable, setStudioAvailable] = useState(() => studioEnabled());
-  const unlockTaps = useRef<{ n: number; at: number }>({ n: 0, at: 0 });
-  const tapCounter = (now: number) => {
-    const u = unlockTaps.current;
-    u.n = now - u.at < 900 ? u.n + 1 : 1;
-    u.at = now;
-    if (u.n >= 5) {
-      u.n = 0;
-      const next = !studioAvailable;
-      setStudioFlag(next);
-      setStudioAvailable(next);
-      if (!next) setStudio(false);
-      sayGuard(next ? 'Studio unlocked on this phone — the switch is beside the page number.' : 'Studio hidden on this phone.');
-    }
-  };
-  const [studio, setStudio] = useState(false);
-  const [studioGate, setStudioGate] = useState(false);
+  /* ── STUDIO on the phone (album-wide on the phone) ── */
+  const studio = true; // owner, 2026-09-30: no Simple/Studio switch — every Studio tool is always on
+  const pageDrag = useDragControls();
   // The selection is tagged with the page it was made on, so turning the page
   // drops it without a reset effect (the pill would point at nothing).
   const [studioSel, setStudioSel] = useState<{ pageIdx: number; slot: number | null; sticker: string | null; sheet: 'mask' | 'look' | null }>({ pageIdx: -1, slot: null, sticker: null, sheet: null });
@@ -67,7 +49,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const setStudioSlot = (slot: number | null) => setStudioSel((s) => ({ pageIdx: idx, slot, sticker: slot != null ? null : (s.pageIdx === idx ? s.sticker : null), sheet: slot != null ? (s.pageIdx === idx ? s.sheet : null) : null }));
   const setStudioSticker = (sticker: string | null) => setStudioSel((s) => ({ pageIdx: idx, slot: sticker != null ? null : (s.pageIdx === idx ? s.slot : null), sticker, sheet: null }));
   const setStudioSheet = (sheet: 'mask' | 'look' | null) => setStudioSel((s) => ({ pageIdx: idx, slot: s.pageIdx === idx ? s.slot : null, sticker: s.pageIdx === idx ? s.sticker : null, sheet }));
-  const [stickerModal, setStickerModal] = useState<{ uid: string | null } | null>(null);
   const [guard, setGuard] = useState<string | null>(null);
   const guardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sayGuard = (msg: string) => {
@@ -75,13 +56,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
     if (guardTimer.current) clearTimeout(guardTimer.current);
     guardTimer.current = setTimeout(() => setGuard(null), 2600);
   };
-  const enterStudio = () => {
-    let dismissed = false;
-    try { dismissed = !!sessionStorage.getItem(STUDIO_GATE_KEY); } catch { /* private mode */ }
-    if (!user && !dismissed) { setStudioGate(true); return; }
-    setStudio(true);
-  };
-  const leaveStudio = () => { setStudio(false); setStudioSlot(null); setStudioSticker(null); setStudioSheet(null); };
   const afterGuard = (reasons: GuardReason[]) => { if (reasons.length) sayGuard(GUARD_MESSAGES[reasons[0]]); return reasons; };
   const pickMask = (id: MaskId | 'none') => {
     if (studioSlot == null) return;
@@ -219,13 +193,17 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
 
   return (
     <div className="h-full flex flex-col bg-paper relative">
-      {/* Page counter (+ the Simple | Studio switch when the flag is on) */}
       <div className="shrink-0 flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-medium">
-        <span onClick={(e) => tapCounter(e.timeStamp)} data-testid="page-counter">{studio ? `Page ${idx + 1} of ${total} · tap a photo or a sticker` : `Page ${idx + 1} of ${total} · tap 🗑 to remove a photo, + to add one`}</span>
+        <span data-testid="page-counter">Page {idx + 1} of {total} · tap a photo to style it</span>
       </div>
-      {studioAvailable && page?.studio && (
-        <div className="shrink-0 text-center -mt-1 pb-1">
+      {page?.studio && (
+        <div className="shrink-0 flex flex-wrap items-center justify-center gap-1.5 -mt-1 pb-1 px-3">
           <span className="text-[11px] font-bold text-blush-pink bg-blush rounded-full px-2.5 py-0.5" data-testid="studio-yours">✎ This page is yours · Regenerate skips it</span>
+          <button type="button" data-testid="studio-fix"
+            onClick={() => { actions.resetStudioPage(); setStudioSlot(null); setStudioSticker(null); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }}
+            className="text-[11px] font-bold text-blush-pink border border-peach rounded-full px-2.5 py-0.5 flex items-center gap-1 whitespace-nowrap active:scale-95 transition-transform">
+            <Wand2 size={11} /> Megy, fix this page
+          </button>
         </div>
       )}
 
@@ -234,10 +212,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         <AnimatePresence mode="wait">
           <motion.div
             key={idx}
-            // Studio: no page swipe while editing — framer's native pointer
-            // listener fires before React's, so a sticker drag would turn the
-            // page. The arrows still move between pages.
-            drag={studio ? false : 'x'}
+            // Swipe starts from React's pointerdown, not framer's native
+            // listener (which fires first) — sticker hit areas and the pills
+            // stopPropagation, so dragging a sticker never turns the page.
+            drag="x"
+            dragListener={false}
+            dragControls={pageDrag}
+            onPointerDown={(e) => pageDrag.start(e)}
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.2}
             onDragEnd={(_e, info) => {
@@ -265,9 +246,8 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                 // A DEALT box (textSlotRoll) opens its kind's editor directly;
                 // undealt boxes keep the 3-way chooser. The ⋯ badge below is
                 // the always-available override.
-                const roll = page.textSlotRoll?.[slotIndex] ?? null;
+                const roll = dealtBoxRoll(page, slotIndex);
                 if (roll === 'text') setEditSlot(slotIndex);
-                else if (roll === 'qr') setTextSlotQrEditSlot(slotIndex);
                 else if (roll === 'quote') setBoxQuoteSlot(slotIndex);
                 else setChooserTextSlot(slotIndex);
               }}
@@ -282,7 +262,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                 onOpenSheet={setStudioSheet}
                 onWorn={() => { if (studioSlot != null) { actions.setSlotMask(studioSlot, 'brushed'); actions.setSlotLook(studioSlot, 'faded'); sayGuard('Worn: brushed edge + faded look. Keep faces away from the edge.'); } }}
                 onStickerGeom={(uid, geom) => afterGuard(actions.updateStickerGeom(uid, geom))}
-                onStickerSwap={(uid) => setStickerModal({ uid })}
                 onStickerRemove={(uid) => { actions.removeSticker(uid); setStudioSticker(null); }} />
             )}
           </motion.div>
@@ -296,37 +275,15 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         {uploadMsg && (
           <p className="mb-2 text-center text-xs font-semibold text-success">{uploadMsg}</p>
         )}
-        {/* Simple | Studio — in the bottom bar, where the Megy pull-down and the
-            page can never cover it. Full width so a thumb finds it. */}
-        {studioAvailable && (
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <span className="text-[11px] font-semibold text-medium">{studio ? 'Studio · tap a photo or a sticker' : 'Simple · Megy leads'}</span>
-            <StudioToggle studio={studio} onSimple={leaveStudio} onStudio={enterStudio} />
-          </div>
-        )}
-        <div className="flex items-center gap-3">
-          <button onClick={goPrev} disabled={idx === 0}
-            className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-medium disabled:opacity-30 transition-opacity">
-            <ChevronLeft size={22} />
+        {/* Tools — quiet, so the one loud button on the screen is the way on. */}
+        <div className="grid grid-cols-2 gap-2" data-testid="studio-tray">
+          <button onClick={() => uploadRef.current?.click()} className={TOOL}>
+            <ImagePlus size={18} /> Add photos
           </button>
-          <button onClick={() => uploadRef.current?.click()} title="Add more photos"
-            className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-medium active:scale-95 transition-transform">
-            <ImagePlus size={20} />
-          </button>
-          <button onClick={() => actions.setLayoutPickerOpen(true)}
-            className="flex-1 h-12 rounded-xl bg-peach text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+          <button onClick={() => actions.setLayoutPickerOpen(true)} className={TOOL}>
             <LayoutGrid size={18} /> Change layout
           </button>
-          <button onClick={goNext} disabled={isLast}
-            className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-medium disabled:opacity-30 transition-opacity">
-            <ChevronRight size={22} />
-          </button>
         </div>
-        {studio && (
-          <StudioTray pageIsYours={!!page?.studio}
-            onAddSticker={() => setStickerModal({ uid: null })}
-            onFix={() => { actions.resetStudioPage(); setStudioSlot(null); setStudioSticker(null); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }} />
-        )}
         {/* Living-memory QR — offered on a single full photo page; turns it into
             a full-bleed photo with a scannable corner badge (face-picked corner). */}
         {actions.canAddMemoryQr && (
@@ -335,15 +292,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
             <Video size={18} /> Add a video memory
           </button>
         )}
-        {isLast && (
-          <button onClick={handleDone}
-            className="w-full mt-3 h-12 rounded-xl bg-success text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-            <Check size={18} /> Done — Preview my album
-          </button>
-        )}
+        {/* Page turn, in words both ways — see PageTurnBar. The last page turns
+            Next into Done, in the same spot. */}
+        <PageTurnBar variant="phone" className="mt-3" index={idx} total={total}
+          onPrev={goPrev} onNext={goNext} onDone={handleDone} />
       </div>
 
-      {/* STUDIO: mask / look sheets, the sticker picker, the sign-in nudge, the guardrail line */}
+      {/* STUDIO: mask / look sheets, the guardrail line */}
       {studio && studioSheet && studioSlot != null && page && (
         <StudioSheet kind={studioSheet}
           photo={page.slotFills?.[studioSlot] != null ? actions.uploadedPhotos[page.slotFills[studioSlot] as number] : undefined}
@@ -351,19 +306,6 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           currentLook={isLookId(page.slotLooks?.[studioSlot]) ? (page.slotLooks?.[studioSlot] as LookId) : 'none'}
           onPickMask={pickMask} onPickLook={pickLook} onClose={() => setStudioSheet(null)} />
       )}
-      {stickerModal && (
-        <AddOrnamentModal
-          initial={stickerModal.uid ? (page?.stickers?.find((k) => k.uid === stickerModal.uid) ?? null) : null}
-          onSave={(fill) => {
-            if (stickerModal.uid) actions.replaceStickerFill(stickerModal.uid, fill);
-            else { actions.addSticker(fill); sayGuard('Sticker added — drag it with a finger, pinch to resize, tap it for fine nudges.'); }
-            setStickerModal(null);
-          }}
-          onRemove={() => { if (stickerModal.uid) actions.removeSticker(stickerModal.uid); setStickerModal(null); setStudioSticker(null); }}
-          onClose={() => setStickerModal(null)}
-        />
-      )}
-      {studioGate && <StudioGate onContinue={() => { setStudioGate(false); setStudio(true); }} onClose={() => setStudioGate(false)} />}
       {guard && (
         <div role="status" aria-live="polite" data-testid="studio-guard"
           className="absolute left-1/2 -translate-x-1/2 bottom-28 z-[60] max-w-[88%] px-4 py-2.5 rounded-xl bg-dark text-warm-white text-sm font-medium shadow-2xl text-center">
@@ -382,14 +324,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         />
       )}
 
-      {/* Empty combo/caption-box chooser — Quote / Your Text / QR Code.
+      {/* Empty combo/caption-box chooser — Quote / Your Text (QR left the boxes 2026-10-02: video memories live on full-page photos).
           (Clipart was sunset — old-phone drag; placed ones still render.) */}
       {chooserTextSlot !== null && (
         <SlotChooser
           mobile
           onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setEditSlot(chooserTextSlot)}
-          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
       )}

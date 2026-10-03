@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw, Sparkles, X, Loader2 } from 'lucide-react';
+import { ChevronLeft, ShoppingCart, Plus, Trash2, RotateCw, Sparkles, X, Loader2 } from 'lucide-react';
+import SpreadTurnButton, { SPREAD_TURN_W } from './SpreadTurnButton';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
-import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
+import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss, dealtBoxRoll } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { setPendingPrintJob } from '../../lib/printQueue';
 import { getCanvasDimensions } from './layouts';
@@ -13,11 +14,13 @@ import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
+import EndOfAlbumPrompt from './EndOfAlbumPrompt';
+import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
 import { BOOK } from './bookFeel';
 import { resolveSlotBox } from './slotGeometry';
+import { slotPhotoDomBox } from './slotPhotoFit';
 import { applyMask, isMaskId } from './masks';
 import { lookCss, isLookId } from './looks';
-import { QR_INVITATION_LABEL, QR_INVITATION_IMAGE, qrInvitationLayout } from './qrInvitation';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
@@ -111,18 +114,18 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
 /** One-line invitation per DEALT box kind (textSlotRoll). Keep these in step
  *  with the Fabric labels in useCanvasEngine's empty-textbox block — the two
  *  are SEPARATE and drift silently. */
-const ROLL_LABELS: Record<BoxRoll, string> = {
+const ROLL_LABELS: Record<Exclude<BoxRoll, 'qr'>, string> = {
   quote: 'Add a quote',
   text: 'Your words here',
-  qr: QR_INVITATION_LABEL,
 };
 
 function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex, roll, onMore }: {
   rectKey: string; left: number; top: number; width: number; height: number;
   sx: number; showList: boolean; options: string[]; onTap: () => void; zIndex: number;
   /** Megy's dealt kind for this box — replaces the option list with a single
-   *  invitation (the tap routes straight to that kind's editor upstream). */
-  roll?: BoxRoll | null;
+   *  invitation (the tap routes straight to that kind's editor upstream).
+   *  Read through dealtBoxRoll, so never the retired 'qr'. */
+  roll?: Exclude<BoxRoll, 'qr'> | null;
   /** The dealt box's ⋯ badge → the full chooser (override the roll). */
   onMore?: () => void;
 }) {
@@ -148,24 +151,6 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         const label = ROLL_LABELS[roll];
         const innerW = width - 24;  // padding + dashed border
         const innerH = height - 24;
-        // A video box: the label, then a QR image (owner, 2026-09-12). Shared
-        // layout with the canvas renderer — see qrInvitation.ts.
-        if (roll === 'qr') {
-          // Reserve the ⋯ badge's row (22 px at top-right) so a narrow band
-          // never runs the label under it; the canvas twin does the same.
-          const lay = qrInvitationLayout(width, height - 20, 12, fs);
-          if (lay.qrSide > 0 && lay.fontSize >= 10) {
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 20 }}>
-                <span style={{ fontWeight: 800, fontSize: lay.fontSize, lineHeight: 1.2, letterSpacing: '0.01em', wordBreak: 'break-word', maxWidth: '100%' }}>
-                  {label}
-                </span>
-                <img src={QR_INVITATION_IMAGE} alt="" aria-hidden="true" draggable={false}
-                  style={{ width: lay.qrSide, height: lay.qrSide, imageRendering: 'pixelated', opacity: 0.9, marginTop: lay.gap }} />
-              </div>
-            );
-          }
-        }
         const longestWord = label.split(' ').reduce((a, b) => (b.length > a.length ? b : a), '');
         const fontSize = Math.min(fs, innerW / (longestWord.length * 0.72));
         if (fontSize >= 10 && innerH >= fontSize * 2.2) {
@@ -416,16 +401,18 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         }
 
         const { style: shapeStyle, width, height, leftOffset, topOffset } =
-          slotShapeStyle(slot, slot.width * safeW, slot.height * safeH);
-        const left = safeX + slot.x * safeW + leftOffset;
-        const top = safeY + slot.y * safeH + topOffset;
-        const slotScale = page.slotScales?.[idx] ?? 1;
-        const slotOffsetX = page.slotOffsetsX?.[idx] ?? 0;
-        const slotOffsetY = page.slotOffsetsY?.[idx] ?? 0;
-        const imgW = width * slotScale;
-        const imgH = height * slotScale;
-        const imgLeft = (width - imgW) / 2 + slotOffsetX * sx;
-        const imgTop = (height - imgH) / 2 + slotOffsetY * sy;
+          slotShapeStyle(slot, slotW, slotH);
+        const left = slotLeft + leftOffset;
+        const top = slotTop + topOffset;
+        // The ONE fit print + the editor draw with (slotPhotoFit): cover-fitted
+        // to the FULL slot rect, zoomed about its centre, panned INSIDE the
+        // overflow (object-position) — never by moving the photo box, which at
+        // zoom 1 slid the whole photo and left an empty strip. A circle/heart/
+        // star wrapper is the centred square, so the rect sits at −offset in it.
+        // maxWidth 'none': the base `img { max-width: 100% }` rule would hold a
+        // zoomed box to the frame's width and open a strip on the right.
+        const photoBox = slotPhotoDomBox({ w: slotW, h: slotH }, page.slotScales?.[idx],
+          { x: (page.slotOffsetsX?.[idx] ?? 0) * sx, y: (page.slotOffsetsY?.[idx] ?? 0) * sy });
         // Theme-baked frame overrides the per-slot template border when present.
         // Full-bleed (single-photo, no-textbox) pages get no frame at all.
         const frameWidth = template.fullBleed || slot.masked ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
@@ -437,8 +424,10 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           ? {}
           : frameStyleToCss(page.frameStyle, frameColor);
         // Outer drop shadows (polaroid / shadowbox) need overflow visible to show;
-        // any other frame keeps the photo clipped to the slot/shape.
-        const frameClips = !(page.frameStyle === 'polaroid' || page.frameStyle === 'shadowbox');
+        // any other frame keeps the photo clipped to the slot/shape. A masked or
+        // full-bleed slot draws no frame, so it always clips — otherwise a
+        // circle mask on a polaroid page showed the photo's whole box.
+        const frameClips = template.fullBleed || slot.masked || !(page.frameStyle === 'polaroid' || page.frameStyle === 'shadowbox');
 
         return (
           <div key={`slot-${idx}`} className="absolute" data-slot={idx}
@@ -453,7 +442,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           }}>
             <img src={uploaded.previewUrl} alt="" draggable={false}
               className="absolute object-cover"
-              style={{ left: imgLeft, top: imgTop, width: imgW, height: imgH, ...frameCss.inner,
+              style={{ left: photoBox.left - leftOffset, top: photoBox.top - topOffset, width: photoBox.width, height: photoBox.height,
+                maxWidth: 'none', objectPosition: photoBox.objectPosition, ...frameCss.inner,
                 // STUDIO look — the same filter functions the editor + print apply to pixels.
                 ...(isLookId(page.slotLooks?.[idx]) ? { filter: lookCss(page.slotLooks?.[idx] as never) } : {}) }} />
             {editable && onRemoveFromSlot && (
@@ -615,8 +605,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}
               left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
               showList={!!onChooseTextSlot && Math.min(boxW, boxH) >= 84}
-              options={['Quote', 'Text', 'QR']}
-              roll={page.textSlotRoll?.[i] ?? null}
+              options={['Quote', 'Text']}
+              roll={dealtBoxRoll(page, i)}
               onMore={onChooseTextSlotMenu ? () => onChooseTextSlotMenu(i) : undefined}
               onTap={() => onChooseTextSlot(i)} />
           );
@@ -797,7 +787,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     const compute = () => {
       // The builder root already reserves the Megy panel's width, so the stage
       // measures only the space available beside it.
-      const chromeW = 2 * 56 + 48 + 48;            // nav arrows + gaps + horizontal padding
+      const chromeW = 2 * SPREAD_TURN_W + 48 + 48; // page-turn buttons + gaps + horizontal padding
       const chromeH = 48 + 34;                     // vertical padding + page-number labels
       const availW = el.clientWidth - chromeW;
       const availH = el.clientHeight - chromeH;
@@ -841,14 +831,11 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const hasPrev = spreadLeftIndex > 0;
   const hasNext = spreadLeftIndex + 2 < total;
 
-  // End-of-album prompt — shows once when they reach the last spread. It can
-  // be dismissed (keep browsing) and it offers a real way back to the pages
-  // (owner, 2026-09-13: "there doesn't seem to be a way to go back").
-  const [showOrderCta, setShowOrderCta] = useState(false);
-  const [ctaSeen, setCtaSeen] = useState(false);
-  useEffect(() => {
-    if (!hasNext && total > 0 && !ctaSeen) { setShowOrderCta(true); setCtaSeen(true); }
-  }, [hasNext, total, ctaSeen]);
+  // End-of-album prompt — opens EVERY time they arrive at the last spread
+  // (useEndOfAlbumPrompt). It can be dismissed (keep browsing) and it offers a
+  // real way back to the pages (owner, 2026-09-13: "there doesn't seem to be a
+  // way to go back").
+  const endPrompt = useEndOfAlbumPrompt(!hasNext && total > 0);
 
   return (
     <div style={landscapeRotate
@@ -902,18 +889,11 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       </div>
       {orderErrorBanner && <div className="px-5 pt-2 bg-paper">{orderErrorBanner}</div>}
 
-      {/* Page display with side arrows */}
+      {/* Page display with the page turn on each side — small labelled
+          buttons, not bare ‹ › arrows (SpreadTurnButton). */}
       <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 overflow-auto" style={BOOK.table}>
         <div className="flex items-center gap-6">
-          {/* Prev Arrow — left side */}
-          <button
-            onClick={navPrev}
-            disabled={!hasPrev}
-            className="flex items-center justify-center rounded-full hover:bg-blush-pink/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-            style={{ width: 56, height: 56 }}
-          >
-            <ChevronLeft size={40} className="text-blush-pink" />
-          </button>
+          <SpreadTurnButton dir="prev" show={hasPrev} onClick={navPrev} />
 
           {/* Pages */}
           <div className="flex flex-col items-center gap-3">
@@ -971,51 +951,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             </span>
           </div>
 
-          {/* Next Arrow — right side */}
-          <button
-            onClick={navNext}
-            disabled={!hasNext}
-            className="flex items-center justify-center rounded-full hover:bg-blush-pink/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-            style={{ width: 56, height: 56 }}
-          >
-            <ChevronRight size={40} className="text-blush-pink" />
-          </button>
+          <SpreadTurnButton dir="next" show={hasNext} onClick={navNext} />
         </div>
       </div>
 
-      {/* End-of-album prompt — shows once on the last spread. Tap outside or ✕ to
-          keep browsing; "Back to my pages" is a real button, not a footnote. */}
-      {showOrderCta && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6" onClick={() => setShowOrderCta(false)} data-testid="end-prompt">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 text-center relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowOrderCta(false)} aria-label="Keep browsing" className="absolute top-3 right-3 text-light hover:text-medium p-1"><X size={18} /></button>
-            <div className="text-4xl mb-2">📦</div>
-            <h3 className="font-display text-2xl font-semibold text-dark mb-1">You've reached the end</h3>
-            <p className="text-sm text-medium mb-5">Your album looks beautiful. Give it a cover, then make it real.</p>
-            <button
-              onClick={() => setCoverOpen(true)}
-              className="w-full py-3 mb-3 bg-white border-2 border-blush-pink text-[#C56B4E] text-base font-semibold rounded-xl hover:bg-blush active:scale-[0.98] transition-all"
-            >
-              🎨 Design your cover
-            </button>
-            <button
-              onClick={handleOrder}
-              disabled={orderSaving}
-              data-testid="end-prompt-order"
-              className="w-full py-4 bg-blush-pink text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait"
-            >
-              {orderSaving ? <><Loader2 size={18} className="animate-spin" /> Saving your album…</> : 'ORDER ALBUM'}
-            </button>
-            {orderErrorBanner && <div className="mt-3">{orderErrorBanner}</div>}
-            <button
-              onClick={onBack}
-              data-testid="end-prompt-back"
-              className="w-full mt-3 py-3 rounded-xl border border-line text-cocoa text-sm font-semibold hover:bg-blush active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
-            >
-              <ChevronLeft size={16} /> Back to my pages — I want to change something
-            </button>
-          </div>
-        </div>
+      {/* End-of-album prompt — on every arrival at the last spread. Tap outside
+          or ✕ to keep browsing; "Continue editing" is a real button. */}
+      {endPrompt.open && (
+        <EndOfAlbumPrompt onClose={endPrompt.close} onCheckCover={() => setCoverOpen(true)} onOrder={handleOrder} onContinueEditing={onBack}
+          saving={orderSaving} error={orderErrorBanner || null} />
       )}
 
       {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too).
