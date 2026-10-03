@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useBuilderContext } from '../pages/builder/BuilderContext';
 import { parseIntent } from './intentParser';
-import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, bootWizard, readSavedWizard } from './wizard';
+import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
@@ -186,15 +186,19 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   // Step 1 also asks the album's NAME (its title in Your Projects) — the same
   // unskippable gate covers both.
   const stepOneReady = isStepOneReady(builder.albumTitle, albumTheme);
+  // Taps on Next before step 1 is answered. Next never eats a tap there (a
+  // greyed one left an eager tester stuck, 2026-10-04): each tap points at
+  // what is missing instead.
+  const [stepOneNudge, setStepOneNudge] = useState(0);
   const goNext = () => {
     if (wizardStep === 'pick_theme') {
-      if (!stepOneReady) return;
+      if (!stepOneReady) { setStepOneNudge((n) => n + 1); return; }
+      setStepOneNudge(0);
       void fetchThemeQuotes(albumTheme.trim());
     }
     wizardRef.current.advance();
     setWizardStep(wizardRef.current.state.step);
   };
-  const nextDisabled = wizardStep === 'finalize' || (wizardStep === 'pick_theme' && !stepOneReady);
 
   /* ── Option A: the wizard is the single source of truth for the journey.
      Mirror its step into the SHARED store AND derive the center screen (phase)
@@ -251,6 +255,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
      on the upload step straight back off the cover. A reload is reconciled in
      bootWizard, before the first render. ── */
   const albumBuilt = engine.hasBuiltAlbum();
+  const showPrevious = engine.showsPrevious();
+  const showNext = engine.showsNext();
   useEffect(() => {
     if (wizardRef.current.reconcileOnChange()) setWizardStep(wizardRef.current.state.step);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -393,6 +399,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       : 'Restart from the beginning? Your current album and photos will be cleared.')) return;
     builder.reset();                              // wipe album + photos
     wizardRef.current.restart();                  // engine → welcome, clear flags
+    setStepOneNudge(0);                           // a new album starts unflagged
     setShowWizard(true);                          // re-show the guided centerpiece
     setWizardStep(wizardRef.current.state.step);  // syncs store + phase via effects
     try { localStorage.removeItem(WIZARD_STORAGE_KEY); } catch { /* ignore */ }
@@ -499,7 +506,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             <h3 className="font-display text-xl font-semibold text-dark mb-2"><TypeText text={msg.title} /></h3>
             {wizardRef.current.state.step === 'pick_theme' ? (
               <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme} onContinue={goNext}
-                name={builder.albumTitle} onNameChange={builder.setAlbumTitle} />
+                name={builder.albumTitle} onNameChange={builder.setAlbumTitle} nudge={stepOneNudge} />
             ) : (wizardRef.current.state.step === 'upload_photos' && builder.uploadedPhotos.length > 0) ? (
               <div className="mb-4">
                 {/* Eye-catching photo count */}
@@ -586,7 +593,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             {(
               <div className="flex flex-col gap-2.5">
                 {msg.actions.map((action) => {
-                  const isPrimary = action.includes('→') || action.includes('Now');
+                  const isPrimary = isPrimaryAction(action);
                   return (
                     <button
                       key={action}
@@ -603,30 +610,33 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 })}
               </div>
             )}
+            {/* One way on per screen (WizardEngine.showsNext): no Next where
+                the card's own button is the way on — "Let's Get Started →",
+                the sizes, "Generate Album →" (an unguarded Next with zero
+                photos skipped into an empty review). Once an album is built
+                (the customer came back from Review), Next returns to it
+                without rebuilding the pages. Welcome has no ← Previous. */}
+            {(showPrevious || showNext) && (
             <div className="flex items-center justify-between mt-5 pt-3 border-t border-line-soft">
-              <button
-                onClick={() => { wizardRef.current.back(); setWizardStep(wizardRef.current.state.step); }}
-                disabled={wizardRef.current.state.step === 'welcome'}
-                className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium text-taupe hover:bg-cream disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-              >
-                ← Previous
-              </button>
-              {/* No footer Next on the upload step: "Generate Album →" is the
-                  real way forward (it generates AND advances), and an unguarded
-                  Next with zero photos skips into an empty review. Once an
-                  album is built (the customer came back from Review), Next
-                  returns to it without rebuilding the pages. */}
-              {(wizardRef.current.state.step !== 'upload_photos' || albumBuilt) && (
+              {showPrevious && (
+                <button
+                  onClick={() => { wizardRef.current.back(); setWizardStep(wizardRef.current.state.step); }}
+                  className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium text-taupe hover:bg-cream transition-all"
+                >
+                  ← Previous
+                </button>
+              )}
+              {showNext && (
                 <button
                   onClick={goNext}
-                  disabled={nextDisabled}
                   title={wizardStep === 'pick_theme' && !stepOneReady ? (themeReady ? 'Name your album first' : 'Pick the occasion first') : undefined}
-                  className="flex items-center gap-1 px-5 py-2 rounded-lg text-sm font-medium bg-peach text-white hover:bg-blush-pink disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="ml-auto flex items-center gap-1 px-5 py-2 rounded-lg text-sm font-medium bg-peach text-white hover:bg-blush-pink transition-all"
                 >
                   Next →
                 </button>
               )}
             </div>
+            )}
             {msg.tips.length > 0 && (
               <div className="mt-3 pt-3 border-t border-line-soft space-y-1">
                 {msg.tips.map((tip) => (
@@ -756,7 +766,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   key={action}
                   onClick={() => handleWizardAction(action)}
                   className={`flex-1 min-w-[130px] px-4 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] ${
-                    action.includes('→') || action.includes('Now')
+                    isPrimaryAction(action)
                       ? 'bg-peach text-white hover:bg-blush-pink'
                       : 'bg-cream text-dark hover:bg-peach/20 border border-peach/15'
                   }`}
@@ -765,28 +775,31 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 </button>
               ))}
             </div>
-            {/* Navigation: Previous / Next */}
+            {/* Navigation: Previous / Next — the same one-way-on rule as the
+                center card (WizardEngine.showsNext / showsPrevious): none on
+                the cover (it has its own bar), no Next on Review (Next page
+                under the page) or on Preview & Order (the last step). Never a
+                greyed button: Next shows only where a tap moves on. */}
+            {(showPrevious || showNext) && (
             <div className="flex items-center justify-between mt-3 pt-2 border-t border-line-soft">
-              <button
-                onClick={() => { wizardRef.current.back(); setWizardStep(wizardRef.current.state.step); }}
-                disabled={wizardRef.current.state.step === 'welcome'}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium text-taupe hover:bg-cream disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-              >
-                ← Previous
-              </button>
-              {/* No footer Next on the upload step — same rule as the desktop
-                  panel: "Generate Album →" advances; Next would skip with 0 photos.
-                  With an album already built, Next goes back to it. */}
-              {(wizardRef.current.state.step !== 'upload_photos' || albumBuilt) && (
+              {showPrevious && (
+                <button
+                  onClick={() => { wizardRef.current.back(); setWizardStep(wizardRef.current.state.step); }}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium text-taupe hover:bg-cream transition-all"
+                >
+                  ← Previous
+                </button>
+              )}
+              {showNext && (
                 <button
                   onClick={goNext}
-                  disabled={nextDisabled}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-peach text-white hover:bg-blush-pink disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-peach text-white hover:bg-blush-pink transition-all"
                 >
                   Next →
                 </button>
               )}
             </div>
+            )}
             {wizardRef.current.getMessage().tips.length > 0 && (
               <div className="mt-2 pt-2 border-t border-line-soft space-y-0.5">
                 {wizardRef.current.getMessage().tips.map((tip) => (
