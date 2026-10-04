@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import gsap from 'gsap';
@@ -16,6 +16,8 @@ import BuilderDemoSection from './BuilderDemoSection';
 import { UserProjectsSection } from '../components/UserProjectsSection';
 import { useAuth } from '../lib/authContext';
 import { startFreshAlbum } from '../lib/albumSession';
+import { readLocalDraftSummary, albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
+import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -590,13 +592,23 @@ export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // "Start Creating" with an album in progress asks first (StartNewAlbumPrompt).
+  const [inProgress, setInProgress] = useState<LocalDraftSummary | null>(null);
+  const startNew = useCallback(() => {
+    setInProgress(null);
+    // A new album — which also answers "resume where you left off?".
+    startFreshAlbum(user?.id);
+    navigate('/builder');
+  }, [navigate, user?.id]);
+
   const handleMegyAction = useCallback((action: string, payload?: any) => {
     switch (action) {
-      case 'go-builder':
-        // A new album — which also answers "resume where you left off?".
-        startFreshAlbum(user?.id);
-        navigate('/builder');
+      case 'go-builder': {
+        const draft = readLocalDraftSummary();
+        if (albumInProgress(draft)) setInProgress(draft);
+        else startNew();
         break;
+      }
       case 'load-album':
         if (payload?.albumId) {
           navigate(`/builder?album=${payload.albumId}`);
@@ -608,7 +620,7 @@ export default function Home() {
       default:
         break;
     }
-  }, [navigate, user?.id]);
+  }, [navigate, startNew]);
 
   // Hero welcome card — sends visitors into the builder, where the one true
   // Megy (assistant/MegyAssistant) guides them. No separate home wizard.
@@ -646,6 +658,12 @@ export default function Home() {
     <>
       {/* Hero — Megy is the centerpiece */}
       <HeroSection megyComponent={megyComponent} />
+      {inProgress && (
+        <StartNewAlbumPrompt draft={inProgress} signedIn={!!user}
+          onContinue={() => { setInProgress(null); navigate('/builder'); }}
+          onStartNew={startNew}
+          onClose={() => setInProgress(null)} />
+      )}
 
       <TrustBarSection />
 
