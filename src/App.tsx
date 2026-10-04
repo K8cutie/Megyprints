@@ -11,6 +11,7 @@ import Privacy from './pages/Privacy';
 import Order from './pages/Order';
 import Profile from './pages/Profile';
 import MyMemories from './pages/MyMemories';
+import MyOrders from './pages/MyOrders';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Code-split the two heavy routes so their weight never lands on Home or the
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/order" element={<Order />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />
+          <Route path="/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
         </Route>
         {/* Builder — a full-screen app with its own chrome. Kept OUTSIDE Layout so the
             marketing Lenis smooth-scroll (which hijacks the mouse wheel and scrolls the

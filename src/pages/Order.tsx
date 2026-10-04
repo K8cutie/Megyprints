@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import type { MaterialType, CoverType, AlbumSizePreset, AlbumPage, UploadedPhoto } from "./builder/types";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, Package, QrCode, Wifi, Landmark, Paperclip, Clock } from 'lucide-react';
+import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, QrCode, Wifi, Landmark, Paperclip } from 'lucide-react';
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
@@ -27,20 +27,15 @@ import AddressPicker from '../components/AddressPicker';
 import { scrollPageToTop } from '../lib/pageScroll';
 import { startFreshAlbum } from '../lib/albumSession';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
+import { trackOf } from '../lib/orderTracker';
+import { getMyOrder, type MyOrder } from '../lib/myOrders';
+import OrderTracker from '../components/OrderTracker';
 
 // The front cover at checkout — lazy: it brings the page renderer.
 const CoverThumb = lazy(() => import('./builder/CoverThumb'));
 
 type Step = 'form' | 'payment' | 'tracking';
 
-// The fulfillment journey shown on the tracker.
-const TRACK_STAGES = [
-  { label: 'Payment sent — we\'re confirming it', icon: Clock },
-  { label: 'Payment confirmed', icon: Check },
-  { label: 'Sent to the printer', icon: Package },
-  { label: 'Printing your album', icon: Printer },
-  { label: 'Finished', icon: Check },
-] as const;
 
 export default function Order() {
   const navigate = useNavigate();
@@ -72,7 +67,18 @@ export default function Order() {
   // short of the 40-photo minimum: offer the way back to it.
   const [albumNotSaved, setAlbumNotSaved] = useState(false);
   const [orderNumber, setOrderNumber] = useState('');
-  const [trackStage, setTrackStage] = useState(0);
+  // The placed order as the shop has it now (its real status) — the tracker
+  // follows it. It was a fixed picture stuck at "Payment sent".
+  const [placedOrder, setPlacedOrder] = useState<MyOrder | null>(null);
+  useEffect(() => {
+    const orderId = createdOrderRef.current?.id;
+    if (step !== 'tracking' || !user || !orderId) return;
+    let alive = true;
+    const refresh = () => { getMyOrder(user.id, orderId).then((o) => { if (alive && o) setPlacedOrder(o); }).catch(() => { /* keep what's shown */ }); };
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [step, user]);
   const [prepMsg, setPrepMsg] = useState('');
   // Manual transfer (0033): the receipt + bank reference the customer attaches.
   const [proofFile, setProofFile] = useState<File | null>(null);
@@ -495,7 +501,6 @@ export default function Order() {
       setPrepMsg('Recording your payment…');
       await submitPaymentProof(order.id, { reference: cleanReference(payRef), proofPath });
       setPrepMsg('');
-      setTrackStage(0);
       recordOrder('tracking');
       setStep('tracking');
     } catch (err) {
@@ -517,38 +522,30 @@ export default function Order() {
 
   /* ══════════════ TRACKING ══════════════ */
   if (step === 'tracking') {
-    const printerReached = trackStage >= 2; // "Sent to the printer" onward
-    const finished = trackStage >= TRACK_STAGES.length - 1;
+    // Until the order row answers, it is where the customer just put it.
+    const track = trackOf(placedOrder ?? { status: 'pending_payment', payment_submitted_at: 'now' });
+    const printerReached = track.stage >= 2; // printing onward
+    const finished = track.finished;
     return (
       <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg">
           <div className="text-center mb-8">
-            <h2 className="font-display text-3xl font-bold text-dark">{finished ? 'Your album is finished! 🎉' : 'Thank you — we\'re confirming your payment'}</h2>
+            <h2 className="font-display text-3xl font-bold text-dark">
+              {track.cancelled ? 'This order was cancelled' : finished ? 'Your album has arrived! 🎉' : track.stage === 0 ? 'Thank you — we\'re confirming your payment' : track.headline}
+            </h2>
             {orderNumber && (
               <p className="mt-2 text-sm font-medium text-dark">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
             )}
             <p className="mt-2 text-xs text-taupe max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-dark">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
           </div>
 
-          {/* Status tracker */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <div className="space-y-1">
-              {TRACK_STAGES.map((stage, i) => {
-                const done = i < trackStage;
-                const active = i === trackStage && !finished;
-                const reached = i <= trackStage;
-                const Icon = stage.icon;
-                return (
-                  <div key={stage.label} className="flex items-center gap-3 py-2">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${reached ? 'bg-soft-sage text-success' : 'bg-line-soft text-[#C4C4C4]'}`}>
-                      {active ? <Loader2 size={18} className="animate-spin text-[#C98A5E]" /> : done || (finished && i === TRACK_STAGES.length - 1) ? <Check size={18} /> : <Icon size={18} />}
-                    </div>
-                    <span className={`text-sm font-medium ${reached ? 'text-dark' : 'text-light'}`}>{stage.label}</span>
-                  </div>
-                );
-              })}
+          {/* Status tracker — the order's real status (orderTracker). */}
+          {!track.cancelled && (
+            <div className="bg-white rounded-2xl p-6 shadow-sm">
+              <OrderTracker track={track} />
+              <p className="mt-3 text-xs text-medium">You can check on this order any time in <Link to="/orders" className="underline font-semibold text-dark">Your orders</Link>.</p>
             </div>
-          </div>
+          )}
 
           {/* Print-ready file goes straight to Megyprints — customers don't get
               the PDF (so it can't be printed elsewhere). Just reassure them. */}
@@ -564,6 +561,7 @@ export default function Order() {
                 again (1-star testers); that one is safe in the account. */}
             <button onClick={() => { startFreshAlbum(user?.id); navigate('/builder'); }} data-testid="order-create-another"
               className="px-6 py-2.5 bg-peach text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
+            <button onClick={() => navigate('/orders')} data-testid="order-your-orders" className="px-6 py-2.5 border border-[#D4D4D4] text-medium rounded-lg font-medium hover:bg-line-soft">Your orders</button>
             <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-medium rounded-lg font-medium hover:bg-line-soft">Home</button>
           </div>
         </motion.div>
