@@ -402,9 +402,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           builder.manualSave?.();
         } else if (action.includes('Order')) {
           // "Place Order →" is the filled button, the way on, so it must
-          // order: through the preview's own Order (its checks, then the print
-          // job checkout reads), never straight to /order. On the phone Megy
-          // folds up so the answer underneath (saving, or why not yet) shows.
+          // order: through the preview's own Order (the 40-photo check, then
+          // the print job checkout reads), never straight to /order. On the
+          // phone Megy folds up so the answer underneath (saving, or why not
+          // yet) shows.
           setMobileExpanded(false);
           onPlaceOrder?.();
         }

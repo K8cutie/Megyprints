@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
    panel only handled the other three, so the tap did nothing. A forward
    button must never be a dead tap: testers get stuck (PR #54).
    It must order through the ONE order entry, BuilderPreview.handleOrder
-   (its checks, the print job checkout reads, then Builder.handleOrder's save
+   (the 40-photo check, the print job checkout reads, then Builder.handleOrder's save
    and /order), never straight to /order. So these walk the REAL Builder,
    Megy's panel and the preview, and hold the tap to the Order button's own
    outcome on the same album.
@@ -155,6 +155,16 @@ describe('Step 7 (Preview & Order): "Place Order →" orders', () => {
     expect(ctx.manualSave).toHaveBeenCalledTimes(1);
     expect(where).toBe('/order');
     expect(readOrderHandoff()).toEqual({ albumId: 'album-1', saved: true });
+  });
+
+  it('a 12-photo album (an old draft): the tap answers why not yet, and checkout stays shut', async () => {
+    await openPreview(builderOn(12));
+    await tap(megyButton('Place Order →'));
+    expect(outcome()).toEqual({
+      path: '/builder', job: null,
+      alert: expect.stringContaining('Your album has 12 photos. Albums need at least 40 to print, so add 28 more before you order.'),
+    });
+    expect(document.querySelector('[data-testid="order-too-few-edit"]')?.textContent).toBe('Back to my pages');
   });
 
   for (const photos of [40, 12]) {

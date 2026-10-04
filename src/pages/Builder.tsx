@@ -179,8 +179,9 @@ export default function Builder() {
 
   // Megy's "Place Order →" (Step 7) orders through the SAME door as the
   // preview's own Order button: it asks the preview to run its handleOrder
-  // (the album's print job, then the save + checkout above). Going to /order
-  // straight from Megy would let checkout read a stale or missing print job.
+  // (the 40-photo check, the album's print job, then the save + checkout
+  // above). Going to /order straight from Megy would skip the check and let
+  // checkout read a stale or missing print job.
   // The preview takes the request once (onOrderRequestTaken), so coming back
   // to it never orders again.
   const [orderRequested, setOrderRequested] = useState(false);
