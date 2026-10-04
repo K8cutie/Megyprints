@@ -1,3 +1,4 @@
+import type { PhotoCheck } from './photoCheck';
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from './supabase';
 
@@ -51,6 +52,10 @@ export interface AlbumData {
     cloudUrl?: string;
     storagePath?: string;
     previewUrl?: string;
+    /** Megy's photo check and the customer's keep / leave-out choice. */
+    check?: PhotoCheck;
+    kept?: boolean;
+    leftOut?: boolean;
   }>;
   createdAt?: string;
   updatedAt?: string;
@@ -83,6 +88,10 @@ export function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
     id: p.id,
     name: p.name,
     // No cloudUrl, no storagePath, no previewUrl — all local-only now.
+    // The photo check and the keep / leave-out choice are tiny and travel with it.
+    ...(p.check ? { check: p.check } : {}),
+    ...(p.kept ? { kept: true } : {}),
+    ...(p.leftOut ? { leftOut: true } : {}),
   }));
 
   return {
@@ -101,7 +110,7 @@ export function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
 
 export function deserializeAlbum(row: Record<string, unknown>): AlbumData {
   const dbPhotos = Array.isArray(row.photos)
-    ? (row.photos as Array<{ id: string; name: string; cloudUrl?: string; storagePath?: string; previewUrl?: string }>)
+    ? (row.photos as Array<{ id: string; name: string; cloudUrl?: string; storagePath?: string; previewUrl?: string; check?: PhotoCheck; kept?: boolean; leftOut?: boolean }>)
     : [];
 
   return {
@@ -117,6 +126,9 @@ export function deserializeAlbum(row: Record<string, unknown>): AlbumData {
       cloudUrl: p.cloudUrl ?? undefined,
       storagePath: p.storagePath ?? undefined,
       previewUrl: p.previewUrl ?? undefined,
+      ...(p.check && typeof p.check === 'object' ? { check: p.check } : {}),
+      ...(p.kept ? { kept: true } : {}),
+      ...(p.leftOut ? { leftOut: true } : {}),
     })),
     coverPhoto: (row.cover_photo as string) ?? null,
     // Absent when the database predates 0036 or the query didn't ask for it.

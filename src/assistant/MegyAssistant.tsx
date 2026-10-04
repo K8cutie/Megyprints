@@ -19,6 +19,7 @@ import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackgro
 import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
+import PhotoCheckCard from './PhotoCheckCard';
 import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
@@ -273,6 +274,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   const page = builder.currentPage;
   const totalPhotos = builder.uploadedPhotos.length;
+  // The photos that go in: the ones the customer left out (Megy's photo check) don't.
+  const livePhotos = builder.uploadedPhotos.filter((p) => !p.leftOut);
 
   /* ── Megy's photo read: analyze ratios → recommend best album size (annexed A1) ── */
   const photoAnalysis = totalPhotos > 0 ? analyzePhotos(builder.uploadedPhotos) : null;
@@ -509,11 +512,14 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 name={builder.albumTitle} onNameChange={builder.setAlbumTitle} nudge={stepOneNudge} />
             ) : (wizardRef.current.state.step === 'upload_photos' && builder.uploadedPhotos.length > 0) ? (
               <div className="mb-4">
-                {/* Eye-catching photo count */}
+                {/* Eye-catching photo count — the photos that go in (left-out ones don't). */}
                 <div className="flex items-baseline gap-2 mb-3">
-                  <span className="font-display text-5xl font-bold text-blush-pink leading-none">{builder.uploadedPhotos.length}</span>
+                  <span className="font-display text-5xl font-bold text-blush-pink leading-none" data-testid="photos-ready">{livePhotos.length}</span>
                   <span className="text-base text-ink-mid">photos ready 🎉</span>
                 </div>
+                {/* Megy's free photo check: blurry + repeat shots, suggested out (one tap). */}
+                <PhotoCheckCard photos={builder.uploadedPhotos} check={builder.photoCheck}
+                  onLeaveOut={builder.leaveOutPhotos} onKeep={builder.keepPhotos} onBringBack={builder.bringBackPhotos} />
                 <p className="text-sm text-ink-mid leading-relaxed mb-2">Your album setup:</p>
                 <div className="flex flex-wrap gap-2">
                   <span className="px-3 py-1.5 rounded-full bg-blush text-blush-pink text-sm font-semibold">{builder.albumSize} album</span>
@@ -546,7 +552,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   </div>
                 </div>
                 {(() => {
-                  const est = estimateAlbumFill(builder.uploadedPhotos.length, builder.albumSize, builder.photosPerPage);
+                  const est = estimateAlbumFill(livePhotos.length, builder.albumSize, builder.photosPerPage);
                   return est.fillsAlbum ? (
                     <p className="text-xs text-success mt-3">✓ Plenty for a full {MIN_ALBUM_PAGES}-page album.</p>
                   ) : (
@@ -561,7 +567,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   // size can't make them without a crop, so say so HERE — while
                   // adding photos or switching size is still one tap — instead
                   // of cropping to make up the number.
-                  const short = memoryShortfall(builder.uploadedPhotos, builder.albumSize, offerableAlbumSizes().map((s) => s.preset));
+                  const short = memoryShortfall(livePhotos, builder.albumSize, offerableAlbumSizes().map((s) => s.preset));
                   if (!short) return null;
                   const sizeLabel = SIZE_LABELS[builder.albumSize] ?? builder.albumSize;
                   const better = short.betterSize ? (SIZE_LABELS[short.betterSize] ?? short.betterSize) : null;

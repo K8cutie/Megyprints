@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import type { PhotoCheck } from '../../lib/photoCheck';
 
 export type BuilderPhase = 'setup' | 'upload' | 'template' | 'edit' | 'cover' | 'preview';
 
@@ -645,6 +646,13 @@ export interface UploadedPhoto {
   width: number;
   height: number;
   capturedAt?: number | null; // EXIF DateTimeOriginal (ms) — drives moment grouping
+  /** Megy's free photo check (blur, fingerprint, closed eyes) — lib/photoCheck. */
+  check?: PhotoCheck;
+  /** The customer said keep it: never suggested out again. */
+  kept?: boolean;
+  /** Left out of the album (the customer accepted Megy's suggestion). Stays in
+   *  the list, so indexes don't move and it can be brought back. */
+  leftOut?: boolean;
 }
 
 export interface ThemeConfig {
