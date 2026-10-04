@@ -15,7 +15,8 @@ import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, tooFewToMakeMessage } f
 import { memoryShortfall, MIN_MEMORY_PAGES } from '../pages/builder/generateAlbum';
 import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
 import { SIZE_LABELS } from '../lib/pricing';
-import type { AssistantMessage } from './types';
+import type { AssistantMessage, AssistantIntent } from './types';
+import { rebuildQuestion } from './rebuildQuestion';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
 import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
@@ -307,7 +308,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const cardTooSoon = useSettleGuard(wizardKey);
 
   /* ── Chat ── */
-  const rebuildAskedRef = useRef(false);
+  const rebuildAskedRef = useRef<AssistantIntent | null>(null);
   const builderRef = useRef(builder);
   useEffect(() => { builderRef.current = builder; });
   const sendMessage = useCallback(async (text: string) => {
@@ -317,21 +318,23 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     setInput('');
     setIsThinking(true);
     const parsed = parseIntent(text);
-    // Typed "generate" on an album that's already made rebuilds every page and
-    // replaces the customer's layouts and edits (Studio pages stay). Ask first;
-    // a yes, or asking again, does it. (The wizard's Generate button is its own
-    // explicit choice and isn't asked.)
+    // A typed command that rebuilds a made album (generate, or a new size)
+    // replaces the customer's layouts and edits: ask first (rebuildQuestion);
+    // a yes, or asking the same again, does it. (The wizard's own buttons are
+    // explicit choices and aren't asked.)
     const pending = rebuildAskedRef.current;
-    rebuildAskedRef.current = false;
+    rebuildAskedRef.current = null;
     const yes = /^(yes|yep|yeah|ok|okay|sure|confirm|do it|go ahead)\b/i.test(text.trim());
-    const built = builderRef.current.albumPages.some((p) => (p.slotFills ?? []).some((f) => f != null));
     let intent = parsed.intent;
-    if (pending && yes) intent = { type: 'generate_album', rawMessage: text };
-    else if (intent.type === 'generate_album' && built && !pending) {
-      rebuildAskedRef.current = true;
-      setIsThinking(false);
-      setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', content: "That rebuilds your whole album: every page gets a new layout and your layout changes are replaced (Studio pages stay). Say \"yes\" to go ahead, or keep editing.", intent, timestamp: new Date() }]);
-      return;
+    if (pending && yes) intent = pending;
+    else if (!(pending && pending.type === intent.type)) {
+      const ask = rebuildQuestion(intent, builderRef.current);
+      if (ask) {
+        rebuildAskedRef.current = intent;
+        setIsThinking(false);
+        setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', content: ask, intent, timestamp: new Date() }]);
+        return;
+      }
     }
     const result = await builder.dispatch(intent);
     const asst: AssistantMessage = { id: `a-${Date.now()}`, role: 'assistant', content: result.message, intent: parsed.intent, timestamp: new Date() };

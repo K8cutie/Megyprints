@@ -202,6 +202,17 @@ export function parseIntent(message: string): ParsedCommand {
   // cleared the page (1-star testers).
   if (/\bfill/.test(lower)) scores.clear_slots = 0;
 
+  // Asking to redo the ALBUM is the whole album: "regenerate" alone (a page)
+  // outscored "generate" (the album), so "regenerate my album" redid page 1
+  // only (1-star testers, 2026-10-04). On a made album it asks first.
+  if (/\b(re-?generate|re-?do|re-?build|re-?make|start over with)\b/.test(lower)
+    && /\b(album|whole|everything|all (the |my )?pages|every page)\b/.test(lower)
+    && !/\b(this|current|one) page\b/.test(lower)) {
+    scores.generate_album += 100;
+    scores.regenerate_page = 0;
+    scores.add_photos = 0;
+  }
+
   // Find best intent
   const entries = Object.entries(scores).filter(([k]) => k !== 'unknown');
   entries.sort((a, b) => b[1] - a[1]);
