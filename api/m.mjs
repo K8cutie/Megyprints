@@ -20,10 +20,15 @@ const CLIP_PREFIX = (() => {
   catch { return null; }
 })();
 const CLIP_NAME = /^[a-z2-9]{4,32}\.(mp4|mov|webm|m4v)$/;
+// A replaced clip is the same object name with a version: "?v=<digits>". The
+// clip is cached for a year under its URL, so a replace that kept the URL kept
+// showing the OLD video to anyone who had played it (1-star testers round 2).
+// Nothing else after the name: no other query, no fragment.
+const CLIP_VERSION = /^(\?v=\d{1,13})?$/;
 export function isHostedClip(u) {
   if (!CLIP_PREFIX || !u.href.startsWith(CLIP_PREFIX)) return false;
   const name = u.pathname.slice(u.pathname.lastIndexOf('/') + 1);
-  return CLIP_NAME.test(name) && !u.search && !u.hash;
+  return CLIP_NAME.test(name) && CLIP_VERSION.test(u.search) && !u.hash;
 }
 const fmtMonth = (iso) => {
   const d = new Date(iso);

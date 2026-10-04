@@ -51,6 +51,26 @@ describe('isHostedClip', () => {
   });
 });
 
+describe('a REPLACED clip (1-star testers round 2: the old video stayed for anyone who had played it)', () => {
+  const u = (s) => new URL(s);
+  const clip = `${BASE}/storage/v1/object/public/memory-clips/k7m2p9qz.mp4`;
+  it('the same object with a version "?v=<digits>" is still our clip', () => {
+    expect(mod.isHostedClip(u(`${clip}?v=1759620000000`))).toBe(true);
+  });
+  it('but nothing else after the name', () => {
+    for (const tail of ['?v=abc', '?v=', '?v=1&x=2', '?x=1&v=1', '?vv=1', '?v=12345678901234', '?v=1#frag']) {
+      expect(mod.isHostedClip(u(`${clip}${tail}`)), tail).toBe(false);
+    }
+  });
+  it('the scan page plays the versioned link, so a phone that played the old one fetches the new', async () => {
+    rpc.mockResolvedValue({ data: [row({ destination: `${clip}?v=1759620000000` })], error: null });
+    const res = mkRes();
+    await mod.default(mkReq('k7m2p9qz'), res);
+    expect(res.code).toBe(200);
+    expect(res.body).toContain(`<video src="${clip}?v=1759620000000"`);
+  });
+});
+
 describe('handler', () => {
   it('hosted clip → 200, plays in a <video>, media-src scoped to the project origin, nothing framed, term shown', async () => {
     rpc.mockResolvedValue({ data: [row({ expires_at: inYears(10), title: 'Lola’s 80th' })], error: null });
