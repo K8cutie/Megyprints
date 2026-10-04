@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Phone, Mail, MapPin, ChevronDown, Send, ArrowRight, Loader2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { MessageCircle, Package, Landmark, ChevronDown, Send, ArrowRight, Loader2 } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { reportError } from '../lib/report';
 
@@ -12,7 +12,7 @@ const faqs = [
   { q: 'What is your refund policy?', a: 'Since albums are custom printed, we don\'t offer refunds. However, if there\'s a defect, we\'ll reprint at no charge.' },
   { q: 'Do you offer bulk discounts?', a: 'Yes! Schools and events ordering 10+ albums receive special pricing. Contact us for details.' },
   { q: 'Can I see a preview before printing?', a: 'Yes! Our preview feature shows exactly how your album will look.' },
-  { q: 'How do I pay?', a: 'We currently accept bank transfer and cash on delivery. Online payment coming soon!' },
+  { q: 'How do I pay?', a: 'By bank transfer: at checkout, scan our InstaPay QR with any PH bank or e-wallet app (GCash, Maya, BPI, BDO…) and send the amount shown. We confirm it, then print.' },
 ];
 
 export default function Contact() {
@@ -50,7 +50,7 @@ export default function Contact() {
       const code = (err as { code?: string } | null)?.code;
       setError(code === '53400'
         ? "We're getting a lot of messages right now. Please try again in a minute."
-        : "We couldn't send your message right now. Please email us directly at hello@megyprints.com.");
+        : "We couldn't send your message right now. Please try again in a few minutes.");
     } finally {
       setSubmitting(false);
     }
@@ -64,20 +64,26 @@ export default function Contact() {
           <p className="text-medium mt-2">We'd love to hear from you</p>
         </div>
 
-        {/* Contact methods */}
-        <div className="grid sm:grid-cols-3 gap-4 mb-10">
+        {/* Ways to reach us — only real ones (the cards showed a 555 number
+            and "123 Main Street", and an email on a domain that doesn't exist). */}
+        <div className="grid sm:grid-cols-3 gap-4 mb-10" data-testid="contact-ways">
           {[
-            { icon: <Phone size={20} />, title: 'Call Us', value: '(555) 123-4567', note: 'Mon-Sat, 9AM-6PM', bg: '#F6E7DF' },
-            { icon: <Mail size={20} />, title: 'Email Us', value: 'hello@megyprints.com', note: 'Reply within 24h', bg: '#E8E0F0' },
-            { icon: <MapPin size={20} />, title: 'Visit Us', value: '123 Main Street', note: 'Mon-Sat, 9AM-6PM', bg: '#E4F0E0' },
-          ].map((c) => (
-            <div key={c.title} className="rounded-2xl p-5 text-center" style={{ backgroundColor: c.bg }}>
-              <div className="text-medium mb-2 flex justify-center">{c.icon}</div>
-              <h3 className="font-medium text-dark">{c.title}</h3>
-              <p className="text-sm text-charcoal font-medium mt-1">{c.value}</p>
-              <p className="text-xs text-light">{c.note}</p>
-            </div>
-          ))}
+            { icon: <MessageCircle size={20} />, title: 'Message Us', value: 'Use the form below', note: 'We reply within 24h, Mon–Sat', bg: '#F6E7DF', to: undefined },
+            { icon: <Package size={20} />, title: 'Your Order', value: 'Check where it is', note: 'In Your orders, signed in', bg: '#E8E0F0', to: '/orders' },
+            { icon: <Landmark size={20} />, title: 'Paying', value: 'Bank transfer (InstaPay QR)', note: 'Shown at checkout', bg: '#E4F0E0', to: undefined },
+          ].map((c) => {
+            const body = (
+              <>
+                <div className="text-medium mb-2 flex justify-center">{c.icon}</div>
+                <h3 className="font-medium text-dark">{c.title}</h3>
+                <p className="text-sm text-charcoal font-medium mt-1">{c.value}</p>
+                <p className="text-xs text-light">{c.note}</p>
+              </>
+            );
+            return c.to
+              ? <Link key={c.title} to={c.to} className="rounded-2xl p-5 text-center block hover:brightness-[0.98]" style={{ backgroundColor: c.bg }}>{body}</Link>
+              : <div key={c.title} className="rounded-2xl p-5 text-center" style={{ backgroundColor: c.bg }}>{body}</div>;
+          })}
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
