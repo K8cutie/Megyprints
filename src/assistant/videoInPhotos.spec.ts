@@ -84,7 +84,7 @@ describe('the builder: addPhotos keeps only the photos', () => {
   it('a photo, a video and a PDF → 1 photo in, the video and the PDF counted', async () => {
     let r!: ReturnType<BuilderActions['addPhotos']>;
     await act(async () => { r = b.addPhotos([file('IMG_1.jpg', 'image/jpeg'), file('hk-clip-12s.mp4', 'video/mp4'), file('notes.pdf', 'application/pdf')]); });
-    expect(r).toEqual({ added: 1, skipped: 0, videos: 1, others: 1 });
+    expect(r).toEqual({ added: 1, skipped: 0, videos: 1, others: 1, restored: 0, otherCopies: 0 });
     expect(b.uploadedPhotos.map((p) => p.name)).toEqual(['IMG_1.jpg']);
   });
 });

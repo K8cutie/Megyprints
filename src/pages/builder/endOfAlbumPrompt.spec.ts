@@ -127,7 +127,7 @@ describe('EndOfAlbumPrompt — Order saves the album on its way to checkout (#36
     const s = readFileSync(resolve(__dirname, 'BuilderPreview.tsx'), 'utf8');
     // The 40-photo gate's banner (albumMinimum) comes first, then "before you order"
     // (orderReadiness): each is why Order stopped.
-    expect(s).toMatch(/<EndOfAlbumPrompt[\s\S]*?saving=\{orderSaving\}[\s\S]*?error=\{tooFewBanner \|\| notReadyBanner \|\| orderErrorBanner[\s\S]*?\/>/);
+    expect(s).toMatch(/<EndOfAlbumPrompt[\s\S]*?saving=\{orderSaving\}[\s\S]*?error=\{tooFewBanner \|\| notHereBanner \|\| notReadyBanner \|\| orderErrorBanner[\s\S]*?\/>/);
   });
 });
 

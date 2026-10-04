@@ -40,6 +40,7 @@ import { photosToForget } from '../../lib/photoKeeping';
 import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
 import { albumDataFromDraft, type StoredDraft } from '../../lib/draftAlbum';
 import { kindOfPick } from '../../lib/pickedFiles';
+import { planRelink, copyQuality } from '../../lib/photoRelink';
 import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
 import { detectFaceCenter, initFaceApi } from './faceDetection';
 import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
@@ -513,7 +514,7 @@ export interface BuilderActions {
    *  reporting the selected count lies whenever a re-picked batch is deduped. */
   /** `videos`/`others`: picked files left out — only photos go on pages
    *  (lib/pickedFiles); the confirmation says so. */
-  addPhotos: (files: FileList | File[]) => { added: number; skipped: number; videos: number; others: number };
+  addPhotos: (files: FileList | File[]) => { added: number; skipped: number; videos: number; others: number; restored: number; otherCopies: number };
   removePhoto: (id: string) => void;
   /** Megy's free photo check (lib/photoCheck): runs on the phone in the
    *  background. `ready` = every photo checked for blur and repeats. */
@@ -928,6 +929,10 @@ export function useBuilderState(): BuilderActions {
       photos: uploadedPhotos.map((p) => ({
         id: p.id,
         name: p.name,
+        // Size, pixels, capture time: how another device knows this photo again.
+        ...(p.size ? { size: p.size } : {}),
+        ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
+        ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
         // No cloudUrl, no storagePath — all local-only now.
         ...(p.check ? { check: p.check } : {}),
         ...(p.kept ? { kept: true } : {}),
@@ -1132,14 +1137,17 @@ export function useBuilderState(): BuilderActions {
             const restored = await Promise.all(
               albumData.photos.map(async (p) => {
                 const stored = await idbPhotos.get(p.id);
+                // Not on this device: an empty preview (photoPresence), and
+                // what the cloud knows of the file (photoRelink matches it).
                 return {
                   id: p.id,
                   name: p.name ?? 'Untitled',
                   previewUrl: stored?.url ?? '',
                   type: stored?.type ?? 'image/jpeg',
-                  size: stored?.size ?? 0,
-                  width: stored?.width ?? 0,
-                  height: stored?.height ?? 0,
+                  size: stored?.size ?? p.size ?? 0,
+                  width: stored?.width ?? p.width ?? 0,
+                  height: stored?.height ?? p.height ?? 0,
+                  ...(p.capturedAt != null ? { capturedAt: p.capturedAt } : {}),
                   // Megy's photo check + the customer's keep / leave-out choice.
                   ...(p.check ? { check: p.check } : {}),
                   ...(p.kept ? { kept: true } : {}),
@@ -1227,8 +1235,10 @@ export function useBuilderState(): BuilderActions {
               height: stored.height ?? photo.height,
             };
           }
-          // IndexedDB miss — keep as-is (broken image, but don't lose metadata)
-          return photo;
+          // Not on this device (another device's album, or its store was
+          // cleared): keep everything about it but say so — an empty preview
+          // is "missing" (photoPresence); adding the file again puts it back.
+          return { ...photo, previewUrl: '' };
         })
       );
 
@@ -1290,25 +1300,49 @@ export function useBuilderState(): BuilderActions {
   }, [updateCurrentPage]);
 
   /* ── Photo handling (IndexedDB — zero cloud I/O) ── */
-  const addPhotos = useCallback((files: FileList | File[]): { added: number; skipped: number; videos: number; others: number } => {
+  const addPhotos = useCallback((files: FileList | File[]): { added: number; skipped: number; videos: number; others: number; restored: number; otherCopies: number } => {
     // Only photos go on pages; videos and other files are counted, not added.
     const picked = Array.from(files);
     const fileArray = picked.filter((f) => kindOfPick(f) === 'photo');
     const videos = picked.filter((f) => kindOfPick(f) === 'video').length;
     const others = picked.length - fileArray.length - videos;
 
-    // ── Dedup: never add the same photo twice. Skip files already uploaded
-    // (same name + size) and repeats within this batch — covers re-selecting
-    // the same folder AND a double-fired upload event. ──
-    const seen = new Set(uploadedPhotosRef.current.map((p) => `${p.name}__${p.size}`));
-    const freshFiles: File[] = [];
-    for (const f of fileArray) {
-      const key = `${f.name}__${f.size}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      freshFiles.push(f);
+    // ── The same photo is never added twice (same name + size, or a repeat in
+    // this pick), and a photo this album is MISSING on this device goes back
+    // in its own place (photoRelink) — same frame, crop and caption. ──
+    const plan = planRelink(fileArray, uploadedPhotosRef.current);
+    const freshFiles = plan.fresh.map((i) => fileArray[i]);
+    if (plan.relink.length > 0) {
+      const back = new Map(plan.relink.map((r) => [uploadedPhotosRef.current[r.photo].id, { file: fileArray[r.file], sameCopy: r.sameCopy }]));
+      const recorded = new Map(uploadedPhotosRef.current.filter((p) => back.has(p.id)).map((p) => [p.id, { width: p.width, height: p.height }]));
+      const refill = (p: UploadedPhoto): UploadedPhoto => {
+        const b = back.get(p.id);
+        if (!b) return p;
+        // A fresh file: any note about an earlier copy no longer applies.
+        return { ...p, copyNote: b.sameCopy ? undefined : 'differentCopy', previewUrl: URL.createObjectURL(b.file), type: b.file.type, size: b.file.size };
+      };
+      uploadedPhotosRef.current = uploadedPhotosRef.current.map(refill);
+      setUploadedPhotos((prev) => prev.map(refill));
+      for (const [id, { file }] of back) {
+        // Stored under the photo's OWN id, so the next reload finds it here.
+        const task = measureLimit(async () => {
+          const stored = await idbPhotos.store(file, id);
+          const dims = stored ?? await getImageDimensions(file);
+          const capturedAt = await readCaptureTime(file);
+          if (dims.width > 0 && dims.height > 0) measuredRef.current.set(id, { width: dims.width, height: dims.height });
+          const note = copyQuality(recorded.get(id) ?? { width: 0, height: 0 }, dims);
+          setUploadedPhotos((prev) => prev.map((p) => (p.id === id
+            ? { ...p, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(note ? { copyNote: note } : {}) }
+            : p)));
+        });
+        pendingMeasureRef.current.add(task);
+        void task.catch(() => { /* a failed measure must not block generation */ })
+          .finally(() => pendingMeasureRef.current.delete(task));
+      }
     }
-    if (freshFiles.length === 0) return { added: 0, skipped: fileArray.length, videos, others };
+    const restored = plan.relink.length;
+    const otherCopies = plan.relink.filter((r) => !r.sameCopy).length;
+    if (freshFiles.length === 0) return { added: 0, skipped: plan.duplicate.length, videos, others, restored, otherCopies };
 
     // Create placeholder metadata with preview URLs
     const newPhotos: UploadedPhoto[] = freshFiles.map((file) => ({
@@ -1356,7 +1390,7 @@ export function useBuilderState(): BuilderActions {
         .finally(() => pendingMeasureRef.current.delete(task));
     }
 
-    return { added: freshFiles.length, skipped: fileArray.length - freshFiles.length, videos, others };
+    return { added: freshFiles.length, skipped: plan.duplicate.length, videos, others, restored, otherCopies };
   }, [idbPhotos]);
 
   /* ── Megy's free photo check (lib/photoCheck) ──
@@ -2964,14 +2998,17 @@ export function useBuilderState(): BuilderActions {
             albumData.photos.map(async (p) => {
               // Try to get the actual file from IndexedDB
               const stored = await idbPhotos.get(p.id);
+              // Not on this device: an empty preview (photoPresence), and what
+              // the cloud knows of the file (photoRelink matches it).
               return {
                 id: p.id,
                 name: p.name ?? 'Untitled',
-                previewUrl: stored?.url ?? p.previewUrl ?? '',
+                previewUrl: stored?.url ?? '',
                 type: stored?.type ?? 'image/jpeg',
-                size: stored?.size ?? 0,
-                width: stored?.width ?? 0,
-                height: stored?.height ?? 0,
+                size: stored?.size ?? p.size ?? 0,
+                width: stored?.width ?? p.width ?? 0,
+                height: stored?.height ?? p.height ?? 0,
+                ...(p.capturedAt != null ? { capturedAt: p.capturedAt } : {}),
                 // Megy's photo check + the customer's keep / leave-out choice.
                 ...(p.check ? { check: p.check } : {}),
                 ...(p.kept ? { kept: true } : {}),
