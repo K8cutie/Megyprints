@@ -11,6 +11,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { useSettleGuard } from '../../lib/settleGuard';
 
 export type PageTurnVariant = 'phone' | 'desktop';
 
@@ -48,19 +49,23 @@ export default function PageTurnBar({ index, total, onPrev, onNext, onDone, vari
 }) {
   const s = STYLES[variant];
   const isLast = index >= total - 1;
+  // A double tap turns ONE page: the second tap would land on the next page's
+  // button in the same spot — on page 39, "Done" (settleGuard).
+  const tooSoon = useSettleGuard(index);
+  const turn = (fn: () => void) => () => { if (!tooSoon()) fn(); };
   return (
     <div className={`${s.row} ${className}`} data-testid="page-turn">
       {index > 0 && (
-        <button type="button" onClick={onPrev} data-testid="prev-page" className={s.prev}>
+        <button type="button" onClick={turn(onPrev)} data-testid="prev-page" className={s.prev}>
           <ChevronLeft size={s.prevIcon} /> Previous page
         </button>
       )}
       {isLast ? (
-        <button type="button" onClick={onDone} data-testid="done-preview" className={s.done}>
+        <button type="button" onClick={turn(onDone)} data-testid="done-preview" className={s.done}>
           {s.doneIcon && <Check size={s.doneIcon} />} Done — Preview my album
         </button>
       ) : (
-        <button type="button" onClick={onNext} data-testid="next-page" className={s.next}>
+        <button type="button" onClick={turn(onNext)} data-testid="next-page" className={s.next}>
           Next page <ChevronRight size={s.nextIcon} />
         </button>
       )}
