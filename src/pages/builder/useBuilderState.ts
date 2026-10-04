@@ -627,7 +627,9 @@ export interface BuilderActions {
    *  album-wide with a theme quote the album hasn't used yet (never-repeat
    *  holds). One undo step. Returns counts for the CTA's feedback —
    *  remaining>0 means the pool ran dry and that many boxes stayed empty. */
-  finishBoxesWithQuotes: () => Promise<{ filled: number; remaining: number }>;
+  /** Fill empty boxes with unused theme quotes. heldBack = kept open by the
+   *  quote cadence (by design); noLine = no unused line left for the theme. */
+  finishBoxesWithQuotes: () => Promise<{ filled: number; remaining: number; heldBack: number; noLine: number }>;
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
@@ -2657,7 +2659,7 @@ export function useBuilderState(): BuilderActions {
    *  quotes into every empty caption box (sweepFillQuotes excludes any line
    *  the album already carries, so the never-repeat rule survives the sweep).
    *  Styling mirrors setBoxText's defaults, same as generation-time deals. */
-  const finishBoxesWithQuotes = useCallback(async (): Promise<{ filled: number; remaining: number }> => {
+  const finishBoxesWithQuotes = useCallback(async (): Promise<{ filled: number; remaining: number; heldBack: number; noLine: number }> => {
     const theme = THEMES[selectedTemplate];
     // Grow the theme's pool to what a FULL sweep needs before dealing — the
     // sweep excludes every line the album already carries, so a pool sized
@@ -2666,11 +2668,11 @@ export function useBuilderState(): BuilderActions {
     const box: BoxContentOptions = { quotePool, quoteFontFamily: theme.fontFamily, quoteColor: theme.textColor };
     // Sweep the LATEST pages (the customer may have edited during the wait);
     // the functional updater sees them, the closure above may not.
-    let result = { filled: 0, remaining: 0 };
+    let result = { filled: 0, remaining: 0, heldBack: 0, noLine: 0 };
     pushSnapshot();
     setAlbumPages((prev) => {
-      const { pages, filled, remaining } = sweepFillQuotes(prev, box);
-      result = { filled, remaining };
+      const { pages, filled, remaining, heldBack, noLine } = sweepFillQuotes(prev, box);
+      result = { filled, remaining, heldBack, noLine };
       return filled > 0 ? pages : prev;
     });
     return result;
