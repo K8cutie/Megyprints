@@ -45,6 +45,7 @@ import { createLimiter } from '../../lib/limit';
 import { templateTracker } from './varietyTracker';
 import { readCaptureTime } from './exif';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
+import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 
 /* ══════════════════════════════════════════════════════════════════════════
    useBuilderState — All builder state + localStorage persistence
@@ -607,6 +608,10 @@ export interface BuilderActions {
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
+  /** COVER: put a photo the customer picked on the cover. The file is kept in
+   *  the device's photo store, so the cover still has it after the app is
+   *  closed (coverPhoto). Resolves once it is on the cover. */
+  setCoverPhoto: (file: File) => Promise<void>;
   /** COVER-only: reposition/zoom an image background (focal point + zoom). */
   setBackgroundCrop: (crop: { focusX?: number; focusY?: number; zoom?: number }) => void;
   /** COVER-only: move a bound caption off its template slot (panel fractions). */
@@ -752,6 +757,9 @@ export function useBuilderState(): BuilderActions {
   // stale closure. (No coverBack state: the back is the reserved Megy Prints
   // panel, derived from the front at wrap time.)
   const [coverFront, setCoverFrontPage] = useState<AlbumPage>(() => getInitialState().coverFront);
+  // For reset() and the cover-photo restore (coverPhoto), which read it outside a render.
+  const coverFrontRef = useRef<AlbumPage>(coverFront);
+  useEffect(() => { coverFrontRef.current = coverFront; }, [coverFront]);
   const [editScope, setEditScope] = useState<'interior' | 'coverFront'>('interior');
   const editScopeRef = useRef(editScope);
   editScopeRef.current = editScope;
@@ -1174,6 +1182,22 @@ export function useBuilderState(): BuilderActions {
     }
 
     void rehydrate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── The cover's own uploaded photo, after the app was closed ──
+     Its blob: link died with the old tab; the file is in the photo store under
+     background.localPhotoId (coverPhoto). Separate from the album photos above,
+     which return early at the cover step: there are none yet. Same fresh-start
+     guards. Only a cover still showing the link we started from is patched. */
+  useEffect(() => {
+    if (sessionStorage.getItem('megy-fresh-start') === '1' || skipCloudLoadRef.current) return;
+    const start = coverFrontRef.current;
+    if (!coverLocalPhotoId(start)) return;
+    void withLiveCoverPhoto(start, idbPhotos.get).then((live) => {
+      if (live === start) return;
+      setCoverFrontPage((p) => (p.background?.localPhotoId === start.background.localPhotoId && p.background?.image === start.background.image ? { ...p, background: live.background } : p));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2485,6 +2509,22 @@ export function useBuilderState(): BuilderActions {
     updateCurrentPage((page) => ({ ...page, background: bg }));
   }, [updateCurrentPage]);
 
+  const setCoverPhoto = useCallback(async (file: File) => {
+    const id = newCoverPhotoId(albumIdRef.current ?? 'draft');
+    // Keep the file on the device first. If that fails (storage blocked), the
+    // photo still goes on the cover for this visit, as it always did.
+    const kept = await idbPhotos.store(file, id);
+    const live = kept ? await idbPhotos.get(id) : null;
+    pushSnapshot();
+    setCoverFrontPage((p) => ({
+      ...p,
+      background: live?.url
+        ? { type: 'image', image: live.url, localPhotoId: id }
+        : { type: 'image', image: URL.createObjectURL(file) },
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idbPhotos]);
+
   /** COVER: nudge a bound caption off its template slot (fractions of the panel).
    *  No undo snapshot per call — a drag fires many updates (see
    *  setTextSlotOrnamentGeom). */
@@ -2667,6 +2707,11 @@ export function useBuilderState(): BuilderActions {
     // local-save debounce).
     const stored = loadState();
     const discardedPhotoIds = [...(stored?.uploadedPhotos ?? []), ...uploadedPhotosRef.current].map((p) => p.id);
+    // The cover's own uploaded photo goes the same way (coverPhoto).
+    for (const c of [stored?.coverFront, coverFrontRef.current]) {
+      const id = coverLocalPhotoId(c as AlbumPage | undefined);
+      if (id) discardedPhotoIds.push(id);
+    }
     const discardedAccount = stored?.accountId ?? draftAccountRef.current ?? null;
     const leaving: AlbumData | null = draftHasContent(persistRef.current?.local)
       ? serializeAlbum()
@@ -2799,7 +2844,13 @@ export function useBuilderState(): BuilderActions {
         // Reopening the SAME album: the cover on screen is its own — keep it.
         const sizeForCover = (albumData.sizePreset as AlbumSizePreset) ?? albumSize;
         const savedCover: AlbumPage | null = storedCoverPage(albumData.coverFront, sizeForCover);
-        if (savedCover) setCoverFrontPage(savedCover);
+        if (savedCover) {
+          setCoverFrontPage(savedCover);
+          // Its own uploaded photo, from this device's photo store (coverPhoto).
+          void withLiveCoverPhoto(savedCover, idbPhotos.get).then((live) => {
+            if (live !== savedCover) setCoverFrontPage((p) => (p === savedCover ? live : p));
+          });
+        }
         else if (albumIdRef.current !== albumId) setCoverFrontPage(createCoverPage(sizeForCover));
         if (albumData.id) {
           albumIdRef.current = albumData.id;
@@ -2880,6 +2931,7 @@ export function useBuilderState(): BuilderActions {
     setBoxText,
     finishBoxesWithQuotes,
     setPageBackground,
+    setCoverPhoto,
     setBackgroundCrop,
     setBoxTextOffset,
     updateBackgroundTransform,

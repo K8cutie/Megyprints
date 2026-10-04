@@ -55,13 +55,14 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const activeTab: CoverTab = tab;
 
   // The Background button opens the file picker straight away; the chosen
-  // photo becomes the cover background.
+  // photo becomes the cover background, kept on the device so it is still
+  // there after the app is closed (setCoverPhoto → coverPhoto).
   const bgFileRef = useRef<HTMLInputElement>(null);
   const onBgFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ''; // the same photo can be picked again
     if (!file) return;
-    b.setPageBackground({ type: 'image', image: URL.createObjectURL(file) });
+    void b.setCoverPhoto(file);
   };
 
   // Live preview panel size — kept modest so the inline controls fit below it.
