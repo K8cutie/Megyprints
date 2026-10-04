@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import type { MaterialType, CoverType, AlbumSizePreset, AlbumPage } from "./builder/types";
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import type { MaterialType, CoverType, AlbumSizePreset, AlbumPage, UploadedPhoto } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, Package, QrCode, Wifi, Landmark, Paperclip, Clock } from 'lucide-react';
@@ -27,6 +27,9 @@ import AddressPicker from '../components/AddressPicker';
 import { scrollPageToTop } from '../lib/pageScroll';
 import { startFreshAlbum } from '../lib/albumSession';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
+
+// The front cover at checkout — lazy: it brings the page renderer.
+const CoverThumb = lazy(() => import('./builder/CoverThumb'));
 
 type Step = 'form' | 'payment' | 'tracking';
 
@@ -92,9 +95,12 @@ export default function Order() {
   // from the full album, see placeOrder). Until one answers nothing is priced;
   // when none can, checkout says so and offers the way back to the album.
   // Cover choice maps to binding (non-softcover → hardbound).
-  type OrderAlbumInfo = { albumId?: string; albumSize: AlbumSizePreset; pages: AlbumPage[]; editedAt: number };
+  // `cover`: the front cover page and the photos it draws from, when the album
+  // came with its print job (the device-draft path prices only).
+  type OrderAlbumInfo = { albumId?: string; albumSize: AlbumSizePreset; pages: AlbumPage[]; editedAt: number; cover?: { page: AlbumPage; photos: UploadedPhoto[] } };
   const fromJob = (j: PrintJob): OrderAlbumInfo =>
-    ({ albumId: j.albumId, albumSize: j.albumSize, pages: j.pages, editedAt: readLocalDraftSummary()?.editedAt ?? 0 });
+    ({ albumId: j.albumId, albumSize: j.albumSize, pages: j.pages, editedAt: readLocalDraftSummary()?.editedAt ?? 0,
+      cover: j.coverFront ? { page: j.coverFront, photos: j.photos } : undefined });
   const orderRecordRef = useRef<Omit<CheckoutOrder, 'stage'> | null>(null);
   const restoredRef = useRef(false);
   function restoreCheckout(album: OrderAlbumInfo) {
@@ -626,6 +632,11 @@ export default function Order() {
             <details className="mt-3 text-xs text-light">
               <summary className="cursor-pointer text-center hover:text-medium">Order summary</summary>
             <div className="space-y-2 text-sm border-y border-line-soft py-4 mt-2">
+              {info?.cover && (
+                <div className="flex justify-center pb-2">
+                  <Suspense fallback={null}><CoverThumb page={info.cover.page} photos={info.cover.photos} albumSize={albumSize} width={72} /></Suspense>
+                </div>
+              )}
               <div className="flex justify-between gap-3"><span className="text-medium shrink-0">Album</span><span className="font-semibold text-blush-pink text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name} · {MATERIALS.find((m) => m.type === material)?.name} · {COVERS.find((c) => c.type === cover)?.name}</span></div>
               {breakdown.items.map((item) => (
                 <div key={item.label} className="flex justify-between gap-3">
@@ -735,6 +746,18 @@ export default function Order() {
           <div>
             <div className="bg-white rounded-2xl p-6 shadow-sm sticky top-24">
               <h3 className="font-display text-lg font-semibold text-dark mb-4">Order Summary</h3>
+              {/* What you're paying for: the front of the book, as it prints. */}
+              {info?.cover && (
+                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-line-soft">
+                  <Suspense fallback={<div className="shrink-0 rounded bg-blush" style={{ width: 88, height: 88 }} />}>
+                    <CoverThumb page={info.cover.page} photos={info.cover.photos} albumSize={albumSize} />
+                  </Suspense>
+                  <div className="text-sm leading-snug">
+                    <p className="font-semibold text-dark">Your cover</p>
+                    <p className="text-xs text-medium">{pageCount} pages inside, printed as they look in your preview.</p>
+                  </div>
+                </div>
+              )}
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between items-center gap-3"><span className="text-medium">Material</span><span className="font-semibold text-blush-pink text-right">{MATERIALS.find((m) => m.type === material)?.name}</span></div>
                 <div className="flex justify-between items-center gap-3"><span className="text-medium">Cover</span><span className="font-semibold text-blush-pink text-right">{COVERS.find((c) => c.type === cover)?.name}</span></div>
