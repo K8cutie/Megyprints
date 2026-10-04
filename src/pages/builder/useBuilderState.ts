@@ -39,6 +39,7 @@ import { supabase } from '../../lib/supabase';
 import { photosToForget } from '../../lib/photoKeeping';
 import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
 import { albumDataFromDraft, type StoredDraft } from '../../lib/draftAlbum';
+import { kindOfPick } from '../../lib/pickedFiles';
 import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
 import { detectFaceCenter, initFaceApi } from './faceDetection';
 import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
@@ -510,7 +511,9 @@ export interface BuilderActions {
   /** Appends files, skipping any already in the album (same name + size).
    *  Returns what actually happened so callers can report an HONEST count —
    *  reporting the selected count lies whenever a re-picked batch is deduped. */
-  addPhotos: (files: FileList | File[]) => { added: number; skipped: number };
+  /** `videos`/`others`: picked files left out — only photos go on pages
+   *  (lib/pickedFiles); the confirmation says so. */
+  addPhotos: (files: FileList | File[]) => { added: number; skipped: number; videos: number; others: number };
   removePhoto: (id: string) => void;
   /** Megy's free photo check (lib/photoCheck): runs on the phone in the
    *  background. `ready` = every photo checked for blur and repeats. */
@@ -1287,8 +1290,12 @@ export function useBuilderState(): BuilderActions {
   }, [updateCurrentPage]);
 
   /* ── Photo handling (IndexedDB — zero cloud I/O) ── */
-  const addPhotos = useCallback((files: FileList | File[]): { added: number; skipped: number } => {
-    const fileArray = Array.from(files);
+  const addPhotos = useCallback((files: FileList | File[]): { added: number; skipped: number; videos: number; others: number } => {
+    // Only photos go on pages; videos and other files are counted, not added.
+    const picked = Array.from(files);
+    const fileArray = picked.filter((f) => kindOfPick(f) === 'photo');
+    const videos = picked.filter((f) => kindOfPick(f) === 'video').length;
+    const others = picked.length - fileArray.length - videos;
 
     // ── Dedup: never add the same photo twice. Skip files already uploaded
     // (same name + size) and repeats within this batch — covers re-selecting
@@ -1301,7 +1308,7 @@ export function useBuilderState(): BuilderActions {
       seen.add(key);
       freshFiles.push(f);
     }
-    if (freshFiles.length === 0) return { added: 0, skipped: fileArray.length };
+    if (freshFiles.length === 0) return { added: 0, skipped: fileArray.length, videos, others };
 
     // Create placeholder metadata with preview URLs
     const newPhotos: UploadedPhoto[] = freshFiles.map((file) => ({
@@ -1349,7 +1356,7 @@ export function useBuilderState(): BuilderActions {
         .finally(() => pendingMeasureRef.current.delete(task));
     }
 
-    return { added: freshFiles.length, skipped: fileArray.length - freshFiles.length };
+    return { added: freshFiles.length, skipped: fileArray.length - freshFiles.length, videos, others };
   }, [idbPhotos]);
 
   /* ── Megy's free photo check (lib/photoCheck) ──

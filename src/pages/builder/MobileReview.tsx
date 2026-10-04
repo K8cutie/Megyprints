@@ -74,18 +74,17 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
 
   const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    const photoFiles = files ? Array.from(files).filter((f) => f.type.startsWith('image/')) : [];
+    const picked = e.target.files ? Array.from(e.target.files) : [];
     // Reset FIRST so picking an overlapping batch again still fires onChange.
     e.target.value = '';
-    if (photoFiles.length === 0) return;
-    const res = await actions.dispatch({ type: 'add_photos', payload: { files: photoFiles }, rawMessage: 'add photos' });
-    setUploadMsg(res.message); // honest count — duplicates are skipped, not added
+    if (picked.length === 0) return;
+    const res = await actions.dispatch({ type: 'add_photos', payload: { files: picked }, rawMessage: 'add photos' });
+    setUploadMsg(res.message); // honest count — duplicates skipped, videos/other files left out with a word
   };
   // Auto-clear the confirmation so it never sticks over the page.
   useEffect(() => {
     if (!uploadMsg) return;
-    const t = setTimeout(() => setUploadMsg(null), 3500);
+    const t = setTimeout(() => setUploadMsg(null), /left out|^Videos/.test(uploadMsg) ? 7000 : 3500);
     return () => clearTimeout(t);
   }, [uploadMsg]);
   const [replaceSlot, setReplaceSlot] = useState<number | null>(null); // tap-to-replace target

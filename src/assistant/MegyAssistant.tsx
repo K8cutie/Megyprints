@@ -303,7 +303,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   /* ── Toast ── */
   const [toast, setToast] = useState<string | null>(null);
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
+  const showToast = (msg: string, ms = 2000) => { setToast(msg); setTimeout(() => setToast(null), ms); };
 
   const cardTooSoon = useSettleGuard(wizardKey);
 
@@ -501,15 +501,15 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   /* ── File upload ── */
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files; if (!files) return;
-    const photoFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    const picked = Array.from(files);
     // Clear the input FIRST so re-picking the same batch still fires onChange
     // (a phone picker caps a selection, so re-picking is a normal move here).
     if (fileInputRef.current) fileInputRef.current.value = '';
-    if (photoFiles.length === 0) return;
+    if (picked.length === 0) return;
     // Report what was actually added, not what was selected — duplicates are
-    // skipped, so the selected count would overstate it.
-    const res = await builder.dispatch({ type: 'add_photos', payload: { files: photoFiles }, rawMessage: 'add photos' });
-    showToast(res.message);
+    // skipped, and a video or another file is left out with a word (pickedFiles).
+    const res = await builder.dispatch({ type: 'add_photos', payload: { files: picked }, rawMessage: 'add photos' });
+    showToast(res.message, res.message.includes('left out') || res.message.startsWith('Videos') ? 6000 : 2000);
   };
 
   /* ── Collapsible sections ── */
@@ -528,6 +528,15 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       <div className="fixed inset-0 z-[95] bg-warm-white flex flex-col items-center [justify-content:safe_center] p-6 overflow-auto">
         {/* Hidden file input so the Upload step works on the center stage too */}
         <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleFileUpload} className="hidden" />
+        {/* Megy's answer on the center stage too: the toast lived only in the
+            side panel, so at Step 4 every upload answer — "40 photos added",
+            a video left out — went unseen ("Nothing happens", 1-star testers). */}
+        {toast && (
+          <div role="status" data-testid="megy-toast"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[96] w-[calc(100%-2rem)] max-w-md px-4 py-2.5 bg-dark text-white text-[13px] rounded-xl shadow-lg text-center">
+            {toast}
+          </div>
+        )}
 
         {/* Home — the center stage covers the top bar, so give an explicit exit */}
         <Link
@@ -1157,7 +1166,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
       {/* ═══ TOAST ═══ */}
       {toast && (
-        <div className="absolute bottom-4 left-4 right-4 px-4 py-2.5 bg-dark text-white text-[12px] rounded-xl shadow-lg text-center">{toast}</div>
+        <div role="status" data-testid="megy-toast" className="absolute bottom-4 left-4 right-4 px-4 py-2.5 bg-dark text-white text-[12px] rounded-xl shadow-lg text-center">{toast}</div>
       )}
       </div>{/* end full panel content */}
     </div>
