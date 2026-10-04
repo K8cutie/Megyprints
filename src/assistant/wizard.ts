@@ -402,28 +402,28 @@ export class WizardEngine {
 
       case 'review_pages': {
         const pages = builder.albumPages;
-        const usedIdx = pages
-          .map((p, i) => ({ i, used: (p.slotFills?.some((f: any) => f != null) ?? false) || p.photos.length > 0 || p.textElements.length > 0 }))
-          .filter((x) => x.used)
-          .map((x) => x.i);
-        const lastUsed = usedIdx.length ? usedIdx[usedIdx.length - 1] : pages.length - 1;
-        const usedCount = usedIdx.length || pages.length;
+        // ONE page count everywhere: the album's pages, as the editor ("Page 3
+        // of 40"), the page turn and the print count them. Counting only pages
+        // with photos or text said "page 3 of 38" beside it (1-star testers,
+        // 2026-10-04) and called the album reviewed two pages early.
+        const pageCount = pages.length;
+        const lastPage = Math.max(0, pageCount - 1);
         const cur = builder.currentPageIndex;
         const filled = (builder.currentPage?.slotFills?.filter((f: any) => f !== null)?.length) ?? 0;
         const total = (builder.currentPage?.slotFills?.length) ?? 0;
 
         // Reached the last page with content → proactive "let's order" nudge.
-        if (cur >= lastUsed) {
+        if (cur >= lastPage) {
           return {
             title: "All Pages Reviewed 🎉",
-            body: `You've been through all **${usedCount}** pages — this album looks wonderful. Let's take a look at the finished album! (Or keep tweaking — your call.)`,
+            body: `You've been through all **${pageCount}** pages — this album looks wonderful. Let's take a look at the finished album! (Or keep tweaking — your call.)`,
             actions: ["Change layout", "Preview the album →", "Review from the start"],
             tips: ["You can keep editing any page before ordering", "Your photos stay on your device until you order"],
           };
         }
         return {
           title: "Step 5: Review Each Page 🔍",
-          body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastUsed) + 1} of ${usedCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then tap **Next page** under the page to move through your album.`,
+          body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastPage) + 1} of ${pageCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then tap **Next page** under the page to move through your album.`,
           actions: ["Change layout"],
           tips: ["Go page by page — each can have its own layout", "🎬 Any full-photo page can carry a video: tap Add a video memory and it plays when the printed QR is scanned — 7 are included", "When every page looks right, you'll order from the last page"],
         };

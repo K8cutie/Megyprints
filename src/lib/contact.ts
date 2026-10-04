@@ -73,6 +73,11 @@ export const EMPTY_ADDRESS: AddressValue = {
 
 export const normalizeStreet = (raw: string): string => raw.replace(/\s+/g, ' ').trim();
 
+/** The most the order's street line holds (orders.ship_street, 0011). */
+export const STREET_MAX = 120;
+/** Characters as the database counts them (an emoji is one). */
+export const streetLength = (raw: string): number => Array.from(normalizeStreet(raw)).length;
+
 export const isValidZip = (zip: string): boolean => /^\d{4}$/.test((zip || '').trim());
 
 /** Per-field validation for the UI. Empty object = valid. */
@@ -85,7 +90,9 @@ export function validateAddress(a: AddressValue): Partial<Record<keyof AddressVa
   if (!a.barangayCode) e.barangayCode = 'Select a barangay.';
   const st = normalizeStreet(a.street);
   if (st.length < 3) e.street = 'Enter house/unit no. and street.';
-  else if (st.length > 120) e.street = 'Street is too long (max 120).';
+  // Said, never cut: the field used to stop at 120 and drop the rest of a
+  // pasted address — the unit at the end — without a word (1-star testers).
+  else if (streetLength(st) > STREET_MAX) e.street = `Too long: ${streetLength(st)} of ${STREET_MAX} characters. Shorten it so nothing gets cut.`;
   else if (!/[\p{L}\p{N}]/u.test(st)) e.street = 'Enter a real street (letters or numbers).';
   if (!isValidZip(a.zip)) e.zip = 'Enter a 4-digit ZIP code.';
   return e;
