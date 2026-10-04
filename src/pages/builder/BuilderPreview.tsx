@@ -18,6 +18,7 @@ import AddQrModal from './AddQrModal';
 import EndOfAlbumPrompt from './EndOfAlbumPrompt';
 import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
 import { checkOrderReadiness, readinessMessage } from './orderReadiness';
+import { fillableBoxCount } from './generateAlbum';
 import { BOOK } from './bookFeel';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoDomBox } from './slotPhotoFit';
@@ -692,7 +693,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // toolbar offers a one-tap sweep; the fill is loud + visible + editable,
   // never a silent checkout-time change (this is a paid, unrecallable print).
   const readiness = useMemo(() => checkOrderReadiness(pages), [pages]);
-  const waitingBoxes = readiness.emptyBoxes;
+  // Boxes "let Megy finish" CAN fill — not the ones the cadence holds back.
+  const waitingBoxes = useMemo(() => fillableBoxCount(pages), [pages]);
   const [sweepNote, setSweepNote] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const handleMegyFinish = async () => {
@@ -702,13 +704,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     // per box) — say so, so a few seconds of nothing isn't a dead button.
     setSweepNote('Megy is writing lines for your theme…');
     try {
-      const { filled, remaining } = await finishBoxesWithQuotes();
+      const { filled, noLine } = await finishBoxesWithQuotes();
       setSweepNote(
-        filled === 0
-          ? 'No unused quotes left for this theme'
-          : remaining > 0
-            ? `Megy filled ${filled} — ${remaining} left (out of unique lines)`
-            : `Megy filled ${filled} ${filled === 1 ? 'box' : 'boxes'} ✓`,
+        filled === 0 && noLine > 0
+          ? 'No unused quotes left for this theme. Tap a box to write your own.'
+          : filled === 0
+            ? 'Every box Megy fills has a quote. The rest stay open, so quotes don\'t crowd every page.'
+            : noLine > 0
+              ? `Megy filled ${filled} ✓ ${noLine} more need lines Megy doesn't have; tap one to write your own.`
+              : `Megy filled ${filled} ${filled === 1 ? 'box' : 'boxes'} ✓`,
       );
     } finally {
       setSweeping(false);
@@ -845,12 +849,6 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
         Show me
       </button>
-      {readiness.emptyBoxes > 0 && (
-        <button onClick={() => { setNotReady(null); void handleMegyFinish(); }} data-testid="order-not-ready-fill"
-          className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
-          Fill boxes with quotes
-        </button>
-      )}
       <button onClick={() => handleOrder(true)} data-testid="order-not-ready-anyway"
         className="shrink-0 px-3 py-1.5 rounded-lg font-semibold text-[#8A5A12] underline underline-offset-2 hover:no-underline">
         Order anyway

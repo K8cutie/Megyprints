@@ -43,7 +43,9 @@ describe('checkOrderReadiness — what would print blank', () => {
 describe('readinessMessage — one plain sentence', () => {
   it('lists what is blank, worst first', () => {
     expect(readinessMessage({ emptyFrames: 4, emptyBoxes: 1, placeholderTexts: 1, blankPages: 2, firstPage: 1 }))
-      .toBe(`Before you order: your album has 2 blank pages, 4 empty photo frames, 1 empty text box and 1 text still saying "${PLACEHOLDER_TEXT}". They print exactly as they look.`);
+      .toBe(`Before you order: your album has 2 blank pages, 4 empty photo frames and 1 text still saying "${PLACEHOLDER_TEXT}". They print exactly as they look.`);
+    // Empty caption boxes are not listed: they print as open space by design.
+    expect(readinessMessage({ emptyFrames: 0, emptyBoxes: 20, placeholderTexts: 0, blankPages: 0, firstPage: 1 })).toBeNull();
     expect(readinessMessage({ emptyFrames: 1, emptyBoxes: 0, placeholderTexts: 0, blankPages: 0, firstPage: 3 }))
       .toBe('Before you order: your album has 1 empty photo frame. They print exactly as they look.');
   });
@@ -59,7 +61,7 @@ describe('wired in (source guards)', () => {
     expect(src).not.toMatch(/onClick=\{handleOrder\}/);
     expect(src).not.toMatch(/onOrder=\{handleOrder\}/);
   });
-  it('"boxes waiting" and the warning count boxes the same way (one count)', () => {
-    expect(src).toMatch(/const waitingBoxes = readiness\.emptyBoxes;/);
+  it('"boxes waiting" counts only the boxes Megy can fill (not the ones the cadence keeps open)', () => {
+    expect(src).toMatch(/const waitingBoxes = useMemo\(\(\) => fillableBoxCount\(pages\), \[pages\]\);/);
   });
 });

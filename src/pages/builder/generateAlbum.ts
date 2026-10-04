@@ -563,7 +563,7 @@ export function quotesNeededForSweep(pages: AlbumPage[]): number {
 export function sweepFillQuotes(
   pages: AlbumPage[],
   box: BoxContentOptions,
-): { pages: AlbumPage[]; filled: number; remaining: number } {
+): { pages: AlbumPage[]; filled: number; remaining: number; heldBack: number; noLine: number } {
   const used = new Set<string>();
   for (const p of pages) {
     for (const t of p.textElements) used.add(t.text);
@@ -572,7 +572,11 @@ export function sweepFillQuotes(
   const deck = shuffleArray(box.quotePool.filter((l) => !used.has(l)));
   let di = 0;
   let filled = 0;
-  let remaining = 0;
+  // Two different reasons a box stays empty: the quote CADENCE holds it back
+  // (by design — it prints as open space), or the theme has no unused line
+  // left. The preview said "out of unique lines" for both (1-star testers).
+  let heldBack = 0;
+  let noLine = 0;
   const next: AlbumPage[] = [];
   pages.forEach((page, i) => {
     const template = page.templateId ? getTemplateById(page.templateId) : undefined;
@@ -591,8 +595,8 @@ export function sweepFillQuotes(
       // Cadence: one voice per page, and never on the page right after one
       // that speaks. Held-back boxes stay invitations (they print as paper).
       const prevSpeaks = i > 0 && pageSpeaks(next[i - 1]);
-      if (pageSpeaks(out) || prevSpeaks) { remaining++; continue; }
-      if (di >= deck.length) { remaining++; continue; }
+      if (pageSpeaks(out) || prevSpeaks) { heldBack++; continue; }
+      if (di >= deck.length) { noLine++; continue; }
       const quote = deck[di++];
       out = {
         ...out,
@@ -620,7 +624,18 @@ export function sweepFillQuotes(
     }
     next.push(out);
   });
-  return { pages: next, filled, remaining };
+  return { pages: next, filled, remaining: heldBack + noLine, heldBack, noLine };
+}
+
+/** How many empty boxes "let Megy finish" can fill: the sweep's own rules
+ *  (cadence included) with a line for every box. "N boxes waiting" shows this
+ *  — it counted the boxes the cadence holds back too, so the button kept
+ *  inviting a tap that could never fill them (1-star testers, 2026-10-04). */
+export function fillableBoxCount(pages: AlbumPage[]): number {
+  const boxes = pages.reduce((n, p) => n + ((p.templateId ? getTemplateById(p.templateId)?.textSlots?.length : 0) ?? 0), 0);
+  if (boxes === 0) return 0;
+  const lines = Array.from({ length: boxes }, (_, i) => `\u0000fillable-${i}`);
+  return sweepFillQuotes(pages, { quotePool: lines, quoteFontFamily: '', quoteColor: '' }).filled;
 }
 
 /**

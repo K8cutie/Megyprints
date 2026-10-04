@@ -71,7 +71,9 @@ export function readinessMessage(r: OrderReadiness): string | null {
   const parts: string[] = [];
   if (r.blankPages) parts.push(n(r.blankPages, 'blank page', 'blank pages'));
   if (r.emptyFrames) parts.push(n(r.emptyFrames, 'empty photo frame', 'empty photo frames'));
-  if (r.emptyBoxes) parts.push(n(r.emptyBoxes, 'empty text box', 'empty text boxes'));
+  // Empty caption boxes are NOT listed: an empty box prints as open space by
+  // design (the quote cadence keeps about half of them empty), so warning on
+  // them would flag nearly every album with something nobody needs to fix.
   if (r.placeholderTexts) parts.push(n(r.placeholderTexts, `text still saying "${PLACEHOLDER_TEXT}"`, `texts still saying "${PLACEHOLDER_TEXT}"`));
   if (!parts.length) return null;
   const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
