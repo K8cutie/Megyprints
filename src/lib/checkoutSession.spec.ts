@@ -92,7 +92,7 @@ describe('the order page never prices from defaults (source guard)', () => {
     expect(src).toMatch(/recordOrder\('placed'\)/);
     expect(src).toMatch(/recordOrder\('payment'\)/);
     expect(src).toMatch(/recordOrder\('tracking'\)/);
-    expect(src).toMatch(/resumableCheckoutOrder\(info\.albumId, info\.editedAt\)/);
+    expect(src).toMatch(/resumableCheckoutOrder\(album\.albumId, album\.editedAt\)/);
   });
   it('the payment screen asks for the amount the order was placed at', () => {
     expect(src).toMatch(/\(placedAmount \?\? totalPrice\)/);
