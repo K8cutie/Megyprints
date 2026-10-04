@@ -72,6 +72,12 @@ describe('Megy asks before a typed command rebuilds a made album', () => {
   it('generate on a made album: asks', () => {
     expect(rebuildQuestion({ type: 'generate_album', rawMessage: 'regenerate my album' }, { albumPages: made, albumSize: '6x8' })).toMatch(/^That rebuilds your whole album/);
   });
+  it('"Surprise me" on a made album: asks first — it rebuilds every page too (1-star testers round 2, the Perfectionist)', () => {
+    expect(parseIntent('Surprise me').intent.type).toBe('surprise_me');
+    expect(rebuildQuestion({ type: 'surprise_me', rawMessage: 'Surprise me' }, { albumPages: made, albumSize: '6x8' }))
+      .toBe('That gives every page a fresh, surprise layout: your layout changes and the text you wrote in caption boxes are replaced (Studio pages stay). Say "yes" to go ahead, or keep editing.');
+    expect(rebuildQuestion({ type: 'surprise_me', rawMessage: 'Surprise me' }, { albumPages: empty, albumSize: '6x8' })).toBeNull();
+  });
   it('nothing made yet, or the same size, or another command: no question', () => {
     expect(rebuildQuestion(size('6x4'), { albumPages: empty, albumSize: '6x8' })).toBeNull();
     expect(rebuildQuestion({ type: 'generate_album', rawMessage: 'generate' }, { albumPages: empty, albumSize: '6x8' })).toBeNull();
