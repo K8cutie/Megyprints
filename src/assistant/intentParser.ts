@@ -9,10 +9,14 @@ import type { AlbumSizePreset, TemplateType } from '../pages/builder/types';
 // ── Keyword maps ──────────────────────────────────────────────────────────
 
 const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
+  // Rebuilding the whole album replaces every layout and edit, so it answers
+  // only to asking for it. "auto fill" used to be here AND under auto_fill: the
+  // tie went to this, and typing "auto fill" — the very command Megy suggests —
+  // regenerated the album (1-star testers, 2026-10-04).
   generate_album: [
     'generate', 'generate album', 'auto layout', 'auto-layout', 'create album',
-    'build album', 'make album', 'layout photos', 'auto generate', 'auto place',
-    'distribute photos', 'fill album', 'auto fill', 'autofill',
+    'build album', 'make album', 'layout photos', 'auto generate',
+    'distribute photos',
   ],
   shuffle_layout: [
     'shuffle', 'shuffle layout', 'randomize', 'mix up', 'new layout',
@@ -24,8 +28,8 @@ const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
   ],
   auto_fill: [
     'auto fill', 'autofill', 'auto-fill', 'fill slots', 'fill photos',
-    'place photos', 'put photos', 'auto place', 'fill empty',
-    'fill all', 'populate',
+    'place photos', 'put photos', 'auto place', 'fill empty', 'fill the empty',
+    'fill all', 'fill album', 'fill frames', 'fill the frames', 'populate',
   ],
   clear_slots: [
     'clear', 'clear slots', 'remove photos', 'empty slots', 'delete photos',
@@ -192,6 +196,11 @@ export function parseIntent(message: string): ParsedCommand {
     scores.go_to_page += 50;
     matchedKeywords.push(`page ${standaloneNum[1]}`);
   }
+
+  // Asking to FILL is never asking to clear: "fill the empty slots" matched
+  // clear_slots' "empty slots" (one letter longer than "fill empty") and
+  // cleared the page (1-star testers).
+  if (/\bfill/.test(lower)) scores.clear_slots = 0;
 
   // Find best intent
   const entries = Object.entries(scores).filter(([k]) => k !== 'unknown');
