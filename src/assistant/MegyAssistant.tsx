@@ -781,6 +781,15 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Restart Wizard — start over</span>
         </button>
+        {/* The steps come back after ✕. Closing them used to take Change
+            layout, the cover editor and the Preview / Order shortcuts away for
+            good — a reload didn't bring them back (1-star testers, 2026-10-04). */}
+        {!showWizard && (
+          <button onClick={() => setShowWizard(true)} data-testid="megy-show-steps"
+            className="mt-1 w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-peach/30 bg-white text-blush-pink hover:bg-blush text-xs font-semibold transition-all">
+            Show the steps again ({wizardRef.current.getProgress().label})
+          </button>
+        )}
       </div>
 
       {/* ═══ WIZARD PROGRESS BAR ═══ */}
@@ -792,6 +801,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             </span>
             <button
               onClick={() => setShowWizard(false)}
+              aria-label="Hide the steps" title="Hide the steps (bring them back from the button above)"
               className="text-[10px] text-light hover:text-dark"
             >
               ✕
