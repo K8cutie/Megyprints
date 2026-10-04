@@ -9,6 +9,7 @@ import { FRESH_START_KEY } from '../lib/albumSession';
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AlbumSizePreset } from '../pages/builder/types';
 import { densityRangeLabel } from '../pages/builder/densities';
+import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, photoWord, addMoreLabel } from '../pages/builder/albumMinimum';
 import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
 import { Capacitor } from '@capacitor/core';
 
@@ -101,8 +102,10 @@ export function isStepOneReady(albumTitle: string | null | undefined, theme: str
 /** A step action drawn as the big filled button: the one that moves the
  *  customer on. "Upload Photos" has no → but it is the only way on from an
  *  empty upload step, and a pale cream button there read as a dead end. */
+/** The upload step's way on while short of the 40-photo minimum ("Add 26 more photos"). */
+const ADD_MORE = /^Add \d+ more photos?$/;
 export function isPrimaryAction(action: string): boolean {
-  return action.includes('→') || action.includes('Now') || action === 'Upload Photos';
+  return action.includes('→') || action.includes('Now') || action === 'Upload Photos' || ADD_MORE.test(action);
 }
 
 export class WizardEngine {
@@ -376,20 +379,26 @@ export class WizardEngine {
           tips: ["The spine width is set automatically from your page count at checkout", "You can revisit the cover any time from the Preview screen"],
         };
 
-      case 'upload_photos':
+      case 'upload_photos': {
         // The photos that go in: ones left out by Megy's photo check don't count.
-        const photoCount = builder.uploadedPhotos.filter((p) => !p.leftOut).length;
+        const photoCount = photosGoingIn(builder.uploadedPhotos);
+        // HARD GATE (albumMinimum): no Generate until 40 photos are going in.
+        // The way on is then "Add N more photos" — never a dead Generate.
+        const short = photosShortBy(photoCount);
         return {
           title: photoCount > 0 ? `Step 4: Photos Uploaded (${photoCount}) 📸` : "Step 4: Upload Your Photos 📸",
-          body: photoCount > 0
-            ? `Great! You have **${photoCount}** photo${photoCount > 1 ? 's' : ''} ready. Upload more or let's generate your album!`
-            : "Upload your photos and I'll auto-arrange them into beautiful layouts. You can upload as many as you want — I'll pick the best ones for each page.",
-          actions: photoCount > 0 ? ["Upload More Photos", "Generate Album →"] : ["Upload Photos"],
+          body: photoCount === 0
+            ? `Upload your photos and I'll arrange them into pages. Albums need at least **${MIN_ALBUM_PHOTOS} photos**, one for every page — and you can add as many more as you like.`
+            : short > 0
+              ? `You have **${photoCount}** ${photoWord(photoCount)}. Albums need at least **${MIN_ALBUM_PHOTOS}**, one for every page: add **${short} more** to make your album.`
+              : `Great! You have **${photoCount}** photos ready. Upload more or let's generate your album!`,
+          actions: photoCount === 0 ? ["Upload Photos"] : short > 0 ? [addMoreLabel(short)] : ["Upload More Photos", "Generate Album →"],
           tips: [
             // Android app: the Files picker has no photo cap but hides "Select all" in its ⋮ menu.
             ...(Capacitor.isNativePlatform() ? ["📂 Lots of photos? In the picker tap ☰ → Images → open a folder → ⋮ → Select all"] : []),
             "📱 Upload straight from your phone for the best quality — and I'll auto-sort your photos into pages by the moment they were taken", "I'll match photo ratios to frame shapes automatically"],
         };
+      }
 
       case 'review_pages': {
         const pages = builder.albumPages;

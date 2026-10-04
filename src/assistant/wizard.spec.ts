@@ -641,11 +641,24 @@ describe('one way forward on every guided screen (tester, 2026-10-04)', () => {
     expect(primaries(w)).toEqual(['Upload Photos']);
   });
 
-  it('Step 4 with photos in: "Generate Album →" is the one filled button', () => {
-    const w = on('upload_photos', fresh({ uploadedPhotos: photos } as unknown as Partial<BuilderActions>));
+  it('Step 4 with 40 photos in: "Generate Album →" is the one filled button', () => {
+    const forty = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}` }));
+    const w = on('upload_photos', fresh({ uploadedPhotos: forty } as unknown as Partial<BuilderActions>));
     expect(w.showsNext()).toBe(false);
     expect(primaries(w)).toEqual(['Generate Album →']);
     expect(isPrimaryAction('Upload More Photos')).toBe(false);
+  });
+
+  it('Step 4 short of 40 (hard gate, owner 2026-10-04): no Generate — "Add 37 more photos" is the one filled button', () => {
+    const w = on('upload_photos', fresh({ uploadedPhotos: photos } as unknown as Partial<BuilderActions>));
+    expect(w.getMessage().actions).toEqual(['Add 37 more photos']);
+    expect(primaries(w)).toEqual(['Add 37 more photos']);
+    expect(w.showsNext()).toBe(false);
+    expect(w.getMessage().body).toContain('Albums need at least **40**');
+    // One photo short says "photo", and a 39th is still not enough.
+    const thirtyNine = Array.from({ length: 39 }, (_, i) => ({ id: `p${i}` }));
+    expect(on('upload_photos', fresh({ uploadedPhotos: thirtyNine } as unknown as Partial<BuilderActions>)).getMessage().actions).toEqual(['Add 1 more photo']);
+    expect(isPrimaryAction('Add 1 more photo')).toBe(true);
   });
 
   it('Step 4 with a built album (came back from Review): Next returns to it', () => {
@@ -727,6 +740,14 @@ describe("Megy's photo check: left-out photos don't count (2026-10-04)", () => {
     const w = new WizardEngine(builderStub({ uploadedPhotos: photos } as unknown as Partial<BuilderActions>), false);
     w.state.step = 'upload_photos';
     expect(w.getMessage().title).toBe('Step 4: Photos Uploaded (2) 📸');
-    expect(w.getMessage().body).toContain('**2** photos ready');
+    expect(w.getMessage().body).toContain('You have **2** photos');
+    expect(w.getMessage().body).toContain('add **38 more**');
+  });
+
+  it('left-out photos count against the 40-photo minimum: 40 uploaded, 3 left out → "Add 3 more photos"', () => {
+    const photos = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, leftOut: i < 3 }));
+    const w = new WizardEngine(builderStub({ uploadedPhotos: photos } as unknown as Partial<BuilderActions>), false);
+    w.state.step = 'upload_photos';
+    expect(w.getMessage().actions).toEqual(['Add 3 more photos']);
   });
 });

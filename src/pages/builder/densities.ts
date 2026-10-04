@@ -80,7 +80,7 @@ const NATURAL_BY_SIZE: Record<AlbumSizePreset, number> = {
   // 6x4 is 2 (not 3) since its hero trios were retired: a 3-up needs 2+2+1mm =
   // 4.04" of stacking on a 4.00"-tall page once the 1mm gutter is mandatory, so
   // the deck now caps at 2 photos/page. A natural ABOVE the deck's max makes
-  // autoDensity ask for a density the deck cannot deal.
+  // fill mode ask for a density the deck cannot deal.
   // 8x6/6x8 deal up to 4 (quad-grid) but their natural stays 3: the 4-up is the
   // opt-in "Collage" density, and a natural of 4 would move the fill-mode
   // threshold to 160 photos — spreading today's 120-159-photo albums to 1/page.
@@ -92,46 +92,3 @@ export function naturalPerPage(albumSize: string): number {
   return (NATURAL_BY_SIZE as Record<string, number | undefined>)[albumSize] ?? 2;
 }
 
-/** The density generation will actually use for the AUTO case: the natural look
- *  when there are enough photos for it, otherwise drop toward 1/page so the album
- *  still fills MIN_ALBUM_PAGES without blanks (the lowest density that fills). */
-export function autoDensity(photoCount: number, albumSize: string): number {
-  const natural = naturalPerPage(albumSize);
-  if (photoCount >= MIN_ALBUM_PAGES * natural) return natural;
-  return Math.max(1, Math.floor(photoCount / MIN_ALBUM_PAGES)); // 1/page for < natural-fill
-}
-
-export interface FillEstimate {
-  perPage: number;
-  estimatedPages: number;  // pages the uploaded photos roughly fill
-  fillsAlbum: boolean;     // enough to fill all MIN_ALBUM_PAGES (no blanks)
-  photosForFull: number;   // photos needed to fill the album
-  shortBy: number;         // suggested extra photos (0 if already enough)
-}
-
-/** Estimate how much of a full {MIN_ALBUM_PAGES}-page album the uploaded photos
- *  will fill — matching what generation does — so we can nudge the user to add
- *  more BEFORE generating (avoids surprise blank pages). On AUTO the floor to
- *  fill is MIN_ALBUM_PAGES photos (1 per page); an explicit density needs more. */
-export function estimateAlbumFill(
-  photoCount: number, albumSize: string, photosPerPage?: number,
-): FillEstimate {
-  if (photosPerPage && photosPerPage > 0) {
-    const photosForFull = MIN_ALBUM_PAGES * photosPerPage;
-    return {
-      perPage: photosPerPage,
-      estimatedPages: Math.max(0, Math.round(photoCount / photosPerPage)),
-      fillsAlbum: photoCount >= photosForFull,
-      photosForFull,
-      shortBy: Math.max(0, photosForFull - photoCount),
-    };
-  }
-  const perPage = autoDensity(photoCount, albumSize);
-  return {
-    perPage,
-    estimatedPages: Math.max(0, Math.round(photoCount / perPage)),
-    fillsAlbum: photoCount >= MIN_ALBUM_PAGES,
-    photosForFull: MIN_ALBUM_PAGES,
-    shortBy: Math.max(0, MIN_ALBUM_PAGES - photoCount),
-  };
-}

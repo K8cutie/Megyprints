@@ -6,6 +6,7 @@ import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxR
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss, dealtBoxRoll } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { setPendingPrintJob } from '../../lib/printQueue';
+import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from './albumMinimum';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { slotShapeStyle } from './slotShapeStyle';
@@ -813,11 +814,28 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // and a cover PDF that doesn't match the album. The toolbar button and the
   // end-of-album CTA must BOTH go through here so they can never drift apart.
   // The album id tells checkout WHICH saved album this is (lib/orderAlbum).
+  // THE 40-PHOTO GATE (albumMinimum): an album with fewer than 40 photos on
+  // its pages can't be ordered (an old draft, or photos deleted after
+  // generating). The tap answers with why and the way back to the pages.
+  const [tooFew, setTooFew] = useState<number | null>(null);
   const handleOrder = () => {
     if (orderSaving) return;
+    const have = albumPhotoCount(pages);
+    if (photosShortBy(have) > 0) { setTooFew(have); return; }
+    setTooFew(null);
     setPendingPrintJob({ pages, photos, albumSize, albumId: getAlbumId(), coverDesign, coverFront });
     onOrder();
   };
+  const tooFewBanner = tooFew != null && (
+    <div role="alert" data-testid="order-too-few-photos"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12] text-left">
+      <span className="flex-1 min-w-[12rem]">{tooFewToOrderMessage(tooFew)}</span>
+      <button onClick={onBack} data-testid="order-too-few-edit"
+        className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
+        Back to my pages
+      </button>
+    </div>
+  );
   const orderErrorBanner = orderError && (
     <div role="alert" data-testid="order-save-error"
       className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 text-left">
@@ -887,7 +905,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           </button>
         </div>
       </div>
-      {orderErrorBanner && <div className="px-5 pt-2 bg-paper">{orderErrorBanner}</div>}
+      {(tooFewBanner || orderErrorBanner) && <div className="px-5 pt-2 bg-paper">{tooFewBanner || orderErrorBanner}</div>}
 
       {/* Page display with the page turn on each side — small labelled
           buttons, not bare ‹ › arrows (SpreadTurnButton). */}
@@ -959,7 +977,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           or ✕ to keep browsing; "Continue editing" is a real button. */}
       {endPrompt.open && (
         <EndOfAlbumPrompt onClose={endPrompt.close} onCheckCover={() => setCoverOpen(true)} onOrder={handleOrder} onContinueEditing={onBack}
-          saving={orderSaving} error={orderErrorBanner || null} />
+          saving={orderSaving} error={tooFewBanner || orderErrorBanner || null} />
       )}
 
       {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too).
