@@ -64,3 +64,34 @@ export function readLocalDraftSummary(): LocalDraftSummary | null {
     return null;
   }
 }
+
+/** The draft's album as checkout needs it to PRICE the order — size, pages
+ *  (for the page, photo and QR-memory counts) and when it was last changed —
+ *  when the draft IS that album (or no album id is known). It never feeds the
+ *  print file: that is always built from the full album. Null when there is
+ *  no matching draft. */
+export interface DraftAlbumForOrder {
+  albumId?: string;
+  albumSize: string;
+  pages: unknown[];
+  editedAt: number;
+}
+
+export function readDraftAlbumForOrder(albumId: string | undefined): DraftAlbumForOrder | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as DraftLike & { albumId?: string; albumSize?: string; editedAt?: number };
+    if (albumId && d.albumId && d.albumId !== albumId) return null;
+    const pages = Array.isArray(d.albumPages) ? d.albumPages : [];
+    if (pages.length === 0 || typeof d.albumSize !== 'string') return null;
+    return {
+      albumId: typeof d.albumId === 'string' ? d.albumId : undefined,
+      albumSize: d.albumSize,
+      pages,
+      editedAt: typeof d.editedAt === 'number' ? d.editedAt : 0,
+    };
+  } catch {
+    return null;
+  }
+}
