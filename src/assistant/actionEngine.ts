@@ -9,6 +9,7 @@ import type { AlbumBackground, AlbumSizePreset, TemplateType, TextElement, Frame
 import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
 import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '../pages/builder/types';
 import { photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
+import { albumIsMade } from './rebuildQuestion';
 
 /** THE 40-PHOTO GATE (see albumMinimum): no album is made with fewer photos
  *  going in than pages. Returns Megy's answer when short, null when enough. */
@@ -110,6 +111,15 @@ export class ActionEngine {
           }
           if (!isSizeOfferable(size)) {
             return { intentType: intent.type, success: false, message: `Sorry, the ${size} size isn't available right now. Try another size.` };
+          }
+          // A made album is laid out for its size: changing size lays every
+          // page out again for the new shape. It used to set the size alone and
+          // leave the old layout squashed onto it (1-star testers, 2026-10-04).
+          if (albumIsMade(this.builder.albumPages ?? []) && size !== this.builder.albumSize) {
+            const short = tooFewPhotos(this.builder, intent.type);
+            if (short) return short;
+            await this.builder.generateAlbum(this.builder.currentPage?.background, { size });
+            return { intentType: intent.type, success: true, message: `Album size changed to ${size.replace('x', '×')}. Every page is laid out again for the new shape.` };
           }
           this.builder.setAlbumSize(size);
           return { intentType: intent.type, success: true, message: `Album size changed to ${size}.` };

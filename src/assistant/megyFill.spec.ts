@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseIntent } from './intentParser';
 import { ActionEngine } from './actionEngine';
+import { rebuildQuestion } from './rebuildQuestion';
 import { autoFillPlan } from '../pages/builder/useBuilderState';
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AlbumPage } from '../pages/builder/types';
@@ -67,11 +68,12 @@ describe("Megy's answer says what happened", () => {
   });
 });
 
-describe('a typed "generate" on a made album asks first (source guard)', () => {
+describe('a typed "generate" on a made album asks first', () => {
   const src = readFileSync(resolve(__dirname, 'MegyAssistant.tsx'), 'utf8');
+  const madeAlbum = { albumPages: [page([0])], albumSize: '8x8' as const };
   it('asks, and only a yes (or asking again) rebuilds', () => {
-    expect(src).toMatch(/if \(pending && yes\) intent = \{ type: 'generate_album', rawMessage: text \};/);
-    expect(src).toMatch(/else if \(intent\.type === 'generate_album' && built && !pending\) \{\s*rebuildAskedRef\.current = true;/);
-    expect(src).toMatch(/That rebuilds your whole album/);
+    expect(rebuildQuestion({ type: 'generate_album', rawMessage: 'generate album' }, madeAlbum)).toMatch(/^That rebuilds your whole album/);
+    expect(src).toMatch(/if \(pending && yes\) intent = pending;/);
+    expect(src).toMatch(/const ask = rebuildQuestion\(intent, builderRef\.current\);/);
   });
 });
