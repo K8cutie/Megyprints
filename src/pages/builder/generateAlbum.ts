@@ -560,6 +560,76 @@ export function quotesNeededForSweep(pages: AlbumPage[]): number {
  *  album-wide never-repeat rule holds. Occupied boxes are untouched. Pure —
  *  returns new pages plus counts; `remaining` > 0 means the pool ran dry and
  *  that many boxes were left exactly as they were. */
+/** Does this template's slots span MORE THAN ONE ratio? Such a template can
+ *  only be filled slot-by-slot (tryMixedFill); handing it to a single-ratio
+ *  queue would cross orientations. Single-slot templates are never mixed. */
+export const isMixedRatioTemplate = (t: PageTemplate): boolean =>
+  new Set(t.slots.map((s) => s.ratio).filter(Boolean)).size > 1;
+
+/** A layout with minDensity is dealt only when the customer CHOSE at least
+ *  that many photos per page (AUTO never does) — see PageTemplate.minDensity. */
+export const densityAllowsTemplate = (t: PageTemplate, photosPerPage: number | undefined): boolean =>
+  t.minDensity == null || (photosPerPage ?? 0) >= t.minDensity;
+
+/** Templates for a photo of this ratio at this size — THE rule the generator
+ *  deals by (and the upload step's note reads). RATIO matching is LOOSE — any
+ *  layout of the same ORIENTATION is an acceptable home (a 4:3 in a 3:2 slot
+ *  costs ~11%), which also unlocks layouts whose regions aren't exact camera
+ *  ratios. But ORIENTATION is STRICT: putting a portrait photo in a landscape
+ *  slot loses ~50% and chops heads/feet, so we never cross it. (The old
+ *  fallback returned EVERY template for the size — orientation-blind — which is
+ *  exactly how a portrait photo ended up hard-cropped in a landscape layout.) */
+export function templatesForPhotoRatio(albumSize: AlbumSizePreset, ratio: PhotoRatio, photosPerPage?: number): PageTemplate[] {
+  const allowed = (t: PageTemplate) => !isMixedRatioTemplate(t) && densityAllowsTemplate(t, photosPerPage);
+  // MIXED-RATIO templates are excluded here on purpose. This path draws from
+  // ONE ratio's queue and fills every slot from it, but a mixed template has
+  // slots of more than one orientation by design (e.g. a portrait hero beside
+  // two landscape frames). Filling those blindly puts a photo in a slot of the
+  // opposite orientation and chops it — the exact defect this whole function
+  // is orientation-strict to avoid. They are placed ONLY by tryMixedFill,
+  // which matches each slot individually.
+  const sameOrientation = getTemplatesForOrientation(albumSize, orientationOfRatio(ratio)).filter(allowed);
+  // LOOSEN, don't remove: keep this photo's own ratio plus NEIGHBOURING ratios
+  // within the crop budget. That unlocks the layouts exact-matching locked out
+  // without letting a 4:3 land in a 16:9 slot (25%).
+  const near = sameOrientation.filter((t) => ratioCrop(t.targetRatio, ratio) <= MAX_LOOSE_CROP);
+  if (near.length) return near;
+  if (sameOrientation.length) return sameOrientation; // orientation stays strict
+  const exact = getTemplatesForRatio(albumSize, ratio).filter(allowed);
+  if (exact.length) return exact;
+  // Last resort for a size with nothing of this orientation: single-ratio
+  // layouts only, so even here a slot is never filled across orientations.
+  return getTemplatesForAlbum(albumSize).filter(allowed);
+}
+
+/** The upload step's note when the CHOSEN photos-per-page doesn't fit these
+ *  photos' SHAPES at this size (or null). "2 per page" on an 8×8 with square
+ *  photos made 50 single pages (+₱270) while the note said "all 40 pages are
+ *  filled": an 8×8's 2-photo layouts take two portraits or two landscapes,
+ *  never two squares (1-star testers round 2, the Indecisive one). */
+export function perPageShapeNote(photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined): string | null {
+  if (!perPage || perPage <= 1) return null;
+  const live = photos.filter((p) => !p.leftOut && p.width > 0 && p.height > 0);
+  if (live.length < MIN_PAGES) return null;
+  const groups = Object.entries(analyzePhotos(live).groups) as [PhotoRatio, number[]][];
+  const best = (ratio: PhotoRatio) => Math.max(1, ...templatesForPhotoRatio(albumSize, ratio, perPage).map((t) => t.slotCount).filter((n) => n <= perPage));
+  const short = groups.filter(([r, idx]) => idx.length > 0 && best(r) < perPage);
+  if (!short.length) return null;
+  const shapeOf = (r: PhotoRatio) => orientationOfRatio(r) as string;
+  const shortCount = short.reduce((n, [, idx]) => n + idx.length, 0);
+  const shapes = [...new Set(short.map(([r]) => shapeOf(r)))];
+  const fits = (['portrait', 'landscape', 'square'] as const).filter((o) => getTemplatesForOrientation(albumSize, o).some((t) => !isMixedRatioTemplate(t) && t.slotCount === perPage));
+  const pages = Math.max(MIN_PAGES, groups.reduce((n, [r, idx]) => n + Math.ceil(idx.length / best(r)), 0));
+  const bestShort = Math.max(...short.map(([r]) => best(r)));
+  const size = `${/^(8|11)/.test(albumSize) ? 'an' : 'a'} ${albumSize.replace('x', '×')}`;
+  const why = fits.length
+    ? `its ${perPage}-photo layouts take ${fits.join(' or ')} photos`
+    : `it has no ${perPage}-photo layout`;
+  return `${shortCount === live.length ? 'Your' : `${shortCount} of your`} ${shapes.join(' and ')} photos can't go ${perPage} to a page on ${size} (${why}), so they go ${bestShort === 1 ? 'one' : `${bestShort}`} to a page`
+    + (pages > MIN_PAGES ? `: about ${pages} pages, ${pages - MIN_PAGES} more than the ${MIN_PAGES} included.` : '.')
+    + ' Pick Surprise and Megy mixes in bigger layouts for fewer pages.';
+}
+
 export function sweepFillQuotes(
   pages: AlbumPage[],
   box: BoxContentOptions,
@@ -876,46 +946,9 @@ function layoutAlbum(
     idxs.forEach((i) => { ratioOf[i] = ratio; });
   });
 
-  /** Does this template's slots span MORE THAN ONE ratio? Such a template can
-   *  only be filled slot-by-slot (tryMixedFill); handing it to a single-ratio
-   *  queue would cross orientations. Single-slot templates are never mixed. */
-  const isMixedRatio = (t: PageTemplate): boolean =>
-    new Set(t.slots.map((s) => s.ratio).filter(Boolean)).size > 1;
-
-  /** A layout with minDensity is dealt only when the customer CHOSE at least
-   *  that many photos per page (AUTO never does) — see PageTemplate.minDensity. */
-  const densityAllows = (t: PageTemplate): boolean =>
-    t.minDensity == null || (photosPerPage ?? 0) >= t.minDensity;
-
-  // Templates for a photo at this size. RATIO matching is LOOSE — any layout of
-  // the same ORIENTATION is an acceptable home (a 4:3 in a 3:2 slot costs ~11%),
-  // which also unlocks layouts whose regions aren't exact camera ratios. But
-  // ORIENTATION is STRICT: putting a portrait photo in a landscape slot loses
-  // ~50% and chops heads/feet, so we never cross it. (The old fallback returned
-  // EVERY template for the size — orientation-blind — which is exactly how a
-  // portrait photo ended up hard-cropped in a landscape layout.)
-  const templatesForRatio = (ratio: PhotoRatio): PageTemplate[] => {
-    // MIXED-RATIO templates are excluded here on purpose. This path draws from
-    // ONE ratio's queue and fills every slot from it, but a mixed template has
-    // slots of more than one orientation by design (e.g. a portrait hero beside
-    // two landscape frames). Filling those blindly puts a photo in a slot of the
-    // opposite orientation and chops it — the exact defect this whole function
-    // is orientation-strict to avoid. They are placed ONLY by tryMixedFill,
-    // which matches each slot individually.
-    const sameOrientation = getTemplatesForOrientation(albumSize, orientationOfRatio(ratio))
-      .filter((t) => !isMixedRatio(t) && densityAllows(t));
-    // LOOSEN, don't remove: keep this photo's own ratio plus NEIGHBOURING ratios
-    // within the crop budget. That unlocks the layouts exact-matching locked out
-    // without letting a 4:3 land in a 16:9 slot (25%).
-    const near = sameOrientation.filter((t) => ratioCrop(t.targetRatio, ratio) <= MAX_LOOSE_CROP);
-    if (near.length) return near;
-    if (sameOrientation.length) return sameOrientation; // orientation stays strict
-    const exact = getTemplatesForRatio(albumSize, ratio).filter((t) => !isMixedRatio(t) && densityAllows(t));
-    if (exact.length) return exact;
-    // Last resort for a size with nothing of this orientation: single-ratio
-    // layouts only, so even here a slot is never filled across orientations.
-    return getTemplatesForAlbum(albumSize).filter((t) => !isMixedRatio(t) && densityAllows(t));
-  };
+  const isMixedRatio = isMixedRatioTemplate;
+  const densityAllows = (t: PageTemplate): boolean => densityAllowsTemplate(t, photosPerPage);
+  const templatesForRatio = (ratio: PhotoRatio): PageTemplate[] => templatesForPhotoRatio(albumSize, ratio, photosPerPage);
 
   const pages: AlbumPage[] = [];
   let pageIdx = 0;
@@ -1263,10 +1296,20 @@ function layoutAlbum(
           // every other time — "4 · Collage" on 196 photos made 73 pages, 28
           // of them singles (testers). A different multi page keeps the album
           // close to its plan instead.
+          // A count the CUSTOMER CHOSE ("4 per page") is not a rhythm to vary:
+          // the rhythm penalty pushed every other page to a 3-up, and the one
+          // square 4-up couldn't repeat, so 196 photos at "4 per page" came out
+          // as 62 pages with only 28 holding 4 — more pages, a higher price
+          // (1-star testers round 2, the Hoarder). Chosen: the nearest count
+          // wins, and the one layout for the chosen count may repeat.
+          const chosen = photosPerPage != null && !randomize;
           const counts = [...new Set(under.map((t) => t.slotCount))]
-            .sort((a, b) => (Math.abs(a - want) + (countRecentlyUsed(a) ? 0.75 : 0)) - (Math.abs(b - want) + (countRecentlyUsed(b) ? 0.75 : 0)) || b - a);
+            .sort((a, b) => chosen
+              ? (Math.abs(a - want) - Math.abs(b - want) || b - a)
+              : (Math.abs(a - want) + (countRecentlyUsed(a) ? 0.75 : 0)) - (Math.abs(b - want) + (countRecentlyUsed(b) ? 0.75 : 0)) || b - a);
           for (const count of counts) {
-            const nearest = under.filter((t) => t.slotCount === count && t.id !== lastTemplateId);
+            let nearest = under.filter((t) => t.slotCount === count && t.id !== lastTemplateId);
+            if (!nearest.length && chosen && count === want) nearest = under.filter((t) => t.slotCount === count);
             if (!nearest.length) continue;
             const pool = boxAware(nearest);
             const byId = new Map(nearest.map((t) => [t.id, t]));
