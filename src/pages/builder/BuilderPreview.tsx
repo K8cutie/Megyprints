@@ -919,11 +919,6 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       ? { position: 'fixed', top: 0, left: 0, width: '100vh', height: '100vw', transformOrigin: 'top left', transform: 'translateX(100vw) rotate(90deg)', zIndex: 70, overflow: 'hidden' }
       : { height: '100%' }}>
     <div className="flex flex-col h-full bg-paper relative">
-      {landscapeRotate && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-1.5 text-[11px] font-medium text-cocoa bg-white/85 rounded-full px-3 py-1 shadow-sm pointer-events-none">
-          <RotateCw size={12} /> Hold your phone sideways to view
-        </div>
-      )}
       {/* Toolbar */}
       <div className="flex items-center justify-between px-5 py-2.5 border-b border-[#E8E4E0] bg-white">
         <div className="flex items-center gap-3">
@@ -964,6 +959,16 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           </button>
         </div>
       </div>
+      {/* The sideways hint sits in its OWN row under the toolbar: floating over
+          the toolbar, it covered the start of "10 boxes waiting" (1-star
+          testers, 2026-10-04). */}
+      {landscapeRotate && (
+        <div className="flex justify-center pt-2 bg-paper" data-testid="preview-rotate-hint">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-cocoa bg-white/85 rounded-full px-3 py-1 shadow-sm pointer-events-none">
+            <RotateCw size={12} /> Hold your phone sideways to view
+          </span>
+        </div>
+      )}
       {(tooFewBanner || notReadyBanner || orderErrorBanner) && <div className="px-5 pt-2 bg-paper">{tooFewBanner || notReadyBanner || orderErrorBanner}</div>}
 
       {/* Page display with the page turn on each side — small labelled
