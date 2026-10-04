@@ -12,6 +12,7 @@ import {
   Check,
   Sparkles,
 } from 'lucide-react';
+import { MIN_ALBUM_PHOTOS } from './builder/albumMinimum';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -597,7 +598,7 @@ const STEP_DETAILS: Record<
 > = {
   upload: {
     title: 'Upload Your Photos',
-    desc: 'Drag and drop 20 or more of your favorite photos — as many as you like. We support JPG and PNG formats with instant preview.',
+    desc: `Drag and drop ${MIN_ALBUM_PHOTOS} or more of your favorite photos — as many as you like. We support JPG and PNG formats with instant preview.`,
     features: [
       'Bulk upload with drag & drop',
       'Auto thumbnail generation',
