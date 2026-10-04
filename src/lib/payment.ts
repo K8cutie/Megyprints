@@ -68,6 +68,19 @@ export function cleanReference(raw: string): string {
   return raw.replace(/[^A-Za-z0-9 _./-]/g, '').trim().slice(0, 64);
 }
 
+/** What's wrong with a typed reference number, in words ('' = fine; empty is
+ *  fine too — the field is optional). Junk ("lol nope 🙃 <script>…") was
+ *  quietly stripped to "lol nope scriptalert4/script" and handed to the
+ *  operator as the reference (1-star testers, 2026-10-04): now the customer
+ *  is told, and can fix it or leave it empty. */
+export function referenceProblem(raw: string): string {
+  const t = raw.trim();
+  if (!t) return '';
+  if (/[^A-Za-z0-9 _./-]/.test(t)) return "Use only the letters and numbers on your bank's receipt (e.g. 2026091012345678).";
+  if ((t.match(/\d/g) ?? []).length < 4) return "A reference number has digits in it. Copy it from your bank's receipt, or leave this empty.";
+  return '';
+}
+
 /** Upload the receipt to the private bucket. Create-only (see storageUpload.ts):
  *  customers can't read this bucket, so they can't overwrite in it either. A
  *  retry after a failed "record" step finds the receipt already there and
