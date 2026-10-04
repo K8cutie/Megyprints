@@ -10,7 +10,8 @@ import { parseIntent } from './intentParser';
 import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
-import { DENSITY_BY_SIZE, DENSITY_LABELS, estimateAlbumFill, MIN_ALBUM_PAGES } from '../pages/builder/densities';
+import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES } from '../pages/builder/densities';
+import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
 import { memoryShortfall, MIN_MEMORY_PAGES } from '../pages/builder/generateAlbum';
 import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
 import { SIZE_LABELS } from '../lib/pricing';
@@ -341,11 +342,16 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         break;
       case 'upload_photos':
         if (action.includes('Generate')) {
+          // The 40-photo gate (albumMinimum): the card only offers Generate at
+          // 40+, but a photo left out a moment ago must not slip through.
+          const have = photosGoingIn(builder.uploadedPhotos);
+          if (photosShortBy(have) > 0) { showToast(tooFewToMakeMessage(have)); break; }
           // The upload step doubles as Generate — build the album, then jump to Review.
-          void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then(() => showToast('Album generated!'));
+          void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then((r) => showToast(r.success ? 'Album generated!' : r.message));
           wizardRef.current.advance();
           setWizardStep(wizardRef.current.state.step);
-        } else if (action.includes('Upload')) {
+        } else if (action.includes('Upload') || action.startsWith('Add ')) {
+          // "Upload Photos" / "Upload More Photos" / "Add 26 more photos"
           fileInputRef.current?.click();
         }
         break;
@@ -408,7 +414,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     try { localStorage.removeItem(WIZARD_STORAGE_KEY); } catch { /* ignore */ }
     showToast('Wizard restarted — back to the beginning');
   };
-  const doGenerate = () => { void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then(() => showToast('Album generated!')); };
+  const doGenerate = () => { void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then((r) => showToast(r.success ? 'Album generated!' : r.message)); };
   const doShuffle = () => { void builder.dispatch({ type: 'shuffle_layout', rawMessage: 'shuffle layout' }); showToast('Layout shuffled'); };
   const doRegen = () => { void builder.dispatch({ type: 'regenerate_page', rawMessage: 'regenerate page' }); showToast('Page regenerated'); };
   const doAutoFill = () => { void builder.dispatch({ type: 'auto_fill', rawMessage: 'auto fill' }); showToast('Photos auto-filled'); };
@@ -552,13 +558,22 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   </div>
                 </div>
                 {(() => {
-                  const est = estimateAlbumFill(livePhotos.length, builder.albumSize, builder.photosPerPage);
-                  return est.fillsAlbum ? (
-                    <p className="text-xs text-success mt-3">✓ Plenty for a full {MIN_ALBUM_PAGES}-page album.</p>
+                  // THE 40-PHOTO GATE (albumMinimum): under 40 there is no
+                  // Generate — the card's button is "Add N more photos". At 40+
+                  // every page fills, whatever photos-per-page is picked.
+                  const short = photosShortBy(livePhotos.length);
+                  return short === 0 ? (
+                    <p className="text-xs text-success mt-3" data-testid="photo-minimum-met">✓ Enough for a full {MIN_ALBUM_PAGES}-page album.</p>
                   ) : (
-                    <p className="text-xs text-[#B8791F] mt-3 leading-relaxed">
-                      These fill about <b>{est.estimatedPages}</b> of {MIN_ALBUM_PAGES} pages. Add ~<b>{est.shortBy}</b> more photos to fill the album — or generate now and leave the extra pages blank to fill later.
-                    </p>
+                    <div className="mt-3 p-3 rounded-xl bg-[#FFF6E5] border border-[#F0D9A8]" data-testid="photo-minimum">
+                      <p className="text-sm text-[#8A5A12] leading-relaxed">
+                        Albums need at least <b>{MIN_ALBUM_PHOTOS} photos</b>, one for every page. Add <b>{short} more</b> to make your album.
+                      </p>
+                      <div className="mt-2 h-1.5 rounded-full bg-[#F0D9A8] overflow-hidden" aria-hidden="true">
+                        <div className="h-full rounded-full bg-[#C98A2B] transition-all" style={{ width: `${Math.round((livePhotos.length / MIN_ALBUM_PHOTOS) * 100)}%` }} />
+                      </div>
+                      <p className="mt-1 text-[11px] text-[#8A5A12] tabular-nums">{livePhotos.length} of {MIN_ALBUM_PHOTOS}</p>
+                    </div>
                   );
                 })()}
                 {(() => {

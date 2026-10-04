@@ -1109,7 +1109,11 @@ function layoutAlbum(
     //       on the SAME template). If only one mixed template fits and it was used
     //       recently, stop forcing mixed here and let the more-varied
     //       ratio-by-ratio path take these photos instead. ──
-    if (mixedTemplates.length > 0 && !fillMode) {
+    // "1 · Big & bold" is ONE photo a page, like the ratio path below (multi =
+    // [] at 1/page): mixed pages are 2+ photos, and dealing them there put a
+    // 3-4-photo page in a 1-per-page album and left its last pages BLANK at 40
+    // photos (2026-10-04, found by the 40-photo minimum's every-size sweep).
+    if (mixedTemplates.length > 0 && !fillMode && !(effPerPage === 1 && !randomize)) {
       const mixedBag = bagFor('mixed', mixedTemplates.map((t) => t.id));
       let placed = true;
       while (placed) {

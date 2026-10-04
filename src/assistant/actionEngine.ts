@@ -8,6 +8,14 @@ import type { AssistantIntent, ExecutedAction } from './types';
 import type { AlbumBackground, AlbumSizePreset, TemplateType, TextElement, FrameStyle } from '../pages/builder/types';
 import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
 import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '../pages/builder/types';
+import { photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
+
+/** THE 40-PHOTO GATE (see albumMinimum): no album is made with fewer photos
+ *  going in than pages. Returns Megy's answer when short, null when enough. */
+function tooFewPhotos(builder: BuilderActions, type: AssistantIntent['type']): ExecutedAction | null {
+  const have = photosGoingIn(builder.uploadedPhotos ?? []);
+  return photosShortBy(have) > 0 ? { intentType: type, success: false, message: tooFewToMakeMessage(have) } : null;
+}
 
 /** STUDIO pages are kept through a reshuffle — say so. */
 function studioNote(builder: BuilderActions): string {
@@ -24,13 +32,16 @@ export class ActionEngine {
   async execute(intent: AssistantIntent): Promise<ExecutedAction> {
     try {
       switch (intent.type) {
-        case 'generate_album':
+        case 'generate_album': {
+          const short = tooFewPhotos(this.builder, intent.type);
+          if (short) return short;
           // Carry the user's chosen background into every generated page, so a
           // background picked before generating (incl. a custom upload) survives.
           // Awaited so the reply (and the callers' toasts) land AFTER the album
           // exists — the "making your album" screen covers the wait.
           await this.builder.generateAlbum(this.builder.currentPage?.background);
           return { intentType: intent.type, success: true, message: `Album generated! Your photos have been arranged across all pages.${studioNote(this.builder)}` };
+        }
 
         case 'shuffle_layout':
           // Cycle through the available templates IN ORDER (exhaust every option
@@ -283,6 +294,8 @@ export class ActionEngine {
           if (this.builder.uploadedPhotos.length === 0) {
             return { intentType: intent.type, success: false, message: "Upload a few photos first — then I'll shuffle the layouts for you." };
           }
+          const short = tooFewPhotos(this.builder, intent.type);
+          if (short) return short;
           // Surprise Me changes ONLY the page templates (frame count + positions).
           // The chosen theme owns the look, so the current background is preserved
           // as-is. randomize=true keeps the photo sequence but repackages it into

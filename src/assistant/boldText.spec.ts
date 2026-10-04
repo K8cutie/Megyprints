@@ -88,7 +88,8 @@ describe('every wizard message shows its bold words, never asterisks', () => {
     ['pick_theme', ["Maria's Debut", 'Wedding']],
     ['pick_size', ['8x8']],
     ['design_cover', ['Continue to photos']],
-    ['upload_photos', ['3']],
+    // 3 photos is short of the 40-photo minimum (albumMinimum): the body says how many more.
+    ['upload_photos', ['3', '40', '37 more']],
     ['review_pages', ['page 1 of 3', 'Next page']],
     ['add_text', []],
     ['finalize', []],
@@ -103,7 +104,7 @@ describe('every wizard message shows its bold words, never asterisks', () => {
     expect(last.bolds).toEqual(['3']);
     expect(last.text).toMatch(/^You've been through all 3 pages/);
     const empty = shown(engine({ uploadedPhotos: [] }), 'upload_photos');
-    expect(empty.bolds).toEqual([]);
+    expect(empty.bolds).toEqual(['40 photos']);
     expect(empty.text).not.toContain('*');
   });
 });

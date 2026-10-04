@@ -21,6 +21,7 @@ import { ensureMemoriesForFills } from '../lib/qrMemories';
 import { reportError } from '../lib/report';
 import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, validateAddress, EMPTY_ADDRESS, type AddressValue } from '../lib/contact';
 import AddressPicker from '../components/AddressPicker';
+import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
 
 type Step = 'form' | 'payment' | 'tracking';
 
@@ -60,7 +61,8 @@ export default function Order() {
   const [step, setStep] = useState<Step>('form');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  // The album isn't in the account (a guest who signed in here): offer the way back to it.
+  // The album isn't in the account (a guest who signed in here), or it is
+  // short of the 40-photo minimum: offer the way back to it.
   const [albumNotSaved, setAlbumNotSaved] = useState(false);
   const [orderNumber, setOrderNumber] = useState('');
   const [trackStage, setTrackStage] = useState(0);
@@ -90,6 +92,10 @@ export default function Order() {
   const [hostingYears, setHostingYears] = useState<number | null>(null);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
   const hasJob = job != null;
+  // THE 40-PHOTO GATE (builder/albumMinimum): the Preview's Order stops a
+  // short album, but /order can be opened directly (an old tab, a bookmark).
+  const jobPhotos = job ? albumPhotoCount(job.pages) : null;
+  const jobTooFew = jobPhotos != null && photosShortBy(jobPhotos) > 0;
 
   // ── Early clip upload ──────────────────────────────────────────────────
   // Opening this page is already a commit signal, so the memory videos start
@@ -175,6 +181,13 @@ export default function Order() {
   const placeOrder = async () => {
     setErrorMsg('');
     setAlbumNotSaved(false);
+    // Short of 40 photos: no order row, nothing uploaded.
+    const handed = getPendingPrintJob();
+    if (handed && photosShortBy(albumPhotoCount(handed.pages)) > 0) {
+      setErrorMsg(tooFewToOrderMessage(albumPhotoCount(handed.pages)));
+      setAlbumNotSaved(true);
+      return;
+    }
     setSubmitting(true);
     try {
       // 1. Create the order — but only once. A retry after a failed upload reuses
@@ -222,6 +235,9 @@ export default function Order() {
           "We couldn't prepare your album for printing on this device. Please open your album in the builder on the device where you created it, then order again — your photos live only in that browser.",
         );
       }
+      // The album rebuilt after a reload is short of 40 photos: stop before
+      // anything prints (the order row stays unpaid, like an abandoned checkout).
+      if (photosShortBy(albumPhotoCount(printJob.pages)) > 0) throw new TooFewPhotosError(albumPhotoCount(printJob.pages));
 
       // 2b. REQUIRED: upload every staged memory CLIP (0030). A printed QR must
       //     never point at a missing video, so a failed upload stops checkout —
@@ -313,9 +329,9 @@ export default function Order() {
       setPrepMsg('');
       // The money path must never fail silently in production — the customer sees
       // the message, and the operator/owner sees the cause in Sentry/the endpoint.
-      reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
+      if (!(err instanceof TooFewPhotosError)) reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong placing your order.');
-      setAlbumNotSaved(err instanceof AlbumNotSavedError);
+      setAlbumNotSaved(err instanceof AlbumNotSavedError || err instanceof TooFewPhotosError);
     } finally {
       setSubmitting(false);
     }
@@ -660,6 +676,12 @@ export default function Order() {
                   </div>
                 </div>
               )}
+              {jobTooFew ? (
+                <div role="alert" data-testid="order-too-few-photos"
+                  className="mt-4 rounded-xl border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-3 text-sm text-[#8A5A12]">
+                  {tooFewToOrderMessage(jobPhotos!)}
+                </div>
+              ) : (
               <button onClick={handleProceedToPayment} disabled={!priceReady || submitting}
                 className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                 {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
@@ -667,10 +689,11 @@ export default function Order() {
                     : !settingsReady ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
                       : <>Pricing unavailable — please refresh</>}
               </button>
+              )}
               {errorMsg && (
                 <p className="mt-3 text-xs text-red-500 text-center" role="alert">{errorMsg}</p>
               )}
-              {albumNotSaved && (
+              {(albumNotSaved || jobTooFew) && (
                 <button onClick={() => navigate('/builder')} data-testid="order-open-album"
                   className="w-full mt-3 py-2.5 rounded-xl border border-peach text-cocoa text-sm font-semibold hover:bg-blush transition-colors flex items-center justify-center gap-2">
                   <BookOpen size={16} /> Open my album
