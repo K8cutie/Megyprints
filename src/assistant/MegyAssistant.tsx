@@ -10,7 +10,7 @@ import { parseIntent } from './intentParser';
 import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
-import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES } from '../pages/builder/densities';
+import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES, perPageNote } from '../pages/builder/densities';
 import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
 import { memoryShortfall, MIN_MEMORY_PAGES } from '../pages/builder/generateAlbum';
 import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
@@ -593,8 +593,12 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   // Generate — the card's button is "Add N more photos". At 40+
                   // every page fills, whatever photos-per-page is picked.
                   const short = photosShortBy(livePhotos.length);
+                  const note = perPageNote(livePhotos.length, builder.photosPerPage);
                   return short === 0 ? (
-                    <p className="text-xs text-success mt-3" data-testid="photo-minimum-met">✓ Enough for a full {MIN_ALBUM_PAGES}-page album.</p>
+                    <>
+                      <p className="text-xs text-success mt-3" data-testid="photo-minimum-met">✓ Enough for a full {MIN_ALBUM_PAGES}-page album.</p>
+                      {note && <p className="text-xs text-[#8A5A12] mt-1 leading-relaxed" data-testid="per-page-note">{note}</p>}
+                    </>
                   ) : (
                     <div className="mt-3 p-3 rounded-xl bg-[#FFF6E5] border border-[#F0D9A8]" data-testid="photo-minimum">
                       <p className="text-sm text-[#8A5A12] leading-relaxed">
