@@ -46,6 +46,8 @@ import { templateTracker } from './varietyTracker';
 import { readCaptureTime } from './exif';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
+import { checkPhoto, facesForAllPhotos } from '../../lib/photoCheckRunner';
+import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
 /* ══════════════════════════════════════════════════════════════════════════
    useBuilderState — All builder state + localStorage persistence
@@ -162,7 +164,7 @@ function dominantPageRatio(
 
 /** Auto-fill's choice for a page: every EMPTY photo slot (not a QR slot, not
  *  claimed by a QR/text/ornament) gets the next photo not already on it. */
-function autoFillPlan(page: AlbumPage, photoCount: number): (number | null)[] {
+function autoFillPlan(page: AlbumPage, photoCount: number, leftOut: ReadonlySet<number> = new Set()): (number | null)[] {
   const tmplForFill = PAGE_TEMPLATES.find((t) => t.id === page.templateId);
   const fills = [...(page.slotFills ?? [])];
   let photoIdx = 0;
@@ -170,7 +172,7 @@ function autoFillPlan(page: AlbumPage, photoCount: number): (number | null)[] {
     if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
     if (page.qrFills?.[i] || page.slotTexts?.[i] || page.ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
     if (fills[i] === null && photoIdx < photoCount) {
-      while (photoIdx < photoCount && fills.includes(photoIdx)) {
+      while (photoIdx < photoCount && (fills.includes(photoIdx) || leftOut.has(photoIdx))) {
         photoIdx++;
       }
       if (photoIdx < photoCount) {
@@ -500,6 +502,15 @@ export interface BuilderActions {
    *  reporting the selected count lies whenever a re-picked batch is deduped. */
   addPhotos: (files: FileList | File[]) => { added: number; skipped: number };
   removePhoto: (id: string) => void;
+  /** Megy's free photo check (lib/photoCheck): runs on the phone in the
+   *  background. `ready` = every photo checked for blur and repeats. */
+  photoCheck: { ready: boolean; progress: { done: number; total: number }; suggestion: LeaveOutSuggestion };
+  /** Leave these photos out of the album (Megy's suggestion, accepted). */
+  leaveOutPhotos: (ids: string[]) => void;
+  /** Keep these photos: never suggested out again. */
+  keepPhotos: (ids: string[]) => void;
+  /** Put every left-out photo back (and keep it). */
+  bringBackPhotos: () => void;
   replacePhoto: (id: string, file: File) => void;
 
   // Pages
@@ -898,6 +909,9 @@ export function useBuilderState(): BuilderActions {
         id: p.id,
         name: p.name,
         // No cloudUrl, no storagePath — all local-only now.
+        ...(p.check ? { check: p.check } : {}),
+        ...(p.kept ? { kept: true } : {}),
+        ...(p.leftOut ? { leftOut: true } : {}),
       })),
       coverPhoto: pageSnapshotsRef.current[albumPages[0]?.id] ?? null,
       coverFront: coverFront as unknown as AlbumData['coverFront'],
@@ -1081,6 +1095,10 @@ export function useBuilderState(): BuilderActions {
                   size: stored?.size ?? 0,
                   width: stored?.width ?? 0,
                   height: stored?.height ?? 0,
+                  // Megy's photo check + the customer's keep / leave-out choice.
+                  ...(p.check ? { check: p.check } : {}),
+                  ...(p.kept ? { kept: true } : {}),
+                  ...(p.leftOut ? { leftOut: true } : {}),
                 };
               })
             );
@@ -1292,6 +1310,63 @@ export function useBuilderState(): BuilderActions {
     return { added: freshFiles.length, skipped: fileArray.length - freshFiles.length };
   }, [idbPhotos]);
 
+  /* ── Megy's free photo check (lib/photoCheck) ──
+     One photo at a time, in the background, on the phone: blur + fingerprint
+     for every photo first (~20 ms each), then the face pass (closed eyes) —
+     repeats first. Reads the bytes from the photo store, so it also picks up
+     photos from an older draft. Each result is stored on the photo, so a photo
+     is checked once. `checkTriedRef` keeps a failed photo from looping. */
+  const checkTriedRef = useRef<Set<string>>(new Set());
+  const checkRunningRef = useRef(false);
+  useEffect(() => {
+    // A browser that can't decode a small copy (no createImageBitmap) skips the check.
+    if (typeof createImageBitmap !== 'function') return;
+    if (checkRunningRef.current || !nextCheckJob(uploadedPhotos, checkTriedRef.current, facesForAllPhotos())) return;
+    checkRunningRef.current = true;
+    void (async () => {
+      try {
+        for (;;) {
+          const job = nextCheckJob(uploadedPhotosRef.current, checkTriedRef.current, facesForAllPhotos());
+          if (!job) break;
+          checkTriedRef.current.add(`${job.stage}:${job.id}`);
+          const photo = uploadedPhotosRef.current.find((p) => p.id === job.id);
+          const stored = photo ? await idbPhotos.get(job.id) : null;
+          if (!photo || !stored?.blob) continue;
+          try {
+            const res = await checkPhoto(stored.blob, photo.width, photo.height, { faces: job.stage === 'faces' });
+            const merge = (p: UploadedPhoto): UploadedPhoto => job.stage === 'basic'
+              ? { ...p, check: { ...res, faces: null, facesTried: false } }
+              : { ...p, check: p.check ? { ...p.check, faces: res.faces, eyesClosed: res.eyesClosed, facesTried: true } : p.check };
+            uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === job.id ? merge(p) : p));
+            setUploadedPhotos((prev) => prev.map((p) => (p.id === job.id ? merge(p) : p)));
+          } catch { /* an unreadable photo is just not checked */ }
+          await new Promise((r) => setTimeout(r, 0)); // let the screen breathe between photos
+        }
+      } finally {
+        checkRunningRef.current = false;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadedPhotos]);
+
+  const photoCheck = useMemo(() => ({
+    ready: checkIsReady(uploadedPhotos),
+    progress: checkProgress(uploadedPhotos),
+    suggestion: suggestLeaveOut(uploadedPhotos),
+  }), [uploadedPhotos]);
+
+  const leaveOutPhotos = useCallback((ids: string[]) => {
+    const out = new Set(ids);
+    setUploadedPhotos((prev) => prev.map((p) => (out.has(p.id) ? { ...p, leftOut: true } : p)));
+  }, []);
+  const keepPhotos = useCallback((ids: string[]) => {
+    const keep = new Set(ids);
+    setUploadedPhotos((prev) => prev.map((p) => (keep.has(p.id) ? { ...p, kept: true, leftOut: false } : p)));
+  }, []);
+  const bringBackPhotos = useCallback(() => {
+    setUploadedPhotos((prev) => prev.map((p) => (p.leftOut ? { ...p, leftOut: false, kept: true } : p)));
+  }, []);
+
   const removePhoto = useCallback((id: string) => {
     pushSnapshot();
     // Delete from IndexedDB (local — zero cloud I/O)
@@ -1440,7 +1515,8 @@ export function useBuilderState(): BuilderActions {
     // Their photos leave the pool, the rest of the album is dealt around them
     // (with a smaller minimum), fresh pages map back to the full photo list.
     const { kept, used } = splitStudioPages(albumPagesRef.current);
-    const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i));
+    // Photos the customer left out (Megy's photo check) stay out.
+    const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i) && !photos[i].leftOut);
     const pool = poolMap.map((i) => photos[i]);
     // MEMORY PAGES (owner, 2026-10-02): the album's video memories go on
     // full-page photos, which take the photos that crop least. Only an album
@@ -2206,13 +2282,14 @@ export function useBuilderState(): BuilderActions {
   /* ── Auto-fill ── */
   const autoFillSlots = useCallback(() => {
     pushSnapshot();
-    updateCurrentPage((page) => (page.slotFills?.length ? { ...page, slotFills: autoFillPlan(page, uploadedPhotos.length) } : page));
+    const leftOut = new Set(uploadedPhotos.flatMap((p, i) => (p.leftOut ? [i] : [])));
+    updateCurrentPage((page) => (page.slotFills?.length ? { ...page, slotFills: autoFillPlan(page, uploadedPhotos.length, leftOut) } : page));
     // Face-centre the photos this just placed — and only those; a photo already
     // on the page keeps its framing. (This used to walk the page as it was
     // BEFORE the fill, so it re-panned the photos already there and skipped
     // the new ones.)
     const before = currentPage.slotFills ?? [];
-    autoFillPlan(currentPage, uploadedPhotos.length).forEach((fill, slotIndex) => {
+    autoFillPlan(currentPage, uploadedPhotos.length, leftOut).forEach((fill, slotIndex) => {
       if (fill != null && before[slotIndex] == null) centreOnFace(slotIndex, fill);
     });
   }, [pushSnapshot, updateCurrentPage, uploadedPhotos, currentPage, centreOnFace]);
@@ -2833,6 +2910,10 @@ export function useBuilderState(): BuilderActions {
                 size: stored?.size ?? 0,
                 width: stored?.width ?? 0,
                 height: stored?.height ?? 0,
+                // Megy's photo check + the customer's keep / leave-out choice.
+                ...(p.check ? { check: p.check } : {}),
+                ...(p.kept ? { kept: true } : {}),
+                ...(p.leftOut ? { leftOut: true } : {}),
               };
             })
           );
@@ -2877,6 +2958,10 @@ export function useBuilderState(): BuilderActions {
     uploadedPhotos,
     addPhotos,
     removePhoto,
+    photoCheck,
+    leaveOutPhotos,
+    keepPhotos,
+    bringBackPhotos,
     replacePhoto,
     albumPages,
     currentPageIndex,

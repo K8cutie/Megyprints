@@ -720,3 +720,13 @@ describe('one way forward after the album too: cover, Review, Preview (owner, 20
     }
   });
 });
+
+describe("Megy's photo check: left-out photos don't count (2026-10-04)", () => {
+  it('"Photos Uploaded (N)" counts only the photos that go in', () => {
+    const photos = [{ id: 'a' }, { id: 'b', leftOut: true }, { id: 'c' }, { id: 'd', leftOut: true }];
+    const w = new WizardEngine(builderStub({ uploadedPhotos: photos } as unknown as Partial<BuilderActions>), false);
+    w.state.step = 'upload_photos';
+    expect(w.getMessage().title).toBe('Step 4: Photos Uploaded (2) 📸');
+    expect(w.getMessage().body).toContain('**2** photos ready');
+  });
+});

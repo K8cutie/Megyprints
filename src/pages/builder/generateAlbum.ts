@@ -1,4 +1,6 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll } from './types';
+import { medianSharpness, isBlurry, photoQuality } from '../../lib/photoCheck';
+import { separateLookAlikes } from './lookAlikes';
 import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, photoSlotCount } from './pageTemplates';
 
 /* ── Ratio LOOSENING budget ───────────────────────────────────────────────────
@@ -370,7 +372,13 @@ function pickMemoryPhotos(
   if (k <= 0 || n === 0) return [];
   const allowed = (i: number) => allowedOnFullPage(photos[i], aspect);
   if (n <= k) return order.filter(allowed);
-  const fits = (i: number) => fitsFullPage(photos[i], aspect);
+  // Megy's photo check (lib/photoCheck): a blurry shot only as a last resort,
+  // and the sharper, eyes-open shot wins within a stretch. Without check
+  // results every photo scores the same, so nothing changes.
+  const median = medianSharpness(photos);
+  const blurry = (i: number) => isBlurry(photos[i], median);
+  const weak = (i: number) => 1 - photoQuality(photos[i], median);
+  const fits = (i: number) => fitsFullPage(photos[i], aspect) && !blurry(i);
   const cost = (i: number) => fullPageCost(photos[i], aspect, faces?.[i]);
   const picks: (number | null)[] = new Array(k).fill(null);
   const pickedAt: number[] = [];
@@ -388,7 +396,7 @@ function pickMemoryPhotos(
     let best = -1, bestD = Infinity;
     for (let p = lo; p < hi; p++) {
       if (!fits(order[p])) continue;
-      const d = Math.abs(p - centre(s)) + cost(order[p]);
+      const d = Math.abs(p - centre(s)) + cost(order[p]) + weak(order[p]) * (hi - lo);
       if (d < bestD) { bestD = d; best = p; }
     }
     if (best >= 0) take(s, best);
@@ -417,7 +425,7 @@ function pickMemoryPhotos(
     for (let p = lo; p < hi; p++) {
       const i = order[p];
       if (used.has(i) || !allowed(i)) continue;
-      const c = cost(i) + Math.abs(p - centre(s)) / n;
+      const c = cost(i) + Math.abs(p - centre(s)) / n + weak(i) + (blurry(i) ? 10 : 0);
       if (c < bestC) { bestC = c; best = p; }
     }
     if (best < 0) for (let p = 0; p < n; p++) if (!used.has(order[p]) && allowed(order[p])) { best = p; break; }
@@ -730,7 +738,11 @@ export function generateAlbum(
   const solo = memorySingleTemplate(albumSize);
   const want = solo ? Math.min(MIN_MEMORY_PAGES, photos.length) : 0;
   const reserved = solo && want > 0 ? pickMemoryPhotos(photos, albumSize, want, options?.faceCenters, options?.randomize) : [];
-  if (!solo || reserved.length === 0) return layoutAlbum(photos, albumSize, photosPerPage, background, options);
+  if (!solo || reserved.length === 0) {
+    const plain = layoutAlbum(photos, albumSize, photosPerPage, background, options);
+    separateLookAlikes(plain, photos, canTakeMemoryQr);
+    return plain;
+  }
   const taken = new Set(reserved);
   const restMap = photos.map((_, i) => i).filter((i) => !taken.has(i));
   const pages = layoutAlbum(restMap.map((i) => photos[i]), albumSize, photosPerPage, background,
@@ -741,6 +753,8 @@ export function generateAlbum(
     { photos: photos.length, minPages });
   remapSlotFills(pages, restMap);
   insertMemoryPages(pages, reserved, solo, photos, albumSize, background, options);
+  // Two shots of the same moment the customer kept never share a page.
+  separateLookAlikes(pages, photos, canTakeMemoryQr);
   pages.forEach((p, i) => { p.id = makePageId(i); });
   return pages;
 }
