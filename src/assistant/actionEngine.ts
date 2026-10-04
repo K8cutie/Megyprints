@@ -56,9 +56,13 @@ export class ActionEngine {
           this.builder.regeneratePage();
           return { intentType: intent.type, success: true, message: 'This page has been regenerated with a fresh layout.' };
 
-        case 'auto_fill':
-          this.builder.autoFillSlots();
-          return { intentType: intent.type, success: true, message: 'Photos have been auto-placed into the available slots.' };
+        case 'auto_fill': {
+          // This page's empty frames only, with photos not yet in the album.
+          const { filled, empty } = this.builder.autoFillSlots();
+          if (filled > 0) return { intentType: intent.type, success: true, message: `Filled ${filled} empty frame${filled === 1 ? '' : 's'} on this page with photos that aren't in your album yet.` };
+          if (empty === 0) return { intentType: intent.type, success: false, message: 'This page has no empty photo frames.' };
+          return { intentType: intent.type, success: false, message: "Every photo is already in your album, so I left these frames empty rather than print a photo twice. Add more photos to fill them." };
+        }
 
         case 'clear_slots':
           this.builder.clearAllSlots();

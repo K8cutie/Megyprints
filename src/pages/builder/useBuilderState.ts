@@ -164,8 +164,12 @@ function dominantPageRatio(
 }
 
 /** Auto-fill's choice for a page: every EMPTY photo slot (not a QR slot, not
- *  claimed by a QR/text/ornament) gets the next photo not already on it. */
-function autoFillPlan(page: AlbumPage, photoCount: number, leftOut: ReadonlySet<number> = new Set()): (number | null)[] {
+ *  claimed by a QR/text/ornament) gets the next photo that is NOT ALREADY IN
+ *  THE ALBUM. `skip` = photos used on any page plus the ones left out. It used
+ *  to skip only this page's photos, so it filled frames with photos already on
+ *  other pages — each would print twice — while new uploads sat unused
+ *  (1-star testers, 2026-10-04). No unused photo left → the frame stays empty. */
+export function autoFillPlan(page: AlbumPage, photoCount: number, skip: ReadonlySet<number> = new Set()): (number | null)[] {
   const tmplForFill = PAGE_TEMPLATES.find((t) => t.id === page.templateId);
   const fills = [...(page.slotFills ?? [])];
   let photoIdx = 0;
@@ -173,7 +177,7 @@ function autoFillPlan(page: AlbumPage, photoCount: number, leftOut: ReadonlySet<
     if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
     if (page.qrFills?.[i] || page.slotTexts?.[i] || page.ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
     if (fills[i] === null && photoIdx < photoCount) {
-      while (photoIdx < photoCount && (fills.includes(photoIdx) || leftOut.has(photoIdx))) {
+      while (photoIdx < photoCount && (fills.includes(photoIdx) || skip.has(photoIdx))) {
         photoIdx++;
       }
       if (photoIdx < photoCount) {
@@ -547,7 +551,9 @@ export interface BuilderActions {
   /** The "Change layout" picker open state — shared by mobile + desktop. */
   layoutPickerOpen: boolean;
   setLayoutPickerOpen: (v: boolean) => void;
-  autoFillSlots: () => void;
+  /** Fill the current page's empty photo frames with photos not yet in the
+   *  album. Returns how many it filled, and how many were empty. */
+  autoFillSlots: () => { filled: number; empty: number };
   clearAllSlots: () => void;
 
   // Slot management
@@ -2312,18 +2318,29 @@ export function useBuilderState(): BuilderActions {
 
   /* ── Auto-fill ── */
   const autoFillSlots = useCallback(() => {
+    // Skip every photo already in the album, and the ones left out.
+    const skip = new Set(uploadedPhotos.flatMap((p, i) => (p.leftOut ? [i] : [])));
+    for (const p of albumPages) {
+      for (const f of p.slotFills ?? []) if (f != null) skip.add(f);
+      for (const f of p.textSlotFills ?? []) if (f != null) skip.add(f);
+      for (const ph of p.photos ?? []) if (ph?.photoIndex != null) skip.add(ph.photoIndex);
+    }
+    const before = currentPage.slotFills ?? [];
+    const plan = autoFillPlan(currentPage, uploadedPhotos.length, skip);
+    const filled = plan.filter((f, i) => f != null && before[i] == null).length;
+    const empty = before.filter((f) => f == null).length;
+    if (filled === 0) return { filled, empty };
     pushSnapshot();
-    const leftOut = new Set(uploadedPhotos.flatMap((p, i) => (p.leftOut ? [i] : [])));
-    updateCurrentPage((page) => (page.slotFills?.length ? { ...page, slotFills: autoFillPlan(page, uploadedPhotos.length, leftOut) } : page));
+    updateCurrentPage((page) => (page.slotFills?.length ? { ...page, slotFills: autoFillPlan(page, uploadedPhotos.length, skip) } : page));
     // Face-centre the photos this just placed — and only those; a photo already
     // on the page keeps its framing. (This used to walk the page as it was
     // BEFORE the fill, so it re-panned the photos already there and skipped
     // the new ones.)
-    const before = currentPage.slotFills ?? [];
-    autoFillPlan(currentPage, uploadedPhotos.length, leftOut).forEach((fill, slotIndex) => {
+    plan.forEach((fill, slotIndex) => {
       if (fill != null && before[slotIndex] == null) centreOnFace(slotIndex, fill);
     });
-  }, [pushSnapshot, updateCurrentPage, uploadedPhotos, currentPage, centreOnFace]);
+    return { filled, empty };
+  }, [pushSnapshot, updateCurrentPage, uploadedPhotos, albumPages, currentPage, centreOnFace]);
 
   const clearAllSlots = useCallback(() => {
     pushSnapshot();
