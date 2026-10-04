@@ -86,6 +86,14 @@ export function publicClipUrl(code: string, ext: ClipExt, base: string = SUPABAS
   return `${base.replace(/\/+$/, '')}/storage/v1/object/public/${CLIP_BUCKET}/${clipObjectPath(code, ext)}`;
 }
 
+/** A REPLACED clip's destination: the same object (the printed QR and the
+ *  storage name never change) with a version, so every phone that played the
+ *  old video — cached for a year under its URL — fetches the new one. The scan
+ *  page (api/m.mjs isHostedClip) accepts exactly "?v=<digits>". */
+export function versionedClipUrl(code: string, ext: ClipExt, version: number, base: string = SUPABASE_URL): string {
+  return `${publicClipUrl(code, ext, base)}?v=${Math.max(0, Math.floor(version))}`;
+}
+
 /** Is this destination one of OUR hosted clips (vs a legacy link)? */
 export function isHostedClipUrl(url: string, base: string = SUPABASE_URL): boolean {
   if (!base) return false;

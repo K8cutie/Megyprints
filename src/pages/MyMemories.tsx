@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { QrCode, Copy, Check, Trash2, Loader2, ExternalLink, Upload, Clock } from 'lucide-react';
 import { listMemories, updateMemoryDestination, removeMemory, type QrMemoryRow } from '../lib/qrMemories';
 import { memoryUrl, generateQrPngDataUrl, validateDestination } from '../lib/qrMemory';
-import { validateClipFile, uploadClip, publicClipUrl, isHostedClipUrl } from '../lib/memoryClips';
+import { validateClipFile, uploadClip, versionedClipUrl, isHostedClipUrl } from '../lib/memoryClips';
 
 const fmtMonth = (iso: string) => {
   const d = new Date(iso);
@@ -107,12 +107,13 @@ function MemoryRow({ row, thumb, highlight, onRemoved }: { row: QrMemoryRow; thu
       const v = await validateClipFile(f);
       if (!v.ok) { setMsg({ text: v.error, ok: false }); return; }
       await uploadClip(row.code, v.ext, f, { replace: true });
-      const next = publicClipUrl(row.code, v.ext);
-      if (next !== saved) {
-        const ok = await updateMemoryDestination(row.code, next);
-        if (!ok) { setMsg({ text: 'Uploaded, but could not re-point the QR. Try again.', ok: false }); return; }
-        setSaved(next); setDest(next);
-      }
+      // A NEW link every replace (same object, new version): the old link is
+      // cached for a year on every phone that played it, and kept showing the
+      // old video there — and here — after "Video replaced ✓".
+      const next = versionedClipUrl(row.code, v.ext, Date.now());
+      const ok = await updateMemoryDestination(row.code, next);
+      if (!ok) { setMsg({ text: 'Uploaded, but could not re-point the QR. Try again.', ok: false }); return; }
+      setSaved(next); setDest(next);
       setMsg({ text: 'Video replaced ✓ — same QR, new memory', ok: true });
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : 'Could not replace the video.', ok: false });
