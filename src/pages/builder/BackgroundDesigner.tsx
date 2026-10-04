@@ -60,6 +60,9 @@ interface BackgroundDesignerProps {
   /** Denser swatch grids (smaller swatches) — used by the cover editor so the
    *  preview can be bigger. Leaves Step 3 at its normal sizes. */
   compact?: boolean;
+  /** No upload box: the host opens the file picker itself (the cover editor's
+   *  Background button). Only the album photos are listed. */
+  hideUpload?: boolean;
   /** PHOTO-ONLY mode: swap the texture grid for the picture browser. Used by
    *  the cover editor — a cover background is a photo. */
   imageOnly?: boolean;
@@ -67,7 +70,7 @@ interface BackgroundDesignerProps {
   hideOpacity?: boolean;
 }
 
-export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false, compact = false, imageOnly = false, hideOpacity = false }: BackgroundDesignerProps) {
+export default function BackgroundDesigner({ background, onChange, photos = [], hidePreview = false, compact = false, imageOnly = false, hideOpacity = false, hideUpload = false }: BackgroundDesignerProps) {
   // One fixed mode per host: covers browse pictures, everything else picks a texture.
   const effectiveTab: BgTab = imageOnly ? 'image' : 'texture';
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
@@ -166,6 +169,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
               )
             )}
 
+            {!hideUpload && (<>
             {/* No divider when there's nothing above it (photo-only, no photos yet). */}
             {!(imageOnly && photos.length === 0) && <div className="border-t border-stone-100" />}
 
@@ -194,6 +198,7 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
                 <X size={12} /> Remove custom image
               </button>
             )}
+            </>)}
           </div>
         )}
 
