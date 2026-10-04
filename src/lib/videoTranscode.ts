@@ -47,6 +47,27 @@ const TARGET_FPS = 30;
 const AVC_CODECS = ['avc1.4d0028', 'avc1.640028', 'avc1.42002a', 'avc1.42001f'];
 const AAC_CODEC = 'mp4a.40.2';
 
+/** Frame timestamps for the encoder, from the playing <video>'s mediaTime.
+ *  The FIRST frame caught is never at 0 (rVFC fires after a frame is shown,
+ *  so it reads 0.033 s or later even on a clip that starts at exactly 0), and
+ *  the muxer refuses a track whose first chunk isn't at 0 — every memory clip
+ *  failed to compress, and the throw inside the encoder callback crashed the
+ *  page (2026-10-04, found by the 1-star testers). So timestamps count from
+ *  the first frame caught. A frame that doesn't move time forward (a repeat
+ *  callback) is skipped: the muxer needs rising timestamps. */
+export function makeFrameClock(): (mediaTime: number) => number | null {
+  let first: number | null = null;
+  let last = -1;
+  return (mediaTime: number) => {
+    if (!Number.isFinite(mediaTime)) return null;
+    if (first == null) first = mediaTime;
+    const us = Math.max(0, Math.round((mediaTime - first) * 1e6));
+    if (us <= last) return null;
+    last = us;
+    return us;
+  };
+}
+
 export interface TranscodeResult {
   blob: Blob;
   width: number;
@@ -158,7 +179,12 @@ async function encodeAudioTrack(
 ): Promise<void> {
   let failure: Error | null = null;
   const encoder = new AudioEncoder({
-    output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+    // A muxer throw inside this callback would escape every try/catch (and
+    // take the page down): keep it as the failure instead.
+    output: (chunk, meta) => {
+      if (failure) return;
+      try { muxer.addAudioChunk(chunk, meta); } catch (e) { failure = e instanceof Error ? e : new Error(String(e)); }
+    },
     error: (e) => { failure = e instanceof Error ? e : new Error(String(e)); },
   });
   encoder.configure({ codec: AAC_CODEC, sampleRate: pcm.sampleRate, numberOfChannels: channels, bitrate: AUDIO_BITRATE });
@@ -204,6 +230,7 @@ function encodeVideoTrack(
     if (!ctx) { reject(new Error('This device cannot process video.')); return; }
 
     const keyEvery = Math.max(1, Math.round(TARGET_FPS * KEYFRAME_INTERVAL_SEC));
+    const clock = makeFrameClock();
     const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
     let frames = 0;
     let settled = false;
@@ -235,9 +262,11 @@ function encodeVideoTrack(
     const onFrame: VideoFrameRequestCallback = (_now, meta) => {
       if (settled) return;
       try {
+        const timestamp = clock(meta.mediaTime);
+        if (timestamp == null) { el.requestVideoFrameCallback(onFrame); return; }
         ctx.drawImage(el, 0, 0, width, height);
         const frame = new VideoFrame(canvas, {
-          timestamp: Math.max(0, Math.round(meta.mediaTime * 1e6)),
+          timestamp,
           duration: Math.round(1e6 / TARGET_FPS),
         });
         encoder.encode(frame, { keyFrame: frames % keyEvery === 0 });
@@ -296,6 +325,9 @@ export async function transcodeToMp4(
       // moov at the front: the scanner plays on the first bytes instead of
       // waiting for the whole file to arrive.
       fastStart: 'in-memory' as const,
+      // Belt and braces with makeFrameClock: a track whose first chunk isn't
+      // at 0 is shifted, never refused.
+      firstTimestampBehavior: 'offset' as const,
     });
 
     // A clip WITH sound must never become a silent memory: if AAC encoding
@@ -304,7 +336,12 @@ export async function transcodeToMp4(
 
     let encodeError: Error | null = null;
     const encoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      // As with audio: a muxer throw here must become the error (the caller
+      // keeps the original clip), never an uncaught one that kills the page.
+      output: (chunk, meta) => {
+        if (encodeError) return;
+        try { muxer.addVideoChunk(chunk, meta); } catch (e) { encodeError = e instanceof Error ? e : new Error(String(e)); }
+      },
       error: (e) => { encodeError = e instanceof Error ? e : new Error(String(e)); },
     });
     encoder.configure(videoConfig);
