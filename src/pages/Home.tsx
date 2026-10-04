@@ -18,6 +18,7 @@ import { useAuth } from '../lib/authContext';
 import { startFreshAlbum } from '../lib/albumSession';
 import { readLocalDraftSummary, albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
 import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
+import { MIN_ALBUM_PHOTOS } from './builder/albumMinimum';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -180,7 +181,7 @@ function HowItWorksSection() {
       numColor: 'text-peach',
       img: '/step-upload.jpg',
       title: 'Upload Your Photos',
-      desc: 'Upload 20 or more of your favorite JPG or PNG photos — add as many as you like, any time. Preview and organize them before building.',
+      desc: `Upload ${MIN_ALBUM_PHOTOS} or more of your favorite JPG or PNG photos — add as many as you like, any time. Preview and organize them before building.`,
     },
     {
       num: '02',
