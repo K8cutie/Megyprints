@@ -27,6 +27,7 @@ import { lookCss, isLookId } from './looks';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
+import { trashSpot, TRASH_SIZE, type Box } from './trashSpot';
 import { ornamentFit } from './ornaments';
 import { wordArtDomStyle, resolveTextSlotAlign, freeTextBoxWidth, TEXT_LINE_HEIGHT } from './wordArt';
 import { normalizeGradient, gradientToCss } from './gradient';
@@ -337,6 +338,22 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   const safeY = margin.top * H;
   const safeW = singleW * (1 - margin.left - margin.right);
   const safeH = H * (1 - margin.top - margin.bottom);
+  // Where this page's QR codes sit (page px): a photo's trash button keeps
+  // clear of them (trashSpot) — a tap meant for the QR must never delete it.
+  const qrBoxes: Box[] = [];
+  template?.slots.forEach((raw, i) => {
+    if (!raw || !page.qrFills?.[i]) return;
+    const s = resolveSlotBox(raw, page.slotGeometries?.[i]);
+    const { dx, dy, side } = qrRect(safeX + s.x * safeW, safeY + s.y * safeH, s.width * safeW, s.height * safeH);
+    qrBoxes.push({ x: dx, y: dy, w: side, h: side });
+  });
+  template?.textSlots?.forEach((ts, i) => {
+    if (!page.textSlotQr?.[i]) return;
+    const g = page.textSlotQrGeom?.[i];
+    if (g) { qrBoxes.push({ x: (g.cx - g.w / 2) * singleW, y: (g.cy - g.h / 2) * H, w: g.w * singleW, h: g.h * H }); return; }
+    const { dx, dy, side } = qrRect(safeX + ts.x * safeW, safeY + ts.y * safeH, ts.width * safeW, ts.height * safeH);
+    qrBoxes.push({ x: dx, y: dy, w: side, h: side });
+  });
 
   return (
     <>
@@ -456,7 +473,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             {editable && onRemoveFromSlot && (
               <button onClick={(e) => { e.stopPropagation(); onRemoveFromSlot(idx); }} aria-label="Remove photo"
                 style={{
-                  position: 'absolute', top: 6, right: 6, zIndex: 6, width: 30, height: 30,
+                  position: 'absolute', ...trashSpot({ x: left, y: top, w: width, h: height }, qrBoxes), zIndex: 6, width: TRASH_SIZE, height: TRASH_SIZE,
                   borderRadius: '50%', background: 'rgba(45,45,45,0.65)', border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
