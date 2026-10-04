@@ -304,6 +304,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
   /* ── Chat ── */
+  const rebuildAskedRef = useRef(false);
+  const builderRef = useRef(builder);
+  useEffect(() => { builderRef.current = builder; });
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim()) return;
     const userMsg: AssistantMessage = { id: `u-${Date.now()}`, role: 'user', content: text, timestamp: new Date() };
@@ -311,7 +314,23 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     setInput('');
     setIsThinking(true);
     const parsed = parseIntent(text);
-    const result = await builder.dispatch(parsed.intent);
+    // Typed "generate" on an album that's already made rebuilds every page and
+    // replaces the customer's layouts and edits (Studio pages stay). Ask first;
+    // a yes, or asking again, does it. (The wizard's Generate button is its own
+    // explicit choice and isn't asked.)
+    const pending = rebuildAskedRef.current;
+    rebuildAskedRef.current = false;
+    const yes = /^(yes|yep|yeah|ok|okay|sure|confirm|do it|go ahead)\b/i.test(text.trim());
+    const built = builderRef.current.albumPages.some((p) => (p.slotFills ?? []).some((f) => f != null));
+    let intent = parsed.intent;
+    if (pending && yes) intent = { type: 'generate_album', rawMessage: text };
+    else if (intent.type === 'generate_album' && built && !pending) {
+      rebuildAskedRef.current = true;
+      setIsThinking(false);
+      setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', content: "That rebuilds your whole album: every page gets a new layout and your layout changes are replaced (Studio pages stay). Say \"yes\" to go ahead, or keep editing.", intent, timestamp: new Date() }]);
+      return;
+    }
+    const result = await builder.dispatch(intent);
     const asst: AssistantMessage = { id: `a-${Date.now()}`, role: 'assistant', content: result.message, intent: parsed.intent, timestamp: new Date() };
     setIsThinking(false);
     setMessages((p) => [...p, asst]);
