@@ -238,6 +238,11 @@ function coverDesignToFront(d: CoverDesign, size: AlbumSizePreset): AlbumPage {
   };
 }
 
+/** Signed in, the album is saved to the account this long after it stops
+ *  changing — and at least this often while it keeps changing. */
+export const CLOUD_SAVE_QUIET_MS = 15_000;
+export const CLOUD_SAVE_MAX_WAIT_MS = 120_000;
+
 interface SerializedState {
   albumType: AlbumType;
   albumSize: AlbumSizePreset;
@@ -921,9 +926,14 @@ export function useBuilderState(): BuilderActions {
 
   /* ── Persistence strategy ──
      • Local (localStorage): debounced ~30s — cheap and client-only.
-     • Cloud (Supabase): every 10 minutes, on tab-hide / app exit, on unmount,
-       or a manual save. Photo bytes live in IndexedDB, so the cloud copy is
-       just a light backup of the layout and doesn't need frequent writes. ── */
+     • Cloud (Supabase), signed in: CLOUD_SAVE_QUIET_MS after the album stops
+       changing (at most CLOUD_SAVE_MAX_WAIT_MS while it keeps changing), plus
+       every 10 minutes, on tab-hide / app exit, on unmount, or a manual save.
+       It used to be only the 10-minute / leaving saves, so Your Projects —
+       "All your projects are automatically saved to the cloud" — had no copy
+       of a just-generated, edited album until checkout, and a crash lost it
+       (1-star testers, 2026-10-04). Photo bytes live in IndexedDB, so the
+       cloud copy is the light layout: a write per pause, not per tap. ── */
   const cloudDirtyRef = useRef(false);
   const persistRef = useRef<{
     local: SerializedState;
@@ -983,6 +993,26 @@ export function useBuilderState(): BuilderActions {
     autoSaveTimerRef.current = setTimeout(flushLocal, 30000);
     return () => { if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current); };
   }, [albumType, albumSize, selectedTemplate, albumTitle, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, flushLocal]);
+
+  // Cloud save once the album goes quiet (see the persistence strategy). Only
+  // what the saved row holds counts: turning pages changes nothing in it.
+  const cloudQuietTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cloudFirstChangeAtRef = useRef<number | null>(null);
+  const cloudQuietEffectRanRef = useRef(false);
+  useEffect(() => {
+    if (!cloudQuietEffectRanRef.current) { cloudQuietEffectRanRef.current = true; return; } // the album as it opened
+    const now = Date.now();
+    if (cloudFirstChangeAtRef.current == null) cloudFirstChangeAtRef.current = now;
+    const wait = Math.max(0, Math.min(CLOUD_SAVE_QUIET_MS, cloudFirstChangeAtRef.current + CLOUD_SAVE_MAX_WAIT_MS - now));
+    if (cloudQuietTimerRef.current !== null) clearTimeout(cloudQuietTimerRef.current);
+    cloudQuietTimerRef.current = setTimeout(() => {
+      cloudQuietTimerRef.current = null;
+      cloudFirstChangeAtRef.current = null;
+      flushLocal();
+      flushCloud();
+    }, wait);
+  }, [albumTitle, albumSize, uploadedPhotos, albumPages, coverFront, flushLocal, flushCloud]);
+  useEffect(() => () => { if (cloudQuietTimerRef.current !== null) clearTimeout(cloudQuietTimerRef.current); }, []);
 
   // Cloud backup every 10 minutes (only if something changed).
   useEffect(() => {
