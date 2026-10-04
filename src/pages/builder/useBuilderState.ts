@@ -535,7 +535,10 @@ export interface BuilderActions {
   // Generation
   /** Async: waits for any in-flight photo measurement before laying out, so a
    *  photo is never placed by its fallback ratio. Callers may fire-and-forget. */
-  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean }) => Promise<void>;
+  /** `size`: lay the album out for a NEW size (it becomes the album's size
+   *  with the pages, in one step). Every page is laid out again — a Studio
+   *  page is laid out for the old shape, so it can't be kept. */
+  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset }) => Promise<void>;
   /** What generateAlbum is doing RIGHT NOW, or null when idle. The builder
    *  shows a "making your album" screen while this is set — a whole-album
    *  generation can take several seconds (measuring, laying out, waiting on
@@ -1510,7 +1513,10 @@ export function useBuilderState(): BuilderActions {
     }
   }, []);
 
-  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean }) => {
+  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset }) => {
+    const { size: newSize, ...genOptions } = options ?? {};
+    const size = newSize ?? albumSize;
+    const resizing = size !== albumSize;
     // Show the "making your album" screen for the whole run and let the browser
     // PAINT it before the synchronous layout work starts (a state update alone
     // would be batched behind the heavy loop and never appear).
@@ -1553,7 +1559,9 @@ export function useBuilderState(): BuilderActions {
     // STUDIO: pages the customer moved frames on are kept exactly as they are.
     // Their photos leave the pool, the rest of the album is dealt around them
     // (with a smaller minimum), fresh pages map back to the full photo list.
-    const { kept, used } = splitStudioPages(albumPagesRef.current);
+    // A NEW SIZE re-lays out every page: a Studio page is laid out for the old
+    // shape and would be squashed onto the new one (1-star testers).
+    const { kept, used } = resizing ? { kept: [], used: new Set<number>() } : splitStudioPages(albumPagesRef.current);
     // Photos the customer left out (Megy's photo check) stay out.
     const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i) && !photos[i].leftOut);
     const pool = poolMap.map((i) => photos[i]);
@@ -1563,7 +1571,7 @@ export function useBuilderState(): BuilderActions {
     // whose faces survive, so find the faces first (bounded; skipped
     // entirely in the common case, and harmless when detection fails).
     let faceCenters: Record<number, { x: number; y: number }> | undefined;
-    const faceCands = memoryFaceCandidates(pool, albumSize);
+    const faceCands = memoryFaceCandidates(pool, size);
     if (faceCands.length > 0) {
       faceCenters = {};
       try {
@@ -1577,7 +1585,7 @@ export function useBuilderState(): BuilderActions {
         }
       } catch { /* no faces known → least-crop order */ }
     }
-    let newPages = generateAlbum(pool, albumSize, photosPerPage, bg, { ...options, border, cornerBase, faceCenters, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     setGenerating('quotes');
@@ -1605,6 +1613,10 @@ export function useBuilderState(): BuilderActions {
     // NOTE: no auto-placed cover title. The builder used to drop a themed title
     // ("Our Story" etc.) onto page 1, but that forced unwanted text over the
     // user's photos — removed. Users add their own title/text if they want one.
+    if (resizing) {
+      setAlbumSizeState(size);
+      setCoverFrontPage((c) => ({ ...c, size }));
+    }
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
     } finally {
