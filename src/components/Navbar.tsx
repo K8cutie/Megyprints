@@ -117,7 +117,7 @@ export default function Navbar() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-40 bg-cream flex flex-col items-center justify-center gap-8 md:hidden"
+            className="fixed inset-0 z-40 bg-cream flex flex-col items-center justify-center gap-6 md:hidden overflow-y-auto py-24"
           >
             {navLinks.map((link, i) => (
               <motion.div
@@ -137,11 +137,20 @@ export default function Navbar() {
                 </Link>
               </motion.div>
             ))}
+            {/* Log in / sign up / sign out — the phone menu had none. */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
               transition={{ delay: 0.32, duration: 0.3 }}
+            >
+              <AuthNav variant="menu" onAction={() => setMobileOpen(false)} />
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ delay: 0.4, duration: 0.3 }}
             >
               <Link
                 to="/builder"
