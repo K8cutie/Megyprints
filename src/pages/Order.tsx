@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
-import type { MaterialType, CoverType, AlbumSizePreset } from "./builder/types";
+import type { MaterialType, CoverType, AlbumSizePreset, AlbumPage } from "./builder/types";
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, Package, QrCode, Wifi, Landmark, Paperclip, Clock } from 'lucide-react';
-import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_ALBUM_SIZE, DEFAULT_COVER_DESIGN } from './builder/types';
+import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
 import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } from '../lib/orders';
-import { getPendingPrintJob, readOrderHandoff } from '../lib/printQueue';
+import { getPendingPrintJob, setPendingPrintJob, readOrderHandoff, type PrintJob } from '../lib/printQueue';
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
 import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError } from '../lib/orderAlbum';
-import { readLocalDraftSummary } from '../lib/localDraft';
+import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
+import { saveCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
@@ -21,6 +22,7 @@ import { ensureMemoriesForFills } from '../lib/qrMemories';
 import { reportError } from '../lib/report';
 import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, validateAddress, EMPTY_ADDRESS, type AddressValue } from '../lib/contact';
 import AddressPicker from '../components/AddressPicker';
+import { scrollPageToTop } from '../lib/pageScroll';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
 
 type Step = 'form' | 'payment' | 'tracking';
@@ -52,7 +54,6 @@ export default function Order() {
   >(null);
   const [material, setMaterial] = useState<MaterialType>('matte');
   const [cover, setCover] = useState<CoverType>('softcover');
-  const [size, setSize] = useState<AlbumSizePreset>('8x8');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
@@ -72,18 +73,88 @@ export default function Order() {
   const [proofError, setProofError] = useState('');
   const [payRef, setPayRef] = useState('');
   const [qrMissing, setQrMissing] = useState(false);
+  // The amount the order was placed at — what the payment screen asks for,
+  // even after a reload (checkoutSession), never a recomputed one.
+  const [placedAmount, setPlacedAmount] = useState<number | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
+  const addressRef = useRef<HTMLDivElement>(null);
 
-  // Price the ACTUAL album the customer built. Size + page count come from the
-  // print job (set at "ORDER ALBUM"); fall back sensibly if someone hits /order
-  // directly. Cover choice maps to binding (non-softcover → hardbound).
-  const job = getPendingPrintJob();
-  const albumSize: AlbumSizePreset = job?.albumSize ?? size ?? DEFAULT_ALBUM_SIZE;
-  const pageCount = job?.pages.length ?? MIN_PAGES;
+  // Price the ACTUAL album the customer built — NEVER a default. The album
+  // comes with the print job the Preview hands over (set at "Order"). A reload
+  // wipes that (it lives in memory), and checkout used to fall back to 8×8 /
+  // 40 pages: a 9×9 album was priced ₱1,710 instead of ₱2,886 (1-star testers,
+  // 2026-10-04). Now it is rebuilt from the account, or — for a guest — read
+  // from this device's draft just to price it (the print file is always built
+  // from the full album, see placeOrder). Until one answers nothing is priced;
+  // when none can, checkout says so and offers the way back to the album.
+  // Cover choice maps to binding (non-softcover → hardbound).
+  type OrderAlbumInfo = { albumId?: string; albumSize: AlbumSizePreset; pages: AlbumPage[]; editedAt: number };
+  const fromJob = (j: PrintJob): OrderAlbumInfo =>
+    ({ albumId: j.albumId, albumSize: j.albumSize, pages: j.pages, editedAt: readLocalDraftSummary()?.editedAt ?? 0 });
+  const orderRecordRef = useRef<Omit<CheckoutOrder, 'stage'> | null>(null);
+  const restoredRef = useRef(false);
+  function restoreCheckout(album: OrderAlbumInfo) {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const form = readCheckoutForm(album.albumId);
+    if (form) {
+      setName(form.name); setPhone(form.phone); setAddress(form.address);
+      setMaterial(form.material); setCover(form.cover);
+    }
+    const o = resumableCheckoutOrder(album.albumId, album.editedAt);
+    if (!o) return;
+    createdOrderRef.current = { id: o.orderId, order_number: o.orderNumber, albumId: o.albumId, material: o.material, cover: o.cover, albumSize: o.albumSize };
+    orderRecordRef.current = { albumId: o.albumId, orderId: o.orderId, orderNumber: o.orderNumber, material: o.material, cover: o.cover, albumSize: o.albumSize, amount: o.amount, albumEditedAt: o.albumEditedAt };
+    setOrderNumber(o.orderNumber);
+    setMaterial(o.material);
+    setCover(o.cover);
+    setPlacedAmount(o.amount);
+    if (o.stage === 'payment') setStep('payment');
+    else if (o.stage === 'tracking') setStep('tracking');
+  }
+  const [albumInfo, setAlbumInfo] = useState<OrderAlbumInfo | 'loading' | 'missing'>('loading');
+  // The album arrives here — handed over in memory, rebuilt from the account,
+  // or (pricing only) read from the device draft — and the checkout it had
+  // in this tab comes back with it (restoreCheckout, below).
+  useEffect(() => {
+    if (albumInfo !== 'loading') return;
+    let alive = true;
+    void (async () => {
+      const arrived = (i: OrderAlbumInfo | 'missing') => {
+        if (!alive) return;
+        setAlbumInfo(i);
+        if (i !== 'missing') restoreCheckout(i);
+      };
+      const handed = getPendingPrintJob();
+      if (handed && handed.pages.length > 0) { arrived(fromJob(handed)); return; }
+      const albumId = readOrderHandoff()?.albumId ?? readLocalDraftSummary()?.albumId;
+      if (user) {
+        try {
+          const j = await rebuildPrintJobFromAlbum(user.id, idbPhotos.get, albumId);
+          if (j && j.pages.length > 0) {
+            if (alive) setPendingPrintJob(j);
+            arrived(fromJob(j));
+            return;
+          }
+        } catch { /* not in the account (yet) — the device's draft can still price it */ }
+      }
+      const d = readDraftAlbumForOrder(albumId);
+      arrived(d
+        ? { albumId: d.albumId ?? albumId, albumSize: d.albumSize as AlbumSizePreset, pages: d.pages as AlbumPage[], editedAt: d.editedAt }
+        : 'missing');
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [albumInfo, user]);
+  const info = typeof albumInfo === 'object' ? albumInfo : null;
+  const albumSize: AlbumSizePreset = info?.albumSize ?? '8x8';
+  const pageCount = info?.pages.length ?? MIN_PAGES;
   // QR memories on the album — the first FREE_QR_MEMORIES are included, each
   // one past that is an add-on line (counted per QR code, link or clip alike).
-  const qrCount = countQrMemories(job?.pages ?? []);
+  const qrCount = countQrMemories(info?.pages ?? []);
   // Every QR on the album — both homes — for the checkout belt + clip uploads.
-  const allQrFills = (job?.pages ?? []).flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
+  const allQrFills = (info?.pages ?? []).flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
   const clipCodes = allQrFills.filter((f) => f?.kind === 'clip').map((f) => f!.code);
   // HD (1080p) memories — chosen with the first memory in the builder, priced
   // here. Standard 720p is included, so this bills only when HD was picked.
@@ -91,10 +162,9 @@ export default function Order() {
   // Memory-hosting TERM (0030): the included term unless the customer upgrades.
   const [hostingYears, setHostingYears] = useState<number | null>(null);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
-  const hasJob = job != null;
   // THE 40-PHOTO GATE (builder/albumMinimum): the Preview's Order stops a
   // short album, but /order can be opened directly (an old tab, a bookmark).
-  const jobPhotos = job ? albumPhotoCount(job.pages) : null;
+  const jobPhotos = info ? albumPhotoCount(info.pages) : null;
   const jobTooFew = jobPhotos != null && photosShortBy(jobPhotos) > 0;
 
   // ── Early clip upload ──────────────────────────────────────────────────
@@ -140,7 +210,26 @@ export default function Order() {
   // Loaded AND priceable. `settingsReady` alone only means the load settled — it
   // can settle with no schedule (offline, RPC blocked), and quoting ₱0 then would
   // charge nothing for a real album.
-  const priceReady = settingsReady && schedule !== null;
+  const priceReady = settingsReady && schedule !== null && info !== null;
+
+  // ── Back after a reload (checkoutSession) ──
+  // An order already placed in this checkout returns to where it was — the
+  // payment or thank-you screen, or the form with the SAME order row behind
+  // Place order — instead of a second, duplicate order. And the form comes
+  // back as typed.
+  useEffect(() => {
+    if (!info?.albumId || step !== 'form') return;
+    saveCheckoutForm({ albumId: info.albumId, name, phone, address, material, cover });
+  }, [info, step, name, phone, address, material, cover]);
+  const recordOrder = (stage: CheckoutStage) => {
+    if (orderRecordRef.current) saveCheckoutOrder({ ...orderRecordRef.current, stage });
+  };
+
+  // Every new screen opens at its top: the payment amount and the order
+  // number were below the fold, the phone left at the footer (testers).
+  useEffect(() => { scrollPageToTop(); }, [step]);
+  // Signing in answers "You must be signed in to check out" — don't leave it up.
+  const shownError = user && errorMsg.startsWith('You must be signed in') ? '' : errorMsg;
 
   // ── Form → Payment ──
   const handleProceedToPayment = () => {
@@ -154,7 +243,14 @@ export default function Order() {
     if (!canonicalPhone) newErrors.phone = 'Enter a valid PH mobile number, e.g. 0917 123 4567.';
     setErrors(newErrors);
     setAddressErrors(addrErrs);
-    if (Object.keys(newErrors).length > 0 || Object.keys(addrErrs).length > 0) return;
+    if (Object.keys(newErrors).length > 0 || Object.keys(addrErrs).length > 0) {
+      // The errors sit above the button, off-screen on a phone: a tap that
+      // seemed to do nothing (testers). Go to the first thing to fix.
+      const first = newErrors.name ? nameRef.current : newErrors.phone ? phoneRef.current : addressRef.current;
+      first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (first instanceof HTMLInputElement) first.focus({ preventScroll: true });
+      return;
+    }
 
     // Reflect the cleaned/canonical values back so the user sees exactly what
     // we'll store (and the order later re-derives the same E.164 phone).
@@ -218,6 +314,12 @@ export default function Order() {
           material, cover, albumSize, // freeze the specs the order row was built with
         };
         order = createdOrderRef.current;
+        setPlacedAmount(totalPrice);
+        orderRecordRef.current = {
+          albumId: created.album_id, orderId: created.id, orderNumber: created.order_number,
+          material, cover, albumSize, amount: totalPrice, albumEditedAt: info?.editedAt ?? 0,
+        };
+        recordOrder('placed');
       }
       setOrderNumber(order.order_number);
 
@@ -324,6 +426,7 @@ export default function Order() {
       setPrepMsg('');
 
       // 5. Only NOW — with the PDF safely in the bucket — show the payment QR.
+      recordOrder('payment');
       setStep('payment');
     } catch (err) {
       setPrepMsg('');
@@ -357,6 +460,7 @@ export default function Order() {
       await submitPaymentProof(order.id, { reference: cleanReference(payRef), proofPath });
       setPrepMsg('');
       setTrackStage(0);
+      recordOrder('tracking');
       setStep('tracking');
     } catch (err) {
       setPrepMsg('');
@@ -432,7 +536,7 @@ export default function Order() {
   if (step === 'payment') {
     // Read the order NUMBER from state, not the ref, during render (react-hooks/refs).
     const placed = orderNumber ? { order_number: orderNumber } : null;
-    const amountLabel = `₱${totalPrice.toLocaleString('en-PH')}`;
+    const amountLabel = `₱${(placedAmount ?? totalPrice).toLocaleString('en-PH')}`;
     return (
       <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
@@ -485,7 +589,7 @@ export default function Order() {
                 : <><Check size={16} /> I've sent {amountLabel}</>}
             </button>
             <p className="mt-3 text-[11px] text-light text-center">We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</p>
-            {errorMsg && <p className="mt-3 text-xs text-red-500 text-center">{errorMsg}</p>}
+            {shownError && <p className="mt-3 text-xs text-red-500 text-center">{shownError}</p>}
             <details className="mt-3 text-xs text-light">
               <summary className="cursor-pointer text-center hover:text-medium">Order summary</summary>
             <div className="space-y-2 text-sm border-y border-line-soft py-4 mt-2">
@@ -547,21 +651,15 @@ export default function Order() {
             {/* Size — locked to the album you built when a design is in progress */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
               <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><BookOpen size={18} /> Album Size</h3>
-              {hasJob ? (
+              {info ? (
                 <div className="flex items-center justify-between rounded-xl border-2 border-peach bg-cream px-4 py-3">
                   <span className="text-sm text-medium">From your design</span>
-                  <span className="text-sm font-semibold text-dark">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span>
+                  <span className="text-sm font-semibold text-dark" data-testid="order-album-size">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span>
                 </div>
+              ) : albumInfo === 'loading' ? (
+                <p className="flex items-center gap-2 text-sm text-medium"><Loader2 size={16} className="animate-spin" /> Loading your album…</p>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                  {ALBUM_SIZES.map((s) => (
-                    <button key={s.preset} onClick={() => setSize(s.preset)}
-                      className="py-2.5 px-3 rounded-xl border-2 text-center transition-all text-sm"
-                      style={{ borderColor: size === s.preset ? '#B85C38' : '#E8E8E8', backgroundColor: size === s.preset ? '#F6E7DF' : '#fff' }}>
-                      {s.name}
-                    </button>
-                  ))}
-                </div>
+                <p className="text-sm text-medium">No album found on this device.</p>
               )}
             </div>
 
@@ -571,7 +669,7 @@ export default function Order() {
               <div className="space-y-3">
                 <div>
                   <label className="text-xs text-medium mb-1 block">Full Name</label>
-                  <input value={name}
+                  <input ref={nameRef} value={name}
                     onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: '' })); }}
                     autoComplete="name" maxLength={80}
                     aria-invalid={!!errors.name}
@@ -580,7 +678,7 @@ export default function Order() {
                 </div>
                 <div>
                   <label className="text-xs text-medium mb-1 block">Phone Number</label>
-                  <input value={phone}
+                  <input ref={phoneRef} value={phone}
                     onChange={(e) => { setPhone(e.target.value); if (errors.phone) setErrors((p) => ({ ...p, phone: '' })); }}
                     onBlur={() => { const c = normalizePHPhone(phone); if (c) setPhone(formatPHPhoneDisplay(c)); }}
                     inputMode="tel" autoComplete="tel" maxLength={20}
@@ -588,7 +686,7 @@ export default function Order() {
                     className={`w-full border rounded-lg px-3 py-2 text-sm ${errors.phone ? 'border-red-400' : 'border-line'}`} placeholder="+63 9XX XXX XXXX" />
                   {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                 </div>
-                <div>
+                <div ref={addressRef}>
                   <label className="text-xs text-medium mb-2 block">Delivery Address</label>
                   <AddressPicker
                     value={address}
@@ -676,7 +774,12 @@ export default function Order() {
                   </div>
                 </div>
               )}
-              {jobTooFew ? (
+              {albumInfo === 'missing' ? (
+                <div role="alert" data-testid="order-no-album"
+                  className="mt-4 rounded-xl border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-3 text-sm text-[#8A5A12]">
+                  We can't find the album you're ordering. Open it and tap Order again.
+                </div>
+              ) : jobTooFew ? (
                 <div role="alert" data-testid="order-too-few-photos"
                   className="mt-4 rounded-xl border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-3 text-sm text-[#8A5A12]">
                   {tooFewToOrderMessage(jobPhotos!)}
@@ -686,14 +789,14 @@ export default function Order() {
                 className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                 {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
                   : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${totalPrice.toLocaleString('en-PH')}`} by bank transfer</>
-                    : !settingsReady ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
+                    : !settingsReady || albumInfo === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
                       : <>Pricing unavailable — please refresh</>}
               </button>
               )}
-              {errorMsg && (
-                <p className="mt-3 text-xs text-red-500 text-center" role="alert">{errorMsg}</p>
+              {shownError && (
+                <p className="mt-3 text-xs text-red-500 text-center" role="alert">{shownError}</p>
               )}
-              {(albumNotSaved || jobTooFew) && (
+              {(albumNotSaved || jobTooFew || albumInfo === 'missing') && (
                 <button onClick={() => navigate('/builder')} data-testid="order-open-album"
                   className="w-full mt-3 py-2.5 rounded-xl border border-peach text-cocoa text-sm font-semibold hover:bg-blush transition-colors flex items-center justify-center gap-2">
                   <BookOpen size={16} /> Open my album

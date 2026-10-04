@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Lenis from 'lenis';
+import { registerPageScroller, scrollPageToTop } from '../lib/pageScroll';
 import Navbar from './Navbar';
 import Footer from './Footer';
 
@@ -48,15 +49,17 @@ export default function Layout({ children }: LayoutProps) {
       rafId = requestAnimationFrame(raf);
     }
     rafId = requestAnimationFrame(raf);
+    registerPageScroller(lenis);
 
     return () => {
+      registerPageScroller(null);
       cancelAnimationFrame(rafId);
       lenis.destroy();
     };
   }, []);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    scrollPageToTop();
   }, [location.pathname]);
 
   return (
