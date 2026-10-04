@@ -38,6 +38,7 @@ import { useIndexedDBPhotos, getImageDimensions } from '../../lib/useIndexedDBPh
 import { supabase } from '../../lib/supabase';
 import { photosToForget } from '../../lib/photoKeeping';
 import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
+import { albumDataFromDraft, type StoredDraft } from '../../lib/draftAlbum';
 import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
 import { detectFaceCenter, initFaceApi } from './faceDetection';
 import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
@@ -2793,14 +2794,7 @@ export function useBuilderState(): BuilderActions {
     const leaving: AlbumData | null = draftHasContent(persistRef.current?.local)
       ? serializeAlbum()
       : stored && draftHasContent(stored)
-        ? {
-            id: stored.albumId,
-            title: albumNameToSave(stored.title),
-            sizePreset: stored.albumSize ?? '8x8',
-            pages: (stored.albumPages ?? []) as unknown as AlbumData['pages'],
-            photos: (stored.uploadedPhotos ?? []).map((p) => ({ id: p.id, name: p.name })),
-            ...(stored.coverFront ? { coverFront: stored.coverFront as unknown as AlbumData['coverFront'] } : {}),
-          }
+        ? albumDataFromDraft(stored as StoredDraft)
         : null;
     // getSession reads the saved session directly, so this is right even while
     // the auth context is still loading (it is, on the fresh-start mount).
