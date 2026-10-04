@@ -853,6 +853,11 @@ function layoutAlbum(
   const isMixedRatio = (t: PageTemplate): boolean =>
     new Set(t.slots.map((s) => s.ratio).filter(Boolean)).size > 1;
 
+  /** A layout with minDensity is dealt only when the customer CHOSE at least
+   *  that many photos per page (AUTO never does) — see PageTemplate.minDensity. */
+  const densityAllows = (t: PageTemplate): boolean =>
+    t.minDensity == null || (photosPerPage ?? 0) >= t.minDensity;
+
   // Templates for a photo at this size. RATIO matching is LOOSE — any layout of
   // the same ORIENTATION is an acceptable home (a 4:3 in a 3:2 slot costs ~11%),
   // which also unlocks layouts whose regions aren't exact camera ratios. But
@@ -869,18 +874,18 @@ function layoutAlbum(
     // is orientation-strict to avoid. They are placed ONLY by tryMixedFill,
     // which matches each slot individually.
     const sameOrientation = getTemplatesForOrientation(albumSize, orientationOfRatio(ratio))
-      .filter((t) => !isMixedRatio(t));
+      .filter((t) => !isMixedRatio(t) && densityAllows(t));
     // LOOSEN, don't remove: keep this photo's own ratio plus NEIGHBOURING ratios
     // within the crop budget. That unlocks the layouts exact-matching locked out
     // without letting a 4:3 land in a 16:9 slot (25%).
     const near = sameOrientation.filter((t) => ratioCrop(t.targetRatio, ratio) <= MAX_LOOSE_CROP);
     if (near.length) return near;
     if (sameOrientation.length) return sameOrientation; // orientation stays strict
-    const exact = getTemplatesForRatio(albumSize, ratio).filter((t) => !isMixedRatio(t));
+    const exact = getTemplatesForRatio(albumSize, ratio).filter((t) => !isMixedRatio(t) && densityAllows(t));
     if (exact.length) return exact;
     // Last resort for a size with nothing of this orientation: single-ratio
     // layouts only, so even here a slot is never filled across orientations.
-    return getTemplatesForAlbum(albumSize).filter((t) => !isMixedRatio(t));
+    return getTemplatesForAlbum(albumSize).filter((t) => !isMixedRatio(t) && densityAllows(t));
   };
 
   const pages: AlbumPage[] = [];
@@ -1034,7 +1039,7 @@ function layoutAlbum(
 
   // Templates that MIX photo ratios on one page (e.g. 3:2 + 1:1 + 2:3). Filled
   // greedily when a moment's photos supply every ratio the template needs.
-  const mixedTemplates = getTemplatesForAlbum(albumSize).filter(isMixedRatio);
+  const mixedTemplates = getTemplatesForAlbum(albumSize).filter((t) => isMixedRatio(t) && densityAllows(t));
 
   // Try to fill a mixed template from `pool`: one unused photo per slot whose
   // ratio matches that slot's ratio. Returns the fills, or null if any slot

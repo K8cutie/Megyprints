@@ -155,6 +155,37 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
     albumSizes: [size], fullBleed: true, slots: quadSlots(v, gap),
   });
 
+  /* ── 4 RECTANGLE photos + a combo box, full bleed (chosen "Collage" only) ─
+     Every 4-up above needs SQUARE photos (Four Squares is all 1:1; the hero
+     quads' three cells are 1:1), so a phone roll of 4:3 / 3:4 photos could
+     never fill one and an explicit 4 per page was quietly dealt as 3.
+     Quarters of a square page are square, so four rectangles fit only as a
+     2×2 of 4:3 (or 3:4) cells with the combo box taking the leftover quarter
+     band — the same move as the 8×6 deck's quad-34-box / quad-32-band.
+     After the 0.5" spine reserve the tightest frame is the 6×6 portrait
+     cell's 2.05" width; on 8×8 the cells are 3.72×2.98" / 2.79×3.97".
+     minDensity 4: dealt only when the customer picks 4 per page, so AUTO and
+     the lower densities deal exactly as before. */
+  const rectQuad = (suffix: string, name: string, r: '4:3' | '3:4', boxFirst: boolean, gap: number): PageTemplate => {
+    const long = (1 - gap) / 2;      // a cell's long side
+    const short = long * 0.75;       // its short side: exact 4:3 / 3:4 on a square page
+    const span = 2 * short + gap;    // the two cells across the short axis
+    const off = boxFirst ? 1 - span : 0;
+    const boxAt = boxFirst ? 0 : span;
+    const land = r === '4:3';
+    const cell = (col: number, row: number) => land
+      ? fill(col * (long + gap), off + row * (short + gap), long, short, r)
+      : fill(off + col * (short + gap), row * (long + gap), short, long, r);
+    return {
+      id: id(suffix), name, category: 'quad', slotCount: 4, margin: ZERO, orientation: 'square',
+      targetRatio: r, albumSizes: [size], fullBleed: true, minDensity: 4,
+      slots: [cell(0, 0), cell(1, 0), cell(0, 1), cell(1, 1)],
+      textSlots: [land
+        ? { id: 'combo', x: 0, y: boxAt, width: 1, height: 1 - span, align: 'center', placeholder: 'Tap to add' }
+        : { id: 'combo', x: boxAt, y: 0, width: 1 - span, height: 1, align: 'center', placeholder: 'Tap to add' }],
+    };
+  };
+
   /* ── 3 SQUARE photos + a combo box, full bleed 2×2 grid ─────────────────
      Three squares cannot tile a square, so the fourth cell is the combo box.
      The gutter is split evenly on both axes, keeping cells exactly 1:1. */
@@ -294,6 +325,10 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
       fbQuadHero('fb-quad-hero-top-gap', 'Hero Top + Three', 'top', GAP),
       fbQuadHero('fb-quad-hero-bottom-gap', 'Hero Bottom + Three', 'bottom', GAP),
     ] : []),
+    rectQuad('fb-quad-43-box-below-gap', 'Four Landscapes + Box Below', '4:3', false, GAP),
+    rectQuad('fb-quad-43-box-above-gap', 'Four Landscapes + Box Above', '4:3', true, GAP),
+    rectQuad('fb-quad-34-box-right-gap', 'Four Portraits + Box Right', '3:4', false, GAP),
+    rectQuad('fb-quad-34-box-left-gap', 'Four Portraits + Box Left', '3:4', true, GAP),
 
     // ── Retired (resolvable, never selectable) — the gutterless originals ──
     retired(fbDuoExact('fb-duo-exact-v', 'Two Portraits + Box', 'v')),
