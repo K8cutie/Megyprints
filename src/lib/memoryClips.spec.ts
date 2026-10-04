@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   clipExtFor, clipMimeFor, clipObjectPath, publicClipUrl, isHostedClipUrl, checkClipMeta,
   MAX_CLIP_BYTES, MAX_INPUT_BYTES, MAX_CLIP_SECONDS, CLIP_BUCKET,
+  versionedClipUrl,
 } from './memoryClips';
 import { targetDimensions, transcodeSupported, QUALITY_TARGETS } from './videoTranscode';
 
@@ -168,5 +171,19 @@ describe('serializeUploads — the Order-page prefetch and the Pay tap never rac
   it('prefetch with nothing staged is a clean no-op', async () => {
     const { prefetchStagedClipUploads } = await import('./memoryClips');
     expect(await prefetchStagedClipUploads([])).toBe(true);
+  });
+});
+
+
+describe('a replaced clip gets a new link (1-star testers round 2)', () => {
+  const BASE = 'https://proj.supabase.co';
+  it('the same object with a version — still one of our hosted clips', () => {
+    const url = versionedClipUrl('k7m2p9qz', 'mp4', 1759620000000, BASE);
+    expect(url).toBe('https://proj.supabase.co/storage/v1/object/public/memory-clips/k7m2p9qz.mp4?v=1759620000000');
+    expect(isHostedClipUrl(url, BASE)).toBe(true);
+  });
+  it('My Memories re-points EVERY replace to a new versioned link (source guard)', () => {
+    const src = readFileSync(resolve(__dirname, '../pages/MyMemories.tsx'), 'utf8');
+    expect(src).toMatch(/const next = versionedClipUrl\(row\.code, v\.ext, Date\.now\(\)\);\s*const ok = await updateMemoryDestination\(row\.code, next\);/);
   });
 });
