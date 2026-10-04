@@ -136,7 +136,11 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
    MAIN COMPONENT
    ══════════════════════════════════════════════════════════════════════════ */
 
-export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollapsed, mobilePulldown }: { collapsed?: boolean; onToggleCollapsed?: (v: boolean) => void; mobilePulldown?: boolean } = {}) {
+export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollapsed, mobilePulldown, onPlaceOrder }: {
+  collapsed?: boolean; onToggleCollapsed?: (v: boolean) => void; mobilePulldown?: boolean;
+  /** Step 7's "Place Order →": the builder orders through the preview's own Order. */
+  onPlaceOrder?: () => void;
+} = {}) {
   const [activeTab, setActiveTab] = useState<TabId>('design');
   const [chatOpen, setChatOpen] = useState(false);
   // Collapse is controlled by the parent (so the layout can reserve panel width);
@@ -396,10 +400,18 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           builder.setPhase('edit');
         } else if (action.includes('Save')) {
           builder.manualSave?.();
+        } else if (action.includes('Order')) {
+          // "Place Order →" is the filled button, the way on, so it must
+          // order: through the preview's own Order (the 40-photo check, then
+          // the print job checkout reads), never straight to /order. On the
+          // phone Megy folds up so the answer underneath (saving, or why not
+          // yet) shows.
+          setMobileExpanded(false);
+          onPlaceOrder?.();
         }
         break;
     }
-  }, [builder, showToast]);
+  }, [builder, showToast, onPlaceOrder]);
   const doRestartWizard = () => {
     // Signed in, the album is saved to the account and keeps its photos (see
     // reset); signed out, it really is gone.
