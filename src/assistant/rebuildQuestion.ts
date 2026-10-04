@@ -3,8 +3,8 @@
    album. Rebuilding replaces every page's layout and the customer's layout
    edits, so a typed "generate", or a size change on an album already laid out
    for another size (it re-lays out every page for the new shape), asks first;
-   a yes, or asking again, does it. The wizard's own buttons are explicit
-   choices and aren't asked.
+   a yes, or asking again, does it ("Surprise me" too). The wizard's own
+   buttons are explicit choices and aren't asked.
    1-star testers, 2026-10-04 (the Penny-Pincher): "change size to 6x4" said
    "Album size changed" and left the 6×8 layout squashed onto 6×4.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -22,6 +22,12 @@ export function rebuildQuestion(intent: AssistantIntent, album: { albumPages: Al
   if (!albumIsMade(album.albumPages)) return null;
   if (intent.type === 'generate_album') {
     return "That rebuilds your whole album: every page gets a new layout and your layout changes are replaced (Studio pages stay). Say \"yes\" to go ahead, or keep editing.";
+  }
+  // "Surprise me" rebuilds every page too (random layouts) — it rearranged a
+  // made album without asking and wiped layout edits and custom text (1-star
+  // testers round 2, the Perfectionist), while "generate" asked.
+  if (intent.type === 'surprise_me') {
+    return "That gives every page a fresh, surprise layout: your layout changes and the text you wrote in caption boxes are replaced (Studio pages stay). Say \"yes\" to go ahead, or keep editing.";
   }
   const size = intent.type === 'change_size' ? (intent.payload?.size as AlbumSizePreset | undefined) : undefined;
   if (size && size !== album.albumSize) {
