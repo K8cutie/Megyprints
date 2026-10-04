@@ -7,8 +7,10 @@
    the spine auto-follows the front title, and the BACK is reserved for the
    Megy Prints mark (coverLayout.deriveBrandedBack) — no Back face here.
 
-   • Background — reuses the Step-3 picker in photo-only mode. Setting an
-     Image here IS how you put a photo on the cover.
+   • Background — tapping it opens the file picker (owner, 2026-10-04: no
+     separate "Upload Custom Image" box). The album's own photos are listed
+     under it once there are some. Setting an image here IS how you put a
+     photo on the cover.
    • Text — the cover title, typed inline (+ font / colour).
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -51,6 +53,16 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
   const [tab, setTab] = useState<CoverTab>('background');
   const activeTab: CoverTab = tab;
+
+  // The Background button opens the file picker straight away; the chosen
+  // photo becomes the cover background.
+  const bgFileRef = useRef<HTMLInputElement>(null);
+  const onBgFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // the same photo can be picked again
+    if (!file) return;
+    b.setPageBackground({ type: 'image', image: URL.createObjectURL(file) });
+  };
 
   // Live preview panel size — kept modest so the inline controls fit below it.
   const [dims, setDims] = useState({ w: 200, h: 200 });
@@ -237,7 +249,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
         return (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => { setTab(t.key); if (t.key === 'background') bgFileRef.current?.click(); }}
             className={`py-2 px-3 rounded-xl border-2 text-sm font-semibold transition-all active:scale-[0.98] ${
               open
                 ? 'bg-peach text-white border-peach shadow'
@@ -248,6 +260,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
           </button>
         );
       })}
+      <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={onBgFile} />
     </div>
   );
 
@@ -279,7 +292,23 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               <p className="text-[10px] text-[#B9A992] mt-1">Drag the cover above to reposition the photo.</p>
             </div>
           )}
-          <BackgroundDesigner hidePreview compact imageOnly hideOpacity background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
+          {/* The album's own photos, once there are some (the cover reopened
+              from the preview). At the cover step there are none yet. */}
+          {uploadedPhotos.length > 0 && (
+            <BackgroundDesigner hidePreview compact imageOnly hideOpacity hideUpload background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
+          )}
+          {bgIsImage ? (
+            !(bg as { photoId?: string }).photoId && (
+              <button
+                onClick={() => b.setPageBackground({ type: 'solid', solid: '#FFFBF7' })}
+                className="w-full py-2 rounded-lg text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 transition-all flex items-center justify-center gap-1.5"
+              >
+                <X size={12} /> Remove photo
+              </button>
+            )
+          ) : (
+            <p className="text-center text-[11px] text-[#B9A992]">Tap Background to choose a photo for your cover.</p>
+          )}
         </div>
       )}
 
