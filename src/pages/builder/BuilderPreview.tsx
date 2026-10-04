@@ -27,6 +27,7 @@ import { lookCss, isLookId } from './looks';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
+import { chooserListSizes, CHOOSER_TITLE } from './chooserFit';
 import { trashSpot, TRASH_SIZE, type Box } from './trashSpot';
 import { ornamentFit } from './ornaments';
 import { wordArtDomStyle, resolveTextSlotAlign, freeTextBoxWidth, TEXT_LINE_HEIGHT } from './wordArt';
@@ -139,6 +140,7 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
 }) {
   const cell = Math.min(width, height);
   const fs = Math.max(12, Math.min(28, cell * 0.15));
+  const list = showList ? chooserListSizes(width, height, options) : null;
   return (
     <div key={rectKey} className="absolute flex flex-col items-center justify-center text-center"
       onClick={(e) => { e.stopPropagation(); onTap(); }}
@@ -180,10 +182,10 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
             <Plus size={26} color="white" />
           </div>
         );
-      })() : showList ? (
+      })() : list ? (
         <>
-          <span style={{ fontWeight: 800, fontSize: fs * 1.15, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>Click to add:</span>
-          <div style={{ fontSize: fs, fontWeight: 700, lineHeight: 1.5, textAlign: 'left' }}>
+          <span data-testid="chooser-title" style={{ fontWeight: 800, fontSize: list.titleFs, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>{CHOOSER_TITLE}</span>
+          <div style={{ fontSize: list.listFs, fontWeight: 700, lineHeight: 1.5, textAlign: 'left' }}>
             {options.map((o) => <div key={o}>•&nbsp; {o}</div>)}
           </div>
         </>
