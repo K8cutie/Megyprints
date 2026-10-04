@@ -8,6 +8,7 @@ import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
 import CoverEditor from './builder/CoverEditor';
 import MobileReview from './builder/MobileReview';
+import MissingPhotosBar from './builder/MissingPhotosBar';
 import LayoutPicker from './builder/LayoutPicker';
 import BuilderBackGuard from './builder/BuilderBackGuard';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
@@ -274,6 +275,9 @@ export default function Builder() {
 
           <div className="flex-1" />
         </div>
+
+        {/* An album opened without its photos says so, with the way on. */}
+        {(actions.phase === 'edit' || actions.phase === 'preview') && <MissingPhotosBar actions={actions} />}
 
         {/* Phase Content */}
         <div className="flex-1 overflow-auto min-h-0 relative">

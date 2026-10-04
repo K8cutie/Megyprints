@@ -18,6 +18,7 @@ import AddQrModal from './AddQrModal';
 import EndOfAlbumPrompt from './EndOfAlbumPrompt';
 import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
 import { checkOrderReadiness, readinessMessage } from './orderReadiness';
+import { missingPhotos, missingPhotosMessage, copyNotesMessage } from '../../lib/photoPresence';
 import { fillableBoxCount } from './generateAlbum';
 import { BOOK } from './bookFeel';
 import { resolveSlotBox } from './slotGeometry';
@@ -849,12 +850,20 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // text and blank pages print exactly as they look — say so once; "Order
   // anyway" goes on, "Show me" goes to the first one.
   const [notReady, setNotReady] = useState<string | null>(null);
+  // PHOTOS NOT ON THIS DEVICE (photoPresence): the album would print blank
+  // frames. No "Order anyway" — a paid, unrecallable print of empty pages.
+  const [notHere, setNotHere] = useState<string | null>(null);
   const handleOrder = (anyway = false) => {
     if (orderSaving) return;
     const have = albumPhotoCount(pages);
     if (photosShortBy(have) > 0) { setTooFew(have); return; }
     setTooFew(null);
-    const warning = readinessMessage(readiness);
+    const gone = missingPhotos(pages, photos, coverFront);
+    if (gone.count > 0) { setNotHere(missingPhotosMessage(gone)); return; }
+    setNotHere(null);
+    // Photos put back from other copies are said here too (never blocking).
+    const copies = copyNotesMessage(pages, photos, coverFront);
+    const warning = [readinessMessage(readiness), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
     if (warning && !anyway) { setNotReady(warning); return; }
     setNotReady(null);
     setPendingPrintJob({ pages, photos, albumSize, albumId: getAlbumId(), coverDesign, coverFront });
@@ -882,6 +891,12 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
         Back to my pages
       </button>
+    </div>
+  );
+  const notHereBanner = notHere != null && missingPhotos(pages, photos, coverFront).count > 0 && (
+    <div role="alert" data-testid="order-photos-not-here"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12] text-left">
+      <span className="flex-1 min-w-[12rem]">{missingPhotosMessage(missingPhotos(pages, photos, coverFront))}</span>
     </div>
   );
   const orderErrorBanner = orderError && (
@@ -969,7 +984,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           </span>
         </div>
       )}
-      {(tooFewBanner || notReadyBanner || orderErrorBanner) && <div className="px-5 pt-2 bg-paper">{tooFewBanner || notReadyBanner || orderErrorBanner}</div>}
+      {(tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner) && <div className="px-5 pt-2 bg-paper">{tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner}</div>}
 
       {/* Page display with the page turn on each side — small labelled
           buttons, not bare ‹ › arrows (SpreadTurnButton). */}
@@ -1059,7 +1074,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           or ✕ to keep browsing; "Continue editing" is a real button. */}
       {endPrompt.open && (
         <EndOfAlbumPrompt onClose={endPrompt.close} onCheckCover={() => setCoverOpen(true)} onOrder={() => handleOrder()} onContinueEditing={onBack}
-          saving={orderSaving} error={tooFewBanner || notReadyBanner || orderErrorBanner || null} />
+          saving={orderSaving} error={tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner || null} />
       )}
 
       {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too).

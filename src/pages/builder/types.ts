@@ -653,6 +653,10 @@ export interface UploadedPhoto {
   /** Left out of the album (the customer accepted Megy's suggestion). Stays in
    *  the list, so indexes don't move and it can be brought back. */
   leftOut?: boolean;
+  /** Put back from a re-added file on this device (photoRelink): 'differentCopy'
+   *  = same name, another size; 'smaller' = fewer pixels than the original (may
+   *  print softer); 'mismatch' = another shape (probably not the same picture). */
+  copyNote?: 'differentCopy' | 'smaller' | 'mismatch';
 }
 
 export interface ThemeConfig {

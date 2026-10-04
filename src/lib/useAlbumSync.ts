@@ -49,6 +49,12 @@ export interface AlbumData {
   photos?: Array<{
     id: string;
     name: string;
+    /** The original file's size and pixels, and when it was taken — a few
+     *  bytes that let another device put the same photo back (photoRelink). */
+    size?: number;
+    width?: number;
+    height?: number;
+    capturedAt?: number | null;
     cloudUrl?: string;
     storagePath?: string;
     previewUrl?: string;
@@ -87,6 +93,11 @@ export function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
   const photosMeta = (albumData.photos ?? []).map((p) => ({
     id: p.id,
     name: p.name,
+    // The file's size, pixels and capture time: how another device knows the
+    // same photo again when it is added there (photoRelink). Bytes, not files.
+    ...(p.size ? { size: p.size } : {}),
+    ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
+    ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
     // No cloudUrl, no storagePath, no previewUrl — all local-only now.
     // The photo check and the keep / leave-out choice are tiny and travel with it.
     ...(p.check ? { check: p.check } : {}),
@@ -110,7 +121,7 @@ export function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
 
 export function deserializeAlbum(row: Record<string, unknown>): AlbumData {
   const dbPhotos = Array.isArray(row.photos)
-    ? (row.photos as Array<{ id: string; name: string; cloudUrl?: string; storagePath?: string; previewUrl?: string; check?: PhotoCheck; kept?: boolean; leftOut?: boolean }>)
+    ? (row.photos as Array<{ id: string; name: string; size?: number; width?: number; height?: number; capturedAt?: number | null; cloudUrl?: string; storagePath?: string; previewUrl?: string; check?: PhotoCheck; kept?: boolean; leftOut?: boolean }>)
     : [];
 
   return {
@@ -123,6 +134,9 @@ export function deserializeAlbum(row: Record<string, unknown>): AlbumData {
     photos: dbPhotos.map((p) => ({
       id: p.id,
       name: p.name ?? 'Untitled',
+      ...(typeof p.size === 'number' && p.size > 0 ? { size: p.size } : {}),
+      ...(typeof p.width === 'number' && typeof p.height === 'number' && p.width > 0 && p.height > 0 ? { width: p.width, height: p.height } : {}),
+      ...(typeof p.capturedAt === 'number' ? { capturedAt: p.capturedAt } : {}),
       cloudUrl: p.cloudUrl ?? undefined,
       storagePath: p.storagePath ?? undefined,
       previewUrl: p.previewUrl ?? undefined,

@@ -21,7 +21,7 @@ export interface StoredDraft {
   title?: string;
   albumSize?: string;
   albumPages?: unknown[];
-  uploadedPhotos?: Array<{ id: string; name: string; check?: unknown; kept?: boolean; leftOut?: boolean }>;
+  uploadedPhotos?: Array<{ id: string; name: string; size?: number; width?: number; height?: number; capturedAt?: number | null; check?: unknown; kept?: boolean; leftOut?: boolean }>;
   coverFront?: unknown;
   accountId?: string | null;
 }
@@ -34,6 +34,9 @@ export function albumDataFromDraft(stored: StoredDraft): AlbumData {
     sizePreset: stored.albumSize ?? '8x8',
     pages: (stored.albumPages ?? []) as unknown as AlbumData['pages'],
     photos: (stored.uploadedPhotos ?? []).map((p) => ({
+      ...(p.size ? { size: p.size } : {}),
+      ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
+      ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
       id: p.id,
       name: p.name,
       ...(p.check ? { check: p.check as NonNullable<AlbumData['photos']>[number]['check'] } : {}),

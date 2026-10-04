@@ -28,6 +28,7 @@ import { scrollPageToTop } from '../lib/pageScroll';
 import { startFreshAlbum } from '../lib/albumSession';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
 import { trackOf } from '../lib/orderTracker';
+import { missingPhotos, missingPhotosMessage } from '../lib/photoPresence';
 import { getMyOrder, type MyOrder } from '../lib/myOrders';
 import OrderTracker from '../components/OrderTracker';
 
@@ -310,6 +311,13 @@ export default function Order() {
     const handed = getPendingPrintJob();
     if (handed && photosShortBy(albumPhotoCount(handed.pages)) > 0) {
       setErrorMsg(tooFewToOrderMessage(albumPhotoCount(handed.pages)));
+      setAlbumNotSaved(true);
+      return;
+    }
+    // Photos not on this device: the print would have blank frames. Never.
+    const gone = handed ? missingPhotos(handed.pages, handed.photos, handed.coverFront) : null;
+    if (gone && gone.count > 0) {
+      setErrorMsg(missingPhotosMessage(gone));
       setAlbumNotSaved(true);
       return;
     }

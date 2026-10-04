@@ -29,6 +29,7 @@ import type { AlbumPage, UploadedPhoto, AlbumSizePreset, CoverDesign } from '../
 import type { StoredPhoto } from './useIndexedDBPhotos';
 import { normalizeStoredPageFields, storedCoverPage } from '../pages/builder/pageNormalize';
 import { withLiveCoverPhoto } from '../pages/builder/coverPhoto';
+import { missingPhotos } from './photoPresence';
 
 // The local draft (DRAFT_STORAGE_KEY, written by useBuilderState) survives a
 // full reload — unlike the in-memory print job — so it's the fallback for the
@@ -178,14 +179,7 @@ export async function rebuildPrintJobFromAlbum(
   // photo) is missing locally — that slot would otherwise print BLANK. "Some other
   // photo resolved" is not good enough: every USED index must have a real preview,
   // or this device can't build a correct PDF and checkout must stop and say so.
-  const usedIdx = new Set<number>();
-  for (const pg of pages) {
-    for (const f of pg.slotFills ?? []) if (typeof f === 'number' && f >= 0) usedIdx.add(f);
-    for (const f of pg.textSlotFills ?? []) if (typeof f === 'number' && f >= 0) usedIdx.add(f);
-  }
-  for (const i of usedIdx) {
-    if (!photos[i]?.previewUrl) return null;
-  }
+  if (missingPhotos(pages, photos).count > 0) return null;
 
   // The cover saved with this album — its slots index these same photos.
   // Without one (saved before 0036), this album's own draft cover.
