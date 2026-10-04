@@ -10,6 +10,7 @@ import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
 import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '../pages/builder/types';
 import { photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
 import { albumIsMade } from './rebuildQuestion';
+import { leftOutNote } from '../lib/pickedFiles';
 
 /** THE 40-PHOTO GATE (see albumMinimum): no album is made with fewer photos
  *  going in than pages. Returns Megy's answer when short, null when enough. */
@@ -219,13 +220,17 @@ export class ActionEngine {
           // album (same name + size), which is exactly what happens when a phone
           // picker caps a batch and the customer re-picks an overlapping set —
           // saying "100 uploaded" there would be a lie.
-          const { added, skipped } = this.builder.addPhotos(files);
+          const { added, skipped, videos = 0, others = 0 } = this.builder.addPhotos(files);
           const parts: string[] = [];
           if (added > 0) parts.push(`${added} photo${added > 1 ? 's' : ''} added`);
           if (skipped > 0) parts.push(`${skipped} already in your album`);
+          // A video or another file is never dropped without a word.
+          const leftOut = leftOutNote(videos, others, added + skipped > 0);
+          if (leftOut) parts.push(leftOut);
           return {
             intentType: intent.type,
-            success: true, // an all-duplicates pick is a no-op, not a failure
+            // an all-duplicates pick is a no-op, not a failure; nothing but left-outs is
+            success: added + skipped > 0 || !leftOut,
             message: parts.length ? `${parts.join(' · ')}.` : 'No photos to add.',
           };
         }
