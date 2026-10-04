@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { loadRegions, loadAllProvinces, loadCities, loadBarangays, cityRegion, type PsgcItem, type ProvinceItem } from '../lib/psgc';
-import type { AddressValue } from '../lib/contact';
+import { STREET_MAX, streetLength, type AddressValue } from '../lib/contact';
 
 type Errors = Partial<Record<keyof AddressValue, string>>;
 
@@ -129,10 +129,17 @@ export default function AddressPicker({ value, onChange, errors }: {
           <input
             value={value.street}
             onChange={(e) => onChange({ ...value, street: e.target.value })}
-            maxLength={120} autoComplete="address-line1" placeholder="123 Rizal St., Purok 2"
+            autoComplete="address-line1" placeholder="123 Rizal St., Purok 2"
             aria-invalid={!!errors?.street} className={inputCls(errors?.street)}
           />
           {errText('street')}
+          {/* Near the limit, show the count: nothing is cut, so the customer
+              sees how much to trim (validateAddress blocks the order past it). */}
+          {streetLength(value.street) >= STREET_MAX - 20 && (
+            <p className={`text-[11px] mt-1 text-right tabular-nums ${streetLength(value.street) > STREET_MAX ? 'text-red-500 font-semibold' : 'text-light'}`} data-testid="street-count">
+              {streetLength(value.street)}/{STREET_MAX}
+            </p>
+          )}
         </div>
         <div>
           <label className="text-xs text-medium mb-1 block">ZIP</label>
