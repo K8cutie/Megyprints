@@ -1152,8 +1152,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             <button onClick={() => setChatOpen(false)} className="text-light hover:text-dark"><ChevronDown className="w-4 h-4" /></button>
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-1 space-y-2 min-h-[80px] max-h-[180px]">
+            {/* overflow-wrap:anywhere — a long unbroken word ("OMGGGG…") ran past
+                the bubble and was cut off at the panel edge (1-star testers). */}
             {messages.slice(-4).map((msg) => (
-              <div key={msg.id} className={`text-[11px] leading-relaxed whitespace-pre-line px-2 py-1 rounded-lg ${msg.role === 'user' ? 'bg-dark text-white ml-4' : 'bg-white text-dark mr-4'}`}>{msg.role === 'assistant' ? <BoldText text={msg.content} /> : msg.content}</div>
+              <div key={msg.id} data-testid="chat-bubble" className={`text-[11px] leading-relaxed whitespace-pre-line [overflow-wrap:anywhere] px-2 py-1 rounded-lg ${msg.role === 'user' ? 'bg-dark text-white ml-4' : 'bg-white text-dark mr-4'}`}>{msg.role === 'assistant' ? <BoldText text={msg.content} /> : msg.content}</div>
             ))}
             {isThinking && <div className="flex gap-1 px-2"><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" /><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" style={{ animationDelay: '150ms' }} /><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" style={{ animationDelay: '300ms' }} /></div>}
           </div>
