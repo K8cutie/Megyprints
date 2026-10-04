@@ -65,6 +65,23 @@ export function densityRangeLabel(sizePreset: string): string {
  *  generateAlbum, which imports this so the two never drift.) */
 export const MIN_ALBUM_PAGES = 40;
 
+/** Photos an album needs for every page to carry `perPage`. With fewer,
+ *  generation gives pages fewer photos so all MIN_ALBUM_PAGES pages fill
+ *  (FILL MODE in generateAlbum) — the upload card says so (1-star testers,
+ *  2026-10-04: "the one about how many photos go on a page" was ignored with
+ *  no word why). */
+export function photosForPerPage(perPage: number): number {
+  return MIN_ALBUM_PAGES * perPage;
+}
+
+/** The upload card's note when the chosen photos-per-page can't be met, or null. */
+export function perPageNote(photos: number, perPage: number | undefined): string | null {
+  if (!perPage || perPage <= 1 || photos < MIN_ALBUM_PAGES) return null;
+  const needed = photosForPerPage(perPage);
+  if (photos >= needed) return null;
+  return `With ${photos} photos, most pages get fewer than ${perPage} so all ${MIN_ALBUM_PAGES} pages are filled. ${perPage} per page needs about ${needed} photos.`;
+}
+
 /** Typical photos-per-page on AUTO (no explicit density) — the "natural" look
  *  when there are plenty of photos. ~2 (3 for the large landscape/portrait sizes). */
 const NATURAL_BY_SIZE: Record<AlbumSizePreset, number> = {

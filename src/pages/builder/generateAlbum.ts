@@ -1234,18 +1234,25 @@ function layoutAlbum(
         const planned = plan.length ? plan[pages.length % plan.length] : 1;
         const want = Math.max(1, Math.min(planCap, planned + planCarry));
         let template: PageTemplate | undefined;
-        if (want > 1 && fits.length > 0) {
-          // Nearest dealable count to the plan (either side, ties go under so
-          // the album only ever gains pages); the difference carries forward.
-          // A count the last two pages did not use beats an exact repeat by up
-          // to one photo (the carry absorbs it) — the rhythm rule, kept here.
-          let bestDist = Infinity, bestCount = -1;
-          for (const t of fits) {
-            const dist = Math.abs(t.slotCount - want) + (t.slotCount > want ? 0.5 : 0) + (countRecentlyUsed(t.slotCount) ? 0.75 : 0);
-            if (dist < bestDist) { bestDist = dist; bestCount = t.slotCount; }
-          }
-          const nearest = fits.filter((t) => t.slotCount === bestCount);
-          if (nearest.length) {
+        // Counts this page may take: never MORE than wanted (2026-10-04, the
+        // 1-star testers): a page over the plan left the album short of photos
+        // for its last pages, which then printed BLANK (42 real photos on an
+        // 8×8 → 2 blank pages). Fewer is safe — the difference carries on.
+        const under = fits.filter((t) => t.slotCount <= want);
+        if (want > 1 && under.length > 0) {
+          // Nearest count to the plan, from the top. A count the last two pages
+          // did not use beats an exact repeat by up to one photo (the carry
+          // absorbs it) — the rhythm rule. Then, from the best count down, the
+          // first count with a layout that is not the previous page's: a thin
+          // pool (ONE 4-up for square photos) used to break to a SINGLE page
+          // every other time — "4 · Collage" on 196 photos made 73 pages, 28
+          // of them singles (testers). A different multi page keeps the album
+          // close to its plan instead.
+          const counts = [...new Set(under.map((t) => t.slotCount))]
+            .sort((a, b) => (Math.abs(a - want) + (countRecentlyUsed(a) ? 0.75 : 0)) - (Math.abs(b - want) + (countRecentlyUsed(b) ? 0.75 : 0)) || b - a);
+          for (const count of counts) {
+            const nearest = under.filter((t) => t.slotCount === count && t.id !== lastTemplateId);
+            if (!nearest.length) continue;
             const pool = boxAware(nearest);
             const byId = new Map(nearest.map((t) => [t.id, t]));
             const okSet = new Set(pool.map((t) => t.id));
@@ -1256,17 +1263,18 @@ function layoutAlbum(
               bag.draw((x) => anySet.has(x) && geoSigOf(byId.get(x)!) !== lastGeoSig) ??
               bag.draw((x) => okSet.has(x)) ?? bag.draw((x) => anySet.has(x));
             template = (id != null ? byId.get(id) : undefined) ?? pool[0] ?? nearest[0];
+            break;
           }
         }
-        // A thin pool can only repeat the previous page's layout (one duo per
-        // ratio): break to a distinct single instead — pages only ever ADD.
-        if (template && template.id === lastTemplateId && singles.length > 0) template = undefined;
         if (!template) {
           template = singles.length > 0
             ? dealSingle(key, singles, boxAware(singles))
             : (ratioTemplates.filter((t) => t.slotCount <= queue.length)[0] ?? ratioTemplates[0]);
         }
         const take = Math.min(template.slots.length, queue.length);
+        // What this page did not take is owed to the next one. (Never negative
+        // now — no page takes more than it wants — so the album can only run
+        // out of plan, never out of photos: no blank pages at the end.)
         planCarry = want - take;
         pushPage(template, queue.splice(0, take));
         return;
