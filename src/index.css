@@ -4,18 +4,44 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Attention pulse for the "Add memory video" button — a soft expanding halo
-   (not a harsh blink) that draws the eye to an easy-to-miss feature. It's
-   applied only until the customer has clicked the button once (see the
-   memory-discovered flag), so it never nags in the long run. Honors
-   prefers-reduced-motion. */
-@keyframes megyMemoryPulse {
-  0%   { box-shadow: 0 0 0 0 rgba(154, 74, 44, 0.55); }
-  70%  { box-shadow: 0 0 0 9px rgba(154, 74, 44, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(154, 74, 44, 0); }
+/* "Add a video memory" — the album's crème de la crème, so it shines (owner,
+   2026-10-04): a gold button, unlike every terracotta one, with a soft gold
+   glow that breathes and a light that sweeps across it now and then. The
+   sweep is a transform on ::after (cheap on old phones); the glow is the
+   button's own shadow, which overflow:hidden does not clip. Dark brown words
+   on gold read at 5.4:1 on its darkest corner (7-11:1 in the middle). Under
+   prefers-reduced-motion it keeps the gold and a still glow, and nothing
+   moves. See VideoMemoryButton. */
+.memory-shine {
+  position: relative;
+  overflow: hidden;
+  color: #2E1A08;
+  background: linear-gradient(135deg, #C9962F 0%, #E9C46F 38%, #F7E3A8 52%, #DDAE4C 70%, #C08A2B 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(120, 80, 10, 0.3), 0 2px 10px 0 rgba(214, 160, 50, 0.45);
+  animation: megyMemoryGlow 2.6s ease-in-out infinite;
 }
-.memory-pulse { animation: megyMemoryPulse 1.8s ease-out infinite; }
-@media (prefers-reduced-motion: reduce) { .memory-pulse { animation: none; } }
+.memory-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.8) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: megyMemorySweep 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.memory-shine > * { position: relative; z-index: 1; }
+@keyframes megyMemoryGlow {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(120, 80, 10, 0.3), 0 2px 10px 0 rgba(214, 160, 50, 0.45); }
+  50%      { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(120, 80, 10, 0.3), 0 0 22px 4px rgba(232, 178, 64, 0.75); }
+}
+@keyframes megyMemorySweep {
+  0%        { transform: translateX(-120%); }
+  35%, 100% { transform: translateX(120%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .memory-shine, .memory-shine::after { animation: none; }
+  .memory-shine::after { display: none; }
+}
 
 /* Rotate-your-phone hint: tilt the phone glyph to landscape and back, to show
    the gesture. Used on the mobile Preview page (portrait). */
