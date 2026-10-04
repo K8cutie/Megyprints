@@ -48,6 +48,10 @@ interface BuilderPreviewProps {
   /** Why the album could not go to checkout (the save failed). */
   orderError?: string | null;
   onDismissOrderError?: () => void;
+  /** Megy's "Place Order →" asked to order (Builder.requestOrder). */
+  orderRequested?: boolean;
+  /** The preview took the request: it runs once, through handleOrder. */
+  onOrderRequestTaken?: () => void;
 }
 
 function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = false, displayScale = 1): React.CSSProperties {
@@ -678,7 +682,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   );
 }
 
-export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError }: BuilderPreviewProps) {
+export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError, orderRequested = false, onOrderRequestTaken }: BuilderPreviewProps) {
   const total = pages.length;
   const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId } = useBuilderContext();
 
@@ -854,6 +858,17 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // real way back to the pages (owner, 2026-09-13: "there doesn't seem to be a
   // way to go back").
   const endPrompt = useEndOfAlbumPrompt(!hasNext && total > 0);
+
+  // Megy's "Place Order →" (Step 7) lands here and orders exactly like the
+  // Order button above: through handleOrder, the one way to order. It was a
+  // filled button that did nothing. Taken first, so a re-render or a later
+  // visit to the preview never orders again.
+  useEffect(() => {
+    if (!orderRequested) return;
+    onOrderRequestTaken?.();
+    handleOrder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderRequested]);
 
   return (
     <div style={landscapeRotate

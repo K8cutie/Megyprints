@@ -67,12 +67,14 @@ const EditPhase = memo(function EditPhase({
   );
 });
 
-const PreviewPhase = memo(function PreviewPhase({ actions, onOrder, orderSaving, orderError, onDismissOrderError }: {
+const PreviewPhase = memo(function PreviewPhase({ actions, onOrder, orderSaving, orderError, onDismissOrderError, orderRequested, onOrderRequestTaken }: {
   actions: BuilderContextValue;
   onOrder: () => void;
   orderSaving: boolean;
   orderError: string | null;
   onDismissOrderError: () => void;
+  orderRequested: boolean;
+  onOrderRequestTaken: () => void;
 }) {
   return (
     <BuilderPreview
@@ -86,6 +88,8 @@ const PreviewPhase = memo(function PreviewPhase({ actions, onOrder, orderSaving,
       orderSaving={orderSaving}
       orderError={orderError}
       onDismissOrderError={onDismissOrderError}
+      orderRequested={orderRequested}
+      onOrderRequestTaken={onOrderRequestTaken}
       getPageSnapshot={actions.getPageSnapshot}
     />
   );
@@ -172,6 +176,19 @@ export default function Builder() {
     navigate('/order');
   }, [actions, navigate]);
   const dismissOrderError = useCallback(() => setOrderError(null), []);
+
+  // Megy's "Place Order →" (Step 7) orders through the SAME door as the
+  // preview's own Order button: it asks the preview to run its handleOrder
+  // (the album's print job, then the save + checkout above). Going to /order
+  // straight from Megy would let checkout read a stale or missing print job.
+  // The preview takes the request once (onOrderRequestTaken), so coming back
+  // to it never orders again.
+  const [orderRequested, setOrderRequested] = useState(false);
+  const requestOrder = useCallback(() => {
+    setOrderRequested(true);
+    if (actions.phase !== 'preview') actions.setPhase('preview');
+  }, [actions]);
+  const takeOrderRequest = useCallback(() => setOrderRequested(false), []);
 
   /* Minimal action handler for BuilderEdit internal triggers */
   const handleAction = useCallback((actionId: string, _payload?: Record<string, unknown>) => {
@@ -288,7 +305,8 @@ export default function Builder() {
             {actions.phase === 'preview' && (
               <motion.div key="preview" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="h-full">
-                <PreviewPhase actions={actions} onOrder={handleOrder} orderSaving={orderSaving} orderError={orderError} onDismissOrderError={dismissOrderError} />
+                <PreviewPhase actions={actions} onOrder={handleOrder} orderSaving={orderSaving} orderError={orderError} onDismissOrderError={dismissOrderError}
+                  orderRequested={orderRequested} onOrderRequestTaken={takeOrderRequest} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -309,7 +327,8 @@ export default function Builder() {
         </div>
 
         {/* ── Megy Assistant ── */}
-        <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'cover' || actions.phase === 'preview')} />
+        <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'cover' || actions.phase === 'preview')}
+          onPlaceOrder={requestOrder} />
 
         {/* "Change layout" picker — shared by mobile review + desktop panel */}
         <LayoutPicker actions={actions} />
