@@ -45,6 +45,51 @@ export async function initFaceApi(modelUrl = DEFAULT_MODEL_URL): Promise<void> {
   return loadPromise;
 }
 
+/** The tiny 68-point landmark model (~80 KB, same CDN), for the photo check's
+ *  closed-eyes test. Loaded on first use, after the face detector. Resolves
+ *  false when either model can't load (the check then skips eyes). */
+let landmarksLoaded = false;
+let landmarksPromise: Promise<boolean> | null = null;
+export async function initFaceLandmarks(modelUrl = DEFAULT_MODEL_URL): Promise<boolean> {
+  if (landmarksLoaded) return true;
+  if (landmarksPromise) return landmarksPromise;
+  landmarksPromise = (async () => {
+    await initFaceApi(modelUrl);
+    if (!modelsLoaded) return false;
+    try {
+      await faceapi.nets.faceLandmark68TinyNet.loadFromUri(modelUrl);
+      landmarksLoaded = true;
+    } catch (err) {
+      console.warn('[FaceDetection] Failed to load landmark model:', err);
+    }
+    return landmarksLoaded;
+  })();
+  return landmarksPromise;
+}
+
+/** Face detection runs on the GPU (WebGL) — fast. On the CPU fallback a
+ *  detection takes about a second and blocks the screen. */
+export function faceBackendIsFast(): boolean {
+  try { return faceapi.tf.getBackend() === 'webgl'; } catch { return false; }
+}
+
+/** Faces with their 68 landmarks, for the photo check. Empty when the models
+ *  aren't loaded or detection fails. */
+export async function detectFacesWithLandmarks(
+  input: HTMLCanvasElement,
+): Promise<{ boxHeight: number; landmarks: { x: number; y: number }[] }[]> {
+  if (!landmarksLoaded) return [];
+  try {
+    const found = await faceapi
+      .detectAllFaces(input, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
+      .withFaceLandmarks(true);
+    return found.map((f) => ({ boxHeight: f.detection.box.height, landmarks: f.landmarks.positions.map((pt) => ({ x: pt.x, y: pt.y })) }));
+  } catch (err) {
+    console.warn('[FaceDetection] Landmark detection failed:', err);
+    return [];
+  }
+}
+
 /** Detect face center(s) in an image.
     - 1 face  → centers on that face
     - 2+ faces→ centers on the middle of the GROUP so everyone stays in frame

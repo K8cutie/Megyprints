@@ -27,6 +27,7 @@ import { COLORS } from './MobileTextEditor';
 import { FONTS } from './fonts';
 import { FontSelect } from './FontList';
 import { DEFAULT_COVER, type AlbumPage, type TextStyle } from './types';
+import { medianSharpness, photoQuality } from '../../lib/photoCheck';
 
 const SPINE_STRIP_W = 26;
 type CoverTab = 'background' | 'text';
@@ -50,6 +51,14 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   }, [setEditScope]);
 
   const page: AlbumPage = coverFront;
+
+  // The album's photos for the cover: best shots first (Megy's photo check),
+  // left-out ones not offered.
+  const coverPhotos = useMemo(() => {
+    const live = uploadedPhotos.filter((p) => !p.leftOut);
+    const median = medianSharpness(live);
+    return [...live].sort((a, b) => photoQuality(b, median) - photoQuality(a, median));
+  }, [uploadedPhotos]);
 
   const [tab, setTab] = useState<CoverTab>('background');
   const activeTab: CoverTab = tab;
@@ -295,8 +304,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
           )}
           {/* The album's own photos, once there are some (the cover reopened
               from the preview). At the cover step there are none yet. */}
-          {uploadedPhotos.length > 0 && (
-            <BackgroundDesigner hidePreview compact imageOnly hideOpacity hideUpload background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
+          {coverPhotos.length > 0 && (
+            <BackgroundDesigner hidePreview compact imageOnly hideOpacity hideUpload background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={coverPhotos} />
           )}
           {bgIsImage ? (
             !(bg as { photoId?: string }).photoId && (

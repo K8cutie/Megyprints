@@ -377,7 +377,8 @@ export class WizardEngine {
         };
 
       case 'upload_photos':
-        const photoCount = builder.uploadedPhotos.length;
+        // The photos that go in: ones left out by Megy's photo check don't count.
+        const photoCount = builder.uploadedPhotos.filter((p) => !p.leftOut).length;
         return {
           title: photoCount > 0 ? `Step 4: Photos Uploaded (${photoCount}) 📸` : "Step 4: Upload Your Photos 📸",
           body: photoCount > 0
