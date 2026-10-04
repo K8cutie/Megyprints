@@ -53,6 +53,21 @@ export const BOOK = {
       ', linear-gradient(to right, rgba(255,255,255,0) 47.6%, rgba(255,255,255,0.22) 48.9%, rgba(255,255,255,0) 49.6%, rgba(255,255,255,0) 50.4%, rgba(255,255,255,0.22) 51.1%, rgba(255,255,255,0) 52.4%)',
     ].join(''),
   } as CSSProperties,
+  /** The CLOSED book: the front cover on its own, square at the spine and
+   *  softly rounded at the fore-edge, with the book's shadow on the table. */
+  closed: (w: number, h: number, s: number): CSSProperties => {
+    const r = Math.max(2, Math.round(5 * s));
+    return {
+      position: 'relative', width: w, height: h, overflow: 'hidden', background: '#FFFFFF',
+      borderRadius: `1px ${r}px ${r}px 1px`,
+      boxShadow: `0 ${Math.round(28 * s)}px ${Math.round(60 * s)}px -${Math.round(14 * s)}px rgba(45,28,16,0.55), 0 ${Math.round(8 * s)}px ${Math.round(18 * s)}px rgba(0,0,0,0.16)`,
+    };
+  },
+  /** The hinge of a hardcover: a shadowed groove just in from the spine edge. */
+  hinge: {
+    position: 'absolute', inset: 0, zIndex: 42, pointerEvents: 'none',
+    background: 'linear-gradient(to right, rgba(0,0,0,0.26) 0%, rgba(0,0,0,0.06) 1.6%, rgba(255,255,255,0.12) 2.8%, rgba(0,0,0,0.12) 3.8%, rgba(0,0,0,0) 6%)',
+  } as CSSProperties,
   /** A single page (the album's last, odd page): shade its free edge instead of a gutter. */
   edgeShade: (side: 'left' | 'right'): CSSProperties => ({
     position: 'absolute', inset: 0, zIndex: 42, pointerEvents: 'none',

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronLeft, ShoppingCart, Plus, Trash2, RotateCw, Sparkles, X, Loader2 } from 'lucide-react';
+import { ChevronLeft, ShoppingCart, Plus, Trash2, RotateCw, Sparkles, X, Loader2, Pencil } from 'lucide-react';
 import SpreadTurnButton, { SPREAD_TURN_W } from './SpreadTurnButton';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
@@ -736,6 +736,13 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const [edit, setEdit] = useState<{ pageIndex: number; slot?: number; textId?: string } | null>(null);
   const [qrEdit, setQrEdit] = useState<{ pageIndex: number; slot: number } | null>(null);
   const [coverOpen, setCoverOpen] = useState(false);
+  // THE COVER FIRST (1-star testers, 2026-10-04: "I paid without ever seeing
+  // the finished front of the book"). The preview opens on the closed book's
+  // front cover, like picking it up; "Next" opens pages 1–2 and "Previous"
+  // from there comes back to it. `coverAt` is the page the cover was opened
+  // over, so any other page turn (Megy's "go to page 5") leaves the cover.
+  const [coverAt, setCoverAt] = useState<number | null>(() => (coverFront && currentIndex === 0 ? 0 : null));
+  const onCover = !!coverFront && coverAt === currentIndex;
   const buildTextInitial = (pageIndex: number, textId: string): BoxTextContent => {
     const el = pages[pageIndex]?.textElements?.find((t) => t.id === textId);
     return {
@@ -799,9 +806,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const singleW = Math.round(base.w * fitScale);
   const H = Math.round(base.h * fitScale);
 
-  // Navigate by 2 pages (one spread) at a time
-  const navPrev = () => onGoToPage(Math.max(0, currentIndex - 2));
-  const navNext = () => onGoToPage(Math.min(total - 1, currentIndex + 2));
+  // Navigate by 2 pages (one spread) at a time; the cover sits before pages 1–2.
+  const navPrev = () => {
+    if (Math.floor(currentIndex / 2) * 2 === 0) { if (coverFront) setCoverAt(currentIndex); return; }
+    onGoToPage(Math.max(0, currentIndex - 2));
+  };
+  const navNext = () => {
+    if (onCover) { setCoverAt(null); return; }
+    onGoToPage(Math.min(total - 1, currentIndex + 2));
+  };
 
   // SINGLE order entry point. Checkout (Order.tsx) reads the pending print job to
   // price the album and build the cover PDF; if we call onOrder() WITHOUT stashing
@@ -862,8 +875,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     </div>
   );
 
-  const hasPrev = spreadLeftIndex > 0;
-  const hasNext = spreadLeftIndex + 2 < total;
+  const hasPrev = !onCover && (spreadLeftIndex > 0 || !!coverFront);
+  const hasNext = onCover ? total > 0 : spreadLeftIndex + 2 < total;
 
   // End-of-album prompt — opens EVERY time they arrive at the last spread
   // (useEndOfAlbumPrompt). It can be dismissed (keep browsing) and it offers a
@@ -900,7 +913,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             <ChevronLeft size={14} /> Edit pages
           </button>
           <span className="text-xs text-medium font-medium tabular-nums">
-            {spreadLeftIndex + 1}-{Math.min(spreadLeftIndex + 2, total)} / {total}
+            {onCover ? 'Cover' : <>{spreadLeftIndex + 1}-{Math.min(spreadLeftIndex + 2, total)} / {total}</>}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -940,7 +953,24 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         <div className="flex items-center gap-6">
           <SpreadTurnButton dir="prev" show={hasPrev} onClick={navPrev} />
 
-          {/* Pages */}
+          {/* The closed book: the front cover, as it prints. */}
+          {onCover && coverFront ? (
+          <div className="flex flex-col items-center gap-3">
+            <div style={BOOK.closed(singleW, H, fitScale)} data-testid="preview-cover">
+              <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
+              <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
+              <div aria-hidden="true" style={BOOK.hinge} />
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-medium" data-testid="preview-caption">Front cover</span>
+              <button onClick={() => setCoverOpen(true)} data-testid="preview-edit-cover"
+                className="px-3 py-1.5 rounded-lg border border-line bg-white text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors">
+                <Pencil size={13} /> Edit cover
+              </button>
+            </div>
+          </div>
+          ) : (
+          /* Pages */
           <div className="flex flex-col items-center gap-3">
             {/* THE BOOK (owner, 2026-09-13: "it looks so flat"). The spread sits
                 inside a cover that peeks out around it, over a stack of page
@@ -995,6 +1025,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                 : `Page ${spreadLeftIndex + 1} of ${total}`}
             </span>
           </div>
+          )}
 
           <SpreadTurnButton dir="next" show={hasNext} onClick={navNext} />
         </div>

@@ -22,11 +22,11 @@ import BackgroundDesigner from './BackgroundDesigner';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
-import { deriveSpine } from './coverLayout';
+import { deriveSpine, measureSpineText, SPINE_DARK_INK, type SpineInfo } from './coverLayout';
 import { COLORS } from './MobileTextEditor';
 import { FONTS } from './fonts';
 import { FontSelect } from './FontList';
-import { DEFAULT_COVER, type AlbumPage, type TextStyle } from './types';
+import { DEFAULT_COVER, type AlbumPage } from './types';
 import { medianSharpness, photoQuality } from '../../lib/photoCheck';
 
 const SPINE_STRIP_W = 26;
@@ -333,6 +333,21 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               className="w-full px-3 py-2.5 rounded-xl border border-line bg-white text-[15px] text-dark outline-none focus:border-blush-pink"
               style={{ fontFamily: title.fontFamily }}
             />
+            {/* The spine is narrow: say what it prints when it isn't the title as typed. */}
+            {spine.shortened ? (
+              <span className="block mt-1 text-[11px] text-[#8A5A12]" data-testid="spine-too-long">
+                Too long for the spine: it prints as “{spine.text.text}”. A shorter title fits whole.
+              </span>
+            ) : spine.shrunk && (
+              <span className="block mt-1 text-[11px] text-stone" data-testid="spine-smaller">
+                A long title: the spine prints it in smaller letters so it fits.
+              </span>
+            )}
+            {spine.inkChanged && (
+              <span className="block mt-1 text-[11px] text-stone" data-testid="spine-ink-note">
+                Your colour wouldn't show on the spine, so the spine title prints in {spine.text.color === SPINE_DARK_INK ? 'dark' : 'light'} ink.
+              </span>
+            )}
           </label>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -467,8 +482,13 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 }
 
 /** The spine shown beside the front cover — auto-derived from the front page
- *  (title + colour), read-only. Reads bottom→top like the printed spine. */
-function SpineStrip({ height, spine }: { height: number; spine: { text: TextStyle; bg: string } }) {
+ *  (title + colour), read-only. Reads bottom→top like the printed spine, and
+ *  shows the WHOLE line that prints (shrunk to the strip when it must). */
+function SpineStrip({ height, spine }: { height: number; spine: SpineInfo }) {
+  const line = spine.text.text;
+  const fontSize = line.trim()
+    ? Math.max(2, Math.min(12, Math.floor((12 * (height - 10)) / Math.max(1, measureSpineText(line, spine.text, 12)))))
+    : 12;
   return (
     <div className="flex flex-col items-center shrink-0">
       <div
@@ -479,7 +499,7 @@ function SpineStrip({ height, spine }: { height: number; spine: { text: TextStyl
           <span
             style={{
               transform: 'rotate(-90deg)', whiteSpace: 'nowrap',
-              fontSize: 12, lineHeight: 1, fontFamily: spine.text.fontFamily,
+              fontSize, lineHeight: 1, fontFamily: spine.text.fontFamily,
               color: spine.text.color, fontWeight: spine.text.bold ? 700 : 400,
               fontStyle: spine.text.italic ? 'italic' : 'normal',
             }}
