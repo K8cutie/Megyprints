@@ -265,6 +265,17 @@ describe('rebuildPrintJobFromAlbum — cover', () => {
     expect(job?.coverFront).toBeUndefined();
   });
 
+  it("the cover's own uploaded photo comes from this device's photo store after the sign-in reload", async () => {
+    const withPhoto = { ...JSON.parse(JSON.stringify(cover)), background: { type: 'image', image: 'blob:from-the-closed-tab', localPhotoId: 'cover-a1-x' } };
+    fakeLatestAlbum(savedRow({ cover_front: withPhoto }));
+    draftOnDevice(null);
+    const deviceGet = async (id: string) => (id === 'cover-a1-x'
+      ? ({ id, name: 'beach.jpg', url: 'blob:fresh/cover-a1-x', type: 'image/jpeg', size: 1, width: 10, height: 10 } as unknown as StoredPhoto)
+      : idbGet(id));
+    const job = await rebuildPrintJobFromAlbum('u1', deviceGet, 'a1');
+    expect(job?.coverFront?.background).toMatchObject({ type: 'image', image: 'blob:fresh/cover-a1-x', localPhotoId: 'cover-a1-x' });
+  });
+
   it('a draft from before album ids were kept is trusted, as it always was', async () => {
     fakeLatestAlbum(savedRow());
     draftOnDevice({ coverFront: cover });

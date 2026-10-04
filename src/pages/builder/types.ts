@@ -156,6 +156,11 @@ export interface AlbumBackground {
    *  revoked / dies after a reload), but the id re-resolves to a fresh URL from
    *  IndexedDB — so a photo-background survives a reload. */
   photoId?: string;
+  /** A photo the customer uploaded for the COVER itself (not one of the album
+   *  photos). Its bytes are kept in the same IndexedDB photo store under this
+   *  id, so `image` (a blob: URL that dies with the tab) can be pointed at a
+   *  fresh URL after the app was closed (coverPhoto.withLiveCoverPhoto). */
+  localPhotoId?: string;
   x?: number;
   y?: number;
   width?: number;

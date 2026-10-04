@@ -28,6 +28,7 @@ import { DRAFT_STORAGE_KEY } from './localDraft';
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, CoverDesign } from '../pages/builder/types';
 import type { StoredPhoto } from './useIndexedDBPhotos';
 import { normalizeStoredPageFields, storedCoverPage } from '../pages/builder/pageNormalize';
+import { withLiveCoverPhoto } from '../pages/builder/coverPhoto';
 
 // The local draft (DRAFT_STORAGE_KEY, written by useBuilderState) survives a
 // full reload — unlike the in-memory print job — so it's the fallback for the
@@ -190,6 +191,9 @@ export async function rebuildPrintJobFromAlbum(
   // Without one (saved before 0036), this album's own draft cover.
   const savedCover: AlbumPage | null = storedCoverPage(album.cover_front, albumSize);
   const cover = savedCover ? { coverFront: savedCover } : draftCoverPages(album.id, albumSize);
+  // A photo uploaded for the cover itself: its link died with the reload, its
+  // file is in this device's photo store (coverPhoto).
+  if (cover.coverFront) cover.coverFront = await withLiveCoverPhoto(cover.coverFront, idbGet);
 
   return { pages, photos, albumSize, albumId: album.id, coverDesign: draftCoverDesign(album.id), ...cover };
 }
