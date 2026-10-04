@@ -7,7 +7,9 @@ import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_COVER_DESIGN } from './builder/
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
 import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } from '../lib/orders';
-import { getPendingPrintJob, setPendingPrintJob, readOrderHandoff, type PrintJob } from '../lib/printQueue';
+import { getPendingPrintJob, setPendingPrintJob, readOrderHandoff, noteOrderHandoff, type PrintJob } from '../lib/printQueue';
+import { draftAlbumForAccount } from '../lib/draftAlbum';
+import { serializeAlbum, upsertAlbumRow } from '../lib/useAlbumSync';
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
 import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError } from '../lib/orderAlbum';
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
@@ -265,6 +267,19 @@ export default function Order() {
     void placeOrder();
   };
 
+  /** Save this device's draft of the album to the signed-in account (a guest
+   *  who signed up at checkout). Never another account's draft. */
+  const saveDraftToAccount = async (albumId: string): Promise<boolean> => {
+    if (!user) return false;
+    const draft = draftAlbumForAccount(user.id, albumId);
+    if (!draft) return false;
+    setPrepMsg('Saving your album to your account…');
+    const { error } = await upsertAlbumRow({ ...serializeAlbum(draft), user_id: user.id, id: draft.id });
+    if (error) return false;
+    noteOrderHandoff({ albumId, saved: true });
+    return true;
+  };
+
   // ── Place the order → REQUIRED print-PDF upload → show the payment QR ──
   // Manual bank transfer (0033): the order row exists BEFORE the customer pays
   // so its number can be the transfer reference; it stays pending_payment
@@ -296,9 +311,14 @@ export default function Order() {
         // device's draft. Never simply "the latest": a customer keeps several.
         const albumId = resolveOrderAlbumId(getPendingPrintJob(), readLocalDraftSummary());
         // A guest's album never reached the account (the builder saves it on the
-        // way to checkout, but only for a signed-in customer).
+        // way to checkout, but only for a signed-in customer). They signed up
+        // HERE: save it to the new account now. It used to stop them with "Open
+        // it in the builder and tap Order again", and that detour wiped their
+        // address (1-star testers, 2026-10-04).
+        const handoff = readOrderHandoff();
+        if (albumId && handoff?.albumId === albumId && !handoff.saved) await saveDraftToAccount(albumId);
         assertAlbumSavedForOrder(readOrderHandoff(), albumId);
-        const created = await createOrderFromAlbum({
+        const orderIt = () => createOrderFromAlbum({
           userId: user!.id,
           albumId,
           specs: { material, cover, size: albumSize },
@@ -309,6 +329,15 @@ export default function Order() {
           hostingYears: effectiveYears,
           hdMemories,
         });
+        let created;
+        try {
+          created = await orderIt();
+        } catch (e) {
+          // The account has no copy of this album (it never got its save):
+          // save this device's draft, then order it.
+          if (!(e instanceof AlbumNotSavedError) || !albumId || !(await saveDraftToAccount(albumId))) throw e;
+          created = await orderIt();
+        }
         createdOrderRef.current = {
           id: created.id, order_number: created.order_number, albumId: created.album_id,
           material, cover, albumSize, // freeze the specs the order row was built with
