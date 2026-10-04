@@ -86,6 +86,48 @@ describe('square 4-up layouts', () => {
   });
 });
 
+/* A phone roll is 4:3 / 3:4, never square — and every 4-up above needs square
+   photos, so "Collage" (4/page) on such a roll used to come out exactly like
+   3/page. The rectangle quads fix that, but only when 4 is CHOSEN. */
+describe('square albums: 4 per page on a phone roll (no square photos)', () => {
+  const roll = (n: number): UploadedPhoto[] => Array.from({ length: n }, (_, i) => {
+    const portrait = i % 5 >= 3;
+    return { id: `r${i}`, previewUrl: '', name: `r${i}.jpg`, type: 'image/jpeg', size: 1, width: portrait ? 3024 : 4032, height: portrait ? 4032 : 3024, capturedAt: i };
+  });
+  const orient = (w: number, h: number) => (w / h > 1.02 ? 'landscape' : w / h < 0.98 ? 'portrait' : 'square');
+  const fills = (p: AlbumPage) => (p.slotFills ?? []).filter((f) => f != null).length;
+  const usesOptIn = (p: AlbumPage) => getTemplatesForAlbum(p.size).some((t) => t.id === p.templateId && t.minDensity != null);
+
+  for (const size of SQUARES) {
+    for (const n of [120, 200]) {
+      it(`${size}, ${n} photos at 4/page: deals 4-photo pages, never a portrait in a landscape slot or back`, () => {
+        const photos = roll(n);
+        const pages = generateAlbum(photos, size, 4);
+        expect(pages.filter((p) => fills(p) === 4).length, 'four-photo pages').toBeGreaterThanOrEqual(10);
+        for (const p of pages) {
+          const t = getTemplatesForAlbum(size).find((x) => x.id === p.templateId);
+          (p.slotFills ?? []).forEach((f, s) => {
+            if (f == null || !t) return;
+            const want = t.slots[s].ratio ?? t.targetRatio;
+            const [a, b] = want.split(':').map(Number);
+            const slot = orient(a, b), photo = orient(photos[f].width, photos[f].height);
+            expect(slot === 'landscape' && photo === 'portrait', `${p.templateId} slot ${s}`).toBe(false);
+            expect(slot === 'portrait' && photo === 'landscape', `${p.templateId} slot ${s}`).toBe(false);
+          });
+        }
+        expect(pages.reduce((a, p) => a + fills(p), 0)).toBe(n);
+        expect(pages.length).toBeGreaterThanOrEqual(40);
+      });
+    }
+
+    it(`${size}: the rectangle quads are opt-in — AUTO and 3/page never deal them`, () => {
+      for (const n of [120, 200]) for (const ppp of [undefined, 3]) {
+        expect(generateAlbum(roll(n), size, ppp).filter(usesOptIn), `${n} photos, ${ppp ?? 'AUTO'}`).toHaveLength(0);
+      }
+    });
+  }
+});
+
 describe('an explicit density never pads the album with blank pages', () => {
   // A chosen density is a ceiling. Below MIN_PAGES × density the budget drops
   // to whatever still fills 40 pages; only a pool under 40 photos can leave

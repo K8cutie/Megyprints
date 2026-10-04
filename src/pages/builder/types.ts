@@ -93,6 +93,10 @@ export interface PageTemplate {
   /** True full-bleed: the photo runs to ALL four page edges — no safe margin and
    *  no binding gutter. Use only for single-photo full-page layouts. */
   fullBleed?: boolean;
+  /** Auto-generation deals this layout only when the customer CHOSE at least
+   *  this many photos per page. Absent → dealt at every density, AUTO included.
+   *  The layout picker and manual swaps ignore it. */
+  minDensity?: number;
 }
 
 export interface FilledSlot {
