@@ -95,3 +95,9 @@ export function readDraftAlbumForOrder(albumId: string | undefined): DraftAlbumF
     return null;
   }
 }
+
+/** Is there an album in progress worth asking about before starting a new
+ *  one (StartNewAlbumPrompt): photos, something on a page, or just a name. */
+export function albumInProgress(draft: LocalDraftSummary | null): draft is LocalDraftSummary {
+  return !!draft && (draft.hasContent || draft.title.trim().length > 0);
+}

@@ -25,6 +25,7 @@ import { reportError } from '../lib/report';
 import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, validateAddress, EMPTY_ADDRESS, type AddressValue } from '../lib/contact';
 import AddressPicker from '../components/AddressPicker';
 import { scrollPageToTop } from '../lib/pageScroll';
+import { startFreshAlbum } from '../lib/albumSession';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
 
 type Step = 'form' | 'payment' | 'tracking';
@@ -553,7 +554,10 @@ export default function Order() {
           )}
 
           <div className="mt-6 flex gap-3 justify-center">
-            <button onClick={() => navigate('/builder')} className="px-6 py-2.5 bg-peach text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
+            {/* A NEW album. It reopened the one just ordered, ready to order
+                again (1-star testers); that one is safe in the account. */}
+            <button onClick={() => { startFreshAlbum(user?.id); navigate('/builder'); }} data-testid="order-create-another"
+              className="px-6 py-2.5 bg-peach text-white rounded-lg font-medium hover:brightness-105">Create Another</button>
             <button onClick={() => navigate('/')} className="px-6 py-2.5 border border-[#D4D4D4] text-medium rounded-lg font-medium hover:bg-line-soft">Home</button>
           </div>
         </motion.div>
