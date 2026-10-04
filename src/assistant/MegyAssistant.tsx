@@ -21,6 +21,7 @@ import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
 import PhotoCheckCard from './PhotoCheckCard';
+import { useSettleGuard } from '../lib/settleGuard';
 import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
@@ -303,6 +304,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
+  const cardTooSoon = useSettleGuard(wizardKey);
+
   /* ── Chat ── */
   const rebuildAskedRef = useRef(false);
   const builderRef = useRef(builder);
@@ -542,7 +545,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             <div className="h-full bg-peach rounded-full transition-all" style={{ width: `${prog.percent}%` }} />
           </div>
 
-          <div className="p-6 bg-white rounded-2xl border border-peach/20 shadow-xl" key={wizardKey}>
+          {/* A double tap is one tap: right after the card changes, a tap is the
+              tail of the one that changed it (settleGuard). */}
+          <div className="p-6 bg-white rounded-2xl border border-peach/20 shadow-xl" key={wizardKey}
+            onClickCapture={(e) => { if (cardTooSoon()) { e.stopPropagation(); e.preventDefault(); } }}>
             <h3 className="font-display text-xl font-semibold text-dark mb-2"><TypeText text={msg.title} /></h3>
             {wizardRef.current.state.step === 'pick_theme' ? (
               <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme} onContinue={goNext}
