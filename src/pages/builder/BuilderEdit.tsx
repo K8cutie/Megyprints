@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles,
-  Wand2, Upload, Home, PanelLeftOpen, Video,
+  Wand2, Upload, Home, PanelLeftOpen,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -30,6 +30,7 @@ import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
 import PageTurnBar from './PageTurnBar';
+import VideoMemoryButton from './VideoMemoryButton';
 import { CloudSaveStatus } from '../../components/CloudSaveStatus';
 import { useAuth } from '../../lib/authContext';
 import { GUARD_MESSAGES, SOFT_MESSAGE, printSharpness, resolveSlotBox } from './slotGeometry';
@@ -276,15 +277,6 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
   // Corner the user picks for a NEW memory badge (null = Auto, face-aware).
   const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null);
-  // Pulse the button until the customer has clicked it once (feature discovery,
-  // not a nag). Persisted so it stays discovered across sessions/devices-local.
-  const [memoryDiscovered, setMemoryDiscovered] = useState(() => {
-    try { return localStorage.getItem('megy-memory-discovered') === '1'; } catch { return false; }
-  });
-  const markMemoryDiscovered = () => {
-    setMemoryDiscovered(true);
-    try { localStorage.setItem('megy-memory-discovered', '1'); } catch { /* ignore */ }
-  };
   const [pickerIsTextSlot, setPickerIsTextSlot] = useState(false);
   const buildSlotTextInitial = useCallback((slot: number): BoxTextContent => {
     const existing = actions.currentPage?.slotTexts?.[slot];
@@ -1091,15 +1083,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
               {/* Living-memory QR — offered on a single full-photo page; turns it
                   into a full-bleed photo with a scannable corner badge. */}
-              {actions.canAddMemoryQr && (
-                <button
-                  onClick={() => { markMemoryDiscovered(); setMemoryOpen(true); }}
-                  title="Add a video that plays when this page's printed QR is scanned"
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all bg-blush-pink text-white hover:brightness-105 shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}
-                >
-                  <Video size={13} /> Add a video memory
-                </button>
-              )}
+              {actions.canAddMemoryQr && <VideoMemoryButton variant="desktop" onClick={() => setMemoryOpen(true)} />}
             </div>
           </div>
 

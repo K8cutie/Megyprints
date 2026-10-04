@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
-import { LayoutGrid, Loader2, X, Video, ImagePlus, Wand2 } from 'lucide-react';
+import { LayoutGrid, Loader2, X, ImagePlus, Wand2 } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -24,6 +24,7 @@ import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
 import PageTurnBar from './PageTurnBar';
+import VideoMemoryButton from './VideoMemoryButton';
 
 /** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
 const TOOL = 'h-14 rounded-xl bg-cream text-medium text-[12px] font-semibold flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform';
@@ -102,13 +103,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [slotQuoteSlot, setSlotQuoteSlot] = useState<number | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
   const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null); // corner for a NEW badge (null = Auto)
-  // Pulse the button until it's been clicked once (discovery, not a nag).
-  const [memoryDiscovered, setMemoryDiscovered] = useState(() => {
-    try { return localStorage.getItem('megy-memory-discovered') === '1'; } catch { return false; }
-  });
   const openMemory = () => {
-    setMemoryDiscovered(true);
-    try { localStorage.setItem('megy-memory-discovered', '1'); } catch { /* ignore */ }
     setMemoryCorner(null); // fresh badge starts on Auto
     setMemoryOpen(true);
   };
@@ -286,12 +281,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         </div>
         {/* Living-memory QR — offered on a single full photo page; turns it into
             a full-bleed photo with a scannable corner badge (face-picked corner). */}
-        {actions.canAddMemoryQr && (
-          <button onClick={openMemory}
-            className={`w-full mt-3 h-11 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform bg-blush-pink text-white shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}>
-            <Video size={18} /> Add a video memory
-          </button>
-        )}
+        {actions.canAddMemoryQr && <VideoMemoryButton variant="phone" onClick={openMemory} />}
         {/* Page turn, in words both ways — see PageTurnBar. The last page turns
             Next into Done, in the same spot. */}
         <PageTurnBar variant="phone" className="mt-3" index={idx} total={total}
