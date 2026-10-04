@@ -17,7 +17,7 @@ import { saveCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readChecko
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
-import { PAYEE, checkProof, uploadPaymentProof, submitPaymentProof, cleanReference } from '../lib/payment';
+import { PAYEE, checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
 import { updateMemoryDestination } from '../lib/qrMemories';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
@@ -84,6 +84,7 @@ export default function Order() {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofError, setProofError] = useState('');
   const [payRef, setPayRef] = useState('');
+  const [refError, setRefError] = useState('');
   const [qrMissing, setQrMissing] = useState(false);
   // The amount the order was placed at — what the payment screen asks for,
   // even after a reload (checkoutSession), never a recomputed one.
@@ -490,6 +491,8 @@ export default function Order() {
     const order = createdOrderRef.current;
     if (!order) { setErrorMsg('Your order was not created yet — go back and try again.'); return; }
     setErrorMsg('');
+    const refBad = referenceProblem(payRef);
+    if (refBad) { setRefError(refBad); return; }
     setSubmitting(true);
     try {
       let proofPath: string | null = null;
@@ -612,8 +615,10 @@ export default function Order() {
               </label>
               {proofError && <p className="mt-1.5 text-[11px] text-red-500">{proofError}</p>}
               <label className="block text-xs font-semibold text-dark mt-3 mb-1.5">Reference no. <span className="font-normal text-light">(optional — from your bank's receipt)</span></label>
-              <input value={payRef} onChange={(e) => setPayRef(e.target.value)} inputMode="text" autoComplete="off" placeholder="e.g. 2026091012345678" maxLength={64}
-                className="w-full px-3 py-2 rounded-lg border border-line text-sm outline-none focus:border-peach" />
+              <input value={payRef} onChange={(e) => { setPayRef(e.target.value); setRefError(''); }} inputMode="text" autoComplete="off" placeholder="e.g. 2026091012345678" maxLength={64}
+                aria-invalid={!!refError} data-testid="pay-reference"
+                className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:border-peach ${refError ? 'border-red-400' : 'border-line'}`} />
+              {refError && <p className="mt-1.5 text-[11px] text-red-500" data-testid="pay-reference-error">{refError}</p>}
             </div>
 
             <button
