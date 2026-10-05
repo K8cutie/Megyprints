@@ -144,7 +144,7 @@ describe('real dialogs', () => {
       'pages/builder/SlotChooser.tsx', 'pages/builder/BuilderBackGuard.tsx', 'pages/builder/CoverEditor.tsx',
       'pages/builder/BuilderEdit.tsx', 'components/SoftAuthGate.tsx', 'components/ResumePrompt.tsx',
       'components/StartNewAlbumPrompt.tsx', 'components/DeleteAccountSection.tsx',
-      'pages/builder/EndOfAlbumPrompt.tsx',
+      'pages/builder/EndOfAlbumPrompt.tsx', 'assistant/MegyAssistant.tsx',
     ];
     for (const f of files) {
       const src = readFileSync(resolve(__dirname, '..', f), 'utf8');
@@ -156,6 +156,10 @@ describe('real dialogs', () => {
 });
 
 describe('the rest of the keyboard pass', () => {
+  it("KB-6: the builder's hidden photo input is never a Tab stop (source guard)", () => {
+    const src = readFileSync(resolve(__dirname, '../pages/Builder.tsx'), 'utf8');
+    expect(src).toMatch(/tabIndex=\{-1\}\s*aria-hidden="true"\s*style=\{\{ opacity: 0, position: 'absolute', width: 0, height: 0/);
+  });
   it('KB-3: the receipt picker is a focusable control, not display:none (source guard)', () => {
     const src = readFileSync(resolve(__dirname, '../pages/Order.tsx'), 'utf8');
     expect(src).toMatch(/type="file" accept="image\/jpeg,image\/png,image\/webp,application\/pdf" className="sr-only"/);
