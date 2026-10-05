@@ -29,7 +29,7 @@ import { startFreshAlbum } from '../lib/albumSession';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
 import { trackOf } from '../lib/orderTracker';
 import { missingPhotos, missingPhotosMessage } from '../lib/photoPresence';
-import { getMyOrder, type MyOrder } from '../lib/myOrders';
+import { getMyOrder, openOrderForAlbum, type MyOrder } from '../lib/myOrders';
 import OrderTracker from '../components/OrderTracker';
 
 // The front cover at checkout — lazy: it brings the page renderer.
@@ -71,6 +71,11 @@ export default function Order() {
   // The placed order as the shop has it now (its real status) — the tracker
   // follows it. It was a fixed picture stuck at "Payment sent".
   const [placedOrder, setPlacedOrder] = useState<MyOrder | null>(null);
+  // This album's order still waiting for payment, if any: said up front, and a
+  // second order is asked, never placed silently (1-star testers round 2, Q1).
+  const [openOrder, setOpenOrder] = useState<MyOrder | null>(null);
+  const [askSecond, setAskSecond] = useState(false);
+  const secondOkRef = useRef(false);
   useEffect(() => {
     const orderId = createdOrderRef.current?.id;
     if (step !== 'tracking' || !user || !orderId) return;
@@ -165,6 +170,17 @@ export default function Order() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [albumInfo, user]);
   const info = typeof albumInfo === 'object' ? albumInfo : null;
+  useEffect(() => {
+    if (!user || !info?.albumId || step !== 'form') return;
+    let alive = true;
+    openOrderForAlbum(user.id, info.albumId)
+      .then((o) => {
+        // The order this checkout itself made (a retry after a failed upload) is not "another".
+        if (alive) setOpenOrder(o && o.id !== createdOrderRef.current?.id ? o : null);
+      })
+      .catch(() => { /* can't tell: checkout goes on as before */ });
+    return () => { alive = false; };
+  }, [user, info?.albumId, step]);
   const albumSize: AlbumSizePreset = info?.albumSize ?? '8x8';
   const pageCount = info?.pages.length ?? MIN_PAGES;
   // QR memories on the album — the first FREE_QR_MEMORIES are included, each
@@ -279,8 +295,19 @@ export default function Order() {
       openLogin();
       return;
     }
+    // This album already has an order waiting for payment: ask first.
+    if (openOrder && !secondOkRef.current) {
+      setAskSecond(true);
+      return;
+    }
     void placeOrder();
   };
+  const placeSecondOrder = () => {
+    secondOkRef.current = true;
+    setAskSecond(false);
+    void placeOrder();
+  };
+  const openExistingOrder = () => { if (openOrder) navigate(`/orders?order=${openOrder.id}`); };
 
   /** Save this device's draft of the album to the signed-in account (a guest
    *  who signed up at checkout). Never another account's draft. */
@@ -670,6 +697,20 @@ export default function Order() {
       <div className="max-w-[900px] mx-auto">
         <h1 className="font-display text-4xl font-bold text-dark text-center mb-8">Finalize Your Order</h1>
 
+        {openOrder && (
+          <div role="status" data-testid="order-already-open"
+            className="mb-6 rounded-2xl border border-peach bg-blush px-5 py-4 text-sm text-cocoa">
+            <p className="font-semibold text-dark">
+              This album already has an order {openOrder.payment_submitted_at ? "— you sent the payment and we're confirming it" : 'waiting for payment'}: <span className="font-mono">{openOrder.order_number}</span>, placed {new Date(openOrder.created_at).toLocaleDateString('en-PH', { day: 'numeric', month: 'long' })}.
+            </p>
+            <p className="mt-1">{openOrder.payment_submitted_at ? "You don't need a new one." : "To finish it, pay that order. You don't need a new one."} Changed the album since? Place a new order below and we'll print the new one.</p>
+            <button type="button" onClick={openExistingOrder} data-testid="order-open-existing"
+              className="mt-3 px-4 py-2 rounded-lg bg-blush-pink text-white font-semibold hover:brightness-105">
+              Open order {openOrder.order_number}
+            </button>
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left: Options */}
           <div className="lg:col-span-2 space-y-6">
@@ -859,6 +900,22 @@ export default function Order() {
                     : !settingsReady || albumInfo === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
                       : <>Pricing unavailable — please refresh</>}
               </button>
+              )}
+              {askSecond && openOrder && (
+                <div role="alert" data-testid="order-second-ask"
+                  className="mt-3 rounded-xl border border-peach bg-blush px-3 py-3 text-sm text-cocoa">
+                  <p>This album already has order <span className="font-mono">{openOrder.order_number}</span> {openOrder.payment_submitted_at ? 'with its payment sent' : 'waiting for payment'}. Place a second order for it?</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" onClick={openExistingOrder} data-testid="order-second-open"
+                      className="px-3 py-2 rounded-lg bg-blush-pink text-white font-semibold hover:brightness-105">
+                      Open order {openOrder.order_number}
+                    </button>
+                    <button type="button" onClick={placeSecondOrder} data-testid="order-second-yes"
+                      className="px-3 py-2 rounded-lg border border-peach bg-white font-semibold hover:bg-blush">
+                      Yes, place a second order
+                    </button>
+                  </div>
+                </div>
               )}
               {shownError && (
                 <p className="mt-3 text-xs text-red-500 text-center" role="alert">{shownError}</p>

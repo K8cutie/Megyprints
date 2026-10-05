@@ -11,7 +11,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { LocalDraftSummary } from './localDraft';
-import { cleanAlbumName, UNNAMED_ALBUM } from './albumName';
+import { cleanAlbumName, isDefaultAlbumName } from './albumName';
 
 export interface SavedAlbumSummary {
   id: string;
@@ -21,13 +21,10 @@ export interface SavedAlbumSummary {
   photoCount?: number;
 }
 
-/** Titles an album got without the customer naming it. */
-const DEFAULT_TITLES = new Set([UNNAMED_ALBUM, 'Untitled Album', '']);
-
 /** An album nobody put anything into — opening the builder and leaving used to
  *  save one of these every time. Never worth offering. */
 function isEmptyLeftover(a: SavedAlbumSummary): boolean {
-  return a.photoCount === 0 && DEFAULT_TITLES.has(cleanAlbumName(a.title));
+  return a.photoCount === 0 && isDefaultAlbumName(a.title);
 }
 
 export type ResumeOffer =
