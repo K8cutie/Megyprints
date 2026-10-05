@@ -57,7 +57,7 @@ export async function openOrderForAlbum(userId: string, albumId: string): Promis
 /** The finish this album was last ordered with (not a cancelled order), or
  *  null. A second copy opened on Matte + Softcover — a different book from the
  *  one being copied (1-star testers round 2, RC-1). */
-export interface LastFinish { order_number: string; material: string; cover: string }
+export interface LastFinish { order_number: string; material: string; cover: string; status?: string }
 export async function lastOrderForAlbum(userId: string, albumId: string): Promise<LastFinish | null> {
   const { data, error } = await supabase
     .from('orders')
@@ -70,7 +70,7 @@ export async function lastOrderForAlbum(userId: string, albumId: string): Promis
     .maybeSingle();
   if (error || !data) return null;
   const d = data as LastFinish & { status: string };
-  return { order_number: d.order_number, material: d.material, cover: d.cover };
+  return { order_number: d.order_number, material: d.material, cover: d.cover, status: d.status };
 }
 
 export async function getMyOrder(userId: string, orderId: string): Promise<MyOrder | null> {

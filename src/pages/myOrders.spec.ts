@@ -190,7 +190,7 @@ describe('one album, one open order', () => {
 describe('a second copy starts from the first', () => {
   it("the album's last order (not a cancelled one) gives the finish", async () => {
     h.orders = [{ order_number: 'MP-2026-2FAZ2B4', material: 'glossy', cover: 'hardboundLeather', status: 'paid' }];
-    expect(await lastOrderForAlbum('user-1', 'album-9')).toEqual({ order_number: 'MP-2026-2FAZ2B4', material: 'glossy', cover: 'hardboundLeather' });
+    expect(await lastOrderForAlbum('user-1', 'album-9')).toEqual({ order_number: 'MP-2026-2FAZ2B4', material: 'glossy', cover: 'hardboundLeather', status: 'paid' });
     expect(h.query).toContainEqual(['eq', 'album_id', 'album-9']);
     expect(h.query).toContainEqual(['neq', 'status', 'cancelled']);
     expect(h.query).toContainEqual(['limit', 1]);
