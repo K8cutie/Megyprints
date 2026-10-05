@@ -68,6 +68,57 @@ export async function updateMemoryDestination(code: string, destination: string)
 }
 
 /** List the signed-in owner's memories (for the management screen). */
+/** A longer hosting term bought with an order that isn't confirmed yet: the
+ *  memory still shows the included term until the shop marks the order paid
+ *  (apply_order_hosting_term). My Memories said "Live until 2031" to someone
+ *  who had just paid for 10 years, with no word that it changes (round 2, MMC-1). */
+export interface PendingTerm { years: number; orderNumber: string }
+
+/** The codes in an order's frozen album, as apply_order_hosting_term reads them. */
+export function memoryCodesInSnapshot(snapshot: unknown): string[] {
+  const pages = (snapshot as { pages?: unknown[] } | null)?.pages;
+  if (!Array.isArray(pages)) return [];
+  const codes = new Set<string>();
+  for (const p of pages as Record<string, unknown>[]) {
+    for (const f of [...((p?.qrFills ?? p?.qr_fills ?? []) as unknown[]), ...((p?.textSlotQr ?? p?.text_slot_qr ?? []) as unknown[])]) {
+      const code = (f as { code?: unknown } | null)?.code;
+      if (typeof code === 'string' && /^[a-z2-9]{4,32}$/.test(code)) codes.add(code);
+    }
+  }
+  return [...codes];
+}
+
+/** code → the term waiting on payment, from the customer's own unpaid orders. */
+export async function pendingTermsByCode(userId: string): Promise<Record<string, PendingTerm>> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('order_number, hosting_years, album_snapshot')
+    .eq('user_id', userId)
+    .eq('status', 'pending_payment')
+    .not('hosting_years', 'is', null);
+  if (error || !data) return {};
+  const out: Record<string, PendingTerm> = {};
+  for (const o of data as { order_number: string; hosting_years: number | null; album_snapshot: unknown }[]) {
+    if (!o.hosting_years) continue;
+    for (const code of memoryCodesInSnapshot(o.album_snapshot)) {
+      if (!out[code] || out[code].years < o.hosting_years) out[code] = { years: o.hosting_years, orderNumber: o.order_number };
+    }
+  }
+  return out;
+}
+
+/** When the paid term will end (the memory's start + the years bought), if
+ *  that is later than what it shows now — else null (already applied, or no
+ *  longer than the included term). */
+export function pendingUntil(row: Pick<QrMemoryRow, 'created_at' | 'expires_at' | 'kind'>, pending: PendingTerm | undefined): string | null {
+  if (!pending || row.kind !== 'clip') return null;
+  const start = new Date(row.created_at);
+  if (Number.isNaN(start.getTime())) return null;
+  const until = new Date(start.getTime());
+  until.setUTCFullYear(until.getUTCFullYear() + pending.years);
+  const now = row.expires_at ? new Date(row.expires_at).getTime() : 0;
+  return until.getTime() > now + 24 * 3600 * 1000 ? until.toISOString() : null;
+}
 export async function listMemories(): Promise<QrMemoryRow[]> {
   const { data, error } = await supabase
     .from('qr_memories')

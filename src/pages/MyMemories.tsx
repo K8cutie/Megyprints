@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { QrCode, Copy, Check, Trash2, Loader2, ExternalLink, Upload, Clock } from 'lucide-react';
-import { listMemories, updateMemoryDestination, removeMemory, type QrMemoryRow } from '../lib/qrMemories';
+import { listMemories, updateMemoryDestination, removeMemory, pendingTermsByCode, pendingUntil, type QrMemoryRow, type PendingTerm } from '../lib/qrMemories';
+import { useAuth } from '../lib/authContext';
 import { memoryUrl, generateQrPngDataUrl, validateDestination } from '../lib/qrMemory';
 import { validateClipFile, uploadClip, versionedClipUrl, isHostedClipUrl } from '../lib/memoryClips';
 
@@ -24,6 +25,15 @@ export default function MyMemories() {
   const [err, setErr] = useState('');
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [renewCode] = useState<string | null>(() => renewCodeFromHash());
+  // Terms bought with an order not confirmed yet (MMC-1).
+  const { user } = useAuth();
+  const [pending, setPending] = useState<Record<string, PendingTerm>>({});
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    void pendingTermsByCode(user.id).then((p) => { if (alive) setPending(p); });
+    return () => { alive = false; };
+  }, [user]);
 
   useEffect(() => {
     let alive = true;
@@ -74,7 +84,7 @@ export default function MyMemories() {
       <div className="space-y-3">
         {rows?.map((row) => (
           <MemoryRow
-            key={row.code} row={row} thumb={thumbs[row.code]} highlight={row.code === renewCode}
+            key={row.code} row={row} thumb={thumbs[row.code]} highlight={row.code === renewCode} pending={pending[row.code]}
             onRemoved={() => setRows((rs) => rs?.filter((r) => r.code !== row.code) ?? null)}
           />
         ))}
@@ -83,7 +93,7 @@ export default function MyMemories() {
   );
 }
 
-function MemoryRow({ row, thumb, highlight, onRemoved }: { row: QrMemoryRow; thumb?: string; highlight?: boolean; onRemoved: () => void }) {
+function MemoryRow({ row, thumb, highlight, pending, onRemoved }: { row: QrMemoryRow; thumb?: string; highlight?: boolean; pending?: PendingTerm; onRemoved: () => void }) {
   const url = memoryUrl(row.code);
   const [dest, setDest] = useState(row.destination);
   /** What the row points at NOW (updates after a relink/replace without
@@ -159,6 +169,14 @@ function MemoryRow({ row, thumb, highlight, onRemoved }: { row: QrMemoryRow; thu
             <Clock size={11} /> {expired ? `Hosting ended ${fmtMonth(row.expires_at)} — renew to bring it back` : `Live until ${fmtMonth(row.expires_at)}`}
           </p>
         )}
+        {(() => {
+          const until = pendingUntil(row, pending);
+          return until && (
+            <p className="text-[11px] mb-1.5 text-cocoa" data-testid="memory-pending-term">
+              Your {pending!.years}-year term (to {fmtMonth(until)}) starts once we confirm your payment for order <span className="font-mono">{pending!.orderNumber}</span>.
+            </p>
+          );
+        })()}
         {isClip ? (
           <div>
             <video src={saved} controls muted playsInline preload="metadata" className="w-full max-h-48 rounded-lg bg-black mb-2" />

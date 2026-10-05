@@ -95,6 +95,8 @@ export default function Order() {
   // The amount the order was placed at — what the payment screen asks for,
   // even after a reload (checkoutSession), never a recomputed one.
   const [placedAmount, setPlacedAmount] = useState<number | null>(null);
+  // Memory-hosting TERM (0030): the included term unless the customer upgrades.
+  const [hostingYears, setHostingYears] = useState<number | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const addressRef = useRef<HTMLDivElement>(null);
@@ -123,6 +125,7 @@ export default function Order() {
     if (form) {
       setName(form.name); setPhone(form.phone); setAddress(form.address);
       setMaterial(form.material); setCover(form.cover);
+      if (form.hostingYears != null) setHostingYears(form.hostingYears);
     }
     const o = resumableCheckoutOrder(album.albumId, album.editedAt);
     if (!o) return;
@@ -192,8 +195,6 @@ export default function Order() {
   // HD (1080p) memories — chosen with the first memory in the builder, priced
   // here. Standard 720p is included, so this bills only when HD was picked.
   const hdMemories = qrCount > 0 && currentClipQuality() === 'hd';
-  // Memory-hosting TERM (0030): the included term unless the customer upgrades.
-  const [hostingYears, setHostingYears] = useState<number | null>(null);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
   // THE 40-PHOTO GATE (builder/albumMinimum): the Preview's Order stops a
   // short album, but /order can be opened directly (an old tab, a bookmark).
@@ -252,8 +253,8 @@ export default function Order() {
   // back as typed.
   useEffect(() => {
     if (!info?.albumId || step !== 'form') return;
-    saveCheckoutForm({ albumId: info.albumId, name, phone, address, material, cover });
-  }, [info, step, name, phone, address, material, cover]);
+    saveCheckoutForm({ albumId: info.albumId, name, phone, address, material, cover, hostingYears });
+  }, [info, step, name, phone, address, material, cover, hostingYears]);
   const recordOrder = (stage: CheckoutStage) => {
     if (orderRecordRef.current) saveCheckoutOrder({ ...orderRecordRef.current, stage });
   };
