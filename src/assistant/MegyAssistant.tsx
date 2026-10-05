@@ -12,7 +12,7 @@ import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/build
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES, perPageNote } from '../pages/builder/densities';
 import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
-import { memoryShortfall, MIN_MEMORY_PAGES } from '../pages/builder/generateAlbum';
+import { memoryShortfall, MIN_MEMORY_PAGES, perPageShapeNote } from '../pages/builder/generateAlbum';
 import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
 import { SIZE_LABELS } from '../lib/pricing';
 import type { AssistantMessage, AssistantIntent } from './types';
@@ -611,7 +611,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   // Generate — the card's button is "Add N more photos". At 40+
                   // every page fills, whatever photos-per-page is picked.
                   const short = photosShortBy(livePhotos.length);
-                  const note = perPageNote(livePhotos.length, builder.photosPerPage);
+                  // The photos' SHAPES first: a choice they can't take at this size
+                  // grows the album (pages, price) — say so before generating.
+                  const note = perPageShapeNote(livePhotos, builder.albumSize, builder.photosPerPage) ?? perPageNote(livePhotos.length, builder.photosPerPage);
                   return short === 0 ? (
                     <>
                       <p className="text-xs text-success mt-3" data-testid="photo-minimum-met">✓ Enough for a full {MIN_ALBUM_PAGES}-page album.</p>
