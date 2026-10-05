@@ -52,7 +52,7 @@ describe('the album\'s name is the cover title until the customer writes their o
     await act(async () => { builder.setAlbumTitle('HK trip'); });
     expect(title()?.text).toBe('HK trip');
     expect(coverIsBlank(builder.coverFront)).toBe(false);
-    const spine = deriveSpine(builder.coverFront, coverWrapGeometry('8x8', 40, 'hardcover'));
+    const spine = deriveSpine(builder.coverFront, coverWrapGeometry('8x8', 40, 'hardboundLinen'));
     expect(spine.text.text).toBe('HK trip');
   });
   it('renaming follows — while the title is still Megy\'s', async () => {
