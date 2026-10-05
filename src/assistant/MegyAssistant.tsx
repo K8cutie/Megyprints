@@ -22,7 +22,7 @@ import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
 import PhotoCheckCard from './PhotoCheckCard';
-import { useSettleGuard } from '../lib/settleGuard';
+import { useSettleGuard, noteScreenTap, tooSoonAfterScreenTap } from '../lib/settleGuard';
 import { useModalDialog } from '../lib/useModalDialog';
 import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT, isAlbumThemeReady } from '../lib/albumTheme';
@@ -369,7 +369,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           '6×4': '6x4', '8×6': '8x6', '6×8': '6x8', '11.5×8': '11.5x8', '8.5×11': '8.5x11',
         };
         const size = Object.keys(sizes).find(k => action.includes(k));
-        if (size) {
+        // One size per double tap, on whichever surface the second tap lands.
+        if (size && !tooSoonAfterScreenTap()) {
+          noteScreenTap();
           void builder.dispatch({ type: 'change_size', payload: { size: sizes[size] }, rawMessage: `change size to ${sizes[size]}` });
           wizardRef.current.advance();
           setWizardStep(wizardRef.current.state.step);
