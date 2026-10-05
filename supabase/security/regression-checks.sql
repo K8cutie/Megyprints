@@ -132,6 +132,8 @@ begin
     raise exception 'REGRESSION (account deletion): delete_own_account() is MISSING';
   elsif src not like '%''print-pdfs''%' or src not like '%''memory-clips''%' then
     raise exception 'REGRESSION (account deletion): delete_own_account() no longer checks print-pdfs AND memory-clips are empty for the caller';
+  elsif src not like '%-cover.pdf%' or src not like '%''payment-proofs''%' then
+    raise exception 'REGRESSION (account deletion): delete_own_account() no longer checks the cover wrap PDFs AND payment receipts are gone (0039)';
   elsif to_regprocedure('public.my_memory_clip_names()') is null then
     raise exception 'REGRESSION (account deletion): my_memory_clip_names() is MISSING, so the endpoint cannot find the videos to remove';
   elsif has_function_privilege('anon', 'public.my_memory_clip_names()', 'EXECUTE') then
@@ -140,12 +142,12 @@ begin
 
   select string_agg(b.id, ', ') into bad
   from storage.buckets b
-  where b.id in ('memory-clips', 'print-pdfs')
+  where b.id in ('memory-clips', 'print-pdfs', 'payment-proofs')
     and coalesce(to_jsonb(b) ->> 'versioning_status', 'DISABLED') <> 'DISABLED';
   if bad is not null then
     raise exception 'REGRESSION (account deletion): versioning is ON for % — deleted files would be kept as archived copies', bad;
   end if;
-  raise notice 'PASS: account deletion removes and verifies print PDFs and memory videos';
+  raise notice 'PASS: account deletion removes and verifies print PDFs, cover wraps, receipts and memory videos';
 end $$;
 
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
