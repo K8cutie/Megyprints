@@ -293,7 +293,7 @@ function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onT
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode, asPrinted }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -328,6 +328,11 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   /** COVER panel: no interior binding gutter (its inner edge is the spine) and no
    *  pink keep-out guide — see the cover-as-pages rework. */
   coverMode?: boolean;
+  /** The preview that checkout calls "printed as they look": an empty caption
+   *  box is open space there, as it prints — still tappable, its outline and
+   *  "Tap to add text" showing only on hover or keyboard focus. It showed a
+   *  pink "Tap to add" panel on 18 of 20 spreads (1-star testers round 2, PPR2-1). */
+  asPrinted?: boolean;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -643,6 +648,27 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         // onTextSlotTap on surfaces like the BuilderPreview spread); otherwise
         // read-only.
         const onEmptyTap = onChooseTextSlot ?? (onTextSlotTap ? () => onTextSlotTap(i) : undefined);
+        if (asPrinted) {
+          if (!onEmptyTap) return null;
+          return (
+            <button key={`tslot-${i}`} type="button" data-testid="preview-empty-box"
+              aria-label={ts.placeholder || 'Tap to add text'} title={ts.placeholder || 'Tap to add text'}
+              onClick={(e) => { e.stopPropagation(); onEmptyTap(i); }}
+              className="absolute group p-0 m-0 bg-transparent border-0 outline-none"
+              style={{ zIndex: 5, left: boxLeft, top: boxTop, width: boxW, height: boxH, cursor: 'pointer' }}>
+              <span aria-hidden="true"
+                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity"
+                style={{
+                  gap: `${4 * sx}px`, borderRadius: `${6 * sx}px`,
+                  border: `${Math.max(1, 1.25 * sx)}px dashed rgba(232,165,152,0.85)`,
+                  color: 'rgba(139,111,71,0.9)', fontSize: `${11 * sx}px`, fontWeight: 500,
+                }}>
+                <span style={{ fontSize: `${12 * sx}px` }}>✎</span>
+                {ts.placeholder || 'Tap to add text'}
+              </span>
+            </button>
+          );
+        }
         return (
           <div key={`tslot-${i}`} className="absolute flex items-center"
             onClick={onEmptyTap ? (e) => { e.stopPropagation(); onEmptyTap(i); } : undefined}
@@ -1037,7 +1063,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
             >
               {/* Left Page */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex}
+                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted
                   onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
                   onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
                   onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
@@ -1047,7 +1073,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                   the dashed binding guides already mark the gutter). */}
               {spreadRightPage && (
                 <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
-                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1}
+                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex + 1, slot })} />
