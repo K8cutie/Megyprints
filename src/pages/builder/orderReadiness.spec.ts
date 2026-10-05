@@ -54,7 +54,7 @@ describe('readinessMessage — one plain sentence', () => {
 describe('wired in (source guards)', () => {
   const src = readFileSync(resolve(__dirname, 'BuilderPreview.tsx'), 'utf8');
   it('Order asks first; only "Order anyway" goes on with blanks', () => {
-    expect(src).toMatch(/const warning = \[coverIsBlank\(coverFront\) \? BLANK_COVER_MESSAGE : '', readinessMessage\(readiness\), copies \? `\$\{copies\}\.` : ''\]\.filter\(Boolean\)\.join\(' '\);\s*if \(warning && !anyway\) \{ setNotReady\(warning\); return; \}/);
+    expect(src).toMatch(/const warning = \[coverIsBlank\(coverFront\) \? BLANK_COVER_MESSAGE : '', readinessMessage\(readiness\), longTextsMessage\(long\.length\), copies \? `\$\{copies\}\.` : ''\]\.filter\(Boolean\)\.join\(' '\);\s*if \(warning && !anyway\) \{ setNotReady\(warning\); return; \}/);
     expect(src).toMatch(/onClick=\{\(\) => handleOrder\(true\)\} data-testid="order-not-ready-anyway"/);
   });
   it('no Order button passes its click event as "anyway"', () => {

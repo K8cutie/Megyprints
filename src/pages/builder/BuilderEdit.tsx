@@ -22,6 +22,7 @@ import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
 import { dealtBoxRoll } from './types';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
@@ -780,6 +781,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {textEditSlot !== null && (
         <MobileTextEditor
           initial={buildBoxInitial(textEditSlot)}
+          box={actions.currentPage ? captionBoxSize(actions.currentPage, textEditSlot, actions.albumSize, actions.currentPageIndex, { coverMode: actions.editScope === 'coverFront' }) : null}
           onSave={(content) => { actions.setBoxText(textEditSlot, content); setTextEditSlot(null); }}
           onClose={() => setTextEditSlot(null)}
         />

@@ -9,12 +9,13 @@
    (iOS keyboard/viewport timing is finicky; this is the part to test on-device.)
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Check, X, Minus, Plus, ChevronDown } from 'lucide-react';
 import type { TextElement } from './types';
 import { FONTS, fontName } from './fonts';
 import { FontList } from './FontList';
 import { contrastOutline, WORDART_OUTLINE_WIDTH, WORDART_SHADOW } from './wordArt';
+import { captionFits, type Box } from './textFit';
 
 export type BoxTextContent = Pick<
   TextElement,
@@ -23,10 +24,13 @@ export type BoxTextContent = Pick<
 
 export const COLORS = ['#2D2D2D', '#FFFFFF', '#E8A598', '#C9A24B', '#2E7D4A', '#3A6EA5', '#9B5DE5'];
 
-export default function MobileTextEditor({ initial, onSave, onClose }: {
+export default function MobileTextEditor({ initial, onSave, onClose, box }: {
   initial: BoxTextContent;
   onSave: (content: BoxTextContent) => void;
   onClose: () => void;
+  /** The caption box this text fills (design px, captionBoxSize): the editor
+   *  says, as you type, when it won't fit — the box clips it in print. */
+  box?: Box | null;
 }) {
   const [text, setText] = useState(initial.text);
   const [fontSize, setFontSize] = useState(initial.fontSize || 28);
@@ -55,6 +59,12 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
   }, []);
 
   useEffect(() => { taRef.current?.focus(); }, []);
+
+  // Too long for its box? (PERF2-2) — the renderers' own wrap, in design px.
+  const fit = useMemo(
+    () => (box ? captionFits(text, { fontSize, fontFamily, bold, italic }, box) : null),
+    [box, text, fontSize, fontFamily, bold, italic],
+  );
 
   const save = () => {
     onSave({
@@ -100,6 +110,18 @@ export default function MobileTextEditor({ initial, onSave, onClose }: {
           }}
         />
       </div>
+      {fit && !fit.fits && (
+        <div role="status" data-testid="text-too-long"
+          className="shrink-0 mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12]">
+          <span className="flex-1 min-w-[12rem]">Too long for this box: part of it will be cut off in print. Shorten it{fit.fitsAt ? ', or make the text smaller' : ''}.</span>
+          {fit.fitsAt && (
+            <button type="button" data-testid="text-make-fit" onClick={() => setFontSize(fit.fitsAt!)}
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
+              Make it fit (size {fit.fitsAt})
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Format bar — floats directly above the keyboard */}
       <div className="shrink-0 border-t border-line bg-white relative">
