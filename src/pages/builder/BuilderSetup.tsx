@@ -6,7 +6,7 @@ import type { AlbumSizePreset } from './types';
 import { loadStoreSettings } from '../../lib/storeSettings';
 import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
 import { fetchThemeQuotes } from '../../lib/quotes';
-import { readAlbumTheme, writeAlbumTheme } from '../../lib/albumTheme';
+import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT } from '../../lib/albumTheme';
 import AlbumThemeStep from '../../assistant/AlbumThemeStep';
 import { isStepOneReady } from '../../assistant/wizard';
 
@@ -112,6 +112,12 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext, album
   // deep link, old draft). Same component, same gate.
   const [albumTheme, setAlbumThemeState] = useState(readAlbumTheme);
   const setAlbumTheme = (v: string) => { setAlbumThemeState(v); writeAlbumTheme(v); };
+  // An album opened from the cloud brings its own occasion (N4): show it.
+  useEffect(() => {
+    const onTheme = () => setAlbumThemeState(readAlbumTheme());
+    window.addEventListener(ALBUM_THEME_EVENT, onTheme);
+    return () => window.removeEventListener(ALBUM_THEME_EVENT, onTheme);
+  }, []);
   const themeReady = isStepOneReady(albumTitle, albumTheme);
   // A size is offered only if the owner hasn't hidden it AND it has layouts to
   // build with (see albumSizeOptions). Re-load the store settings once so a cold
