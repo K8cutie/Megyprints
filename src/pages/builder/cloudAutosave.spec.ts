@@ -17,12 +17,12 @@ vi.mock('../../lib/authContext', () => ({ useAuth: () => ({ user: { id: 'user-1'
 vi.mock('../../lib/supabase', () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }) } },
 }));
-vi.mock('../../lib/useAlbumSync', () => {
+vi.mock('../../lib/useAlbumSync', async (importOriginal) => {
   const api = {
     save: sync.save, load: async () => null, loadAll: async () => [],
     deleteAlbum: async () => ({ success: true }), loading: false, error: null, clearError: () => {},
   };
-  return { useAlbumSync: () => api };
+  return { ...(await importOriginal<typeof import('../../lib/useAlbumSync')>()), useAlbumSync: () => api };
 });
 vi.mock('../../lib/useIndexedDBPhotos', () => {
   const idb = {
