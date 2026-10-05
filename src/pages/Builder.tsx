@@ -10,6 +10,7 @@ import CoverEditor from './builder/CoverEditor';
 import MobileReview from './builder/MobileReview';
 import MissingPhotosBar from './builder/MissingPhotosBar';
 import AlbumConflictBar from './builder/AlbumConflictBar';
+import OrderedAlbumNote from './builder/OrderedAlbumNote';
 import LayoutPicker from './builder/LayoutPicker';
 import BuilderBackGuard from './builder/BuilderBackGuard';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
@@ -282,6 +283,8 @@ export default function Builder() {
 
         {/* Changed on two devices: which version to keep is asked, never picked. */}
         <AlbumConflictBar actions={actions} />
+        {/* Already ordered: that order prints the album as it was then. */}
+        {(actions.phase === 'edit' || actions.phase === 'preview') && <OrderedAlbumNote actions={actions} />}
         {/* An album opened without its photos says so, with the way on. */}
         {(actions.phase === 'edit' || actions.phase === 'preview') && <MissingPhotosBar actions={actions} />}
 
