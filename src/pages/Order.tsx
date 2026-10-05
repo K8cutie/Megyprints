@@ -43,7 +43,7 @@ const DEFAULT_COVER: CoverType = 'softcover';
 
 export default function Order() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { openLogin } = useAuthModal();
   const idbPhotos = useIndexedDBPhotos();
   // Remembers a created order across retries so a second Pay tap (e.g. after a
@@ -147,8 +147,13 @@ export default function Order() {
   // The album arrives here — handed over in memory, rebuilt from the account,
   // or (pricing only) read from the device draft — and the checkout it had
   // in this tab comes back with it (restoreCheckout, below).
+  // Only once sign-in has settled: after a reload the session is still being
+  // read for a moment, and deciding then (no account yet) priced the album
+  // from the device draft, without its cover and name, and took the form
+  // saved under the account for someone else's, so a reload reset the paper,
+  // the cover and the details to nothing (1-star testers round 3, the Quitter).
   useEffect(() => {
-    if (albumInfo !== 'loading') return;
+    if (albumInfo !== 'loading' || authLoading) return;
     let alive = true;
     void (async () => {
       const arrived = (i: OrderAlbumInfo | 'missing') => {
@@ -176,7 +181,7 @@ export default function Order() {
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [albumInfo, user]);
+  }, [albumInfo, user, authLoading]);
   const info = typeof albumInfo === 'object' ? albumInfo : null;
   useEffect(() => {
     if (!user || !info?.albumId || step !== 'form') return;
