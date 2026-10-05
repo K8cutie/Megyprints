@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronLeft, ShoppingCart, Plus, Trash2, RotateCw, Sparkles, X, Loader2, Pencil } from 'lucide-react';
+import { ChevronLeft, ShoppingCart, Plus, Trash2, Sparkles, X, Loader2, Pencil, BookOpen, FileText } from 'lucide-react';
 import SpreadTurnButton, { SPREAD_TURN_W } from './SpreadTurnButton';
+import PreviewTurnBar from './PreviewTurnBar';
+import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, swipeTurn, turnBack, turnForward, type PreviewPosition, type PreviewView, type Turn } from './previewPaging';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss, dealtBoxRoll } from './types';
@@ -37,7 +39,8 @@ import { normalizeGradient, gradientToCss } from './gradient';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ══════════════════════════════════════════════════════════════════════════
-   BuilderPreview — Spread-only view with side arrows
+   BuilderPreview — the book: the open book (two pages) with a turn on each
+   side; on an upright phone one page at a time with the turn under it.
    ══════════════════════════════════════════════════════════════════════════ */
 
 interface BuilderPreviewProps {
@@ -767,16 +770,20 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     }
   };
 
-  // The preview is a TWO-PAGE spread — wider than a phone screen, so it shrinks to
-  // a stamp in portrait. Rather than ask the user to rotate (useless if their phone
-  // rotation is locked), we AUTO-ROTATE the whole preview 90° in mobile-portrait:
-  // the spread is laid out landscape and sized to the phone's LONG axis, so holding
-  // the phone sideways shows the album upright + full-size — no rotation-unlock
-  // needed. If the screen genuinely IS landscape (auto-rotate on), isPortrait is
-  // false and we render normally. Desktop never rotates.
+  // AN UPRIGHT PHONE SHOWS ONE PAGE AT A TIME (owner, 2026-10-05). The open
+  // book is two pages wide, so on an upright phone the preview used to turn
+  // itself 90° in code and ask the customer to turn the phone: "Preview forces
+  // the phone sideways" (6 of 16 testers, round 2), with the status bar, the
+  // keyboard and the back gesture still upright, and a jump when auto-rotate
+  // kicked in. Now: one page, as wide as the phone, turned under it (or with
+  // a swipe). The open book shows when the phone is really turned (a real
+  // landscape screen is not upright) or on "See it as an open book", fitted to
+  // the width. Desktop and tablets in landscape show the open book as before.
   const isMobile = useIsMobile();
   const isPortrait = useIsPortrait();
-  const landscapeRotate = isMobile && isPortrait;
+  const upright = isMobile && isPortrait;
+  const [openBook, setOpenBook] = useState(false);
+  const view: PreviewView = upright && !openBook ? 'page' : 'spread';
 
   // Tap a textbox in the preview → open the formatting editor for THAT page.
   // `slot` = a template caption box; `textId` = a free element (e.g. the theme title).
@@ -835,6 +842,16 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     const el = stageRef.current;
     if (!el) return;
     const compute = () => {
+      if (upright) {
+        // Upright phone: the turn sits UNDER the book, so the page (or the
+        // open book) gets the whole width. Room is kept for the stage padding,
+        // the cover's lip, the caption and the open-book button.
+        const availW = el.clientWidth - 32 - 24;
+        const availH = el.clientHeight - 32 - 24 - 72;
+        const fit = Math.min(availW / (base.w * (view === 'page' ? 1 : 2)), availH / base.h);
+        setFitScale(Math.max(0.15, Math.min(1, fit)));
+        return;
+      }
       // The builder root already reserves the Megy panel's width, so the stage
       // measures only the space available beside it.
       const chromeW = 2 * SPREAD_TURN_W + 48 + 48; // page-turn buttons + gaps + horizontal padding
@@ -849,19 +866,35 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     ro.observe(el);
     window.addEventListener('resize', compute);
     return () => { ro.disconnect(); window.removeEventListener('resize', compute); };
-  }, [base.w, base.h]);
+  }, [base.w, base.h, upright, view]);
   const singleW = Math.round(base.w * fitScale);
   const H = Math.round(base.h * fitScale);
 
-  // Navigate by 2 pages (one spread) at a time; the cover sits before pages 1–2.
-  const navPrev = () => {
-    if (Math.floor(currentIndex / 2) * 2 === 0) { if (coverFront) setCoverAt(currentIndex); return; }
-    onGoToPage(Math.max(0, currentIndex - 2));
+  // Turn one page (upright) or one open book (2 pages) at a time; the cover
+  // sits before page 1 (previewPaging).
+  const pos: PreviewPosition = { view, index: currentIndex, total, onCover, hasCover: !!coverFront };
+  const go = (t: Turn | null) => {
+    if (!t) return;
+    if (t.cover) { setCoverAt(currentIndex); return; }
+    setCoverAt(null);
+    if (t.index !== currentIndex) onGoToPage(t.index);
   };
-  const navNext = () => {
-    if (onCover) { setCoverAt(null); return; }
-    onGoToPage(Math.min(total - 1, currentIndex + 2));
-  };
+  const navPrev = () => go(turnBack(pos));
+  const navNext = () => go(turnForward(pos));
+  // A swipe across the page turns it too (upright).
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeHandlers = upright ? {
+    onPointerDown: (e: React.PointerEvent) => { swipeRef.current = { x: e.clientX, y: e.clientY }; },
+    onPointerUp: (e: React.PointerEvent) => {
+      const from = swipeRef.current;
+      swipeRef.current = null;
+      if (!from) return;
+      const t = swipeTurn(e.clientX - from.x, e.clientY - from.y);
+      if (t === 'forward') navNext();
+      else if (t === 'back') navPrev();
+    },
+    onPointerCancel: () => { swipeRef.current = null; },
+  } : {};
 
   // SINGLE order entry point. Checkout (Order.tsx) reads the pending print job to
   // price the album and build the cover PDF; if we call onOrder() WITHOUT stashing
@@ -947,14 +980,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     </div>
   );
 
-  const hasPrev = !onCover && (spreadLeftIndex > 0 || !!coverFront);
-  const hasNext = onCover ? total > 0 : spreadLeftIndex + 2 < total;
+  const hasPrev = canTurnBack(pos);
+  const hasNext = canTurnForward(pos);
 
-  // End-of-album prompt — opens EVERY time they arrive at the last spread
-  // (useEndOfAlbumPrompt). It can be dismissed (keep browsing) and it offers a
-  // real way back to the pages (owner, 2026-09-13: "there doesn't seem to be a
-  // way to go back").
-  const endPrompt = useEndOfAlbumPrompt(!hasNext && total > 0);
+  // End-of-album prompt — opens EVERY time they arrive at the last page (or
+  // the last open book) (useEndOfAlbumPrompt). It can be dismissed (keep
+  // browsing) and it offers a real way back to the pages (owner, 2026-09-13:
+  // "there doesn't seem to be a way to go back").
+  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos));
+  const currentPage = pages[currentIndex];
 
   // Megy's "Place Order →" (Step 7) lands here and orders exactly like the
   // Order button above: through handleOrder, the one way to order. It was a
@@ -967,36 +1001,50 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderRequested]);
 
+  const megyFinish = sweepNote ? (
+    <span className="text-xs font-medium text-cocoa">{sweepNote}</span>
+  ) : waitingBoxes > 0 ? (
+    <button
+      onClick={handleMegyFinish}
+      title="Fill every empty box with a quote written for your theme — you can still edit or remove any of them"
+      className={`px-3 py-2 bg-blush text-[#A0562F] text-xs font-semibold rounded-lg hover:bg-peach/40 flex items-center gap-1.5 ${upright ? 'w-full justify-center' : ''}`}
+    >
+      <Sparkles size={13} /> {waitingBoxes} {waitingBoxes === 1 ? 'box' : 'boxes'} waiting — let Megy finish
+    </button>
+  ) : null;
+
+  // Upright: the open book on request, fitted to the width — for the one
+  // thing one page can't show, how facing pages look together.
+  const openBookToggle = upright && !onCover && (
+    <div className="flex flex-col items-center gap-1">
+      <button type="button" onClick={() => setOpenBook((v) => !v)} data-testid="preview-open-book"
+        className="px-3 py-1.5 rounded-lg border border-line bg-white text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors">
+        {openBook ? <><FileText size={13} /> One page at a time</> : <><BookOpen size={13} /> See it as an open book</>}
+      </button>
+      {!openBook && <span className="text-[11px] text-taupe">or turn your phone sideways</span>}
+    </div>
+  );
+
   return (
-    <div style={landscapeRotate
-      ? { position: 'fixed', top: 0, left: 0, width: '100vh', height: '100vw', transformOrigin: 'top left', transform: 'translateX(100vw) rotate(90deg)', zIndex: 70, overflow: 'hidden' }
-      : { height: '100%' }}>
+    <div style={{ height: '100%' }}>
     <div className="flex flex-col h-full bg-paper relative">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-5 py-2.5 border-b border-[#E8E4E0] bg-white">
-        <div className="flex items-center gap-3">
+      <div className={`border-b border-[#E8E4E0] bg-white ${upright ? 'px-3 py-2' : 'px-5 py-2.5'}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
           <button onClick={onBack} data-testid="preview-edit-pages"
-            className="px-3 py-1.5 rounded-lg border border-line text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors">
+            className="shrink-0 px-3 py-1.5 rounded-lg border border-line text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors">
             <ChevronLeft size={14} /> Edit pages
           </button>
-          <span className="text-xs text-medium font-medium tabular-nums">
-            {onCover ? 'Cover' : <>{spreadLeftIndex + 1}-{Math.min(spreadLeftIndex + 2, total)} / {total}</>}
+          <span className="text-xs text-medium font-medium tabular-nums whitespace-nowrap" data-testid="preview-counter">
+            {previewCounter(pos)}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* "Megy finishes it" — visible only while empty caption boxes remain.
-              Fills them with unused theme quotes; every fill stays editable. */}
-          {sweepNote ? (
-            <span className="text-xs font-medium text-cocoa">{sweepNote}</span>
-          ) : waitingBoxes > 0 && (
-            <button
-              onClick={handleMegyFinish}
-              title="Fill every empty box with a quote written for your theme — you can still edit or remove any of them"
-              className="px-3 py-2 bg-blush text-[#A0562F] text-xs font-semibold rounded-lg hover:bg-peach/40 flex items-center gap-1.5"
-            >
-              <Sparkles size={13} /> {waitingBoxes} {waitingBoxes === 1 ? 'box' : 'boxes'} waiting — let Megy finish
-            </button>
-          )}
+              Fills them with unused theme quotes; every fill stays editable.
+              An upright phone has no room beside Order: it gets its own row. */}
+          {!upright && megyFinish}
           {/* "Print PDF" intentionally NOT exposed to customers — the print-ready
               PDF is generated by Megyprints only AFTER an order is paid, so the
               album can't be downloaded and printed elsewhere. */}
@@ -1012,23 +1060,16 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           </button>
         </div>
       </div>
-      {/* The sideways hint sits in its OWN row under the toolbar: floating over
-          the toolbar, it covered the start of "10 boxes waiting" (1-star
-          testers, 2026-10-04). */}
-      {landscapeRotate && (
-        <div className="flex justify-center pt-2 bg-paper" data-testid="preview-rotate-hint">
-          <span className="flex items-center gap-1.5 text-[11px] font-medium text-cocoa bg-white/85 rounded-full px-3 py-1 shadow-sm pointer-events-none">
-            <RotateCw size={12} /> Hold your phone sideways to view
-          </span>
-        </div>
-      )}
+      {upright && (sweepNote || waitingBoxes > 0) && <div className="pt-2 flex" data-testid="preview-megy-row">{megyFinish}</div>}
+      </div>
       {(tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner) && <div className="px-5 pt-2 bg-paper">{tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner}</div>}
 
       {/* Page display with the page turn on each side — small labelled
           buttons, not bare ‹ › arrows (SpreadTurnButton). */}
-      <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 overflow-auto" style={BOOK.table}>
+      <div ref={stageRef} className={`flex-1 flex items-center justify-center overflow-auto ${upright ? 'p-4' : 'p-6'}`}
+        style={upright ? { ...BOOK.table, touchAction: 'pan-y' } : BOOK.table} {...swipeHandlers} data-testid="preview-stage">
         <div className="flex items-center gap-6">
-          <SpreadTurnButton dir="prev" show={hasPrev} onClick={navPrev} />
+          {!upright && <SpreadTurnButton dir="prev" show={hasPrev} onClick={navPrev} />}
 
           {/* The closed book: the front cover, as it prints. */}
           {onCover && coverFront ? (
@@ -1045,6 +1086,27 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                 <Pencil size={13} /> Edit cover
               </button>
             </div>
+          </div>
+          ) : view === 'page' && currentPage ? (
+          /* One page out of the open book (an upright phone): its own side of
+             the gutter shows which side it is bound on. */
+          <div className="flex flex-col items-center gap-3">
+            <div style={BOOK.cover(singleW, H, fitScale)} data-testid="preview-book">
+              <div aria-hidden="true" style={BOOK.edges(singleW, H, fitScale)} />
+              <div className="relative bg-white" style={{ width: singleW, height: H, isolation: 'isolate' }} data-testid="preview-single-page">
+                <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
+                  <PageView key={currentPage.id} page={currentPage} photos={photos} singleW={singleW} H={H} pageIndex={currentIndex} asPrinted
+                    onTextSlotTap={(slot) => setEdit({ pageIndex: currentIndex, slot })}
+                    onTextTap={(textId) => setEdit({ pageIndex: currentIndex, textId })}
+                    onQrSlotTap={(slot) => setQrEdit({ pageIndex: currentIndex, slot })} />
+                </div>
+                <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
+                <div aria-hidden="true" style={BOOK.grain} />
+                <div aria-hidden="true" style={BOOK.spine(bindingEdge(currentIndex))} data-testid="preview-spine" data-spine={bindingEdge(currentIndex)} />
+              </div>
+            </div>
+            <span className="text-xs font-medium text-medium tabular-nums" data-testid="preview-caption">{previewCaption(pos)}</span>
+            {openBookToggle}
           </div>
           ) : (
           /* Pages */
@@ -1097,16 +1159,24 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
 
             {/* One caption under the book, like a page number in the corner */}
             <span className="text-xs font-medium text-medium tabular-nums" data-testid="preview-caption">
-              {spreadRightPage
-                ? `Pages ${spreadLeftIndex + 1}–${spreadLeftIndex + 2} of ${total}`
-                : `Page ${spreadLeftIndex + 1} of ${total}`}
+              {previewCaption(pos)}
             </span>
+            {upright && openBookToggle}
           </div>
           )}
 
-          <SpreadTurnButton dir="next" show={hasNext} onClick={navNext} />
+          {!upright && <SpreadTurnButton dir="next" show={hasNext} onClick={navNext} />}
         </div>
       </div>
+
+      {/* Upright phone: the turn under the book, in the thumb zone. */}
+      {upright && (
+        <div className="px-4 pt-2 bg-paper border-t border-[#E8E4E0]" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+          <PreviewTurnBar view={view} settleKey={onCover ? 'cover' : `${view}-${currentIndex}`}
+            canBack={hasPrev} canForward={hasNext} onBack={navPrev} onForward={navNext}
+            onOrder={() => handleOrder()} ordering={orderSaving} />
+        </div>
+      )}
 
       {/* End-of-album prompt — on every arrival at the last spread. Tap outside
           or ✕ to keep browsing; "Continue editing" is a real button. */}
