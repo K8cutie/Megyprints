@@ -25,6 +25,13 @@ export function isAlbumNameReady(v: string | null | undefined): boolean {
   return cleanAlbumName(v).length >= MIN_ALBUM_NAME_LENGTH;
 }
 
+/** A title the album got without the customer naming it ("My Album", the
+ *  older "Untitled Album", nothing) — not worth showing as its name. */
+export function isDefaultAlbumName(v: string | null | undefined): boolean {
+  const n = cleanAlbumName(v);
+  return n === '' || n === UNNAMED_ALBUM || n === 'Untitled Album';
+}
+
 /** The name to save: the customer's, or the old default for an unnamed draft. */
 export function albumNameToSave(v: string | null | undefined): string {
   return cleanAlbumName(v) || UNNAMED_ALBUM;
