@@ -50,6 +50,7 @@ import { templateTracker } from './varietyTracker';
 import { readCaptureTime } from './exif';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
+import { FONTS } from './fonts';
 import { checkPhoto, facesForAllPhotos } from '../../lib/photoCheckRunner';
 import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
@@ -288,6 +289,25 @@ function createCoverPage(size: AlbumSizePreset): AlbumPage {
   const blank: AlbumPage = { ...createEmptyPage(0, size), id: `cover-front-${Date.now()}` };
   const tmpl = getTemplateById(DEFAULT_COVER_TEMPLATE_ID);
   return tmpl ? relayPageOnTemplate(blank, tmpl) : blank;
+}
+
+/** The cover with the album's name as its title — unless the customer wrote
+ *  a title of their own. An empty name takes Megy's title away again. */
+export function withNameTitle(cover: AlbumPage, name: string): AlbumPage {
+  const t = cover.templateId ? getTemplateById(cover.templateId) : undefined;
+  if (!t?.textSlots?.length) return cover; // a cover with no title box
+  const el = cover.textElements?.find((x) => x.boxIndex === 0);
+  if (el && !el.fromAlbumName) return cover; // the customer's own title
+  const others = (cover.textElements ?? []).filter((x) => x.boxIndex !== 0);
+  if (!name) return el ? { ...cover, textElements: others } : cover;
+  if (el) return el.text === name ? cover : { ...cover, textElements: (cover.textElements ?? []).map((x) => (x.boxIndex === 0 ? { ...x, text: name } : x)) };
+  const title: TextElement = {
+    // The cover editor's title defaults (CoverEditor), so it looks the same as one typed there.
+    id: `cover-ft-${Date.now()}`, text: name, boxIndex: 0, x: 0, y: 0, rotation: 0, opacity: 1,
+    fontSize: 32, fontFamily: FONTS[6].family, color: '#2D2D2D', bold: true, italic: false, underline: false,
+    alignment: 'center', fromAlbumName: true,
+  };
+  return { ...cover, textElements: [...others, title] };
 }
 
 /** Migrate a legacy CoverDesign (the old stacked Front/Spine/Back form) into a
@@ -869,6 +889,17 @@ export function useBuilderState(): BuilderActions {
   // stale closure. (No coverBack state: the back is the reserved Megy Prints
   // panel, derived from the front at wrap time.)
   const [coverFront, setCoverFrontPage] = useState<AlbumPage>(() => getInitialState().coverFront);
+
+  /* The album's name is its cover title until the customer writes their own
+     (1-star testers round 2: two albums went to print with a plain white
+     cover — the name typed in Step 1 never reached the cover, or the spine
+     that follows it). Naming or renaming the album (the customer's setter —
+     not a load) puts the name in the cover's title box; a title the customer
+     typed themselves is never touched. */
+  const renameAlbum = useCallback((title: string) => {
+    setAlbumTitle(title);
+    setCoverFrontPage((cover) => withNameTitle(cover, cleanAlbumName(title)));
+  }, []);
   // For reset() and the cover-photo restore (coverPhoto), which read it outside a render.
   const coverFrontRef = useRef<AlbumPage>(coverFront);
   useEffect(() => { coverFrontRef.current = coverFront; }, [coverFront]);
@@ -2816,7 +2847,10 @@ export function useBuilderState(): BuilderActions {
           textSlotOrnament,
           textSlotQrGeom,
           textElements: page.textElements.map((t) =>
-            t.boxIndex === slotIndex ? { ...t, ...content, text: content.text } : t),
+            t.boxIndex === slotIndex
+              // A title the customer types is theirs: it stops following the album name.
+              ? { ...t, ...content, text: content.text, fromAlbumName: content.text === t.text ? t.fromAlbumName : undefined }
+              : t),
         };
       }
       const newText: TextElement = {
@@ -3306,7 +3340,7 @@ export function useBuilderState(): BuilderActions {
     setAlbumType: setAlbumTypeState,
     setSelectedTemplate: setSelectedTemplateState,
     albumTitle,
-    setAlbumTitle,
+    setAlbumTitle: renameAlbum,
     uploadedPhotos,
     addPhotos,
     removePhoto,
