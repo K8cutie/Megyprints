@@ -40,7 +40,8 @@ export default function MyOrders() {
   }, [user]);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
+    // pt-24: below the fixed header — the title was drawn over the logo (RC).
+    <div className="max-w-3xl mx-auto px-4 pt-24 pb-10">
       <div className="flex items-center gap-2 mb-1">
         <Package className="text-blush-pink" size={22} />
         <h1 className="font-display text-2xl font-semibold text-dark">Your orders</h1>
@@ -102,6 +103,14 @@ function OrderCard({ order, focused }: { order: MyOrder; focused?: boolean }) {
           <img src={PAYEE.qrSrc} alt={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} className="mt-2 w-36 h-36 object-contain rounded-lg bg-white" draggable={false} />
           <p className="mt-2">Already paid? <Link to="/contact" className="underline font-semibold">Send us your receipt</Link> and we'll match it.</p>
         </div>
+      )}
+
+      {/* A second copy: open the album as it is now, then Order (RC). */}
+      {order.album_id && !track.awaitingPayment && (
+        <Link to={`/builder?album=${order.album_id}`} data-testid="order-again"
+          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-peach text-xs font-semibold text-cocoa hover:bg-blush">
+          Order this album again
+        </Link>
       )}
 
       {order.tracking && track.stage >= 4 && (

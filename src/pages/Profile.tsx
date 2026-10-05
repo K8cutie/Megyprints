@@ -203,7 +203,9 @@ export function Profile({ onBack }: ProfilePageProps) {
     .slice(0, 2);
 
   return (
-    <div className="min-h-screen bg-warm-white">
+    // pt-16: below the site's fixed header — "My Profile" sat on top of Home,
+    // and this Sign Out on top of the header's (1-star testers round 2).
+    <div className="min-h-screen bg-warm-white pt-16">
       {/* Header */}
       <header className="bg-white border-b border-blush-deep/50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
@@ -409,7 +411,9 @@ export function Profile({ onBack }: ProfilePageProps) {
                           {album.title || 'Untitled Album'}
                         </h4>
                         <p className="text-xs text-taupe mt-0.5">
-                          {album.sizePreset} &middot; {album.pages?.length ?? 0} pages
+                          {/* The list loads the light columns (no pages), so it said "0 pages"
+                              for a 40-page album; its photos are listed, and true. */}
+                          {album.sizePreset} &middot; {(album.photos?.length ?? 0)} photo{(album.photos?.length ?? 0) === 1 ? '' : 's'}
                         </p>
                         {album.updatedAt && (
                           <p className="text-xs text-taupe/60 mt-0.5">
