@@ -350,6 +350,10 @@ export default function Builder() {
           type="file"
           accept="image/*"
           multiple
+          // Opened by the Add photos buttons, never by Tab: it was an unnamed,
+          // invisible Tab stop on every builder step (1-star testers round 2, KB-6).
+          tabIndex={-1}
+          aria-hidden="true"
           style={{ opacity: 0, position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }}
           onChange={(e) => {
             if (e.target.files) {

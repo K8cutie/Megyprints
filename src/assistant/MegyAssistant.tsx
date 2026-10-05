@@ -23,6 +23,7 @@ import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
 import PhotoCheckCard from './PhotoCheckCard';
 import { useSettleGuard } from '../lib/settleGuard';
+import { useModalDialog } from '../lib/useModalDialog';
 import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
@@ -526,12 +527,18 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
      IS the screen. Once an album exists (review onward) we fall back to the
      canvas + side panel. This removes any competing center control. ── */
   const centerStage = showWizard && ['welcome', 'pick_theme', 'pick_size', 'upload_photos'].includes(wizardStep);
+  // The full-screen step is the screen: Tab stays in it and focus starts in
+  // it. Behind it, the builder's own size buttons, album-name box and occasion
+  // chips were 15 invisible Tab stops before "Let's Get Started" (KB-6). No
+  // Escape — it is a step to answer, not a box to dismiss.
+  const stageRef = useModalDialog<HTMLDivElement>(centerStage);
 
   if (centerStage) {
     const msg = wizardRef.current.getMessage();
     const prog = wizardRef.current.getProgress();
     return (
-      <div className="fixed inset-0 z-[95] bg-warm-white flex flex-col items-center [justify-content:safe_center] p-6 overflow-auto">
+      <div ref={stageRef} role="dialog" aria-modal="true" aria-label="Megy's guide" tabIndex={-1}
+        className="fixed inset-0 z-[95] bg-warm-white flex flex-col items-center [justify-content:safe_center] p-6 overflow-auto outline-none">
         {/* Hidden file input so the Upload step works on the center stage too */}
         <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleFileUpload} className="hidden" />
         {/* Megy's answer on the center stage too: the toast lived only in the
