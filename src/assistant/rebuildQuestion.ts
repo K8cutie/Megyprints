@@ -29,6 +29,15 @@ export function placedMemories(pages: AlbumPage[]): number {
 
 const memoriesPhrase = (n: number) => (n > 0 ? ` and your ${n} video ${n === 1 ? 'memory' : 'memories'} (you'd add ${n === 1 ? 'it' : 'them'} again)` : '');
 
+/** What Megy says after a new occasion switched her quotes (Step 1's Next
+ *  on a made album). */
+export function occasionQuotesMessage(occasion: string, changed: number, cleared: number): string {
+  const lines = (n: number) => `${n} ${n === 1 ? 'quote' : 'quotes'}`;
+  return `Your album is about ${occasion} now, so Megy changed ${lines(changed)} she wrote to ${occasion} ones`
+    + (cleared > 0 ? ` and cleared ${lines(cleared)} she had no new line for` : '')
+    + '. Lines you wrote or picked stay. Undo puts the old ones back.';
+}
+
 /** What making a made album again replaces, in the customer's words. */
 export function remakeLosesMessage(memories: number): string {
   return `Every page is laid out again from your photos. That replaces your layout changes, the text you wrote${memoriesPhrase(memories)}. Your photos stay.`;

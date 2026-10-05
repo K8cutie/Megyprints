@@ -119,6 +119,9 @@ export interface BoxContentOptions {
   quotePool: string[];
   quoteFontFamily: string;
   quoteColor: string;
+  /** The occasion the pool was written for: each dealt quote carries it
+   *  (TextElement.fromOccasion) so a later occasion change can swap it. */
+  occasion?: string;
 }
 
 export function rollBoxKind(): BoxRoll {
@@ -199,6 +202,7 @@ export function dealBoxContent(
           rotation: 0,
           opacity: 100,
           boxIndex: j,
+          ...(box.occasion ? { fromOccasion: box.occasion } : {}),
         } satisfies TextElement);
       } else {
         // Pool exhausted (or empty): never repeat a line — re-roll this box
@@ -692,6 +696,7 @@ export function sweepFillQuotes(
             rotation: 0,
             opacity: 100,
             boxIndex: j,
+            ...(box.occasion ? { fromOccasion: box.occasion } : {}),
           } satisfies TextElement,
         ],
       };

@@ -46,7 +46,7 @@ import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
 import { detectFaceCenter, initFaceApi } from './faceDetection';
 import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
 import { createLimiter } from '../../lib/limit';
-import { templateTracker } from './varietyTracker';
+import { templateTracker, shuffleArray } from './varietyTracker';
 import { readCaptureTime } from './exif';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
@@ -776,6 +776,9 @@ export interface BuilderActions {
   /** Fill empty boxes with unused theme quotes. heldBack = kept open by the
    *  quote cadence (by design); noLine = no unused line left for the theme. */
   finishBoxesWithQuotes: () => Promise<{ filled: number; remaining: number; heldBack: number; noLine: number }>;
+  /** Swap the quotes Megy dealt for another occasion for this one's (Step 1's
+   *  Next on a made album); the customer's own lines stay. */
+  requoteForOccasion: (occasion: string) => Promise<{ changed: number; cleared: number }>;
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
@@ -1994,6 +1997,7 @@ export function useBuilderState(): BuilderActions {
       quotePool,
       quoteFontFamily: quoteTheme.fontFamily,
       quoteColor: quoteTheme.textColor,
+      occasion: currentAlbumTheme(),
     };
     dealAlbumBoxes(newPages, boxContent);
     newPages = mergeStudioPages(newPages, kept);
@@ -2978,7 +2982,10 @@ export function useBuilderState(): BuilderActions {
     pushSnapshot();
     updateCurrentPage((page) => ({
       ...page,
-      textElements: page.textElements.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+      // New words are the customer's: they stop following the occasion.
+      textElements: page.textElements.map((t) => (t.id === id
+        ? { ...t, ...updates, ...(updates.text != null && updates.text !== t.text ? { fromOccasion: undefined } : {}) }
+        : t)),
     }));
   }, [updateCurrentPage]);
 
@@ -3023,7 +3030,8 @@ export function useBuilderState(): BuilderActions {
           textElements: page.textElements.map((t) =>
             t.boxIndex === slotIndex
               // A title the customer types is theirs: it stops following the album name.
-              ? { ...t, ...content, text: content.text, fromAlbumName: content.text === t.text ? t.fromAlbumName : undefined }
+              // A line the customer writes or picks is theirs too: it stops following the occasion.
+              ? { ...t, ...content, text: content.text, fromAlbumName: content.text === t.text ? t.fromAlbumName : undefined, fromOccasion: content.text === t.text ? t.fromOccasion : undefined }
               : t),
         };
       }
@@ -3096,7 +3104,7 @@ export function useBuilderState(): BuilderActions {
     // sweep excludes every line the album already carries, so a pool sized
     // only for generation would leave the late boxes empty again.
     const quotePool = await ensureThemeQuotes(currentAlbumTheme(), quotesNeededForSweep(albumPages), { budgetMs: 12_000 });
-    const box: BoxContentOptions = { quotePool, quoteFontFamily: theme.fontFamily, quoteColor: theme.textColor };
+    const box: BoxContentOptions = { quotePool, quoteFontFamily: theme.fontFamily, quoteColor: theme.textColor, occasion: currentAlbumTheme() };
     // Sweep the LATEST pages (the customer may have edited during the wait);
     // the functional updater sees them, the closure above may not.
     let result = { filled: 0, remaining: 0, heldBack: 0, noLine: 0 };
@@ -3108,6 +3116,42 @@ export function useBuilderState(): BuilderActions {
     });
     return result;
   }, [albumPages, selectedTemplate, pushSnapshot]);
+
+  /** The occasion changed on a made album (Step 1, then Next): every quote
+   *  Megy dealt for another occasion gets an unused line for this one, in the
+   *  same box and style; the customer's own lines stay. One undo step. A
+   *  "Family" album switched to "Vacation" kept "The table is always full"
+   *  while Step 1 promised "Megy writes the quotes on your pages to match it"
+   *  (1-star testers round 3, the Indecisive One). Returns the quotes changed
+   *  and the ones cleared for want of a new line (they print as paper, never
+   *  as the old occasion's). */
+  const requoteForOccasion = useCallback(async (occasion: string): Promise<{ changed: number; cleared: number }> => {
+    const key = (s?: string) => (s ?? '').trim().toLowerCase();
+    const stale = (t: TextElement) => t.fromOccasion != null && key(t.fromOccasion) !== key(occasion);
+    const count = albumPages.reduce((n, p) => n + p.textElements.filter(stale).length, 0);
+    if (!key(occasion) || count === 0) return { changed: 0, cleared: 0 };
+    const pool = await ensureThemeQuotes(occasion, quotesNeededForSweep(albumPages) + count, { budgetMs: 12_000 });
+    // The pages as they are NOW (the customer may have edited during the wait).
+    const prev = albumPagesRef.current;
+    const result = { changed: 0, cleared: 0 };
+    const used = new Set(prev.flatMap((p) => p.textElements.filter((t) => !stale(t)).map((t) => t.text)));
+    const deck = shuffleArray(pool.filter((l) => !used.has(l)));
+    let di = 0;
+    const next = prev.map((p) => {
+      if (!p.textElements.some(stale)) return p;
+      const textElements: TextElement[] = [];
+      for (const t of p.textElements) {
+        if (!stale(t)) { textElements.push(t); continue; }
+        if (di < deck.length) { textElements.push({ ...t, text: deck[di++], fromOccasion: occasion }); result.changed++; }
+        else result.cleared++;
+      }
+      return { ...p, textElements };
+    });
+    if (result.changed + result.cleared === 0) return result;
+    pushSnapshot();
+    setAlbumPages(next);
+    return result;
+  }, [albumPages, pushSnapshot]);
 
   const setBoxTextOffset = useCallback((slotIndex: number, offsetX: number, offsetY: number) => {
     updateCurrentPage((page) => ({
@@ -3626,6 +3670,7 @@ export function useBuilderState(): BuilderActions {
     deleteTextElement,
     setBoxText,
     finishBoxesWithQuotes,
+    requoteForOccasion,
     setPageBackground,
     setCoverPhoto,
     setBackgroundCrop,

@@ -17,7 +17,7 @@ import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
 import { SIZE_LABELS, extraPagesCharge } from '../lib/pricing';
 import { getPriceSchedule } from '../lib/storeSettings';
 import type { AssistantMessage, AssistantIntent } from './types';
-import { rebuildQuestion, placedMemories } from './rebuildQuestion';
+import { rebuildQuestion, placedMemories, albumIsMade, occasionQuotesMessage } from './rebuildQuestion';
 import RemakeAlbumAsk from './RemakeAlbumAsk';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
 import { getThemeBackgroundVariants } from '../pages/builder/types';
@@ -193,6 +193,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
      real lines instead of waiting on the proxy. */
   const [albumTheme, setAlbumThemeState] = useState(readAlbumTheme);
   const setAlbumTheme = (v: string) => { setAlbumThemeState(v); writeAlbumTheme(v); };
+  // The occasion Step 1's Next left a made album with: Megy's quotes follow it.
+  const [requoteFor, setRequoteFor] = useState<{ occasion: string } | null>(null);
   // An album opened from the cloud brings its own occasion (N4): show it.
   useEffect(() => {
     const onTheme = () => setAlbumThemeState(readAlbumTheme());
@@ -212,6 +214,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       if (!stepOneReady) { setStepOneNudge((n) => n + 1); return; }
       setStepOneNudge(0);
       void fetchThemeQuotes(albumTheme.trim());
+      // A made album follows a new occasion: Megy's quotes switch to it
+      // (the effect below, once the toast exists).
+      if (albumIsMade(builder.albumPages)) setRequoteFor({ occasion: albumTheme.trim() });
     }
     wizardRef.current.advance();
     setWizardStep(wizardRef.current.state.step);
@@ -315,6 +320,15 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   // "Make the album again?" (RemakeAlbumAsk): open while the question is asked.
   const [remakeAsk, setRemakeAsk] = useState(false);
   const showToast = (msg: string, ms = 2000) => { setToast(msg); setTimeout(() => setToast(null), ms); };
+  // A new occasion on a made album: Megy's quotes switch to it, and she says so.
+  useEffect(() => {
+    if (!requoteFor) return;
+    const { occasion } = requoteFor;
+    void builder.requoteForOccasion(occasion).then(({ changed, cleared }) => {
+      if (changed + cleared > 0) showToast(occasionQuotesMessage(occasion, changed, cleared), 7000);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requoteFor]);
 
   const cardTooSoon = useSettleGuard(wizardKey);
 

@@ -315,6 +315,10 @@ export interface TextElement extends TextStyle {
   /** COVER-ONLY: this title is the album's name, put there by Megy — it follows
    *  a rename until the customer types a title of their own. */
   fromAlbumName?: boolean;
+  /** A quote Megy dealt for this occasion: it follows an occasion change
+   *  (useBuilderState.requoteForOccasion) until the customer writes or picks
+   *  a line of their own for the box. */
+  fromOccasion?: string;
 }
 
 /** STUDIO: a customer-moved photo frame. Each index corresponds to
