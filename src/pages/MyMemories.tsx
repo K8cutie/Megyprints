@@ -4,6 +4,7 @@ import { listMemories, updateMemoryDestination, removeMemory, pendingTermsByCode
 import { useAuth } from '../lib/authContext';
 import { memoryUrl, generateQrPngDataUrl, validateDestination } from '../lib/qrMemory';
 import { validateClipFile, uploadClip, versionedClipUrl, isHostedClipUrl } from '../lib/memoryClips';
+import { memoryPlaces, memoryDeleteWarning, deleteMemoryEverywhere } from '../lib/memoryRemoval';
 
 const fmtMonth = (iso: string) => {
   const d = new Date(iso);
@@ -25,6 +26,8 @@ export default function MyMemories() {
   const [err, setErr] = useState('');
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [renewCode] = useState<string | null>(() => renewCodeFromHash());
+  // What the last delete took off (the albums and pages its QR came off).
+  const [notice, setNotice] = useState<string | null>(null);
   // Terms bought with an order not confirmed yet (MMC-1).
   const { user } = useAuth();
   const [pending, setPending] = useState<Record<string, PendingTerm>>({});
@@ -69,6 +72,7 @@ export default function MyMemories() {
         </div>
       )}
       {err && <p className="text-sm text-red-500 mb-4">{err}</p>}
+      {notice && <p className="mb-4 rounded-xl border border-line bg-cream px-4 py-3 text-sm text-cocoa" data-testid="memory-deleted" role="status">{notice}</p>}
       {rows === null && !err && (
         <div className="flex items-center gap-2 text-sm text-light py-10 justify-center">
           <Loader2 size={16} className="animate-spin" /> Loading…
@@ -84,8 +88,12 @@ export default function MyMemories() {
       <div className="space-y-3">
         {rows?.map((row) => (
           <MemoryRow
-            key={row.code} row={row} thumb={thumbs[row.code]} highlight={row.code === renewCode} pending={pending[row.code]}
-            onRemoved={() => setRows((rs) => rs?.filter((r) => r.code !== row.code) ?? null)}
+            key={row.code} row={row} thumb={thumbs[row.code]} highlight={row.code === renewCode} pending={pending[row.code]} userId={user?.id ?? null}
+            onRemoved={(albums) => {
+              setRows((rs) => rs?.filter((r) => r.code !== row.code) ?? null);
+              const where = albums.map((a) => `${a.pages.length === 1 ? `page ${a.pages[0]}` : `pages ${a.pages.join(', ')}`} of \u201c${a.title}\u201d`).join(' and ');
+              setNotice(`Deleted.${where ? ` Its QR came off ${where}.` : ''}`);
+            }}
           />
         ))}
       </div>
@@ -93,7 +101,10 @@ export default function MyMemories() {
   );
 }
 
-function MemoryRow({ row, thumb, highlight, pending, onRemoved }: { row: QrMemoryRow; thumb?: string; highlight?: boolean; pending?: PendingTerm; onRemoved: () => void }) {
+function MemoryRow({ row, thumb, highlight, pending, userId, onRemoved }: {
+  row: QrMemoryRow; thumb?: string; highlight?: boolean; pending?: PendingTerm; userId: string | null;
+  onRemoved: (albums: { title: string; pages: number[] }[]) => void;
+}) {
   const url = memoryUrl(row.code);
   const [dest, setDest] = useState(row.destination);
   /** What the row points at NOW (updates after a relink/replace without
@@ -102,7 +113,10 @@ function MemoryRow({ row, thumb, highlight, pending, onRemoved }: { row: QrMemor
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [confirmDel, setConfirmDel] = useState(false);
+  // Delete asks first, saying where the QR is (memoryPlaces): null = not
+  // asking, '' = looking it up.
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [now] = useState(() => Date.now());
   const dirty = dest.trim() !== saved;
   const isClip = row.kind === 'clip' || isHostedClipUrl(saved);
@@ -147,9 +161,24 @@ function MemoryRow({ row, thumb, highlight, pending, onRemoved }: { row: QrMemor
     try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
   };
 
+  const askDelete = async () => {
+    setConfirmDel('');
+    try {
+      setConfirmDel(userId ? memoryDeleteWarning(await memoryPlaces(userId, row.code)) : 'Delete it?');
+    } catch {
+      setConfirmDel('Delete it?');
+    }
+  };
   const del = async () => {
-    if (!confirmDel) { setConfirmDel(true); return; }
-    if (await removeMemory(row.code)) onRemoved();
+    setDeleting(true);
+    try {
+      if (userId) {
+        const r = await deleteMemoryEverywhere(userId, row.code);
+        if (r.ok) onRemoved(r.albums); else setMsg({ text: 'Could not delete. Try again.', ok: false });
+      } else if (await removeMemory(row.code)) onRemoved([]);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -206,11 +235,30 @@ function MemoryRow({ row, thumb, highlight, pending, onRemoved }: { row: QrMemor
         {msg && <p className={`text-xs mt-1 ${msg.ok ? 'text-success' : 'text-red-500'}`}>{msg.text}</p>}
         <div className="flex items-center justify-between mt-2">
           <span className="text-[11px] text-light">{row.scan_count} scan{row.scan_count === 1 ? '' : 's'}</span>
-          <button onClick={del} onBlur={() => setConfirmDel(false)}
-            className={`text-xs flex items-center gap-1 px-2 py-1 rounded-lg ${confirmDel ? 'bg-red-50 text-red-600 font-semibold' : 'text-[#B4B4B4] hover:text-red-500'}`}>
-            <Trash2 size={13} /> {confirmDel ? 'Tap again to delete' : 'Delete'}
-          </button>
+          {confirmDel == null && (
+            <button onClick={() => void askDelete()} data-testid="memory-delete"
+              className="text-xs flex items-center gap-1 px-2 py-1 rounded-lg text-[#B4B4B4] hover:text-red-500">
+              <Trash2 size={13} /> Delete
+            </button>
+          )}
         </div>
+        {confirmDel != null && (
+          <div className="mt-2 rounded-xl border border-red-200 bg-red-50 p-3" data-testid="memory-delete-ask">
+            <p className="text-xs text-red-700 leading-relaxed mb-2" data-testid="memory-delete-warning">
+              {confirmDel || 'Checking where this QR is\u2026'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => void del()} disabled={!confirmDel || deleting} data-testid="memory-delete-confirm"
+                className="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold disabled:opacity-40 flex items-center gap-1.5">
+                {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete the video
+              </button>
+              <button onClick={() => setConfirmDel(null)} disabled={deleting} data-testid="memory-delete-keep"
+                className="px-3 py-2 rounded-lg border border-line bg-white text-xs font-semibold text-dark">
+                Keep it
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
