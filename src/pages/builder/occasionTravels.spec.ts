@@ -155,7 +155,7 @@ describe('a fresh browser opening the album gets them back', () => {
     expect(builder.photosPerPage).toBe(2);
     expect(builder.albumTitle).toBe('Quinn HK Trip');
   });
-  it('an album saved before they travelled keeps what this device has', async () => {
+  it('ANOTHER album saved before they travelled has none: the last album\'s occasion does not carry into it (Kraken)', async () => {
     writeAlbumTheme('Birthday');
     cloud.rows.set('album-2', {
       id: 'album-2', user_id: 'user-1', title: 'Old', album_size: '8x8',
@@ -163,6 +163,21 @@ describe('a fresh browser opening the album gets them back', () => {
     });
     await mount();
     await act(async () => { await builder.loadAlbum('album-2'); });
+    expect(readAlbumTheme()).toBe('');
+  });
+  it('the SAME album reopened, saved before they travelled, keeps what this device has for it', async () => {
+    writeAlbumTheme('Birthday');
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+      albumType: 'standard', albumSize: '8x8', selectedTemplate: 'classic', uploadedPhotos: photos,
+      albumPages: Array.from({ length: 40 }, (_, i) => page(i)), currentPageIndex: 0, rejectedTemplateIds: [],
+      title: 'Old', albumId: 'album-2', accountId: 'user-1',
+    }));
+    cloud.rows.set('album-2', {
+      id: 'album-2', user_id: 'user-1', title: 'Old', album_size: '8x8',
+      pages: Array.from({ length: 40 }, (_, i) => page(i)), photos: [], updated_at: '2026-10-05T01:00:00.000001+00:00',
+    });
+    await mount();
+    await act(async () => { await builder.loadAlbum('album-2', { replace: true }); });
     expect(readAlbumTheme()).toBe('Birthday');
   });
 });

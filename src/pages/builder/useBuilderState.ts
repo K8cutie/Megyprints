@@ -1105,11 +1105,15 @@ export function useBuilderState(): BuilderActions {
 
   /** An album opened from the cloud brings its own occasion and photos-per-page
    *  (a fresh browser had none: "Generate Album" bounced back to Step 1, and the
-   *  "2 per page" pick was back to Surprise — round 2, N4). One saved before
-   *  they travelled keeps what this device has. */
-  const restoreAlbumChoices = useCallback((a: AlbumData) => {
+   *  "2 per page" pick was back to Surprise — round 2, N4). One saved without
+   *  them has none: the last album's (or the last account's) used to carry
+   *  over into it, and out with its next save (Kraken, 2026-10-05). Only the
+   *  SAME album reopened keeps what this device has for it. */
+  const restoreAlbumChoices = useCallback((a: AlbumData, sameAlbum = false) => {
     if (a.occasion) writeAlbumTheme(a.occasion);
+    else if (!sameAlbum) writeAlbumTheme('');
     if (a.photosPerPage != null) setPhotosPerPage(a.photosPerPage);
+    else if (!sameAlbum) setPhotosPerPage(undefined);
   }, []);
 
   /* ── Persistence strategy ──
@@ -3248,6 +3252,8 @@ export function useBuilderState(): BuilderActions {
     setCurrentPageIndex(0);
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
+    // A new album is a new occasion (Step 1 asks it again).
+    writeAlbumTheme('');
     setCoverDesign(DEFAULT_COVER_DESIGN);
     setCoverFrontPage(createCoverPage('8x8'));
     setEditScope('interior');
@@ -3260,6 +3266,21 @@ export function useBuilderState(): BuilderActions {
     // ── Clear wizard state so it restarts from step 1 ──
     try { localStorage.removeItem('megy_wizard_state'); } catch { /* ignore */ }
   }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict, setCloudGone, syncRecFor]);
+
+  /* ── Another account's album is not opened for this one ──
+     A shared device: B signs in where A's album was left. It used to open as
+     B's (a new id, A's pages and photos), and a guest's album that checkout
+     had saved to A's account opened for B under A's id, refusing every save
+     (Kraken, 2026-10-05). B gets a fresh album; A's stays in A's account,
+     and its photos stay on the device (reset keeps an account's photos).
+     Before paint, so B never sees A's album. */
+  const draftOwnerRef = useRef<string | null>(getInitialState().accountId ?? null);
+  useLayoutEffect(() => {
+    if (!user?.id) return;
+    const owner = draftOwnerRef.current;
+    draftOwnerRef.current = user.id;
+    if (owner && owner !== user.id) reset();
+  }, [user?.id, reset]);
 
   /* ── Load specific album by ID — SAFE: respects local data ── */
   const cloudLoadCompletedRef = useRef<number>(0);
@@ -3276,6 +3297,7 @@ export function useBuilderState(): BuilderActions {
       // album with real work in it, push its latest version to the account
       // first — the draft on this device can be newer than its cloud copy.
       const onScreen = persistRef.current?.local;
+      const wasOnScreen = albumIdRef.current === albumId;
       if (albumIdRef.current !== albumId && draftHasContent(onScreen)) {
         void saveToCloud(user.id, serializeAlbum(), { quiet: true });
       }
@@ -3365,7 +3387,7 @@ export function useBuilderState(): BuilderActions {
           if (albumData.updatedAt) settleSyncRecord(albumData.id, albumData.updatedAt, albumContentKey(toAlbumRow(albumData)));
         }
         draftAccountRef.current = user.id;
-        restoreAlbumChoices(albumData);
+        restoreAlbumChoices(albumData, wasOnScreen);
         setAlbumTitle(albumData.title ?? '');
         setPhase('edit');
       }

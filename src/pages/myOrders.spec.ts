@@ -203,10 +203,12 @@ describe('a second copy starts from the first', () => {
     expect(readLastDelivery(undefined)).toBeNull();
     clearLastDelivery(); // signing out
     expect(readLastDelivery('user-1')).toBeNull();
-    // Sign-out does it (source guard): right after the session is gone.
+    // Any sign-out does it (source guard): the menu, an expired session,
+    // another tab — through forgetCheckoutOnDevice (checkoutSession.spec).
     const auth = readFileSync(resolve(__dirname, '../lib/authContext.tsx'), 'utf8');
-    const afterSignOut = auth.slice(auth.indexOf('setSession(null);'), auth.indexOf('setSession(null);') + 200);
-    expect(afterSignOut).toContain('clearLastDelivery();');
+    expect(auth).toMatch(/if \(event === 'SIGNED_OUT'\) forgetAccountInTab\(\);/);
+    const session = readFileSync(resolve(__dirname, '../lib/checkoutSession.ts'), 'utf8');
+    expect(session.slice(session.indexOf('export function forgetCheckoutOnDevice'))).toContain('clearLastDelivery();');
   });
   it('Your orders: "Order this album again" on a placed order — not on one waiting for payment', async () => {
     h.orders = [

@@ -77,12 +77,15 @@ export interface DraftAlbumForOrder {
   editedAt: number;
 }
 
-export function readDraftAlbumForOrder(albumId: string | undefined): DraftAlbumForOrder | null {
+export function readDraftAlbumForOrder(albumId: string | undefined, userId?: string): DraftAlbumForOrder | null {
   try {
     const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
     if (!raw) return null;
-    const d = JSON.parse(raw) as DraftLike & { albumId?: string; albumSize?: string; editedAt?: number };
+    const d = JSON.parse(raw) as DraftLike & { albumId?: string; albumSize?: string; editedAt?: number; accountId?: string | null };
     if (albumId && d.albumId && d.albumId !== albumId) return null;
+    // Another account's album left on a shared device is not this one's to
+    // price (or order): only a guest's, or the signed-in account's own.
+    if (userId && d.accountId && d.accountId !== userId) return null;
     const pages = Array.isArray(d.albumPages) ? d.albumPages : [];
     if (pages.length === 0 || typeof d.albumSize !== 'string') return null;
     return {
