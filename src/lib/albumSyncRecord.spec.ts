@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { albumContentKey, decideSync, readSyncRecord, writeSyncRecord, SYNC_STORAGE_KEY, type SyncRecord } from './albumSyncRecord';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { albumContentKey, decideSync, readSyncRecord, draftSyncRecord, toDraftSync, SYNC_STORAGE_KEY, type SyncRecord } from './albumSyncRecord';
 import { serializeAlbum, deserializeAlbum, type AlbumData } from './useAlbumSync';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -55,46 +57,64 @@ describe('albumContentKey: the same album gives the same key however it travelle
 
 describe('decideSync', () => {
   const rec: SyncRecord = { albumId: 'a1', base: 'v1', key: 'K1' };
-  const at = (iso: string) => Date.parse(iso);
-  it('the cloud is still this device\'s version: in sync', () => {
-    expect(decideSync({ rec, cloudUpdatedAt: 'v1', cloudKey: 'K9', localKey: 'K2', localEditedAt: 0 })).toBe('in-sync');
+  it('the cloud is still this copy\'s version: in sync', () => {
+    expect(decideSync({ rec, cloudUpdatedAt: 'v1', cloudKey: 'K9', localKey: 'K2' })).toBe('in-sync');
   });
   it('moved on, nothing changed here: take the cloud\'s', () => {
-    expect(decideSync({ rec, cloudUpdatedAt: 'v2', cloudKey: 'K9', localKey: 'K1', localEditedAt: 0 })).toBe('take-cloud');
+    expect(decideSync({ rec, cloudUpdatedAt: 'v2', cloudKey: 'K9', localKey: 'K1' })).toBe('take-cloud');
   });
   it('moved on AND changed here: ask', () => {
-    expect(decideSync({ rec, cloudUpdatedAt: 'v2', cloudKey: 'K9', localKey: 'K2', localEditedAt: 0 })).toBe('conflict');
+    expect(decideSync({ rec, cloudUpdatedAt: 'v2', cloudKey: 'K9', localKey: 'K2' })).toBe('conflict');
   });
-  it('moved on to what this device has (or sent as it closed): its own work, adopt', () => {
-    expect(decideSync({ rec, cloudUpdatedAt: 'v2', cloudKey: 'K2', localKey: 'K2', localEditedAt: 0 })).toBe('ours');
-    expect(decideSync({ rec: { ...rec, sentKey: 'K3' }, cloudUpdatedAt: 'v2', cloudKey: 'K3', localKey: 'K4', localEditedAt: 0 })).toBe('ours');
+  it('moved on to what this copy has (or sent as it closed): its own work, adopt', () => {
+    expect(decideSync({ rec, cloudUpdatedAt: 'v2', cloudKey: 'K2', localKey: 'K2' })).toBe('ours');
+    expect(decideSync({ rec: { ...rec, sentKey: 'K3' }, cloudUpdatedAt: 'v2', cloudKey: 'K3', localKey: 'K4' })).toBe('ours');
   });
-  it('no known version (a draft from before): cloud saved after the last change here asks, else this one is kept', () => {
-    const cloudAt = '2026-10-05T01:30:00.000000+00:00';
-    expect(decideSync({ rec: null, cloudUpdatedAt: cloudAt, cloudKey: 'K9', localKey: 'K2', localEditedAt: at('2026-10-05T01:00:00Z') })).toBe('conflict');
-    expect(decideSync({ rec: null, cloudUpdatedAt: cloudAt, cloudKey: 'K9', localKey: 'K2', localEditedAt: at('2026-10-05T02:00:00Z') })).toBe('keep-local');
-    expect(decideSync({ rec: { albumId: 'a1', base: null, key: '', sentKey: 'K5' }, cloudUpdatedAt: cloudAt, cloudKey: 'K9', localKey: 'K2', localEditedAt: 0 })).toBe('conflict');
+  it('no known version and the two differ: ALWAYS ask, whatever the clocks say (Kraken: a stale phone kept its copy)', () => {
+    // It used to keep this copy when this device's last change looked newer
+    // than the cloud's save, and photos waking up after a reload counted as a
+    // change, so every stale copy looked newer.
+    expect(decideSync({ rec: null, cloudUpdatedAt: '2026-10-05T01:30:00.000000+00:00', cloudKey: 'K9', localKey: 'K2' })).toBe('conflict');
+    expect(decideSync({ rec: { base: null, key: '', sentKey: 'K5' }, cloudUpdatedAt: 'v1', cloudKey: 'K9', localKey: 'K2' })).toBe('conflict');
+    expect(decideSync({ rec: null, cloudUpdatedAt: 'v1', cloudKey: 'K2', localKey: 'K2' })).toBe('ours');
   });
 });
 
-describe('the record on this device', () => {
+describe('the record travels with the draft', () => {
   beforeEach(() => localStorage.clear());
-  it('per album, read back as written', () => {
-    writeSyncRecord({ albumId: 'a1', base: 'v1', key: 'K1' });
-    writeSyncRecord({ albumId: 'a2', base: 'v7', key: 'K7' });
+  it('a draft\'s own record, for its own album only', () => {
+    expect(draftSyncRecord('a1', { base: 'v1', key: 'K1', sentKey: 'K2' })).toEqual({ albumId: 'a1', base: 'v1', key: 'K1', sentKey: 'K2' });
+    expect(draftSyncRecord('a1', { base: null, key: 'K1' })).toEqual({ albumId: 'a1', base: null, key: 'K1' });
+    expect(draftSyncRecord(undefined, { base: 'v1', key: 'K1' })).toBeNull();
+    expect(draftSyncRecord('a1', null)).toBeNull();
+    expect(draftSyncRecord('a1', { base: 'v1' })).toBeNull();
+    expect(draftSyncRecord('a1', 'nope')).toBeNull();
+  });
+  it('what is stored in the draft: the version, the key, a save in flight', () => {
+    expect(toDraftSync({ albumId: 'a1', base: 'v1', key: 'K1', at: 5 })).toEqual({ base: 'v1', key: 'K1' });
+    expect(toDraftSync({ albumId: 'a1', base: null, key: 'K1', sentKey: 'K2' })).toEqual({ base: null, key: 'K1', sentKey: 'K2' });
+    expect(toDraftSync(null)).toBeNull();
+  });
+  it('the old per-device record is still read for a draft saved before (never written any more)', () => {
+    localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify({ a1: { albumId: 'a1', base: 'v1', key: 'K1' } }));
     expect(readSyncRecord('a1')).toMatchObject({ base: 'v1', key: 'K1' });
-    expect(readSyncRecord('a2')).toMatchObject({ base: 'v7', key: 'K7' });
-    expect(readSyncRecord('a3')).toBeNull();
+    expect(readSyncRecord('a2')).toBeNull();
     expect(readSyncRecord(undefined)).toBeNull();
   });
-  it('keeps the 30 most recent albums', () => {
-    for (let i = 0; i < 35; i++) writeSyncRecord({ albumId: `a${i}`, base: 'v', key: 'k', at: i } as SyncRecord);
-    expect(Object.keys(JSON.parse(localStorage.getItem(SYNC_STORAGE_KEY)!))).toHaveLength(30);
-  });
-  it('garbage in storage reads as no record', () => {
+  it('garbage in the old store reads as no record', () => {
     localStorage.setItem(SYNC_STORAGE_KEY, '{nope');
     expect(readSyncRecord('a1')).toBeNull();
     localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify([1, 2]));
     expect(readSyncRecord('a1')).toBeNull();
+  });
+});
+
+describe('the version is the database\'s clock, never a device\'s (0040)', () => {
+  it('albums.updated_at is stamped by the server on INSERT as well as update', () => {
+    const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/0040_albums_insert_time.sql'), 'utf8');
+    expect(sql).toMatch(/create trigger on_album_inserted\s+before insert on public\.albums\s+for each row execute procedure public\.handle_updated_at\(\)/);
+  });
+  it('a saved row carries no updated_at from this device', () => {
+    expect('updated_at' in serializeAlbum(album())).toBe(false);
   });
 });

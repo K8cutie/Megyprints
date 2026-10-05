@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { albumDataFromDraft, draftAlbumForAccount } from './draftAlbum';
+import { saveDraftToAccount } from './draftAccountSave';
+import { supabase } from './supabase';
 import { DRAFT_STORAGE_KEY } from './localDraft';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -66,5 +68,69 @@ describe('checkout saves it instead of sending the guest away (source guard)', (
   });
   it('the builder\'s own reset saves a leaving draft through the same shape', () => {
     expect(readFileSync(resolve(__dirname, '../pages/builder/useBuilderState.ts'), 'utf8')).toMatch(/albumDataFromDraft\(stored as StoredDraft\)/);
+  });
+});
+
+/* ── Checkout saves the draft the way the builder does (Kraken, 2026-10-05) ──
+   It used to upsert blindly: no version, no occasion or photos-per-page, and
+   the draft stayed "nobody's", so the next account on the device took it
+   over. Now: on the draft's version (or as a new row), never over a newer
+   copy, the whole row, and the draft is stamped with the account and the
+   version it now has. */
+describe('saveDraftToAccount', () => {
+  type Call = { op: string; row?: Record<string, unknown>; eqs: [string, unknown][] };
+  let calls: Call[];
+  let reply: (c: Call) => { data: unknown; error: unknown };
+  beforeEach(() => {
+    calls = [];
+    reply = (c) => c.op === 'insert' ? { data: { id: 'album-1', updated_at: 'v1' }, error: null } : { data: [], error: null };
+    vi.spyOn(supabase, 'from').mockImplementation((() => {
+      const c: Call = { op: 'select', eqs: [] };
+      const done = () => { calls.push(c); return Promise.resolve(reply(c)); };
+      const api: Record<string, unknown> = {
+        insert: (row: Record<string, unknown>) => { c.op = 'insert'; c.row = row; return api; },
+        update: (row: Record<string, unknown>) => { c.op = 'update'; c.row = row; return api; },
+        select: () => api,
+        eq: (k: string, v: unknown) => { c.eqs.push([k, v]); return api; },
+        single: done,
+        maybeSingle: done,
+        then: (ok: (v: unknown) => unknown, bad?: (e: unknown) => unknown) => done().then(ok, bad),
+      };
+      return api;
+    }) as never);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('a guest\'s draft: a NEW row with the occasion and photos-per-page, then the draft is this account\'s, on that version', async () => {
+    draft({ photosPerPage: 2 });
+    localStorage.setItem('megy-album-theme', 'Vacation');
+    expect(await saveDraftToAccount('user-1', 'album-1')).toBe('saved');
+    expect(calls.map((c) => c.op)).toEqual(['insert']);
+    expect(calls[0].row).toMatchObject({ id: 'album-1', user_id: 'user-1', occasion: 'Vacation', photos_per_page: 2, title: 'Guest HK Trip' });
+    expect('updated_at' in calls[0].row!).toBe(false);
+    const d = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY)!);
+    expect(d.accountId).toBe('user-1');
+    expect(d.sync).toEqual({ base: 'v1', key: expect.any(String) });
+  });
+
+  it('a draft that has a version saves ONTO that version', async () => {
+    draft({ accountId: 'user-1', sync: { base: 'v1', key: 'K1' } });
+    reply = (c) => c.op === 'update' ? { data: [{ id: 'album-1', updated_at: 'v2' }], error: null } : { data: null, error: null };
+    expect(await saveDraftToAccount('user-1', 'album-1')).toBe('saved');
+    expect(calls[0]).toMatchObject({ op: 'update', eqs: [['id', 'album-1'], ['updated_at', 'v1']] });
+    expect(JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY)!).sync.base).toBe('v2');
+  });
+
+  it('the account\'s copy changed on another device since: nothing written, "conflict" (the builder asks)', async () => {
+    draft({ accountId: 'user-1', sync: { base: 'v1', key: 'K1' } });
+    reply = (c) => c.op === 'update' ? { data: [], error: null } : { data: { id: 'album-1', updated_at: 'v9' }, error: null };
+    expect(await saveDraftToAccount('user-1', 'album-1')).toBe('conflict');
+    expect(JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY)!).sync).toEqual({ base: 'v1', key: 'K1' });
+  });
+
+  it('another account\'s draft: nothing is sent', async () => {
+    draft({ accountId: 'someone-else' });
+    expect(await saveDraftToAccount('user-1', 'album-1')).toBe('failed');
+    expect(calls).toEqual([]);
   });
 });

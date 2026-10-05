@@ -27,6 +27,13 @@ vi.mock('../../lib/supabase', () => {
       // A database without a column refuses the whole write over it (PGRST204).
       const missing = Object.keys(q.row!).find((k) => cloud.lacks.has(k));
       if (missing) return { data: null, error: { code: 'PGRST204', message: `Could not find the '${missing}' column of 'albums' in the schema cache` } };
+      if (q.op === 'insert') {
+        const row = q.row!;
+        if (cloud.rows.has(row.id as string)) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "albums_pkey"' } };
+        const saved = JSON.parse(JSON.stringify({ ...row, updated_at: stamp() }));
+        cloud.rows.set(row.id as string, saved);
+        return { data: { id: saved.id, updated_at: saved.updated_at }, error: null };
+      }
       if (q.op === 'upsert') {
         const row = q.row!;
         const before = cloud.rows.get(row.id as string);
@@ -45,6 +52,7 @@ vi.mock('../../lib/supabase', () => {
       select: () => api, eq: (c: string, v: unknown) => { q.filters.push([c, v]); return api; },
       order: () => api, limit: () => api,
       upsert: (row: Record<string, unknown>) => { q.op = 'upsert'; q.row = row; return api; },
+      insert: (row: Record<string, unknown>) => { q.op = 'insert'; q.row = row; return api; },
       update: (row: Record<string, unknown>) => { q.op = 'update'; q.row = row; return api; },
       single: () => run(true), maybeSingle: () => run(true),
       then: (ok: (v: unknown) => unknown, bad?: (e: unknown) => unknown) => run(false).then(ok, bad),

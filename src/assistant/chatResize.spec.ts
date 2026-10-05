@@ -19,9 +19,9 @@ import type { AlbumPage, UploadedPhoto } from '../pages/builder/types';
 
 vi.mock('../lib/authContext', () => ({ useAuth: () => ({ user: null }) }));
 vi.mock('../lib/supabase', () => ({ supabase: { auth: { getSession: async () => ({ data: { session: null } }) } } }));
-vi.mock('../lib/useAlbumSync', () => {
+vi.mock('../lib/useAlbumSync', async (importOriginal) => {
   const sync = { save: async () => ({ success: true }), load: async () => null, loadAll: async () => [], deleteAlbum: async () => ({ success: true }), loading: false, error: null, clearError: () => {} };
-  return { useAlbumSync: () => sync };
+  return { ...(await importOriginal<Record<string, unknown>>()), useAlbumSync: () => sync };
 });
 vi.mock('../lib/useIndexedDBPhotos', () => {
   const idb = { store: async () => null, get: async () => null, getMany: async () => new Map(), deletePhoto: async () => {}, deleteMany: async () => {}, list: async () => [], loading: false, error: null, clearError: () => {} };
