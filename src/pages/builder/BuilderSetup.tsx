@@ -9,6 +9,7 @@ import { fetchThemeQuotes } from '../../lib/quotes';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT } from '../../lib/albumTheme';
 import AlbumThemeStep from '../../assistant/AlbumThemeStep';
 import { isStepOneReady } from '../../assistant/wizard';
+import { noteScreenTap, tooSoonAfterScreenTap } from '../../lib/settleGuard';
 
 /* ═══════════════════════════════════════════════════════════
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
@@ -172,7 +173,13 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext, album
               key={size.preset}
               size={size}
               selected={selectedSize === size.preset}
-              onSelect={() => onSizeChange(size.preset)}
+              onSelect={() => {
+                // The tail of a tap that just picked a size on Megy's card
+                // (and moved the screen on) is not a second pick.
+                if (tooSoonAfterScreenTap()) return;
+                noteScreenTap();
+                onSizeChange(size.preset);
+              }}
             />
           ))}
         </div>
