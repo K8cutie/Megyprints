@@ -112,7 +112,7 @@ function reflowFills(
    count), reflow the existing photos into the new slots, and reset per-slot
    framing. Shared by shuffle / cycle / apply-layout so the "change the layout"
    behavior lives in exactly one place. */
-function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage {
+export function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage {
   const existingFills = [...new Set(
     (page.slotFills ?? []).filter((f): f is number => f !== null),
   )];
@@ -128,7 +128,7 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
   const carriedTextSlotOrnament = (page.textSlotOrnament ?? []).slice(0, textSlotCount);
   const carriedTextSlotOrnamentGeom = (page.textSlotOrnamentGeom ?? []).slice(0, textSlotCount);
   const carriedTextSlotQrGeom = (page.textSlotQrGeom ?? []).slice(0, textSlotCount);
-  return {
+  const relaid: AlbumPage = {
     ...page,
     templateId: template.id,
     qrFills: carriedQr,
@@ -144,6 +144,72 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
     slotOffsetsX: new Array(slotCount).fill(0),
     slotOffsetsY: new Array(slotCount).fill(0),
   };
+  return keepMemories(page, relaid, template);
+}
+
+/* A layout change never drops a video memory (1-star testers round 2, MMC-3):
+   "Three Squares" then "Full Page" sliced the QR off with the slot it sat in —
+   no message, the gold "Add a video memory" button came back, and checkout
+   counted one memory fewer. Each memory the new layout lost goes back on the
+   page: on a full-page photo as its corner badge (the badge "Add a video
+   memory" makes, in the corner it had), else in an empty frame, else in a
+   caption box, else in the last frame (that photo leaves this page and is
+   back among the unused ones — a photo can be placed again, a memory's
+   printed QR is the customer's video). */
+function keepMemories(before: AlbumPage, after: AlbumPage, template: PageTemplate): AlbumPage {
+  const memoriesOf = (p: AlbumPage) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])].filter((q): q is QrFill => q != null);
+  const kept = new Set(memoriesOf(after).map((q) => q.code));
+  const lost = memoriesOf(before).filter((q) => !kept.has(q.code));
+  let page = after;
+  const size = (before.size ?? template.albumSizes[0]) as AlbumSizePreset;
+  for (const memory of lost) {
+    const t = (page.templateId ? getTemplateById(page.templateId) : undefined) ?? template;
+    const photoSlots = t.slots.filter((sl) => sl.kind !== 'qr').length;
+    // 1. A full-page photo: the corner badge.
+    const badge = photoSlots === 1 && !(t.textSlots?.length) && !t.slots.some((sl) => sl.kind === 'qr')
+      ? qrBadgeTemplate(size, qrBadgeCornerOf(before.templateId) ?? 'br')
+      : undefined;
+    if (badge) {
+      const n = badge.slots.length;
+      const slotFills: (number | null)[] = new Array(n).fill(null);
+      slotFills[0] = (page.slotFills ?? []).find((f): f is number => f != null) ?? null;
+      const qrFills: (QrFill | null)[] = new Array(n).fill(null);
+      qrFills[badge.slots.findIndex((sl) => sl.kind === 'qr')] = memory;
+      page = {
+        ...page, templateId: badge.id, slotFills, qrFills,
+        slotTexts: new Array(n).fill(null), ornamentFills: new Array(n).fill(null),
+        slotScales: new Array(n).fill(1), slotOffsetsX: new Array(n).fill(0), slotOffsetsY: new Array(n).fill(0),
+        cornerBase: undefined, // theme corners would sit over the chip
+      };
+      continue;
+    }
+    const fills = [...(page.slotFills ?? [])];
+    const qrs = [...(page.qrFills ?? [])];
+    const open = (i: number) => fills[i] == null && !qrs[i] && !page.slotTexts?.[i] && !page.ornamentFills?.[i];
+    // 2. An empty frame (a QR frame first).
+    const slotOrder = t.slots.map((sl, i) => ({ sl, i })).sort((a, b) => Number(b.sl.kind === 'qr') - Number(a.sl.kind === 'qr'));
+    const free = slotOrder.find(({ i }) => open(i));
+    if (free) {
+      qrs[free.i] = memory;
+      page = { ...page, qrFills: qrs };
+      continue;
+    }
+    // 3. A caption box with nothing in it.
+    const boxQr = [...(page.textSlotQr ?? [])];
+    const box = (t.textSlots ?? []).findIndex((_, j) => !boxQr[j] && page.textSlotFills?.[j] == null
+      && !page.textSlotOrnament?.[j] && !(page.textElements ?? []).some((e) => e.boxIndex === j));
+    if (box >= 0) {
+      boxQr[box] = memory;
+      page = { ...page, textSlotQr: boxQr };
+      continue;
+    }
+    // 4. The last frame.
+    const last = t.slots.length - 1;
+    fills[last] = null;
+    qrs[last] = memory;
+    page = { ...page, slotFills: fills, qrFills: qrs };
+  }
+  return page;
 }
 
 /* The page's dominant photo ratio (the most common ratio among the photos
