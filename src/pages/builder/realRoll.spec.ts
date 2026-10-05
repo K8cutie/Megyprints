@@ -108,10 +108,12 @@ describe('the upload card says when photos-per-page will be lowered', () => {
 });
 
 describe('the upload step says what "4 · Collage" costs BEFORE Generate (round 3, the Hoarder: no page or price estimate)', () => {
-  it('196 photos at 4 a page: about 55 pages, 15 extra, and the pesos', async () => {
+  it('196 photos at 4 a page: about 55 pages, 15 extra, and the pesos they add (whole sheets: 14 of 4 pages, 4 more than 40 pages take)', async () => {
     const { photosPerPageNote, chosenAlbumPages } = await import('./generateAlbum');
-    expect(photosPerPageNote(roll(0, 196), '8x8', 4, 27)).toBe(
-      '4 per page makes your album: about 55 pages, 15 more than the 40 included (15 × ₱27 = ₱405). That counts 7 full-page photos, where your video memories go.');
+    const { extraPagesCharge } = await import('../../lib/pricing');
+    const schedule = { min_pages: 40, sheet_rate: 106, disabled_sizes: [], sizes: { '8x8': { pps: 4, soft_rate: 600, hard_rate: 1400 } } } as unknown as Parameters<typeof extraPagesCharge>[0];
+    expect(photosPerPageNote(roll(0, 196), '8x8', 4, (pages) => extraPagesCharge(schedule, '8x8', 'soft', pages).amount)).toBe(
+      '4 per page makes your album: about 55 pages, 15 more than the 40 included, which adds ₱424. That counts 7 full-page photos, where your video memories go.');
     expect(chosenAlbumPages(roll(0, 196), '8x8', 4)).toEqual({ pages: 55, memoryPages: 7 });
     // the price schedule not loaded yet: the pages, without pesos
     expect(photosPerPageNote(roll(0, 196), '8x8', 4, null)).toBe(
@@ -125,7 +127,7 @@ describe('the upload step says when the photos\' SHAPES can\'t take the chosen p
     const photos = roll(70, 120); // the tester's 50, all square
     expect(perPageShapeNote(photos, '8x8', 2)).toBe(
       "Your square photos can't go 2 to a page on an 8×8 (its 2-photo layouts take portrait or landscape photos), so they go one to a page: about 50 pages, 10 more than the 40 included. Pick Surprise and Megy mixes in bigger layouts for fewer pages.");
-    expect(perPageShapeNote(photos, '8x8', 2, 27)).toContain('about 50 pages, 10 more than the 40 included (10 × ₱27 = ₱270).');
+    expect(perPageShapeNote(photos, '8x8', 2, () => 318)).toContain('about 50 pages, 10 more than the 40 included, which adds ₱318.');
     expect(gen(1, photos, 2)).toHaveLength(50); // what the note says is what happens
     expect(gen(1, photos)).toHaveLength(40); // Surprise fits 40
   });
@@ -136,8 +138,8 @@ describe('the upload step says when the photos\' SHAPES can\'t take the chosen p
     expect(perPageShapeNote(roll(70, 120), '8x8', undefined)).toBeNull();
     expect(perPageShapeNote(roll(70, 120), '8x8', 1)).toBeNull();
   });
-  it('the upload card shows the note, with the live price of an extra page (source guard)', () => {
+  it('the upload card shows the note, with what the extra pages add on the live schedule (source guard)', () => {
     const src = readFileSync(resolve(__dirname, '../../assistant/MegyAssistant.tsx'), 'utf8');
-    expect(src).toMatch(/const note = photosPerPageNote\(livePhotos, builder\.albumSize, builder\.photosPerPage, schedule \? perPageRate\(schedule, builder\.albumSize\) : null\);/);
+    expect(src).toMatch(/const note = photosPerPageNote\(livePhotos, builder\.albumSize, builder\.photosPerPage,\s+schedule \? \(pages\) => extraPagesCharge\(schedule, builder\.albumSize, 'soft', pages\)\.amount : null\);/);
   });
 });

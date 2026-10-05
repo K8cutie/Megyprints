@@ -155,9 +155,21 @@ export function hostingReserveOf(schedule: Pick<PriceSchedule, 'hosting_reserve'
   return Number.isFinite(r) && r > 0 ? Math.round(r) : 0;
 }
 
-/** Marked-up per-page rate used for the "extra pages" display line. */
-export function perPageRate(schedule: PriceSchedule, size: AlbumSizePreset): number {
-  return Math.round(schedule.sheet_rate / schedule.sizes[size].pps);
+/** What the pages past the included minimum add to the price. Pages print
+ *  `pps` to a sheet and the price is per sheet, so 10 more pages on an 8×8
+ *  (4 a sheet) are 3 more sheets: ₱318. The summary used to show
+ *  "10 × ₱27 = ₱270" and hid the other ₱48 in the line still labelled
+ *  "40 pages" (1-star testers round 3, the Indecisive One). */
+export function extraPagesCharge(
+  schedule: PriceSchedule, size: AlbumSizePreset, binding: Binding, pages: number,
+): { pages: number; sheets: number; amount: number } {
+  const min = schedule.min_pages;
+  const pps = schedule.sizes[size].pps;
+  return {
+    pages: Math.max(0, pages - min),
+    sheets: sheetsFor(pps, min, pages) - sheetsFor(pps, min, min),
+    amount: priceOf(schedule, size, binding, pages) - priceOf(schedule, size, binding, min),
+  };
 }
 
 export interface PriceLine { label: string; amount: number }
@@ -194,9 +206,10 @@ export function countQrMemories(pages: readonly QrCountablePage[]): number {
   return n;
 }
 
-/** CUSTOMER-FACING. Marked-up amounts only. Line amounts are reconciled so items
- *  sum exactly to total (base = total − extra), so the displayed split never
- *  hints at the underlying model. */
+/** CUSTOMER-FACING. Marked-up amounts only. The album line is always the
+ *  price of the included pages, whatever the page count, and the extra-pages
+ *  line is everything the pages past them add, so items sum exactly to the
+ *  total. */
 export function priceBreakdown(
   schedule: PriceSchedule,
   size: AlbumSizePreset,
@@ -222,13 +235,16 @@ export function priceBreakdown(
   const items: PriceLine[] = [];
 
   if (extra > 0) {
-    const perPage = perPageRate(schedule, size);
-    const extraAmount = extra * perPage;
+    const more = extraPagesCharge(schedule, size, binding, pages);
+    const pps = schedule.sizes[size].pps;
     items.push({
       label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} QR memories included`,
-      amount: printTotal - extraAmount,
+      amount: printTotal - more.amount,
     });
-    items.push({ label: `Extra pages · ${extra} × ₱${perPage}`, amount: extraAmount });
+    items.push({
+      label: `Extra pages · ${extra} (pages print ${pps} to a sheet: ${more.sheets} more ${more.sheets === 1 ? 'sheet' : 'sheets'})`,
+      amount: more.amount,
+    });
   } else {
     items.push({
       label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} QR memories included`,
