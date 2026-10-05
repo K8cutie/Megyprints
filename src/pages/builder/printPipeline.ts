@@ -21,6 +21,7 @@ import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './t
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 import { coverWrapGeometry, insetRect } from './coverGeometry';
 import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedText } from './coverLayout';
+import { withBleed, bleedPx, drawMirroredEdges } from './printBleed';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -331,17 +332,21 @@ async function renderPageManually(
   // Interior pages downscale to fit the storage cap; a cover PANEL passes
   // maxSide=Infinity (no downscale) so it stays crisp when composited into the
   // wrap, which applies its own MAX_COVER_SIDE cap at the end.
+  // An interior page goes out with its 0.125" bleed on every edge (PI-2): the
+  // page as approved, its edge mirrored outward (printBleed). A cover PANEL is
+  // composited into the wrap, which runs it into the turn-in itself.
+  const page300: HTMLCanvasElement = coverMode ? canvas : withBleed(canvas, bleedPx(PRINT_DPI));
   const MAX_SIDE = opts.maxSide ?? 1800;
-  const scale = Math.min(1, MAX_SIDE / Math.max(W, H));
-  let out: HTMLCanvasElement = canvas;
+  const scale = Math.min(1, MAX_SIDE / Math.max(page300.width, page300.height));
+  let out: HTMLCanvasElement = page300;
   if (scale < 1) {
     out = document.createElement('canvas');
-    out.width = Math.round(W * scale);
-    out.height = Math.round(H * scale);
+    out.width = Math.round(page300.width * scale);
+    out.height = Math.round(page300.height * scale);
     const octx = out.getContext('2d')!;
     octx.imageSmoothingEnabled = true;
     octx.imageSmoothingQuality = 'high';
-    octx.drawImage(canvas, 0, 0, out.width, out.height);
+    octx.drawImage(page300, 0, 0, out.width, out.height);
   }
   return new Promise((resolve) => {
     out.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.82);
@@ -1026,6 +1031,13 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
     const frontImg = await renderCoverPanelImage(coverFront, photos, albumSize);
     const { front, spine: spineRect } = geom.panels;
     ctx.drawImage(frontImg, front.x, front.y, front.width, front.height);
+    // The front carries on past its trim — top, bottom and the outer edge —
+    // through the turn-in (hardcover, 0.625") or the bleed (softcover, 0.125"),
+    // mirrored: a photo cover stopped at the 8×8 panel and the paper that wraps
+    // round the board was cream (PI-3). The hinge side keeps the cover colour.
+    drawMirroredEdges(ctx, frontImg, frontImg.naturalWidth || frontImg.width, frontImg.naturalHeight || frontImg.height,
+      { x: front.x, y: front.y, w: front.width, h: front.height },
+      { top: front.y, bottom: H - (front.y + front.height), right: W - (front.x + front.width), left: 0 });
     // Spine: fill + the derived front-page text, rotated up the spine.
     ctx.fillStyle = spine.bg;
     ctx.fillRect(spineRect.x, spineRect.y, spineRect.width, spineRect.height);
