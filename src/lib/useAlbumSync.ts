@@ -70,6 +70,11 @@ export interface AlbumData {
    *  Its photo slots index `photos`, so it only makes sense with this album.
    *  Loaded: null when the album was saved without one. */
   coverFront?: Record<string, unknown> | null;
+  /** The occasion (Step 1 — "Vacation", or anything typed), albums.occasion
+   *  (0038). Loaded: null when saved without one. */
+  occasion?: string | null;
+  /** The photos-per-page pick (albums.photos_per_page); null = Surprise. */
+  photosPerPage?: number | null;
 }
 
 export interface SaveOptions {
@@ -133,6 +138,9 @@ export function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
     ...(albumData.coverPhoto !== undefined ? { cover_photo: albumData.coverPhoto } : {}),
     // Same rule for the cover: a save that has none to say keeps the saved one.
     ...(albumData.coverFront !== undefined ? { cover_front: albumData.coverFront } : {}),
+    // The occasion and photos-per-page travel with the album (round 2, N4).
+    ...(albumData.occasion !== undefined ? { occasion: albumData.occasion || null } : {}),
+    ...(albumData.photosPerPage !== undefined ? { photos_per_page: albumData.photosPerPage ?? null } : {}),
     updated_at: new Date().toISOString(),
   };
 }
@@ -165,6 +173,8 @@ export function deserializeAlbum(row: Record<string, unknown>): AlbumData {
     coverPhoto: (row.cover_photo as string) ?? null,
     // Absent when the database predates 0036 or the query didn't ask for it.
     coverFront: isPlainObject(row.cover_front) ? row.cover_front : null,
+    occasion: typeof row.occasion === 'string' && row.occasion.trim() ? row.occasion : null,
+    photosPerPage: typeof row.photos_per_page === 'number' && row.photos_per_page > 0 ? row.photos_per_page : null,
     createdAt: (row.created_at as string) ?? undefined,
     updatedAt: (row.updated_at as string) ?? undefined,
   };
@@ -185,16 +195,36 @@ export function isMissingCoverFrontColumn(err: { code?: string; message?: string
     && (err.message ?? '').includes('cover_front');
 }
 
-/** Upsert one album row. If the database has no cover_front column yet, the
- *  album is saved again without its cover rather than not at all. */
+/** Columns added after 0001 that a save can carry. The app can reach a
+ *  database that doesn't have them yet (a deploy lands before db:push), and
+ *  PostgREST then refuses the whole write over one of them. */
+const OPTIONAL_COLUMNS = ['cover_front', 'occasion'] as const;
+
+/** Which optional column the database just said it doesn't have, if any. */
+export function missingOptionalColumn(err: { code?: string; message?: string } | null | undefined): string | null {
+  if (!err || (err.code !== 'PGRST204' && err.code !== '42703')) return null;
+  return OPTIONAL_COLUMNS.find((c) => (err.message ?? '').includes(c)) ?? null;
+}
+
+/** Write a row; each optional column the database lacks is dropped and the
+ *  write sent again — the album is saved without it rather than not at all. */
+async function writeDroppingMissing<R>(row: Record<string, unknown>, write: (r: Record<string, unknown>) => PromiseLike<R & { error: { code?: string; message?: string } | null }>) {
+  let r = { ...row };
+  let res = await write(r);
+  for (let i = 0; i < OPTIONAL_COLUMNS.length && res.error; i++) {
+    const col = missingOptionalColumn(res.error);
+    if (!col || !(col in r)) break;
+    r = { ...r };
+    delete r[col];
+    res = await write(r);
+  }
+  return res;
+}
+
+/** Upsert one album row (see writeDroppingMissing). */
 export async function upsertAlbumRow(row: Record<string, unknown>) {
-  const write = (r: Record<string, unknown>) =>
-    supabase.from('albums').upsert(r, { onConflict: 'id' }).select('id, updated_at').single();
-  const first = await write(row);
-  if (!first.error || !('cover_front' in row) || !isMissingCoverFrontColumn(first.error)) return first;
-  const withoutCover = { ...row };
-  delete withoutCover.cover_front;
-  return write(withoutCover);
+  return writeDroppingMissing(row, (r) =>
+    supabase.from('albums').upsert(r, { onConflict: 'id' }).select('id, updated_at').single());
 }
 
 /** Write the album row ONLY if the cloud still holds version `base` (the
@@ -202,13 +232,8 @@ export async function upsertAlbumRow(row: Record<string, unknown>) {
  *  it). The rows written: one, or none when the version moved — or when
  *  there is no such row yet. Same missing-cover_front retry as upsertAlbumRow. */
 export async function updateAlbumRowAt(row: Record<string, unknown>, base: string) {
-  const write = (r: Record<string, unknown>) =>
-    supabase.from('albums').update(r).eq('id', row.id as string).eq('updated_at', base).select('id, updated_at');
-  const first = await write(row);
-  if (!first.error || !('cover_front' in row) || !isMissingCoverFrontColumn(first.error)) return first;
-  const withoutCover = { ...row };
-  delete withoutCover.cover_front;
-  return write(withoutCover);
+  return writeDroppingMissing(row, (r) =>
+    supabase.from('albums').update(r).eq('id', row.id as string).eq('updated_at', base).select('id, updated_at'));
 }
 
 // =============================================================================
