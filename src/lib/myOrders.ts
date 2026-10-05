@@ -16,9 +16,12 @@ export interface MyOrder {
   page_count: number | null;
   /** The courier's tracking number, once shipped. */
   tracking: string | null;
+  /** The ordered album's name, from the order's frozen copy of it. Two orders
+   *  of a 9×9, 41 pages said nothing about which album each was (round 2). */
+  album_title?: string | null;
 }
 
-const COLUMNS = 'id, order_number, status, amount, created_at, payment_submitted_at, album_size, page_count, tracking';
+const COLUMNS = 'id, order_number, status, amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title';
 
 /** Newest first. */
 export async function listMyOrders(userId: string): Promise<MyOrder[]> {
@@ -29,6 +32,24 @@ export async function listMyOrders(userId: string): Promise<MyOrder[]> {
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as MyOrder[];
+}
+
+/** This album's order that is still waiting for payment (the newest), or
+   *  null. Ordering the same album again used to place a second unpaid order
+   *  without a word (1-star testers round 2, Q1): checkout now says there is
+   *  one and asks before a second. */
+export async function openOrderForAlbum(userId: string, albumId: string): Promise<MyOrder | null> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select(COLUMNS)
+    .eq('user_id', userId)
+    .eq('album_id', albumId)
+    .eq('status', 'pending_payment')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as MyOrder | null) ?? null;
 }
 
 export async function getMyOrder(userId: string, orderId: string): Promise<MyOrder | null> {

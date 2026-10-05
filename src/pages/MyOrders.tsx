@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Package, Loader2, Landmark } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { listMyOrders, type MyOrder } from '../lib/myOrders';
@@ -7,6 +7,7 @@ import { trackOf } from '../lib/orderTracker';
 import { PAYEE } from '../lib/payment';
 import { ALBUM_SIZES } from './builder/types';
 import OrderTracker from '../components/OrderTracker';
+import { cleanAlbumName, isDefaultAlbumName } from '../lib/albumName';
 
 /* ══════════════════════════════════════════════════════════════════════════
    Your orders — every order, where it is now (its real status), and what to
@@ -25,6 +26,9 @@ export default function MyOrders() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<MyOrder[] | null>(null);
   const [err, setErr] = useState('');
+  // Opened for one order (checkout's "Open order MP-…"): that card first in view.
+  const [params] = useSearchParams();
+  const focusId = params.get('order');
 
   useEffect(() => {
     if (!user) return;
@@ -58,19 +62,24 @@ export default function MyOrders() {
       )}
 
       <div className="space-y-4">
-        {orders?.map((o) => <OrderCard key={o.id} order={o} />)}
+        {orders?.map((o) => <OrderCard key={o.id} order={o} focused={o.id === focusId} />)}
       </div>
     </div>
   );
 }
 
-function OrderCard({ order }: { order: MyOrder }) {
+function OrderCard({ order, focused }: { order: MyOrder; focused?: boolean }) {
   const track = trackOf(order);
   const size = ALBUM_SIZES.find((s) => s.preset === order.album_size)?.name ?? order.album_size ?? '';
+  const albumName = isDefaultAlbumName(order.album_title) ? '' : cleanAlbumName(order.album_title);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (focused) ref.current?.scrollIntoView?.({ block: 'start' }); }, [focused]);
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm" data-testid="order-card">
+    <div ref={ref} className={`bg-white rounded-2xl p-5 shadow-sm ${focused ? 'ring-2 ring-peach' : ''}`}
+      data-testid="order-card" data-focused={focused ? 'true' : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
+          {albumName && <p className="text-base font-display font-semibold text-dark truncate" data-testid="order-album-name">{albumName}</p>}
           <p className="text-sm font-semibold text-dark">Order <span className="font-mono text-[#C98A5E]">{order.order_number}</span></p>
           <p className="text-xs text-medium mt-0.5">
             Placed {fmtDate(order.created_at)}{size ? ` · ${size}` : ''}{order.page_count ? ` · ${order.page_count} pages` : ''}

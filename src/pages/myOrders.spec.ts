@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   user: { id: 'user-1', email: 'c@example.test', user_metadata: {} } as unknown,
   orders: [] as unknown[],
   query: [] as [string, ...unknown[]][],
+  at: undefined as string | undefined,
 }));
 vi.mock('../lib/authContext', () => ({ useAuth: () => ({ user: h.user, logout: vi.fn(), loading: false }) }));
 vi.mock('../components/AuthModalProvider', () => ({ useAuthModal: () => ({ openLogin: vi.fn(), openSignup: vi.fn() }) }));
@@ -28,24 +29,29 @@ vi.mock('../lib/supabase', () => {
   const chain = {
     select: (...a: unknown[]) => { h.query.push(['select', ...a]); return chain; },
     eq: (...a: unknown[]) => { h.query.push(['eq', ...a]); return chain; },
-    order: async (...a: unknown[]) => { h.query.push(['order', ...a]); return { data: h.orders, error: null }; },
+    order: (...a: unknown[]) => {
+      h.query.push(['order', ...a]);
+      return Object.assign(Promise.resolve({ data: h.orders, error: null }), {
+        limit: (...l: unknown[]) => { h.query.push(['limit', ...l]); return chain; },
+      });
+    },
     maybeSingle: async () => ({ data: h.orders[0] ?? null, error: null }),
   };
   return { supabase: { from: (t: string) => { h.query.push(['from', t]); return chain; } } };
 });
 
 import { trackOf, TRACK_STAGES } from '../lib/orderTracker';
-import { listMyOrders } from '../lib/myOrders';
+import { listMyOrders, openOrderForAlbum } from '../lib/myOrders';
 import MyOrders from './MyOrders';
 import AuthNav from '../components/AuthNav';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement;
 let root: Root;
-beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); h.query = []; h.orders = []; });
+beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); h.query = []; h.orders = []; h.at = undefined; });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 const render = async (el: ReturnType<typeof createElement>) => {
-  await act(async () => { root.render(createElement(MemoryRouter, null, el)); });
+  await act(async () => { root.render(createElement(MemoryRouter, { initialEntries: [h.at ?? '/orders'] }, el)); });
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 };
 
@@ -127,5 +133,48 @@ describe('the way there', () => {
     expect(src).not.toMatch(/setTrackStage/);
     const app = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
     expect(app).toMatch(/<Route path="\/orders" element=\{<ProtectedRoute><MyOrders \/><\/ProtectedRoute>\} \/>/);
+  });
+});
+
+/* ── Round 2 (Q1): the same album ordered again ────────────────────────────
+   "Place order" a second time made a second unpaid order without a word, and
+   Your orders then listed two 9×9, 41-page orders with nothing to tell them
+   apart. Checkout now asks (Order.tsx, walked in real Chrome); these are the
+   pieces it stands on. */
+describe('one album, one open order', () => {
+  it("checkout finds the album's order still waiting for payment: this customer, this album, unpaid, newest", async () => {
+    h.orders = [order({ order_number: 'MP-2026-G647BSD' })];
+    const found = await openOrderForAlbum('user-1', 'album-9');
+    expect(found?.order_number).toBe('MP-2026-G647BSD');
+    expect(h.query).toContainEqual(['eq', 'user_id', 'user-1']);
+    expect(h.query).toContainEqual(['eq', 'album_id', 'album-9']);
+    expect(h.query).toContainEqual(['eq', 'status', 'pending_payment']);
+    expect(h.query).toContainEqual(['order', 'created_at', { ascending: false }]);
+    expect(h.query).toContainEqual(['limit', 1]);
+    // The album's name rides along, from the order's frozen copy.
+    expect(h.query.find((q) => q[0] === 'select')?.[1]).toMatch(/album_title:album_snapshot->>title/);
+  });
+  it('none waiting → null', async () => {
+    expect(await openOrderForAlbum('user-1', 'album-9')).toBeNull();
+  });
+  it('Your orders says which album each order is', async () => {
+    h.orders = [order({ order_number: 'MP-2026-AAA1', album_title: 'Quinn HK Trip 2' }), order({ order_number: 'MP-2026-AAA2', album_title: 'Untitled Album' })];
+    await render(createElement(MyOrders));
+    const names = [...host.querySelectorAll('[data-testid="order-card"]')].map((c) => c.querySelector('[data-testid="order-album-name"]')?.textContent ?? null);
+    expect(names).toEqual(['Quinn HK Trip 2', null]); // an unnamed album shows no made-up name
+  });
+  it('opened for one order (checkout\'s "Open order MP-…"), that order is the one picked out', async () => {
+    h.orders = [order({ id: 'o-1', order_number: 'MP-2026-NEW1' }), order({ id: 'o-2', order_number: 'MP-2026-G647BSD' })];
+    h.at = '/orders?order=o-2';
+    await render(createElement(MyOrders));
+    const focused = host.querySelectorAll('[data-focused="true"]');
+    expect(focused).toHaveLength(1);
+    expect(focused[0].textContent).toContain('MP-2026-G647BSD');
+  });
+  it('checkout asks before a second order, and says so up front (source guard)', () => {
+    const src = readFileSync(resolve(__dirname, 'Order.tsx'), 'utf8');
+    expect(src).toMatch(/if \(openOrder && !secondOkRef\.current\) \{\s*setAskSecond\(true\);\s*return;\s*\}\s*void placeOrder\(\);/);
+    expect(src).toMatch(/data-testid="order-already-open"/);
+    expect(src).toMatch(/navigate\(`\/orders\?order=\$\{openOrder\.id\}`\)/);
   });
 });
