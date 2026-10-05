@@ -25,6 +25,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Image as ImageIcon, Type, Quote, X } from 'lucide-react';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 interface SlotChooserProps {
   /** Open the photo picker. Optional — when omitted, the Photo option is hidden
@@ -55,12 +56,15 @@ export default function SlotChooser({ onPhoto, onText, onQuote, onClose, mobile 
   ];
 
   const pick = (run: () => void) => { run(); onClose(); };
+  // Keyboard (KB-2): focus on the first choice, Tab kept inside, Escape closes.
+  const panelRef = useModalDialog<HTMLDivElement>(true, onClose);
 
   const Buttons = (
     <div className="flex flex-col gap-2">
-      {options.map(({ key, label, desc, Icon, run }) => (
+      {options.map(({ key, label, desc, Icon, run }, i) => (
         <button
           key={key}
+          data-autofocus={i === 0 ? true : undefined}
           onClick={() => pick(run)}
           className="flex items-center gap-3 w-full p-3 rounded-xl border border-line-soft bg-cream hover:bg-blush active:scale-[0.98] transition text-left"
         >
@@ -87,12 +91,13 @@ export default function SlotChooser({ onPhoto, onText, onQuote, onClose, mobile 
           <motion.div
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+            ref={panelRef} role="dialog" aria-modal="true" aria-label="Add to this box" tabIndex={-1}
             className="w-full bg-white rounded-t-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
               <span className="text-sm font-semibold text-dark">Add to this box</span>
-              <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
+              <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
             </div>
             <div className="p-3">{Buttons}</div>
           </motion.div>
@@ -103,10 +108,11 @@ export default function SlotChooser({ onPhoto, onText, onQuote, onClose, mobile 
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-5" onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Add to this box" tabIndex={-1}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <span className="text-base font-semibold text-dark">Add to this box</span>
-          <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
+          <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
         </div>
         {Buttons}
       </div>

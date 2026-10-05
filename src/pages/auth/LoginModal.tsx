@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, LogIn, Chrome } from 'lucide-react';
 import { useAuth } from '../../lib/authContext';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 // =============================================================================
 // Types
@@ -18,6 +19,8 @@ export interface LoginModalProps {
 // =============================================================================
 
 export function LoginModal({ isOpen, onClose, onSwitchToSignup }: LoginModalProps) {
+  // Keyboard: focus in, Tab kept inside, Escape closes, focus back after (KB-2).
+  const panelRef = useModalDialog<HTMLDivElement>(isOpen, onClose);
   const { login, signInWithOAuth, loading, error, clearError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -107,6 +110,11 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup }: LoginModalProp
 
           {/* Modal */}
           <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="login-title"
+            tabIndex={-1}
             className="relative z-10 w-full max-w-md mx-4 rounded-2xl bg-warm-white shadow-2xl overflow-hidden"
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -124,7 +132,7 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup }: LoginModalProp
               </button>
 
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-ink-warm">Welcome Back</h2>
+                <h2 id="login-title" className="text-2xl font-bold text-ink-warm">Welcome Back</h2>
                 <p className="mt-1 text-sm text-taupe">
                   Sign in to access your albums and photos
                 </p>
@@ -176,6 +184,7 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup }: LoginModalProp
                         if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
                       }}
                       placeholder="you@example.com"
+                      data-autofocus
                       className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-4 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
                       autoComplete="email"
                     />

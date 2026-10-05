@@ -12,6 +12,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Loader2, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useModalDialog } from '../lib/useModalDialog';
 import {
   preflightAccountDeletion,
   deleteMyAccount,
@@ -93,6 +94,8 @@ export default function DeleteAccountSection() {
     setOpen(false);
     setPhase('idle');
   }, [phase]);
+  // Keyboard (KB-2): focus in, Tab kept inside, Escape closes (never mid-delete).
+  const panelRef = useModalDialog<HTMLDivElement>(open, close);
 
   return (
     <>
@@ -131,6 +134,8 @@ export default function DeleteAccountSection() {
               exit={{ opacity: 0, scale: 0.96, y: 12 }}
               className="w-full max-w-md bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
+              ref={panelRef}
+              tabIndex={-1}
               role="dialog"
               aria-modal="true"
               aria-labelledby="delete-account-title"

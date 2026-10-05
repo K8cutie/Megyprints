@@ -28,6 +28,7 @@ import { FONTS } from './fonts';
 import { FontSelect } from './FontList';
 import { DEFAULT_COVER, type AlbumPage } from './types';
 import { medianSharpness, photoQuality } from '../../lib/photoCheck';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 const SPINE_STRIP_W = 26;
 type CoverTab = 'background' | 'text';
@@ -41,6 +42,8 @@ interface Props {
 
 export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }: Props) {
   const b = useBuilderContext();
+  // As a dialog (not the wizard step): focus in, Tab kept inside, Escape closes (KB-2).
+  const panelRef = useModalDialog<HTMLDivElement>(mode === 'modal', onClose);
   const { setEditScope, coverFront, albumSize, albumPages, uploadedPhotos } = b;
 
   // Own the cover scope for the editor's lifetime; always restore 'interior' on
@@ -469,7 +472,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-stretch sm:items-center justify-center sm:p-4">
-      <div className="bg-cream w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden relative">
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Design your cover" tabIndex={-1}
+        className="bg-cream w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden relative">
         {header}
         {preview}
         {reservedNote}

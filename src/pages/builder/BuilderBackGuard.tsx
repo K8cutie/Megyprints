@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 /* ══════════════════════════════════════════════════════════════════════════
  *  BuilderBackGuard — stop the mobile Back button from nuking a draft
@@ -93,6 +94,9 @@ export default function BuilderBackGuard({ flush, phase, onStepBack }: BuilderBa
     navigate('/');
   }, [navigate]);
 
+  // Keyboard (KB-2): focus on "Keep editing", Tab kept inside, Escape stays.
+  const panelRef = useModalDialog<HTMLDivElement>(confirmOpen, stay);
+
   if (!confirmOpen) return null;
 
   return createPortal(
@@ -104,6 +108,8 @@ export default function BuilderBackGuard({ flush, phase, onStepBack }: BuilderBa
       onClick={stay}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden"
       >
@@ -122,6 +128,7 @@ export default function BuilderBackGuard({ flush, phase, onStepBack }: BuilderBa
           <div className="flex flex-col gap-2.5">
             <button
               onClick={stay}
+              data-autofocus
               className="w-full py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all"
             >
               Keep editing

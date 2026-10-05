@@ -11,6 +11,7 @@
 
 import { X, BookOpen, Sparkles } from 'lucide-react';
 import type { LocalDraftSummary } from '../lib/localDraft';
+import { useModalDialog } from '../lib/useModalDialog';
 
 export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onStartNew, onClose }: {
   draft: LocalDraftSummary;
@@ -20,9 +21,11 @@ export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onSta
   onClose: () => void;
 }) {
   const photos = `${draft.photoCount} photo${draft.photoCount === 1 ? '' : 's'}`;
+  // Keyboard (KB-2): focus on "Continue my album", Tab kept inside, Escape closes.
+  const panelRef = useModalDialog<HTMLDivElement>(true, onClose);
   return (
     <div className="fixed inset-0 z-[135] flex items-center justify-center bg-black/40 px-4" onClick={onClose} data-testid="start-new-prompt">
-      <div role="dialog" aria-modal="true" aria-labelledby="start-new-title" onClick={(e) => e.stopPropagation()}
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="start-new-title" tabIndex={-1} onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center">
         <button onClick={onClose} aria-label="Close" className="absolute top-3 right-3 p-1.5 rounded-full text-light hover:text-medium hover:bg-line-soft transition-colors">
           <X size={16} />
@@ -39,7 +42,7 @@ export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onSta
           </div>
         </div>
         <div className="space-y-2">
-          <button onClick={onContinue} data-testid="start-new-continue"
+          <button onClick={onContinue} data-testid="start-new-continue" data-autofocus
             className="w-full py-3 rounded-xl bg-peach text-white text-sm font-semibold hover:brightness-105 transition-all">
             Continue my album
           </button>

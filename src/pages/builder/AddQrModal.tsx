@@ -13,6 +13,7 @@ import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
 import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
 import { getPriceSchedule } from '../../lib/storeSettings';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 const CORNER_LABELS: Record<QrCorner, string> = {
   tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right',
@@ -57,6 +58,8 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   const [checking, setChecking] = useState(false);
   const [stagedUrl, setStagedUrl] = useState<string | null>(null); // local blob of a not-yet-uploaded clip
   const inputRef = useRef<HTMLInputElement>(null);
+  // Keyboard (KB-2): focus in, Tab kept inside, Escape closes — not mid-shrink.
+  const panelRef = useModalDialog<HTMLDivElement>(true, busy || checking ? undefined : onClose);
   const schedule = getPriceSchedule();
   const includedYears = includedHostingYears(schedule ?? {});
   const hdPrice = hdMemoriesPriceOf(schedule ?? {});
@@ -159,9 +162,10 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
 
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="clip-modal-title" tabIndex={-1}
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-line shrink-0">
-          <span className="text-sm font-semibold text-dark flex items-center gap-2">
+          <span id="clip-modal-title" className="text-sm font-semibold text-dark flex items-center gap-2">
             <Video size={18} className="text-blush-pink" /> {initial ? 'Change this memory' : 'Add a video memory'}
           </span>
           <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
@@ -230,7 +234,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
           {/* Picker */}
           <input ref={inputRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v" className="hidden"
             onChange={(e) => void pick(e.target.files?.[0] ?? null)} />
-          <button type="button" onClick={() => inputRef.current?.click()} disabled={checking || busy}
+          <button type="button" onClick={() => inputRef.current?.click()} disabled={checking || busy} data-autofocus
             className="w-full rounded-xl border-2 border-dashed border-peach bg-cream px-4 py-4 text-sm font-semibold text-cocoa flex items-center justify-center gap-2 disabled:opacity-60">
             {checking ? <><Loader2 size={16} className="animate-spin" /> Checking your video…</>
               : <><Upload size={16} /> {file ? 'Choose a different video' : initial ? 'Replace with a new video' : 'Choose a video'}</>}
@@ -317,6 +321,7 @@ function LegacyLinkModal({ initial, onSave, onRemove, onClose, corner, onCorner,
   const [url, setUrl] = useState(initial?.destination ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const panelRef = useModalDialog<HTMLDivElement>(true, busy ? undefined : onClose);
 
   const embed = useMemo(() => videoEmbedInfo(url), [url]);
   const previewSrc = embed
@@ -365,12 +370,13 @@ function LegacyLinkModal({ initial, onSave, onRemove, onClose, corner, onCorner,
 
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="link-modal-title" tabIndex={-1}
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-line">
-          <span className="text-sm font-semibold text-dark flex items-center gap-2">
+          <span id="link-modal-title" className="text-sm font-semibold text-dark flex items-center gap-2">
             <Youtube size={18} className="text-blush-pink" /> {initial ? 'Edit YouTube Memory' : 'Add a YouTube Memory'}
           </span>
-          <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
+          <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-3">
           {!user && (
