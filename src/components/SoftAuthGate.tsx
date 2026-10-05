@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { LogIn, UserPlus, Sparkles } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from './AuthModalProvider';
+import { useModalDialog } from '../lib/useModalDialog';
 
 /* Soft sign-in nudge — a friendly, DISMISSIBLE prompt shown once per session when
    a signed-out user enters the builder. "Continue without an account" is always
@@ -28,15 +29,19 @@ export default function SoftAuthGate() {
     setShow(false);
   };
 
+  // Keyboard (KB-2): focus in, Tab kept inside, Escape = "Continue without an account".
+  const panelRef = useModalDialog<HTMLDivElement>(show && !user, dismiss);
+
   if (!show || user) return null;
 
   return (
     <div className="fixed inset-0 z-[130] bg-black/40 flex items-center justify-center p-4" onClick={dismiss}>
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center" onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="soft-auth-title" tabIndex={-1}
+        className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center" onClick={(e) => e.stopPropagation()}>
         <div className="w-12 h-12 rounded-full bg-blush flex items-center justify-center mx-auto mb-3">
           <Sparkles size={22} className="text-blush-pink" />
         </div>
-        <h2 className="font-display text-lg font-semibold text-dark">Have an account?</h2>
+        <h2 id="soft-auth-title" className="font-display text-lg font-semibold text-dark">Have an account?</h2>
         <p className="text-sm text-medium mt-1.5 mb-5">
           Sign in to use all the features — save your album, add QR memories, and order prints.
         </p>

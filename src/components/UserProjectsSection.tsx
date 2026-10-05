@@ -184,13 +184,18 @@ export function UserProjectsSection() {
                         to={`/builder?album=${album.id}`}
                         className="p-1.5 rounded-lg text-taupe hover:text-blush-pink hover:bg-blush transition-all"
                         title="Open album"
+                        aria-label={`Open album ${album.title || 'Untitled Album'}`}
                       >
                         <ChevronRight size={16} />
                       </Link>
                       <button
                         onClick={() => album.id && handleDelete(album.id)}
-                        className="p-1.5 rounded-lg text-taupe hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                        // Shown when it has keyboard focus too: it was invisible while
+                        // focused, and Enter deleted an album no one saw (KB-7).
+                        className="p-1.5 rounded-lg text-taupe hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-red-300 transition-all"
                         title="Delete album"
+                        aria-label={`Delete album ${album.title || 'Untitled Album'}`}
+                        data-testid="project-delete"
                       >
                         <Trash2 size={14} />
                       </button>

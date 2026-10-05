@@ -642,15 +642,18 @@ export default function Order() {
 
             {/* Receipt + reference (0033). Optional, but it lets the operator match the deposit at a glance. */}
             <div className="mt-4 rounded-xl border border-line-soft p-3">
-              <label className="block text-xs font-semibold text-dark mb-1.5">Receipt screenshot <span className="font-normal text-light">(optional)</span></label>
-              <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-peach bg-cream text-xs text-cocoa cursor-pointer hover:bg-blush">
+              <p className="block text-xs font-semibold text-dark mb-1.5">Receipt screenshot <span className="font-normal text-light">(optional)</span></p>
+              {/* A real control a keyboard reaches (Tab, then Enter or Space opens the
+                  file picker): the input was display:none, so the receipt the
+                  steps ask for was mouse-only (1-star testers round 2, KB-3). */}
+              <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-peach bg-cream text-xs text-cocoa cursor-pointer hover:bg-blush focus-within:ring-2 focus-within:ring-peach focus-within:ring-offset-1">
                 <Paperclip size={14} className="shrink-0" />
                 <span className="truncate">{proofFile ? `${proofFile.name} · ${Math.max(1, Math.round(proofFile.size / 1024))} KB` : 'Attach the transfer receipt (JPG, PNG or PDF)'}</span>
-                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={(e) => onPickProof(e.target.files?.[0] ?? null)} />
+                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" data-testid="pay-receipt-input" onChange={(e) => onPickProof(e.target.files?.[0] ?? null)} />
               </label>
               {proofError && <p className="mt-1.5 text-[11px] text-red-500">{proofError}</p>}
-              <label className="block text-xs font-semibold text-dark mt-3 mb-1.5">Reference no. <span className="font-normal text-light">(optional — from your bank's receipt)</span></label>
-              <input value={payRef} onChange={(e) => { setPayRef(e.target.value); setRefError(''); }} inputMode="text" autoComplete="off" placeholder="e.g. 2026091012345678" maxLength={64}
+              <label htmlFor="pay-reference" className="block text-xs font-semibold text-dark mt-3 mb-1.5">Reference no. <span className="font-normal text-light">(optional — from your bank's receipt)</span></label>
+              <input id="pay-reference" value={payRef} onChange={(e) => { setPayRef(e.target.value); setRefError(''); }} inputMode="text" autoComplete="off" placeholder="e.g. 2026091012345678" maxLength={64}
                 aria-invalid={!!refError} data-testid="pay-reference"
                 className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:border-peach ${refError ? 'border-red-400' : 'border-line'}`} />
               {refError && <p className="mt-1.5 text-[11px] text-red-500" data-testid="pay-reference-error">{refError}</p>}
@@ -764,8 +767,8 @@ export default function Order() {
               <h3 className="font-display text-lg font-semibold text-dark mb-4">Your Details</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-medium mb-1 block">Full Name</label>
-                  <input ref={nameRef} value={name}
+                  <label htmlFor="order-name" className="text-xs text-medium mb-1 block">Full Name</label>
+                  <input id="order-name" ref={nameRef} value={name}
                     onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: '' })); }}
                     autoComplete="name" maxLength={80}
                     aria-invalid={!!errors.name}
@@ -773,8 +776,8 @@ export default function Order() {
                   {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-medium mb-1 block">Phone Number</label>
-                  <input ref={phoneRef} value={phone}
+                  <label htmlFor="order-phone" className="text-xs text-medium mb-1 block">Phone Number</label>
+                  <input id="order-phone" ref={phoneRef} value={phone}
                     onChange={(e) => { setPhone(e.target.value); if (errors.phone) setErrors((p) => ({ ...p, phone: '' })); }}
                     onBlur={() => { const c = normalizePHPhone(phone); if (c) setPhone(formatPHPhoneDisplay(c)); }}
                     inputMode="tel" autoComplete="tel" maxLength={20}

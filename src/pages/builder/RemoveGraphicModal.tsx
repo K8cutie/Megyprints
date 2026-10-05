@@ -1,4 +1,5 @@
 import { X, Trash2 } from 'lucide-react';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 /* Adding AI graphics was retired — themed quotes took their place in the slot
    chooser. Graphics already placed in saved albums still render and print
@@ -27,20 +28,23 @@ export default function RemoveGraphicModal({ onRemove, onClose, mobile, kind = '
   mobile?: boolean;
   kind?: keyof typeof COPY;
 }) {
+  // Keyboard (KB-2): focus on "Keep it", Tab kept inside, Escape keeps it.
+  const panelRef = useModalDialog<HTMLDivElement>(true, onClose);
   const Card = (
     <div
+      ref={panelRef} role="dialog" aria-modal="true" aria-label={COPY[kind].title} tabIndex={-1}
       className={`bg-white shadow-2xl flex flex-col ${mobile ? 'w-full rounded-t-2xl' : 'w-full max-w-xs rounded-2xl'}`}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between px-5 py-3 border-b border-line">
         <span className="text-sm font-semibold text-dark">{COPY[kind].title}</span>
-        <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
+        <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
       </div>
       <div className="px-5 py-4">
         <p className="text-xs text-stone leading-relaxed">{COPY[kind].body}</p>
       </div>
       <div className="px-5 pb-4 flex gap-2">
-        <button onClick={onClose}
+        <button onClick={onClose} data-autofocus
           className="flex-1 h-10 rounded-xl border border-line-soft text-sm font-medium text-[#6B5842] hover:bg-cream">
           Keep it
         </button>
