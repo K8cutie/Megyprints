@@ -144,6 +144,7 @@ describe('real dialogs', () => {
       'pages/builder/SlotChooser.tsx', 'pages/builder/BuilderBackGuard.tsx', 'pages/builder/CoverEditor.tsx',
       'pages/builder/BuilderEdit.tsx', 'components/SoftAuthGate.tsx', 'components/ResumePrompt.tsx',
       'components/StartNewAlbumPrompt.tsx', 'components/DeleteAccountSection.tsx',
+      'pages/builder/EndOfAlbumPrompt.tsx',
     ];
     for (const f of files) {
       const src = readFileSync(resolve(__dirname, '..', f), 'utf8');
