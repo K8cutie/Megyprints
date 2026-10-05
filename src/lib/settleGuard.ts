@@ -26,3 +26,14 @@ export function useSettleGuard(key: unknown): () => boolean {
   }, [key]);
   return useCallback(() => performance.now() - changedAt.current < SETTLE_MS, []);
 }
+
+/* ── Across surfaces ──
+   A tap on one surface can change what is under the finger on ANOTHER: Megy's
+   size card moves on, and for a moment the setup page's own size grid shows
+   under it, so a double tap picked 6×4 and then 9×9 there. The album came out
+   9×9 while the toast said "Size set: 6×4" (1-star testers round 3, the
+   Next-Masher). noteScreenTap() marks a tap that changes the screen;
+   tooSoonAfterScreenTap() answers its tail, wherever it lands. */
+let screenTapAt = Number.NEGATIVE_INFINITY;
+export function noteScreenTap(): void { screenTapAt = performance.now(); }
+export function tooSoonAfterScreenTap(): boolean { return performance.now() - screenTapAt < SETTLE_MS; }
