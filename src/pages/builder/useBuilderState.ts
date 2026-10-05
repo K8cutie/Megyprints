@@ -133,6 +133,11 @@ export function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): Al
   const relaid: AlbumPage = {
     ...page,
     templateId: template.id,
+    // A caption bound to a box the new layout doesn't have goes with the old
+    // layout. It stayed: the editor drew it over the photo, the preview hid it,
+    // and the print drew it as loose text where it once sat (1-star testers
+    // round 3, the Indecisive One).
+    textElements: (page.textElements ?? []).filter((t) => t.boxIndex == null || t.boxIndex < textSlotCount),
     qrFills: carriedQr,
     slotTexts: carriedText,
     ornamentFills: carriedOrnament,
@@ -147,6 +152,18 @@ export function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): Al
     slotOffsetsY: new Array(slotCount).fill(0),
   };
   return keepMemories(page, relaid, template);
+}
+
+/** What laying `page` out on `template` would take off it: the photos that no
+ *  longer fit (in page order) and the captions whose box the layout lacks. */
+export function layoutChangeLeftovers(page: AlbumPage, template: PageTemplate): { photos: number[]; captions: number } {
+  const relaid = relayPageOnTemplate(page, template);
+  const kept = new Set([...(relaid.slotFills ?? []), ...(relaid.textSlotFills ?? [])].filter((f): f is number => f != null));
+  const had = [...new Set([...(page.slotFills ?? []), ...(page.textSlotFills ?? [])].filter((f): f is number => f != null))];
+  return {
+    photos: had.filter((f) => !kept.has(f)),
+    captions: (page.textElements?.length ?? 0) - (relaid.textElements?.length ?? 0),
+  };
 }
 
 /* A layout change never drops a video memory (1-star testers round 2, MMC-3):
@@ -232,6 +249,31 @@ function dominantPageRatio(
     if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; }
   }
   return pageRatio;
+}
+
+/** New pages for `photos` (photo indices), on layouts that hold exactly them:
+ *  ratio-matched first, then any layout of that count, splitting when no
+ *  layout holds that many. */
+function pagesForPhotos(photos: number[], size: AlbumSizePreset, assignments: Partial<Record<number, PhotoRatio>>): AlbumPage[] {
+  const pages: AlbumPage[] = [];
+  let rest = [...photos];
+  const all = getTemplatesForAlbum(size);
+  while (rest.length) {
+    let placed = false;
+    for (let k = rest.length; k >= 1 && !placed; k--) {
+      const chunk = rest.slice(0, k);
+      const ratio = dominantPageRatio(chunk, assignments);
+      const fits = (t: PageTemplate) => t.slots.filter((sl) => sl.kind !== 'qr').length === k;
+      const t = all.find((x) => fits(x) && (!ratio || x.targetRatio === ratio)) ?? all.find(fits);
+      if (!t) continue;
+      const blank = { ...createEmptyPage(0, size), id: `page-${Date.now()}-${Math.random().toString(36).slice(2)}`, slotFills: chunk };
+      pages.push(relayPageOnTemplate(blank, t));
+      rest = rest.slice(k);
+      placed = true;
+    }
+    if (!placed) break; // no layout at all for this size (never in practice)
+  }
+  return pages;
 }
 
 /** Auto-fill's choice for a page: every EMPTY photo slot (not a QR slot, not
@@ -645,8 +687,13 @@ export interface BuilderActions {
   cycleLayout: () => void;
   /** Templates available for the current page (for the layout picker). */
   availableTemplatesForCurrentPage: () => PageTemplate[];
-  /** Apply a chosen template to the current page, keeping its photos. */
-  applyPageLayout: (templateId: string) => void;
+  /** Apply a chosen template to the current page, keeping its photos. Photos
+   *  that no longer fit go on a new page after it ('new-page') or leave the
+   *  album ('leave-out', the default). */
+  applyPageLayout: (templateId: string, leftover?: 'new-page' | 'leave-out') => void;
+  /** What a layout would take off the current page: photos that no longer fit
+   *  and captions whose box it lacks. */
+  layoutChangeLoses: (templateId: string) => { photos: number; captions: number };
   /** The "Change layout" picker open state — shared by mobile + desktop. */
   layoutPickerOpen: boolean;
   setLayoutPickerOpen: (v: boolean) => void;
@@ -2156,18 +2203,36 @@ export function useBuilderState(): BuilderActions {
   /** Apply a SPECIFIC template to the current page (the picker's choice), keeping
    *  the existing photos (re-filled into the new slots — unlike setPageTemplate
    *  which clears them). */
-  const applyPageLayout = useCallback((templateId: string) => {
+  /** What the chosen layout would take off the current page (the picker asks
+   *  before it does: LayoutPicker). */
+  const layoutChangeLoses = useCallback((templateId: string): { photos: number; captions: number } => {
+    const template = getTemplateById(templateId);
+    const page = albumPages[currentPageIndex];
+    if (!template || !page) return { photos: 0, captions: 0 };
+    const left = layoutChangeLeftovers(page, template);
+    return { photos: left.photos.length, captions: left.captions };
+  }, [albumPages, currentPageIndex]);
+
+  /** Apply a chosen layout. Photos that no longer fit go on a new page right
+   *  after this one ('new-page'), or leave the album ('leave-out', back among
+   *  the unused photos). They used to just leave, without a word (1-star
+   *  testers round 3, the Indecisive One: 50 photos, 48 in the album). */
+  const applyPageLayout = useCallback((templateId: string, leftover: 'new-page' | 'leave-out' = 'leave-out') => {
     const template = getTemplateById(templateId);
     if (!template) return;
+    const before = albumPages[currentPageIndex];
+    const spare = leftover === 'new-page' && before ? layoutChangeLeftovers(before, template).photos : [];
+    const assignments = spare.length ? analyzePhotos(uploadedPhotos).assignments : {};
     pushSnapshot();
     setAlbumPages((prev) => {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page) return prev;
       next[currentPageIndex] = relayPageOnTemplate(page, template);
+      if (spare.length) next.splice(currentPageIndex + 1, 0, ...pagesForPhotos(spare, albumSize, assignments));
       return next;
     });
-  }, [currentPageIndex]);
+  }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
 
   /* ── Face-centred auto-pan ──
      detectFaceCenter gives the face as a 0–1 point on the photo; every renderer
@@ -3521,6 +3586,7 @@ export function useBuilderState(): BuilderActions {
     shuffleLayout,
     cycleLayout,
     availableTemplatesForCurrentPage,
+    layoutChangeLoses,
     applyPageLayout,
     layoutPickerOpen,
     setLayoutPickerOpen,
