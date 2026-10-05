@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useBuilderContext } from '../pages/builder/BuilderContext';
 import { parseIntent } from './intentParser';
-import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard } from './wizard';
+import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, KEEP_PAGES, REMAKE_ALBUM } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES, perPageNote } from '../pages/builder/densities';
@@ -16,7 +16,8 @@ import { memoryShortfall, MIN_MEMORY_PAGES, perPageShapeNote } from '../pages/bu
 import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
 import { SIZE_LABELS } from '../lib/pricing';
 import type { AssistantMessage, AssistantIntent } from './types';
-import { rebuildQuestion } from './rebuildQuestion';
+import { rebuildQuestion, placedMemories } from './rebuildQuestion';
+import RemakeAlbumAsk from './RemakeAlbumAsk';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
 import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
@@ -310,6 +311,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   /* ── Toast ── */
   const [toast, setToast] = useState<string | null>(null);
+  // "Make the album again?" (RemakeAlbumAsk): open while the question is asked.
+  const [remakeAsk, setRemakeAsk] = useState(false);
   const showToast = (msg: string, ms = 2000) => { setToast(msg); setTimeout(() => setToast(null), ms); };
 
   const cardTooSoon = useSettleGuard(wizardKey);
@@ -377,7 +380,13 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         }
         break;
       case 'upload_photos':
-        if (action.includes('Generate')) {
+        if (action === KEEP_PAGES) {
+          // A made album: carry on with the pages as they are.
+          wizardRef.current.advance();
+          setWizardStep(wizardRef.current.state.step);
+        } else if (action === REMAKE_ALBUM) {
+          setRemakeAsk(true); // asks first: it replaces every page (RemakeAlbumAsk)
+        } else if (action.includes('Generate')) {
           // The 40-photo gate (albumMinimum): the card only offers Generate at
           // 40+, but a photo left out a moment ago must not slip through.
           const have = photosGoingIn(builder.uploadedPhotos);
@@ -533,12 +542,22 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   // Escape — it is a step to answer, not a box to dismiss.
   const stageRef = useModalDialog<HTMLDivElement>(centerStage);
 
+  // Asked before a made album is laid out again; "Make it again" does what
+  // "Generate Album" does, "Keep my pages" carries on.
+  const remakeAskEl = remakeAsk && (
+    <RemakeAlbumAsk memories={placedMemories(builder.albumPages)}
+      onClose={() => setRemakeAsk(false)}
+      onKeep={() => { setRemakeAsk(false); handleWizardAction(KEEP_PAGES); }}
+      onRemake={() => { setRemakeAsk(false); handleWizardAction('Generate Album →'); }} />
+  );
+
   if (centerStage) {
     const msg = wizardRef.current.getMessage();
     const prog = wizardRef.current.getProgress();
     return (
       <div ref={stageRef} role="dialog" aria-modal="true" aria-label="Megy's guide" tabIndex={-1}
         className="fixed inset-0 z-[95] bg-warm-white flex flex-col items-center [justify-content:safe_center] p-6 overflow-auto outline-none">
+        {remakeAskEl}
         {/* Hidden file input so the Upload step works on the center stage too */}
         <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleFileUpload} className="hidden" />
         {/* Megy's answer on the center stage too: the toast lived only in the
@@ -1181,6 +1200,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         </div>
       )}
 
+      {remakeAskEl}
       {/* ═══ TOAST ═══ */}
       {toast && (
         <div role="status" data-testid="megy-toast" className="absolute bottom-4 left-4 right-4 px-4 py-2.5 bg-dark text-white text-[12px] rounded-xl shadow-lg text-center">{toast}</div>
