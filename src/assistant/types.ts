@@ -27,6 +27,7 @@ export type AssistantIntentType =
   | 'update_text'
   | 'delete_text'
   | 'preview_album'
+  | 'place_order'
   | 'status'
   | 'help'
   | 'undo'

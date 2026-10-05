@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useBuilderContext } from '../pages/builder/BuilderContext';
 import { parseIntent } from './intentParser';
-import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, KEEP_PAGES, REMAKE_ALBUM } from './wizard';
+import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, KEEP_PAGES, REMAKE_ALBUM, saveWizardForAlbum, forgetWizardForAlbum, wizardForAlbum } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES } from '../pages/builder/densities';
@@ -286,8 +286,28 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   /* Save the journey on every step change and on the ✕, so a reload restores
      it. Declared after the effects above, so it saves what they settled on. */
+  /* Another album on screen (opened from Your orders or Your projects): its
+     own step, not the last album's. Before the save below, so the new
+     album's journey is never saved under the old one's id. */
+  const journeyAlbumRef = useRef(builder.getAlbumId());
+  const albumOnScreen = builder.getAlbumId();
+  const switchJourney = (id: string | undefined): boolean => {
+    const next = wizardForAlbum(builder, id);
+    if (!next) return false;
+    wizardRef.current = next;
+    return true;
+  };
   useEffect(() => {
-    try { localStorage.setItem(WIZARD_STORAGE_KEY, wizardRef.current.serialize(!showWizard)); } catch { /* storage blocked: this visit only */ }
+    if (albumOnScreen === journeyAlbumRef.current) return;
+    journeyAlbumRef.current = albumOnScreen;
+    if (switchJourney(albumOnScreen)) setWizardStep(wizardRef.current.state.step);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [albumOnScreen]);
+
+  useEffect(() => {
+    const saved = wizardRef.current.serialize(!showWizard);
+    try { localStorage.setItem(WIZARD_STORAGE_KEY, saved); } catch { /* storage blocked: this visit only */ }
+    saveWizardForAlbum(journeyAlbumRef.current, saved);
   }, [wizardStep, showWizard]);
 
   // Force re-render when wizard step changes via key
@@ -362,6 +382,17 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', content: ask, intent, timestamp: new Date() }]);
         return;
       }
+    }
+    // "Place order" / "order this album again": the same door as the
+    // preview's Order button (the album's checks, its save, then checkout).
+    // It answered "I'm not sure what you mean" (round 3, the Returning Customer).
+    if (intent.type === 'place_order') {
+      const made = albumIsMade(builder.albumPages) && !!onPlaceOrder;
+      setIsThinking(false);
+      setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', intent, timestamp: new Date(),
+        content: made ? 'Opening your order: the album, then checkout.' : 'Make your album first: add your photos and tap Generate Album. Then you can order it.' }]);
+      if (made) onPlaceOrder?.();
+      return;
     }
     const result = await builder.dispatch(intent);
     const asst: AssistantMessage = { id: `a-${Date.now()}`, role: 'assistant', content: result.message, intent: parsed.intent, timestamp: new Date() };
@@ -484,6 +515,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     setShowWizard(true);                          // re-show the guided centerpiece
     setWizardStep(wizardRef.current.state.step);  // syncs store + phase via effects
     try { localStorage.removeItem(WIZARD_STORAGE_KEY); } catch { /* ignore */ }
+    forgetWizardForAlbum(builder.getAlbumId());
     showToast('Wizard restarted — back to the beginning');
   };
   const doGenerate = () => { void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then((r) => showToast(r.success ? 'Album generated!' : r.message)); };

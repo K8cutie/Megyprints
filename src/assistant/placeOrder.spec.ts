@@ -146,7 +146,7 @@ describe('Step 7 (Preview & Order): "Place Order →" orders', () => {
     await tap(megyButton('Place Order →'));
     expect(outcome()).toEqual({ path: '/order', job: { pages: 40, photos: 40, albumId: 'album-1' }, alert: null });
     // A guest: checkout is told this album never reached the account.
-    expect(readOrderHandoff()).toEqual({ albumId: 'album-1', saved: false });
+    expect(readOrderHandoff()).toEqual({ albumId: 'album-1', saved: false, fresh: true });
   });
 
   it('signed in: the album is saved first, then checkout — once per tap', async () => {
@@ -155,7 +155,7 @@ describe('Step 7 (Preview & Order): "Place Order →" orders', () => {
     await tap(megyButton('Place Order →'));
     expect(ctx.manualSave).toHaveBeenCalledTimes(1);
     expect(where).toBe('/order');
-    expect(readOrderHandoff()).toEqual({ albumId: 'album-1', saved: true });
+    expect(readOrderHandoff()).toEqual({ albumId: 'album-1', saved: true, fresh: true });
   });
 
   it('a 12-photo album (an old draft): the tap answers why not yet, and checkout stays shut', async () => {

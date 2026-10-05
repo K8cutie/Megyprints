@@ -217,7 +217,7 @@ describe('a second copy starts from the first', () => {
     ];
     await render(createElement(MyOrders));
     const cards = [...host.querySelectorAll('[data-testid="order-card"]')];
-    expect(cards[0].querySelector('[data-testid="order-again"]')?.getAttribute('href')).toBe('/builder?album=album-9');
+    expect(cards[0].querySelector('[data-testid="order-again"]')?.getAttribute('href')).toBe('/builder?album=album-9&order=again');
     expect(cards[1].querySelector('[data-testid="order-again"]')).toBeNull();
   });
   it('checkout prefills only when this tab had no form, and says so (source guard)', () => {

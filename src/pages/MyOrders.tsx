@@ -105,9 +105,11 @@ function OrderCard({ order, focused }: { order: MyOrder; focused?: boolean }) {
         </div>
       )}
 
-      {/* A second copy: open the album as it is now, then Order (RC). */}
+      {/* A second copy: the album as it is now, through the Order door (its
+          checks and save), straight to checkout (RC; round 3: it opened the
+          editor on page 1, with no order button on screen). */}
       {order.album_id && !track.awaitingPayment && (
-        <Link to={`/builder?album=${order.album_id}`} data-testid="order-again"
+        <Link to={`/builder?album=${order.album_id}&order=again`} data-testid="order-again"
           className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-peach text-xs font-semibold text-cocoa hover:bg-blush">
           Order this album again
         </Link>

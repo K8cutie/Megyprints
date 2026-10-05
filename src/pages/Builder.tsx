@@ -104,7 +104,7 @@ export default function Builder() {
   const actions = useBuilderContext();
   const navigate = useNavigate();
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [errorKey, setErrorKey] = useState(0);
 
   /* Refs */
@@ -169,7 +169,7 @@ export default function Builder() {
     if (!actions.user) {
       // A guest can't be saved to an account. Checkout asks them to sign in,
       // and the note tells it this album never reached the account.
-      if (albumId) noteOrderHandoff({ albumId, saved: false });
+      if (albumId) noteOrderHandoff({ albumId, saved: false, fresh: true });
       navigate('/order');
       return;
     }
@@ -187,7 +187,7 @@ export default function Builder() {
         : "We couldn't save your album to your account, so it can't be ordered yet. Check your connection and tap Order again.");
       return;
     }
-    if (albumId) noteOrderHandoff({ albumId, saved: true });
+    if (albumId) noteOrderHandoff({ albumId, saved: true, fresh: true });
     navigate('/order');
   }, [actions, navigate]);
   const dismissOrderError = useCallback(() => setOrderError(null), []);
@@ -217,13 +217,18 @@ export default function Builder() {
   const hasLoadedRef = useRef<string | null>(null);
   const userId = actions.user?.id;
   const loadAlbum = actions.loadAlbum;
+  // "Order this album again" (Your orders) adds &order=again: once the album
+  // is in, it goes through the Order door (requestOrder) to checkout. The
+  // flag comes off the address first, so a reload doesn't order again.
   useEffect(() => {
     const albumId = searchParams.get('album');
     if (!albumId || !userId) return;
     if (hasLoadedRef.current === albumId) return;
     hasLoadedRef.current = albumId;
-    loadAlbum(albumId);
-  }, [searchParams, userId, loadAlbum]);
+    const again = searchParams.get('order') === 'again';
+    if (again) setSearchParams((p) => { p.delete('order'); return p; }, { replace: true });
+    void loadAlbum(albumId).then(() => { if (again) requestOrder(); });
+  }, [searchParams, setSearchParams, userId, loadAlbum, requestOrder]);
 
   const phaseIndex = phases.findIndex((p) => p.id === actions.phase);
   // Desktop: reserve the Megy panel's width so the toolbar + canvas sit BESIDE

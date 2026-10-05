@@ -526,6 +526,54 @@ function parseSaved(data: string): Record<string, unknown> {
 /* ── Local storage key ── */
 export const WIZARD_STORAGE_KEY = 'megy_wizard_state';
 
+/* Each album's own journey (1-star testers round 3, the Returning Customer):
+   one key held every album's step, so finishing one album put a new,
+   unreviewed one at "Place Order", and sent the paid one back to page-by-page
+   review. The current journey stays under WIZARD_STORAGE_KEY; this keeps the
+   last few albums' own, by album id. */
+export const WIZARD_BY_ALBUM_KEY = 'megy_wizard_by_album';
+const MAX_ALBUM_JOURNEYS = 20;
+const readJourneys = (): Record<string, string> => {
+  try {
+    const v = JSON.parse(localStorage.getItem(WIZARD_BY_ALBUM_KEY) || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, string> : {};
+  } catch { return {}; }
+};
+/** The journey saved for this album, or null. */
+export function readWizardForAlbum(albumId: string | undefined): string | null {
+  if (!albumId) return null;
+  const j = readJourneys()[albumId];
+  return typeof j === 'string' ? j : null;
+}
+/** Keep this album's journey (the newest few albums only). */
+export function saveWizardForAlbum(albumId: string | undefined, data: string): void {
+  if (!albumId) return;
+  const all = readJourneys();
+  delete all[albumId];
+  all[albumId] = data;
+  const keys = Object.keys(all);
+  for (const k of keys.slice(0, Math.max(0, keys.length - MAX_ALBUM_JOURNEYS))) delete all[k];
+  try { localStorage.setItem(WIZARD_BY_ALBUM_KEY, JSON.stringify(all)); } catch { /* storage full: this album's step only lives this visit */ }
+}
+export function forgetWizardForAlbum(albumId: string | undefined): void {
+  if (!albumId) return;
+  const all = readJourneys();
+  if (!(albumId in all)) return;
+  delete all[albumId];
+  try { localStorage.setItem(WIZARD_BY_ALBUM_KEY, JSON.stringify(all)); } catch { /* ignore */ }
+}
+/** The engine for an album the builder just switched to: its own saved
+ *  journey, else (a made album with none) the album's reality, reconciled
+ *  forward. Null for an album that isn't made and has no journey: the one in
+ *  progress (a new album's Step 1) carries on. */
+export function wizardForAlbum(builder: BuilderActions, albumId: string | undefined): WizardEngine | null {
+  const saved = readWizardForAlbum(albumId);
+  const engine = saved != null ? WizardEngine.deserialize(saved, builder) : new WizardEngine(builder, false);
+  if (saved == null && !engine.hasBuiltAlbum()) return null;
+  engine.reconcileForward();
+  return engine;
+}
+
 /** What a previous visit saved, or null for a first visit. Also null when the
  *  customer just asked for a NEW album (Home → Create New Album): the builder
  *  resets on mount, and the old album's journey must not come back with it. */
