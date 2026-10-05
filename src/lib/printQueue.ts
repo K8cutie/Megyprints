@@ -64,6 +64,10 @@ export interface OrderHandoff {
   albumId: string;
   /** The cloud row holds the album exactly as it left the builder. */
   saved: boolean;
+  /** Just handed over by the builder's Order door (not read since): a NEW
+   *  checkout, never the last one's thank-you. A reload of checkout reads
+   *  the handoff again without it, and comes back where it was. */
+  fresh?: boolean;
 }
 
 export function noteOrderHandoff(handoff: OrderHandoff): void {
@@ -75,8 +79,17 @@ export function readOrderHandoff(): OrderHandoff | null {
     const raw = sessionStorage.getItem(HANDOFF_KEY);
     if (!raw) return null;
     const h = JSON.parse(raw) as Partial<OrderHandoff>;
-    return typeof h?.albumId === 'string' ? { albumId: h.albumId, saved: h.saved === true } : null;
+    return typeof h?.albumId === 'string' ? { albumId: h.albumId, saved: h.saved === true, ...(h.fresh ? { fresh: true } : {}) } : null;
   } catch {
     return null;
   }
+}
+
+/** Whether checkout was just opened by the builder's Order door — once: the
+ *  mark comes off, so a reload is a reload. */
+export function takeFreshHandoff(): boolean {
+  const h = readOrderHandoff();
+  if (!h?.fresh) return false;
+  noteOrderHandoff({ albumId: h.albumId, saved: h.saved });
+  return true;
 }

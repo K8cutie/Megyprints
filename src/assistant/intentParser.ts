@@ -108,6 +108,13 @@ const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
   preview_album: [
     'preview', 'preview album', 'see preview', 'show preview', 'finalize',
   ],
+  // Ordering (round 3, the Returning Customer: "I want to order another copy
+  // of this album" and "place order" were "I'm not sure what you mean").
+  // Never bare "order": "change the order of the pages" is not a purchase.
+  place_order: [
+    'place order', 'place an order', 'place my order', 'order this album', 'order the album', 'order my album',
+    'order another', 'order again', 'another copy', 'reorder', 're-order', 'checkout', 'buy this album', 'buy the album', 'order it',
+  ],
   status: [
     'status', 'overview', 'summary', 'how many', 'what do i have',
     'show me', 'album status', 'progress', 'where am i',
@@ -184,7 +191,7 @@ export function parseIntent(message: string): ParsedCommand {
     go_to_page: 0, next_page: 0, prev_page: 0,
     change_size: 0, change_template: 0, apply_theme: 0,
     set_background: 0, set_border: 0, set_frame: 0,
-    add_text: 0, update_text: 0, delete_text: 0, preview_album: 0, status: 0,
+    add_text: 0, update_text: 0, delete_text: 0, preview_album: 0, place_order: 0, status: 0,
     help: 0, undo: 0, redo: 0, reset: 0, surprise_me: 0,
     add_photos: 0, set_photos_per_page: 0, unknown: 0,
   };

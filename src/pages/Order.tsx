@@ -7,7 +7,7 @@ import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_COVER_DESIGN } from './builder/
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
 import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } from '../lib/orders';
-import { getPendingPrintJob, setPendingPrintJob, readOrderHandoff, noteOrderHandoff, type PrintJob } from '../lib/printQueue';
+import { getPendingPrintJob, setPendingPrintJob, readOrderHandoff, noteOrderHandoff, takeFreshHandoff, type PrintJob } from '../lib/printQueue';
 import { saveDraftToAccount as saveDraftAlbumToAccount } from '../lib/draftAccountSave';
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
 import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, AlbumChangedElsewhereError } from '../lib/orderAlbum';
@@ -125,6 +125,9 @@ export default function Order() {
   function restoreCheckout(album: OrderAlbumInfo) {
     if (restoredRef.current) return;
     restoredRef.current = true;
+    // Read (and cleared) on every arrival, so only the first visit after the
+    // Order button counts as fresh: a reload later is a reload.
+    const fresh = takeFreshHandoff();
     const form = readCheckoutForm(album.albumId, user?.id);
     formRestoredRef.current = !!form;
     if (form) {
@@ -133,6 +136,11 @@ export default function Order() {
       if (form.hostingYears != null) setHostingYears(form.hostingYears);
     }
     const o = resumableCheckoutOrder(album.albumId, album.editedAt, user?.id);
+    // Just sent here by the album's Order button (a second copy, "Order this
+    // album again"): a finished checkout is not brought back. It showed the
+    // last order's thank-you, and the album could not be ordered again
+    // (1-star testers round 3, the Returning Customer). A reload still is.
+    if (o && fresh && o.stage === 'tracking') return;
     if (!o) return;
     createdOrderRef.current = { id: o.orderId, order_number: o.orderNumber, albumId: o.albumId, material: o.material, cover: o.cover, albumSize: o.albumSize };
     orderRecordRef.current = { albumId: o.albumId, orderId: o.orderId, orderNumber: o.orderNumber, material: o.material, cover: o.cover, albumSize: o.albumSize, amount: o.amount, albumEditedAt: o.albumEditedAt, userId: o.userId ?? user?.id ?? null };
