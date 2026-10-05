@@ -6,6 +6,8 @@ import { useBuilderContext, type BuilderContextValue } from './builder/BuilderCo
 import BuilderSetup from './builder/BuilderSetup';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
+import RemakeAlbumAsk from '../assistant/RemakeAlbumAsk';
+import { albumIsMade, placedMemories } from '../assistant/rebuildQuestion';
 import CoverEditor from './builder/CoverEditor';
 import MobileReview from './builder/MobileReview';
 import MissingPhotosBar from './builder/MissingPhotosBar';
@@ -136,9 +138,16 @@ export default function Builder() {
     void actions.dispatch({ type: 'regenerate_page', rawMessage: 'regenerate page' });
   }, [actions]);
 
-  const handleGenerateAll = useCallback(() => {
+  // "Generate All" on a made album lays every page out again: it asks first
+  // (RemakeAlbumAsk), the way Megy's Step 4 does.
+  const [remakeAsk, setRemakeAsk] = useState(false);
+  const generateAll = useCallback(() => {
     void actions.dispatch({ type: 'generate_album', rawMessage: 'generate album' });
   }, [actions]);
+  const handleGenerateAll = useCallback(() => {
+    if (albumIsMade(actions.albumPages)) { setRemakeAsk(true); return; }
+    generateAll();
+  }, [actions.albumPages, generateAll]);
 
   const handleReset = useCallback(() => {
     actions.reset();
@@ -339,6 +348,12 @@ export default function Builder() {
             </div>
           )}
         </div>
+
+        {remakeAsk && (
+          <RemakeAlbumAsk memories={placedMemories(actions.albumPages)}
+            onClose={() => setRemakeAsk(false)} onKeep={() => setRemakeAsk(false)}
+            onRemake={() => { setRemakeAsk(false); generateAll(); }} />
+        )}
 
         {/* ── Megy Assistant ── */}
         <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'cover' || actions.phase === 'preview')}

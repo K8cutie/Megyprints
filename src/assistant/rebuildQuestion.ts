@@ -17,11 +17,23 @@ export function albumIsMade(pages: AlbumPage[]): boolean {
   return pages.some((p) => (p.slotFills ?? []).some((f) => f != null));
 }
 
+/** Video memories placed on the album's pages (photo-slot and box QRs). */
+export function placedMemories(pages: AlbumPage[]): number {
+  return pages.reduce((n, p) => n + (p.qrFills ?? []).filter(Boolean).length + (p.textSlotQr ?? []).filter(Boolean).length, 0);
+}
+
+const memoriesPhrase = (n: number) => (n > 0 ? ` and your ${n} video ${n === 1 ? 'memory' : 'memories'} (you'd add ${n === 1 ? 'it' : 'them'} again)` : '');
+
+/** What making a made album again replaces, in the customer's words. */
+export function remakeLosesMessage(memories: number): string {
+  return `Every page is laid out again from your photos. That replaces your layout changes, the text you wrote${memoriesPhrase(memories)}. Your photos stay.`;
+}
+
 /** The question to ask before running `intent`, or null to just run it. */
 export function rebuildQuestion(intent: AssistantIntent, album: { albumPages: AlbumPage[]; albumSize: AlbumSizePreset }): string | null {
   if (!albumIsMade(album.albumPages)) return null;
   if (intent.type === 'generate_album') {
-    return "That rebuilds your whole album: every page gets a new layout and your layout changes are replaced (Studio pages stay). Say \"yes\" to go ahead, or keep editing.";
+    return `That rebuilds your whole album: every page gets a new layout and your layout changes are replaced (Studio pages stay)${memoriesPhrase(placedMemories(album.albumPages))}. Say "yes" to go ahead, or keep editing.`;
   }
   // "Surprise me" rebuilds every page too (random layouts) — it rearranged a
   // made album without asking and wiped layout edits and custom text (1-star

@@ -104,6 +104,10 @@ export function isStepOneReady(albumTitle: string | null | undefined, theme: str
  *  empty upload step, and a pale cream button there read as a dead end. */
 /** The upload step's way on while short of the 40-photo minimum ("Add 26 more photos"). */
 const ADD_MORE = /^Add \d+ more photos?$/;
+/** Step 4 with a made album: the way on, and the choice to start the pages over. */
+export const KEEP_PAGES = 'Keep my pages →';
+export const REMAKE_ALBUM = 'Make the album again';
+
 export function isPrimaryAction(action: string): boolean {
   return action.includes('→') || action.includes('Now') || action === 'Upload Photos' || ADD_MORE.test(action);
 }
@@ -283,7 +287,10 @@ export class WizardEngine {
       case 'welcome': return false;
       case 'pick_size': return this.state.completed.includes('pick_size');
       case 'design_cover': return false;
-      case 'upload_photos': return this.hasBuiltAlbum();
+      // A made album with its photos: the card's "Keep my pages →" is the way
+      // on, so no second Next beside it. Made but short of photos (some left
+      // out since): Next is the way back to the pages.
+      case 'upload_photos': return this.hasBuiltAlbum() && photosShortBy(photosGoingIn(this.builder.uploadedPhotos)) > 0;
       case 'review_pages': return false;
       case 'finalize': return false;
       default: return true;
@@ -385,6 +392,17 @@ export class WizardEngine {
         // HARD GATE (albumMinimum): no Generate until 40 photos are going in.
         // The way on is then "Add N more photos" — never a dead Generate.
         const short = photosShortBy(photoCount);
+        // Already made: keeping the pages is the way on. "Generate Album →"
+        // (the filled button) used to lay every page out again without a word,
+        // wiping placed video memories and edits (1-star testers round 3).
+        if (short === 0 && this.hasBuiltAlbum()) {
+          return {
+            title: `Step 4: Photos Uploaded (${photoCount}) 📸`,
+            body: `Your album is made. **Keep my pages** to carry on with it, or **make the album again** to lay out every page from your photos from scratch.`,
+            actions: ["Upload More Photos", KEEP_PAGES, REMAKE_ALBUM],
+            tips: ["Making the album again replaces your layout changes, the text you wrote and any video memories you placed. Megy asks first"],
+          };
+        }
         return {
           title: photoCount > 0 ? `Step 4: Photos Uploaded (${photoCount}) 📸` : "Step 4: Upload Your Photos 📸",
           body: photoCount === 0

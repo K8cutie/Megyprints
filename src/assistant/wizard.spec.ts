@@ -661,7 +661,16 @@ describe('one way forward on every guided screen (tester, 2026-10-04)', () => {
     expect(isPrimaryAction('Add 1 more photo')).toBe(true);
   });
 
-  it('Step 4 with a built album (came back from Review): Next returns to it', () => {
+  it('Step 4 with a built album and its photos: "Keep my pages →" is the one way on; making it again is a plain choice (round 3)', () => {
+    const forty = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}` }));
+    const w = new WizardEngine(builderStub({ phase: 'edit', albumPages: built, uploadedPhotos: forty } as unknown as Partial<BuilderActions>), false);
+    w.state.step = 'upload_photos';
+    expect(w.getMessage().actions).toEqual(['Upload More Photos', 'Keep my pages →', 'Make the album again']);
+    expect(w.getMessage().actions.filter(isPrimaryAction)).toEqual(['Keep my pages →']);
+    expect(w.showsNext()).toBe(false);
+  });
+
+  it('Step 4 with a built album short of photos (some left out since): Next returns to it', () => {
     const w = new WizardEngine(builderStub({ phase: 'edit', albumPages: built, uploadedPhotos: photos } as unknown as Partial<BuilderActions>), false);
     w.state.step = 'upload_photos';
     expect(w.showsNext()).toBe(true);
