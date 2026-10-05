@@ -15,6 +15,7 @@
 import type { AlbumData } from './useAlbumSync';
 import { DRAFT_STORAGE_KEY } from './localDraft';
 import { albumNameToSave } from './albumName';
+import { readAlbumTheme } from './albumTheme';
 
 export interface StoredDraft {
   albumId?: string;
@@ -24,6 +25,9 @@ export interface StoredDraft {
   uploadedPhotos?: Array<{ id: string; name: string; size?: number; width?: number; height?: number; capturedAt?: number | null; check?: unknown; kept?: boolean; leftOut?: boolean }>;
   coverFront?: unknown;
   accountId?: string | null;
+  photosPerPage?: number | null;
+  /** The cloud version this draft is based on (albumSyncRecord.DraftSync). */
+  sync?: unknown;
 }
 
 /** The album row for a stored draft (photo bytes stay on the device). */
@@ -44,6 +48,10 @@ export function albumDataFromDraft(stored: StoredDraft): AlbumData {
       ...(p.leftOut ? { leftOut: true } : {}),
     })),
     ...(stored.coverFront ? { coverFront: stored.coverFront as unknown as AlbumData['coverFront'] } : {}),
+    // The occasion and photos-per-page travel with the album, as in the
+    // builder's own save (round 2, N4). A draft knows only this device's.
+    occasion: readAlbumTheme() || null,
+    photosPerPage: typeof stored.photosPerPage === 'number' && stored.photosPerPage > 0 ? stored.photosPerPage : null,
   };
 }
 

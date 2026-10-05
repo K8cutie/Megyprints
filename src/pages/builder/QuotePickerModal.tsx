@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Quote, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { fetchThemeQuotes, moreThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
-
-const THEME_KEY = 'megy-album-theme';
+import { readAlbumTheme, writeAlbumTheme, cleanAlbumTheme, MAX_THEME_LENGTH } from '../../lib/albumTheme';
 
 /* Themed quote picker for a caption box. Reads the album's free-text theme
    (asked at setup, stored locally), asks the /api/theme-quotes proxy for short
@@ -24,16 +23,16 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   const panelRef = useModalDialog<HTMLDivElement>(true, onClose);
   // Seeded from the theme picked at setup, so the first render already has it —
   // no setState inside the mount effect.
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem(THEME_KEY) || ''; } catch { return ''; }
-  });
+  const [theme, setTheme] = useState(readAlbumTheme);
   const [quotes, setQuotes] = useState<string[]>([]);
   const [source, setSource] = useState<'ai' | 'curated'>('curated');
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async (t: string, fresh = false) => {
-    const q = t.trim();
-    try { if (q) localStorage.setItem(THEME_KEY, q); } catch { /* ignore */ }
+    // The album's occasion, held to the same length as Step 1 (albumTheme):
+    // an uncapped one broke albums_occasion_chk and every save after it.
+    const q = cleanAlbumTheme(t);
+    if (q) writeAlbumTheme(q);
     setLoading(true);
     try {
       // "More lines" → GROW the theme's pool (the album deals from it, so the
@@ -65,6 +64,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
           <input
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
+            maxLength={MAX_THEME_LENGTH}
             onKeyDown={(e) => { if (e.key === 'Enter') void load(theme, true); }}
             placeholder="e.g. Marriage, 1st birthday, Palawan trip"
             className="flex-1 border border-line rounded-lg px-3 py-2 text-sm"

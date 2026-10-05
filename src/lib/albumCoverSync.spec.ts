@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { supabase } from './supabase';
-import { serializeAlbum, deserializeAlbum, upsertAlbumRow, isMissingCoverFrontColumn, type AlbumData } from './useAlbumSync';
+import { serializeAlbum, deserializeAlbum, insertAlbumRow, isMissingCoverFrontColumn, type AlbumData } from './useAlbumSync';
 import { rebuildPrintJobFromAlbum } from './printJobRebuild';
 import { storedCoverPage } from '../pages/builder/pageNormalize';
 import type { StoredPhoto } from './useIndexedDBPhotos';
@@ -125,8 +125,7 @@ function fakeAlbumsTable(responses: Res[]) {
   vi.spyOn(supabase, 'from').mockImplementation(((table: string) => {
     expect(table).toBe('albums');
     return {
-      upsert: (row: Record<string, unknown>, opts: unknown) => {
-        expect(opts).toEqual({ onConflict: 'id' });
+      insert: (row: Record<string, unknown>) => {
         sent.push(row);
         const res = responses[sent.length - 1];
         return { select: () => ({ single: async () => res }) };
@@ -143,11 +142,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('upsertAlbumRow', () => {
+describe('insertAlbumRow', () => {
   it('saves the cover in the same write when the column exists', async () => {
     const sent = fakeAlbumsTable([{ data: { id: 'a1' }, error: null }]);
     const row = { ...serializeAlbum(album({ coverFront: cover })), user_id: 'u1', id: 'a1' };
-    const res = await upsertAlbumRow(row);
+    const res = await insertAlbumRow(row);
     expect(res.error).toBeNull();
     expect(sent).toHaveLength(1);
     expect(sent[0].cover_front).toEqual(cover);
@@ -159,7 +158,7 @@ describe('upsertAlbumRow', () => {
       { data: { id: 'a1' }, error: null },
     ]);
     const row = { ...serializeAlbum(album({ coverFront: cover })), user_id: 'u1', id: 'a1' };
-    const res = await upsertAlbumRow(row);
+    const res = await insertAlbumRow(row);
     expect(res.error).toBeNull();
     expect(res.data).toEqual({ id: 'a1' });
     expect(sent).toHaveLength(2);
@@ -172,21 +171,21 @@ describe('upsertAlbumRow', () => {
 
   it('any other error is returned as is, not retried', async () => {
     const sent = fakeAlbumsTable([{ data: null, error: { code: '42501', message: 'new row violates row-level security policy for table "albums"' } }]);
-    const res = await upsertAlbumRow({ ...serializeAlbum(album({ coverFront: cover })), id: 'a1' });
+    const res = await insertAlbumRow({ ...serializeAlbum(album({ coverFront: cover })), id: 'a1' });
     expect(res.error?.code).toBe('42501');
     expect(sent).toHaveLength(1);
   });
 
   it('a missing OTHER column is not mistaken for the cover', async () => {
     const sent = fakeAlbumsTable([{ data: null, error: { code: 'PGRST204', message: "Could not find the 'title' column of 'albums' in the schema cache" } }]);
-    const res = await upsertAlbumRow({ ...serializeAlbum(album({ coverFront: cover })), id: 'a1' });
+    const res = await insertAlbumRow({ ...serializeAlbum(album({ coverFront: cover })), id: 'a1' });
     expect(res.error?.code).toBe('PGRST204');
     expect(sent).toHaveLength(1);
   });
 
   it('a row without a cover is never retried', async () => {
     const sent = fakeAlbumsTable([{ data: null, error: MISSING_ON_WRITE }]);
-    await upsertAlbumRow({ ...serializeAlbum(album()), id: 'a1' });
+    await insertAlbumRow({ ...serializeAlbum(album()), id: 'a1' });
     expect(sent).toHaveLength(1);
   });
 });

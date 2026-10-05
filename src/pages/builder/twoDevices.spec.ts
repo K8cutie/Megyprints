@@ -22,6 +22,8 @@ const cloud = vi.hoisted(() => ({
   tick: 0,
   offline: false,
   writes: 0,
+  /** Every row the app sent in an insert or upsert, as sent. */
+  sent: [] as Record<string, unknown>[],
 }));
 
 vi.mock('../../lib/authContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }));
@@ -37,20 +39,37 @@ vi.mock('../../lib/supabase', () => {
     return v;
   };
   const store = (r: Record<string, unknown>) => jsonb(JSON.parse(JSON.stringify(r))) as Record<string, unknown>;
+  // RLS: the signed-in customer (user-1) sees and writes only their own rows.
+  const mine = (r: Record<string, unknown>) => r.user_id === undefined || r.user_id === 'user-1';
+  const RLS = { code: '42501', message: 'new row violates row-level security policy (USING expression) for table "albums"' };
   const from = () => {
     const q: { op: string; row?: Record<string, unknown>; filters: [string, unknown][] } = { op: 'select', filters: [] };
-    const matches = (r: Record<string, unknown>) => q.filters.every(([c, v]) => r[c] === v);
+    const matches = (r: Record<string, unknown>) => mine(r) && q.filters.every(([c, v]) => r[c] === v);
     const run = async (single: boolean) => {
       if (cloud.offline) return { data: null, error: { message: 'Failed to fetch' } };
       if (q.op === 'select') {
         const found = [...cloud.rows.values()].filter(matches).map((r) => JSON.parse(JSON.stringify(r)));
         return { data: single ? found[0] ?? null : found, error: null };
       }
-      if (q.op === 'upsert') {
-        cloud.writes++;
+      if (q.op === 'insert') {
         const row = q.row!;
+        cloud.sent.push(JSON.parse(JSON.stringify(row)));
+        // The id is taken (by anyone: the primary key does not care whose).
+        if (cloud.rows.has(row.id as string)) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "albums_pkey"' } };
+        cloud.writes++;
+        // The database stamps it (0040). Without 0040 it kept what was sent.
+        const saved = store({ ...row, updated_at: stamp() });
+        cloud.rows.set(row.id as string, saved);
+        return { data: { id: saved.id, updated_at: saved.updated_at }, error: null };
+      }
+      if (q.op === 'upsert') {
+        const row = q.row!;
+        cloud.sent.push(JSON.parse(JSON.stringify(row)));
         const before = cloud.rows.get(row.id as string);
-        // The database stamps updates (trigger); a new row keeps what was sent.
+        // ON CONFLICT DO UPDATE on a row RLS hides: refused.
+        if (before && !mine(before)) return { data: null, error: RLS };
+        cloud.writes++;
+        // The database stamps updates (trigger); a new row kept what was sent.
         const saved = store({ ...before, ...row, updated_at: before ? stamp() : (row.updated_at ?? stamp()) });
         cloud.rows.set(row.id as string, saved);
         return { data: { id: saved.id, updated_at: saved.updated_at }, error: null };
@@ -71,6 +90,7 @@ vi.mock('../../lib/supabase', () => {
       order: () => api,
       limit: () => api,
       upsert: (row: Record<string, unknown>) => { q.op = 'upsert'; q.row = row; return api; },
+      insert: (row: Record<string, unknown>) => { q.op = 'insert'; q.row = row; return api; },
       update: (row: Record<string, unknown>) => { q.op = 'update'; q.row = row; return api; },
       single: () => run(true),
       maybeSingle: () => run(true),
@@ -97,7 +117,7 @@ vi.mock('./faceDetection', () => ({ initFaceApi: async () => {}, detectFaceCente
 
 import { useBuilderState, CLOUD_SAVE_QUIET_MS, type BuilderActions } from './useBuilderState';
 import { DRAFT_STORAGE_KEY } from '../../lib/localDraft';
-import { conflictMessage } from '../../lib/albumSyncRecord';
+import { conflictMessage, DELETED_ELSEWHERE_MESSAGE } from '../../lib/albumSyncRecord';
 
 const photos: UploadedPhoto[] = Array.from({ length: 40 }, (_, i) => ({
   id: `photo-${i}`, name: `photo-${i}.jpg`, previewUrl: `https://photos.test/${i}.jpg`,
@@ -137,13 +157,15 @@ function laptopChangesPage4() {
   cloud.rows.set('album-1', { ...row, pages, updated_at: `2026-10-05T01:30:${String(cloud.tick++).padStart(2, '0')}.000001+00:00` });
 }
 const cloudPage4 = () => ((cloud.rows.get('album-1')!.pages as Row[])[3]).templateId;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const storedDraft = (): any => JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY)!);
 
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
   vi.setSystemTime(new Date('2026-10-05T01:00:00Z'));
   localStorage.clear(); sessionStorage.clear();
-  cloud.rows.clear(); cloud.tick = 0; cloud.offline = false; cloud.writes = 0;
+  cloud.rows.clear(); cloud.tick = 0; cloud.offline = false; cloud.writes = 0; cloud.sent = [];
   // The phone made the album: on this device, then saved to the account.
   localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
     albumType: 'standard', albumSize: '8x8', selectedTemplate: 'classic', uploadedPhotos: photos,
@@ -258,13 +280,15 @@ describe('both open at the same time', () => {
 
 describe('this device\'s own saves never look like another device\'s', () => {
   it('a save that landed as the app closed (its reply lost) is recognised on the next open', async () => {
+    await act(async () => { builder.saveDraftNow(); });
+    const before = storedDraft().sync;
     await act(async () => { builder.setAlbumTitle('HK Trip 2026'); });
-    // Its save lands, the reply never comes back: the phone still has the old version.
-    const rec = JSON.parse(localStorage.getItem('megy-album-sync-v1')!)['album-1'];
     await act(async () => { await builder.manualSave(); });
-    const after = JSON.parse(localStorage.getItem('megy-album-sync-v1')!)['album-1'];
-    localStorage.setItem('megy-album-sync-v1', JSON.stringify({ 'album-1': { ...after, base: rec.base, key: rec.key } }));
     await closePhone();
+    // Its save landed, the reply never came back: the draft still names the
+    // old version, and the save it sent.
+    const d = storedDraft();
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ ...d, sync: { base: before.base, key: before.key, sentKey: d.sync.key } }));
     await openPhone();
     await advance(1000);
     expect(builder.cloudConflict ?? null).toBeNull();
@@ -281,14 +305,189 @@ describe('this device\'s own saves never look like another device\'s', () => {
   });
 });
 
-describe('a draft from before this change (no record of its version)', () => {
+describe('a draft with no record of its version', () => {
+  /** A draft from before records, or one whose record was lost. */
+  const forgetVersion = () => {
+    const d = storedDraft();
+    delete d.sync;
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(d));
+    localStorage.removeItem('megy-album-sync-v1');
+  };
+
   it('cloud saved after the last change on this device: asks', async () => {
     await closePhone();
-    localStorage.removeItem('megy-album-sync-v1');
+    forgetVersion();
     vi.setSystemTime(new Date('2026-10-05T02:00:00Z'));
-    laptopChangesPage4(); // stamped 01:30 — but the draft below was changed at 01:00
+    laptopChangesPage4(); // stamped 01:30, the draft was changed at 01:00
     await openPhone();
     await advance(1000);
     expect(builder.cloudConflict).toEqual({ updatedAt: expect.any(String) });
+  });
+
+  it('Kraken: even when this device\'s clock says it changed later, it asks; it never saves over the laptop\'s page 4', async () => {
+    // Photos waking up after a reload used to stamp the draft "edited now", so
+    // a stale phone always looked newer than the laptop's save and kept its
+    // own copy, then saved it over the laptop's.
+    await closePhone();
+    forgetVersion();
+    laptopChangesPage4(); // stamped 01:30
+    vi.setSystemTime(new Date('2026-10-05T02:00:00Z'));
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ ...storedDraft(), editedAt: Date.now() })); // "edited" at 02:00
+    await openPhone();
+    await advance(CLOUD_SAVE_QUIET_MS * 2);
+    await closePhone();
+    expect(cloudPage4()).toBe('t88-fb-quad-grid-gap');
+  });
+});
+
+describe('when the album last changed here (editedAt)', () => {
+  it('turning pages and a reload do not move it; a real change does', async () => {
+    await act(async () => { builder.saveDraftNow(); });
+    const at = storedDraft().editedAt;
+    vi.setSystemTime(new Date('2026-10-05T03:00:00Z'));
+    for (let i = 1; i < 6; i++) { await act(async () => { builder.goToPage(i); }); }
+    await closePhone();
+    await openPhone();
+    await act(async () => { builder.saveDraftNow(); });
+    expect(storedDraft().editedAt).toBe(at);
+    await act(async () => { builder.setAlbumTitle('HK Trip, edited'); });
+    await act(async () => { builder.saveDraftNow(); });
+    expect(storedDraft().editedAt).toBeGreaterThanOrEqual(Date.parse('2026-10-05T03:00:00Z'));
+  });
+});
+
+describe('two tabs, one draft (Kraken: a stale tab saved its old album over the other tab\'s)', () => {
+  let builderB!: BuilderActions;
+  let rootB: Root | null = null;
+  function ProbeB() {
+    const b = useBuilderState();
+    useEffect(() => { builderB = b; });
+    return null;
+  }
+  async function openTabB() {
+    rootB = createRoot(document.createElement('div'));
+    await act(async () => { rootB!.render(createElement(ProbeB)); });
+    await advance(2000);
+  }
+  afterEach(async () => { await act(async () => { rootB?.unmount(); }); rootB = null; });
+
+  it('tab B only turned pages: tab A\'s save stays, and coming back to B opens it', async () => {
+    await act(async () => { builder.saveDraftNow(); });
+    await openTabB();
+    await act(async () => { builder.setAlbumTitle('Saved from tab A'); });
+    await act(async () => { await builder.manualSave(); });
+    await act(async () => { builder.saveDraftNow(); }); // tab A's draft, with its version, on disk
+    for (let i = 1; i < 4; i++) { await act(async () => { builderB.goToPage(i); }); }
+    await act(async () => { window.dispatchEvent(new Event('pagehide')); }); // tab B hidden
+    await advance(1000);
+    expect(cloud.rows.get('album-1')!.title).toBe('Saved from tab A');
+    await advance(20_000);
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await advance(1500);
+    expect(builderB.albumTitle).toBe('Saved from tab A');
+  });
+
+  it('tab B changed it too: its save does not land, it asks', async () => {
+    await act(async () => { builder.saveDraftNow(); });
+    await openTabB();
+    await act(async () => { builder.setAlbumTitle('Saved from tab A'); });
+    await act(async () => { await builder.manualSave(); });
+    await act(async () => { builder.saveDraftNow(); });
+    await act(async () => { builderB.setAlbumTitle('Typed in tab B'); });
+    await act(async () => { await builderB.manualSave(); });
+    expect(builderB.cloudConflict).toEqual({ updatedAt: expect.any(String) });
+    expect(cloud.rows.get('album-1')!.title).toBe('Saved from tab A');
+  });
+});
+
+describe('deleted on another device (Kraken: it came back from the phone)', () => {
+  it('the phone\'s next save does not put it back; it asks', async () => {
+    cloud.rows.delete('album-1'); // deleted on the laptop
+    await act(async () => { builder.setAlbumTitle('HK Trip — phone'); });
+    await advance(CLOUD_SAVE_QUIET_MS + 1000);
+    await act(async () => { await builder.manualSave(); });
+    expect(cloud.rows.has('album-1')).toBe(false);
+    expect(cloud.rows.size).toBe(0);
+    expect(builder.cloudGone).toBe(true);
+    expect(DELETED_ELSEWHERE_MESSAGE).toMatch(/deleted on another device/);
+  });
+
+  it('coming back to the phone with nothing changed: it asks too, and writes nothing', async () => {
+    cloud.rows.delete('album-1');
+    await advance(20_000);
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await advance(1500);
+    expect(builder.cloudGone).toBe(true);
+    await advance(CLOUD_SAVE_QUIET_MS * 2);
+    expect(cloud.rows.size).toBe(0);
+  });
+
+  it('"Keep it as a new album": what is on the phone saves under a NEW id; the deleted one stays deleted', async () => {
+    cloud.rows.delete('album-1');
+    await act(async () => { builder.setAlbumTitle('HK Trip — kept'); });
+    await act(async () => { await builder.manualSave(); });
+    let kept = false;
+    await act(async () => { kept = await builder.saveAsNewAlbum(); });
+    expect(kept).toBe(true);
+    expect(builder.cloudGone).toBe(false);
+    expect(cloud.rows.has('album-1')).toBe(false);
+    const id = builder.getAlbumId()!;
+    expect(id).not.toBe('album-1');
+    expect(cloud.rows.get(id)!.title).toBe('HK Trip — kept');
+  });
+
+  it('"Let it go": a fresh start, and nothing is re-created', async () => {
+    cloud.rows.delete('album-1');
+    await act(async () => { await builder.manualSave(); });
+    await act(async () => { builder.letDeletedAlbumGo(); });
+    await advance(CLOUD_SAVE_QUIET_MS * 2);
+    expect(builder.cloudGone).toBe(false);
+    expect(builder.albumTitle).toBe('');
+    expect(cloud.rows.size).toBe(0);
+  });
+});
+
+describe('an album id already used by a row this account cannot see (Kraken)', () => {
+  it('saves as a new album under a new id: no 42501 forever, the other row untouched', async () => {
+    await closePhone();
+    const other = { id: 'album-squat', user_id: 'user-2', title: 'Not yours', pages: [], updated_at: '2026-10-05T00:00:00.000000+00:00' };
+    cloud.rows.set('album-squat', other);
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ ...storedDraft(), albumId: 'album-squat', sync: null, title: 'Mine' }));
+    localStorage.removeItem('megy-album-sync-v1');
+    await openPhone();
+    let ok = false;
+    await act(async () => { ok = await builder.manualSave(); });
+    expect(ok).toBe(true);
+    expect(cloud.rows.get('album-squat')).toEqual(other);
+    const id = builder.getAlbumId()!;
+    expect(id).not.toBe('album-squat');
+    expect(cloud.rows.get(id)).toMatchObject({ title: 'Mine', user_id: 'user-1' });
+  });
+});
+
+describe('saves go one at a time', () => {
+  it('two saves at once: both land in turn, neither is taken for another device\'s', async () => {
+    await act(async () => { builder.setAlbumTitle('Twice'); });
+    let results: boolean[] = [];
+    await act(async () => { results = await Promise.all([builder.manualSave(), builder.manualSave()]); });
+    expect(results).toEqual([true, true]);
+    expect(builder.cloudConflict ?? null).toBeNull();
+    expect(cloud.rows.get('album-1')!.title).toBe('Twice');
+  });
+});
+
+describe('what a save sends', () => {
+  it('never this device\'s clock as the version: the database stamps updated_at', () => {
+    expect(cloud.sent.length).toBeGreaterThan(0); // the first save, in beforeEach
+    for (const row of cloud.sent) expect('updated_at' in row).toBe(false);
+  });
+
+  it('the occasion is capped at Step 1\'s length, so the database check never refuses the save', async () => {
+    localStorage.setItem('megy-album-theme', 'A very long occasion typed into the quote picker '.repeat(3));
+    await act(async () => { builder.setAlbumTitle('With occasion'); });
+    await act(async () => { await builder.manualSave(); });
+    const occasion = cloud.rows.get('album-1')!.occasion as string;
+    expect(occasion.length).toBeLessThanOrEqual(40);
+    expect(occasion).toMatch(/^A very long occasion/);
   });
 });
