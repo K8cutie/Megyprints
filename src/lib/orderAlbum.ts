@@ -30,6 +30,17 @@ export class AlbumNotSavedError extends Error {
   }
 }
 
+/** The account's copy of this album was changed on another device since this
+ *  device's draft: which version to keep is asked in the builder (TD-3), so
+ *  checkout never orders one over the other. Same way out as not saved. */
+export class AlbumChangedElsewhereError extends AlbumNotSavedError {
+  constructor() {
+    super();
+    this.message = 'This album was also changed on another device. Open it in the builder to choose which version to keep, then tap Order again.';
+    this.name = 'AlbumChangedElsewhereError';
+  }
+}
+
 /** The album to order: the one handed over with the print job, else the draft
  *  on this device. Undefined only when neither knows one. */
 export function resolveOrderAlbumId(

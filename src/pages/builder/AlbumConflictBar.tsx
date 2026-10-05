@@ -8,23 +8,43 @@
 
 import { useEffect, useState } from 'react';
 import type { BuilderContextValue } from './BuilderContext';
-import { conflictMessage } from '../../lib/albumSyncRecord';
+import { conflictMessage, DELETED_ELSEWHERE_MESSAGE } from '../../lib/albumSyncRecord';
 
 export default function AlbumConflictBar({ actions }: { actions: BuilderContextValue }) {
-  const { cloudConflict, cloudNotice, dismissCloudNotice } = actions;
+  const { cloudConflict, cloudGone, cloudNotice, dismissCloudNotice } = actions;
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!cloudNotice) return;
     const t = window.setTimeout(dismissCloudNotice, 9000);
     return () => window.clearTimeout(t);
   }, [cloudNotice, dismissCloudNotice]);
+  const run = async (fn: () => unknown) => {
+    if (busy) return;
+    setBusy(true);
+    try { await fn(); } finally { setBusy(false); }
+  };
 
+  // Deleted on the laptop while open on the phone: it used to come back
+  // silently with the phone's next save (Kraken, 2026-10-05). Asked now.
+  if (cloudGone) {
+    return (
+      <div role="alert" data-testid="album-deleted-bar"
+        className="shrink-0 flex flex-wrap items-center gap-2 px-4 py-2.5 bg-[#FFF1EA] border-b border-[#EBC3AE] text-xs text-[#7A3A1E]">
+        <span className="flex-1 min-w-[14rem]">{DELETED_ELSEWHERE_MESSAGE}</span>
+        <button type="button" disabled={busy} data-testid="deleted-keep-new"
+          onClick={() => run(actions.saveAsNewAlbum)}
+          className="shrink-0 px-3 py-1.5 rounded-lg bg-[#B85C38] text-white font-semibold hover:bg-[#A04E2E] disabled:opacity-60">
+          Keep it as a new album
+        </button>
+        <button type="button" disabled={busy} data-testid="deleted-let-go"
+          onClick={() => run(actions.letDeletedAlbumGo)}
+          className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E2B49C] font-semibold hover:bg-[#FFE6DA] disabled:opacity-60">
+          Let it go
+        </button>
+      </div>
+    );
+  }
   if (cloudConflict) {
-    const run = async (fn: () => Promise<unknown>) => {
-      if (busy) return;
-      setBusy(true);
-      try { await fn(); } finally { setBusy(false); }
-    };
     return (
       <div role="alert" data-testid="album-conflict-bar"
         className="shrink-0 flex flex-wrap items-center gap-2 px-4 py-2.5 bg-[#FFF1EA] border-b border-[#EBC3AE] text-xs text-[#7A3A1E]">

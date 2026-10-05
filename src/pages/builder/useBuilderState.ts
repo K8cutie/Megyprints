@@ -34,7 +34,7 @@ import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 import { useAuth } from '../../lib/authContext';
 import { useAlbumSync, serializeAlbum as toAlbumRow } from '../../lib/useAlbumSync';
 import type { AlbumData, SaveResult } from '../../lib/useAlbumSync';
-import { readSyncRecord, writeSyncRecord, albumContentKey, decideSync } from '../../lib/albumSyncRecord';
+import { readSyncRecord, albumContentKey, decideSync, draftSyncRecord, toDraftSync, type DraftSync, type SyncRecord } from '../../lib/albumSyncRecord';
 import { useIndexedDBPhotos, getImageDimensions } from '../../lib/useIndexedDBPhotos';
 import { supabase } from '../../lib/supabase';
 import { photosToForget } from '../../lib/photoKeeping';
@@ -359,9 +359,12 @@ interface SerializedState {
    *  was ever signed in is a saved album, so throwing it away later (even signed
    *  out) must not delete its photos — see photosToForget. */
   accountId?: string | null;
-  /** When the album last changed on this device (ms). Decides whether this
-   *  copy or the cloud copy is the newer one. */
+  /** When the album itself last changed on this device (ms) — not a page
+   *  turn, not photos waking up after a reload. */
   editedAt?: number;
+  /** The cloud version this draft is based on (albumSyncRecord). Stored WITH
+   *  the content, so a tab never borrows another tab's version. */
+  sync?: DraftSync | null;
 }
 
 /* ── Undo snapshot ── */
@@ -545,6 +548,7 @@ function getInitialState(): SerializedState {
     albumId: effectiveSaved?.albumId,
     accountId: effectiveSaved?.accountId ?? null,
     editedAt: effectiveSaved?.editedAt ?? 0,
+    sync: effectiveSaved?.sync ?? null,
   };
 }
 
@@ -797,6 +801,13 @@ export interface BuilderActions {
   openNewerVersion: () => Promise<void>;
   /** Keep the album on this device: it replaces the other device's version. */
   keepThisVersion: () => Promise<boolean>;
+  /** The album open here was deleted on another device: whether to keep it
+   *  is ASKED (AlbumConflictBar), it never comes back by itself. */
+  cloudGone: boolean;
+  /** Keep it: what is on screen saves as a NEW album (new id). */
+  saveAsNewAlbum: () => Promise<boolean>;
+  /** Let it go: start fresh. */
+  letDeletedAlbumGo: () => void;
 
   // ── Phase 1: Photo URL resolution ──
   getPhotoUrl: (photoOrId: UploadedPhoto | string) => string;
@@ -861,6 +872,21 @@ export function useBuilderState(): BuilderActions {
     if (draftAccountRef.current) albumIdRef.current = newAlbumId();
     draftAccountRef.current = user.id;
   }
+  /** The cloud version the album on screen is based on (albumSyncRecord). Held
+   *  by THIS tab and saved inside its draft: two tabs share one draft, and a
+   *  record kept per device let a stale tab save its old album onto the other
+   *  tab's newer version (Kraken, 2026-10-05). A draft saved before records
+   *  moved into it reads the old per-device one, once. */
+  const syncRecRef = useRef<SyncRecord | null | undefined>(undefined);
+  if (syncRecRef.current === undefined) {
+    const init = getInitialState();
+    syncRecRef.current = draftSyncRecord(init.albumId, init.sync) ?? readSyncRecord(init.albumId);
+  }
+  /** The record for `albumId`, when it is the one this tab holds. */
+  const syncRecFor = useCallback((albumId: string | undefined): SyncRecord | null => {
+    const rec = syncRecRef.current;
+    return albumId && rec?.albumId === albumId ? rec : null;
+  }, []);
   /** When the album last changed on this device (SerializedState.editedAt). */
   const editedAtRef = useRef<number | undefined>(undefined);
   if (editedAtRef.current === undefined) editedAtRef.current = getInitialState().editedAt ?? 0;
@@ -1034,6 +1060,14 @@ export function useBuilderState(): BuilderActions {
     setCloudConflictState(c);
   }, []);
   const [cloudNotice, setCloudNotice] = useState<string | null>(null);
+  // Deleted on another device while open here: whether to keep it is asked
+  // (saveAsNewAlbum / letDeletedAlbumGo). It used to come back silently.
+  const [cloudGone, setCloudGoneState] = useState(false);
+  const cloudGoneRef = useRef(false);
+  const setCloudGone = useCallback((gone: boolean) => {
+    cloudGoneRef.current = gone;
+    setCloudGoneState(gone);
+  }, []);
   const reconcilingRef = useRef(false);
 
   const currentPage =
@@ -1098,25 +1132,54 @@ export function useBuilderState(): BuilderActions {
      Every album save goes through saveToCloud: it lands only on the cloud
      version this device works from, and remembers the new one. When another
      device saved since, nothing is overwritten — the customer is asked
-     (cloudConflict). `quiet`: a save of an album being put away or left
-     (reset, opening another album) — nobody to ask, so it just doesn't land. */
+     (cloudConflict); deleted there, it is not put back without asking
+     (cloudGone). `quiet`: a save of an album being put away or left (reset,
+     opening another album) — nobody to ask, so it just doesn't land.
+
+     Saves go out ONE AT A TIME (saveChainRef): two at once both started from
+     the same version, so the second was refused as "changed on another
+     device" — by this device's own first save. Each starts from the version
+     the one before it left behind. */
   const saveAlbumFn = albumSync.save;
-  const saveToCloud = useCallback(async (
+  const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const saveToCloud = useCallback((
     userId: string,
     data: AlbumData,
-    opts?: { overwrite?: string; quiet?: boolean },
+    opts?: { overwrite?: string; quiet?: boolean; rec?: SyncRecord | null },
   ): Promise<SaveResult> => {
     const albumId = data.id;
-    const rec = readSyncRecord(albumId);
-    const key = albumContentKey(toAlbumRow(data));
-    // Before sending: if the app closes before the reply, the cloud may hold
-    // this save — and it is still this device's own work.
-    if (albumId) writeSyncRecord({ albumId, base: rec?.base ?? null, key: rec?.key ?? '', sentKey: key });
-    const res = await saveAlbumFn(userId, data, { base: opts?.overwrite ?? rec?.base ?? null });
-    if (res.success && albumId) writeSyncRecord({ albumId, base: res.updatedAt ?? null, key });
-    if (res.conflict && !opts?.quiet && albumId === albumIdRef.current) setCloudConflict(res.conflict);
-    return res;
-  }, [saveAlbumFn, setCloudConflict]);
+    // The version this album was on when the save was asked for. If it is put
+    // away before its turn comes, that is still what it saves onto.
+    const askedRec = opts?.rec !== undefined ? opts.rec : syncRecFor(albumId);
+    const onScreen = () => !!albumId && albumIdRef.current === albumId;
+    const run = async (): Promise<SaveResult> => {
+      const rec = onScreen() ? syncRecFor(albumId) : askedRec;
+      const key = albumContentKey(toAlbumRow(data));
+      // Before sending: if the app closes before the reply, the cloud may hold
+      // this save — and it is still this copy's own work.
+      if (albumId && onScreen()) syncRecRef.current = { albumId, base: rec?.base ?? null, key: rec?.key ?? '', sentKey: key };
+      const res = await saveAlbumFn(userId, data, { base: opts?.overwrite ?? rec?.base ?? null });
+      if (res.gone === 'taken' && onScreen()) {
+        // Its id is used by a row this account can't see. This album was never
+        // in the cloud here, so it simply becomes a new album with a new id.
+        const fresh = newAlbumId();
+        albumIdRef.current = fresh;
+        syncRecRef.current = null;
+        const again = await saveAlbumFn(userId, { ...data, id: fresh }, { base: null });
+        if (again.success && albumIdRef.current === fresh) syncRecRef.current = { albumId: fresh, base: again.updatedAt ?? null, key };
+        return again;
+      }
+      if (res.success && albumId && onScreen()) syncRecRef.current = { albumId, base: res.updatedAt ?? null, key };
+      if (!opts?.quiet && onScreen()) {
+        if (res.conflict) setCloudConflict(res.conflict);
+        else if (res.gone === 'deleted') setCloudGone(true);
+      }
+      return res;
+    };
+    const next = saveChainRef.current.then(run, run);
+    saveChainRef.current = next.catch(() => undefined);
+    return next;
+  }, [saveAlbumFn, setCloudConflict, setCloudGone, syncRecFor]);
 
   const persistRef = useRef<{
     local: SerializedState;
@@ -1141,27 +1204,45 @@ export function useBuilderState(): BuilderActions {
     [],
   );
 
-  /** After a cloud version was opened: once the album on screen has settled
-   *  into it, remember that this device works from that version. */
-  const settleSyncRecord = useCallback((albumId: string, base: string) => {
+  /** After a cloud version was opened: this tab works from that version at
+   *  once, and once the album on screen has settled into it (pages are
+   *  normalized on the way in), from what it looks like here. */
+  const settleSyncRecord = useCallback((albumId: string, base: string, cloudKey: string) => {
+    syncRecRef.current = { albumId, base, key: cloudKey };
     setTimeout(() => {
-      if (albumIdRef.current !== albumId) return;
-      writeSyncRecord({ albumId, base, key: localAlbumKey() });
+      if (albumIdRef.current !== albumId || syncRecRef.current?.base !== base) return;
+      syncRecRef.current = { albumId, base, key: localAlbumKey() };
     }, 600);
   }, [localAlbumKey]);
 
+  /** Did the album itself change in the burst of changes just settled? Then
+   *  editedAt is when that burst began (see the change effect below). */
+  const editedKeyRef = useRef<string | null>(null);
+  const editedCheckRef = useRef<{ since: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const settleEdited = useCallback(() => {
+    const pending = editedCheckRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    editedCheckRef.current = null;
+    const key = localAlbumKey();
+    if (editedKeyRef.current !== null && editedKeyRef.current !== key) editedAtRef.current = pending.since;
+    editedKeyRef.current = key;
+  }, [localAlbumKey]);
+
   const flushLocal = useCallback(() => {
-    // editedAt is read at flush time: it is set by the change effect, which
-    // runs AFTER the render that built persistRef.
-    if (persistRef.current) saveState({ ...persistRef.current.local, editedAt: editedAtRef.current });
-  }, []);
+    // editedAt and the version are read at flush time: the change effect and
+    // the saves set them AFTER the render that built persistRef.
+    settleEdited();
+    const p = persistRef.current;
+    if (p) saveState({ ...p.local, editedAt: editedAtRef.current, sync: toDraftSync(syncRecFor(p.local.albumId)) });
+  }, [syncRecFor, settleEdited]);
 
   const flushCloud = useCallback(() => {
     const p = persistRef.current;
     if (!p || !p.userId || p.isLoadingCloud || p.justLoaded() || !cloudDirtyRef.current) return;
-    // Waiting on which version to keep, or asking the cloud right now: no save
-    // goes out over the other device's version.
-    if (cloudConflictRef.current || reconcilingRef.current) return;
+    // Waiting on which version to keep, deleted elsewhere and not yet asked,
+    // or asking the cloud right now: no save goes out.
+    if (cloudConflictRef.current || cloudGoneRef.current || reconcilingRef.current) return;
     // Nothing worth keeping yet (no photos, nothing on a page, no name): don't
     // save it. Opening the builder and leaving used to add an empty "My Album"
     // to Your Projects every time — one "resume" could then offer.
@@ -1171,7 +1252,7 @@ export function useBuilderState(): BuilderActions {
     // pages, photos waking up after a reload): no write. Re-saving it is how a
     // phone that only LOOKED at an album pushed its old copy over the
     // laptop's newer one.
-    const rec = readSyncRecord(data.id);
+    const rec = syncRecFor(data.id);
     if (rec?.base && rec.key === albumContentKey(toAlbumRow(data))) { cloudDirtyRef.current = false; return; }
     cloudDirtyRef.current = false;
     setCloudSaveStatus('saving');
@@ -1183,8 +1264,9 @@ export function useBuilderState(): BuilderActions {
           // album at the old album's row.
           setCloudSaveStatus('saved');
           setLastSavedAt(new Date());
-        } else if (result.conflict) {
-          // Not saved, on purpose: the customer is asked which version to keep.
+        } else if (result.conflict || result.gone === 'deleted') {
+          // Not saved, on purpose: the customer is asked which version to
+          // keep, or whether to keep an album deleted on another device.
           cloudDirtyRef.current = true;
           setCloudSaveStatus('idle');
         } else {
@@ -1193,18 +1275,27 @@ export function useBuilderState(): BuilderActions {
         }
       })
       .catch(() => { cloudDirtyRef.current = true; setCloudSaveStatus('error'); });
-  }, []);
+  }, [syncRecFor]);
 
   // Any change → mark cloud dirty + debounce the LOCAL save (~30s).
-  const changeEffectRanRef = useRef(false);
+  // editedAt moves only when the ALBUM changed (what its cloud row would hold),
+  // not on a page turn, and not when photos wake up from this device's store
+  // after a reload. That reload used to stamp every stale copy "edited just
+  // now", so it looked newer than the cloud's (Kraken, 2026-10-05). The album
+  // is compared once a burst of changes settles (a drag is many), stamped
+  // with when the burst began.
   useEffect(() => {
-    if (changeEffectRanRef.current) editedAtRef.current = Date.now();
-    changeEffectRanRef.current = true;
+    if (editedKeyRef.current === null) editedKeyRef.current = localAlbumKey(); // the album as it opened
+    else {
+      const since = editedCheckRef.current?.since ?? Date.now();
+      if (editedCheckRef.current) clearTimeout(editedCheckRef.current.timer);
+      editedCheckRef.current = { since, timer: setTimeout(settleEdited, 800) };
+    }
     cloudDirtyRef.current = true;
     if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(flushLocal, 30000);
     return () => { if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current); };
-  }, [albumType, albumSize, selectedTemplate, albumTitle, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, flushLocal]);
+  }, [albumType, albumSize, selectedTemplate, albumTitle, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, flushLocal, localAlbumKey, settleEdited]);
 
   // Cloud save once the album goes quiet (see the persistence strategy). Only
   // what the saved row holds counts: turning pages changes nothing in it.
@@ -1376,7 +1467,7 @@ export function useBuilderState(): BuilderActions {
           }
           if (albumData.id) {
             albumIdRef.current = albumData.id;
-            if (albumData.updatedAt) settleSyncRecord(albumData.id, albumData.updatedAt);
+            if (albumData.updatedAt) settleSyncRecord(albumData.id, albumData.updatedAt, albumContentKey(toAlbumRow(albumData)));
           }
           restoreAlbumChoices(albumData);
           setAlbumTitle(albumData.title ?? '');
@@ -3085,8 +3176,9 @@ export function useBuilderState(): BuilderActions {
       setCloudSaveStatus('saved');
       setLastSavedAt(new Date());
     } else {
-      // A conflict isn't a failure to show as one: the bar asks the question.
-      setCloudSaveStatus(result.conflict ? 'idle' : 'error');
+      // A conflict (or an album deleted elsewhere) isn't a failure to show as
+      // one: the bar asks the question.
+      setCloudSaveStatus(result.conflict || result.gone === 'deleted' ? 'idle' : 'error');
     }
     return result.success;
   }, [user, saveToCloud, serializeAlbum]);
@@ -3116,6 +3208,8 @@ export function useBuilderState(): BuilderActions {
       if (id) discardedPhotoIds.push(id);
     }
     const discardedAccount = stored?.accountId ?? draftAccountRef.current ?? null;
+    // The version the album being put away is on (in memory, else its draft's).
+    const leavingRec = syncRecFor(albumIdRef.current) ?? draftSyncRecord(stored?.albumId, stored?.sync);
     const leaving: AlbumData | null = draftHasContent(persistRef.current?.local)
       ? serializeAlbum()
       : stored && draftHasContent(stored)
@@ -3132,7 +3226,7 @@ export function useBuilderState(): BuilderActions {
       if (session && leaving && (!discardedAccount || discardedAccount === session.user.id)) {
         // Only onto the version this device had: a newer one saved on another
         // device is not overwritten by the copy being put away.
-        await saveToCloud(session.user.id, leaving, { quiet: true });
+        await saveToCloud(session.user.id, leaving, { quiet: true, rec: leavingRec });
       }
       // 2. Its photos. This used to wipe the WHOLE photo store — which every
       //    saved album on the device shares — so each "Start Creating" or
@@ -3146,6 +3240,7 @@ export function useBuilderState(): BuilderActions {
     albumIdRef.current = newAlbumId();
     editedAtRef.current = 0;
     setCloudConflict(null);
+    setCloudGone(false);
     setCloudNotice(null);
     setAlbumTitle('');
 
@@ -3170,7 +3265,7 @@ export function useBuilderState(): BuilderActions {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     // ── Clear wizard state so it restarts from step 1 ──
     try { localStorage.removeItem('megy_wizard_state'); } catch { /* ignore */ }
-  }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict]);
+  }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict, setCloudGone, syncRecFor]);
 
   /* ── Another account's album is not opened for this one ──
      A shared device: B signs in where A's album was left. It used to open as
@@ -3211,23 +3306,21 @@ export function useBuilderState(): BuilderActions {
       // what each side changed since this device's version (albumSyncRecord) —
       // not by comparing this device's clock with the server's.
       if (albumData && albumIdRef.current === albumId && draftHasContent(onScreen) && !opts?.replace) {
-        const rec = readSyncRecord(albumId);
+        const rec = syncRecFor(albumId);
         const cloudKey = albumContentKey(toAlbumRow(albumData));
         const decision = albumData.updatedAt
-          ? decideSync({ rec, cloudUpdatedAt: albumData.updatedAt, cloudKey, localKey: localAlbumKey(), localEditedAt: editedAtRef.current ?? 0 })
+          ? decideSync({ rec, cloudUpdatedAt: albumData.updatedAt, cloudKey, localKey: localAlbumKey() })
           : 'in-sync';
         if (decision !== 'take-cloud') {
           if (decision === 'conflict') setCloudConflict({ updatedAt: albumData.updatedAt! });
-          else if ((decision === 'ours' || decision === 'keep-local') && albumData.updatedAt) {
-            writeSyncRecord({ albumId, base: albumData.updatedAt, key: cloudKey });
-            if (decision === 'keep-local') cloudDirtyRef.current = true;
-          }
+          else if (decision === 'ours' && albumData.updatedAt) syncRecRef.current = { albumId, base: albumData.updatedAt, key: cloudKey };
           setPhase('edit');
           return;
         }
       }
       if (albumData) {
         setCloudConflict(null);
+        setCloudGone(false);
         if (albumData.sizePreset) {
           setAlbumSizeState(albumData.sizePreset as AlbumSizePreset);
         }
@@ -3291,7 +3384,7 @@ export function useBuilderState(): BuilderActions {
         else if (albumIdRef.current !== albumId) setCoverFrontPage(createCoverPage(sizeForCover));
         if (albumData.id) {
           albumIdRef.current = albumData.id;
-          if (albumData.updatedAt) settleSyncRecord(albumData.id, albumData.updatedAt);
+          if (albumData.updatedAt) settleSyncRecord(albumData.id, albumData.updatedAt, albumContentKey(toAlbumRow(albumData)));
         }
         draftAccountRef.current = user.id;
         restoreAlbumChoices(albumData, wasOnScreen);
@@ -3302,7 +3395,7 @@ export function useBuilderState(): BuilderActions {
       setIsLoadingCloud(false);
       cloudLoadCompletedRef.current = Date.now();
     }
-  }, [user, albumSync, albumSize, albumPages, serializeAlbum, saveToCloud, localAlbumKey, settleSyncRecord, setCloudConflict, restoreAlbumChoices]);
+  }, [user, albumSync, albumSize, albumPages, serializeAlbum, saveToCloud, localAlbumKey, settleSyncRecord, setCloudConflict, setCloudGone, restoreAlbumChoices, syncRecFor]);
 
   /** Ask the cloud whether THIS album moved on on another device (on opening
    *  it, on coming back to the app): nothing changed here -> open the newer
@@ -3310,22 +3403,27 @@ export function useBuilderState(): BuilderActions {
   const reconcile = useCallback(async () => {
     const p = persistRef.current;
     const albumId = albumIdRef.current;
-    if (!p?.userId || !albumId || reconcilingRef.current || p.isLoadingCloud || cloudConflictRef.current) return;
+    if (!p?.userId || !albumId || reconcilingRef.current || p.isLoadingCloud || cloudConflictRef.current || cloudGoneRef.current) return;
     reconcilingRef.current = true;
     let takeCloud = false;
     try {
-      const rec = readSyncRecord(albumId);
+      const rec = syncRecFor(albumId);
       // One small read first: the version only.
       const { data: head, error } = await supabase.from('albums').select('updated_at').eq('id', albumId).maybeSingle();
-      if (error || !head) return; // offline, or never saved: nothing to compare with
+      if (error) return; // offline: nothing to compare with
+      if (!head) {
+        // Saved from here before, and now gone: deleted on another device.
+        // Asked, not re-created. (Never saved: nothing to compare with.)
+        if (rec?.base && albumIdRef.current === albumId) setCloudGone(true);
+        return;
+      }
       if (rec?.base && rec.base === (head as { updated_at: string }).updated_at) return;
       const cloud = await albumSync.load(p.userId, albumId);
       if (!cloud?.updatedAt || albumIdRef.current !== albumId) return;
       const cloudKey = albumContentKey(toAlbumRow(cloud));
-      const decision = decideSync({ rec, cloudUpdatedAt: cloud.updatedAt, cloudKey, localKey: localAlbumKey(), localEditedAt: editedAtRef.current ?? 0 });
-      if (decision === 'ours' || decision === 'keep-local') {
-        writeSyncRecord({ albumId, base: cloud.updatedAt, key: cloudKey });
-        if (decision === 'keep-local') cloudDirtyRef.current = true;
+      const decision = decideSync({ rec: syncRecFor(albumId), cloudUpdatedAt: cloud.updatedAt, cloudKey, localKey: localAlbumKey() });
+      if (decision === 'ours') {
+        syncRecRef.current = { albumId, base: cloud.updatedAt, key: cloudKey };
       } else if (decision === 'conflict') {
         setCloudConflict({ updatedAt: cloud.updatedAt });
       } else if (decision === 'take-cloud') {
@@ -3340,7 +3438,7 @@ export function useBuilderState(): BuilderActions {
       await loadAlbum(albumId, { replace: true });
       setCloudNotice('This album was changed on your other device, so that newer version is open now.');
     }
-  }, [albumSync, localAlbumKey, loadAlbum, setCloudConflict]);
+  }, [albumSync, localAlbumKey, loadAlbum, setCloudConflict, setCloudGone, syncRecFor]);
   useLayoutEffect(() => { reconcileRef.current = reconcile; }, [reconcile]);
 
   const openNewerVersion = useCallback(async () => {
@@ -3366,6 +3464,30 @@ export function useBuilderState(): BuilderActions {
     }
     return res.success;
   }, [user, saveToCloud, serializeAlbum, setCloudConflict]);
+  /** Deleted on another device, and the customer keeps it: a NEW album (new
+   *  id) with what is on screen. The deleted one stays deleted. */
+  const saveAsNewAlbum = useCallback(async (): Promise<boolean> => {
+    if (!user) return false;
+    albumIdRef.current = newAlbumId();
+    syncRecRef.current = null;
+    setCloudGone(false);
+    setCloudSaveStatus('saving');
+    const res = await saveToCloud(user.id, serializeAlbum());
+    if (res.success) {
+      cloudDirtyRef.current = false;
+      setCloudSaveStatus('saved');
+      setLastSavedAt(new Date());
+    } else {
+      cloudDirtyRef.current = true;
+      setCloudSaveStatus('error');
+    }
+    return res.success;
+  }, [user, saveToCloud, serializeAlbum, setCloudGone]);
+  /** Deleted on another device, and the customer lets it go: start fresh. */
+  const letDeletedAlbumGo = useCallback(() => {
+    setCloudGone(false);
+    reset();
+  }, [reset, setCloudGone]);
   const getCloudConflict = useCallback(() => cloudConflictRef.current, []);
   const dismissCloudNotice = useCallback(() => setCloudNotice(null), []);
 
@@ -3490,6 +3612,9 @@ export function useBuilderState(): BuilderActions {
     dismissCloudNotice,
     openNewerVersion,
     keepThisVersion,
+    cloudGone,
+    saveAsNewAlbum,
+    letDeletedAlbumGo,
     getPhotoUrl,
     user,
     loadAlbum,

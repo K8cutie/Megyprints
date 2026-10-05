@@ -1,6 +1,7 @@
 import type { PhotoCheck } from './photoCheck';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from './supabase';
+import { cleanAlbumTheme } from './albumTheme';
 
 // =============================================================================
 // Types
@@ -78,11 +79,10 @@ export interface AlbumData {
 }
 
 export interface SaveOptions {
-  /** The cloud version (albums.updated_at) this device's album is based on.
+  /** The cloud version (albums.updated_at) this copy of the album is based on.
    *  Given, the save only lands on that same version: when another device
    *  saved since, nothing is overwritten and the reply says `conflict`
-   *  (albumSyncRecord). Absent (a new album, or a draft from before this), it
-   *  saves as it always did. */
+   *  (albumSyncRecord). Absent, the album is saved as a NEW row. */
   base?: string | null;
 }
 
@@ -93,6 +93,12 @@ export interface SaveResult {
   updatedAt?: string;
   /** Another device saved this album since `base`: the cloud's version. */
   conflict?: { updatedAt: string };
+  /** Nothing was written because this account has no such row to write:
+   *  - 'deleted': saved on a version, and the row is gone (deleted on another
+   *    device). It is never put back without asking.
+   *  - 'taken': a new album whose id is already used by a row this account
+   *    cannot see. The album needs a new id. */
+  gone?: 'deleted' | 'taken';
 }
 
 export interface UseAlbumSyncReturn {
@@ -139,9 +145,13 @@ export function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
     // Same rule for the cover: a save that has none to say keeps the saved one.
     ...(albumData.coverFront !== undefined ? { cover_front: albumData.coverFront } : {}),
     // The occasion and photos-per-page travel with the album (round 2, N4).
-    ...(albumData.occasion !== undefined ? { occasion: albumData.occasion || null } : {}),
+    // The occasion is capped here, the one place every row is built: a longer
+    // one (the quote picker took any length) broke albums_occasion_chk, and
+    // then every save failed (Kraken, 2026-10-05).
+    ...(albumData.occasion !== undefined ? { occasion: cleanAlbumTheme(albumData.occasion ?? '') || null } : {}),
     ...(albumData.photosPerPage !== undefined ? { photos_per_page: albumData.photosPerPage ?? null } : {}),
-    updated_at: new Date().toISOString(),
+    // No updated_at: the database sets it on every write (0001 on update, 0040
+    // on insert). It IS the version, so this device's clock must not pick it.
   };
 }
 
@@ -221,19 +231,64 @@ async function writeDroppingMissing<R>(row: Record<string, unknown>, write: (r: 
   return res;
 }
 
-/** Upsert one album row (see writeDroppingMissing). */
-export async function upsertAlbumRow(row: Record<string, unknown>) {
+/** Insert one NEW album row (see writeDroppingMissing). */
+export async function insertAlbumRow(row: Record<string, unknown>) {
   return writeDroppingMissing(row, (r) =>
-    supabase.from('albums').upsert(r, { onConflict: 'id' }).select('id, updated_at').single());
+    supabase.from('albums').insert(r).select('id, updated_at').single());
 }
 
 /** Write the album row ONLY if the cloud still holds version `base` (the
  *  database sets updated_at on every write, so another device's save moves
  *  it). The rows written: one, or none when the version moved — or when
- *  there is no such row yet. Same missing-cover_front retry as upsertAlbumRow. */
+ *  there is no such row. Same missing-column retry as insertAlbumRow. */
 export async function updateAlbumRowAt(row: Record<string, unknown>, base: string) {
   return writeDroppingMissing(row, (r) =>
     supabase.from('albums').update(r).eq('id', row.id as string).eq('updated_at', base).select('id, updated_at'));
+}
+
+const readVersion = async (id: string) => {
+  const { data, error } = await supabase.from('albums').select('id, updated_at').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return (data as { updated_at: string } | null)?.updated_at ?? null;
+};
+
+/**
+ * Save one album row for `userId`. Never overwrites blindly:
+ *  - on a version (`base`): lands only on that version. Moved on: `conflict`.
+ *    Gone: `gone: 'deleted'`, and it is NOT put back. It used to fall through
+ *    to an upsert, so an album deleted on the laptop came back from the phone
+ *    without a word (Kraken, 2026-10-05).
+ *  - no version: a NEW row (insert). Its id already saved by this account:
+ *    `conflict` (the builder decides whose work it is). Used by a row this
+ *    account cannot see: `gone: 'taken'`. An upsert there failed with 42501 on
+ *    every save, forever.
+ * Throws on any other error.
+ */
+export async function saveAlbumRow(userId: string, albumData: AlbumData, opts?: SaveOptions): Promise<SaveResult> {
+  const payload = {
+    ...serializeAlbum(albumData),
+    user_id: userId,
+    ...(albumData.id ? { id: albumData.id } : {}),
+  };
+
+  if (albumData.id && opts?.base) {
+    const { data: rows, error: updateError } = await updateAlbumRowAt(payload, opts.base);
+    if (updateError) throw updateError;
+    const written = Array.isArray(rows) ? rows[0] as { id?: string; updated_at?: string } | undefined : undefined;
+    if (written) return { success: true, albumId: written.id, updatedAt: written.updated_at };
+    const now = await readVersion(albumData.id);
+    return now ? { success: false, conflict: { updatedAt: now } } : { success: false, gone: 'deleted' };
+  }
+
+  const { data, error: insertError } = await insertAlbumRow(payload);
+  if (insertError) {
+    if (insertError.code === '23505' && albumData.id) {
+      const now = await readVersion(albumData.id);
+      return now ? { success: false, conflict: { updatedAt: now } } : { success: false, gone: 'taken' };
+    }
+    throw insertError;
+  }
+  return { success: true, albumId: data?.id as string | undefined, updatedAt: (data as { updated_at?: string } | null)?.updated_at };
 }
 
 // =============================================================================
@@ -243,61 +298,17 @@ export async function updateAlbumRowAt(row: Record<string, unknown>, base: strin
 export function useAlbumSync(): UseAlbumSyncReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
-  /**
-   * Upsert an album for a user. If albumData.id is provided, updates that album;
-   * otherwise creates a new one.
-   */
+  /** Save an album for a user (saveAlbumRow), with loading / error state. */
   const save = useCallback(
     async (userId: string, albumData: AlbumData, opts?: SaveOptions): Promise<SaveResult> => {
-      // Cancel any in-flight request
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-
       setLoading(true);
       setError(null);
-
       try {
-        if (controller.signal.aborted) {
-          return { success: false };
-        }
-
-        const payload = {
-          ...serializeAlbum(albumData),
-          user_id: userId,
-          // If album has an id, include it so upsert targets the right row
-          ...(albumData.id ? { id: albumData.id } : {}),
-        };
-
-        // Based on a version: write only onto that version.
-        if (albumData.id && opts?.base) {
-          const { data: rows, error: updateError } = await updateAlbumRowAt(payload, opts.base);
-          if (updateError) throw updateError;
-          const written = Array.isArray(rows) ? rows[0] as { id?: string; updated_at?: string } | undefined : undefined;
-          if (written) return { success: true, albumId: written.id, updatedAt: written.updated_at };
-          // Nothing written: another device saved since — or the row is gone
-          // (deleted elsewhere), and then this save puts it back.
-          const { data: now, error: readError } = await supabase
-            .from('albums').select('id, updated_at').eq('id', albumData.id).maybeSingle();
-          if (readError) throw readError;
-          if (now) return { success: false, conflict: { updatedAt: (now as { updated_at: string }).updated_at } };
-        }
-
-        const { data, error: upsertError } = await upsertAlbumRow(payload);
-
-        if (upsertError) {
-          throw upsertError;
-        }
-
-        return { success: true, albumId: data?.id as string | undefined, updatedAt: (data as { updated_at?: string } | null)?.updated_at };
+        return await saveAlbumRow(userId, albumData, opts);
       } catch (err: unknown) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          return { success: false };
-        }
         const message =
           err instanceof Error ? err.message : 'Failed to save album. Please try again.';
         setError(message);

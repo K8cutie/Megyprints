@@ -28,14 +28,16 @@ let log;
 let db;
 /** Which key each createClient call used. */
 let clientKeys;
+/** The .eq() filters on each orders read. */
+let ordersFilters;
 
 const freshDb = () => ({
   user: { id: 'user-1' },
   userErr: null,
   preflight: { data: { albums: 1, memories: 2, orders: 2, videos: 2, blocking: [] }, error: null },
   orders: [
-    { id: 'ord-pending', status: 'pending_payment' },
-    { id: 'ord-delivered', status: 'delivered' },
+    { id: 'ord-pending', status: 'pending_payment', user_id: 'user-1' },
+    { id: 'ord-delivered', status: 'delivered', user_id: 'user-1' },
   ],
   ordersErr: null,
   clips: { data: ['k7m2p9qz.mp4', 'w4n8r2ta.mov'], error: null },
@@ -52,13 +54,24 @@ const userClient = () => ({
     if (name === 'delete_own_account') return db.deleteResult;
     return { data: null, error: { message: `unexpected rpc ${name}` } };
   },
+  // db.orders is what RLS lets the caller read; .eq() filters narrow it the way
+  // PostgREST would, and every filter used is kept in ordersFilters.
   from: (table) => ({
-    select: () => ({
-      in: async (_col, statuses) => {
-        log.push(table);
-        return { data: db.orders.filter((o) => statuses.includes(o.status)), error: db.ordersErr };
-      },
-    }),
+    select: () => {
+      const eqs = {};
+      const q = {
+        eq: (col, val) => { eqs[col] = val; return q; },
+        in: async (_col, statuses) => {
+          log.push(table);
+          ordersFilters.push({ ...eqs });
+          const rows = db.orders
+            .filter((o) => Object.entries(eqs).every(([c, v]) => o[c] === v))
+            .filter((o) => statuses.includes(o.status));
+          return { data: rows.map(({ id, status }) => ({ id, status })), error: db.ordersErr };
+        },
+      };
+      return q;
+    },
   }),
   storage: { from: () => ({ remove: async () => { throw new Error('customer client must never remove files'); } }) },
 });
@@ -86,7 +99,7 @@ vi.mock('@supabase/supabase-js', () => ({
 
 let mod;
 beforeAll(async () => { mod = await import('./delete-account.mjs'); });
-beforeEach(() => { log = []; clientKeys = []; db = freshDb(); });
+beforeEach(() => { log = []; clientKeys = []; ordersFilters = []; db = freshDb(); });
 
 const mkRes = () => {
   const r = { code: 0, body: null, headers: {},
@@ -104,6 +117,10 @@ const mkReq = (over = {}) => ({
 });
 const call = async (req = mkReq()) => { const res = mkRes(); await mod.default(req, res); return res; };
 const removals = () => log.filter((l) => l.startsWith('remove:'));
+/** The caller's two orders: pages + cover wrap, and every receipt name 0033 allows. */
+const PDFS = 'remove:print-pdfs:ord-pending.pdf,ord-pending-cover.pdf,ord-delivered.pdf,ord-delivered-cover.pdf';
+const PROOFS = 'remove:payment-proofs:'
+  + ['ord-pending', 'ord-delivered'].flatMap((id) => ['jpg', 'png', 'webp', 'pdf'].map((e) => `${id}.${e}`)).join(',');
 
 describe('happy path', () => {
   it('removes the caller\'s PDFs and clips with the service key, then deletes the account as the caller', async () => {
@@ -114,7 +131,8 @@ describe('happy path', () => {
       'rpc:account_deletion_preflight',
       'orders',
       'rpc:my_memory_clip_names',
-      'remove:print-pdfs:ord-pending.pdf,ord-delivered.pdf',
+      PDFS,
+      PROOFS,
       'remove:memory-clips:k7m2p9qz.mp4,w4n8r2ta.mov',
       'rpc:delete_own_account',
     ]);
@@ -131,7 +149,8 @@ describe('happy path', () => {
     expect(res.code).toBe(200);
     expect(log.join('\n')).not.toMatch(/victim|\.\.\//);
     expect(removals()).toEqual([
-      'remove:print-pdfs:ord-pending.pdf,ord-delivered.pdf',
+      PDFS,
+      PROOFS,
       'remove:memory-clips:k7m2p9qz.mp4,w4n8r2ta.mov',
     ]);
   });
@@ -161,6 +180,61 @@ describe('happy path', () => {
     db.clips = { data: ['k7m2p9qz.mp4', null, '', 42, { name: 'x' }], error: null };
     await call();
     expect(removals()).toContain('remove:memory-clips:k7m2p9qz.mp4');
+  });
+});
+
+describe('only the caller\'s own orders (Kraken: an owner account wiped every customer\'s print files)', () => {
+  // RLS on orders lets the shop's own accounts read EVERY order (0005/0006).
+  const ownerSees = () => [
+    { id: 'ord-mine', status: 'delivered', user_id: 'user-1' },
+    { id: 'cust-a', status: 'delivered', user_id: 'user-2' },
+    { id: 'cust-b', status: 'pending_payment', user_id: 'user-3' },
+    { id: 'cust-c', status: 'cancelled', user_id: null },
+  ];
+
+  it('an owner deleting their own account removes their own order\'s files and no one else\'s', async () => {
+    db.orders = ownerSees();
+    const res = await call();
+    expect(res.code).toBe(200);
+    expect(log.join('\n')).not.toMatch(/cust-/);
+    expect(removals()).toEqual([
+      'remove:print-pdfs:ord-mine.pdf,ord-mine-cover.pdf',
+      'remove:payment-proofs:ord-mine.jpg,ord-mine.png,ord-mine.webp,ord-mine.pdf',
+      'remove:memory-clips:k7m2p9qz.mp4,w4n8r2ta.mov',
+    ]);
+  });
+
+  it('the orders read is filtered by the caller\'s user_id from their verified token, not left to RLS', async () => {
+    await call();
+    expect(ordersFilters).toEqual([{ user_id: 'user-1' }]);
+  });
+
+  it('an owner with no orders of their own removes no print file and no receipt at all', async () => {
+    db.orders = ownerSees().filter((o) => o.user_id !== 'user-1');
+    const res = await call();
+    expect(res.code).toBe(200);
+    expect(removals()).toEqual(['remove:memory-clips:k7m2p9qz.mp4,w4n8r2ta.mov']);
+  });
+});
+
+describe('the cover wrap and the receipt go with the order', () => {
+  it('each order loses its pages PDF, its cover wrap PDF and any receipt it may have', async () => {
+    await call();
+    expect(removals()).toEqual([PDFS, PROOFS, 'remove:memory-clips:k7m2p9qz.mp4,w4n8r2ta.mov']);
+  });
+
+  it('receipt removal fails → 500, the clips are not touched and the account is NOT deleted', async () => {
+    db.removeErr = (bucket) => (bucket === 'payment-proofs' ? { message: 'storage unavailable' } : null);
+    const res = await call();
+    expect(res.code).toBe(500);
+    expect(removals().some((l) => l.startsWith('remove:memory-clips:'))).toBe(false);
+    expect(log).not.toContain('rpc:delete_own_account');
+  });
+
+  it('a paid order on the press keeps its files (the database refuses that customer before anything)', async () => {
+    db.orders = [...db.orders, { id: 'ord-printing', status: 'in_production', user_id: 'user-1' }];
+    await call();
+    expect(log.join('\n')).not.toMatch(/ord-printing/);
   });
 });
 
@@ -285,6 +359,24 @@ describe('migrations', () => {
     expect(lister).toContain("s.bucket_id = 'memory-clips'");
     expect(lister).toContain('s.owner_id = auth.uid()::text');
     expect(fnBody('account_deletion_preflight')).toMatch(/'memory-clips'\s+and s\.owner_id = v_uid::text/);
+  });
+
+  it('the latest delete_own_account() also refuses while a cover wrap or a receipt remains, and drops the receipt path', () => {
+    const body = fnBody('delete_own_account');
+    expect(body).toContain("o.id::text || '-cover.pdf'");
+    expect(body).toContain("s.bucket_id = 'payment-proofs'");
+    expect(body).toMatch(/if v_proofs > 0 then\s+raise exception/);
+    expect(body).toMatch(/payment_proof_path\s*=\s*null/);
+    // Every guard counts only the caller's orders.
+    expect(body.match(/o\.user_id = v_uid/g).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('the names removed are exactly the names the upload policies allow (0017 cover wrap, 0033 receipt)', () => {
+    const sql = (f) => readFileSync(join(MIGRATIONS, readdirSync(MIGRATIONS).find((n) => n.startsWith(f))), 'utf8');
+    const allowed = (src) => [...src.matchAll(/o\.id::text \|\| '([^']+)'/g)].map((m) => m[1]);
+    const asSuffix = (names) => names.map((n) => n.slice('X'.length));
+    expect(new Set(allowed(sql('0017')))).toEqual(new Set(asSuffix(mod.pdfNames('X'))));
+    expect(new Set(allowed(sql('0033')))).toEqual(new Set(asSuffix(mod.proofNames('X'))));
   });
 
   it('blockedMessage() is the database\'s refusal, word for word', () => {

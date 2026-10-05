@@ -1,69 +1,78 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   albumSyncRecord — which cloud version of an album THIS device works from.
+   albumSyncRecord — which cloud version of an album THIS copy works from.
 
    The same album open on a phone and a laptop: the laptop changed page 4 and
    saved; the phone reloaded, opened its own older copy without a word, and
    saved it over the laptop's — the laptop's change was gone (1-star testers
    round 2, TD-3). Last save won.
 
-   Now each device remembers, per album, the cloud version it last saved or
-   opened (`base`, the row's updated_at — set by the database) and what the
-   album held then (`key`). A save only lands on that same version
-   (useAlbumSync.save), and on opening the album or coming back to the app the
-   device asks the cloud first (decideSync):
+   Now each copy of the album knows the cloud version it last saved or opened
+   (`base`, the row's updated_at — set by the database) and what the album held
+   then (`key`). A save only lands on that same version (useAlbumSync.save),
+   and on opening the album or coming back to the app the builder asks the
+   cloud first (decideSync):
      • the cloud moved on and nothing changed here → take the newer version;
      • both changed → ask which to keep, never pick silently.
    Photos are never part of this — only the light album row.
+
+   The record travels INSIDE the device draft (DraftSync), not beside it: two
+   tabs share one draft, and a record kept per device let a stale tab borrow
+   the other tab's newer version and save its old album onto it (Kraken,
+   2026-10-05). Content and the version it came from now move together.
    ══════════════════════════════════════════════════════════════════════════ */
 
+/** Where records were kept per device before they moved into the draft. Read
+ *  only for a draft saved before that, which carries none of its own. */
 export const SYNC_STORAGE_KEY = 'megy-album-sync-v1';
-/** Albums remembered per device; the oldest are forgotten first. */
-const MAX_RECORDS = 30;
 
-export interface SyncRecord {
-  albumId: string;
-  /** The cloud row's updated_at for the version this device last saved or
+/** The cloud version a copy of the album is based on. Stored with the draft. */
+export interface DraftSync {
+  /** The cloud row's updated_at for the version this copy last saved or
    *  opened, exactly as the database returned it. */
   base: string | null;
-  /** albumContentKey of the album as it was at `base` on this device. */
+  /** albumContentKey of the album as it was at `base`. */
   key: string;
   /** Key of a save sent but not (yet) acknowledged: when the app closes
-   *  mid-save, the cloud may hold it — it is still this device's own work. */
+   *  mid-save, the cloud may hold it — it is still this copy's own work. */
   sentKey?: string;
-  /** When this record was written (ms), for forgetting the oldest. */
+}
+
+export interface SyncRecord extends DraftSync {
+  albumId: string;
   at?: number;
 }
 
-type RecordMap = Record<string, SyncRecord>;
-
-function readAll(): RecordMap {
-  try {
-    const raw = localStorage.getItem(SYNC_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as RecordMap : {};
-  } catch {
-    return {};
-  }
+/** A draft's own record, when it is for that draft's album. */
+export function draftSyncRecord(albumId: string | undefined, sync: unknown): SyncRecord | null {
+  if (!albumId || !sync || typeof sync !== 'object') return null;
+  const s = sync as Partial<DraftSync>;
+  if (typeof s.key !== 'string') return null;
+  return {
+    albumId,
+    base: typeof s.base === 'string' ? s.base : null,
+    key: s.key,
+    ...(typeof s.sentKey === 'string' ? { sentKey: s.sentKey } : {}),
+  };
 }
 
+/** The part of a record that is stored in the draft. */
+export function toDraftSync(rec: SyncRecord | null): DraftSync | null {
+  if (!rec) return null;
+  return { base: rec.base, key: rec.key, ...(rec.sentKey ? { sentKey: rec.sentKey } : {}) };
+}
+
+/** A record from the old per-device store (drafts saved before DraftSync). */
 export function readSyncRecord(albumId: string | undefined): SyncRecord | null {
   if (!albumId) return null;
-  const rec = readAll()[albumId];
-  return rec && rec.albumId === albumId && typeof rec.key === 'string' ? rec : null;
-}
-
-export function writeSyncRecord(rec: SyncRecord): void {
   try {
-    const all = readAll();
-    all[rec.albumId] = { ...rec, at: Date.now() };
-    const ids = Object.keys(all);
-    if (ids.length > MAX_RECORDS) {
-      ids.sort((a, b) => (all[a].at ?? 0) - (all[b].at ?? 0))
-        .slice(0, ids.length - MAX_RECORDS)
-        .forEach((id) => { delete all[id]; });
-    }
-    localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify(all));
-  } catch { /* storage full or blocked: saves still never overwrite blindly */ }
+    const raw = localStorage.getItem(SYNC_STORAGE_KEY);
+    const all = raw ? JSON.parse(raw) : null;
+    if (!all || typeof all !== 'object' || Array.isArray(all)) return null;
+    const rec = (all as Record<string, SyncRecord>)[albumId];
+    return rec && rec.albumId === albumId && typeof rec.key === 'string' ? rec : null;
+  } catch {
+    return null;
+  }
 }
 
 /* ── What the album holds ── */
@@ -123,39 +132,36 @@ export function albumContentKey(row: Record<string, unknown>): string {
 /* ── Which version wins ── */
 
 export type SyncDecision =
-  /** The cloud is the version this device has. */
+  /** The cloud is the version this copy has. */
   | 'in-sync'
-  /** The cloud moved on, but to this device's own work (the same album, or a
+  /** The cloud moved on, but to this copy's own work (the same album, or a
    *  save that landed as the app closed): adopt its version, nothing to ask. */
   | 'ours'
-  /** Changed on another device, nothing changed here since: open that one. */
+  /** Changed elsewhere, nothing changed here since: open that one. */
   | 'take-cloud'
-  /** Changed on another device AND here: ask which to keep. */
-  | 'conflict'
-  /** No record (a draft from before this) and this device changed the album
-   *  after the cloud copy was saved: keep it, it saves over as it always did. */
-  | 'keep-local';
+  /** Changed elsewhere AND here — or no way to tell what changed here: ask. */
+  | 'conflict';
 
 export function decideSync(input: {
-  rec: SyncRecord | null;
+  rec: DraftSync | null;
   cloudUpdatedAt: string;
   /** albumContentKey of the cloud row — only read when the version moved. */
   cloudKey: string;
-  /** albumContentKey of the album on this device now. */
+  /** albumContentKey of the album on this copy now. */
   localKey: string;
-  /** When the album last changed on this device (ms; 0 unknown). */
-  localEditedAt: number;
 }): SyncDecision {
-  const { rec, cloudUpdatedAt, cloudKey, localKey, localEditedAt } = input;
+  const { rec, cloudUpdatedAt, cloudKey, localKey } = input;
   if (rec?.base && rec.base === cloudUpdatedAt) return 'in-sync';
   if (cloudKey === localKey) return 'ours';
   if (rec?.sentKey && cloudKey === rec.sentKey) return 'ours';
   if (rec?.base) return localKey === rec.key ? 'take-cloud' : 'conflict';
-  // No known version (a draft from before this, or a first save that never
-  // got its reply): this device can't tell what it changed since. When the
-  // cloud copy was saved after the last change here, ask; otherwise keep this.
-  const cloudAt = Date.parse(cloudUpdatedAt) || 0;
-  return cloudAt > localEditedAt ? 'conflict' : 'keep-local';
+  // No known version (a draft from before records, or a first save that never
+  // got its reply) and the two differ: this copy can't tell what it changed,
+  // so it asks. It used to compare this device's clock with the cloud's save
+  // time and keep its own copy when "newer" — and photos waking up after a
+  // reload counted as a change, so a stale phone always looked newer and
+  // silently saved over the laptop's page 4 (Kraken, 2026-10-05).
+  return 'conflict';
 }
 
 /* ── What the customer is told ── */
@@ -174,3 +180,6 @@ export function conflictMessage(updatedAt: string, now = new Date()): string {
   const when = savedWhen(updatedAt, now);
   return `This album was also changed on another device${when ? ` (saved ${when})` : ''}. Which version do you want to keep? The one you don't keep is replaced.`;
 }
+
+/** Said when the album open here was deleted on another device. */
+export const DELETED_ELSEWHERE_MESSAGE = 'This album was deleted on another device. Keep what is here as a new album, or let it go?';

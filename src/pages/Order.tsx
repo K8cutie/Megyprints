@@ -8,10 +8,9 @@ import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
 import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } from '../lib/orders';
 import { getPendingPrintJob, setPendingPrintJob, readOrderHandoff, noteOrderHandoff, type PrintJob } from '../lib/printQueue';
-import { draftAlbumForAccount } from '../lib/draftAlbum';
-import { serializeAlbum, upsertAlbumRow } from '../lib/useAlbumSync';
+import { saveDraftToAccount as saveDraftAlbumToAccount } from '../lib/draftAccountSave';
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
-import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError } from '../lib/orderAlbum';
+import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, AlbumChangedElsewhereError } from '../lib/orderAlbum';
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
 import { saveCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
@@ -352,14 +351,14 @@ export default function Order() {
   const openExistingOrder = () => { if (openOrder) navigate(`/orders?order=${openOrder.id}`); };
 
   /** Save this device's draft of the album to the signed-in account (a guest
-   *  who signed up at checkout). Never another account's draft. */
+   *  who signed up at checkout). Never another account's draft, and never over
+   *  a newer copy saved on another device: that one is the builder's question. */
   const saveDraftToAccount = async (albumId: string): Promise<boolean> => {
     if (!user) return false;
-    const draft = draftAlbumForAccount(user.id, albumId);
-    if (!draft) return false;
     setPrepMsg('Saving your album to your account…');
-    const { error } = await upsertAlbumRow({ ...serializeAlbum(draft), user_id: user.id, id: draft.id });
-    if (error) return false;
+    const outcome = await saveDraftAlbumToAccount(user.id, albumId);
+    if (outcome === 'conflict') throw new AlbumChangedElsewhereError();
+    if (outcome !== 'saved') return false;
     noteOrderHandoff({ albumId, saved: true });
     return true;
   };
