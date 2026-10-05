@@ -62,6 +62,7 @@ function builderOn(photoCount: number, user: { id: string } | null = null, saved
     currentPageIndex: 0, currentPage: albumPages[0], selectedTextId: null, selectedPhotoId: null,
     user, coverDesign: undefined, coverFront: undefined, photoCheck: undefined,
     getAlbumId: () => 'album-1',
+    getCloudConflict: () => null,
     manualSave: vi.fn(async () => saved),
     dispatch: vi.fn(async () => ({ success: true, message: '' })),
     setPhase: vi.fn(), setWizardStep: vi.fn(), setAlbumTitle: vi.fn(), goToPage: vi.fn(),

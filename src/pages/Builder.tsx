@@ -9,6 +9,7 @@ import BuilderPreview from './builder/BuilderPreview';
 import CoverEditor from './builder/CoverEditor';
 import MobileReview from './builder/MobileReview';
 import MissingPhotosBar from './builder/MissingPhotosBar';
+import AlbumConflictBar from './builder/AlbumConflictBar';
 import LayoutPicker from './builder/LayoutPicker';
 import BuilderBackGuard from './builder/BuilderBackGuard';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
@@ -170,7 +171,10 @@ export default function Builder() {
     if (!mountedRef.current) return; // left the builder while it saved
     setOrderSaving(false);
     if (!saved) {
-      setOrderError("We couldn't save your album to your account, so it can't be ordered yet. Check your connection and tap Order again.");
+      setOrderError(actions.getCloudConflict()
+        // Changed on another device too: the bar at the top asks which to keep.
+        ? 'This album was also changed on another device. Choose which version to keep (the note at the top), then tap Order again.'
+        : "We couldn't save your album to your account, so it can't be ordered yet. Check your connection and tap Order again.");
       return;
     }
     if (albumId) noteOrderHandoff({ albumId, saved: true });
@@ -276,6 +280,8 @@ export default function Builder() {
           <div className="flex-1" />
         </div>
 
+        {/* Changed on two devices: which version to keep is asked, never picked. */}
+        <AlbumConflictBar actions={actions} />
         {/* An album opened without its photos says so, with the way on. */}
         {(actions.phase === 'edit' || actions.phase === 'preview') && <MissingPhotosBar actions={actions} />}
 
