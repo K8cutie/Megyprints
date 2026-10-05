@@ -74,6 +74,6 @@ describe('a typed "generate" on a made album asks first', () => {
   it('asks, and only a yes (or asking again) rebuilds', () => {
     expect(rebuildQuestion({ type: 'generate_album', rawMessage: 'generate album' }, madeAlbum)).toMatch(/^That rebuilds your whole album/);
     expect(src).toMatch(/if \(pending && yes\) intent = pending;/);
-    expect(src).toMatch(/const ask = rebuildQuestion\(intent, builderRef\.current\);/);
+    expect(src).toMatch(/const ask = rebuildQuestion\(intent, builderRef\.current,/);
   });
 });

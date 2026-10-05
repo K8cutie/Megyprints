@@ -78,6 +78,24 @@ describe('Megy asks before a typed command rebuilds a made album', () => {
       .toBe('That gives every page a fresh, surprise layout: your layout changes and the text you wrote in caption boxes are replaced (Studio pages stay). Say "yes" to go ahead, or keep editing.');
     expect(rebuildQuestion({ type: 'surprise_me', rawMessage: 'Surprise me' }, { albumPages: empty, albumSize: '6x8' })).toBeNull();
   });
+  it('a new size that grows the album says how many pages and what they add (round 3, the Indecisive One: 6×4 → 8×8 at 2 a page made 50 single pages without a word)', () => {
+    const squares: UploadedPhoto[] = Array.from({ length: 50 }, (_, i) => ({ id: `sq-${i}`, previewUrl: '', name: `sq-${i}.jpg`, type: 'image/jpeg', size: 1, width: 1440, height: 1440 }));
+    const album = { albumPages: made, albumSize: '6x4' as const, uploadedPhotos: squares, photosPerPage: 2 };
+    const sheets = (pages: number) => (Math.ceil(pages / 4) - 10) * 106; // 8×8: 4 pages a sheet, ₱106 a sheet
+    expect(rebuildQuestion(size('8x8'), album, (_s, pages) => sheets(pages))).toBe(
+      'That makes your album 8×8 and lays out every page again for the new shape. Your photos stay; your layout changes are replaced, Studio pages too.'
+      + " Your square photos can't go 2 to a page on an 8×8 (its 2-photo layouts take portrait or landscape photos), so they go one to a page: about 50 pages, 10 more than the 40 included, which adds ₱318. Pick Surprise and Megy mixes in bigger layouts for fewer pages."
+      + ' Say "yes" to go ahead, or keep editing.');
+    // before the price schedule loads: the pages, no pesos
+    expect(rebuildQuestion(size('8x8'), album, null)).toContain('about 50 pages, 10 more than the 40 included. Pick Surprise');
+    // a size that keeps the album at 40 pages adds nothing to the question
+    expect(rebuildQuestion(size('8x8'), { ...album, photosPerPage: undefined }, (_s, pages) => sheets(pages)))
+      .toBe('That makes your album 8×8 and lays out every page again for the new shape. Your photos stay; your layout changes are replaced, Studio pages too. Say "yes" to go ahead, or keep editing.');
+  });
+  it('the chat asks with the live price of the extra pages (source guard)', () => {
+    const src = readFileSync(resolve(__dirname, 'MegyAssistant.tsx'), 'utf8');
+    expect(src).toMatch(/const ask = rebuildQuestion\(intent, builderRef\.current,\s+schedule \? \(size, pages\) => extraPagesCharge\(schedule, size, 'soft', pages\)\.amount : null\);/);
+  });
   it('nothing made yet, or the same size, or another command: no question', () => {
     expect(rebuildQuestion(size('6x4'), { albumPages: empty, albumSize: '6x8' })).toBeNull();
     expect(rebuildQuestion({ type: 'generate_album', rawMessage: 'generate' }, { albumPages: empty, albumSize: '6x8' })).toBeNull();
@@ -162,6 +180,6 @@ describe('the chat asks with rebuildQuestion (source guard)', () => {
   it('a yes runs what was asked about; asking the same again runs it', () => {
     const src = readFileSync(resolve(__dirname, 'MegyAssistant.tsx'), 'utf8');
     expect(src).toMatch(/if \(pending && yes\) intent = pending;/);
-    expect(src).toMatch(/else if \(!\(pending && pending\.type === intent\.type\)\) \{\s*const ask = rebuildQuestion\(intent, builderRef\.current\);/);
+    expect(src).toMatch(/else if \(!\(pending && pending\.type === intent\.type\)\) \{\s*const schedule = getPriceSchedule\(\);\s*const ask = rebuildQuestion\(intent, builderRef\.current,/);
   });
 });

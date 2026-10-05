@@ -339,7 +339,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     let intent = parsed.intent;
     if (pending && yes) intent = pending;
     else if (!(pending && pending.type === intent.type)) {
-      const ask = rebuildQuestion(intent, builderRef.current);
+      const schedule = getPriceSchedule();
+      const ask = rebuildQuestion(intent, builderRef.current,
+        schedule ? (size, pages) => extraPagesCharge(schedule, size, 'soft', pages).amount : null);
       if (ask) {
         rebuildAskedRef.current = intent;
         setIsThinking(false);
