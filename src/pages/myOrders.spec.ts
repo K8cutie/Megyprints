@@ -43,7 +43,7 @@ vi.mock('../lib/supabase', () => {
 
 import { trackOf, TRACK_STAGES } from '../lib/orderTracker';
 import { listMyOrders, openOrderForAlbum, lastOrderForAlbum } from '../lib/myOrders';
-import { saveLastDelivery, readLastDelivery } from '../lib/checkoutSession';
+import { saveLastDelivery, readLastDelivery, clearLastDelivery } from '../lib/checkoutSession';
 import { EMPTY_ADDRESS } from '../lib/contact';
 import MyOrders from './MyOrders';
 import AuthNav from '../components/AuthNav';
@@ -201,6 +201,12 @@ describe('a second copy starts from the first', () => {
     expect(readLastDelivery('user-1')?.address.street).toBe('12 Day One St.');
     expect(readLastDelivery('user-2')).toBeNull();
     expect(readLastDelivery(undefined)).toBeNull();
+    clearLastDelivery(); // signing out
+    expect(readLastDelivery('user-1')).toBeNull();
+    // Sign-out does it (source guard): right after the session is gone.
+    const auth = readFileSync(resolve(__dirname, '../lib/authContext.tsx'), 'utf8');
+    const afterSignOut = auth.slice(auth.indexOf('setSession(null);'), auth.indexOf('setSession(null);') + 200);
+    expect(afterSignOut).toContain('clearLastDelivery();');
   });
   it('Your orders: "Order this album again" on a placed order — not on one waiting for payment', async () => {
     h.orders = [

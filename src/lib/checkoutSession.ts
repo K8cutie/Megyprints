@@ -86,6 +86,10 @@ export interface LastDelivery { userId: string; name: string; phone: string; add
 export function saveLastDelivery(d: LastDelivery): void {
   try { localStorage.setItem(DELIVERY_KEY, JSON.stringify(d)); } catch { /* private mode */ }
 }
+/** Signing out forgets them: a shared device doesn't keep someone's address. */
+export function clearLastDelivery(): void {
+  try { localStorage.removeItem(DELIVERY_KEY); } catch { /* private mode */ }
+}
 export function readLastDelivery(userId: string | undefined): LastDelivery | null {
   if (!userId) return null;
   try {

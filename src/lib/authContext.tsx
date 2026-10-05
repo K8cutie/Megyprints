@@ -4,6 +4,7 @@ import type { User, Session, Provider } from '@supabase/supabase-js';
 import { AuthError } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from './supabase';
 import { isNativeShell, nativeSignInWithOAuth } from './nativeAuth';
+import { clearLastDelivery } from './checkoutSession';
 
 // =============================================================================
 // Types
@@ -157,6 +158,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(null);
       setSession(null);
+      // The last order's delivery details (checkout's prefill) leave with the account.
+      clearLastDelivery();
     } catch (err: unknown) {
       const message = err instanceof AuthError ? err.message : 'Failed to sign out. Please try again.';
       setError(message);
