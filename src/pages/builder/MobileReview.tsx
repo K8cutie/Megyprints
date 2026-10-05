@@ -13,6 +13,7 @@ import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
@@ -423,6 +424,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
       {editSlot !== null && (
         <MobileTextEditor
           initial={buildInitial(editSlot)}
+          box={actions.currentPage ? captionBoxSize(actions.currentPage, editSlot, actions.albumSize, actions.currentPageIndex, { coverMode: actions.editScope === 'coverFront' }) : null}
           onSave={(content) => actions.setBoxText(editSlot, content)}
           onClose={() => setEditSlot(null)}
         />

@@ -14,6 +14,7 @@ import { PREVIEW_DIMS } from './PreviewSizeConstants';
 import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import { captionBoxSize, overflowingCaptions, longTextsMessage } from './textFit';
 import AddQrModal from './AddQrModal';
 import EndOfAlbumPrompt from './EndOfAlbumPrompt';
 import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
@@ -876,6 +877,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // text and blank pages print exactly as they look — say so once; "Order
   // anyway" goes on, "Show me" goes to the first one.
   const [notReady, setNotReady] = useState<string | null>(null);
+  const longFirstPageRef = useRef<number | null>(null);
   // PHOTOS NOT ON THIS DEVICE (photoPresence): the album would print blank
   // frames. No "Order anyway" — a paid, unrecallable print of empty pages.
   const [notHere, setNotHere] = useState<string | null>(null);
@@ -890,7 +892,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     // Photos put back from other copies are said here too (never blocking).
     const copies = copyNotesMessage(pages, photos, coverFront);
     // A blank front cover is said first (it is what everyone sees first).
-    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', readinessMessage(readiness), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
+    // Text too long for its box is clipped in print (PERF2-2) — said here too.
+    const long = overflowingCaptions(pages, albumSize);
+    longFirstPageRef.current = long[0]?.pageIndex ?? null;
+    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', readinessMessage(readiness), longTextsMessage(long.length), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
     if (warning && !anyway) { setNotReady(warning); return; }
     setNotReady(null);
     setPendingPrintJob({ pages, photos, albumSize, albumId: getAlbumId(), coverDesign, coverFront });
@@ -904,7 +909,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           setNotReady(null);
           // The cover first: "Show me" opens the cover editor.
           if (coverIsBlank(coverFront)) { setCoverOpen(true); return; }
-          if (readiness.firstPage != null) onGoToPage(readiness.firstPage); onBack();
+          const first = [readiness.firstPage, longFirstPageRef.current].filter((n): n is number => n != null);
+          if (first.length) onGoToPage(Math.min(...first)); onBack();
         }} data-testid="order-not-ready-show"
         className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
         Show me
@@ -1115,6 +1121,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       {edit && (
         <MobileTextEditor
           initial={edit.textId != null ? buildTextInitial(edit.pageIndex, edit.textId) : buildBoxInitial(edit.pageIndex, edit.slot!)}
+          box={edit.textId == null && pages[edit.pageIndex] ? captionBoxSize(pages[edit.pageIndex], edit.slot!, albumSize, edit.pageIndex) : null}
           onSave={(content) => {
             if (edit.textId != null) updateTextElement(edit.textId, content);
             else setBoxText(edit.slot!, content, edit.pageIndex);
