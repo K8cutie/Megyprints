@@ -19,7 +19,7 @@ import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, 
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
 import { PAYEE, checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
 import { updateMemoryDestination } from '../lib/qrMemories';
-import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady } from '../lib/storeSettings';
+import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady, onStoreSettingsChange, retryStoreSettings } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
 import { reportError } from '../lib/report';
 import { normalizeFullName, isValidFullName, normalizePHPhone, formatPHPhoneDisplay, validateAddress, EMPTY_ADDRESS, type AddressValue } from '../lib/contact';
@@ -230,6 +230,15 @@ export default function Order() {
     void storeSettingsReady().then(() => { if (alive) setSettingsReady(true); });
     return () => { alive = false; };
   }, [settingsReady]);
+  // Prices that arrive later (back online, a retry) re-render checkout (CD-1).
+  const [, setPriceTick] = useState(0);
+  useEffect(() => onStoreSettingsChange(() => setPriceTick((n) => n + 1)), []);
+  const [retryingPrices, setRetryingPrices] = useState(false);
+  const retryPrices = () => {
+    if (retryingPrices) return;
+    setRetryingPrices(true);
+    void retryStoreSettings().finally(() => setRetryingPrices(false));
+  };
   const schedule = getPriceSchedule(); // re-read each render; non-null once loaded
   const tiers = schedule ? hostingTiersOf(schedule) : [];
   const includedYears = schedule ? includedHostingYears(schedule) : null;
@@ -825,7 +834,7 @@ export default function Order() {
                       <span className="font-medium text-dark text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span></div>
+                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{priceReady ? `₱${totalPrice.toLocaleString('en-PH')}` : '—'}</span></div>
                 </div>
               </div>
               <div className="mt-4 flex items-start gap-2 rounded-xl bg-blush border border-peach/60 px-3 py-2.5">
@@ -897,12 +906,16 @@ export default function Order() {
                   {tooFewToOrderMessage(jobPhotos!)}
                 </div>
               ) : (
-              <button onClick={handleProceedToPayment} disabled={!priceReady || submitting}
+              <button onClick={priceReady ? handleProceedToPayment : (settingsReady && albumInfo !== 'loading' ? retryPrices : undefined)}
+                disabled={submitting || (!priceReady && (!settingsReady || albumInfo === 'loading' || retryingPrices))}
+                data-testid="order-place"
                 className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                 {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
                   : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${totalPrice.toLocaleString('en-PH')}`} by bank transfer</>
                     : !settingsReady || albumInfo === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
-                      : <>Pricing unavailable — please refresh</>}
+                      // A tap that answers: try the prices again (they also come back on their own).
+                      : retryingPrices ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
+                        : <>Prices didn't load — tap to try again</>}
               </button>
               )}
               {askSecond && openOrder && (
