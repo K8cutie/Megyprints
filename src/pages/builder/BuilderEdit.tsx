@@ -39,6 +39,7 @@ import StudioStrip from './StudioStrip';
 import { getCanvasDimensions } from './layouts';
 import { PAGE_TEMPLATES, hasQrSlot } from './pageTemplates';
 import { templateTracker } from './varietyTracker';
+import { useModalDialog } from '../../lib/useModalDialog';
 import fabric from './fabric-loader';
 
 /* ── Local helper types for in-place filter effects ─────────────────────── */
@@ -278,6 +279,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   // Corner the user picks for a NEW memory badge (null = Auto, face-aware).
   const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null);
   const [pickerIsTextSlot, setPickerIsTextSlot] = useState(false);
+  // The photo picker as a keyboard can use it (KB-2): focus in, Tab kept inside, Escape closes.
+  const pickerRef = useModalDialog<HTMLDivElement>(showPhotoPicker && selectedSlotForPicker !== null, () => { setShowPhotoPicker(false); setPickerIsTextSlot(false); });
   const buildSlotTextInitial = useCallback((slot: number): BoxTextContent => {
     const existing = actions.currentPage?.slotTexts?.[slot];
     if (existing) return { ...existing };
@@ -696,10 +699,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              ref={pickerRef} role="dialog" aria-modal="true" aria-labelledby="photo-picker-title" tabIndex={-1}
               className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="font-display text-lg font-semibold text-dark mb-4">
+              <h3 id="photo-picker-title" className="font-display text-lg font-semibold text-dark mb-4">
                 Choose a photo for slot {selectedSlotForPicker + 1}
               </h3>
               {actions.uploadedPhotos.length === 0 ? (

@@ -13,12 +13,15 @@ import type { BuilderContextValue } from './BuilderContext';
 import type { AlbumPage } from './types';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 export default function LayoutPicker({ actions }: { actions: BuilderContextValue }) {
   const open = actions.layoutPickerOpen;
   const idx = actions.currentPageIndex;
   const page = actions.albumPages[idx];
   const close = () => actions.setLayoutPickerOpen(false);
+  // Keyboard: focus on the current layout, Tab kept inside, Escape closes (KB-2).
+  const panelRef = useModalDialog<HTMLDivElement>(!!(open && page), close);
 
   // Preview thumbnail size at the album's aspect ratio.
   const dims = getCanvasDimensions(actions.albumSize);
@@ -42,11 +45,12 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
           <motion.div
             initial={{ y: '100%', opacity: 0.6 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '100%', opacity: 0.6 }}
             transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+            ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="layout-picker-title" tabIndex={-1}
             className="w-full lg:max-w-2xl bg-white rounded-t-2xl lg:rounded-2xl max-h-[80vh] flex flex-col shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
-              <span className="text-sm font-semibold text-dark">Choose a layout</span>
+              <span id="layout-picker-title" className="text-sm font-semibold text-dark">Choose a layout</span>
               <button onClick={close} className="text-light p-1" aria-label="Close"><X size={18} /></button>
             </div>
             {layouts.length === 0 ? (
@@ -65,7 +69,7 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
                     slotOffsetsY: new Array(slotCount).fill(0),
                   };
                   return (
-                    <button key={t.id}
+                    <button key={t.id} data-autofocus={current ? true : undefined} aria-pressed={current}
                       onClick={() => { actions.applyPageLayout(t.id); close(); }}
                       className={`rounded-xl border-2 p-1.5 active:scale-95 transition-transform ${current ? 'border-peach bg-cream' : 'border-line-soft bg-white'}`}>
                       <div className="relative overflow-hidden bg-white mx-auto rounded-md" style={{ width: W, height: H }}>

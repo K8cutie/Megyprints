@@ -7,6 +7,7 @@ import { readLocalDraftSummary } from '../lib/localDraft';
 import { chooseResumeOffer, type ResumeOffer } from '../lib/resumeOffer';
 import { wasResumeAsked, markResumeAsked, clearResumeAsked, startFreshAlbum } from '../lib/albumSession';
 import { formatRelativeTime } from './UserProjectsSection';
+import { useModalDialog } from '../lib/useModalDialog';
 
 /* ══════════════════════════════════════════════════════════════════════════
    ResumePrompt — "Pick up where you left off?"
@@ -80,6 +81,9 @@ export function ResumePrompt() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [user, loading, pathname, search, offer, loadAll]);
 
+  // Keyboard (KB-2): focus on "Yes, resume", Tab kept inside, Escape = not now.
+  const panelRef = useModalDialog<HTMLDivElement>(!!offer && !!user, () => setOffer(null));
+
   if (!offer || !user) return null;
 
   const close = () => setOffer(null);
@@ -100,9 +104,11 @@ export function ResumePrompt() {
   return (
     <div className="fixed inset-0 z-[135] flex items-center justify-center bg-black/40 px-4" onClick={close} data-testid="resume-prompt">
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="resume-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center"
       >
@@ -129,6 +135,7 @@ export function ResumePrompt() {
           <button
             onClick={resume}
             data-testid="resume-yes"
+            data-autofocus
             className="w-full py-3 rounded-xl bg-peach text-white text-sm font-semibold hover:brightness-105 transition-all"
           >
             Yes, resume

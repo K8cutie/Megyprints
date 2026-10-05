@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { loadRegions, loadAllProvinces, loadCities, loadBarangays, cityRegion, type PsgcItem, type ProvinceItem } from '../lib/psgc';
 import { STREET_MAX, streetLength, type AddressValue } from '../lib/contact';
 
@@ -18,6 +18,9 @@ export default function AddressPicker({ value, onChange, errors }: {
   onChange: (v: AddressValue) => void;
   errors?: Errors;
 }) {
+  // Each field announced by its visible label, not its example text (KB-5).
+  const uid = useId();
+  const fid = (k: string) => `${uid}-${k}`;
   const [provinces, setProvinces] = useState<ProvinceItem[]>([]);
   const [regionByCode, setRegionByCode] = useState<Record<string, string>>({});
   const [cities, setCities] = useState<PsgcItem[]>([]);
@@ -97,16 +100,16 @@ export default function AddressPicker({ value, onChange, errors }: {
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-medium mb-1 block">Province</label>
-          <select value={value.provinceCode} onChange={(e) => pickProvince(e.target.value)} disabled={loading.prov} aria-invalid={!!errors?.provinceCode} className={selCls(errors?.provinceCode, value.provinceCode)}>
+          <label htmlFor={fid('province')} className="text-xs text-medium mb-1 block">Province</label>
+          <select id={fid('province')} value={value.provinceCode} onChange={(e) => pickProvince(e.target.value)} disabled={loading.prov} aria-invalid={!!errors?.provinceCode} className={selCls(errors?.provinceCode, value.provinceCode)}>
             <option value="">{loading.prov ? 'Loading…' : 'Select province…'}</option>
             {provinces.map((p) => <option key={p.code} value={p.code} className="text-dark">{p.name}</option>)}
           </select>
           {errText('provinceCode')}
         </div>
         <div>
-          <label className="text-xs text-medium mb-1 block">City / Municipality</label>
-          <select value={value.cityCode} onChange={(e) => pickCity(e.target.value)} disabled={!value.provinceCode || loading.city} aria-invalid={!!errors?.cityCode} className={selCls(errors?.cityCode, value.cityCode)}>
+          <label htmlFor={fid('city')} className="text-xs text-medium mb-1 block">City / Municipality</label>
+          <select id={fid('city')} value={value.cityCode} onChange={(e) => pickCity(e.target.value)} disabled={!value.provinceCode || loading.city} aria-invalid={!!errors?.cityCode} className={selCls(errors?.cityCode, value.cityCode)}>
             <option value="">{loading.city ? 'Loading…' : 'Select city / municipality…'}</option>
             {cities.map((c) => <option key={c.code} value={c.code} className="text-dark">{c.name}</option>)}
           </select>
@@ -115,8 +118,8 @@ export default function AddressPicker({ value, onChange, errors }: {
       </div>
 
       <div>
-        <label className="text-xs text-medium mb-1 block">Barangay</label>
-        <select value={value.barangayCode} onChange={(e) => pickBarangay(e.target.value)} disabled={!value.cityCode || loading.brgy} aria-invalid={!!errors?.barangayCode} className={selCls(errors?.barangayCode, value.barangayCode)}>
+        <label htmlFor={fid('barangay')} className="text-xs text-medium mb-1 block">Barangay</label>
+        <select id={fid('barangay')} value={value.barangayCode} onChange={(e) => pickBarangay(e.target.value)} disabled={!value.cityCode || loading.brgy} aria-invalid={!!errors?.barangayCode} className={selCls(errors?.barangayCode, value.barangayCode)}>
           <option value="">{loading.brgy ? 'Loading…' : 'Select barangay…'}</option>
           {barangays.map((b) => <option key={b.code} value={b.code} className="text-dark">{b.name}</option>)}
         </select>
@@ -125,8 +128,9 @@ export default function AddressPicker({ value, onChange, errors }: {
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_110px] gap-3">
         <div>
-          <label className="text-xs text-medium mb-1 block">House / Unit No. &amp; Street</label>
+          <label htmlFor={fid('street')} className="text-xs text-medium mb-1 block">House / Unit No. &amp; Street</label>
           <input
+            id={fid('street')}
             value={value.street}
             onChange={(e) => onChange({ ...value, street: e.target.value })}
             autoComplete="address-line1" placeholder="123 Rizal St., Purok 2"
@@ -142,8 +146,9 @@ export default function AddressPicker({ value, onChange, errors }: {
           )}
         </div>
         <div>
-          <label className="text-xs text-medium mb-1 block">ZIP</label>
+          <label htmlFor={fid('zip')} className="text-xs text-medium mb-1 block">ZIP</label>
           <input
+            id={fid('zip')}
             value={value.zip}
             onChange={(e) => onChange({ ...value, zip: e.target.value.replace(/\D/g, '').slice(0, 4) })}
             inputMode="numeric" maxLength={4} autoComplete="postal-code" placeholder="1109"

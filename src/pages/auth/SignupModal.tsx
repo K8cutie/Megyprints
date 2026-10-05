@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, UserPlus, User } from 'lucide-react';
 import { useAuth } from '../../lib/authContext';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 // =============================================================================
 // Types
@@ -18,6 +19,8 @@ export interface SignupModalProps {
 // =============================================================================
 
 export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalProps) {
+  // Keyboard: focus in, Tab kept inside, Escape closes, focus back after (KB-2).
+  const panelRef = useModalDialog<HTMLDivElement>(isOpen, onClose);
   const { signup, loading, error, clearError } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -137,6 +140,11 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
 
           {/* Modal */}
           <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="signup-title"
+            tabIndex={-1}
             className="relative z-10 w-full max-w-md mx-4 rounded-2xl bg-warm-white shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -154,7 +162,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
               </button>
 
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-ink-warm">Create Account</h2>
+                <h2 id="signup-title" className="text-2xl font-bold text-ink-warm">Create Account</h2>
                 <p className="mt-1 text-sm text-taupe">
                   Start building beautiful photo albums
                 </p>
@@ -198,6 +206,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                           setFieldErrors((p) => ({ ...p, fullName: undefined }));
                       }}
                       placeholder="Your full name"
+                      data-autofocus
                       className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-4 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
                       autoComplete="name"
                     />

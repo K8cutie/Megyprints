@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Quote, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { useModalDialog } from '../../lib/useModalDialog';
 import { fetchThemeQuotes, moreThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
 
 const THEME_KEY = 'megy-album-theme';
@@ -19,6 +20,8 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   onClose: () => void;
   mobile?: boolean;
 }) {
+  // Keyboard (KB-2): focus in, Tab kept inside, Escape closes.
+  const panelRef = useModalDialog<HTMLDivElement>(true, onClose);
   // Seeded from the theme picked at setup, so the first render already has it —
   // no setState inside the mount effect.
   const [theme, setTheme] = useState(() => {
@@ -128,7 +131,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
       <span className="text-sm font-semibold text-dark flex items-center gap-2">
         <Quote size={18} className="text-blush-pink" /> {initial ? 'Change quote' : 'Add a quote'}
       </span>
-      <button onClick={onClose} className="text-light p-1"><X size={18} /></button>
+      <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
     </div>
   );
 
@@ -144,7 +147,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   if (mobile) {
     return (
       <div className="absolute inset-0 z-[120] bg-black/40 flex items-end" onClick={onClose}>
-        <div className="w-full bg-white rounded-t-2xl flex flex-col max-h-[80%]" onClick={(e) => e.stopPropagation()}>
+        <div ref={panelRef} role="dialog" aria-modal="true" aria-label={'Choose a quote'} tabIndex={-1} className="w-full bg-white rounded-t-2xl flex flex-col max-h-[80%]" onClick={(e) => e.stopPropagation()}>
           {Header}{Body}{Footer}
         </div>
       </div>
@@ -153,7 +156,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
 
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={'Choose a quote'} tabIndex={-1} className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
         {Header}{Body}{Footer}
       </div>
     </div>
