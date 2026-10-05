@@ -53,7 +53,7 @@ export default function MyMemories() {
   }, []);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
+    <div className="max-w-3xl mx-auto px-4 pt-24 pb-10">
       <div className="flex items-center gap-2 mb-1">
         <QrCode className="text-blush-pink" size={22} />
         <h1 className="font-display text-2xl font-semibold text-dark">My Memories</h1>

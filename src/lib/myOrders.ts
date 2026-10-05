@@ -19,9 +19,11 @@ export interface MyOrder {
   /** The ordered album's name, from the order's frozen copy of it. Two orders
    *  of a 9×9, 41 pages said nothing about which album each was (round 2). */
   album_title?: string | null;
+  /** The album this order printed — "Order this album again" opens it. */
+  album_id?: string | null;
 }
 
-const COLUMNS = 'id, order_number, status, amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title';
+const COLUMNS = 'id, order_number, status, amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title, album_id';
 
 /** Newest first. */
 export async function listMyOrders(userId: string): Promise<MyOrder[]> {
@@ -50,6 +52,25 @@ export async function openOrderForAlbum(userId: string, albumId: string): Promis
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as MyOrder | null) ?? null;
+}
+
+/** The finish this album was last ordered with (not a cancelled order), or
+ *  null. A second copy opened on Matte + Softcover — a different book from the
+ *  one being copied (1-star testers round 2, RC-1). */
+export interface LastFinish { order_number: string; material: string; cover: string }
+export async function lastOrderForAlbum(userId: string, albumId: string): Promise<LastFinish | null> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('order_number, material, cover, status')
+    .eq('user_id', userId)
+    .eq('album_id', albumId)
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  const d = data as LastFinish & { status: string };
+  return { order_number: d.order_number, material: d.material, cover: d.cover };
 }
 
 export async function getMyOrder(userId: string, orderId: string): Promise<MyOrder | null> {

@@ -13,7 +13,7 @@ import { serializeAlbum, upsertAlbumRow } from '../lib/useAlbumSync';
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
 import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError } from '../lib/orderAlbum';
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
-import { saveCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
+import { saveCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
@@ -29,7 +29,7 @@ import { startFreshAlbum } from '../lib/albumSession';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
 import { trackOf } from '../lib/orderTracker';
 import { missingPhotos, missingPhotosMessage } from '../lib/photoPresence';
-import { getMyOrder, openOrderForAlbum, type MyOrder } from '../lib/myOrders';
+import { getMyOrder, openOrderForAlbum, lastOrderForAlbum, type MyOrder } from '../lib/myOrders';
 import OrderTracker from '../components/OrderTracker';
 
 // The front cover at checkout — lazy: it brings the page renderer.
@@ -118,10 +118,12 @@ export default function Order() {
       cover: j.coverFront ? { page: j.coverFront, photos: j.photos } : undefined });
   const orderRecordRef = useRef<Omit<CheckoutOrder, 'stage'> | null>(null);
   const restoredRef = useRef(false);
+  const formRestoredRef = useRef(false);
   function restoreCheckout(album: OrderAlbumInfo) {
     if (restoredRef.current) return;
     restoredRef.current = true;
     const form = readCheckoutForm(album.albumId);
+    formRestoredRef.current = !!form;
     if (form) {
       setName(form.name); setPhone(form.phone); setAddress(form.address);
       setMaterial(form.material); setCover(form.cover);
@@ -182,6 +184,25 @@ export default function Order() {
         if (alive) setOpenOrder(o && o.id !== createdOrderRef.current?.id ? o : null);
       })
       .catch(() => { /* can't tell: checkout goes on as before */ });
+    return () => { alive = false; };
+  }, [user, info?.albumId, step]);
+  // A second copy starts from the first: the album's last finish, and the
+  // delivery details of the last order on this device (RC-1). Only when this
+  // tab had no form of its own to bring back.
+  const [prefilled, setPrefilled] = useState<{ finishFrom: string | null; delivery: boolean } | null>(null);
+  const prefillRef = useRef(false);
+  useEffect(() => {
+    if (!user || !info?.albumId || step !== 'form' || formRestoredRef.current || prefillRef.current) return;
+    prefillRef.current = true;
+    const d = readLastDelivery(user.id);
+    let alive = true;
+    void lastOrderForAlbum(user.id, info.albumId).then((o) => {
+      if (!alive) return;
+      if (d) { setName(d.name); setPhone(d.phone); setAddress(d.address); }
+      const known = o && MATERIALS.some((m) => m.type === o.material) && COVERS.some((c) => c.type === o.cover);
+      if (o && known) { setMaterial(o.material as MaterialType); setCover(o.cover as CoverType); }
+      if ((o && known) || d) setPrefilled({ finishFrom: o && known ? o.order_number : null, delivery: !!d });
+    });
     return () => { alive = false; };
   }, [user, info?.albumId, step]);
   const albumSize: AlbumSizePreset = info?.albumSize ?? '8x8';
@@ -401,6 +422,8 @@ export default function Order() {
           id: created.id, order_number: created.order_number, albumId: created.album_id,
           material, cover, albumSize, // freeze the specs the order row was built with
         };
+        // The next checkout on this device starts from these details (RC-1).
+        if (user) saveLastDelivery({ userId: user.id, name, phone, address });
         order = createdOrderRef.current;
         setPlacedAmount(totalPrice);
         orderRecordRef.current = {
@@ -727,6 +750,13 @@ export default function Order() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left: Options */}
           <div className="lg:col-span-2 space-y-6">
+            {prefilled && (
+              <div role="status" data-testid="order-prefilled"
+                className="rounded-2xl border border-line-soft bg-white px-5 py-3 text-sm text-cocoa">
+                {prefilled.finishFrom && <p>Same paper and cover as your last order of this album (<span className="font-mono">{prefilled.finishFrom}</span>). Change them below if you like.</p>}
+                {prefilled.delivery && <p className={prefilled.finishFrom ? 'mt-1' : ''}>Delivery details from your last order — check they're still right.</p>}
+              </div>
+            )}
             {/* Material */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
               <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><Palette size={18} /> Paper Material</h3>

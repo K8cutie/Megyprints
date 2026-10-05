@@ -76,6 +76,28 @@ export function resumableCheckoutOrder(albumId: string | undefined, albumEditedA
 
 export function saveCheckoutForm(form: CheckoutForm): void { write(FORM_KEY, form); }
 
+/* ── The delivery details of the customer's last order, on THIS device ──
+   A returning customer typed name, phone and the whole address again (RC-1).
+   Kept per account in localStorage — the order row holds the address as
+   names, the picker needs its PSGC codes — and offered on the next checkout
+   whose form is still empty. Never another account's. */
+const DELIVERY_KEY = 'megy-last-delivery';
+export interface LastDelivery { userId: string; name: string; phone: string; address: AddressValue }
+export function saveLastDelivery(d: LastDelivery): void {
+  try { localStorage.setItem(DELIVERY_KEY, JSON.stringify(d)); } catch { /* private mode */ }
+}
+/** Signing out forgets them: a shared device doesn't keep someone's address. */
+export function clearLastDelivery(): void {
+  try { localStorage.removeItem(DELIVERY_KEY); } catch { /* private mode */ }
+}
+export function readLastDelivery(userId: string | undefined): LastDelivery | null {
+  if (!userId) return null;
+  try {
+    const d = JSON.parse(localStorage.getItem(DELIVERY_KEY) || 'null') as LastDelivery | null;
+    return d && d.userId === userId && d.address ? d : null;
+  } catch { return null; }
+}
+
 export function readCheckoutForm(albumId: string | undefined): CheckoutForm | null {
   const f = read<CheckoutForm>(FORM_KEY);
   if (!f || !albumId || f.albumId !== albumId) return null;

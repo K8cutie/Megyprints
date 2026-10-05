@@ -29,6 +29,7 @@ vi.mock('../lib/supabase', () => {
   const chain = {
     select: (...a: unknown[]) => { h.query.push(['select', ...a]); return chain; },
     eq: (...a: unknown[]) => { h.query.push(['eq', ...a]); return chain; },
+    neq: (...a: unknown[]) => { h.query.push(['neq', ...a]); return chain; },
     order: (...a: unknown[]) => {
       h.query.push(['order', ...a]);
       return Object.assign(Promise.resolve({ data: h.orders, error: null }), {
@@ -41,7 +42,9 @@ vi.mock('../lib/supabase', () => {
 });
 
 import { trackOf, TRACK_STAGES } from '../lib/orderTracker';
-import { listMyOrders, openOrderForAlbum } from '../lib/myOrders';
+import { listMyOrders, openOrderForAlbum, lastOrderForAlbum } from '../lib/myOrders';
+import { saveLastDelivery, readLastDelivery, clearLastDelivery } from '../lib/checkoutSession';
+import { EMPTY_ADDRESS } from '../lib/contact';
 import MyOrders from './MyOrders';
 import AuthNav from '../components/AuthNav';
 
@@ -176,5 +179,54 @@ describe('one album, one open order', () => {
     expect(src).toMatch(/if \(openOrder && !secondOkRef\.current\) \{\s*setAskSecond\(true\);\s*return;\s*\}\s*void placeOrder\(\);/);
     expect(src).toMatch(/data-testid="order-already-open"/);
     expect(src).toMatch(/navigate\(`\/orders\?order=\$\{openOrder\.id\}`\)/);
+  });
+});
+
+/* ── Round 2 (RC-1): a second copy of an album ─────────────────────────────
+   Day 2, the returning customer ordered the Glossy + Hardbound album again:
+   checkout opened on Matte + Softcover (₱1,710 — a different book) with every
+   delivery field empty, Your orders had no way to order again, and its title
+   sat on the header logo. */
+describe('a second copy starts from the first', () => {
+  it("the album's last order (not a cancelled one) gives the finish", async () => {
+    h.orders = [{ order_number: 'MP-2026-2FAZ2B4', material: 'glossy', cover: 'hardboundLeather', status: 'paid' }];
+    expect(await lastOrderForAlbum('user-1', 'album-9')).toEqual({ order_number: 'MP-2026-2FAZ2B4', material: 'glossy', cover: 'hardboundLeather' });
+    expect(h.query).toContainEqual(['eq', 'album_id', 'album-9']);
+    expect(h.query).toContainEqual(['neq', 'status', 'cancelled']);
+    expect(h.query).toContainEqual(['limit', 1]);
+  });
+  it('the delivery details of the last order, on this device, for this account only', () => {
+    localStorage.clear();
+    saveLastDelivery({ userId: 'user-1', name: 'Rae Returner', phone: '09175550105', address: { ...EMPTY_ADDRESS, street: '12 Day One St.' } });
+    expect(readLastDelivery('user-1')?.address.street).toBe('12 Day One St.');
+    expect(readLastDelivery('user-2')).toBeNull();
+    expect(readLastDelivery(undefined)).toBeNull();
+    clearLastDelivery(); // signing out
+    expect(readLastDelivery('user-1')).toBeNull();
+    // Sign-out does it (source guard): right after the session is gone.
+    const auth = readFileSync(resolve(__dirname, '../lib/authContext.tsx'), 'utf8');
+    const afterSignOut = auth.slice(auth.indexOf('setSession(null);'), auth.indexOf('setSession(null);') + 200);
+    expect(afterSignOut).toContain('clearLastDelivery();');
+  });
+  it('Your orders: "Order this album again" on a placed order — not on one waiting for payment', async () => {
+    h.orders = [
+      order({ order_number: 'MP-2026-DONE', status: 'delivered', payment_submitted_at: '2026-10-01T00:00:00Z', album_id: 'album-9' }),
+      order({ order_number: 'MP-2026-WAIT', album_id: 'album-9' }),
+    ];
+    await render(createElement(MyOrders));
+    const cards = [...host.querySelectorAll('[data-testid="order-card"]')];
+    expect(cards[0].querySelector('[data-testid="order-again"]')?.getAttribute('href')).toBe('/builder?album=album-9');
+    expect(cards[1].querySelector('[data-testid="order-again"]')).toBeNull();
+  });
+  it('checkout prefills only when this tab had no form, and says so (source guard)', () => {
+    const src = readFileSync(resolve(__dirname, 'Order.tsx'), 'utf8');
+    expect(src).toMatch(/if \(!user \|\| !info\?\.albumId \|\| step !== 'form' \|\| formRestoredRef\.current \|\| prefillRef\.current\) return;/);
+    expect(src).toMatch(/Same paper and cover as your last order of this album/);
+    expect(src).toMatch(/if \(user\) saveLastDelivery\(\{ userId: user\.id, name, phone, address \}\);/);
+  });
+  it('the order, memories and profile pages start below the fixed header (source guard)', () => {
+    expect(readFileSync(resolve(__dirname, 'MyOrders.tsx'), 'utf8')).toMatch(/max-w-3xl mx-auto px-4 pt-24 pb-10/);
+    expect(readFileSync(resolve(__dirname, 'MyMemories.tsx'), 'utf8')).toMatch(/max-w-3xl mx-auto px-4 pt-24 pb-10/);
+    expect(readFileSync(resolve(__dirname, 'Profile.tsx'), 'utf8')).toMatch(/min-h-screen bg-warm-white pt-16/);
   });
 });
