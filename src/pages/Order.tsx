@@ -13,7 +13,7 @@ import { serializeAlbum, upsertAlbumRow } from '../lib/useAlbumSync';
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
 import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError } from '../lib/orderAlbum';
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
-import { saveCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
+import { saveCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
@@ -38,6 +38,10 @@ const CoverThumb = lazy(() => import('./builder/CoverThumb'));
 type Step = 'form' | 'payment' | 'tracking';
 
 
+/** The finish a checkout opens with, before anything is picked. */
+const DEFAULT_MATERIAL: MaterialType = 'matte';
+const DEFAULT_COVER: CoverType = 'softcover';
+
 export default function Order() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -54,8 +58,8 @@ export default function Order() {
   const createdOrderRef = useRef<
     { id: string; order_number: string; albumId: string; material: MaterialType; cover: CoverType; albumSize: AlbumSizePreset } | null
   >(null);
-  const [material, setMaterial] = useState<MaterialType>('matte');
-  const [cover, setCover] = useState<CoverType>('softcover');
+  const [material, setMaterial] = useState<MaterialType>(DEFAULT_MATERIAL);
+  const [cover, setCover] = useState<CoverType>(DEFAULT_COVER);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
@@ -122,17 +126,17 @@ export default function Order() {
   function restoreCheckout(album: OrderAlbumInfo) {
     if (restoredRef.current) return;
     restoredRef.current = true;
-    const form = readCheckoutForm(album.albumId);
+    const form = readCheckoutForm(album.albumId, user?.id);
     formRestoredRef.current = !!form;
     if (form) {
       setName(form.name); setPhone(form.phone); setAddress(form.address);
       setMaterial(form.material); setCover(form.cover);
       if (form.hostingYears != null) setHostingYears(form.hostingYears);
     }
-    const o = resumableCheckoutOrder(album.albumId, album.editedAt);
+    const o = resumableCheckoutOrder(album.albumId, album.editedAt, user?.id);
     if (!o) return;
     createdOrderRef.current = { id: o.orderId, order_number: o.orderNumber, albumId: o.albumId, material: o.material, cover: o.cover, albumSize: o.albumSize };
-    orderRecordRef.current = { albumId: o.albumId, orderId: o.orderId, orderNumber: o.orderNumber, material: o.material, cover: o.cover, albumSize: o.albumSize, amount: o.amount, albumEditedAt: o.albumEditedAt };
+    orderRecordRef.current = { albumId: o.albumId, orderId: o.orderId, orderNumber: o.orderNumber, material: o.material, cover: o.cover, albumSize: o.albumSize, amount: o.amount, albumEditedAt: o.albumEditedAt, userId: o.userId ?? user?.id ?? null };
     setOrderNumber(o.orderNumber);
     setMaterial(o.material);
     setCover(o.cover);
@@ -166,7 +170,7 @@ export default function Order() {
           }
         } catch { /* not in the account (yet) — the device's draft can still price it */ }
       }
-      const d = readDraftAlbumForOrder(albumId);
+      const d = readDraftAlbumForOrder(albumId, user?.id);
       arrived(d
         ? { albumId: d.albumId ?? albumId, albumSize: d.albumSize as AlbumSizePreset, pages: d.pages as AlbumPage[], editedAt: d.editedAt }
         : 'missing');
@@ -188,9 +192,13 @@ export default function Order() {
   }, [user, info?.albumId, step]);
   // A second copy starts from the first: the album's last finish, and the
   // delivery details of the last order on this device (RC-1). Only when this
-  // tab had no form of its own to bring back.
+  // tab had no form of its own to bring back, and only into what is still
+  // untouched: a guest who typed everything and then signed in on this page
+  // had it all replaced by the account's last order (Kraken, 2026-10-05).
   const [prefilled, setPrefilled] = useState<{ finishFrom: string | null; delivery: boolean } | null>(null);
   const prefillRef = useRef(false);
+  const formNowRef = useRef({ name, phone, address, material, cover });
+  useEffect(() => { formNowRef.current = { name, phone, address, material, cover }; }, [name, phone, address, material, cover]);
   useEffect(() => {
     if (!user || !info?.albumId || step !== 'form' || formRestoredRef.current || prefillRef.current) return;
     prefillRef.current = true;
@@ -198,10 +206,13 @@ export default function Order() {
     let alive = true;
     void lastOrderForAlbum(user.id, info.albumId).then((o) => {
       if (!alive) return;
-      if (d) { setName(d.name); setPhone(d.phone); setAddress(d.address); }
-      const known = o && MATERIALS.some((m) => m.type === o.material) && COVERS.some((c) => c.type === o.cover);
-      if (o && known) { setMaterial(o.material as MaterialType); setCover(o.cover as CoverType); }
-      if ((o && known) || d) setPrefilled({ finishFrom: o && known ? o.order_number : null, delivery: !!d });
+      const plan = prefillPlan(formNowRef.current, { material: DEFAULT_MATERIAL, cover: DEFAULT_COVER });
+      const delivery = !!d && plan.delivery;
+      if (d && delivery) { setName(d.name); setPhone(d.phone); setAddress(d.address); }
+      const known = !!o && MATERIALS.some((m) => m.type === o.material) && COVERS.some((c) => c.type === o.cover);
+      const finish = !!o && known && plan.finish;
+      if (o && finish) { setMaterial(o.material as MaterialType); setCover(o.cover as CoverType); }
+      if (finish || delivery) setPrefilled({ finishFrom: finish && o ? o.order_number : null, delivery });
     });
     return () => { alive = false; };
   }, [user, info?.albumId, step]);
@@ -283,8 +294,8 @@ export default function Order() {
   // back as typed.
   useEffect(() => {
     if (!info?.albumId || step !== 'form') return;
-    saveCheckoutForm({ albumId: info.albumId, name, phone, address, material, cover, hostingYears });
-  }, [info, step, name, phone, address, material, cover, hostingYears]);
+    saveCheckoutForm({ albumId: info.albumId, name, phone, address, material, cover, hostingYears, userId: user?.id ?? null });
+  }, [info, step, name, phone, address, material, cover, hostingYears, user]);
   const recordOrder = (stage: CheckoutStage) => {
     if (orderRecordRef.current) saveCheckoutOrder({ ...orderRecordRef.current, stage });
   };
@@ -429,6 +440,7 @@ export default function Order() {
         orderRecordRef.current = {
           albumId: created.album_id, orderId: created.id, orderNumber: created.order_number,
           material, cover, albumSize, amount: totalPrice, albumEditedAt: info?.editedAt ?? 0,
+          userId: user?.id ?? null,
         };
         recordOrder('placed');
       }

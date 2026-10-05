@@ -41,6 +41,13 @@ export function getPendingPrintJob(): PrintJob | null {
   return pending;
 }
 
+/** Signing out drops the album handed to checkout (and the note about it):
+ *  the next account in this tab must not check out the last one's album. */
+export function clearPendingPrintJob(): void {
+  pending = null;
+  try { sessionStorage.removeItem(HANDOFF_KEY); } catch { /* private mode */ }
+}
+
 // ── The hand-off note ──
 // Whether the album went to checkout SAVED to the customer's account. The
 // builder saves it on the way (Builder.handleOrder) — but only a signed-in

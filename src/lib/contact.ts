@@ -71,6 +71,11 @@ export const EMPTY_ADDRESS: AddressValue = {
   cityCode: '', cityName: '', barangayCode: '', barangayName: '', street: '', zip: '',
 };
 
+/** Nothing picked or typed in any part of the address yet. */
+export function isEmptyAddress(a: AddressValue | null | undefined): boolean {
+  return !a || (Object.keys(EMPTY_ADDRESS) as (keyof AddressValue)[]).every((k) => !String(a[k] ?? '').trim());
+}
+
 export const normalizeStreet = (raw: string): string => raw.replace(/\s+/g, ' ').trim();
 
 /** The most the order's street line holds (orders.ship_street, 0011). */

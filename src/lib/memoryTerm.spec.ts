@@ -65,11 +65,11 @@ describe('MMC-1: a term waiting on payment is said', () => {
 describe('MMC-6: the term picked survives a reload', () => {
   it('saved with the checkout form, read back with it', () => {
     saveCheckoutForm({ albumId: 'a1', name: 'Mae', phone: '09171234567', address: EMPTY_ADDRESS, material: 'matte', cover: 'softcover', hostingYears: 10 });
-    expect(readCheckoutForm('a1')?.hostingYears).toBe(10);
+    expect(readCheckoutForm('a1', 'user-1')?.hostingYears).toBe(10);
   });
   it('checkout restores it and keeps saving it (source guard)', () => {
     const src = readFileSync(resolve(__dirname, '../pages/Order.tsx'), 'utf8');
     expect(src).toMatch(/if \(form\.hostingYears != null\) setHostingYears\(form\.hostingYears\);/);
-    expect(src).toMatch(/saveCheckoutForm\(\{ albumId: info\.albumId, name, phone, address, material, cover, hostingYears \}\);/);
+    expect(src).toMatch(/saveCheckoutForm\(\{ albumId: info\.albumId, name, phone, address, material, cover, hostingYears, userId: user\?\.id \?\? null \}\);/);
   });
 });
