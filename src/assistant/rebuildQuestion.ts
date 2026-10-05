@@ -7,10 +7,15 @@
    buttons are explicit choices and aren't asked.
    1-star testers, 2026-10-04 (the Penny-Pincher): "change size to 6x4" said
    "Album size changed" and left the 6×8 layout squashed onto 6×4.
+   A size change that grows the album says so, the way the photos-per-page
+   step does: "change the album size to 8x8" on a 40-page 6×4 at 2 a page
+   made 50 single pages (₱318 more) and the question never said (1-star
+   testers round 3, the Indecisive One).
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AssistantIntent } from './types';
-import type { AlbumPage, AlbumSizePreset } from '../pages/builder/types';
+import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '../pages/builder/types';
+import { photosPerPageNote } from '../pages/builder/generateAlbum';
 
 /** An album is made once any page holds a photo. */
 export function albumIsMade(pages: AlbumPage[]): boolean {
@@ -29,8 +34,14 @@ export function remakeLosesMessage(memories: number): string {
   return `Every page is laid out again from your photos. That replaces your layout changes, the text you wrote${memoriesPhrase(memories)}. Your photos stay.`;
 }
 
-/** The question to ask before running `intent`, or null to just run it. */
-export function rebuildQuestion(intent: AssistantIntent, album: { albumPages: AlbumPage[]; albumSize: AlbumSizePreset }): string | null {
+/** The question to ask before running `intent`, or null to just run it.
+ *  `extraCost` is what `pages` pages add at a size on the live schedule (null
+ *  before it loads: pages, no pesos). */
+export function rebuildQuestion(
+  intent: AssistantIntent,
+  album: { albumPages: AlbumPage[]; albumSize: AlbumSizePreset; uploadedPhotos?: UploadedPhoto[]; photosPerPage?: number },
+  extraCost?: ((size: AlbumSizePreset, pages: number) => number) | null,
+): string | null {
   if (!albumIsMade(album.albumPages)) return null;
   if (intent.type === 'generate_album') {
     return `That rebuilds your whole album: every page gets a new layout and your layout changes are replaced (Studio pages stay)${memoriesPhrase(placedMemories(album.albumPages))}. Say "yes" to go ahead, or keep editing.`;
@@ -43,7 +54,12 @@ export function rebuildQuestion(intent: AssistantIntent, album: { albumPages: Al
   }
   const size = intent.type === 'change_size' ? (intent.payload?.size as AlbumSizePreset | undefined) : undefined;
   if (size && size !== album.albumSize) {
-    return `That makes your album ${size.replace('x', '×')} and lays out every page again for the new shape. Your photos stay; your layout changes are replaced, Studio pages too. Say "yes" to go ahead, or keep editing.`;
+    // What the new size makes of these photos at the photos-per-page picked,
+    // when that's more pages than included: the same note as the upload step.
+    const note = photosPerPageNote(album.uploadedPhotos ?? [], size, album.photosPerPage,
+      extraCost ? (pages) => extraCost(size, pages) : null);
+    const grows = note && /more than the \d+ included/.test(note) ? ` ${note}` : '';
+    return `That makes your album ${size.replace('x', '×')} and lays out every page again for the new shape. Your photos stay; your layout changes are replaced, Studio pages too.${grows} Say "yes" to go ahead, or keep editing.`;
   }
   return null;
 }
