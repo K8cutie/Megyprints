@@ -64,6 +64,21 @@ export function checkOrderReadiness(
   return r;
 }
 
+/** A front cover with nothing on it: no photo, no title or other text, no
+ *  graphic — it prints as a plain sheet (1-star testers round 2: "Album goes to
+ *  print with a totally blank white cover (no title) and no warning"). */
+export function coverIsBlank(cover: AlbumPage | null | undefined): boolean {
+  if (!cover) return false;
+  if (cover.background?.type === 'image' && cover.background.image) return false;
+  if ((cover.slotFills ?? []).some((f) => f != null) || (cover.textSlotFills ?? []).some((f) => f != null)) return false;
+  if ((cover.textElements ?? []).some((t) => (t.text ?? '').trim() && (t.text ?? '').trim() !== PLACEHOLDER_TEXT)) return false;
+  if ((cover.stickers?.length ?? 0) > 0 || (cover.photos?.length ?? 0) > 0) return false;
+  if ((cover.ornamentFills ?? []).some(Boolean) || (cover.textSlotOrnament ?? []).some(Boolean)) return false;
+  return true;
+}
+
+export const BLANK_COVER_MESSAGE = 'Your front cover is blank: no title or photo on it.';
+
 const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
 /** The warning, or null when everything on the pages will print as shown. */

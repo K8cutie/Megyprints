@@ -312,6 +312,9 @@ export interface TextElement extends TextStyle {
    *  preview and the cover print. Ignored on interior pages (coverMode only). */
   offsetX?: number;
   offsetY?: number;
+  /** COVER-ONLY: this title is the album's name, put there by Megy — it follows
+   *  a rename until the customer types a title of their own. */
+  fromAlbumName?: boolean;
 }
 
 /** STUDIO: a customer-moved photo frame. Each index corresponds to
