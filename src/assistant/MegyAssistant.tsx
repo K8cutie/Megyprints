@@ -24,7 +24,7 @@ import AlbumThemeStep from './AlbumThemeStep';
 import PhotoCheckCard from './PhotoCheckCard';
 import { useSettleGuard } from '../lib/settleGuard';
 import { splitBold } from './boldText';
-import { readAlbumTheme, writeAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
+import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
 import {
   Images, LayoutGrid, Palette, Type, ChevronUp, ChevronDown,
@@ -190,6 +190,12 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
      real lines instead of waiting on the proxy. */
   const [albumTheme, setAlbumThemeState] = useState(readAlbumTheme);
   const setAlbumTheme = (v: string) => { setAlbumThemeState(v); writeAlbumTheme(v); };
+  // An album opened from the cloud brings its own occasion (N4): show it.
+  useEffect(() => {
+    const onTheme = () => setAlbumThemeState(readAlbumTheme());
+    window.addEventListener(ALBUM_THEME_EVENT, onTheme);
+    return () => window.removeEventListener(ALBUM_THEME_EVENT, onTheme);
+  }, []);
   const themeReady = isAlbumThemeReady(albumTheme);
   // Step 1 also asks the album's NAME (its title in Your Projects) — the same
   // unskippable gate covers both.

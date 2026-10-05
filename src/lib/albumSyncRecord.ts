@@ -77,6 +77,8 @@ export function rowContent(row: Record<string, unknown>): Record<string, unknown
     pages: row.pages ?? [],
     photos: row.photos ?? [],
     cover_front: row.cover_front ?? null,
+    occasion: row.occasion || null,
+    photos_per_page: row.photos_per_page ?? null,
   };
 }
 

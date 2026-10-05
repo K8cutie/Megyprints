@@ -51,6 +51,7 @@ import { readCaptureTime } from './exif';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { FONTS } from './fonts';
+import { readAlbumTheme, writeAlbumTheme } from '../../lib/albumTheme';
 import { checkPhoto, facesForAllPhotos } from '../../lib/photoCheckRunner';
 import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
@@ -1062,8 +1063,20 @@ export function useBuilderState(): BuilderActions {
       })),
       coverPhoto: pageSnapshotsRef.current[albumPages[0]?.id] ?? null,
       coverFront: coverFront as unknown as AlbumData['coverFront'],
+      // The album's occasion and photos-per-page go with it (round 2, N4).
+      occasion: readAlbumTheme() || null,
+      photosPerPage: photosPerPage ?? null,
     };
-  }, [albumTitle, albumSize, albumPages, uploadedPhotos, coverFront]);
+  }, [albumTitle, albumSize, albumPages, uploadedPhotos, coverFront, photosPerPage]);
+
+  /** An album opened from the cloud brings its own occasion and photos-per-page
+   *  (a fresh browser had none: "Generate Album" bounced back to Step 1, and the
+   *  "2 per page" pick was back to Surprise — round 2, N4). One saved before
+   *  they travelled keeps what this device has. */
+  const restoreAlbumChoices = useCallback((a: AlbumData) => {
+    if (a.occasion) writeAlbumTheme(a.occasion);
+    if (a.photosPerPage != null) setPhotosPerPage(a.photosPerPage);
+  }, []);
 
   /* ── Persistence strategy ──
      • Local (localStorage): debounced ~30s — cheap and client-only.
@@ -1361,6 +1374,7 @@ export function useBuilderState(): BuilderActions {
             albumIdRef.current = albumData.id;
             if (albumData.updatedAt) settleSyncRecord(albumData.id, albumData.updatedAt);
           }
+          restoreAlbumChoices(albumData);
           setAlbumTitle(albumData.title ?? '');
         }
       } finally {
@@ -3258,6 +3272,7 @@ export function useBuilderState(): BuilderActions {
           if (albumData.updatedAt) settleSyncRecord(albumData.id, albumData.updatedAt);
         }
         draftAccountRef.current = user.id;
+        restoreAlbumChoices(albumData);
         setAlbumTitle(albumData.title ?? '');
         setPhase('edit');
       }
@@ -3265,7 +3280,7 @@ export function useBuilderState(): BuilderActions {
       setIsLoadingCloud(false);
       cloudLoadCompletedRef.current = Date.now();
     }
-  }, [user, albumSync, albumSize, albumPages, serializeAlbum, saveToCloud, localAlbumKey, settleSyncRecord, setCloudConflict]);
+  }, [user, albumSync, albumSize, albumPages, serializeAlbum, saveToCloud, localAlbumKey, settleSyncRecord, setCloudConflict, restoreAlbumChoices]);
 
   /** Ask the cloud whether THIS album moved on on another device (on opening
    *  it, on coming back to the app): nothing changed here -> open the newer
