@@ -328,7 +328,7 @@ export class ActionEngine {
         }
 
         case 'help':
-          return { intentType: intent.type, success: true, message: getHelpText() };
+          return { intentType: intent.type, success: true, message: intent.payload?.topic === 'text' ? TEXT_HELP : getHelpText() };
 
         case 'unknown':
         default:
@@ -384,6 +384,9 @@ function guessColor(hint: string): string {
   };
   return map[hint.toLowerCase()] ?? '#FFFBF7';
 }
+
+/** "How do I edit the text box?" — an answer, not a new text box (PI-5). */
+export const TEXT_HELP = "To edit a text box, tap it on the page (double-click on a computer). You can type your own words there, and change the font, size and colour. If it's too long for its box, the editor says so and offers a size that fits.";
 
 function getHelpText(): string {
   return `Here's what I can help you with:
