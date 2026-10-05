@@ -11,6 +11,7 @@ import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { ALBUM_SIZES } from './types';
 import { renderAlbumForPrint, renderCoverWrapForPrint, type CoverPrintInput } from './printPipeline';
 import { coverWrapGeometry } from './coverGeometry';
+import { pageSizeWithBleedIn } from './printBleed';
 
 function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -32,9 +33,10 @@ export async function generateAlbumPdf(
   onProgress?: (completed: number, total: number) => void,
 ): Promise<Blob> {
   const config = ALBUM_SIZES.find((s) => s.preset === albumSize);
-  // ALBUM_SIZES stores 300 DPI pixels → physical inches = px / 300.
-  const wIn = (config?.width ?? 2400) / 300;
-  const hIn = (config?.height ?? 2400) / 300;
+  // ALBUM_SIZES stores 300 DPI pixels → physical inches = px / 300. Each page
+  // file is the trim plus its 0.125" bleed on every edge (printBleed, PI-2):
+  // an 8×8 page is 8.25 × 8.25 in, cut down to 8 × 8.
+  const { wIn, hIn } = pageSizeWithBleedIn((config?.width ?? 2400) / 300, (config?.height ?? 2400) / 300);
   const orientation: 'landscape' | 'portrait' = wIn >= hIn ? 'landscape' : 'portrait';
 
   const rendered = await renderAlbumForPrint(pages, photos, albumSize, onProgress);
