@@ -49,6 +49,9 @@ export interface CheckoutForm {
   address: AddressValue;
   material: MaterialType;
   cover: CoverType;
+  /** The memory-hosting term picked (null = the included one). It reset to
+   *  the included 5 years on a reload, and the total with it (round 2, MMC-6). */
+  hostingYears?: number | null;
 }
 
 function read<T>(key: string): T | null {
