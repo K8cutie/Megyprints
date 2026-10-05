@@ -202,7 +202,7 @@ export default function DeleteAccountSection() {
                             {hostedUntil ? <>, even though hosting runs until <b>{hostedUntil}</b></> : null}
                           </li>
                         )}
-                        <li>every print file we hold for your past orders</li>
+                        <li>every print file we hold for your past orders, and any payment receipt you attached</li>
                       </ul>
 
                       {(preflight?.orders ?? 0) > 0 && (

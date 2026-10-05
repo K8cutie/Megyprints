@@ -3,13 +3,17 @@
 //
 // ── WHY THIS ENDPOINT EXISTS ────────────────────────────────────────────────
 // Deleting the account has to take the customer's PHOTOS and VIDEOS with it.
-// On our side those live in two buckets:
+// On our side those live in three buckets:
 //
-//   • `print-pdfs` (private) — the print-ready PDF for each order.
+//   • `print-pdfs` (private) — the print-ready PDFs for each order: the pages
+//     at `<order id>.pdf` and the cover wrap at `<order id>-cover.pdf` (0017).
 //   • `memory-clips` (PUBLIC, 0030) — the videos behind their QR codes, at
 //     `<code>.<ext>`. Anyone holding the link can play these, so leaving them
 //     behind would make "we deleted your account" untrue for exactly the data
 //     that is most exposed.
+//   • `payment-proofs` (private, 0033) — the receipt screenshot they attached
+//     at `<order id>.<jpg|png|webp|pdf>`. A bank receipt shows their name, and
+//     the record we keep is meant to have none.
 //
 // Two doors are shut on removing those files from SQL or from the customer's
 // own session, and both are shut on purpose:
@@ -29,11 +33,17 @@
 //      policy either, so the same lookup failure applies there.)
 //
 // So the removal runs here, with the service-role key, scoped to:
-//   • print-pdfs objects belonging to an order owned by the CALLER, and
+//   • print-pdfs and payment-proofs objects named for an order whose user_id
+//     is the CALLER, and
 //   • memory-clips objects the CALLER uploaded (owner_id), as listed by
 //     public.my_memory_clip_names() (0035).
 // Both lists are read with the caller's own token, so their identity comes from
 // their JWT. The request body is never read.
+//
+// "Owned by the caller" is an explicit user_id filter, not just RLS. RLS on
+// orders lets the shop's own accounts (0005/0006) read EVERY order, so an
+// unfiltered read under an owner's email listed every customer's order, and the
+// service key then removed every customer's print file.
 //
 // ── WHAT THIS ENDPOINT DOES NOT DECIDE ─────────────────────────────────────
 // It does not decide whether deletion is allowed. That stays in
@@ -58,6 +68,11 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const PDF_BUCKET = 'print-pdfs';
 const CLIP_BUCKET = 'memory-clips';
+const PROOF_BUCKET = 'payment-proofs';
+
+/** Every name an order's files can have, exactly as 0017 and 0033 allow them. */
+export const pdfNames = (orderId) => [`${orderId}.pdf`, `${orderId}-cover.pdf`];
+export const proofNames = (orderId) => ['jpg', 'png', 'webp', 'pdf'].map((ext) => `${orderId}.${ext}`);
 
 /** Storage's remove() takes a list of names per request (up to 1000). Batches
  *  stay well under that; 0030 caps an account at 200 clips. */
@@ -130,15 +145,19 @@ export default async function handler(req, res) {
 
     // ── 2. What to remove, read as the CUSTOMER ──
     // Both lists are read BEFORE anything is removed, so a failure here (say,
-    // 0035 not applied yet) deletes nothing at all. RLS decides which orders
-    // are theirs; my_memory_clip_names() keys off auth.uid(). The service key
-    // is then used for nothing but removing these exact names.
+    // 0035 not applied yet) deletes nothing at all. The orders are the ones
+    // whose user_id is the caller: RLS alone would hand an owner's account
+    // every customer's order. my_memory_clip_names() keys off auth.uid(). The
+    // service key is then used for nothing but removing these exact names.
     const { data: orders, error: ordersErr } = await asUser
       .from('orders')
       .select('id, status')
+      .eq('user_id', uid)
       .in('status', REMOVABLE);
     if (ordersErr) throw new Error(ordersErr.message);
-    const pdfPaths = (orders ?? []).map((o) => `${o.id}.pdf`);
+    const orderIds = (orders ?? []).map((o) => o.id);
+    const pdfPaths = orderIds.flatMap(pdfNames);
+    const proofPaths = orderIds.flatMap(proofNames);
 
     const { data: clipList, error: clipsErr } = await asUser.rpc('my_memory_clip_names');
     if (clipsErr || !Array.isArray(clipList)) {
@@ -146,18 +165,21 @@ export default async function handler(req, res) {
     }
     const clipNames = clipList.filter((n) => typeof n === 'string' && n.length > 0);
 
-    // ── 3. Remove the PDFs (their photos) and the clips (their videos) ──
+    // ── 3. Remove the PDFs (their photos), the clips (their videos) and the
+    //       receipts (their name). A name with no file behind it is skipped
+    //       by Storage, so trying all four receipt types costs nothing. ──
     if (pdfPaths.length || clipNames.length) {
       const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
       await removeAll(admin, PDF_BUCKET, pdfPaths);
+      await removeAll(admin, PROOF_BUCKET, proofPaths);
       await removeAll(admin, CLIP_BUCKET, clipNames);
     }
 
     // ── 4. Everything else, decided and executed by the database ──
-    // If any PDF or clip is somehow still there, this refuses and nothing is
-    // deleted (guards (b) and (b2)).
+    // If any PDF, receipt or clip is somehow still there, this refuses and
+    // nothing is deleted (guards (b), (b2) and (b3)).
     const { data, error } = await asUser.rpc('delete_own_account');
     if (error) {
       // These messages are written for a customer to read (they name the order
