@@ -10,11 +10,12 @@ import { parseIntent } from './intentParser';
 import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, KEEP_PAGES, REMAKE_ALBUM } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
-import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES, perPageNote } from '../pages/builder/densities';
+import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES } from '../pages/builder/densities';
 import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
-import { memoryShortfall, MIN_MEMORY_PAGES, perPageShapeNote } from '../pages/builder/generateAlbum';
+import { memoryShortfall, MIN_MEMORY_PAGES, photosPerPageNote } from '../pages/builder/generateAlbum';
 import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
-import { SIZE_LABELS } from '../lib/pricing';
+import { SIZE_LABELS, perPageRate } from '../lib/pricing';
+import { getPriceSchedule } from '../lib/storeSettings';
 import type { AssistantMessage, AssistantIntent } from './types';
 import { rebuildQuestion, placedMemories } from './rebuildQuestion';
 import RemakeAlbumAsk from './RemakeAlbumAsk';
@@ -645,9 +646,12 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   // Generate — the card's button is "Add N more photos". At 40+
                   // every page fills, whatever photos-per-page is picked.
                   const short = photosShortBy(livePhotos.length);
-                  // The photos' SHAPES first: a choice they can't take at this size
-                  // grows the album (pages, price) — say so before generating.
-                  const note = perPageShapeNote(livePhotos, builder.albumSize, builder.photosPerPage) ?? perPageNote(livePhotos.length, builder.photosPerPage);
+                  // What the photos-per-page picked makes, BEFORE Generate: the
+                  // shapes that can't take it, or the pages and pesos past the
+                  // included 40 ("4 · Collage" on 196 photos made 59 pages and
+                  // ₱513 of extra pages with no word: 1-star testers round 3).
+                  const schedule = getPriceSchedule();
+                  const note = photosPerPageNote(livePhotos, builder.albumSize, builder.photosPerPage, schedule ? perPageRate(schedule, builder.albumSize) : null);
                   return short === 0 ? (
                     <>
                       <p className="text-xs text-success mt-3" data-testid="photo-minimum-met">✓ Enough for a full {MIN_ALBUM_PAGES}-page album.</p>

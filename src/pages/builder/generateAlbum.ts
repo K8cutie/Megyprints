@@ -453,8 +453,13 @@ function insertMemoryPages(
     return !!t && t.slots.length === 1 && coversWholeSheet(t);
   };
   for (const r of [...reserved].sort((a, b) => (pos.get(a) ?? 0) - (pos.get(b) ?? 0))) {
-    let at = pages.findIndex((p) => pagePos(p) > (pos.get(r) ?? 0));
-    if (at < 0) at = pages.length;
+    // Right after the LAST page that starts before this photo. "Before the
+    // first page that starts after it" put six memory pages in a row on pages
+    // 1-7: shapes are dealt in turn, so the 13 portraits from the END of the
+    // roll sit on pages 2-8, and every memory photo stopped at the first of
+    // them (1-star testers round 3, the Hoarder).
+    let at = 0;
+    pages.forEach((p, i) => { if (pagePos(p) < (pos.get(r) ?? 0)) at = i + 1; });
     // Facing pages must not repeat a look: step one page later (or earlier).
     if (isFullPage(pages[at - 1]) || isFullPage(pages[at])) {
       if (at + 1 <= pages.length && !isFullPage(pages[at]) && !isFullPage(pages[at + 1])) at += 1;
@@ -607,7 +612,7 @@ export function templatesForPhotoRatio(albumSize: AlbumSizePreset, ratio: PhotoR
  *  photos made 50 single pages (+₱270) while the note said "all 40 pages are
  *  filled": an 8×8's 2-photo layouts take two portraits or two landscapes,
  *  never two squares (1-star testers round 2, the Indecisive one). */
-export function perPageShapeNote(photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined): string | null {
+export function perPageShapeNote(photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, extraPageRate?: number | null): string | null {
   if (!perPage || perPage <= 1) return null;
   const live = photos.filter((p) => !p.leftOut && p.width > 0 && p.height > 0);
   if (live.length < MIN_PAGES) return null;
@@ -619,14 +624,14 @@ export function perPageShapeNote(photos: UploadedPhoto[], albumSize: AlbumSizePr
   const shortCount = short.reduce((n, [, idx]) => n + idx.length, 0);
   const shapes = [...new Set(short.map(([r]) => shapeOf(r)))];
   const fits = (['portrait', 'landscape', 'square'] as const).filter((o) => getTemplatesForOrientation(albumSize, o).some((t) => !isMixedRatioTemplate(t) && t.slotCount === perPage));
-  const pages = Math.max(MIN_PAGES, groups.reduce((n, [r, idx]) => n + Math.ceil(idx.length / best(r)), 0));
+  const pages = chosenAlbumPages(live, albumSize, perPage)?.pages ?? MIN_PAGES;
   const bestShort = Math.max(...short.map(([r]) => best(r)));
   const size = `${/^(8|11)/.test(albumSize) ? 'an' : 'a'} ${albumSize.replace('x', '×')}`;
   const why = fits.length
     ? `its ${perPage}-photo layouts take ${fits.join(' or ')} photos`
     : `it has no ${perPage}-photo layout`;
   return `${shortCount === live.length ? 'Your' : `${shortCount} of your`} ${shapes.join(' and ')} photos can't go ${perPage} to a page on ${size} (${why}), so they go ${bestShort === 1 ? 'one' : `${bestShort}`} to a page`
-    + (pages > MIN_PAGES ? `: about ${pages} pages, ${pages - MIN_PAGES} more than the ${MIN_PAGES} included.` : '.')
+    + (pages > MIN_PAGES ? extraPagesClause(pages, extraPageRate) : '.')
     + ' Pick Surprise and Megy mixes in bigger layouts for fewer pages.';
 }
 
@@ -697,6 +702,169 @@ export function sweepFillQuotes(
   return { pages: next, filled, remaining: heldBack + noLine, heldBack, noLine };
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   A CHOSEN PHOTOS-PER-PAGE IS DEALT AS CHOSEN (1-star testers round 3, the
+   Hoarder): "4 · Collage" on 196 photos made 59 pages, 36 of them 4-ups. The
+   fill plan made one page in four a 3-up "to breathe", the photos left at the
+   end of a shape's queue went on singles, and 260 photos (past fill mode)
+   came out at 82 pages, only 36 of them 4-ups. Now each queue of same-shape
+   photos (moment by moment, as the album deals them) gets its own plan: as
+   few pages as its layouts allow, each as near the chosen count as it can be.
+   When those can't fill the album's minimum, the spare pages are shared out
+   (the densest queue first), so 130 photos at 4 a page make 40 pages, not
+   the 41-42 the shared fill plan's leftover singles made.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** The photo counts this shape's layouts deal at this size, up to `cap`
+ *  (1 only when it has a one-photo layout: without one, a "single" page is
+ *  dealt on a bigger layout and takes more photos than planned). */
+function dealableCounts(albumSize: AlbumSizePreset, ratio: PhotoRatio, cap: number, photosPerPage?: number): number[] {
+  const counts = [...new Set(templatesForPhotoRatio(albumSize, ratio, photosPerPage)
+    .map((t) => t.slotCount).filter((c) => c >= 1 && c <= cap))].sort((a, b) => a - b);
+  return counts.length ? counts : [1];
+}
+
+/** Splits `n` photos into exactly `p` pages using only `allowed` counts.
+ *  Some counts can't make some sums: on an 8×6 a wide photo has only 4-up
+ *  layouts at "4 per page", so 7 of them are 4+1+1+1, never 4+3 (a 3 the
+ *  deck can't deal broke into singles and the album outgrew its estimate).
+ *  `fits(p)` says whether p pages can hold exactly n; `split(p)` gives the
+ *  counts spread evenly (as near n/p as the sum allows), rhythm-shuffled. */
+function pageSplitter(n: number, allowed: number[]) {
+  // rows[p][s] = 1 when s photos fill exactly p pages
+  const rows: Uint8Array[] = [new Uint8Array(n + 1)];
+  rows[0][0] = 1;
+  const row = (p: number): Uint8Array => {
+    while (rows.length <= p) {
+      const prev = rows[rows.length - 1];
+      const next = new Uint8Array(n + 1);
+      for (let sum = 0; sum <= n; sum++) if (prev[sum]) for (const c of allowed) if (sum + c <= n) next[sum + c] = 1;
+      rows.push(next);
+    }
+    return rows[p];
+  };
+  const fits = (p: number) => p >= 1 && p <= n && row(p)[n] === 1;
+  const split = (p: number): number[] => {
+    // Each page takes the count nearest to keeping the running total on the
+    // even line (as planPageCounts does), among counts that still leave an
+    // exact split for the pages after it.
+    const counts: number[] = [];
+    let cum = 0;
+    for (let i = 0; i < p; i++) {
+      const want = (n * (i + 1)) / p - cum;
+      const left = n - cum;
+      const c = [...allowed].sort((x, y) => Math.abs(x - want) - Math.abs(y - want) || y - x)
+        .find((x) => x <= left && row(p - i - 1)[left - x] === 1)!;
+      counts.push(c);
+      cum += c;
+    }
+    return rhythmShuffle(counts);
+  };
+  return { fits, split };
+}
+
+/** The page counts at a chosen photos-per-page for each queue of same-shape
+ *  photos, keyed `${moment}:${ratio}` (moment by moment, shape by shape, the
+ *  way layoutAlbum deals them): "4 per page" on 174 squares = 42 pages of 4
+ *  and 2 of 3. Spare pages up to `minPages` go to the densest queue first,
+ *  never more pages than a queue has photos. Deterministic in its LENGTHS
+ *  (only the order of counts within a queue is shuffled), so the upload
+ *  step's estimate is the album's page count. */
+function chosenQueuePlans(photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number, minPages: number): Map<string, number[]> {
+  const analysis = analyzePhotos(photos);
+  const ratioOf: Record<number, PhotoRatio> = {};
+  (Object.entries(analysis.groups) as [PhotoRatio, number[]][]).forEach(([r, idx]) => idx.forEach((i) => { ratioOf[i] = r; }));
+  const cap = Math.min(perPage, Math.max(1, ...getTemplatesForAlbum(albumSize).map((t) => t.slotCount)));
+  const queues: { key: string; n: number; split: ReturnType<typeof pageSplitter>; pages: number }[] = [];
+  groupPhotosByMoment(photos).forEach((group, g) => {
+    const n = new Map<PhotoRatio, number>();
+    for (const i of group) { const r = ratioOf[i] ?? analysis.dominantRatio; n.set(r, (n.get(r) ?? 0) + 1); }
+    for (const [r, count] of n) {
+      let allowed = dealableCounts(albumSize, r, cap, perPage);
+      let split = pageSplitter(count, allowed);
+      let pages = Math.ceil(count / Math.max(...allowed));
+      while (pages <= count && !split.fits(pages)) pages++;
+      if (pages > count) { // no exact split at all (no one-photo layout): singles carry it
+        allowed = [...new Set([1, ...allowed])];
+        split = pageSplitter(count, allowed);
+        pages = Math.ceil(count / Math.max(...allowed));
+        while (!split.fits(pages)) pages++;
+      }
+      queues.push({ key: `${g}:${r}`, n: count, split, pages });
+    }
+  });
+  // Spare pages to the densest queue that can take one; when none can take
+  // exactly one, the smallest step there is (the album then runs a page or
+  // two over the minimum, never short of it: no blank pages).
+  let spare = minPages - queues.reduce((sum, q) => sum + q.pages, 0);
+  while (spare > 0) {
+    const byDensity = [...queues].sort((a, b) => b.n / b.pages - a.n / a.pages);
+    const stepOf = (q: (typeof queues)[number]) => {
+      for (let d = 1; q.pages + d <= q.n; d++) if (q.split.fits(q.pages + d)) return d;
+      return Infinity;
+    };
+    const one = byDensity.find((q) => stepOf(q) === 1);
+    const q = one ?? byDensity.reduce<(typeof queues)[number] | null>((best, x) => (stepOf(x) < (best ? stepOf(best) : Infinity) ? x : best), null);
+    if (!q || stepOf(q) === Infinity) break;
+    const d = stepOf(q);
+    q.pages += d;
+    spare -= d;
+  }
+  return new Map(queues.map((q) => [q.key, q.split.split(q.pages)]));
+}
+
+const planLength = (plans: Map<string, number[]>) => [...plans.values()].reduce((sum, p) => sum + p.length, 0);
+
+/** What generateAlbum makes for these photos at a CHOSEN photos-per-page:
+ *  its pages, and how many are the full-page video-memory singles. null for
+ *  Surprise. The upload step says it before Generate. */
+export function chosenAlbumPages(
+  photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, minPages = MIN_PAGES,
+): { pages: number; memoryPages: number } | null {
+  if (!perPage || photos.length === 0) return null;
+  const solo = memorySingleTemplate(albumSize);
+  const reserved = solo ? pickMemoryPhotos(photos, albumSize, Math.min(MIN_MEMORY_PAGES, photos.length)) : [];
+  const taken = new Set(reserved);
+  const rest = photos.filter((_, i) => !taken.has(i));
+  if (perPage === 1) return { pages: Math.max(minPages, photos.length), memoryPages: reserved.length };
+  const restMin = Math.max(1, minPages - reserved.length);
+  return { pages: Math.max(minPages, reserved.length + planLength(chosenQueuePlans(rest, albumSize, perPage, restMin))), memoryPages: reserved.length };
+}
+
+/** ": about 55 pages, 15 more than the 40 included (15 × ₱27 = ₱405)." */
+function extraPagesClause(pages: number, extraPageRate?: number | null): string {
+  const extra = pages - MIN_PAGES;
+  const peso = (n: number) => `₱${n.toLocaleString('en-PH')}`;
+  return `: about ${pages} pages, ${extra} more than the ${MIN_PAGES} included`
+    + (extraPageRate ? ` (${extra} × ${peso(extraPageRate)} = ${peso(extra * extraPageRate)})` : '') + '.';
+}
+
+/** The upload step's note for the photos-per-page picked, or null: the
+ *  shapes can't take it (perPageShapeNote); or the pages and pesos it makes
+ *  past the included 40; or, with too few photos, why pages get fewer. */
+export function photosPerPageNote(
+  photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, extraPageRate?: number | null,
+): string | null {
+  const shape = perPageShapeNote(photos, albumSize, perPage, extraPageRate);
+  if (shape) return shape;
+  if (!perPage || perPage <= 1) return null;
+  const live = photos.filter((p) => !p.leftOut && p.width > 0 && p.height > 0);
+  if (live.length < MIN_PAGES) return null;
+  const made = chosenAlbumPages(live, albumSize, perPage);
+  if (made && made.pages > MIN_PAGES) {
+    return `${perPage} per page makes your album`
+      + extraPagesClause(made.pages, extraPageRate).replace(/\.$/, '')
+      + `. That counts ${made.memoryPages} full-page photos, where your video memories go.`;
+  }
+  // Too few photos for every page to take `perPage`: the 40 pages are filled
+  // with fewer on some. (The video-memory singles count: 4 a page fills 40
+  // pages from 7 + 33 × 4 = 139 photos, not 160.)
+  const memory = memorySingleTemplate(albumSize) ? MIN_MEMORY_PAGES : 0;
+  const needed = memory + (MIN_PAGES - memory) * perPage;
+  if (live.length >= needed) return null;
+  return `With ${live.length} photos, ${live.length * 2 < needed ? 'most' : 'some'} pages get fewer than ${perPage} so all ${MIN_PAGES} pages are filled. ${perPage} per page needs about ${needed} photos.`;
+}
+
 /** How many empty boxes "let Megy finish" can fill: the sweep's own rules
  *  (cadence included) with a line for every box. "N boxes waiting" shows this
  *  — it counted the boxes the cadence holds back too, so the button kept
@@ -728,7 +896,8 @@ export function planPageCounts(photos: number, minPages: number, cap: number, al
   // Page budget: at least minPages; when the photos would force every page
   // to the cap, add just enough pages for the mix to breathe (about one page
   // in four below the cap) — more pages cost the customer money, so the
-  // inflation is deliberately mild.
+  // inflation is deliberately mild. (Surprise only: a count the CUSTOMER
+  // chose is planned per shape, without breathing pages — chosenQueuePlans.)
   const pages = Math.max(minPages, Math.ceil(photos / (top - 0.25)));
   const avg = photos / pages;
   const nearest = (d: number, exclude?: number): number => {
@@ -768,10 +937,18 @@ export function planPageCounts(photos: number, minPages: number, cap: number, al
   }
   while (diff > 0) { counts.push(1); diff--; }
   while (diff < 0) { const i = counts.findIndex((c) => c > 1); if (i < 0) break; counts[i]--; diff++; }
-  // 3. Randomise without breaking the rhythm: swap random neighbouring pages
-  //    only when no run around them grows past what the even spread allows
-  //    (ceil(majority / rest), never under 3). Swaps move pages, not photos,
-  //    so the sum stays exact.
+  // 3. Randomise without breaking the rhythm.
+  return rhythmShuffle(counts);
+}
+
+/** Swap random neighbouring pages only when no run around them grows past
+ *  what the even spread allows (ceil(majority / rest), never under 3). Swaps
+ *  move pages, not photos, so the sum stays exact. Mutates and returns. */
+function rhythmShuffle(counts: number[]): number[] {
+  // One page has no neighbour to swap with: the swap reached past the end
+  // and made [2] into [undefined, 2], a page that is never dealt (a 2-photo
+  // queue at "2 per page", once each shape got its own plan).
+  if (counts.length < 2) return counts;
   const freq = new Map<number, number>();
   for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1);
   const major = Math.max(...freq.values());
@@ -1142,14 +1319,21 @@ function layoutAlbum(
   // The counts the deck can actually deal for THIS pool's ratios (square
   // photos on a square page have 1, 3 and 4 — no 2), so the plan never asks
   // for a count no layout can serve.
-  if (fillMode) {
+  // A CHOSEN count (2+): each shape's queue gets its own plan, the album's
+  // minimum shared out among them (see A CHOSEN PHOTOS-PER-PAGE above). The
+  // shared fill plan is for Surprise only.
+  const chosenCount = !randomize && photosPerPage != null && photosPerPage > 1;
+  const chosenCap = Math.min(deckMax, photosPerPage ?? 1);
+  const queuePlans = chosenCount ? chosenQueuePlans(photos, albumSize, photosPerPage as number, minPages) : null;
+  const exactPlan = queuePlans != null;
+  if (fillMode && !exactPlan) {
     const present = new Set<PhotoRatio>(photos.map((_, i) => ratioOf[i] ?? dominantRatio));
     const allowed = new Set<number>([1]);
     for (const r of present) for (const t of templatesForRatio(r)) if (t.slotCount <= planCap) allowed.add(t.slotCount);
     plan = planPageCounts(totalPhotos, minPages, planCap, [...allowed]);
   }
 
-  for (const group of momentGroups) {
+  for (const [moment, group] of momentGroups.entries()) {
     let remaining = [...group];
 
     // ── 3a. Place mixed-ratio templates the pool can satisfy — but with VARIETY,
@@ -1161,7 +1345,7 @@ function layoutAlbum(
     // [] at 1/page): mixed pages are 2+ photos, and dealing them there put a
     // 3-4-photo page in a 1-per-page album and left its last pages BLANK at 40
     // photos (2026-10-04, found by the 40-photo minimum's every-size sweep).
-    if (mixedTemplates.length > 0 && !fillMode && !(effPerPage === 1 && !randomize)) {
+    if (mixedTemplates.length > 0 && !fillMode && !exactPlan && !(effPerPage === 1 && !randomize)) {
       const mixedBag = bagFor('mixed', mixedTemplates.map((t) => t.id));
       let placed = true;
       while (placed) {
@@ -1230,6 +1414,11 @@ function layoutAlbum(
        *  must always land somewhere). */
       singles: PageTemplate[];
       multi: PageTemplate[];
+      /** This queue's own page counts at a chosen photos-per-page (exactPlan),
+       *  the next one to deal, and what earlier pages owe it. */
+      plan?: number[];
+      planAt: number;
+      carry: number;
     }
     const states: RatioState[] = (Object.keys(byRatio) as PhotoRatio[]).map((ratio) => {
       const queue = byRatio[ratio]!;
@@ -1250,7 +1439,11 @@ function layoutAlbum(
       // empty window falls through to single-photo pages (more pages, no
       // crops). AUTO/randomize → every multi layout of this ratio.
       let multi: PageTemplate[];
-      if (plan) {
+      let own: number[] | undefined;
+      if (queuePlans) {
+        multi = allMulti.filter((t) => t.slotCount <= chosenCap);
+        own = queuePlans.get(`${moment}:${ratio}`);
+      } else if (plan) {
         multi = allMulti.filter((t) => t.slotCount <= planCap);
       } else if (effPerPage === 1 && !randomize) {
         multi = [];
@@ -1265,7 +1458,7 @@ function layoutAlbum(
       } else {
         multi = allMulti;
       }
-      return { key: ratio, queue, ratioTemplates, onePhoto, singles, multi };
+      return { key: ratio, queue, ratioTemplates, onePhoto, singles, multi, plan: own, planAt: 0, carry: 0 };
     });
 
     // Emit exactly one page from a ratio's queue (drains 1..slotCount photos).
@@ -1276,11 +1469,12 @@ function layoutAlbum(
       // ── Planned fill ── deal this page at its planned count (plus any
       // carry the earlier pages could not place), choosing a layout that
       // differs from the last and, while the caption cooldown runs, is box-free.
-      if (plan) {
+      if (plan || st.plan) {
         // Past the plan's length (singles added pages) the plan CYCLES, so the
         // tail keeps the same rhythm instead of collapsing to one per page.
-        const planned = plan.length ? plan[pages.length % plan.length] : 1;
-        const want = Math.max(1, Math.min(planCap, planned + planCarry));
+        // A queue with its own plan (exactPlan) deals it in order.
+        const planned = st.plan ? (st.plan[st.planAt++] ?? 1) : (plan!.length ? plan![pages.length % plan!.length] : 1);
+        const want = Math.max(1, Math.min(st.plan ? chosenCap : planCap, planned + (st.plan ? st.carry : planCarry)));
         let template: PageTemplate | undefined;
         // Counts this page may take: never MORE than wanted (2026-10-04, the
         // 1-star testers): a page over the plan left the album short of photos
@@ -1333,7 +1527,7 @@ function layoutAlbum(
         // What this page did not take is owed to the next one. (Never negative
         // now — no page takes more than it wants — so the album can only run
         // out of plan, never out of photos: no blank pages at the end.)
-        planCarry = want - take;
+        if (st.plan) st.carry = want - take; else planCarry = want - take;
         pushPage(template, queue.splice(0, take));
         return;
       }
