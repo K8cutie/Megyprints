@@ -17,7 +17,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import AddQrModal from './AddQrModal';
 import EndOfAlbumPrompt from './EndOfAlbumPrompt';
 import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
-import { checkOrderReadiness, readinessMessage } from './orderReadiness';
+import { checkOrderReadiness, readinessMessage, coverIsBlank, BLANK_COVER_MESSAGE } from './orderReadiness';
 import { missingPhotos, missingPhotosMessage, copyNotesMessage } from '../../lib/photoPresence';
 import { fillableBoxCount } from './generateAlbum';
 import { BOOK } from './bookFeel';
@@ -863,7 +863,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     setNotHere(null);
     // Photos put back from other copies are said here too (never blocking).
     const copies = copyNotesMessage(pages, photos, coverFront);
-    const warning = [readinessMessage(readiness), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
+    // A blank front cover is said first (it is what everyone sees first).
+    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', readinessMessage(readiness), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
     if (warning && !anyway) { setNotReady(warning); return; }
     setNotReady(null);
     setPendingPrintJob({ pages, photos, albumSize, albumId: getAlbumId(), coverDesign, coverFront });
@@ -873,7 +874,12 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     <div role="alert" data-testid="order-not-ready"
       className="flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12] text-left">
       <span className="flex-1 min-w-[12rem]">{notReady}</span>
-      <button onClick={() => { setNotReady(null); if (readiness.firstPage != null) onGoToPage(readiness.firstPage); onBack(); }} data-testid="order-not-ready-show"
+      <button onClick={() => {
+          setNotReady(null);
+          // The cover first: "Show me" opens the cover editor.
+          if (coverIsBlank(coverFront)) { setCoverOpen(true); return; }
+          if (readiness.firstPage != null) onGoToPage(readiness.firstPage); onBack();
+        }} data-testid="order-not-ready-show"
         className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
         Show me
       </button>

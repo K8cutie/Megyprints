@@ -180,7 +180,7 @@ describe('no order with photos missing (source guards; the walk proves it)', () 
   it('the preview — the one order entry — stops and says why, with no "Order anyway"', () => {
     const p = src('../pages/builder/BuilderPreview.tsx');
     expect(p).toMatch(/const gone = missingPhotos\(pages, photos, coverFront\);\s*if \(gone\.count > 0\) \{ setNotHere\(missingPhotosMessage\(gone\)\); return; \}/);
-    expect(p.indexOf('const gone = missingPhotos')).toBeLessThan(p.indexOf('const warning = [readinessMessage(readiness)'));
+    expect(p.indexOf('const gone = missingPhotos')).toBeLessThan(p.indexOf('const warning = [coverIsBlank(coverFront)'));
   });
   it('checkout refuses a print job with photos missing; the rebuild uses the same rule', () => {
     expect(src('../pages/Order.tsx')).toMatch(/const gone = handed \? missingPhotos\(handed\.pages, handed\.photos, handed\.coverFront\) : null;\s*if \(gone && gone\.count > 0\) \{/);
