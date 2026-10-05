@@ -23,11 +23,16 @@ export function readAlbumTheme(): string {
   try { return localStorage.getItem(ALBUM_THEME_KEY) || ''; } catch { return ''; }
 }
 
+/** Fired when the occasion changes outside the step that asks it (an album
+ *  opened from the cloud brings its own): the steps showing it re-read. */
+export const ALBUM_THEME_EVENT = 'megy-album-theme';
+
 export function writeAlbumTheme(v: string): void {
+  const clean = cleanAlbumTheme(v);
   try {
-    const clean = cleanAlbumTheme(v);
     if (clean) localStorage.setItem(ALBUM_THEME_KEY, clean); else localStorage.removeItem(ALBUM_THEME_KEY);
   } catch { /* memory-only this session */ }
+  try { window.dispatchEvent(new CustomEvent(ALBUM_THEME_EVENT, { detail: clean })); } catch { /* no window */ }
 }
 
 /** Trim, collapse whitespace, cap the length. Never throws. */
