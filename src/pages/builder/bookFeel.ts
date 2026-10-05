@@ -68,6 +68,12 @@ export const BOOK = {
     position: 'absolute', inset: 0, zIndex: 42, pointerEvents: 'none',
     background: 'linear-gradient(to right, rgba(0,0,0,0.26) 0%, rgba(0,0,0,0.06) 1.6%, rgba(255,255,255,0.12) 2.8%, rgba(0,0,0,0.12) 3.8%, rgba(0,0,0,0) 6%)',
   } as CSSProperties,
+  /** One page out of the open book (an upright phone shows one at a time):
+   *  the half of the gutter on its own page, so the side it is bound on shows. */
+  spine: (side: 'left' | 'right'): CSSProperties => ({
+    position: 'absolute', inset: 0, zIndex: 42, pointerEvents: 'none',
+    background: `linear-gradient(to ${side}, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 76%, rgba(0,0,0,0.04) 86%, rgba(0,0,0,0.13) 95%, rgba(0,0,0,0.30) 99.5%, rgba(0,0,0,0.34) 100%)`,
+  }),
   /** A single page (the album's last, odd page): shade its free edge instead of a gutter. */
   edgeShade: (side: 'left' | 'right'): CSSProperties => ({
     position: 'absolute', inset: 0, zIndex: 42, pointerEvents: 'none',
