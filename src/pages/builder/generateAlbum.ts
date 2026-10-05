@@ -612,7 +612,7 @@ export function templatesForPhotoRatio(albumSize: AlbumSizePreset, ratio: PhotoR
  *  photos made 50 single pages (+₱270) while the note said "all 40 pages are
  *  filled": an 8×8's 2-photo layouts take two portraits or two landscapes,
  *  never two squares (1-star testers round 2, the Indecisive one). */
-export function perPageShapeNote(photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, extraPageRate?: number | null): string | null {
+export function perPageShapeNote(photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, extraCost?: ExtraPagesCost): string | null {
   if (!perPage || perPage <= 1) return null;
   const live = photos.filter((p) => !p.leftOut && p.width > 0 && p.height > 0);
   if (live.length < MIN_PAGES) return null;
@@ -631,7 +631,7 @@ export function perPageShapeNote(photos: UploadedPhoto[], albumSize: AlbumSizePr
     ? `its ${perPage}-photo layouts take ${fits.join(' or ')} photos`
     : `it has no ${perPage}-photo layout`;
   return `${shortCount === live.length ? 'Your' : `${shortCount} of your`} ${shapes.join(' and ')} photos can't go ${perPage} to a page on ${size} (${why}), so they go ${bestShort === 1 ? 'one' : `${bestShort}`} to a page`
-    + (pages > MIN_PAGES ? extraPagesClause(pages, extraPageRate) : '.')
+    + (pages > MIN_PAGES ? extraPagesClause(pages, extraCost) : '.')
     + ' Pick Surprise and Megy mixes in bigger layouts for fewer pages.';
 }
 
@@ -831,21 +831,24 @@ export function chosenAlbumPages(
   return { pages: Math.max(minPages, reserved.length + planLength(chosenQueuePlans(rest, albumSize, perPage, restMin))), memoryPages: reserved.length };
 }
 
-/** ": about 55 pages, 15 more than the 40 included (15 × ₱27 = ₱405)." */
-function extraPagesClause(pages: number, extraPageRate?: number | null): string {
-  const extra = pages - MIN_PAGES;
-  const peso = (n: number) => `₱${n.toLocaleString('en-PH')}`;
-  return `: about ${pages} pages, ${extra} more than the ${MIN_PAGES} included`
-    + (extraPageRate ? ` (${extra} × ${peso(extraPageRate)} = ${peso(extra * extraPageRate)})` : '') + '.';
+/** What `pages` pages add to the price past the included ones (pricing's
+ *  extraPagesCharge on the live schedule), or null before it loads. */
+export type ExtraPagesCost = ((pages: number) => number) | null | undefined;
+
+/** ": about 55 pages, 15 more than the 40 included, which adds ₱424." */
+function extraPagesClause(pages: number, extraCost: ExtraPagesCost): string {
+  const amount = extraCost ? extraCost(pages) : 0;
+  return `: about ${pages} pages, ${pages - MIN_PAGES} more than the ${MIN_PAGES} included`
+    + (amount > 0 ? `, which adds ₱${amount.toLocaleString('en-PH')}` : '') + '.';
 }
 
 /** The upload step's note for the photos-per-page picked, or null: the
  *  shapes can't take it (perPageShapeNote); or the pages and pesos it makes
  *  past the included 40; or, with too few photos, why pages get fewer. */
 export function photosPerPageNote(
-  photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, extraPageRate?: number | null,
+  photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, extraCost?: ExtraPagesCost,
 ): string | null {
-  const shape = perPageShapeNote(photos, albumSize, perPage, extraPageRate);
+  const shape = perPageShapeNote(photos, albumSize, perPage, extraCost);
   if (shape) return shape;
   if (!perPage || perPage <= 1) return null;
   const live = photos.filter((p) => !p.leftOut && p.width > 0 && p.height > 0);
@@ -853,7 +856,7 @@ export function photosPerPageNote(
   const made = chosenAlbumPages(live, albumSize, perPage);
   if (made && made.pages > MIN_PAGES) {
     return `${perPage} per page makes your album`
-      + extraPagesClause(made.pages, extraPageRate).replace(/\.$/, '')
+      + extraPagesClause(made.pages, extraCost).replace(/\.$/, '')
       + `. That counts ${made.memoryPages} full-page photos, where your video memories go.`;
   }
   // Too few photos for every page to take `perPage`: the 40 pages are filled

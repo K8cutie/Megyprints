@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, perPageRate,
+  priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, extraPagesCharge,
   qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE,
   hostingTiersOf, hostingTermCharge, includedHostingYears, DEFAULT_HOSTING_TIERS,
   hdMemoriesPriceOf, hdMemoriesCharge,
@@ -331,8 +331,28 @@ describe('pricing invariants', () => {
           .toBeGreaterThanOrEqual(priceOf(schedule, size, 'soft', pages));
   });
 
-  it('per-page rate is positive for every size', () => {
-    const schedule = scheduleFrom(MODEL, 3);
-    for (const size of SIZE_KEYS) expect(perPageRate(schedule, size)).toBeGreaterThan(0);
+  it('the album line costs the same at any page count; the extra-pages line is all the extra pages add (round 3, the Indecisive One)', () => {
+    for (const multiple of MULTIPLES) {
+      const schedule = scheduleFrom(MODEL, multiple);
+      for (const size of SIZE_KEYS)
+        for (const binding of BINDINGS) {
+          const base = priceOf(schedule, size, binding, MIN_PAGES);
+          for (const pages of PAGE_COUNTS.filter((p) => p > MIN_PAGES)) {
+            const [album, extra] = priceBreakdown(schedule, size, binding, pages).items;
+            expect(album.amount, `${size} ${binding} ${pages}`).toBe(base);
+            expect(extra.amount, `${size} ${binding} ${pages}`).toBe(priceOf(schedule, size, binding, pages) - base);
+          }
+        }
+    }
+  });
+
+  it('10 more pages on an 8×8 are 3 more sheets of 4: ₱318 at ₱106 a sheet, not "10 × ₱27"', () => {
+    const schedule = { ...scheduleFrom(MODEL, 3), sheet_rate: 106, min_pages: 40 };
+    schedule.sizes = { ...schedule.sizes, '8x8': { ...schedule.sizes['8x8'], pps: 4 } };
+    expect(extraPagesCharge(schedule, '8x8', 'soft', 50)).toEqual({ pages: 10, sheets: 3, amount: 318 });
+    const [album, extra] = priceBreakdown(schedule, '8x8', 'soft', 50).items;
+    expect(album.amount).toBe(priceOf(schedule, '8x8', 'soft', 40));
+    expect(extra).toEqual({ label: 'Extra pages · 10 (pages print 4 to a sheet: 3 more sheets)', amount: 318 });
+    expect(extraPagesCharge(schedule, '8x8', 'soft', 40)).toEqual({ pages: 0, sheets: 0, amount: 0 });
   });
 });

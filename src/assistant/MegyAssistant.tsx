@@ -14,7 +14,7 @@ import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES } from '../pages/build
 import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
 import { memoryShortfall, MIN_MEMORY_PAGES, photosPerPageNote } from '../pages/builder/generateAlbum';
 import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
-import { SIZE_LABELS, perPageRate } from '../lib/pricing';
+import { SIZE_LABELS, extraPagesCharge } from '../lib/pricing';
 import { getPriceSchedule } from '../lib/storeSettings';
 import type { AssistantMessage, AssistantIntent } from './types';
 import { rebuildQuestion, placedMemories } from './rebuildQuestion';
@@ -651,7 +651,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   // included 40 ("4 · Collage" on 196 photos made 59 pages and
                   // ₱513 of extra pages with no word: 1-star testers round 3).
                   const schedule = getPriceSchedule();
-                  const note = photosPerPageNote(livePhotos, builder.albumSize, builder.photosPerPage, schedule ? perPageRate(schedule, builder.albumSize) : null);
+                  const note = photosPerPageNote(livePhotos, builder.albumSize, builder.photosPerPage,
+                    schedule ? (pages) => extraPagesCharge(schedule, builder.albumSize, 'soft', pages).amount : null);
                   return short === 0 ? (
                     <>
                       <p className="text-xs text-success mt-3" data-testid="photo-minimum-met">✓ Enough for a full {MIN_ALBUM_PAGES}-page album.</p>
