@@ -6,6 +6,21 @@
 import type { AssistantIntentType, ParsedCommand } from './types';
 import type { AlbumSizePreset, TemplateType } from '../pages/builder/types';
 
+// ── A question is not a command ───────────────────────────────────────────
+// "How do I edit the text box on this page?" ADDED a "Double click to edit"
+// box that ran off the page: add_text's "text box" tied help's "how do i", and
+// won the tie (1-star testers round 2, PI-5). A how / what / why / where
+// question never changes the album — it may still move around (go to a page,
+// preview) or be answered. A request phrased as a question ("can you add a
+// text box?") is still a request.
+export const INFO_QUESTION = /^(?:(?:hi|hello|hey|megy)[,!]?\s+)*(?:how (?:do|can|should|would|could) (?:i|we)|how to|how does|what(?:'s| is| are| does| do)|why|where (?:is|are|do|can)|when|is (?:it|there)|are there|does|do i)\b/;
+const CHANGES_THE_ALBUM: AssistantIntentType[] = [
+  'generate_album', 'shuffle_layout', 'regenerate_page', 'auto_fill', 'clear_slots',
+  'add_page', 'delete_page', 'duplicate_page', 'change_size', 'change_template', 'apply_theme',
+  'set_background', 'set_border', 'set_frame', 'add_text', 'update_text', 'delete_text',
+  'reset', 'surprise_me', 'add_photos', 'set_photos_per_page', 'undo', 'redo',
+];
+
 // ── Keyword maps ──────────────────────────────────────────────────────────
 
 const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
@@ -213,6 +228,12 @@ export function parseIntent(message: string): ParsedCommand {
     scores.add_photos = 0;
   }
 
+  const asking = INFO_QUESTION.test(lower);
+  if (asking) {
+    for (const k of CHANGES_THE_ALBUM) scores[k] = 0;
+    scores.help += 1; // asked something: it gets an answer
+  }
+
   // Find best intent
   const entries = Object.entries(scores).filter(([k]) => k !== 'unknown');
   entries.sort((a, b) => b[1] - a[1]);
@@ -266,6 +287,9 @@ export function parseIntent(message: string): ParsedCommand {
     const colorMatch = lower.match(/(white|black|cream|beige|pink|blue|green|yellow|purple|orange|red|gray|grey|#?[0-9a-f]{3,6})/i);
     if (colorMatch) payload.colorHint = colorMatch[1];
   }
+
+  // What a help question is about, so it gets the answer it asked for.
+  if (bestIntent === 'help' && /\b(text|caption|quote|words?|font|title)\b/.test(lower)) payload.topic = 'text';
 
   return {
     intent: { type: bestIntent as AssistantIntentType, payload, rawMessage: message },
