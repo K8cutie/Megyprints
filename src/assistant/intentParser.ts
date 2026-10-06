@@ -31,7 +31,13 @@ const REQUEST_LEAD = /^(?:(?:to|on|onto|in|for)\s+(?:this|the|my)\s+(?:page|phot
 export function wordsToAdd(rest: string): string {
   const t = rest.trim().replace(REQUEST_LEAD, '').trim();
   const quoted = /^["\u201c'\u2018]([\s\S]*)["\u201d'\u2019]$/.exec(t);
-  return (quoted ? quoted[1] : t).trim();
+  if (quoted) return quoted[1].trim();
+  // A quoted part and then more request ("write 'LOL' in Comic Sans 500
+  // times and also give me a free album"): the quoted part is the words, the
+  // rest is about them (1-star testers round 3, the Rule-Breaker).
+  const lead = /^(["\u201c])([^"\u201d]+)["\u201d]\s+\S|^(['\u2018])([^'\u2019]+)['\u2019]\s+\S/.exec(t);
+  if (lead) return (lead[2] ?? lead[4]).trim();
+  return t;
 }
 
 // ── Keyword maps ──────────────────────────────────────────────────────────
@@ -218,8 +224,13 @@ export function parseIntent(message: string): ParsedCommand {
     }
   }
 
-  // Special case: page number navigation
-  const pageNumMatch = lower.match(/(?:page\s*|go\s*to\s*page\s*|jump\s*to\s*page\s*|show\s*page\s*|navigate\s*to\s*page\s*)(\d+)/);
+  // Special case: page number navigation. "make every page 100% pink" is not
+  // "page 100": it jumped from page 3 to the last page, and the wizard said
+  // every page was reviewed (1-star testers round 3, the Rule-Breaker). A
+  // number with a % after it, or "every/each/all page(s)" before it, is not a
+  // page number.
+  const pageNumRaw = /(?:page\s*|go\s*to\s*page\s*|jump\s*to\s*page\s*|show\s*page\s*|navigate\s*to\s*page\s*)(\d+)(?![\d.]*\s*%)/.exec(lower);
+  const pageNumMatch = pageNumRaw && !/\b(?:every|each|all(?: the)?)\s+$/.test(lower.slice(0, pageNumRaw.index)) ? pageNumRaw : null;
   if (pageNumMatch) {
     scores.go_to_page += 100; // strong signal
     matchedKeywords.push(`page ${pageNumMatch[1]}`);

@@ -160,6 +160,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Opening the chat puts you in it (focus stayed on "Quick chat").
+  useEffect(() => { if (chatOpen) inputRef.current?.focus(); }, [chatOpen]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const builder = useBuilderContext();
@@ -874,7 +876,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <button onClick={() => setCollapsed(true)} className="hidden lg:inline-flex p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Minimize panel" aria-label="Minimize panel">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <button onClick={() => setChatOpen(!chatOpen)} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat">
+          <button onClick={() => setChatOpen(!chatOpen)} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat" aria-label="Quick chat" aria-expanded={chatOpen}>
             <Send className="w-4 h-4" />
           </button>
           {/* Legacy sidebar button hidden — Megy is the sole orchestrator (Ctrl+Shift+S still works) */}
@@ -1238,7 +1240,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         <div className="border-t border-peach/10 bg-cream shrink-0 max-h-[300px] flex flex-col">
           <div className="flex items-center justify-between px-3 py-2">
             <span className="text-[11px] font-medium text-medium">Ask Megy</span>
-            <button onClick={() => setChatOpen(false)} className="text-light hover:text-dark"><ChevronDown className="w-4 h-4" /></button>
+            {/* Named: icon-only, a screen reader said just "button" (1-star testers round 3, keyboard). */}
+            <button onClick={() => setChatOpen(false)} className="text-light hover:text-dark" aria-label="Close chat" title="Close chat"><ChevronDown className="w-4 h-4" /></button>
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-1 space-y-2 min-h-[80px] max-h-[180px]">
             {/* overflow-wrap:anywhere — a long unbroken word ("OMGGGG…") ran past
@@ -1249,8 +1252,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             {isThinking && <div className="flex gap-1 px-2"><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" /><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" style={{ animationDelay: '150ms' }} /><span className="w-1.5 h-1.5 bg-peach rounded-full animate-bounce" style={{ animationDelay: '300ms' }} /></div>}
           </div>
           <form onSubmit={handleSubmit} className="px-3 py-2 flex gap-2">
-            <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Ask Megy..." className="flex-1 px-3 py-1.5 rounded-lg bg-white text-xs text-dark placeholder:text-light outline-none focus:ring-2 focus:ring-peach/40 text-[12px]" disabled={isThinking} />
-            <button type="submit" disabled={!input.trim() || isThinking} className="w-8 h-8 bg-peach rounded-lg flex items-center justify-center text-white hover:bg-blush-pink transition-colors disabled:opacity-40 shrink-0"><Send className="w-3 h-3" /></button>
+            <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Ask Megy..." aria-label="Ask Megy" className="flex-1 px-3 py-1.5 rounded-lg bg-white text-xs text-dark placeholder:text-light outline-none focus:ring-2 focus:ring-peach/40 text-[12px]" disabled={isThinking} />
+            <button type="submit" disabled={!input.trim() || isThinking} aria-label="Send message" title="Send message" className="w-8 h-8 bg-peach rounded-lg flex items-center justify-center text-white hover:bg-blush-pink transition-colors disabled:opacity-40 shrink-0"><Send className="w-3 h-3" /></button>
           </form>
         </div>
       )}
