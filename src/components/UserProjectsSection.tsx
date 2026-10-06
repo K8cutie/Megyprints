@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { BookOpen, Plus, Trash2, Loader2, ChevronRight, Clock, Sparkles } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { useAlbumSync } from '../lib/useAlbumSync';
-import type { AlbumData } from '../lib/useAlbumSync';
+import { useAccountAlbums } from '../lib/useAccountAlbums';
 import { startFreshAlbum } from '../lib/albumSession';
+import { AlbumsLoadFailed } from './AlbumsLoadFailed';
 
 /* ══════════════════════════════════════════════════════════════════════════
    UserProjectsSection — Shows logged-in user's albums on the home page
@@ -13,48 +14,24 @@ import { startFreshAlbum } from '../lib/albumSession';
 
 export function UserProjectsSection() {
   const { user } = useAuth();
-  const { loadAll, deleteAlbum } = useAlbumSync();
-
-  const [albums, setAlbums] = useState<AlbumData[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch albums on mount / when user changes
-  useEffect(() => {
-    if (!user?.id) {
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function fetchAlbums() {
-      setLoading(true);
-      try {
-        const userAlbums = await loadAll(user!.id);
-        if (!cancelled) {
-          // Sort by most recently updated
-          const sorted = [...userAlbums].sort((a, b) => {
-            const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-            const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-            return bTime - aTime;
-          });
-          setAlbums(sorted);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void fetchAlbums();
-    return () => { cancelled = true; };
-  }, [user?.id, loadAll]);
+  const { deleteAlbum } = useAlbumSync();
+  // The account's albums — and whether they could be loaded: offline this
+  // said "No projects yet" and never asked again (round 3, the Connection Drop).
+  const list = useAccountAlbums(user?.id);
+  const loading = list.loading;
+  const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
+  const albums = useMemo(() => list.albums
+    .filter((a) => !a.id || !gone.has(a.id))
+    // Most recently updated first
+    .sort((a, b) => (b.updatedAt ? new Date(b.updatedAt).getTime() : 0) - (a.updatedAt ? new Date(a.updatedAt).getTime() : 0)),
+  [list.albums, gone]);
 
   const handleDelete = useCallback(
     async (albumId: string) => {
       if (!confirm('Are you sure you want to delete this album?')) return;
       const result = await deleteAlbum(albumId);
       if (result.success) {
-        setAlbums((prev) => prev.filter((a) => a.id !== albumId));
+        setGone((prev) => new Set(prev).add(albumId));
       }
     },
     [deleteAlbum]
@@ -81,7 +58,7 @@ export function UserProjectsSection() {
             <p className="text-medium text-sm mt-1">
               {albums.length > 0
                 ? `${albums.length} saved ${albums.length === 1 ? 'album' : 'albums'}`
-                : 'Start creating your first album'}
+                : list.failed ? "Couldn't load your albums" : 'Start creating your first album'}
             </p>
           </div>
           <Link
@@ -99,6 +76,8 @@ export function UserProjectsSection() {
           <div className="flex items-center justify-center py-16">
             <Loader2 size={28} className="animate-spin text-blush-pink" />
           </div>
+        ) : albums.length === 0 && list.failed ? (
+          <AlbumsLoadFailed retrying={list.retrying} onRetry={list.retry} />
         ) : albums.length === 0 ? (
           /* Empty State */
           <motion.div

@@ -291,6 +291,24 @@ export async function saveAlbumRow(userId: string, albumData: AlbumData, opts?: 
   return { success: true, albumId: data?.id as string | undefined, updatedAt: (data as { updated_at?: string } | null)?.updated_at };
 }
 
+/** The account's albums, newest first, list columns only. THROWS when they
+ *  can't be loaded: an empty list means no albums, never "couldn't load"
+ *  (useAccountAlbums). */
+export async function listAccountAlbums(userId: string): Promise<AlbumData[]> {
+  const { data, error: selectError } = await supabase
+    .from('albums')
+    // List view only needs lightweight columns — NOT the full `pages` JSON.
+    // The full album is fetched on demand via load() when one is opened.
+    // `photos` is just ids + names; the resume prompt uses it to skip
+    // empty albums.
+    .select('id, title, album_size, photos, cover_photo, created_at, updated_at')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+  if (selectError) throw selectError;
+  if (!data || !Array.isArray(data)) return [];
+  return data.map((row) => deserializeAlbum(row as Record<string, unknown>));
+}
+
 // =============================================================================
 // Hook
 // =============================================================================
@@ -369,23 +387,7 @@ export function useAlbumSync(): UseAlbumSyncReturn {
     setError(null);
 
     try {
-      const { data, error: selectError } = await supabase
-        .from('albums')
-        // List view only needs lightweight columns — NOT the full `pages` JSON.
-        // The full album is fetched on demand via load() when one is opened.
-        // `photos` is just ids + names; the resume prompt uses it to skip
-        // empty albums.
-        .select('id, title, album_size, photos, cover_photo, created_at, updated_at')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false });
-
-      if (selectError) {
-        throw selectError;
-      }
-
-      if (!data || !Array.isArray(data)) return [];
-
-      return data.map((row) => deserializeAlbum(row as Record<string, unknown>));
+      return await listAccountAlbums(userId);
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Failed to load albums. Please try again.';
