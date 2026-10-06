@@ -245,14 +245,16 @@ export class ActionEngine {
 
         case 'add_text': {
           const text = intent.payload?.text as string | undefined;
-          const centerX = 1200 / 2; // approximate canvas center
-          const centerY = 800 / 2;
-          this.builder.addTextElement(centerX, centerY, text);
+          // Centred on the page and made to fit (addTextElement).
+          const r = this.builder.addTextElement(undefined, undefined, text);
+          if (r.tooLong) {
+            return { intentType: intent.type, success: false, message: "That's too long to fit on the page, even in small letters. Try a shorter line." };
+          }
           return {
             intentType: intent.type,
             success: true,
             message: text
-              ? `Text added: "${text}".`
+              ? `Text added: "${text}"${r.shrunk ? `, in smaller letters (size ${r.fontSize}) so it all fits` : ''}.`
               : 'Text added. Double-click it on the canvas to edit.',
           };
         }
