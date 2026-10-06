@@ -23,7 +23,7 @@ import { dealtBoxRoll } from './types';
 import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
-import { isLookId, type LookId } from './looks';
+import { isLookId, VINTAGE, type LookId } from './looks';
 import PageTurnBar from './PageTurnBar';
 import VideoMemoryButton from './VideoMemoryButton';
 
@@ -255,7 +255,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                 selectedSlot={studioSlot} onSelectSlot={setStudioSlot}
                 selectedSticker={studioSticker} onSelectSticker={setStudioSticker}
                 onOpenSheet={setStudioSheet}
-                onWorn={() => { if (studioSlot != null) { actions.setSlotMask(studioSlot, 'brushed'); actions.setSlotLook(studioSlot, 'faded'); sayGuard('Worn: brushed edge + faded look. Keep faces away from the edge.'); } }}
+                onVintage={() => { if (studioSlot != null) { actions.setSlotMask(studioSlot, VINTAGE.mask); actions.setSlotLook(studioSlot, VINTAGE.look); sayGuard(VINTAGE.says); } }}
                 onStickerGeom={(uid, geom) => afterGuard(actions.updateStickerGeom(uid, geom))}
                 onStickerRemove={(uid) => { actions.removeSticker(uid); setStudioSticker(null); }} />
             )}

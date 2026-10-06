@@ -12,8 +12,10 @@ import { pageInches } from './stickers';
 /* ══════════════════════════════════════════════════════════════════════════
    STUDIO ON THE PHONE (owner, 2026-09-13: "I want to see the mobile version").
    Not a squeezed desktop: the page stays the hero, tools live on the thing
-   you tap. Tap a photo → a pill (Mask · Look · Worn); Mask / Look open a
-   bottom sheet of THUMBNAILS of that very photo, so you pick by eye. Stickers
+   you tap. Tap a photo → a pill (Mask · Filter · Vintage); Mask / Filter open
+   a bottom sheet of THUMBNAILS of that very photo, so you pick by eye. (Filter
+   was "Look" and Vintage was "Worn" until owner, 2026-10-07: "what are
+   those" — the code still calls a filter a look, see looks.ts.) Stickers
    are retired (owner, 2026-10-01) — none can be added — but a placed one
    still shows and prints: tap it → a pill with 1 mm nudge arrows and Remove;
    drag it with a finger, pinch to resize. Every change goes through the same
@@ -23,10 +25,14 @@ import { pageInches } from './stickers';
 const THUMB = 84;
 
 /* ── The pill above a tapped photo ───────────────────────────────────────── */
-function Pill({ left, top, children, onClose, testid }: { left: number; top: number; children: ReactNode; onClose: () => void; testid: string }) {
+const PILL_GAP = 4; // px the pill keeps from the page's left and right edges
+function Pill({ left, top, W, children, onClose, testid }: { left: number; top: number; W: number; children: ReactNode; onClose: () => void; testid: string }) {
+  // Centred on `left`, but never past either page edge: translate percentages
+  // are the pill's OWN width, so CSS clamps it without measuring — a guessed
+  // half-width clipped "Mask" once the words got longer (2026-10-07).
   return (
     <div data-testid={testid} className="absolute z-30 flex items-center gap-1 rounded-full bg-dark text-warm-white shadow-xl px-1.5 py-1"
-      style={{ left, top, transform: 'translateX(-50%)' }}
+      style={{ left, top, transform: `translateX(clamp(${PILL_GAP - left}px, -50%, calc(${W - PILL_GAP - left}px - 100%)))` }}
       onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
       {children}
       <button type="button" aria-label="Close" onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center text-warm-white/70"><X size={14} /></button>
@@ -59,7 +65,7 @@ export function StudioSheet({ kind, photo, currentMask, currentLook, onPickMask,
   };
   const items: { id: string; label: string; node: ReactNode; active: boolean; onPick: () => void }[] = kind === 'mask'
     ? MASKS.map((m) => ({ id: m.id, label: m.label, node: thumb(m.id, currentLook), active: currentMask === m.id, onPick: () => onPickMask(m.id) }))
-    : [{ id: 'none', label: 'As shot', node: thumb(currentMask, 'none'), active: currentLook === 'none', onPick: () => onPickLook('none') },
+    : [{ id: 'none', label: 'Original', node: thumb(currentMask, 'none'), active: currentLook === 'none', onPick: () => onPickLook('none') },
        ...LOOKS.map((l) => ({ id: l.id, label: l.label, node: thumb(currentMask, l.id), active: currentLook === l.id, onPick: () => onPickLook(l.id) }))];
   return (
     <AnimatePresence>
@@ -68,7 +74,7 @@ export function StudioSheet({ kind, photo, currentMask, currentLook, onPickMask,
         <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 320 }}
           className="w-full bg-white rounded-t-2xl pb-6" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-line">
-            <span className="text-sm font-semibold text-dark">{kind === 'mask' ? 'Mask' : 'Look'}</span>
+            <span className="text-sm font-semibold text-dark">{kind === 'mask' ? 'Mask' : 'Filter'}</span>
             <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
           </div>
           <div className="flex gap-3 overflow-x-auto px-4 pt-3 pb-1" style={{ scrollbarWidth: 'none' }}>
@@ -90,7 +96,7 @@ export function StudioSheet({ kind, photo, currentMask, currentLook, onPickMask,
 }
 
 /* ── The layer over the page: the photo pill, the sticker hit areas + pill ── */
-export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, onSelectSlot, selectedSticker, onSelectSticker, onOpenSheet, onWorn, onStickerGeom, onStickerRemove }: {
+export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, onSelectSlot, selectedSticker, onSelectSticker, onOpenSheet, onVintage, onStickerGeom, onStickerRemove }: {
   page: AlbumPage;
   pageIndex: number;
   W: number; H: number;
@@ -100,13 +106,13 @@ export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, on
   selectedSticker: string | null;
   onSelectSticker: (uid: string | null) => void;
   onOpenSheet: (kind: 'mask' | 'look') => void;
-  onWorn: () => void;
+  onVintage: () => void;
   onStickerGeom: (uid: string, geom: OrnamentTransform) => GuardReason[];
   onStickerRemove: (uid: string) => void;
 }) {
   const rect = selectedSlot != null ? slotRectPx(page, pageIndex, selectedSlot, W, H, albumSize) : null;
   const pillTop = rect ? (rect.top > 48 ? rect.top - 44 : rect.top + 8) : 0;
-  const pillLeft = rect ? Math.max(90, Math.min(W - 90, rect.left + rect.width / 2)) : 0;
+  const pillLeft = rect ? rect.left + rect.width / 2 : 0;
 
   /* sticker drag / pinch — live geometry while the finger is down, committed on release */
   const [live, setLive] = useState<{ uid: string; geom: OrnamentTransform } | null>(null);
@@ -182,16 +188,16 @@ export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, on
 
       {/* the photo pill */}
       {rect && selectedSlot != null && (
-        <Pill left={pillLeft} top={pillTop} onClose={() => onSelectSlot(null)} testid="studio-pill">
+        <Pill left={pillLeft} top={pillTop} W={W} onClose={() => onSelectSlot(null)} testid="studio-pill">
           <button type="button" className={pillBtn} onClick={() => onOpenSheet('mask')} data-testid="pill-mask">Mask</button>
-          <button type="button" className={pillBtn} onClick={() => onOpenSheet('look')} data-testid="pill-look">Look</button>
-          <button type="button" className={pillBtn} onClick={onWorn} data-testid="pill-worn">Worn</button>
+          <button type="button" className={pillBtn} onClick={() => onOpenSheet('look')} data-testid="pill-filter">Filter</button>
+          <button type="button" className={pillBtn} onClick={onVintage} data-testid="pill-vintage">Vintage</button>
         </Pill>
       )}
 
       {/* the sticker pill */}
       {selSticker && (
-        <Pill left={Math.max(120, Math.min(W - 120, selSticker.geom.cx * W))} top={Math.max(8, selSticker.geom.cy * H - (selSticker.geom.h * H) / 2 - 44)} onClose={() => onSelectSticker(null)} testid="sticker-pill">
+        <Pill left={selSticker.geom.cx * W} W={W} top={Math.max(8, selSticker.geom.cy * H - (selSticker.geom.h * H) / 2 - 44)} onClose={() => onSelectSticker(null)} testid="sticker-pill">
           <button type="button" aria-label="Nudge left" className="w-7 h-7 rounded-full flex items-center justify-center active:bg-white/15" onClick={() => nudge(selSticker.uid, -mm.x, 0)}><ChevronLeft size={14} /></button>
           <button type="button" aria-label="Nudge up" className="w-7 h-7 rounded-full flex items-center justify-center active:bg-white/15" onClick={() => nudge(selSticker.uid, 0, -mm.y)}><ChevronUp size={14} /></button>
           <button type="button" aria-label="Nudge down" className="w-7 h-7 rounded-full flex items-center justify-center active:bg-white/15" onClick={() => nudge(selSticker.uid, 0, mm.y)}><ChevronDown size={14} /></button>
