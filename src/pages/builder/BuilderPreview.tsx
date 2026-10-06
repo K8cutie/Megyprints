@@ -16,7 +16,7 @@ import { PREVIEW_DIMS } from './PreviewSizeConstants';
 import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
-import { captionBoxSize, overflowingCaptions, longTextsMessage } from './textFit';
+import { captionBoxSize, overflowingCaptions, longTextsMessage, coverTitleFit, COVER_TITLE_TOO_LONG_MESSAGE } from './textFit';
 import AddQrModal from './AddQrModal';
 import EndOfAlbumPrompt from './EndOfAlbumPrompt';
 import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
@@ -928,7 +928,9 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     // Text too long for its box is clipped in print (PERF2-2) — said here too.
     const long = overflowingCaptions(pages, albumSize);
     longFirstPageRef.current = long[0]?.pageIndex ?? null;
-    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', readinessMessage(readiness), longTextsMessage(long.length), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
+    // The cover title clipped on the front is said with the cover (round 3).
+    const titleCut = coverTitleFit(coverFront, albumSize)?.fits === false;
+    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', titleCut ? COVER_TITLE_TOO_LONG_MESSAGE : '', readinessMessage(readiness), longTextsMessage(long.length), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
     if (warning && !anyway) { setNotReady(warning); return; }
     setNotReady(null);
     setPendingPrintJob({ pages, photos, albumSize, albumId: getAlbumId(), coverDesign, coverFront });
@@ -941,7 +943,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       <button onClick={() => {
           setNotReady(null);
           // The cover first: "Show me" opens the cover editor.
-          if (coverIsBlank(coverFront)) { setCoverOpen(true); return; }
+          if (coverIsBlank(coverFront) || coverTitleFit(coverFront, albumSize)?.fits === false) { setCoverOpen(true); return; }
           const first = [readiness.firstPage, longFirstPageRef.current].filter((n): n is number => n != null);
           if (first.length) onGoToPage(Math.min(...first)); onBack();
         }} data-testid="order-not-ready-show"

@@ -114,8 +114,8 @@ describe('Before you order: a blank front cover is said', () => {
   });
   it('the preview\'s Order says it first, and "Show me" opens the cover (source guard)', () => {
     const src = readFileSync(resolve(__dirname, 'BuilderPreview.tsx'), 'utf8');
-    expect(src).toMatch(/\[coverIsBlank\(coverFront\) \? BLANK_COVER_MESSAGE : '', readinessMessage\(readiness\)/);
-    expect(src).toMatch(/if \(coverIsBlank\(coverFront\)\) \{ setCoverOpen\(true\); return; \}/);
+    expect(src).toMatch(/\[coverIsBlank\(coverFront\) \? BLANK_COVER_MESSAGE : '', titleCut \? COVER_TITLE_TOO_LONG_MESSAGE : '', readinessMessage\(readiness\)/);
+    expect(src).toMatch(/if \(coverIsBlank\(coverFront\) \|\| coverTitleFit\(coverFront, albumSize\)\?\.fits === false\) \{ setCoverOpen\(true\); return; \}/);
     expect(BLANK_COVER_MESSAGE).toBe('Your front cover is blank: no title or photo on it.');
   });
 });
