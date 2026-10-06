@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { useAlbumSync } from '../lib/useAlbumSync';
+import { useAccountAlbums } from '../lib/useAccountAlbums';
+import { AlbumsLoadFailed } from '../components/AlbumsLoadFailed';
 import DeleteAccountSection from '../components/DeleteAccountSection';
 import { supabase } from '../lib/supabase';
 import type { AlbumData } from '../lib/useAlbumSync';
@@ -31,9 +33,14 @@ export interface ProfilePageProps {
 
 export function Profile({ onBack }: ProfilePageProps) {
   const { user, logout, loading: authLoading } = useAuth();
-  const { loadAll, deleteAlbum, loading: albumsLoading } = useAlbumSync();
+  const { deleteAlbum } = useAlbumSync();
+  // The account's albums — and whether they could be loaded (offline this said
+  // "No albums yet": 1-star testers round 3, the Connection Drop).
+  const list = useAccountAlbums(user?.id);
+  const albumsLoading = list.loading;
 
-  const [albums, setAlbums] = useState<AlbumData[]>([]);
+  const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
+  const albums: AlbumData[] = useMemo(() => list.albums.filter((a) => !a.id || !gone.has(a.id)), [list.albums, gone]);
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -55,18 +62,6 @@ export function Profile({ onBack }: ProfilePageProps) {
     }
   }, [user]);
 
-  // Load user's albums
-  useEffect(() => {
-    if (!user?.id) return;
-
-    async function fetchAlbums() {
-      if (!user?.id) return;
-      const userAlbums = await loadAll(user.id);
-      setAlbums(userAlbums);
-    }
-
-    void fetchAlbums();
-  }, [user?.id, loadAll, user]);
 
   const handleAvatarSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,7 +137,7 @@ export function Profile({ onBack }: ProfilePageProps) {
 
       const result = await deleteAlbum(albumId);
       if (result.success) {
-        setAlbums((prev) => prev.filter((a) => a.id !== albumId));
+        setGone((prev) => new Set(prev).add(albumId));
       }
     },
     [deleteAlbum]
@@ -369,6 +364,8 @@ export function Profile({ onBack }: ProfilePageProps) {
             <div className="flex items-center justify-center py-12">
               <Loader2 size={24} className="animate-spin text-blush-pink" />
             </div>
+          ) : albums.length === 0 && list.failed ? (
+            <AlbumsLoadFailed compact retrying={list.retrying} onRetry={list.retry} />
           ) : albums.length === 0 ? (
             <div className="bg-white rounded-2xl border border-blush-deep/50 p-8 text-center">
               <BookOpen size={40} className="text-blush-deep mx-auto mb-3" />
