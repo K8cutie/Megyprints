@@ -21,6 +21,19 @@ const CHANGES_THE_ALBUM: AssistantIntentType[] = [
   'reset', 'surprise_me', 'add_photos', 'set_photos_per_page', 'undo', 'redo',
 ];
 
+/** The words to put on the page, out of what follows "add text": "to this
+ *  page that says 🦖 RAWR…" printed "to this page that says 🦖 RAWR…" (1-star
+ *  testers round 3, the Rule-Breaker). The request's own words go: "to/on
+ *  this page", "that says"/"which reads" (or "saying"/"says"/"reading" right
+ *  after the page), a colon, and the quotes round it. A caption that starts
+ *  with "Saying …" on its own is the caption. */
+const REQUEST_LEAD = /^(?:(?:to|on|onto|in|for)\s+(?:this|the|my)\s+(?:page|photo|picture)\s*(?:(?:that|which)\s+(?:says|reads)|saying|reading|says)?|(?:that|which)\s+(?:says|reads))\s*:?\s*/i;
+export function wordsToAdd(rest: string): string {
+  const t = rest.trim().replace(REQUEST_LEAD, '').trim();
+  const quoted = /^["\u201c'\u2018]([\s\S]*)["\u201d'\u2019]$/.exec(t);
+  return (quoted ? quoted[1] : t).trim();
+}
+
 // ── Keyword maps ──────────────────────────────────────────────────────────
 
 const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
@@ -286,7 +299,7 @@ export function parseIntent(message: string): ParsedCommand {
   if (bestIntent === 'add_text') {
     // Try to extract text content after "add text" or "write"
     const textMatch = message.match(/(?:add text|write|insert text|caption)[\s:]*(.+)/i);
-    if (textMatch) payload.text = textMatch[1].trim();
+    if (textMatch) payload.text = wordsToAdd(textMatch[1]);
   }
 
   if (bestIntent === 'set_background') {

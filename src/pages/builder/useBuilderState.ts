@@ -47,6 +47,8 @@ import { detectFaceCenter, initFaceApi } from './faceDetection';
 import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
 import { createLimiter } from '../../lib/limit';
 import { templateTracker, shuffleArray } from './varietyTracker';
+import { captionBoxSize, captionFits } from './textFit';
+import { TEXT_LINE_HEIGHT } from './wordArt';
 import { readCaptureTime } from './exif';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
@@ -608,6 +610,17 @@ const paintFrame = () => new Promise<void>((resolve) => {
 export const PLAIN_BACKGROUND: AlbumBackground = { type: 'solid', solid: '#FFFFFF' };
 export const PLAIN_BORDER = { color: '#FFFFFF', width: 0 };
 
+/** What adding text came to (addTextElement). */
+export interface AddedText {
+  added: boolean;
+  /** The size it went on at. */
+  fontSize: number;
+  /** Made smaller than the default so it fits. */
+  shrunk: boolean;
+  /** Too long to fit even at the smallest size: nothing was added. */
+  tooLong: boolean;
+}
+
 export interface BuilderActions {
   // Album config
   albumType: AlbumType;
@@ -760,7 +773,9 @@ export interface BuilderActions {
   sendToBack: (id: string) => void;
 
   // Text
-  addTextElement: (x: number, y: number, text?: string) => void;
+  /** New text centred on (x, y) (default: the page's centre), made smaller
+   *  to fit; nothing is added when it can't fit at all. */
+  addTextElement: (x?: number, y?: number, text?: string) => AddedText;
   /** Place a themed quote in the current page's free space; returns the quote, or null if no room. */
   addThemedQuote: () => string | null;
   updateTextElement: (id: string, updates: Partial<TextElement>) => void;
@@ -2885,8 +2900,17 @@ export function useBuilderState(): BuilderActions {
   }, [updateCurrentPage]);
 
   /* ── Text ── */
-  const addTextElement = useCallback((x: number, y: number, text?: string) => {
-    pushSnapshot();
+  /** New text on the current page, centred on (x, y) (default: the page's
+   *  centre). A long one is made smaller until it fits — its box, or 80% of
+   *  the page — and placed inside the page: Megy's chat put a 190-character
+   *  caption at the far right edge in large type, running off the side and
+   *  the bottom (1-star testers round 3, the Rule-Breaker; its canvas centre
+   *  was 1200 × 800 on a 750 × 750 page). Too long even at the smallest size:
+   *  nothing is added, and the caller says so. */
+  const addTextElement = useCallback((x?: number, y?: number, text?: string): AddedText => {
+    const { width: cw, height: ch } = getCanvasDimensions(albumSize);
+    const cx = x ?? cw / 2;
+    const cy = y ?? ch / 2;
     // New text inherits the active theme's font + color so captions match the
     // occasion. The user can still restyle any text element afterward.
     const theme = THEMES[selectedTemplate];
@@ -2906,12 +2930,22 @@ export function useBuilderState(): BuilderActions {
       cur?.textSlotFills?.[i] == null &&
       !cur?.textSlotQr?.[i] &&
       !cur?.textSlotOrnament?.[i]);
+    const inBox = slots.length > 0 && emptyBox >= 0;
+    // The size it fits at: its box (textFit, as the editor's warning and
+    // Order's check measure it), or 80% of the page for free text.
+    const boxSize = inBox && cur ? captionBoxSize(cur, emptyBox, albumSize, currentPageIndex) : null;
+    const freeW = Math.round(cw * 0.8);
+    const start = inBox ? 28 : 32;
+    const fit = trimmed ? captionFits(trimmed, { fontSize: start, fontFamily: theme.fontFamily }, boxSize ?? { w: freeW, h: ch * 0.8 }) : null;
+    if (fit && !fit.fits && fit.fitsAt == null) return { added: false, fontSize: start, shrunk: false, tooLong: true };
+    const fontSize = fit && !fit.fits && fit.fitsAt != null ? fit.fitsAt : start;
+    pushSnapshot();
     updateCurrentPage((page) => {
-      if (slots.length > 0 && emptyBox >= 0) {
+      if (inBox) {
         const newText: TextElement = {
           id: `box-${emptyBox}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           text: trimmed || 'Double-tap to edit',
-          x: 0, y: 0, fontSize: 28,
+          x: 0, y: 0, fontSize,
           fontFamily: theme.fontFamily, color: theme.textColor,
           bold: false, italic: false, underline: false,
           alignment: (slots[emptyBox].align ?? 'center') as TextElement['alignment'],
@@ -2919,17 +2953,25 @@ export function useBuilderState(): BuilderActions {
         };
         return { ...page, textElements: [...page.textElements, newText] };
       }
+      // Free text: a box 80% of the page wide (the text wraps inside it),
+      // centred on (cx, cy) and kept inside the page.
+      const words = trimmed || 'Double click to edit';
+      const lines = Math.max(1, Math.ceil((words.length * fontSize * 0.6) / freeW));
+      const blockH = lines * fontSize * TEXT_LINE_HEIGHT;
       const newText: TextElement = {
         id: `text-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        text: trimmed || 'Double click to edit',
-        x, y, fontSize: 32,
+        text: words,
+        x: Math.round(Math.min(Math.max(0, cx - freeW / 2), cw - freeW)),
+        y: Math.round(Math.min(Math.max(0, cy - blockH / 2), Math.max(0, ch - blockH))),
+        fontSize,
         fontFamily: theme.fontFamily, color: theme.textColor,
         bold: false, italic: false, underline: false,
-        alignment: 'center', rotation: 0, opacity: 100, width: 200,
+        alignment: 'center', rotation: 0, opacity: 100, width: freeW,
       };
       return { ...page, textElements: [...page.textElements, newText] };
     });
-  }, [updateCurrentPage, selectedTemplate, albumPages, currentPageIndex]);
+    return { added: true, fontSize, shrunk: fontSize < start, tooLong: false };
+  }, [updateCurrentPage, selectedTemplate, albumPages, currentPageIndex, albumSize]);
 
   // Drop a themed quote into the current page's largest empty band (so the user
   // doesn't have to type). Returns the quote placed, or null when the page is
