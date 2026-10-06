@@ -28,6 +28,7 @@ import { FONTS } from './fonts';
 import { FontSelect } from './FontList';
 import { DEFAULT_COVER, type AlbumPage } from './types';
 import { medianSharpness, photoQuality } from '../../lib/photoCheck';
+import { coverTitleFit } from './textFit';
 import { useModalDialog } from '../../lib/useModalDialog';
 
 const SPINE_STRIP_W = 26;
@@ -119,6 +120,9 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   // `title` snapshot here would make two edits fired before a re-render clobber
   // each other (last write wins), e.g. Bold then Italic in quick succession.
   const updateTitle = (patch: Partial<typeof title>) => b.setBoxText(0, { text: title.text, ...patch });
+  // The front's title box clips what doesn't fit: say so as it's typed, the
+  // way a page's text box does, with the size that fits.
+  const titleFit = useMemo(() => coverTitleFit(coverFront, albumSize), [coverFront, albumSize]);
 
   // ── Cover photo crop: drag the preview to reposition, slider to zoom. A cover
   //    is one fixed-aspect panel, so a photo can't be ratio-matched to it — the
@@ -336,6 +340,17 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               className="w-full px-3 py-2.5 rounded-xl border border-line bg-white text-[15px] text-dark outline-none focus:border-blush-pink"
               style={{ fontFamily: title.fontFamily }}
             />
+            {titleFit && !titleFit.fits && (
+              <span className="mt-1 flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-2.5 py-2 text-[11px] text-[#8A5A12]" role="status" data-testid="cover-title-too-long">
+                <span className="flex-1 min-w-[10rem]">Too long for the front cover: part of it will be cut off in print. Shorten it{titleFit.fitsAt ? ', or make the text smaller' : ''}.</span>
+                {titleFit.fitsAt && (
+                  <button type="button" onClick={() => updateTitle({ fontSize: titleFit.fitsAt! })} data-testid="cover-title-make-fit"
+                    className="shrink-0 px-2.5 py-1 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
+                    Make it fit (size {titleFit.fitsAt})
+                  </button>
+                )}
+              </span>
+            )}
             {/* The spine is narrow: say what it prints when it isn't the title as typed. */}
             {spine.shortened ? (
               <span className="block mt-1 text-[11px] text-[#8A5A12]" data-testid="spine-too-long">

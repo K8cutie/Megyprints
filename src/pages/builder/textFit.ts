@@ -88,6 +88,21 @@ export function overflowingCaptions(
   return out;
 }
 
+/** Does the front cover's title fit its box? The cover title is box 0 of
+ *  the cover page and prints the way a caption does (no binding margin), so
+ *  the same arithmetic holds. A long title showed only its middle lines on the
+ *  front, top and bottom cut off, and only the spine said anything (1-star
+ *  testers round 3, the Perfectionist and the Rule-Breaker). null when there
+ *  is no title or it can't be measured. */
+export function coverTitleFit(coverFront: AlbumPage | null | undefined, albumSize: AlbumSizePreset, m: Measurer | null = defaultMeasurer()): Fit | null {
+  const el = coverFront?.textElements?.find((t) => t.boxIndex === 0);
+  if (!coverFront || !el || !(el.text ?? '').trim()) return null;
+  const box = captionBoxSize(coverFront, 0, albumSize, 0, { coverMode: true });
+  return box ? captionFits(el.text, el, box, m) : null;
+}
+
+export const COVER_TITLE_TOO_LONG_MESSAGE = 'The cover title is too long for the front cover: part of it is cut off in print.';
+
 /** "Before you order" line for them, or ''. */
 export function longTextsMessage(count: number): string {
   if (!count) return '';
