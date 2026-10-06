@@ -88,6 +88,10 @@ export class ActionEngine {
           if (target === undefined) {
             return { intentType: intent.type, success: false, message: 'Which page number would you like to go to?' };
           }
+          // A page the album doesn't have is said, not swapped for the last one.
+          if (target >= this.builder.albumPages.length) {
+            return { intentType: intent.type, success: false, message: `There's no page ${target + 1}: your album has ${this.builder.albumPages.length} pages.` };
+          }
           const clamped = Math.max(0, Math.min(target, this.builder.albumPages.length - 1));
           this.builder.goToPage(clamped);
           return { intentType: intent.type, success: true, message: `Now on page ${clamped + 1} of ${this.builder.albumPages.length}.` };
