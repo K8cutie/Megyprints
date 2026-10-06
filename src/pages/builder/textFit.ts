@@ -14,7 +14,7 @@ import type { AlbumPage, AlbumSizePreset } from './types';
 import { adaptTemplateToOrientation, getTemplateById } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { getCanvasDimensions } from './layouts';
-import { wrapTextLines, TEXT_LINE_HEIGHT } from './wordArt';
+import { wrapTextLines, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
 
 export interface Box { w: number; h: number }
 export interface CaptionStyle { fontSize?: number; fontFamily?: string; bold?: boolean; italic?: boolean }
@@ -51,7 +51,7 @@ const fontOf = (s: CaptionStyle, size: number) =>
 
 function linesAt(text: string, s: CaptionStyle, size: number, box: Box, m: Measurer): number {
   m.font = fontOf(s, size);
-  const pad = box.w * 0.04;
+  const pad = box.w * CAPTION_PAD_X;
   return wrapTextLines(m as CanvasRenderingContext2D, text, box.w - pad * 2).length;
 }
 

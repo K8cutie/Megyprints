@@ -13,7 +13,7 @@ import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPath
 import { applyLookPixels, isLookId, type LookId } from './looks';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { WORDART_SHADOW, TEXT_LINE_HEIGHT, resolveTextSlotAlign } from './wordArt';
+import { WORDART_SHADOW, FABRIC_LINE_HEIGHT, CAPTION_PAD_X, resolveTextSlotAlign } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import type { QrFill, OrnamentFill } from './types';
 import { clampQrGeom, dealtBoxRoll } from './types';
@@ -1256,10 +1256,13 @@ export function renderTemplateSlots(
     const st = slotTexts?.[i] ?? null;
     if (st) {
       const stText = new fab.Textbox(st.text, {
-        left: sx,
+        // Inside print's margin, at print's line rhythm (see CAPTION_PAD_X,
+        // FABRIC_LINE_HEIGHT): the editor shows the lines paper gets.
+        left: sx + sw * CAPTION_PAD_X,
         top: sy + sh / 2,
         originY: 'center',
-        width: sw,
+        width: sw * (1 - 2 * CAPTION_PAD_X),
+        lineHeight: FABRIC_LINE_HEIGHT,
         fontSize: st.fontSize,
         fontFamily: st.fontFamily,
         fill: st.color,
@@ -2039,7 +2042,8 @@ function renderScene(
     const slotRect = text.boxIndex != null ? textSlotRect(text.boxIndex) : null;
     const autoWidth = Math.max(text.text.length * text.fontSize * 0.6, 100);
     const fabricText = new fab.Textbox(text.text, {
-      left: slotRect ? slotRect.left : text.x,
+      // A bound caption wraps inside print's margin (CAPTION_PAD_X).
+      left: slotRect ? slotRect.left + slotRect.width * CAPTION_PAD_X : text.x,
       // Bound captions sit VERTICALLY CENTERED in their box (origin = center),
       // matching the preview + mobile review. Free text keeps top-left origin.
       top: slotRect ? (slotRect.top + slotRect.height / 2) : text.y,
@@ -2051,10 +2055,10 @@ function renderScene(
       fontStyle: text.italic ? 'italic' : 'normal',
       underline: text.underline,
       // ELEMENT-first alignment via the shared resolver (same as DOM + print);
-      // 1.25 line rhythm matching both (Fabric's default was 1.16, so multi-line
-      // captions sat tighter in the editor than on screen and paper).
+      // the 1.25 line rhythm of both, in Fabric's terms (FABRIC_LINE_HEIGHT:
+      // Fabric multiplies by 1.13, so 1.25 itself spaced lines 13% wider).
       textAlign: resolveTextSlotAlign(text, text.boxIndex != null ? template?.textSlots?.[text.boxIndex] : null),
-      lineHeight: TEXT_LINE_HEIGHT,
+      lineHeight: FABRIC_LINE_HEIGHT,
       stroke: text.outlineWidth && text.outlineColor ? text.outlineColor : undefined,
       strokeWidth: text.outlineWidth && text.outlineColor ? text.outlineWidth : 0,
       paintFirst: 'stroke',
@@ -2074,7 +2078,7 @@ function renderScene(
       cornerSize: 8,
       transparentCorners: false,
       borderColor: '#B85C38',
-      width: slotRect ? slotRect.width : (text.width ?? autoWidth),
+      width: slotRect ? slotRect.width * (1 - 2 * CAPTION_PAD_X) : (text.width ?? autoWidth),
       scaleX: text.scaleX ?? 1,
       scaleY: text.scaleY ?? 1,
     });

@@ -54,6 +54,22 @@ export function wordArtDomStyle(s: WordArtStyle, scale: number): CSSProperties {
  *  different height on paper than it does on screen. */
 export const TEXT_LINE_HEIGHT = 1.25;
 
+/** The margin a caption (a bound text box, or text in a photo slot) wraps
+ *  inside, on each side, as a share of the box's width. Print draws it; the
+ *  preview and the editor used the box's full width, so a line close to the
+ *  box width sat on one line on screen and broke in two on paper ("Beach days
+ *  are the best" / "days": 1-star testers round 3, the Print Inspector). Every
+ *  renderer and the fit check read this one number. */
+export const CAPTION_PAD_X = 0.04;
+
+/** Fabric 5 draws each line fontSize × lineHeight × 1.13 tall (its
+ *  _fontSizeMult), so its lineHeight for TEXT_LINE_HEIGHT on the canvas is
+ *  this. With 1.25 itself the editor spaced lines 13% wider than the preview
+ *  and print: a caption "Make it fit" had fitted still overflowed the box in
+ *  the editor (1-star testers round 3, the Perfectionist). */
+export const FABRIC_FONT_SIZE_MULT = 1.13;
+export const FABRIC_LINE_HEIGHT = TEXT_LINE_HEIGHT / FABRIC_FONT_SIZE_MULT;
+
 /** Caption alignment resolution — the ELEMENT's own choice wins over the
  *  template slot's default, in ALL THREE renderers. (Print used to resolve
  *  template-first on interior pages, so a left-aligned caption printed centered

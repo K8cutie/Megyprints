@@ -14,7 +14,7 @@ import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT } from './wordArt';
+import { drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import { getCanvasDimensions } from './layouts';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './types';
@@ -823,7 +823,7 @@ function renderTextElement(
     // break-word) and clips (overflow:hidden). Printing one unwrapped line let
     // any caption longer than the box run off the page edge — which a themed
     // QUOTE, being longer than a typical caption, hits routinely.
-    const pad = slot.w * 0.04;
+    const pad = slot.w * CAPTION_PAD_X;
     const cx = align === 'left' ? slot.x + pad : align === 'right' ? slot.x + slot.w - pad : slot.x + slot.w / 2;
     const cy = slot.y + slot.h / 2;
     ctx.save();
@@ -888,7 +888,7 @@ function renderSlotText(
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
 
-  const pad = w * 0.04;
+  const pad = w * CAPTION_PAD_X;
   const cx = align === 'left' ? x + pad : align === 'right' ? x + w - pad : x + w / 2;
   const cy = y + h / 2;
 
