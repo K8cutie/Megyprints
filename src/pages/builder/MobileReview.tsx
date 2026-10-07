@@ -22,7 +22,7 @@ import type { QrFill } from './types';
 import { dealtBoxRoll } from './types';
 import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
-import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
+import { isMaskId, edgeGuardMessage, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
 import PageTurnBar from './PageTurnBar';
 import VideoMemoryButton from './VideoMemoryButton';
@@ -62,7 +62,8 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const pickMask = (id: MaskId | 'none') => {
     if (studioSlot == null) return;
     actions.setSlotMask(studioSlot, id === 'none' ? null : id);
-    if (isTextureMask(id)) sayGuard(`A textured edge bites up to ${Math.round(TEXTURE_BITE * 100)}% in from each side — keep faces away from the edge.`);
+    const warn = edgeGuardMessage(id);
+    if (warn) sayGuard(warn);
   };
   const pickLook = (id: LookId | 'none') => { if (studioSlot != null) actions.setSlotLook(studioSlot, id === 'none' ? null : id); };
 

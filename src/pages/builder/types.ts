@@ -13,7 +13,8 @@ export type LayoutStyle =
   | 'trio' | 'asymDuo' | 'panorama' | 'freeform';
 
 export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star' | 'arch'
-  | 'leaf' | 'scallop' | 'hexagon' | 'octagon' | 'diamond' | 'ticket' | 'cloud';
+  | 'leaf' | 'scallop' | 'hexagon' | 'octagon' | 'diamond' | 'ticket' | 'cloud'
+  | 'pinking' | 'stamp' | 'wavy' | 'halftone';
 
 /** Slot purpose. Absent/'photo' = normal photo slot (default; back-compat).
  *  'qr' = QR living-memory slot — filled by page.qrFills[idx], not slotFills.
