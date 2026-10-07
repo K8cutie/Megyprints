@@ -2,11 +2,12 @@ import { MASKS, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
 import { LOOKS, type LookId } from './looks';
 import type { AlbumPage } from './types';
 
-/* The STUDIO strip under the desktop toolbar: masks + looks for the selected
-   photo, the Worn preset. (It also offered "Add sticker" until stickers were
-   retired, owner 2026-10-01.) A real component (not an inline function in
-   BuilderEdit's render) so the hooks linter can see it never touches refs
-   during render. */
+/* The STUDIO strip under the desktop toolbar: masks + filters (looks.ts) for
+   the selected photo. (It also offered "Add sticker" until stickers were
+   retired, owner 2026-10-01; Filter was "Look", and a one-tap "Worn" preset
+   sat here, until owner, 2026-10-07.) A real component (not an inline
+   function in BuilderEdit's render) so the hooks linter can see it never
+   touches refs during render. */
 export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, onGuard }: {
   page: AlbumPage | undefined;
   selectedSlotIndex: number | null;
@@ -39,18 +40,14 @@ export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, o
             {MASKS.map((m) => chip(current === m.id, m.label, () => pickMask(m.id), `mask-${m.id}`))}
           </>
         ) : (
-          <span className="text-[11px] text-light">Select a photo to mask it or change its look · drag a frame to move it</span>
+          <span className="text-[11px] text-light">Select a photo to mask it or add a filter · drag a frame to move it</span>
         )}
       </div>
       {hasPhoto && (
         <div className="h-8 flex items-center gap-2 px-3 overflow-x-auto border-t border-line-soft">
-          <span className="text-[11px] text-medium">Look</span>
-          {chip(currentLook === 'none', 'As shot', () => onLook(slotIdx as number, null), 'look-none')}
-          {LOOKS.map((l) => chip(currentLook === l.id, l.label, () => onLook(slotIdx as number, l.id as LookId), `look-${l.id}`))}
-          <div className="w-px h-4 bg-line" />
-          <span className="text-[11px] text-medium">Preset</span>
-          {chip(current === 'brushed' && currentLook === 'faded', 'Worn', () => { onMask(slotIdx as number, 'brushed'); onLook(slotIdx as number, 'faded'); onGuard('Worn: brushed edge + faded look. Keep faces away from the edge.'); }, 'preset-worn')}
-        </div>
+          <span className="text-[11px] text-medium">Filter</span>
+          {chip(currentLook === 'none', 'Original', () => onLook(slotIdx as number, null), 'look-none')}
+          {LOOKS.map((l) => chip(currentLook === l.id, l.label, () => onLook(slotIdx as number, l.id as LookId), `look-${l.id}`))}        </div>
       )}
     </div>
   );

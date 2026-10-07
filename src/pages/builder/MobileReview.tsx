@@ -254,9 +254,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               <StudioLayer page={page} pageIndex={idx} W={dims.w} H={dims.h} albumSize={actions.albumSize}
                 selectedSlot={studioSlot} onSelectSlot={setStudioSlot}
                 selectedSticker={studioSticker} onSelectSticker={setStudioSticker}
-                onOpenSheet={setStudioSheet}
-                onWorn={() => { if (studioSlot != null) { actions.setSlotMask(studioSlot, 'brushed'); actions.setSlotLook(studioSlot, 'faded'); sayGuard('Worn: brushed edge + faded look. Keep faces away from the edge.'); } }}
-                onStickerGeom={(uid, geom) => afterGuard(actions.updateStickerGeom(uid, geom))}
+                onOpenSheet={setStudioSheet}                onStickerGeom={(uid, geom) => afterGuard(actions.updateStickerGeom(uid, geom))}
                 onStickerRemove={(uid) => { actions.removeSticker(uid); setStudioSticker(null); }} />
             )}
           </motion.div>
