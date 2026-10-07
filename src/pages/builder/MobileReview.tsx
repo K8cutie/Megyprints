@@ -23,7 +23,7 @@ import { dealtBoxRoll } from './types';
 import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
-import { isLookId, VINTAGE, type LookId } from './looks';
+import { isLookId, type LookId } from './looks';
 import PageTurnBar from './PageTurnBar';
 import VideoMemoryButton from './VideoMemoryButton';
 
@@ -254,9 +254,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               <StudioLayer page={page} pageIndex={idx} W={dims.w} H={dims.h} albumSize={actions.albumSize}
                 selectedSlot={studioSlot} onSelectSlot={setStudioSlot}
                 selectedSticker={studioSticker} onSelectSticker={setStudioSticker}
-                onOpenSheet={setStudioSheet}
-                onVintage={() => { if (studioSlot != null) { actions.setSlotMask(studioSlot, VINTAGE.mask); actions.setSlotLook(studioSlot, VINTAGE.look); sayGuard(VINTAGE.says); } }}
-                onStickerGeom={(uid, geom) => afterGuard(actions.updateStickerGeom(uid, geom))}
+                onOpenSheet={setStudioSheet}                onStickerGeom={(uid, geom) => afterGuard(actions.updateStickerGeom(uid, geom))}
                 onStickerRemove={(uid) => { actions.removeSticker(uid); setStudioSticker(null); }} />
             )}
           </motion.div>

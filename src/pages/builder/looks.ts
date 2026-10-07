@@ -8,8 +8,6 @@
    browser's canvas `filter` support.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import type { MaskId } from './masks';
-
 export type LookId = 'bw' | 'sepia' | 'faded' | 'warm';
 export type LookOp =
   | { fn: 'grayscale'; v: number }
@@ -24,15 +22,6 @@ export const LOOKS: { id: LookId; label: string; ops: LookOp[] }[] = [
   { id: 'faded', label: 'Faded', ops: [{ fn: 'sepia', v: 0.18 }, { fn: 'saturate', v: 0.72 }, { fn: 'contrast', v: 0.86 }, { fn: 'brightness', v: 1.07 }] },
   { id: 'warm', label: 'Warm', ops: [{ fn: 'sepia', v: 0.22 }, { fn: 'saturate', v: 1.15 }, { fn: 'brightness', v: 1.03 }] },
 ];
-
-/* VINTAGE (was "Worn" until owner, 2026-10-07: "what is worn"): the one-tap
-   preset on the photo pill and the desktop strip — a brushed edge plus the
-   Faded filter. One definition, so both say and do the same thing. */
-export const VINTAGE: { mask: MaskId; look: LookId; says: string } = {
-  mask: 'brushed',
-  look: 'faded',
-  says: 'Vintage: brushed edge + the Faded filter. Keep faces away from the edge.',
-};
 
 export function isLookId(v: unknown): v is LookId {
   return typeof v === 'string' && LOOKS.some((l) => l.id === v);

@@ -12,10 +12,11 @@ import { pageInches } from './stickers';
 /* ══════════════════════════════════════════════════════════════════════════
    STUDIO ON THE PHONE (owner, 2026-09-13: "I want to see the mobile version").
    Not a squeezed desktop: the page stays the hero, tools live on the thing
-   you tap. Tap a photo → a pill (Mask · Filter · Vintage); Mask / Filter open
-   a bottom sheet of THUMBNAILS of that very photo, so you pick by eye. (Filter
-   was "Look" and Vintage was "Worn" until owner, 2026-10-07: "what are
-   those" — the code still calls a filter a look, see looks.ts.) Stickers
+   you tap. Tap a photo → a pill (Mask · Filter); each opens a bottom sheet
+   of THUMBNAILS of that very photo, so you pick by eye. (Owner, 2026-10-07:
+   "Look" became Filter — the code still calls a filter a look, see looks.ts
+   — and the one-tap "Worn" preset was removed: brushed edge is in Mask,
+   Faded is in Filter.) Stickers
    are retired (owner, 2026-10-01) — none can be added — but a placed one
    still shows and prints: tap it → a pill with 1 mm nudge arrows and Remove;
    drag it with a finger, pinch to resize. Every change goes through the same
@@ -96,7 +97,7 @@ export function StudioSheet({ kind, photo, currentMask, currentLook, onPickMask,
 }
 
 /* ── The layer over the page: the photo pill, the sticker hit areas + pill ── */
-export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, onSelectSlot, selectedSticker, onSelectSticker, onOpenSheet, onVintage, onStickerGeom, onStickerRemove }: {
+export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, onSelectSlot, selectedSticker, onSelectSticker, onOpenSheet, onStickerGeom, onStickerRemove }: {
   page: AlbumPage;
   pageIndex: number;
   W: number; H: number;
@@ -106,7 +107,6 @@ export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, on
   selectedSticker: string | null;
   onSelectSticker: (uid: string | null) => void;
   onOpenSheet: (kind: 'mask' | 'look') => void;
-  onVintage: () => void;
   onStickerGeom: (uid: string, geom: OrnamentTransform) => GuardReason[];
   onStickerRemove: (uid: string) => void;
 }) {
@@ -190,9 +190,7 @@ export function StudioLayer({ page, pageIndex, W, H, albumSize, selectedSlot, on
       {rect && selectedSlot != null && (
         <Pill left={pillLeft} top={pillTop} W={W} onClose={() => onSelectSlot(null)} testid="studio-pill">
           <button type="button" className={pillBtn} onClick={() => onOpenSheet('mask')} data-testid="pill-mask">Mask</button>
-          <button type="button" className={pillBtn} onClick={() => onOpenSheet('look')} data-testid="pill-filter">Filter</button>
-          <button type="button" className={pillBtn} onClick={onVintage} data-testid="pill-vintage">Vintage</button>
-        </Pill>
+          <button type="button" className={pillBtn} onClick={() => onOpenSheet('look')} data-testid="pill-filter">Filter</button>        </Pill>
       )}
 
       {/* the sticker pill */}

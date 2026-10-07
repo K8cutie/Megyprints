@@ -1,13 +1,13 @@
 import { MASKS, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
-import { LOOKS, VINTAGE, type LookId } from './looks';
+import { LOOKS, type LookId } from './looks';
 import type { AlbumPage } from './types';
 
 /* The STUDIO strip under the desktop toolbar: masks + filters (looks.ts) for
-   the selected photo, the Vintage preset. (It also offered "Add sticker"
-   until stickers were retired, owner 2026-10-01; Filter was "Look" and
-   Vintage was "Worn" until owner, 2026-10-07.) A real component (not an
-   inline function in BuilderEdit's render) so the hooks linter can see it
-   never touches refs during render. */
+   the selected photo. (It also offered "Add sticker" until stickers were
+   retired, owner 2026-10-01; Filter was "Look", and a one-tap "Worn" preset
+   sat here, until owner, 2026-10-07.) A real component (not an inline
+   function in BuilderEdit's render) so the hooks linter can see it never
+   touches refs during render. */
 export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, onGuard }: {
   page: AlbumPage | undefined;
   selectedSlotIndex: number | null;
@@ -47,11 +47,7 @@ export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, o
         <div className="h-8 flex items-center gap-2 px-3 overflow-x-auto border-t border-line-soft">
           <span className="text-[11px] text-medium">Filter</span>
           {chip(currentLook === 'none', 'Original', () => onLook(slotIdx as number, null), 'look-none')}
-          {LOOKS.map((l) => chip(currentLook === l.id, l.label, () => onLook(slotIdx as number, l.id as LookId), `look-${l.id}`))}
-          <div className="w-px h-4 bg-line" />
-          <span className="text-[11px] text-medium">Preset</span>
-          {chip(current === VINTAGE.mask && currentLook === VINTAGE.look, 'Vintage', () => { onMask(slotIdx as number, VINTAGE.mask); onLook(slotIdx as number, VINTAGE.look); onGuard(VINTAGE.says); }, 'preset-vintage')}
-        </div>
+          {LOOKS.map((l) => chip(currentLook === l.id, l.label, () => onLook(slotIdx as number, l.id as LookId), `look-${l.id}`))}        </div>
       )}
     </div>
   );
