@@ -209,6 +209,12 @@ describe('Studio slot overrides go through resolveSlotBox in every renderer', ()
     expect(domShape).toMatch(/textureMaskCss\(/);
     expect(fabric).toMatch(/applyTextureAlpha\(/);
     expect(print).toMatch(/applyTextureAlpha\(/);
+    // an edge that paints (torn paper's white rim) is drawn by all three
+    expect(dom).toMatch(/textureOverlayCss\(/);
+    expect(fabric).toMatch(/loadMaskOverlay\(/);
+    expect(print).toMatch(/loadMaskOverlay\(/);
+    expect(fabric).toMatch(/applyTextureAlpha\([^)]*overlay\)/);
+    expect(print).toMatch(/applyTextureAlpha\([^)]*overlay\)/);
     // looks: the DOM uses lookCss, Fabric + print apply the same ops to pixels
     expect(dom).toMatch(/lookCss\(/);
     expect(fabric).toMatch(/applyLookPixels\(/);

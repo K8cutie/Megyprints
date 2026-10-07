@@ -1,4 +1,4 @@
-import { MASKS, isTextureMask, TEXTURE_BITE, type MaskId } from './masks';
+import { MASKS, edgeGuardMessage, type MaskId } from './masks';
 import { LOOKS, type LookId } from './looks';
 import type { AlbumPage } from './types';
 
@@ -21,7 +21,8 @@ export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, o
   const currentLook = (slotIdx != null ? page?.slotLooks?.[slotIdx] : null) ?? 'none';
   const pickMask = (id: MaskId | 'none') => {
     onMask(slotIdx as number, id === 'none' ? null : id);
-    if (isTextureMask(id)) onGuard(`A textured edge bites up to ${Math.round(TEXTURE_BITE * 100)}% in from each side — keep faces away from the edge.`);
+    const warn = edgeGuardMessage(id);
+    if (warn) onGuard(warn);
   };
   const chip = (active: boolean, label: string, onClick: () => void, testid: string) => (
     <button key={testid} type="button" aria-pressed={active} onClick={onClick} data-testid={testid}

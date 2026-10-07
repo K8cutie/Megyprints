@@ -26,7 +26,7 @@ import { fillableBoxCount } from './generateAlbum';
 import { BOOK } from './bookFeel';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoDomBox } from './slotPhotoFit';
-import { applyMask, isMaskId } from './masks';
+import { applyMask, isMaskId, textureOverlayCss } from './masks';
 import { lookCss, isLookId } from './looks';
 import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
@@ -483,6 +483,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 maxWidth: 'none', objectPosition: photoBox.objectPosition, ...frameCss.inner,
                 // STUDIO look — the same filter functions the editor + print apply to pixels.
                 ...(isLookId(page.slotLooks?.[idx]) ? { filter: lookCss(page.slotLooks?.[idx] as never) } : {}) }} />
+            {/* An edge that paints (torn paper's white rim): over the photo, under
+                the frame's own mask — after the look, as the editor + print draw it. */}
+            {slot.texture && textureOverlayCss(slot.texture) && <div aria-hidden style={textureOverlayCss(slot.texture)!} />}
             {editable && onRemoveFromSlot && (
               <button onClick={(e) => { e.stopPropagation(); onRemoveFromSlot(idx); }} aria-label="Remove photo"
                 style={{

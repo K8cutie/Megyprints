@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoRect } from './slotPhotoFit';
-import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, applyTextureAlpha, type MaskId } from './masks';
+import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha, type MaskId } from './masks';
 import { applyLookPixels, isLookId, type LookId } from './looks';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
@@ -1387,7 +1387,10 @@ export function renderTemplateSlots(
           } catch { octx = null; /* show the plain image */ }
           if (off && octx) {
             if (slot.texture) {
-              try { applyTextureAlpha(octx, await loadMaskTexture(slot.texture), 0, 0, off.width, off.height); }
+              try {
+                const [tex, overlay] = await Promise.all([loadMaskTexture(slot.texture), loadMaskOverlay(slot.texture)]);
+                applyTextureAlpha(octx, tex, 0, 0, off.width, off.height, overlay);
+              }
               catch { /* texture missing — the photo without the edge, as print does */ }
               // the texture loads async: a newer render may have started since
               if (renderId !== currentRenderId) return;

@@ -6,7 +6,7 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoRect } from './slotPhotoFit';
-import { applyMask, isMaskId, archRy, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, applyTextureAlpha } from './masks';
+import { applyMask, isMaskId, archRy, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha } from './masks';
 import { applyLookPixels, isLookId } from './looks';
 import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { dedupeSlotFills } from './slotUtils';
@@ -658,7 +658,10 @@ async function renderSlotPhoto(
       if (look) applyLookPixels(tc, 0, 0, t.width, t.height, look);
       if (slot.feather) featherAlpha(tc, 0, 0, t.width, t.height, slot.feather, slot.featherSide);
       if (slot.texture) {
-        try { applyTextureAlpha(tc, await loadMaskTexture(slot.texture), 0, 0, t.width, t.height); }
+        try {
+          const [tex, overlay] = await Promise.all([loadMaskTexture(slot.texture), loadMaskOverlay(slot.texture)]);
+          applyTextureAlpha(tc, tex, 0, 0, t.width, t.height, overlay);
+        }
         catch { /* texture missing — print the plain photo rather than nothing */ }
       }
       ctx.drawImage(t, sx, sy);

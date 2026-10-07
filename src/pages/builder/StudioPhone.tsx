@@ -4,7 +4,7 @@ import { X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2 } from 'lu
 import type { AlbumPage, UploadedPhoto, TemplateSlot, OrnamentTransform } from './types';
 import type { GuardReason } from './slotGeometry';
 import { slotRectPx } from './studioPhoneGeom';
-import { applyMask, MASKS, TEXTURE_BITE, type MaskId } from './masks';
+import { applyMask, MASKS, textureOverlayCss, type MaskId } from './masks';
 import { LOOKS, lookCss, type LookId } from './looks';
 import { slotShapeStyle } from './slotShapeStyle';
 import { pageInches } from './stickers';
@@ -60,6 +60,7 @@ export function StudioSheet({ kind, photo, currentMask, currentLook, onPickMask,
       <div style={{ width: THUMB, height: THUMB, position: 'relative' }}>
         <div style={{ position: 'absolute', left: sh.leftOffset, top: sh.topOffset, width: sh.width, height: sh.height, overflow: 'hidden', background: '#EFE4D2', ...sh.style } as CSSProperties}>
           {photo && <img src={photo.previewUrl} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: look === 'none' ? undefined : lookCss(look) }} />}
+          {applied.texture && textureOverlayCss(applied.texture) && <div aria-hidden style={textureOverlayCss(applied.texture)!} />}
         </div>
       </div>
     );
@@ -88,7 +89,7 @@ export function StudioSheet({ kind, photo, currentMask, currentLook, onPickMask,
             ))}
           </div>
           {kind === 'mask' && (
-            <p className="px-4 pt-2 text-[11px] text-light">Brushed, Deckle and Frost bite up to {Math.round(TEXTURE_BITE * 100)}% in from each side — keep faces away from the edge.</p>
+            <p className="px-4 pt-2 text-[11px] text-light">Some edges reach into the photo — keep faces away from the edge.</p>
           )}
         </motion.div>
       </motion.div>
