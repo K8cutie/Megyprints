@@ -1,7 +1,7 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll } from './types';
 import { medianSharpness, isBlurry, photoQuality } from '../../lib/photoCheck';
 import { separateLookAlikes } from './lookAlikes';
-import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, photoSlotCount } from './pageTemplates';
+import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, orientationOfShape, photoSlotCount } from './pageTemplates';
 
 /* ── Ratio LOOSENING budget ───────────────────────────────────────────────────
    Ratio matching is loosened, not removed: a photo still prefers its own ratio,
@@ -609,6 +609,22 @@ export function templatesForPhotoRatio(albumSize: AlbumSizePreset, ratio: PhotoR
   // Last resort for a size with nothing of this orientation: single-ratio
   // layouts only, so even here a slot is never filled across orientations.
   return getTemplatesForAlbum(albumSize).filter(allowed);
+}
+
+/** The shape (width / height) frame `i` of `t` prints at on a `size` page. A
+ *  photo over the whole sheet prints at the PAGE's shape, whatever ratio the
+ *  layout declares (see cropSafe); every other frame is ratio-true. */
+export function frameShape(t: PageTemplate, i: number, size: AlbumSizePreset): number {
+  if (i === 0 && coversWholeSheet(t)) return PAGE_ASPECT[size] ?? 1;
+  return RATIO_VALUE[t.slots[i]?.ratio ?? t.targetRatio] ?? 1;
+}
+
+/** Can a photo of this ratio sit in a frame of this shape? templatesForPhotoRatio's
+ *  rule, one frame at a time: the same orientation, and a crop within the loose
+ *  budget (a 4:3 in a 3:2 frame, 11%, yes; in a square, 25%, no). */
+export function frameTakesPhoto(frame: number, ratio: PhotoRatio): boolean {
+  const photo = RATIO_VALUE[ratio] ?? 1;
+  return orientationOfShape(frame) === orientationOfShape(photo) && cropBetween(frame, photo) <= MAX_LOOSE_CROP + 1e-9;
 }
 
 /** The upload step's note when the CHOSEN photos-per-page doesn't fit these

@@ -18,12 +18,12 @@ import type {
   FrameStyle,
   TextStyle,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
@@ -251,6 +251,47 @@ function dominantPageRatio(
     if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; }
   }
   return pageRatio;
+}
+
+/** The layouts the "Change layout" sheet offers for `page` (LayoutPicker):
+ *  the page's own layout FIRST — the sheet's "✓ Current" — then every layout
+ *  that holds its photos the way the generator deals them: each photo in a
+ *  frame of its own orientation, cropped no more than the loose budget
+ *  (frameTakesPhoto), judged on the page a tap would make. Same photo count
+ *  first, then the nearest counts.
+ *  It used to want layouts built for the photos' EXACT ratio. Three 4:3
+ *  landscapes on Hero Top (3:2 frames, an 11% crop the generator deals all
+ *  the time) got only "Four Landscapes + Box Above / Below": no "✓ Current",
+ *  no 3-photo layout (phone walk, 2026-10-08). */
+export function layoutChoicesForPage(page: AlbumPage, photos: UploadedPhoto[], size: AlbumSizePreset): PageTemplate[] {
+  const ratioOf = analyzePhotos(photos).assignments;
+  const count = new Set((page.slotFills ?? []).filter((f): f is number => f !== null)).size;
+  const holdsPhotos = (t: PageTemplate) => {
+    const relaid = relayPageOnTemplate(page, t);
+    // A memory can turn a full page into its badge layout: judge what's laid.
+    const laid = (relaid.templateId ? getTemplateById(relaid.templateId) : undefined) ?? t;
+    return (relaid.slotFills ?? []).every((f, i) =>
+      f == null || ratioOf[f] == null || frameTakesPhoto(frameShape(laid, i, size), ratioOf[f]));
+  };
+  const current = page.templateId ? getTemplateById(page.templateId) : undefined;
+  const fits = getTemplatesForAlbum(size)
+    .filter((t) => t.id !== current?.id && holdsPhotos(t))
+    .sort((a, b) => Math.abs(photoSlotCount(a) - count) - Math.abs(photoSlotCount(b) - count) || a.id.localeCompare(b.id));
+  return current ? [current, ...fits] : fits;
+}
+
+/** Where Megy's "next layout" (cycleLayout) takes `page`: the next of the
+ *  sheet's layouts that hold the same number of photos, in id order, looping.
+ *  Undefined when no other one does. It used to fall back to ANY layout of
+ *  that count: three landscapes went from Hero Top to Three Squares, losing
+ *  a quarter of each photo. */
+export function nextLayoutInCycle(page: AlbumPage, photos: UploadedPhoto[], size: AlbumSizePreset): PageTemplate | undefined {
+  const count = new Set((page.slotFills ?? []).filter((f): f is number => f !== null)).size;
+  const pool = layoutChoicesForPage(page, photos, size)
+    .filter((t) => photoSlotCount(t) === count)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const next = pool[(pool.findIndex((t) => t.id === page.templateId) + 1) % Math.max(1, pool.length)];
+  return next && next.id !== page.templateId ? next : undefined;
 }
 
 /** New pages for `photos` (photo indices), on layouts that hold exactly them:
@@ -2171,52 +2212,31 @@ export function useBuilderState(): BuilderActions {
     });
   }, [currentPageIndex, photosPerPage, albumSize]);
 
-  /* Cycle the current page through ratio-MATCHED layouts (same photo count AND
-     same slot ratio as the photos), in order, looping — powers mobile "Change".
-     Re-flows the photos so they never get cropped into a mismatched slot. */
+  /* Cycle the current page through the layouts that hold its photos (same
+     photo count, no bad crop — nextLayoutInCycle), in order, looping — powers
+     Megy's "next layout". Re-flows the photos into the new frames. */
   const cycleLayout = useCallback(() => {
+    const before = albumPagesRef.current[currentPageIndex];
+    const template = before && nextLayoutInCycle(before, uploadedPhotos, albumSize);
+    if (!template) return; // nothing else holds these photos: no undo step for nothing
     pushSnapshot();
-    const analysis = analyzePhotos(uploadedPhotos);
     setAlbumPages((prev) => {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page) return prev;
-      const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
-      const count = existingFills.length;
-      // The page's dominant photo ratio → only cycle templates whose slots match.
-      const pageRatio = dominantPageRatio(existingFills, analysis.assignments);
-      const allForSize = getTemplatesForAlbum(albumSize);
-      let pool = allForSize.filter((t) => t.slotCount === count && (!pageRatio || t.targetRatio === pageRatio));
-      if (pool.length === 0) pool = allForSize.filter((t) => t.slotCount === count);
-      if (pool.length === 0) pool = allForSize;
-      pool = [...pool].sort((a, b) => a.id.localeCompare(b.id));
-      if (pool.length === 0) return prev;
-      const curIdx = pool.findIndex((t) => t.id === page.templateId);
-      const template = pool[(curIdx + 1) % pool.length];
       next[currentPageIndex] = relayPageOnTemplate(page, template);
       return next;
     });
   }, [currentPageIndex, albumSize, uploadedPhotos]);
 
-  /** The templates available for the current page (same pool the cycle uses:
-   *  matching the page's photo count + dominant ratio, active only), sorted —
-   *  for the layout picker so the user can choose directly. */
+  /** The layouts the picker offers for the current page: its own first ("✓
+   *  Current"), then the ones that hold its photos (layoutChoicesForPage).
+   *  Photos a smaller layout can't hold, the picker asks about first; a
+   *  bigger one leaves empty "+" frames to fill. */
   const availableTemplatesForCurrentPage = useCallback((): PageTemplate[] => {
     const page = albumPages[currentPageIndex];
     if (!page) return [];
-    const analysis = analyzePhotos(uploadedPhotos);
-    const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
-    const count = existingFills.length;
-    const pageRatio = dominantPageRatio(existingFills, analysis.assignments);
-    const allForSize = getTemplatesForAlbum(albumSize);
-    // EXPERIMENT: slotCount removed from the qualification — show EVERY layout whose
-    // ratio matches the page's photos, regardless of photo count. Strict RATIO match
-    // stays (no crop). Note: picking a layout with FEWER slots than photos drops the
-    // extra photos from this page; MORE slots leaves empty "+" slots to fill.
-    let pool = allForSize.filter((t) => (!pageRatio || t.targetRatio === pageRatio));
-    if (pool.length === 0) pool = allForSize;
-    // Same photo count first, then nearest counts, then by id.
-    return [...pool].sort((a, b) => Math.abs(a.slotCount - count) - Math.abs(b.slotCount - count) || a.id.localeCompare(b.id));
+    return layoutChoicesForPage(page, uploadedPhotos, albumSize);
   }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
 
   /** Apply a SPECIFIC template to the current page (the picker's choice), keeping

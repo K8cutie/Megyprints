@@ -1,8 +1,9 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   LayoutPicker — the "Change layout" picker. Shows every template available for
-   the current page (matching its photo count + ratio, active only) as a REAL
-   preview (the page rendered with your actual photos), so the user picks the
-   look directly. Bottom sheet on phones/tablets, centered modal on desktop.
+   LayoutPicker — the "Change layout" picker. Shows the page's own layout first
+   ("✓ Current"), then every layout that holds its photos without a bad crop,
+   same photo count first (layoutChoicesForPage), each as a REAL preview (the
+   page rendered with your actual photos), so the user picks the look directly.
+   Bottom sheet on phones/tablets, centered modal on desktop.
    Shared: opened from the mobile review AND the desktop panel via
    actions.layoutPickerOpen.
 
@@ -102,6 +103,9 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
                     </button>
                   );
                 })}
+                {layouts.length === 1 && layouts[0].id === page.templateId && (
+                  <p className="col-span-full px-3 pb-3 text-center text-sm text-light">No other layouts fit this page.</p>
+                )}
               </div>
             )}
           </motion.div>
