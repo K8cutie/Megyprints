@@ -60,6 +60,8 @@ export interface Section {
   layout: SectionLayout;
   density: Density;
   looksPerPage: LooksPerPage;
+  /** Every portrait photo brought in for this class (matched or not). */
+  pool?: string[];
   /** The adviser picked a portrait size (the guide's step 5). */
   sizeChosen?: boolean;
   /** The adviser said there's no class photo for this section. */

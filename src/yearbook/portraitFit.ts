@@ -72,9 +72,27 @@ export function fitPortrait(width: number, height: number, face: FaceGeom | null
   return { crop, head, eyes: { x: (ex - x) / cw, y: (ey - y) / ch }, tight };
 }
 
-/** Does a square badge (frame-relative rect) touch the head? */
+/** Every OTHER face in the photo (a parent, a classmate in the background)
+ *  as an oval in frame coordinates, so the badge stays off them too. */
+export function otherFaceOvals(width: number, height: number, faces: FaceGeom[], fit: PortraitFit): { x0: number; y0: number; x1: number; y1: number }[] {
+  const main = mainFace(faces);
+  const { crop } = fit;
+  return faces.filter((f) => f !== main).map((f) => {
+    const bx = f.box.x * width, by = f.box.y * height, bw = f.box.w * width, bh = f.box.h * height;
+    return { x0: (bx - bw * 0.12 - crop.x) / crop.w, x1: (bx + bw * 1.12 - crop.x) / crop.w, y0: (by - bh * 0.45 - crop.y) / crop.h, y1: (by + bh - crop.y) / crop.h };
+  });
+}
+
+/** Does a square badge (frame-relative rect) touch the head? The head is the
+ *  oval inside its box (hair included): the box's corners are empty space,
+ *  which is exactly where an upper-right badge sits. */
 export function badgeHitsHead(fit: PortraitFit, badge: { x0: number; y0: number; x1: number; y1: number }): boolean {
-  const h = fit.head;
+  return rectHitsOval(fit.head, badge);
+}
+
+export function rectHitsOval(h: { x0: number; y0: number; x1: number; y1: number } | null, r: { x0: number; y0: number; x1: number; y1: number }): boolean {
   if (!h) return false;
-  return badge.x0 < h.x1 && badge.x1 > h.x0 && badge.y0 < h.y1 && badge.y1 > h.y0;
+  const cx = (h.x0 + h.x1) / 2, cy = (h.y0 + h.y1) / 2, rx = (h.x1 - h.x0) / 2, ry = (h.y1 - h.y0) / 2;
+  const px = Math.min(Math.max(cx, r.x0), r.x1), py = Math.min(Math.max(cy, r.y0), r.y1);
+  return ((px - cx) / rx) ** 2 + ((py - cy) / ry) ** 2 < 1;
 }

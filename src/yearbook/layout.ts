@@ -18,7 +18,7 @@
    • nothing within 0.5 in of the spine; page numbers in the outside corner. */
 import { GRID, HEADER_H, NAME_MIN_PT, NAME_PT, PORTRAIT_ASPECT, QR_BADGE_IN, QR_BADGE_INSET, CLASS_QR_IN, TRIM, isRecto, liveArea, ptToIn, type Density } from './geometry';
 import { displayName, sortForPage } from './classList';
-import { badgeHitsHead, fitPortrait, mainFace, type Crop, type PortraitFit } from './portraitFit';
+import { badgeHitsHead, fitPortrait, mainFace, otherFaceOvals, rectHitsOval, type Crop, type PortraitFit } from './portraitFit';
 import type { Person, PhotoMeta, Section } from './types';
 
 export type FontRole = 'display' | 'body';
@@ -81,17 +81,19 @@ function cornerBadge(frameW: number, frameH: number, size = QR_BADGE_IN) {
   return { x0, y0, x1, y1 };
 }
 
-function hits(fit: PortraitFit | null, frameW: number, frameH: number): boolean {
+function hits(fit: PortraitFit | null, frameW: number, frameH: number, photo?: PhotoMeta): boolean {
   const badge = cornerBadge(frameW, frameH);
+  if (fit && photo && otherFaceOvals(photo.width, photo.height, photo.faces, fit).some((o) => rectHitsOval(o, badge))) return true;
   if (fit && fit.head) return badgeHitsHead(fit, badge);
-  const h = STANDARD_HEAD;
-  return badge.x0 < h.x1 && badge.x1 > h.x0 && badge.y0 < h.y1 && badge.y1 > h.y0;
+  return rectHitsOval(STANDARD_HEAD, badge);
 }
 
-/** Fit a name into a width: shrink in ¼ pt steps, then split into two lines. */
+/** Fit a name into a width: shrink by at most 1 pt in ¼ pt steps, then split
+ *  into two lines (first name on top), then shrink the two lines. A long
+ *  name never ends up as one tiny line next to normal-sized neighbours. */
 export function fitName(p: Pick<Person, 'first' | 'last' | 'middle' | 'suffix'>, width: number, startPt: number, measure: Measure): { lines: string[]; pt: number } {
   const full = displayName(p);
-  for (let pt = startPt; pt >= NAME_MIN_PT - 1e-9; pt -= 0.25) {
+  for (let pt = startPt; pt >= Math.max(NAME_MIN_PT, startPt - 1) - 1e-9; pt -= 0.25) {
     if (measure(full, pt, 'body', 600) <= width) return { lines: [full], pt };
   }
   const a = [p.first, p.middle].filter(Boolean).join(' ');
@@ -165,7 +167,7 @@ function groupPage(section: Section, adviser: Person | undefined, students: Pers
     y += 0.3;
   }
   const names = sortForPage(students).map(displayName);
-  const cols = 3, colW = (w - 0.3) / cols, pt = 8, lh = ptToIn(pt) * 1.45;
+  const cols = 3, colW = (w - 0.3) / cols, pt = 9, lh = ptToIn(pt) * 1.5;
   const perCol = Math.ceil(names.length / cols);
   for (let c = 0; c < cols; c++) {
     const chunk = names.slice(c * perCol, (c + 1) * perCol);
@@ -282,7 +284,7 @@ function looksPages(section: Section, cells: { person: Person; photos: PhotoMeta
   // Decide the QR spot once for the section from the main (toga) photos.
   const L0 = liveArea(startPage);
   const geo = looksGeometry(n, L0);
-  const anyHit = cells.some((c) => hits(portraitFitFor(c.photos[0]), geo.mainW, geo.mainH));
+  const anyHit = cells.some((c) => hits(portraitFitFor(c.photos[0]), geo.mainW, geo.mainH, c.photos[0]));
   const qrMode: QrMode = n === 4 || anyHit ? 'name' : 'corner';
   for (let i = 0, page = startPage; i < cells.length; i += n, page++) {
     const L = liveArea(page);
@@ -393,7 +395,7 @@ export function layoutSection(section: Section, ctx: LayoutCtx): SectionLayoutRe
     });
     // QR rule (a): corner when it clears every face at this size, else beside the name.
     const G = gridGeometry(page, section.density, nameBand(section.density, 'corner'));
-    const anyHit = cells.length === 0 ? hits(null, G.pw, G.ph) : cells.some((c) => hits(c.fit, G.pw, G.ph));
+    const anyHit = cells.length === 0 ? hits(null, G.pw, G.ph) : cells.some((c) => hits(c.fit, G.pw, G.ph, c.photo));
     qrMode = anyHit ? 'name' : 'corner';
     const G2 = gridGeometry(page, section.density, nameBand(section.density, qrMode));
     portrait = { w: G2.pw, h: G2.ph };

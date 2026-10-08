@@ -133,7 +133,9 @@ export function matchPhotos(people: MatchPerson[], photos: MatchPhoto[], perPers
     return { method: 'names', assignments, confidence, similar, unmatchedPhotos: photos.map((p) => p.id), warnings };
   }
 
-  const scores = people.map((p) => photos.map((ph) => scoreName(p, ph.fileName)));
+  // With one photo each, a photographer's toga shot wins over the other looks.
+  const lookPenalty = (fileName: string) => (perPerson === 1 ? (lookOf(fileName) ?? 0) * 0.01 : 0);
+  const scores = people.map((p) => photos.map((ph) => Math.max(0, scoreName(p, ph.fileName) - lookPenalty(ph.fileName))));
   const photosWithAName = photos.filter((_, j) => people.some((_, i) => scores[i][j] >= 0.6)).length;
   const useNames = photosWithAName >= Math.max(1, Math.ceil(photos.length * 0.5));
 

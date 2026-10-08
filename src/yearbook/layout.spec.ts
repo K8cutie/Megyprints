@@ -128,7 +128,35 @@ describe('layoutSection — three looks', () => {
   });
 });
 
+describe('QR badges never cover a face', () => {
+  it('in corner mode, no badge touches its portrait\'s head oval at any size', async () => {
+    const { fitPortrait, mainFace, rectHitsOval } = await import('./portraitFit');
+    for (const d of [4, 9, 12, 16, 20, 30] as Density[]) {
+      const { section, ctx } = makeSection(30, { density: d });
+      const r = layoutSection(section, ctx);
+      if (r.qrMode !== 'corner') continue;
+      for (const page of r.pages) {
+        const photos = page.elements.filter((e) => e.kind === 'photo' && e.personId) as Extract<El, { kind: 'photo' }>[];
+        const qrs = page.elements.filter((e) => e.kind === 'qr') as Extract<El, { kind: 'qr' }>[];
+        for (const ph of photos) {
+          const meta = ctx.photos[ph.photoId];
+          const fit = fitPortrait(meta.width, meta.height, mainFace(meta.faces));
+          const q = qrs.find((b) => b.x > ph.x && b.x < ph.x + ph.w && b.y >= ph.y && b.y < ph.y + ph.h)!;
+          expect(q).toBeTruthy();
+          const rel = { x0: (q.x - ph.x) / ph.w, x1: (q.x + q.size - ph.x) / ph.w, y0: (q.y - ph.y) / ph.h, y1: (q.y + q.size - ph.y) / ph.h };
+          expect(rectHitsOval(fit.head, rel)).toBe(false);
+        }
+      }
+    }
+  });
+});
+
 describe('fitName', () => {
+  it('wraps a long name to two lines instead of printing it tiny', () => {
+    const r = fitName({ first: 'Lorraine', last: 'Hernandez' }, 0.79, 8, (t, pt) => t.length * (pt / 72) * 0.5);
+    expect(r.lines).toEqual(['Lorraine', 'Hernandez']);
+    expect(r.pt).toBe(8);
+  });
   it('shrinks, then splits long names onto two lines', () => {
     const short = fitName({ first: 'Ana', last: 'Uy' }, 1.2, 9, approxMeasure);
     expect(short.lines).toHaveLength(1);

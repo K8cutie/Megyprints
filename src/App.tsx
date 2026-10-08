@@ -22,6 +22,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 // the entry chunk (which is exactly why it wasn't splitting before).
 const BuilderRoute = lazy(() => import('./pages/builder/BuilderRoute'));
 const Admin = lazy(() => import('./pages/Admin'));
+// MEGYearbooks — desktop yearbook maker. Lazy: its own engine + face AI.
+const YearbookRoute = lazy(() => import('./pages/yearbook/YearbookRoute'));
 import InstallPrompt from './components/InstallPrompt';
 import ResumePrompt from './components/ResumePrompt';
 import { loadTemplateSettings } from './lib/templateSettings';
@@ -77,6 +79,8 @@ export default function App() {
             window instead of the editor/wizard's own overflow containers) is not active
             here. THIS is what broke wheel-scrolling in the builder. */}
         <Route path="/builder/*" element={<BuilderRoute />} />
+        {/* MEGYearbooks — desktop yearbook maker, its own full-screen chrome too. */}
+        <Route path="/yearbooks/*" element={<YearbookRoute />} />
         {/* Operator console — outside the customer Layout (its own chrome) */}
         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
         {/* Catch-all: an unknown hash previously mounted nothing (blank screen).
