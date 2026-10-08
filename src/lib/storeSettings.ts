@@ -158,6 +158,27 @@ export async function setHdMemoriesPrice(next: number): Promise<string | null> {
   return null;
 }
 
+/** Owner-only (definer RPC, 0041). Sets the shipping built into every album
+ *  price ("Free shipping" at checkout) and reloads the schedule. */
+export async function setShippingAllowance(next: number): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_shipping_allowance', { p_amount: Math.round(next) });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
+/** Owner-only (definer RPC, 0041). Sets the crossed-out "was" price — the old
+ *  multiple and its last day (YYYY-MM-DD) — or clears it with nulls. The SQL
+ *  refuses an end date more than 6 months out. */
+export async function setPriceCompare(multiple: number | null, until: string | null): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_price_compare', { p_multiple: multiple, p_until: until });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
 /** Owner-only. The raw cost model behind the schedule, for the admin Pricing
  *  panel. Rejected by the database for anyone else, so a non-owner reaching this
  *  gets an error rather than the figures. */

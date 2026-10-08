@@ -9,8 +9,8 @@ import { useState, useEffect } from 'react';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
-import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
-import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice } from '../../lib/storeSettings';
+import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
 
@@ -49,6 +49,19 @@ export default function PricingPanel() {
   const [savedHd, setSavedHd] = useState(false);
   const [hdErr, setHdErr] = useState('');
 
+  // ── Persisted shipping built into the price ("Free shipping", 0041) ──
+  const [ship, setShip] = useState(0);
+  const [savingShip, setSavingShip] = useState(false);
+  const [savedShip, setSavedShip] = useState(false);
+  const [shipErr, setShipErr] = useState('');
+
+  // ── Persisted crossed-out "was" price (0041) ──
+  const [cmpMult, setCmpMult] = useState('');
+  const [cmpUntil, setCmpUntil] = useState('');
+  const [savingCmp, setSavingCmp] = useState(false);
+  const [savedCmp, setSavedCmp] = useState('');
+  const [cmpErr, setCmpErr] = useState('');
+
   // ── Persisted hosting TERMS (5/10/15/20 yrs; first = included) ──
   const [tiers, setTiers] = useState<{ years: number; price: number }[]>([]);
   const [savingTiers, setSavingTiers] = useState(false);
@@ -67,7 +80,7 @@ export default function PricingPanel() {
     setDisabledSizesState(getDisabledSizes());
     void loadOwnerPricingModel().then((m) => {
       if (!alive) return;
-      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); setHdPrice(Number(m.hd_memories_price ?? 0)); }
+      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); setHdPrice(Number(m.hd_memories_price ?? 0)); setShip(shippingAllowanceOf(m)); setCmpMult(m.compare_multiple != null ? String(m.compare_multiple) : ''); setCmpUntil(m.compare_until ?? ''); }
       else setModelErr('Could not load the cost model. Owner sign-in is required to view pricing.');
     });
     return () => { alive = false; };
@@ -92,6 +105,31 @@ export default function PricingPanel() {
       setModel((m) => (m ? { ...m, hosting_reserve: Math.round(reserve) } : m));
       setSavedReserve(true); setTimeout(() => setSavedReserve(false), 2500);
     }
+  };
+
+  const saveShip = async () => {
+    setSavingShip(true); setSavedShip(false); setShipErr('');
+    const err = await setShippingAllowance(ship);
+    setSavingShip(false);
+    if (err) setShipErr(err);
+    else {
+      setModel((m) => (m ? { ...m, shipping_allowance: Math.round(ship) } : m));
+      setSavedShip(true); setTimeout(() => setSavedShip(false), 2500);
+    }
+  };
+
+  const saveCompare = async (clear: boolean) => {
+    setSavingCmp(true); setSavedCmp(''); setCmpErr('');
+    const mult = clear ? null : Number(cmpMult);
+    const until = clear ? null : cmpUntil;
+    if (!clear && (!Number.isFinite(mult) || !until)) { setCmpErr('Enter the old multiple and an end date, or clear it.'); setSavingCmp(false); return; }
+    const err = await setPriceCompare(mult, until);
+    setSavingCmp(false);
+    if (err) { setCmpErr(err); return; }
+    setModel((m) => (m ? { ...m, compare_multiple: mult, compare_until: until } : m));
+    if (clear) { setCmpMult(''); setCmpUntil(''); }
+    setSavedCmp(clear ? 'Cleared — checkout no longer shows a was price.' : `Saved — checkout shows the ${mult}× price crossed out until ${until}.`);
+    setTimeout(() => setSavedCmp(''), 3000);
   };
 
   const saveHd = async () => {
@@ -145,10 +183,12 @@ export default function PricingPanel() {
   const cost = costOf(model, size, bind, pages);
   const surcharge = model.sizes[size].surcharge;
   const price = ownerPriceOf(model, size, bind, pages, mult); // marked-up cost + size premium
-  const profit = price - cost;
+  // The shipping built into the price pays the courier — it is not profit.
+  const shipIn = shippingAllowanceOf(model);
+  const profit = price - cost - shipIn;
   const cpp = perPageCost(model, size);
-  const marginPct = Math.round((1 - cost / price) * 100);
-  const effMult = price / cost; // effective markup once the size premium is added
+  const marginPct = Math.round((profit / price) * 100);
+  const effMult = (price - shipIn) / cost; // effective markup once the size premium is added
   const r = rival8(pages);
 
   return (
@@ -248,6 +288,69 @@ export default function PricingPanel() {
           </div>
           {savedHd && <p className="text-xs text-success mt-2 font-semibold">Saved - HD memories now cost {peso(model.hd_memories_price)}.</p>}
           {hdErr && <p className="text-xs text-rust-deep mt-2">Couldn't save: {hdErr}</p>}
+        </div>
+
+        {/* Shipping built into every price — checkout says "Free shipping" */}
+        <div className="mt-5 pt-5 border-t border-sand-deep">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="min-w-[220px]">
+              <h4 className="font-semibold text-dark">Shipping built into price</h4>
+              <p className="text-xs text-medium mt-1 leading-snug">
+                Flat ₱ added to <b>every album</b> after the markup (never multiplied) to pay the courier. Customers never
+                see a shipping charge: checkout says <b>Free shipping</b> ({peso(model.shipping_allowance ?? 0)} value).
+              </p>
+            </div>
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-light block mb-1">₱ / album</label>
+                <input type="number" min={0} max={10000} step={10} value={ship}
+                  onChange={(e) => { setShip(+e.target.value); setSavedShip(false); }}
+                  className="w-28 border border-line rounded-lg px-3 py-2 font-mono text-sm tabular-nums" />
+              </div>
+              <button onClick={saveShip} disabled={savingShip || ship === shippingAllowanceOf(model)}
+                className="px-4 py-2 rounded-lg bg-dark text-white text-sm font-semibold disabled:opacity-40">
+                {savingShip ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+          {savedShip && <p className="text-xs text-success mt-2 font-semibold">✓ Saved — every album now has {peso(model.shipping_allowance ?? 0)} of shipping built in.</p>}
+          {shipErr && <p className="text-xs text-rust-deep mt-2">Couldn't save: {shipErr}</p>}
+        </div>
+
+        {/* Crossed-out "was" price — the real old price, with an end date */}
+        <div className="mt-5 pt-5 border-t border-sand-deep">
+          <h4 className="font-semibold text-dark">Was price (crossed out at checkout)</h4>
+          <p className="text-xs text-medium mt-1 leading-snug max-w-2xl">
+            Shows what the same album cost at an <b>older multiple</b>, crossed out next to today's total, with "you save ₱X".
+            Only use a multiple you <b>actually charged</b> — a made-up "regular" price is a deceptive price claim under the
+            Consumer Act. It turns itself off after the end date, which can be at most 6 months ahead.
+          </p>
+          <div className="mt-3 flex items-end gap-2 flex-wrap">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-light block mb-1">Old multiple</label>
+              <input type="number" min={1} max={10} step={0.25} value={cmpMult}
+                onChange={(e) => { setCmpMult(e.target.value); setSavedCmp(''); }}
+                className="w-24 border border-line rounded-lg px-3 py-2 font-mono text-sm tabular-nums" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-light block mb-1">Show until</label>
+              <input type="date" min={manilaToday()} value={cmpUntil}
+                onChange={(e) => { setCmpUntil(e.target.value); setSavedCmp(''); }}
+                className="border border-line rounded-lg px-3 py-2 font-mono text-sm" />
+            </div>
+            <button onClick={() => saveCompare(false)} disabled={savingCmp}
+              className="px-4 py-2 rounded-lg bg-dark text-white text-sm font-semibold disabled:opacity-40">
+              {savingCmp ? 'Saving…' : 'Save'}
+            </button>
+            {(model.compare_multiple != null || model.compare_until) && (
+              <button onClick={() => saveCompare(true)} disabled={savingCmp}
+                className="px-4 py-2 rounded-lg border border-line text-sm font-semibold text-dark disabled:opacity-40">
+                Stop showing it
+              </button>
+            )}
+          </div>
+          {savedCmp && <p className="text-xs text-success mt-2 font-semibold">✓ {savedCmp}</p>}
+          {cmpErr && <p className="text-xs text-rust-deep mt-2">Couldn't save: {cmpErr}</p>}
         </div>
 
         {/* Hosting TERMS — sold at checkout; the shortest is the included term */}
@@ -399,11 +502,13 @@ export default function PricingPanel() {
             <div>
               <div className="text-xs uppercase tracking-wide text-light">Your price</div>
               <div className="font-mono text-4xl font-semibold tabular-nums text-dark leading-none mt-1">{peso(price)}</div>
-              {(surcharge > 0 || model.hosting_reserve > 0) && (
+              {(surcharge > 0 || model.hosting_reserve > 0 || shipIn > 0) && (
                 <div className="text-[11px] text-cocoa mt-1">
                   incl.{surcharge > 0 && <> +{peso(surcharge)} size premium</>}
                   {surcharge > 0 && model.hosting_reserve > 0 && <> ·</>}
                   {model.hosting_reserve > 0 && <> +{peso(model.hosting_reserve)} hosting reserve</>}
+                  {(surcharge > 0 || model.hosting_reserve > 0) && shipIn > 0 && <> ·</>}
+                  {shipIn > 0 && <> +{peso(shipIn)} shipping</>}
                   {' '}({mult.toFixed(2).replace(/0$/, '')}× base)
                 </div>
               )}
@@ -415,7 +520,7 @@ export default function PricingPanel() {
           <div className="grid grid-cols-2 gap-px bg-line border border-line rounded-xl overflow-hidden">
             {[
               { k: 'Production cost', n: peso(cost), c: 'text-dark' },
-              { k: 'Profit / album', n: peso(profit), c: 'text-success' },
+              { k: shipIn > 0 ? 'Profit / album (after shipping)' : 'Profit / album', n: peso(profit), c: 'text-success' },
               { k: 'Printed sheets', n: String(sheetsFor(model.sizes[size].pps, model.min_pages, pages)), c: 'text-dark' },
               { k: 'Cost / extra page', n: '₱' + cpp.toFixed(2), c: 'text-dark' },
             ].map((s) => (
