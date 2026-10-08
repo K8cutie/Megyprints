@@ -52,7 +52,7 @@ import { TEXT_LINE_HEIGHT } from './wordArt';
 import { readCaptureTime } from './exif';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
-import { FONTS } from './fonts';
+import { DEFAULT_TITLE_FONT } from './fonts';
 import { readAlbumTheme, writeAlbumTheme } from '../../lib/albumTheme';
 import { checkPhoto, facesForAllPhotos } from '../../lib/photoCheckRunner';
 import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
@@ -349,7 +349,7 @@ export function withNameTitle(cover: AlbumPage, name: string): AlbumPage {
   const title: TextElement = {
     // The cover editor's title defaults (CoverEditor), so it looks the same as one typed there.
     id: `cover-ft-${Date.now()}`, text: name, boxIndex: 0, x: 0, y: 0, rotation: 0, opacity: 1,
-    fontSize: 32, fontFamily: FONTS[6].family, color: '#2D2D2D', bold: true, italic: false, underline: false,
+    fontSize: 32, fontFamily: DEFAULT_TITLE_FONT, color: '#2D2D2D', bold: true, italic: false, underline: false,
     alignment: 'center', fromAlbumName: true,
   };
   return { ...cover, textElements: [...others, title] };

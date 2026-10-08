@@ -10,46 +10,9 @@ import {
 import type { CanvasPhoto, TextElement, PhotoFilters, AlbumBackground, UploadedPhoto } from './types';
 import { FILTER_PRESETS, DEFAULT_FILTERS, DEFAULT_BG_FILTERS } from './types';
 import BackgroundDesigner from './BackgroundDesigner';
+import { FontList } from './FontList';
 
 /* ── Constants ── */
-
-const FONT_FAMILIES = [
-  // Sans-serif
-  { name: 'DM Sans', value: '"DM Sans", sans-serif', preview: 'Aa' },
-  { name: 'Inter', value: '"Inter", sans-serif', preview: 'Aa' },
-  { name: 'Montserrat', value: '"Montserrat", sans-serif', preview: 'Aa' },
-  { name: 'Poppins', value: '"Poppins", sans-serif', preview: 'Aa' },
-  { name: 'Open Sans', value: '"Open Sans", sans-serif', preview: 'Aa' },
-  { name: 'Lato', value: '"Lato", sans-serif', preview: 'Aa' },
-  { name: 'Nunito', value: '"Nunito", sans-serif', preview: 'Aa' },
-  { name: 'Raleway', value: '"Raleway", sans-serif', preview: 'Aa' },
-  { name: 'Work Sans', value: '"Work Sans", sans-serif', preview: 'Aa' },
-  { name: 'Source Sans 3', value: '"Source Sans 3", sans-serif', preview: 'Aa' },
-  { name: 'Outfit', value: '"Outfit", sans-serif', preview: 'Aa' },
-  // Serif
-  { name: 'Playfair Display', value: '"Playfair Display", serif', preview: 'Aa' },
-  { name: 'Lora', value: '"Lora", serif', preview: 'Aa' },
-  { name: 'Merriweather', value: '"Merriweather", serif', preview: 'Aa' },
-  { name: 'Libre Baskerville', value: '"Libre Baskerville", serif', preview: 'Aa' },
-  { name: 'Crimson Text', value: '"Crimson Text", serif', preview: 'Aa' },
-  { name: 'Cormorant Garamond', value: '"Cormorant Garamond", serif', preview: 'Aa' },
-  { name: 'Georgia', value: 'Georgia, serif', preview: 'Aa' },
-  { name: 'Times New Roman', value: '"Times New Roman", serif', preview: 'Aa' },
-  // Display / Decorative
-  { name: 'Dancing Script', value: '"Dancing Script", cursive', preview: 'Aa' },
-  { name: 'Great Vibes', value: '"Great Vibes", cursive', preview: 'Aa' },
-  { name: 'Pacifico', value: '"Pacifico", cursive', preview: 'Aa' },
-  { name: 'Caveat', value: '"Caveat", cursive', preview: 'Aa' },
-  { name: 'Satisfy', value: '"Satisfy", cursive', preview: 'Aa' },
-  { name: 'Amatic SC', value: '"Amatic SC", cursive', preview: 'Aa' },
-  { name: 'Bebas Neue', value: '"Bebas Neue", sans-serif', preview: 'Aa' },
-  { name: 'Abril Fatface', value: '"Abril Fatface", serif', preview: 'Aa' },
-  { name: 'Righteous', value: '"Righteous", sans-serif', preview: 'Aa' },
-  { name: 'Fredoka', value: '"Fredoka", sans-serif', preview: 'Aa' },
-  // Monospace
-  { name: 'Courier New', value: '"Courier New", monospace', preview: 'Aa' },
-  { name: 'JetBrains Mono', value: '"JetBrains Mono", monospace', preview: 'Aa' },
-];
 
 const FONT_SIZE_PRESETS = [12, 16, 20, 24, 32, 48, 64, 96, 120];
 
@@ -257,23 +220,10 @@ function TextEditor({
           {/* Font Family */}
           <div>
             <label className="text-[11px] font-medium text-medium mb-1 block">Font Family</label>
-            <div className="grid grid-cols-3 gap-1 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-              {FONT_FAMILIES.map((font) => (
-                <button
-                  key={font.value}
-                  onClick={() => update({ fontFamily: font.value })}
-                  className="py-1.5 px-1 rounded-md text-[10px] transition-all border text-center"
-                  style={{
-                    fontFamily: font.value,
-                    backgroundColor: text.fontFamily === font.value ? '#F6E7DF' : '#fff',
-                    borderColor: text.fontFamily === font.value ? '#B85C38' : '#E8E8E8',
-                    color: text.fontFamily === font.value ? '#9A4A2C' : '#6B6B6B',
-                  }}
-                >
-                  <span className="text-base block leading-tight">{font.preview}</span>
-                  <span className="text-[8px] opacity-70 block truncate">{font.name}</span>
-                </button>
-              ))}
+            {/* The ONE font list (fonts.ts), each name in its own face — the
+                same 74 the phone and the cover offer. */}
+            <div className="max-h-56 overflow-y-auto rounded-lg border border-line custom-scrollbar" data-testid="desktop-font-list">
+              <FontList value={text.fontFamily} onPick={(f) => update({ fontFamily: f })} />
             </div>
           </div>
 

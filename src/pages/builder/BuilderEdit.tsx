@@ -169,10 +169,16 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       // Empty slot → open the 3-way content chooser (photo / text / QR).
       setChooserSlot(slotIndex);
     }, [containerMode]),
+    /* TEXT boxes open their editor even in Studio. Studio's container mode
+       (always on since 2026-09-30, `useState(true)` above) makes PHOTO frames
+       selectable so they can be moved — a click there selects, by design. A
+       text box is never a movable frame, but these handlers bailed out on
+       containerMode too, so on desktop clicking a caption, a quote, an empty
+       "Your words here" box or its ⋯ did NOTHING, and no font or colour could
+       be reached (found walking the 74 fonts, 2026-10-08). */
     onTextSlotClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
       setTextEditSlot(slotIndex);
-    }, [containerMode]),
+    }, []),
     onQrSlotClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
       setQrEditSlot(slotIndex);
@@ -182,11 +188,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       setOrnamentEditSlot(slotIndex);
     }, [containerMode]),
     onSlotTextClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
-      setSlotTextEditSlot(slotIndex);
-    }, [containerMode]),
+      setSlotTextEditSlot(slotIndex); // a text box: opens in Studio too (see onTextSlotClick)
+    }, []),
     onTextSlotEmptyClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
+      // A text box: opens in Studio too (see onTextSlotClick).
       // A DEALT box (textSlotRoll) opens its kind's editor directly — the roll
       // already answered "which kind?". Undealt boxes (old drafts, boxes a
       // template swap added) keep the 3-way chooser; the box's ⋯ badge
@@ -195,11 +200,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       if (roll === 'text') setTextEditSlot(slotIndex);
       else if (roll === 'quote') setBoxQuoteSlot(slotIndex);
       else setChooserTextSlot(slotIndex);
-    }, [containerMode, actions.currentPage]),
+    }, [actions.currentPage]),
     onTextSlotChooserClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
-      setChooserTextSlot(slotIndex);
-    }, [containerMode]),
+      setChooserTextSlot(slotIndex); // a text box's ⋯: opens in Studio too (see onTextSlotClick)
+    }, []),
     onTextSlotPhotoClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
       // Filled-with-photo caption box → re-open the photo picker for it.

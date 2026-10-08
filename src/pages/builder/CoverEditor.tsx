@@ -24,7 +24,7 @@ import { getTemplateById } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
 import { deriveSpine, measureSpineText, SPINE_DARK_INK, type SpineInfo } from './coverLayout';
 import { COLORS } from './MobileTextEditor';
-import { FONTS } from './fonts';
+import { DEFAULT_TITLE_FONT } from './fonts';
 import { FontSelect } from './FontList';
 import { DEFAULT_COVER, type AlbumPage } from './types';
 import { medianSharpness, photoQuality } from '../../lib/photoCheck';
@@ -105,7 +105,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const titleEl = page.textElements?.find((t) => t.boxIndex === 0);
   const title = {
     text: titleEl?.text ?? '',
-    fontFamily: titleEl?.fontFamily ?? FONTS[6].family,
+    fontFamily: titleEl?.fontFamily ?? DEFAULT_TITLE_FONT,
     color: titleEl?.color ?? '#2D2D2D',
     bold: titleEl?.bold ?? true,
     italic: titleEl?.italic ?? false,

@@ -4,7 +4,9 @@
    list from day one; the cover title used a plain <select>, and Android draws
    a <select>'s list itself in the system font — every name looked the same
    (owner, 2026-10-02: "the fonts don't look like how the fonts look").
-   Now both editors show this one list.
+   Now both editors show this one list — and since 2026-10-08 the desktop
+   text panels too (they had their own 31-font grid of "Aa" tiles), grouped
+   by mood with a heading per group.
 
    FontSelect — a font box + this list in a pop-up, for forms (the cover).
    Portalled to <body> with fixed coordinates so a scrolling panel can't clip
@@ -14,25 +16,36 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
-import { FONTS, fontName, isSameFont } from './fonts';
+import { FONTS, FONT_GROUPS, fontName, isSameFont } from './fonts';
+
+/* A row draws (and so downloads its font) only once it scrolls near view —
+   74 names in their own faces would otherwise fetch every font the moment
+   the list opens. The intrinsic size keeps the scrollbar honest meanwhile. */
+const LAZY_ROW = { contentVisibility: 'auto', containIntrinsicSize: 'auto 46px' } as const;
 
 export function FontList({ value, onPick }: { value: string; onPick: (family: string) => void }) {
   const selectedRef = useRef<HTMLButtonElement>(null);
-  // Open on the current font, not at the top of a 27-name list.
+  // Open on the current font, not at the top of a 74-name list.
   useEffect(() => { selectedRef.current?.scrollIntoView?.({ block: 'nearest' }); }, []);
   return (
     <div role="listbox" aria-label="Fonts">
-      {FONTS.map((f) => {
-        const on = isSameFont(f.family, value);
-        return (
-          <button key={f.name} type="button" role="option" aria-selected={on} data-font={f.name}
-            ref={on ? selectedRef : undefined} onClick={() => onPick(f.family)}
-            className={`w-full flex items-center justify-between px-4 py-2.5 text-left ${on ? 'bg-blush' : 'active:bg-paper hover:bg-paper'}`}>
-            <span className="text-[18px] text-dark truncate" style={{ fontFamily: f.family }}>{f.name}</span>
-            {on && <Check size={16} className="text-blush-pink shrink-0 ml-2" />}
-          </button>
-        );
-      })}
+      {FONT_GROUPS.map((g) => (
+        <div key={g.id} role="group" aria-label={g.label}>
+          <div role="presentation" data-font-group={g.id}
+            className="sticky top-0 z-[1] px-4 pt-2.5 pb-1 bg-white text-[11px] font-bold uppercase tracking-wider text-medium">{g.label}</div>
+          {FONTS.filter((f) => f.group === g.id).map((f) => {
+            const on = isSameFont(f.family, value);
+            return (
+              <button key={f.name} type="button" role="option" aria-selected={on} data-font={f.name}
+                ref={on ? selectedRef : undefined} onClick={() => onPick(f.family)} style={LAZY_ROW}
+                className={`w-full flex items-center justify-between px-4 py-2.5 text-left ${on ? 'bg-blush' : 'active:bg-paper hover:bg-paper'}`}>
+                <span className="text-[18px] text-dark truncate" style={{ fontFamily: f.family }}>{f.name}</span>
+                {on && <Check size={16} className="text-blush-pink shrink-0 ml-2" />}
+              </button>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
