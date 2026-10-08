@@ -28,7 +28,7 @@ function askResize(
 ): ExecutedAction {
   const memories = plan.carried.length + plan.lost.length;
   const lost = plan.lost.length;
-  builder.setResizeAsk?.({ size, memories, lost, ...(reason ? { reason } : {}) });
+  builder.setResizeAsk?.({ size, memories, lost, lostCodes: plan.lost.map((q) => q.code), ...(reason ? { reason } : {}) });
   const label = (s: string) => s.replace('x', '×');
   return {
     intentType: type, success: false, asked: true,
@@ -141,18 +141,23 @@ export class ActionEngine {
           // "Switch to …", "Best fit", typing it), so this is where the video
           // memories are kept: they come along, each a badge on its photo. One
           // that can't never comes off without a yes — ask, on screen, with
-          // how many (it dropped them all without a word, 2026-10-08).
+          // how many (it dropped them all without a word, 2026-10-08). A yes
+          // (`confirmedLost`) names the memories it agreed to lose; one it
+          // didn't (added since the question, say) is asked about again.
           if (albumIsMade(this.builder.albumPages ?? []) && size !== this.builder.albumSize) {
             const short = tooFewPhotos(this.builder, intent.type);
             if (short) return short;
-            const confirmed = intent.payload?.confirmed === true;
+            const agreed = Array.isArray(intent.payload?.confirmedLost) ? (intent.payload.confirmedLost as string[]) : [];
             const plan = memoriesAcrossSize(this.builder.albumPages, this.builder.uploadedPhotos ?? [], this.builder.albumSize, size);
             const reason = intent.payload?.reason === 'size_hidden' ? 'size_hidden' as const : undefined;
-            if (plan.lost.length && !confirmed) return askResize(this.builder, intent.type, size, plan, reason);
-            const built = await this.builder.generateAlbum(this.builder.currentPage?.background, { size, ...(confirmed ? { confirmed } : {}) });
-            if (built === false) return askResize(this.builder, intent.type, size, plan, reason);
+            if (plan.lost.some((q) => !agreed.includes(q.code))) return askResize(this.builder, intent.type, size, plan, reason);
+            const made = await this.builder.generateAlbum(this.builder.currentPage?.background, { size, ...(agreed.length ? { confirmedLost: agreed } : {}) });
+            // The builder measured the photos again and its plan says more:
+            // ask with ITS numbers.
+            if (made?.made === false) return askResize(this.builder, intent.type, size, made.memories, reason);
             if (this.builder.resizeAsk) this.builder.setResizeAsk(null); // answered (a typed yes, say)
-            return { intentType: intent.type, success: true, message: `Album size changed to ${size.replace('x', '×')}. Every page is laid out again for the new shape.${resizedMemoriesNote(plan.carried.length, plan.lost.length)}` };
+            const done = made?.memories ?? plan;
+            return { intentType: intent.type, success: true, message: `Album size changed to ${size.replace('x', '×')}. Every page is laid out again for the new shape.${resizedMemoriesNote(done.carried.length, done.lost.length)}` };
           }
           this.builder.setAlbumSize(size);
           return { intentType: intent.type, success: true, message: `Album size changed to ${size}.` };

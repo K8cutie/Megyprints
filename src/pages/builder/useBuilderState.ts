@@ -600,12 +600,20 @@ function getInitialState(): SerializedState {
 /** The stages of a whole-album generation, in order. Shown to the customer. */
 export type GeneratingPhase = 'measuring' | 'laying_out' | 'quotes' | 'finishing';
 
+/** What generateAlbum did, and (for a new size) the memories' plan. */
+export type GenerateResult =
+  | { made: true; memories?: MemoryPlan }
+  | { made: false; memories: MemoryPlan };
+export type MemoryPlan = ReturnType<typeof memoriesAcrossSize>;
+
 /** A size change that would take video memories off: asked before it runs. */
 export interface ResizeAsk {
   size: AlbumSizePreset;
   /** The album's memories, and how many of them can't come along. */
   memories: number;
   lost: number;
+  /** Those memories' codes: a yes lets exactly these come off. */
+  lostCodes: string[];
   /** Setup moved off a size the shop no longer offers (no tap). */
   reason?: 'size_hidden';
 }
@@ -700,10 +708,11 @@ export interface BuilderActions {
   /** `size`: lay the album out for a NEW size (it becomes the album's size
    *  with the pages, in one step). Every page is laid out again — a Studio
    *  page is laid out for the old shape, so it can't be kept. The video
-   *  memories come along, each a badge on its own photo; when one can't, it
-   *  does nothing and resolves false, unless `confirmed` (the customer said
-   *  yes to it coming off). Resolves true once the album is made. */
-  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmed?: boolean }) => Promise<boolean>;
+   *  memories come along, each a badge on its own photo. One that can't comes
+   *  off only when its code is in `confirmedLost` (the customer said yes to
+   *  exactly those); any other and nothing changes ({ made: false } with the
+   *  plan, to ask about). */
+  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }) => Promise<GenerateResult>;
   /** What generateAlbum is doing RIGHT NOW, or null when idle. The builder
    *  shows a "making your album" screen while this is set — a whole-album
    *  generation can take several seconds (measuring, laying out, waiting on
@@ -1948,8 +1957,8 @@ export function useBuilderState(): BuilderActions {
     }
   }, []);
 
-  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmed?: boolean }): Promise<boolean> => {
-    const { size: newSize, confirmed, ...genOptions } = options ?? {};
+  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }): Promise<GenerateResult> => {
+    const { size: newSize, confirmedLost, ...genOptions } = options ?? {};
     const size = newSize ?? albumSize;
     const resizing = size !== albumSize;
     // Show the "making your album" screen for the whole run and let the browser
@@ -1973,9 +1982,9 @@ export function useBuilderState(): BuilderActions {
     });
     // A NEW SIZE KEEPS THE VIDEO MEMORIES: each comes along as its badge on
     // its photo. One that can't (its photo won't fill a page of the new
-    // shape) never comes off without a yes — the caller asks (change_size).
+    // shape) never comes off without a yes to it — the caller asks (change_size).
     const memories = resizing ? memoriesAcrossSize(albumPagesRef.current, photos, albumSize, size) : null;
-    if (memories?.lost.length && !confirmed) return false;
+    if (memories?.lost.some((q) => !confirmedLost?.includes(q.code))) return { made: false, memories };
     pushSnapshot();
     // Bake the active theme's photo frame + corner art onto every generated page.
     // A custom Border picked on the wizard overrides the theme's border here.
@@ -2075,7 +2084,7 @@ export function useBuilderState(): BuilderActions {
     }
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
-    return true;
+    return { made: true, ...(memories ? { memories } : {}) };
     } finally {
       setGenerating(null);
     }

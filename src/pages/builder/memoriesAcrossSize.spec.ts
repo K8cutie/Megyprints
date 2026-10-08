@@ -150,6 +150,36 @@ describe('memories placed before they moved to full pages, and doubles', () => {
     const pages = [badgePage('8x8', 'tl', 0, fill), badgePage('8x8', 'tl', 0, fill)];
     expect(memoriesAcrossSize(pages, photos, '8x8', '6x6')).toEqual({ carried: [{ photo: 0, fill, corner: 'tl' }], lost: [] });
   });
+  // Found by the adversarial review of the first cut: the first memory to
+  // reach a photo claimed it, and a memory that could come was reported lost.
+  it('two memories on one photo the album holds twice both come — the photo stays in twice', () => {
+    const pages = [badgePage('8x8', 'tl', 0, memory('AAA')), badgePage('8x8', 'br', 0, memory('BBB'))];
+    const plan = memoriesAcrossSize(pages, photos, '8x8', '9x9');
+    expect(plan).toEqual({ carried: [{ photo: 0, fill: memory('AAA'), corner: 'tl' }, { photo: 0, fill: memory('BBB'), corner: 'br' }], lost: [] });
+    const made = generateAlbum(photos, '9x9', undefined, undefined, { memories: plan.carried });
+    expect(made.filter((p) => memoriesOn(p).length).map((p) => [p.templateId, p.slotFills?.[0], memoriesOn(p)[0].code]).sort())
+      .toEqual([['qr-badge-9x9-br', 0, 'BBB'], ['qr-badge-9x9-tl', 0, 'AAA']]);
+    const placed = made.flatMap((p) => p.slotFills ?? []).filter((f) => f != null).sort((a, b) => a! - b!);
+    expect(placed).toEqual([0, ...photos.map((_, i) => i)]); // photo 0 twice, as before; every other once
+  });
+  it('a duplicated memory page whose copy got a photo that fits: the memory comes on the copy', () => {
+    // Photo 0 is landscape (can't fill a 6×8 page); photo 2 is square (can).
+    const fill = memory('AAA');
+    const pages = [badgePage('8x8', 'tl', 0, fill), badgePage('8x8', 'br', 2, fill)];
+    expect(memoriesAcrossSize(pages, photos, '8x8', '6x8')).toEqual({ carried: [{ photo: 2, fill, corner: 'br' }], lost: [] });
+  });
+  it('a frame memory leaves a badge memory its only photo when its page has another that fits', () => {
+    // Frame page holds photos 4 and 8 (both landscape, both fit 6×4); photo 4
+    // is also the badge memory's photo on a later page.
+    const pages = [
+      page({ templateId: three.id, slotFills: [4, null, 8], qrFills: [null, memory('frame'), null] }),
+      badgePage('8x8', 'tl', 4, memory('badge')),
+    ];
+    expect(memoriesAcrossSize(pages, photos, '8x8', '6x4')).toEqual({
+      carried: [{ photo: 4, fill: memory('badge'), corner: 'tl' }, { photo: 8, fill: memory('frame'), corner: null }],
+      lost: [],
+    });
+  });
   it('an album with no memories plans nothing', () => {
     expect(memoriesAcrossSize(generateAlbum(photos, '8x8'), photos, '8x8', '6x8')).toEqual({ carried: [], lost: [] });
   });

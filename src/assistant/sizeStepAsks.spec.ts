@@ -61,8 +61,8 @@ function madeAlbumAtSizeStep(answer: ExecutedAction) {
     manualSave: vi.fn(async () => true),
     dispatch: vi.fn(async (intent: { type: string; payload?: Record<string, unknown> }) => {
       if (intent.type !== 'change_size') return { intentType: intent.type, success: true, message: '' };
-      if (intent.payload?.confirmed) return { intentType: 'change_size', success: true, message: 'Album size changed to 6×8.' };
-      if (answer.asked) ctx.resizeAsk = { size: intent.payload?.size, memories: 3, lost: 2 };
+      if (intent.payload?.confirmedLost) return { intentType: 'change_size', success: true, message: 'Album size changed to 6×8.' };
+      if (answer.asked) ctx.resizeAsk = { size: intent.payload?.size, memories: 3, lost: 2, lostCodes: ['code4', 'code9'] };
       return answer;
     }),
     resizeAsk: null as null | Record<string, unknown>,
@@ -152,12 +152,16 @@ describe('Megy\'s size step, a made album whose memories can\'t all come to the 
     expect(onSizeStep()).toBe(true);
   });
 
-  it('"Change to 6×8 without them" runs the confirmed change', async () => {
+  it('"Change to 6×8 without them" lets exactly those memories go, and the card moves on, saying so', async () => {
     await open(ASKED);
     await tap(sizeOnCard('6×8'));
     await render();
     await tap(document.querySelector('[data-testid="resize-confirm"]'));
-    expect(sizeCalls()).toEqual([{ size: '6x8' }, { size: '6x8', confirmed: true }]);
+    expect(sizeCalls()).toEqual([{ size: '6x8' }, { size: '6x8', confirmedLost: ['code4', 'code9'] }]);
+    expect(ctx.setResizeAsk).toHaveBeenCalledWith(null);
+    // The first cut changed the size from Builder and left the card on Step 2.
+    expect(onSizeStep()).toBe(false);
+    expect(ctx.setWizardStep).toHaveBeenLastCalledWith('design_cover');
   });
 });
 

@@ -63,9 +63,26 @@ export function resizeMemoriesLine(memories: number, lost: number, size: AlbumSi
  *  the ones that came off. '' when the album had none. */
 export function resizedMemoriesNote(carried: number, lost: number): string {
   const memories = (n: number) => `${n} video ${n === 1 ? 'memory' : 'memories'}`;
-  if (lost > 0) return ` ${memories(lost)} came off${carried > 0 ? `; the other ${carried} came along, each on its own photo` : ''}.`;
+  if (lost > 0) {
+    const others = carried === 0 ? '' : carried === 1 ? '; the other one came along on its photo' : `; the other ${carried} came along, each on its own photo`;
+    return ` ${memories(lost)} came off${others}.`;
+  }
   if (carried === 0) return '';
   return carried === 1 ? ' Your video memory came along on its photo.' : ` Your ${memories(carried)} came along, each on its own photo.`;
+}
+
+/** The intent a "yes" to rebuildQuestion runs. For a size change it names
+ *  the memories the question said would come off (confirmedLost) — only
+ *  those: one found at the yes that wasn't in the question is asked about
+ *  again, never dropped on a yes to something else. */
+export function confirmedIntent(
+  intent: AssistantIntent,
+  album: { albumPages: AlbumPage[]; albumSize: AlbumSizePreset; uploadedPhotos?: UploadedPhoto[] },
+): AssistantIntent {
+  const size = intent.type === 'change_size' ? (intent.payload?.size as AlbumSizePreset | undefined) : undefined;
+  if (!size || size === album.albumSize) return intent;
+  const { lost } = memoriesAcrossSize(album.albumPages, album.uploadedPhotos ?? [], album.albumSize, size);
+  return lost.length ? { ...intent, payload: { ...intent.payload, confirmedLost: lost.map((q) => q.code) } } : intent;
 }
 
 /** What making a made album again replaces, in the customer's words. */

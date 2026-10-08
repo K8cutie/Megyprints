@@ -7,7 +7,6 @@ import BuilderSetup from './builder/BuilderSetup';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
 import RemakeAlbumAsk from '../assistant/RemakeAlbumAsk';
-import ResizeAlbumAsk from '../assistant/ResizeAlbumAsk';
 import { albumIsMade, placedMemories } from '../assistant/rebuildQuestion';
 import CoverEditor from './builder/CoverEditor';
 import MobileReview from './builder/MobileReview';
@@ -359,18 +358,6 @@ export default function Builder() {
           <RemakeAlbumAsk memories={placedMemories(actions.albumPages)}
             onClose={() => setRemakeAsk(false)} onKeep={() => setRemakeAsk(false)}
             onRemake={() => { setRemakeAsk(false); generateAll(); }} />
-        )}
-
-        {/* A new size that would take video memories off asks first, from
-            any size tap (Setup, Megy's steps, typed): actionEngine change_size. */}
-        {actions.resizeAsk && (
-          <ResizeAlbumAsk ask={actions.resizeAsk} from={actions.albumSize}
-            onKeep={() => actions.setResizeAsk(null)}
-            onChange={() => {
-              const { size } = actions.resizeAsk!;
-              actions.setResizeAsk(null);
-              void actions.dispatch({ type: 'change_size', payload: { size, confirmed: true }, rawMessage: `change size to ${size}` });
-            }} />
         )}
 
         {/* ── Megy Assistant ── */}

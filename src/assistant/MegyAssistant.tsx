@@ -17,8 +17,9 @@ import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
 import { SIZE_LABELS, extraPagesCharge } from '../lib/pricing';
 import { getPriceSchedule } from '../lib/storeSettings';
 import type { AssistantMessage, AssistantIntent } from './types';
-import { rebuildQuestion, placedMemories, albumIsMade, occasionQuotesMessage } from './rebuildQuestion';
+import { rebuildQuestion, placedMemories, albumIsMade, occasionQuotesMessage, confirmedIntent } from './rebuildQuestion';
 import RemakeAlbumAsk from './RemakeAlbumAsk';
+import ResizeAlbumAsk from './ResizeAlbumAsk';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
 import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
@@ -346,9 +347,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       const ask = rebuildQuestion(intent, builderRef.current,
         schedule ? (size, pages) => extraPagesCharge(schedule, size, 'soft', pages).amount : null);
       if (ask) {
-        // The yes is to what was asked — for a size change that includes the
-        // video memories that would come off — so it runs it confirmed.
-        rebuildAskedRef.current = { ...intent, payload: { ...intent.payload, confirmed: true } };
+        // The yes is to what was asked: for a size change, the video memories
+        // it said would come off, and only those (confirmedIntent).
+        rebuildAskedRef.current = confirmedIntent(intent, builderRef.current);
         setIsThinking(false);
         setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', content: ask, intent, timestamp: new Date() }]);
         return;
@@ -372,6 +373,16 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   }, []);
   const handleSubmit = (e?: React.FormEvent) => { e?.preventDefault(); sendMessage(input); };
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } };
+
+  /* A size was set (Step 2's card, or a yes to the memories question): the
+     size step moves on, and Megy says so. */
+  const sizeSet = (label: string) => {
+    if (wizardRef.current.state.step === 'pick_size') {
+      wizardRef.current.advance();
+      setWizardStep(wizardRef.current.state.step);
+    }
+    showToast(`Size set: ${label}`);
+  };
 
   /* ── Wizard action handler ── */
   const handleWizardAction = useCallback((action: string) => {
@@ -400,12 +411,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           noteScreenTap();
           void builder.dispatch({ type: 'change_size', payload: { size: sizes[size] }, rawMessage: `change size to ${sizes[size]}` })
             .then((r) => {
-              if (!r.success) { if (!r.asked) showToast(r.message, 6000); return; }
-              if (wizardRef.current.state.step === 'pick_size') {
-                wizardRef.current.advance();
-                setWizardStep(wizardRef.current.state.step);
-              }
-              showToast(`Size set: ${size}`);
+              if (r.success) sizeSet(size);
+              else if (!r.asked) showToast(r.message, 6000);
             });
         }
         break;
@@ -482,7 +489,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         }
         break;
     }
-  }, [builder, showToast, onPlaceOrder]);
+  }, [builder, showToast, onPlaceOrder, sizeSet]);
   const doRestartWizard = () => {
     // Signed in, the album is saved to the account and keeps its photos (see
     // reset); signed out, it really is gone.
@@ -582,6 +589,23 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       onRemake={() => { setRemakeAsk(false); handleWizardAction('Generate Album →'); }} />
   );
 
+  // A new size that would take video memories off asks first, from any size
+  // tap (Setup's grid, Step 2, "Switch to …", typed): actionEngine
+  // change_size opens it. The yes lets exactly the memories it named come off.
+  const resizeAsk = builder.resizeAsk;
+  const resizeAskEl = resizeAsk && (
+    <ResizeAlbumAsk ask={resizeAsk} from={builder.albumSize}
+      onKeep={() => builder.setResizeAsk(null)}
+      onChange={() => {
+        builder.setResizeAsk(null);
+        void builder.dispatch({ type: 'change_size', payload: { size: resizeAsk.size, confirmedLost: resizeAsk.lostCodes }, rawMessage: `change size to ${resizeAsk.size}` })
+          .then((r) => {
+            if (r.success) sizeSet(resizeAsk.size.replace('x', '×'));
+            else if (!r.asked) showToast(r.message, 6000);
+          });
+      }} />
+  );
+
   if (centerStage) {
     const msg = wizardRef.current.getMessage();
     const prog = wizardRef.current.getProgress();
@@ -589,6 +613,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       <div ref={stageRef} role="dialog" aria-modal="true" aria-label="Megy's guide" tabIndex={-1}
         className="fixed inset-0 z-[95] bg-warm-white flex flex-col items-center [justify-content:safe_center] p-6 overflow-auto outline-none">
         {remakeAskEl}
+        {resizeAskEl}
         {/* Hidden file input so the Upload step works on the center stage too */}
         <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleFileUpload} className="hidden" />
         {/* Megy's answer on the center stage too: the toast lived only in the
@@ -795,6 +820,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   return (
     <>
+      {/* Outside the panel: it shows even with Megy folded away. */}
+      {resizeAskEl}
       {/* Mobile (post-wizard): Megy collapses to a small character icon in the
           upper-right; tap it to pull Megy DOWN from the top. */}
       {mobilePulldown && !mobileExpanded && (

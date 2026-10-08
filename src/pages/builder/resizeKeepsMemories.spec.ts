@@ -51,7 +51,7 @@ vi.mock('../../lib/quotes', async (importOriginal) => ({
 
 import { useBuilderState, type BuilderActions } from './useBuilderState';
 import { ActionEngine } from '../../assistant/actionEngine';
-import { rebuildQuestion } from '../../assistant/rebuildQuestion';
+import { rebuildQuestion, confirmedIntent, resizedMemoriesNote } from '../../assistant/rebuildQuestion';
 import ResizeAlbumAsk from '../../assistant/ResizeAlbumAsk';
 import { getTemplateById, getTemplatesForAlbum } from './pageTemplates';
 import { canTakeMemoryQr } from './generateAlbum';
@@ -216,12 +216,14 @@ describe('a memory that can\'t come along is never dropped without asking', () =
     expect(builder.albumSize).toBe('8x8');
     expect(builder.albumPages).toBe(before);
     expect(builder.resizeAsk).toMatchObject({ size: '6x8', memories: 3, lost: 2 });
+    expect([...builder.resizeAsk!.lostCodes].sort()).toEqual(['memlnd01', 'memlnd03']);
+    expect(r).toMatchObject({ asked: true });
     expect(r.message).toMatch(/2 of your 3 video memories can't come along/);
   });
 
   it('a yes changes the size: the square photo keeps its memory, the two landscapes\' come off', async () => {
     await changeSize('6x8');
-    const r = await changeSize('6x8', { confirmed: true });
+    const r = await changeSize('6x8', { confirmedLost: builder.resizeAsk!.lostCodes });
     expect(r.success).toBe(true);
     expect(builder.albumSize).toBe('6x8');
     expect(builder.resizeAsk ?? null).toBeNull();
@@ -236,16 +238,74 @@ describe('a memory that can\'t come along is never dropped without asking', () =
     const r = await changeSize('6x8', { reason: 'size_hidden' });
     expect(r.success).toBe(false);
     expect(builder.albumSize).toBe('8x8');
-    expect(builder.resizeAsk).toEqual({ size: '6x8', memories: 3, lost: 2, reason: 'size_hidden' });
+    expect(builder.resizeAsk).toMatchObject({ size: '6x8', memories: 3, lost: 2, reason: 'size_hidden' });
   });
 
-  it('typing it asks first, with the same numbers (and a yes is the confirmed change)', () => {
+  it('a yes for some memories never drops one it didn\'t name: that one is asked about', async () => {
+    await changeSize('6x8');
+    const r = await changeSize('6x8', { confirmedLost: ['memlnd01'] });
+    expect(r).toMatchObject({ success: false, asked: true });
+    expect(builder.albumSize).toBe('8x8');
+    expect(memoriesIn(builder.albumPages)).toHaveLength(3);
+  });
+
+  it('a typed yes is a yes to what was asked: a memory added before the yes is asked about, not dropped', async () => {
+    // "change size to 8x6": all 3 come along (landscapes fit, the square loses a quarter).
+    const intent = { type: 'change_size' as const, payload: { size: '8x6' }, rawMessage: 'change size to 8x6' };
+    expect(rebuildQuestion(intent, builder)).toMatch(/Your 3 video memories come along/);
+    const yes = confirmedIntent(intent, builder);
+    // Before the yes: a portrait goes on a full page and gets a memory.
+    const page = builder.albumPages.findIndex((p) => canTakeMemoryQr(p));
+    const portrait = PHOTOS.findIndex((p) => p.height > p.width);
+    await tap((b) => b.goToPage(page));
+    await tap((b) => b.fillSlot(0, portrait));
+    await tap((b) => b.applyMemoryQr(memory('memprt04'), 'bl'));
+    let r!: Awaited<ReturnType<ActionEngine['execute']>>;
+    await act(async () => { r = await engine().execute(yes); });
+    expect(r).toMatchObject({ success: false, asked: true });
+    expect(builder.albumSize).toBe('8x8');
+    expect(builder.resizeAsk).toMatchObject({ size: '8x6', memories: 4, lost: 1, lostCodes: ['memprt04'] });
+    expect(memoriesIn(builder.albumPages)).toHaveLength(4);
+  });
+
+  it('typing it asks first, with the same numbers (and a yes names the memories it lets go)', () => {
     const megy = readFileSync(resolve(__dirname, '../../assistant/MegyAssistant.tsx'), 'utf8');
-    expect(megy).toMatch(/rebuildAskedRef\.current = \{ \.\.\.intent, payload: \{ \.\.\.intent\.payload, confirmed: true \} \};/);
+    expect(megy).toMatch(/rebuildAskedRef\.current = confirmedIntent\(intent, builderRef\.current\);/);
+    expect(confirmedIntent({ type: 'change_size', payload: { size: '6x8' }, rawMessage: '' }, builder).payload?.confirmedLost)
+      .toEqual(expect.arrayContaining(['memlnd01', 'memlnd03']));
+    expect(confirmedIntent({ type: 'change_size', payload: { size: '6x6' }, rawMessage: '' }, builder).payload?.confirmedLost).toBeUndefined();
     const ask = rebuildQuestion({ type: 'change_size', payload: { size: '6x8' }, rawMessage: 'change size to 6x8' }, builder);
     expect(ask).toMatch(/2 of your 3 video memories can't come along/);
     const keeps = rebuildQuestion({ type: 'change_size', payload: { size: '6x6' }, rawMessage: 'change size to 6x6' }, builder);
     expect(keeps).toMatch(/Your 3 video memories come along/);
+  });
+});
+
+describe('when the builder\'s own plan says more than the engine\'s', () => {
+  it('the question carries the builder\'s numbers, never "they all come along … without them"', async () => {
+    // The engine plans from the album as it stands (nothing lost); the
+    // builder re-measures the photos first and finds one can't come.
+    const lostOne = memory('relink01');
+    const stub = {
+      albumPages: builder.albumPages, albumSize: '8x8', uploadedPhotos: builder.uploadedPhotos, currentPage: builder.albumPages[0],
+      resizeAsk: null, setResizeAsk: vi.fn(), setAlbumSize: vi.fn(),
+      generateAlbum: vi.fn(async () => ({ made: false, memories: { carried: [], lost: [lostOne] } })),
+    };
+    const r = await new ActionEngine(stub as unknown as BuilderActions).execute({ type: 'change_size', payload: { size: '6x6' }, rawMessage: 'change size to 6x6' });
+    expect(r).toMatchObject({ success: false, asked: true });
+    expect(stub.setResizeAsk).toHaveBeenCalledWith({ size: '6x6', memories: 1, lost: 1, lostCodes: ['relink01'] });
+    expect(r.message).toBe("Your video memory can't come along: its photo doesn't fit a full 6×6 page, so it'd come off the album (you'd add it again). Keep 8×8, or change to 6×6 without it.");
+  });
+});
+
+describe('what Megy says after the size changed', () => {
+  it('counts read right, one or many', () => {
+    expect(resizedMemoriesNote(3, 0)).toBe(' Your 3 video memories came along, each on its own photo.');
+    expect(resizedMemoriesNote(1, 0)).toBe(' Your video memory came along on its photo.');
+    expect(resizedMemoriesNote(1, 2)).toBe(' 2 video memories came off; the other one came along on its photo.');
+    expect(resizedMemoriesNote(2, 1)).toBe(' 1 video memory came off; the other 2 came along, each on its own photo.');
+    expect(resizedMemoriesNote(0, 2)).toBe(' 2 video memories came off.');
+    expect(resizedMemoriesNote(0, 0)).toBe('');
   });
 });
 
@@ -255,7 +315,7 @@ describe('the question on screen (ResizeAlbumAsk)', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const r = createRoot(host);
-    await act(async () => { r.render(createElement(ResizeAlbumAsk, { ask: { size: '6x8', memories: 3, lost: 2 }, from: '8x8', onKeep, onChange })); });
+    await act(async () => { r.render(createElement(ResizeAlbumAsk, { ask: { size: '6x8', memories: 3, lost: 2, lostCodes: ['a', 'b'] }, from: '8x8', onKeep, onChange })); });
     const text = host.textContent ?? '';
     expect(text).toContain('Change to 6×8?');
     expect(text).toContain("2 of your 3 video memories can't come along: their photos don't fit a full 6×8 page, so they'd come off the album (you'd add them again).");
@@ -275,7 +335,7 @@ describe('the question on screen (ResizeAlbumAsk)', () => {
   it('Setup\'s switch away from a hidden size says why it asks', async () => {
     const host = document.createElement('div');
     const r = createRoot(host);
-    await act(async () => { r.render(createElement(ResizeAlbumAsk, { ask: { size: '8x8', memories: 1, lost: 1, reason: 'size_hidden' }, from: '6x4', onKeep: () => {}, onChange: () => {} })); });
+    await act(async () => { r.render(createElement(ResizeAlbumAsk, { ask: { size: '8x8', memories: 1, lost: 1, lostCodes: ['a'], reason: 'size_hidden' }, from: '6x4', onKeep: () => {}, onChange: () => {} })); });
     expect(host.querySelector('[data-testid="resize-ask-why"]')?.textContent).toBe("6×4 albums aren't offered any more.");
     expect(host.querySelector('[data-testid="resize-confirm"]')?.textContent).toBe('Change to 8×8 without it');
     await act(async () => { r.unmount(); });
@@ -293,9 +353,15 @@ describe('every way to change the size runs the same change_size', () => {
     expect(src('../Builder.tsx')).toMatch(/onSizeChange=\{\(size, reason\) => \{ void actions\.dispatch\(\{ type: 'change_size', payload: \{ size, reason \}/);
     expect(src('BuilderSetup.tsx')).toMatch(/if \(first\) onSizeChange\(first\.preset, 'size_hidden'\);/);
     const megy = src('../../assistant/MegyAssistant.tsx');
-    expect(megy.match(/dispatch\(\{ type: 'change_size'/g)?.length).toBe(3);
+    // Step 2, "Switch to …", "Best fit", and the question's own yes.
+    expect(megy.match(/dispatch\(\{ type: 'change_size'/g)?.length).toBe(4);
   });
   it('the question that asks before memories come off is on screen wherever the tap was', () => {
-    expect(src('../Builder.tsx')).toMatch(/\{actions\.resizeAsk && \(\s*<ResizeAlbumAsk/);
+    // Megy is always mounted in the builder; the question shows on her
+    // full-screen steps and outside her panel (so even with her folded away).
+    const megy = src('../../assistant/MegyAssistant.tsx');
+    expect(megy).toMatch(/const resizeAskEl = resizeAsk && \(\s*<ResizeAlbumAsk/);
+    expect(megy.match(/\{resizeAskEl\}/g)?.length).toBe(2);
+    expect(src('../Builder.tsx')).toMatch(/<MegyAssistant /);
   });
 });

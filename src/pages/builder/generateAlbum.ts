@@ -412,32 +412,44 @@ export function memoryPhotoFits(photo: UploadedPhoto, size: AlbumSizePreset, was
 
 /** Which of the album's memories a change from `from` to `to` carries, each
  *  on its photo (`photos` indexes), and which can't come. A badge comes with
- *  its own photo; a frame or box memory with the first photo on its page
- *  that fits. A memory placed twice (a duplicated page) comes along once. */
+ *  its own photo; a frame or box memory with a photo of its page that fits,
+ *  one no other memory took if it can. A memory placed twice (a duplicated
+ *  page) comes along once, from whichever place fits. Two memories on one
+ *  photo the album holds twice both come (the photo stays in twice). */
 export function memoriesAcrossSize(
   pages: AlbumPage[], photos: UploadedPhoto[], from: AlbumSizePreset, to: AlbumSizePreset,
 ): { carried: CarriedMemory[]; lost: QrFill[] } {
-  const carried: CarriedMemory[] = [];
-  const lost: QrFill[] = [];
-  const seen = new Set<string>();
-  const taken = new Set<number>();
-  const badgeOK = !!qrBadgeTemplate(to, 'br');
+  type Spot = { photo: number; was?: AlbumSizePreset; corner: QrCorner | null };
+  const byCode = new Map<string, { fill: QrFill; badge: boolean; spots: Spot[] }>();
   for (const page of pages) {
     const memories = memoriesOn(page);
     if (!memories.length) continue;
     const t = page.templateId ? getTemplateById(page.templateId) : undefined;
-    const corner = qrBadgeCornerOf(page.templateId);
+    const corner = memories.length === 1 ? qrBadgeCornerOf(page.templateId) : null;
     const was = t && layoutHoldsMemory(t) ? ((page.size as AlbumSizePreset | undefined) ?? from) : undefined;
     const onPage = [...new Set([...(page.slotFills ?? []), ...(page.textSlotFills ?? [])].filter((f): f is number => f != null))];
     for (const fill of memories) {
-      if (seen.has(fill.code)) continue;
-      seen.add(fill.code);
-      const candidates = corner ? onPage.slice(0, 1) : onPage;
-      const photo = badgeOK ? candidates.find((f) => !taken.has(f) && photos[f] && memoryPhotoFits(photos[f], to, was)) : undefined;
-      if (photo == null) { lost.push(fill); continue; }
-      taken.add(photo);
-      carried.push({ photo, fill, corner: memories.length === 1 ? corner : null });
+      const entry = byCode.get(fill.code) ?? { fill, badge: false, spots: [] };
+      byCode.set(fill.code, entry);
+      // A badge's own photo first, ahead of anything a frame or box offers.
+      if (corner) { entry.badge = true; entry.spots.unshift(...onPage.slice(0, 1).map((photo) => ({ photo, was, corner }))); }
+      else entry.spots.push(...onPage.map((photo) => ({ photo, was, corner: null })));
     }
+  }
+  const carried: CarriedMemory[] = [];
+  const lost: QrFill[] = [];
+  const badgeOK = !!qrBadgeTemplate(to, 'br');
+  const fits = (s: Spot) => badgeOK && !!photos[s.photo] && memoryPhotoFits(photos[s.photo], to, s.was);
+  const claimed = new Set<number>();
+  // Badges first (each has its one photo), then frame/box memories, which
+  // pick among their page's photos.
+  const entries = [...byCode.values()].sort((a, b) => Number(b.badge) - Number(a.badge));
+  for (const { fill, badge, spots } of entries) {
+    const ok = spots.filter(fits);
+    const spot = (badge ? ok[0] : undefined) ?? ok.find((s) => !claimed.has(s.photo)) ?? ok[0];
+    if (!spot) { lost.push(fill); continue; }
+    claimed.add(spot.photo);
+    carried.push({ photo: spot.photo, fill, corner: spot.corner });
   }
   return { carried, lost };
 }
@@ -520,12 +532,13 @@ function pickMemoryPhotos(
 
 /** Put each reserved photo's full-page single back where its photo falls in
  *  the album's order, never right beside another full-page single. A photo
- *  that carries a memory (`badges`) gets its badge page instead. Mutates. */
+ *  that carries a memory (`badges`) gets its badge page instead — one per
+ *  memory it carries (it is reserved that many times). Mutates. */
 function insertMemoryPages(
   pages: AlbumPage[], reserved: number[], solo: PageTemplate | undefined, photos: UploadedPhoto[],
   size: AlbumSizePreset, background?: AlbumPage['background'],
   options?: { border?: { color: string; width: number }; cornerBase?: string },
-  badges?: Map<number, CarriedMemory>,
+  badges?: Map<number, CarriedMemory[]>,
 ): void {
   const order = groupPhotosByMoment(photos).flat();
   const pos = new Map(order.map((idx, p) => [idx, p]));
@@ -552,7 +565,7 @@ function insertMemoryPages(
       else if (at - 1 >= 0 && !isFullPage(pages[at - 2]) && !isFullPage(pages[at - 1])) at -= 1;
     }
     const page = createEmptyPage(pages.length, size, background, options?.border, options?.cornerBase);
-    const memory = badges?.get(r);
+    const memory = badges?.get(r)?.shift();
     const badge = memory ? qrBadgeTemplate(size, memory.corner ?? 'br') : undefined;
     if (memory && badge) asBadgePage(page, badge, r, memory.fill);
     else if (solo) {
@@ -1114,12 +1127,13 @@ export function generateAlbum(
 ): AlbumPage[] {
   const minPages = Math.max(1, Math.floor(options?.minPages ?? MIN_PAGES));
   const solo = memorySingleTemplate(albumSize);
-  const badges = new Map<number, CarriedMemory>();
+  const badges = new Map<number, CarriedMemory[]>();
   for (const m of options?.memories ?? []) {
-    if (photos[m.photo] && !badges.has(m.photo) && qrBadgeTemplate(albumSize, m.corner ?? 'br')) badges.set(m.photo, m);
+    if (photos[m.photo] && qrBadgeTemplate(albumSize, m.corner ?? 'br')) badges.set(m.photo, [...(badges.get(m.photo) ?? []), m]);
   }
-  const want = solo ? Math.max(0, Math.min(MIN_MEMORY_PAGES, photos.length) - badges.size) : 0;
-  const reserved = [...badges.keys(), ...(want > 0 ? pickMemoryPhotosBesides(photos, albumSize, want, badges, options) : [])];
+  const carried = [...badges].flatMap(([photo, list]) => list.map(() => photo));
+  const want = solo ? Math.max(0, Math.min(MIN_MEMORY_PAGES, photos.length) - carried.length) : 0;
+  const reserved = [...carried, ...(want > 0 ? pickMemoryPhotosBesides(photos, albumSize, want, badges, options) : [])];
   if (reserved.length === 0) {
     const plain = layoutAlbum(photos, albumSize, photosPerPage, background, options);
     separateLookAlikes(plain, photos, isMemoryReady);
@@ -1144,7 +1158,7 @@ export function generateAlbum(
 
 /** pickMemoryPhotos, from the photos that don't already carry a memory. */
 function pickMemoryPhotosBesides(
-  photos: UploadedPhoto[], size: AlbumSizePreset, k: number, taken: Map<number, CarriedMemory>, options?: GenerateOptions,
+  photos: UploadedPhoto[], size: AlbumSizePreset, k: number, taken: Map<number, CarriedMemory[]>, options?: GenerateOptions,
 ): number[] {
   if (taken.size === 0) return pickMemoryPhotos(photos, size, k, options?.faceCenters, options?.randomize);
   const others = photos.map((_, i) => i).filter((i) => !taken.has(i));
