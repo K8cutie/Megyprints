@@ -22,6 +22,7 @@ import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 import { coverWrapGeometry, insetRect } from './coverGeometry';
 import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedText } from './coverLayout';
 import { withBleed, bleedPx, drawMirroredEdges } from './printBleed';
+import { loadFontFaces } from './fonts';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -155,6 +156,7 @@ async function renderPageManually(
       }
       const st = page.slotTexts?.[i] ?? null;
       if (st) {
+        await loadFontFaces([st]); // a quote/text box's own font, never the fallback
         renderSlotText(ctx, st, sx, sy, sw, sh, W, uiW);
         continue;
       }
@@ -207,12 +209,10 @@ async function renderPageManually(
   // doesn't silently fall back to the default serif.
   const textTpl = template ? adaptTemplateToOrientation(template, W, H) : null;
   const tm = textTpl ? marginForTemplate(textTpl, textTpl.margin, albumSize, pageIndex, { noBinding: coverMode }) : null;
+  // Every face this page's text uses, loaded up front (any stored family string
+  // — the old double-quote-only match skipped 'Great Vibes, cursive').
+  await loadFontFaces(page.textElements || []);
   for (const text of page.textElements || []) {
-    const fam = text.fontFamily || 'serif';
-    const primary = fam.match(/"([^"]+)"/)?.[1];
-    if (primary) {
-      try { await document.fonts.load(`${(text.fontSize || 24) * (W / uiW)}px "${primary}"`); } catch { /* ignore */ }
-    }
     let slot: { x: number; y: number; w: number; h: number; align?: 'left' | 'center' | 'right' } | null = null;
     if (text.boxIndex != null && textTpl && tm) {
       const ts = textTpl.textSlots?.[text.boxIndex];
@@ -1028,6 +1028,8 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
     ctx.fillRect(0, 0, splitX, H);
     ctx.fillStyle = frontBg;
     ctx.fillRect(splitX, 0, W - splitX, H);
+    // The spine repeats the front title in its font; the back has the brand mark.
+    await loadFontFaces([...branded.texts.map((t) => t.style), spine.text]);
     // Reserved back panel: the brand lockup only — no customer artwork.
     for (const t of branded.texts) drawCoverText(ctx, t);
     // Front panel page render, drawn edge-to-edge into its trim rect.
@@ -1058,6 +1060,7 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
     ctx.fillRect(0, 0, splitX, H);
     ctx.fillStyle = panelBg('front');
     ctx.fillRect(splitX, 0, W - splitX, H);
+    await loadFontFaces(layout.panels.flatMap((p) => p.texts.map((t) => t.style)));
 
     for (const p of layout.panels) {
       if (p.bg) {

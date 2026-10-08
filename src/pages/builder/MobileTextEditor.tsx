@@ -12,7 +12,7 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Check, X, Minus, Plus, ChevronDown } from 'lucide-react';
 import type { TextElement } from './types';
-import { FONTS, fontName } from './fonts';
+import { DEFAULT_TEXT_FONT, fontName } from './fonts';
 import { FontList } from './FontList';
 import { contrastOutline, WORDART_OUTLINE_WIDTH, WORDART_SHADOW } from './wordArt';
 import { captionFits, type Box } from './textFit';
@@ -34,7 +34,7 @@ export default function MobileTextEditor({ initial, onSave, onClose, box }: {
 }) {
   const [text, setText] = useState(initial.text);
   const [fontSize, setFontSize] = useState(initial.fontSize || 28);
-  const [fontFamily, setFontFamily] = useState(initial.fontFamily || FONTS[0].family);
+  const [fontFamily, setFontFamily] = useState(initial.fontFamily || DEFAULT_TEXT_FONT);
   const [color, setColor] = useState(initial.color || '#2D2D2D');
   const [bold, setBold] = useState(initial.bold ?? false);
   const [italic, setItalic] = useState(initial.italic ?? false);

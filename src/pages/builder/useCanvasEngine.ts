@@ -33,6 +33,7 @@ import { textureDataUri } from './textures';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
 import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
+import { loadFontFaces } from './fonts';
 import type { BuilderActions } from './useBuilderState';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
@@ -2264,4 +2265,24 @@ function renderScene(
   }
 
   canvas.renderAll();
+  refitTextWhenFontsArrive(fab, canvas, page, thisRenderId);
+}
+
+/* Fonts download on demand (74 of them — fonts.ts), and a canvas draws text in
+   whatever face the browser has RIGHT NOW: a caption whose font is still on
+   its way shows in the fallback and, worse, Fabric measures and wraps it with
+   the fallback's widths. When this page's fonts land, drop Fabric's cached
+   widths, re-measure every text and redraw — unless a newer render started. */
+type RefittableText = { text?: unknown; initDimensions?: () => void; setCoords?: () => void; dirty?: boolean };
+function refitTextWhenFontsArrive(fab: { util?: { clearFabricFontCache?: () => void } }, canvas: FabricCanvas, page: AlbumPage, renderId: number) {
+  const texts = [...(page.textElements ?? []), ...((page.slotTexts ?? []).filter(Boolean) as SlotText[])];
+  if (!texts.length) return;
+  void loadFontFaces(texts).then(() => {
+    if (renderId !== currentRenderId) return;
+    fab.util?.clearFabricFontCache?.();
+    for (const o of canvas.getObjects() as RefittableText[]) {
+      if (typeof o.initDimensions === 'function' && typeof o.text === 'string') { o.initDimensions(); o.setCoords?.(); o.dirty = true; }
+    }
+    canvas.requestRenderAll();
+  });
 }
