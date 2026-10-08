@@ -16,7 +16,7 @@
    • a short last row is centred; students without a photo go in a
      "Not pictured" list, never a blank box;
    • nothing within 0.5 in of the spine; page numbers in the outside corner. */
-import { GRID, HEADER_H, NAME_MIN_PT, NAME_PT, PORTRAIT_ASPECT, QR_BADGE_IN, QR_BADGE_INSET, CLASS_QR_IN, TRIM, isRecto, liveArea, ptToIn, type Density } from './geometry';
+import { GRID, HEADER_H, clampDensity, NAME_MIN_PT, NAME_PT, PORTRAIT_ASPECT, QR_BADGE_IN, QR_BADGE_INSET, CLASS_QR_IN, TRIM, isRecto, liveArea, ptToIn, type Density } from './geometry';
 import { displayName, sortForPage } from './classList';
 import { badgeHitsHead, fitPortrait, mainFace, otherFaceOvals, rectHitsOval, type Crop, type PortraitFit } from './portraitFit';
 import type { Person, PhotoMeta, Section } from './types';
@@ -365,7 +365,8 @@ function lowestY(page: YbPage): number {
 
 /* ── A whole section ──────────────────────────────────────────────────────── */
 
-export function layoutSection(section: Section, ctx: LayoutCtx): SectionLayoutResult {
+export function layoutSection(input: Section, ctx: LayoutCtx): SectionLayoutResult {
+  const section = { ...input, density: clampDensity(input.density) };
   const adviser = section.people.find((p) => p.role === 'class_adviser');
   const students = sortForPage(section.people.filter((p) => p.role === 'student'));
   const withPhoto = students.filter((p) => section.assignments[p.id]?.length && ctx.photos[section.assignments[p.id][0]]);

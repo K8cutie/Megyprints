@@ -133,7 +133,7 @@ function guessColumns(rows: string[][]): Col[] {
 export function parseClassList(text: string): ParsedClassList {
   const warnings: string[] = [];
   let adviser: ParsedClassList['adviser'];
-  const lines = text.replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/ /g, ' ')).filter((l) => l.trim());
+  const lines = text.replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/\u00a0/g, ' ')).filter((l) => l.trim());
 
   const body: string[] = [];
   for (const l of lines) {

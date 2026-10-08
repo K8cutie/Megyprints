@@ -16,9 +16,9 @@ describe('budget', () => {
   it('fit my budget picks the biggest portraits that fit', () => {
     const opts: DensityOption[] = [
       { density: 4, pages: 120, price: 2400 }, { density: 9, pages: 72, price: 1700 }, { density: 12, pages: 60, price: 1500 },
-      { density: 16, pages: 52, price: 1400 }, { density: 20, pages: 48, price: 1350 }, { density: 30, pages: 44, price: 1300 },
     ];
     expect(fitBudget(opts, 1550)?.density).toBe(12);
+    expect(fitBudget(opts, 1800)?.density).toBe(9);
     expect(fitBudget(opts, 5000)?.density).toBe(4);
     expect(fitBudget(opts, 1000)).toBeNull();
   });

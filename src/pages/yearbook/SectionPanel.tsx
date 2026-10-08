@@ -41,7 +41,7 @@ export default function SectionPanel(props: Props) {
     const target = Number(budget.replace(/[^\d.]/g, ''));
     if (!target) { setBudgetMsg('Type the price per copy the school can pay, for example 1500.'); return; }
     const best = fitBudget(options, target);
-    if (!best) { setBudgetMsg(`Even 30 per page costs ${peso(options[options.length - 1]?.price ?? null)} a copy. Try softcover or fewer other pages.`); return; }
+    if (!best) { setBudgetMsg(`Even ${options[options.length - 1]?.density ?? 12} per page costs ${peso(options[options.length - 1]?.price ?? null)} a copy. Try softcover or fewer other pages.`); return; }
     pickDensity(best.density);
     setBudgetMsg(`${best.density} per page fits: ${peso(best.price)} a copy, ${best.pages} pages.`);
   };

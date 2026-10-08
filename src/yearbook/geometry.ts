@@ -41,23 +41,27 @@ export const QR_BADGE_INSET = 0.04;
 /** The class QR on a group photo is bigger: it has the room. */
 export const CLASS_QR_IN = 0.95;
 
-/** Portraits per page the adviser can pick. Each fills the page (see the
- *  layout reference: 6 and 8 leave a fifth to a third of the page empty). */
-export const DENSITIES = [4, 9, 12, 16, 20, 30] as const;
+/** Portraits per page the adviser can pick. Owner decision 2026-10-08:
+ *  "max 12 pic per page". Each fills the page (6 and 8 leave a fifth to a
+ *  third of the page empty — see the layout reference). */
+export const DENSITIES = [4, 9, 12] as const;
 export type Density = (typeof DENSITIES)[number];
+export const MAX_DENSITY: Density = 12;
+
+/** Any saved or typed value → an allowed portrait size (old projects may hold 20 or 30). */
+export function clampDensity(n: number): Density {
+  return [...DENSITIES].reverse().find((d) => d <= n) ?? DENSITIES[0];
+}
 
 /** Columns × rows for each density on a portrait 8.5 × 11 page. */
 export const GRID: Record<Density, { cols: number; rows: number }> = {
   4: { cols: 2, rows: 2 },
   9: { cols: 3, rows: 3 },
   12: { cols: 4, rows: 3 },
-  16: { cols: 4, rows: 4 },
-  20: { cols: 5, rows: 4 },
-  30: { cols: 6, rows: 5 },
 };
 
-/** Name size under a portrait, by density (7–8 pt dense, larger when roomy). */
-export const NAME_PT: Record<Density, number> = { 4: 12, 9: 10.5, 12: 9.5, 16: 9, 20: 8, 30: 7.5 };
+/** Name size under a portrait, by density (larger when roomy). */
+export const NAME_PT: Record<Density, number> = { 4: 12, 9: 10.5, 12: 9.5 };
 export const NAME_MIN_PT = 6.5;
 
 /** Graduates with three looks (toga · Filipiniana/barong · creative). */

@@ -2,7 +2,12 @@
    photo details. Photo pixels stay in IndexedDB and are decoded on demand. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { allPhotoMeta, clearAll, loadProject, saveProject } from '@/yearbook/store';
+import { clampDensity } from '@/yearbook/geometry';
 import type { PhotoMeta, YearbookProject } from '@/yearbook/types';
+
+/** Projects saved before the 12-per-page cap may hold 16, 20 or 30. */
+const migrate = (p: YearbookProject | undefined): YearbookProject | null =>
+  p ? { ...p, sections: p.sections.map((s) => ({ ...s, density: clampDensity(s.density) })) } : null;
 
 export function useYearbook() {
   const [project, setProjectState] = useState<YearbookProject | null>(null);
@@ -14,7 +19,7 @@ export function useYearbook() {
   useEffect(() => {
     let alive = true;
     Promise.all([loadProject(), allPhotoMeta()])
-      .then(([p, ph]) => { if (!alive) return; setProjectState(p ?? null); latest.current = p ?? null; setPhotos(ph); })
+      .then(([p, ph]) => { if (!alive) return; const m = migrate(p); setProjectState(m); latest.current = m; setPhotos(ph); })
       .catch(() => undefined)
       .finally(() => alive && setReady(true));
     return () => { alive = false; };

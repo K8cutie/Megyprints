@@ -219,10 +219,10 @@ export default function YearbookRoute() {
       if (!project) setProject(newProject('', String(new Date().getFullYear() + 1)));
       setTimeout(() => schoolRef.current?.focus(), 50);
     } else if (a === 'add-section') setDialog('section');
-    else if (a === 'add-photos') section ? setDialog('portraits') : setDialog('section');
-    else if (a === 'open-check') section ? setDialog('check') : setDialog('section');
+    else if (a === 'add-photos') setDialog(section ? 'portraits' : 'section');
+    else if (a === 'open-check') setDialog(section ? 'check' : 'section');
     else if (a === 'pick-size') setSpot({ name: 'portrait-size', note: 'Pick a size here. Each shows its pages and price per copy.', key: Date.now() });
-    else if (a === 'add-group') section ? setDialog('group') : setDialog('section');
+    else if (a === 'add-group') setDialog(section ? 'group' : 'section');
     else if (a === 'download') void downloadAll();
   };
   const showMe = (s: GuideStep) => setSpot({ name: s.showMe, note: s.action.label, key: Date.now() });

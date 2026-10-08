@@ -44,7 +44,11 @@ export const deletePhoto = (id: string) => tx('photos', 'readwrite', (s) => s.de
 export async function allPhotoMeta(): Promise<Record<string, PhotoMeta>> {
   const all = (await tx<PhotoRecord[]>('photos', 'readonly', (s) => s.getAll())) ?? [];
   const out: Record<string, PhotoMeta> = {};
-  for (const { blob: _blob, ...meta } of all) out[meta.id] = meta;
+  for (const rec of all) {
+    const meta: Partial<PhotoRecord> = { ...rec };
+    delete meta.blob;
+    out[rec.id] = meta as PhotoMeta;
+  }
   return out;
 }
 

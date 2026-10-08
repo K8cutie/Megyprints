@@ -45,7 +45,7 @@ describe('layoutSection — portraits', () => {
   });
 
   it('keeps everything inside the trim and out of the spine band', () => {
-    for (const d of [4, 9, 12, 16, 20, 30] as Density[]) {
+    for (const d of [4, 9, 12] as Density[]) {
       const { section, ctx } = makeSection(30, { density: d });
       for (const page of layoutSection(section, ctx).pages) {
         for (const e of page.elements) {
@@ -62,9 +62,15 @@ describe('layoutSection — portraits', () => {
     }
   });
 
-  it('QR rule (a): corner at 4 and 9 per page, beside the name from 12 per page', () => {
-    const modes = ([4, 9, 12, 20, 30] as Density[]).map((d) => layoutSection(makeSection(30, { density: d }).section, makeSection(30).ctx).qrMode);
-    expect(modes).toEqual(['corner', 'corner', 'name', 'name', 'name']);
+  it('QR rule (a): corner at 4 and 9 per page, beside the name at 12 per page', () => {
+    const modes = ([4, 9, 12] as Density[]).map((d) => layoutSection(makeSection(30, { density: d }).section, makeSection(30).ctx).qrMode);
+    expect(modes).toEqual(['corner', 'corner', 'name']);
+  });
+
+  it('caps portraits at 12 per page, even for an old project saved at 30', () => {
+    const { section, ctx } = makeSection(30, { density: 30 as Density });
+    const r = layoutSection(section, ctx);
+    expect(Math.max(...r.pages.map((p) => p.elements.filter((e) => e.kind === 'photo').length))).toBeLessThanOrEqual(12);
   });
 
   it('never puts a corner QR over a head, and names are never on a photo', () => {
@@ -131,7 +137,7 @@ describe('layoutSection — three looks', () => {
 describe('QR badges never cover a face', () => {
   it('in corner mode, no badge touches its portrait\'s head oval at any size', async () => {
     const { fitPortrait, mainFace, rectHitsOval } = await import('./portraitFit');
-    for (const d of [4, 9, 12, 16, 20, 30] as Density[]) {
+    for (const d of [4, 9, 12] as Density[]) {
       const { section, ctx } = makeSection(30, { density: d });
       const r = layoutSection(section, ctx);
       if (r.qrMode !== 'corner') continue;
