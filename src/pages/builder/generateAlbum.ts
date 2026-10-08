@@ -1,4 +1,4 @@
-import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll } from './types';
+import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll, QrFill } from './types';
 import { medianSharpness, isBlurry, photoQuality } from '../../lib/photoCheck';
 import { separateLookAlikes } from './lookAlikes';
 import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, photoSlotCount } from './pageTemplates';
@@ -250,6 +250,20 @@ export function canTakeMemoryQr(page: AlbumPage): boolean {
 /** A page that carries a video memory or can take one. */
 export function isMemoryReady(page: AlbumPage): boolean {
   return hasActiveQr(page) || canTakeMemoryQr(page);
+}
+
+/** The video memories on a page: its badge, plus any placed in a frame or a
+ *  box before memories moved to full pages. */
+export function memoriesOn(page: AlbumPage): QrFill[] {
+  return [...(page.qrFills ?? []), ...(page.textSlotQr ?? [])].filter((q): q is QrFill => q != null);
+}
+
+/** Can a video memory sit on this layout? A memory only ever sits on a
+ *  full-bleed, one-photo page — the photo over the whole sheet, no box —
+ *  with its QR as the corner badge (owner, 2026-10-08). The QR-badge
+ *  layouts themselves qualify. */
+export function layoutHoldsMemory(t: PageTemplate): boolean {
+  return photoSlotCount(t) === 1 && !(t.textSlots?.length) && coversWholeSheet(t);
 }
 
 /* ── Which photos go on the memory pages ──────────────────────────────────

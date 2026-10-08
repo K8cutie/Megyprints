@@ -11,6 +11,19 @@ import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '.
 import { photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
 import { albumIsMade } from './rebuildQuestion';
 import { leftOutNote } from '../lib/pickedFiles';
+import { memoriesOn } from '../pages/builder/generateAlbum';
+
+/** A video memory only ever sits on a full-page photo (owner, 2026-10-08), so
+ *  a page with one keeps its layout — say so instead of "Next layout." */
+function memoryKeepsPage(builder: BuilderActions, type: AssistantIntent['type']): ExecutedAction | null {
+  // The album page the layout actions change — not currentPage, which is the
+  // cover while the cover is being edited.
+  const page = builder.albumPages?.[builder.currentPageIndex];
+  return page && memoriesOn(page).length
+    ? { intentType: type, success: false, message: MEMORY_PAGE_STAYS }
+    : null;
+}
+export const MEMORY_PAGE_STAYS = 'This page has a video memory, so it stays one full photo with the QR in the corner. To change its layout, tap the QR and remove the video first.';
 
 /** THE 40-PHOTO GATE (see albumMinimum): no album is made with fewer photos
  *  going in than pages. Returns Megy's answer when short, null when enough. */
@@ -45,18 +58,24 @@ export class ActionEngine {
           return { intentType: intent.type, success: true, message: `Album generated! Your photos have been arranged across all pages.${studioNote(this.builder)}` };
         }
 
-        case 'shuffle_layout':
+        case 'shuffle_layout': {
+          const stays = memoryKeepsPage(this.builder, intent.type);
+          if (stays) return stays;
           // Cycle through the available templates IN ORDER (exhaust every option
           // before repeating), not a random pick — matches the mobile "Change".
           this.builder.cycleLayout();
           return { intentType: intent.type, success: true, message: 'Next layout.' };
+        }
 
-        case 'regenerate_page':
+        case 'regenerate_page': {
+          const stays = memoryKeepsPage(this.builder, intent.type);
+          if (stays) return stays;
           if (this.builder.currentPage?.studio) {
             return { intentType: intent.type, success: false, message: 'This page is yours — I won’t rearrange it. Use “Megy, fix this page” if you want it back the way I had it.' };
           }
           this.builder.regeneratePage();
           return { intentType: intent.type, success: true, message: 'This page has been regenerated with a fresh layout.' };
+        }
 
         case 'auto_fill': {
           // This page's empty frames only, with photos not yet in the album.
@@ -135,6 +154,8 @@ export class ActionEngine {
           if (!templateId) {
             return { intentType: intent.type, success: false, message: 'Which template?' };
           }
+          const stays = memoryKeepsPage(this.builder, intent.type);
+          if (stays) return stays;
           this.builder.setPageTemplate(templateId);
           return { intentType: intent.type, success: true, message: 'Page template changed.' };
         }
