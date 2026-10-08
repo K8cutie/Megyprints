@@ -90,6 +90,39 @@ export async function detectFacesWithLandmarks(
   }
 }
 
+/** Every face with its box and eye centres, as fractions (0–1) of the input
+ *  size — for yearbook portraits (same head size, same eye line) and class
+ *  photos (keep the QR off every face). Empty when the models aren't loaded.
+ *  `inputSize` trades speed for small faces: 416 for a portrait, 608 for a
+ *  class photo. */
+export async function detectFaceGeometry(
+  input: HTMLCanvasElement,
+  inputSize = 416,
+): Promise<{ box: { x: number; y: number; w: number; h: number }; leftEye: { x: number; y: number }; rightEye: { x: number; y: number } }[]> {
+  if (!landmarksLoaded) return [];
+  const W = input.width, H = input.height;
+  const mean = (pts: { x: number; y: number }[]) => ({
+    x: pts.reduce((s, p) => s + p.x, 0) / pts.length / W,
+    y: pts.reduce((s, p) => s + p.y, 0) / pts.length / H,
+  });
+  try {
+    const found = await faceapi
+      .detectAllFaces(input, new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: 0.45 }))
+      .withFaceLandmarks(true);
+    return found.map((f) => {
+      const b = f.detection.box;
+      const pts = f.landmarks.positions;
+      // 68-point layout: 36–41 = one eye, 42–47 = the other (image left → right).
+      const a = mean(pts.slice(36, 42)), c = mean(pts.slice(42, 48));
+      const [leftEye, rightEye] = a.x <= c.x ? [a, c] : [c, a];
+      return { box: { x: b.x / W, y: b.y / H, w: b.width / W, h: b.height / H }, leftEye, rightEye };
+    });
+  } catch (err) {
+    console.warn('[FaceDetection] Face geometry failed:', err);
+    return [];
+  }
+}
+
 /** Detect face center(s) in an image.
     - 1 face  → centers on that face
     - 2+ faces→ centers on the middle of the GROUP so everyone stays in frame
