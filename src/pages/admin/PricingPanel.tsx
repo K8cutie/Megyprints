@@ -9,14 +9,52 @@ import { useState, useEffect } from 'react';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
-import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
-import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice } from '../../lib/storeSettings';
+import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, formulaPriceOf, fixedPriceOf, type Binding, type FixedPrices, type PricingModel, hostingTiersOf } from '../../lib/pricing';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setFixedPrices } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
+const BINDINGS: Binding[] = ['soft', 'hard'];
 
 const peso = (n: number) => '₱' + Math.round(n).toLocaleString('en-PH');
-// Competitor 8×8: ₱3,000 base (20 pages) + ₱30/pg; voucher ≈ 51% of regular.
-const rival8 = (p: number) => { const reg = 3000 + Math.max(0, p - 20) * 30; return { reg, vou: Math.round(reg * 0.51) }; };
+
+// Photobook PH (photobook.com.ph), read from their own price API on 8 Oct 2026:
+// 40-page LIST prices for their standard-bind books, by our nearest size. A
+// standing 50% code ("PERFECTSAVING", valid to 1 Jan 2027) halves them, so the
+// sale price is what their customers actually pay. Extra pages ≈ ₱40 each at
+// list (their 20- vs 40-page prices). They sell no 6×4, 6×8 or 9×9.
+const PHOTOBOOK_CHECKED = '8 Oct 2026';
+const PHOTOBOOK_PER_PAGE = 40;
+const PHOTOBOOK: Partial<Record<AlbumSizePreset, { label: string; soft: number; hard: number }>> = {
+  '6x6':    { label: '6×6',    soft: 900,  hard: 1000 },
+  '8x6':    { label: '8×6',    soft: 1400, hard: 2750 },
+  '6x8':    { label: '8×6',    soft: 1400, hard: 2750 },
+  '8x8':    { label: '8×8',    soft: 1600, hard: 3000 },
+  '9x9':    { label: '8×11',   soft: 1800, hard: 3250 },
+  '11.5x8': { label: '11×8.5', soft: 2100, hard: 3500 },
+  '8.5x11': { label: '8×11',   soft: 1800, hard: 3250 },
+};
+const rival = (size: AlbumSizePreset, bind: Binding, pages: number) => {
+  const p = PHOTOBOOK[size];
+  if (!p) return null;
+  const reg = p[bind] + Math.max(0, pages - 40) * PHOTOBOOK_PER_PAGE;
+  return { label: p.label, reg, sale: Math.round(reg / 2) };
+};
+
+// The fixed-price inputs, keyed "<size>:<binding>"; '' = use the formula.
+type FixedDraft = Record<string, string>;
+const draftKey = (size: AlbumSizePreset, bind: Binding) => `${size}:${bind}`;
+const draftFrom = (m: PricingModel): FixedDraft => Object.fromEntries(
+  ORDER.flatMap((s) => BINDINGS.map((b) => [draftKey(s, b), String(fixedPriceOf(m, s, b) ?? '')])),
+);
+const pricesFrom = (draft: FixedDraft): FixedPrices => {
+  const out: FixedPrices = {};
+  for (const s of ORDER)
+    for (const b of BINDINGS) {
+      const t = (draft[draftKey(s, b)] ?? '').trim();
+      if (t !== '') out[s] = { ...out[s], [b]: Number(t) };
+    }
+  return out;
+};
 
 export default function PricingPanel() {
   const [size, setSize] = useState<AlbumSizePreset>('8x8');
@@ -55,6 +93,12 @@ export default function PricingPanel() {
   const [savedTiers, setSavedTiers] = useState(false);
   const [tiersErr, setTiersErr] = useState('');
 
+  // ── Persisted fixed 40-page prices (0041) ──
+  const [fixedDraft, setFixedDraft] = useState<FixedDraft>({});
+  const [savingFixed, setSavingFixed] = useState(false);
+  const [savedFixed, setSavedFixed] = useState(false);
+  const [fixedErr, setFixedErr] = useState('');
+
   const [disabledSizes, setDisabledSizesState] = useState<AlbumSizePreset[]>(getDisabledSizes());
   const [savingSizes, setSavingSizes] = useState(false);
   const [savedSizes, setSavedSizes] = useState(false);
@@ -67,7 +111,7 @@ export default function PricingPanel() {
     setDisabledSizesState(getDisabledSizes());
     void loadOwnerPricingModel().then((m) => {
       if (!alive) return;
-      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); setHdPrice(Number(m.hd_memories_price ?? 0)); }
+      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); setHdPrice(Number(m.hd_memories_price ?? 0)); setFixedDraft(draftFrom(m)); }
       else setModelErr('Could not load the cost model. Owner sign-in is required to view pricing.');
     });
     return () => { alive = false; };
@@ -119,6 +163,19 @@ export default function PricingPanel() {
     }
   };
 
+  const saveFixed = async () => {
+    setSavingFixed(true); setSavedFixed(false); setFixedErr('');
+    const res = await setFixedPrices(pricesFrom(fixedDraft));
+    setSavingFixed(false);
+    if ('error' in res) { setFixedErr(res.error); return; }
+    if (model) {
+      const next = { ...model, fixed_prices: res.saved };
+      setModel(next);
+      setFixedDraft(draftFrom(next));
+    }
+    setSavedFixed(true); setTimeout(() => setSavedFixed(false), 2500);
+  };
+
   const toggleSize = (preset: AlbumSizePreset) => {
     setDisabledSizesState((prev) => prev.includes(preset) ? prev.filter((p) => p !== preset) : [...prev, preset]);
     setSavedSizes(false);
@@ -144,12 +201,14 @@ export default function PricingPanel() {
 
   const cost = costOf(model, size, bind, pages);
   const surcharge = model.sizes[size].surcharge;
-  const price = ownerPriceOf(model, size, bind, pages, mult); // marked-up cost + size premium
+  const isFixed = fixedPriceOf(model, size, bind) !== null;
+  const price = ownerPriceOf(model, size, bind, pages, mult); // fixed price, or marked-up cost + size premium
   const profit = price - cost;
   const cpp = perPageCost(model, size);
   const marginPct = Math.round((1 - cost / price) * 100);
   const effMult = price / cost; // effective markup once the size premium is added
-  const r = rival8(pages);
+  const r = rival(size, bind, pages);
+  const sheetRate = model.sheet_cost * model.price_multiple;
 
   return (
     <div className="space-y-8">
@@ -169,8 +228,9 @@ export default function PricingPanel() {
           <div>
             <h3 className="font-display text-lg font-semibold text-dark">Store price multiple</h3>
             <p className="text-sm text-medium mt-0.5 max-w-lg">
-              This drives the <b>live checkout price</b> customers pay (production cost × this number).
-              Customers never see it. Distinct from the explore slider below.
+              Production cost × this number is the <b>live checkout price</b> for any size and cover without a
+              fixed price below, and it prices the <b>extra pages</b> on every album. Customers never see it.
+              Distinct from the explore slider further down.
             </p>
           </div>
           <div className="flex items-end gap-3">
@@ -282,6 +342,89 @@ export default function PricingPanel() {
         </div>
       </div>
 
+      {/* Fixed 40-page prices — the PERSISTED per-size price customers pay (0041) */}
+      <div className="rounded-2xl border-2 border-rust/40 bg-warm-white px-5 py-4">
+        <h3 className="font-display text-lg font-semibold text-dark">Album prices · {model.min_pages} pages</h3>
+        <p className="text-sm text-medium mt-0.5 max-w-2xl">
+          Type what customers pay for a {model.min_pages}-page album in that size and cover. Leave a box
+          empty to use cost × the store multiple (shown greyed in the box). The {peso(model.hosting_reserve)} hosting
+          reserve comes out of the price you type. Extra pages always add {peso(sheetRate)} a printed sheet.
+        </p>
+        <div className="mt-3 overflow-x-auto border border-line rounded-xl bg-white">
+          <table className="w-full min-w-[620px] text-sm">
+            <thead>
+              <tr className="bg-warm-white text-light">
+                {['Size', 'Softcover', 'Hardbound', 'Photobook PH · sale (regular)'].map((h) => (
+                  <th key={h} className="px-3 py-2 text-[11px] uppercase tracking-wide font-semibold text-left">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ORDER.map((s) => {
+                const pb = PHOTOBOOK[s];
+                return (
+                  <tr key={s} className="border-t border-line-soft align-top">
+                    <td className="px-3 py-2.5 font-semibold text-dark whitespace-nowrap">
+                      {SIZE_LABELS[s]}
+                      {disabledSizes.includes(s) && <span className="block text-[10px] font-normal text-light">off in the picker</span>}
+                    </td>
+                    {BINDINGS.map((b) => {
+                      const key = draftKey(s, b);
+                      const text = fixedDraft[key] ?? '';
+                      const n = Number(text);
+                      const c = costOf(model, s, b, model.min_pages);
+                      const floor = c + model.hosting_reserve;
+                      const bad = text.trim() !== '' && (!Number.isInteger(n) || n < 1);
+                      const low = !bad && text.trim() !== '' && n < floor;
+                      return (
+                        <td key={b} className="px-3 py-2.5">
+                          <input
+                            type="number" min={1} step={1} inputMode="numeric"
+                            aria-label={`${SIZE_LABELS[s]} ${b === 'soft' ? 'softcover' : 'hardbound'} price for ${model.min_pages} pages`}
+                            value={text}
+                            placeholder={`${peso(formulaPriceOf(model, s, b, model.min_pages, model.price_multiple))}`}
+                            onChange={(e) => { setFixedDraft((d) => ({ ...d, [key]: e.target.value })); setSavedFixed(false); }}
+                            className="w-28 border border-line rounded-lg px-2.5 py-1.5 font-mono text-sm tabular-nums text-dark bg-white placeholder:text-light"
+                          />
+                          <div className={`text-[11px] mt-1 ${bad || low ? 'text-rust-deep font-semibold' : 'text-light'}`}>
+                            {bad ? 'Whole pesos only'
+                              : low ? `Below cost ${peso(Math.ceil(c))} + ${peso(model.hosting_reserve)} reserve`
+                              : text.trim() === '' ? 'Formula price'
+                              : `You keep ${peso(n - c - model.hosting_reserve)}`}
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2.5 text-[12px] text-medium">
+                      {pb ? (
+                        <>
+                          <div className="font-mono tabular-nums text-dark">{peso(pb.soft / 2)} · {peso(pb.hard / 2)}</div>
+                          <div className="font-mono tabular-nums text-light">({peso(pb.soft)} · {peso(pb.hard)})</div>
+                          {pb.label !== SIZE_LABELS[s] && <div className="text-[10px] text-light">their {pb.label}</div>}
+                        </>
+                      ) : <span className="text-light">They don't sell {SIZE_LABELS[s]}</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-light mt-2">
+          Photobook PH prices: their own price list, checked {PHOTOBOOK_CHECKED}. Soft · hard. The sale price is
+          their standing 50% code, valid to 1 Jan 2027.
+        </p>
+        <div className="mt-3 flex items-center gap-3 flex-wrap">
+          <button onClick={saveFixed} disabled={savingFixed}
+            className="py-2 px-4 text-sm font-semibold rounded-lg text-white transition-colors disabled:opacity-60"
+            style={{ background: '#BF5E3E' }}>
+            {savingFixed ? 'Saving…' : 'Save prices'}
+          </button>
+          {savedFixed && <p className="text-xs text-success font-semibold">✓ Saved — checkout now charges these prices.</p>}
+          {fixedErr && <p className="text-xs text-rust-deep">Couldn't save: {fixedErr}</p>}
+        </div>
+      </div>
+
       {/* Album sizes offered — hides sizes from the customer picker (owner-only) */}
       <div className="rounded-2xl border-2 border-rust/40 bg-warm-white px-5 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -325,9 +468,9 @@ export default function PricingPanel() {
       {/* Thesis strip */}
       <div className="grid sm:grid-cols-3 gap-px bg-sand-deep border border-sand-deep rounded-2xl overflow-hidden">
         {[
-          { k: 'Your cost / page — 8×8', v: '₱6.63', sub: 'paper + print, split across the sheet', c: 'text-success' },
-          { k: 'Competitor charge / page — 8×8', v: '₱30.00', sub: '₱60 on their 14×10 landscape', c: 'text-rust-deep' },
-          { k: 'The gap', v: '≈ 4.5×', sub: 'on the biggest price driver', c: 'text-dark' },
+          { k: 'Your cost / page — 8×8', v: '₱' + perPageCost(model, '8x8').toFixed(2), sub: 'paper + print, split across the sheet', c: 'text-success' },
+          { k: 'Photobook PH / extra page — 8×8', v: '₱' + PHOTOBOOK_PER_PAGE.toFixed(2), sub: 'list price, from their 20- vs 40-page books', c: 'text-rust-deep' },
+          { k: 'The gap', v: '≈ ' + (PHOTOBOOK_PER_PAGE / perPageCost(model, '8x8')).toFixed(0) + '×', sub: 'on the biggest price driver', c: 'text-dark' },
         ].map((s) => (
           <div key={s.k} className="bg-white p-4">
             <div className="text-xs text-light">{s.k}</div>
@@ -386,9 +529,8 @@ export default function PricingPanel() {
             <input type="range" min={2} max={6} step={0.25} value={mult}
               onChange={(e) => setMult(+e.target.value)} className="w-full accent-rust" />
             <p className="text-xs mt-1" style={{ color: '#8B6F47' }}>
-              {mult <= 3 ? <><b>Beats their sale</b> — under the voucher price customers actually pay.</>
-                : mult >= 4.75 ? <><b>Their regular price</b> ceiling — hold on premium + the QR feature.</>
-                : 'Between their sale and regular price — solid premium room.'}
+              Explore only — this slider never changes checkout.
+              {isFixed && <> {SIZE_LABELS[size]} {bind === 'soft' ? 'softcover' : 'hardbound'} has a fixed price, so here it only moves the extra pages.</>}
             </p>
           </div>
         </div>
@@ -399,7 +541,11 @@ export default function PricingPanel() {
             <div>
               <div className="text-xs uppercase tracking-wide text-light">Your price</div>
               <div className="font-mono text-4xl font-semibold tabular-nums text-dark leading-none mt-1">{peso(price)}</div>
-              {(surcharge > 0 || model.hosting_reserve > 0) && (
+              {isFixed ? (
+                <div className="text-[11px] text-cocoa mt-1">
+                  fixed {model.min_pages}-page price{pages > model.min_pages && <> + extra sheets at {mult.toFixed(2).replace(/0$/, '')}×</>} · incl. {peso(model.hosting_reserve)} hosting reserve
+                </div>
+              ) : (surcharge > 0 || model.hosting_reserve > 0) && (
                 <div className="text-[11px] text-cocoa mt-1">
                   incl.{surcharge > 0 && <> +{peso(surcharge)} size premium</>}
                   {surcharge > 0 && model.hosting_reserve > 0 && <> ·</>}
@@ -426,25 +572,28 @@ export default function PricingPanel() {
             ))}
           </div>
 
-          {size === '8x8' ? (
+          {r ? (
             <div className="mt-4 rounded-xl border border-line bg-blush px-4 py-3 text-sm">
-              <div className="text-xs font-semibold uppercase tracking-wide text-rust-deep mb-1.5">vs. competitor · same 8×8, {pages} pages</div>
-              {[['Their regular', r.reg], ['Their voucher price', r.vou], ['You', price]].map(([l, v]) => (
+              <div className="text-xs font-semibold uppercase tracking-wide text-rust-deep mb-1.5">
+                vs. Photobook PH · their {r.label} {bind === 'soft' ? 'softcover' : 'hardcover'}, {pages} pages
+              </div>
+              {[['Their regular', r.reg], ['Their sale (50% code)', r.sale], ['You', price]].map(([l, v]) => (
                 <div key={l as string} className="flex justify-between py-0.5">
                   <span className="text-[#6B4A42]">{l}</span>
                   <span className="font-mono tabular-nums text-dark">{peso(v as number)}</span>
                 </div>
               ))}
-              <div className="mt-2 font-semibold" style={{ color: price <= r.vou ? '#2E7D4A' : '#B0503A' }}>
-                {price <= r.vou
-                  ? `↓ ${peso(r.vou - price)} under their voucher price`
-                  : `↑ ${peso(price - r.vou)} over their voucher — you're selling the feature here`}
+              <div className="mt-2 font-semibold" style={{ color: price <= r.sale ? '#2E7D4A' : '#B0503A' }}>
+                {price === r.sale ? '= their sale price'
+                  : price < r.sale ? `↓ ${peso(r.sale - price)} under their sale price`
+                  : `↑ ${peso(price - r.sale)} over their sale price`}
               </div>
+              {pages > 40 && <div className="text-[11px] text-light mt-1">Their extra pages ≈ ₱{PHOTOBOOK_PER_PAGE} each at list — an estimate.</div>}
             </div>
           ) : (
             <div className="mt-4 rounded-xl border border-sand-deep bg-warm-white px-4 py-3 text-sm text-medium">
-              <div className="text-xs font-semibold uppercase tracking-wide text-light mb-1">vs. competitor</div>
-              Direct checkout data on file for <b>8×8 (₱30/pg)</b> and <b>14×10 (₱60/pg)</b>. Switch to 8×8 for the live head-to-head — the cost gap holds at every size.
+              <div className="text-xs font-semibold uppercase tracking-wide text-light mb-1">vs. Photobook PH</div>
+              They don't sell a {SIZE_LABELS[size]} album, so there's nothing to compare it with.
             </div>
           )}
         </div>
@@ -454,14 +603,14 @@ export default function PricingPanel() {
       <div>
         <h3 className="font-display text-lg font-semibold text-dark mb-1">Reference sheet — the 40-page floor</h3>
         <p className="text-sm text-medium mb-3">
-          <b>3×</b> is the recommended baseline (under their sale); <b>5×</b> is the ceiling (their regular price) — worth holding on premium hardbound where the QR living-memory sells it.
-          The <b>3×/5×</b> columns include the flat <b>size premium</b> (marked beside the size): <b>+₱150</b> on 9×9, <b>+₱300</b> on 11.5×8 &amp; 8.5×11 — pure margin, since those cost the same to print as 8×8.
+          <b>Customers pay</b> is the live price (a fixed price where you set one, else cost × {model.price_multiple}).
+          The <b>3×/5×</b> columns are what the formula alone would charge, and include the flat <b>size premium</b> (marked beside the size): <b>+₱150</b> on 9×9, <b>+₱300</b> on 11.5×8 &amp; 8.5×11.
         </p>
         <div className="overflow-x-auto border border-line rounded-xl">
-          <table className="w-full min-w-[560px] text-sm">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="bg-warm-white text-light">
-                {['Size', 'Cost', '3× price', '5× price', 'Cost / extra page'].map((h, i) => (
+                {['Size', 'Cost', 'Customers pay', '3× formula', '5× formula', 'Cost / extra page'].map((h, i) => (
                   <th key={h} className={`px-4 py-2.5 text-[11px] uppercase tracking-wide font-semibold ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
                 ))}
               </tr>
@@ -475,15 +624,35 @@ export default function PricingPanel() {
         </div>
       </div>
 
-      {/* Competitor decode */}
+      {/* Competitor prices — Photobook PH, read from their own price list */}
       <div>
-        <h3 className="font-display text-lg font-semibold text-dark mb-1">What the competition charges</h3>
-        <p className="text-sm text-medium mb-3">Decoded from their live checkout — flat ₱3,000 base (20 pages) + a per-page rate that climbs with size.</p>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <RivalCard title="8×8 Hardcover Photobook" meta="Imagewrap hardcover · 116 pages (20 + 96)"
-            lines={[['Base · 20 pages', '₱3,000', ''], ['+96 pages @ ₱30', '₱2,880', 'rival'], ['Matte lamination', '₱150', ''], ['Regular', '₱6,030', 'rule'], ['After voucher', '₱3,078', 'pay']]} />
-          <RivalCard title="14×10 Landscape Hardcover" meta="Imagewrap hardcover · 64 pages (20 + 44)"
-            lines={[['Base · 20 pages', '₱3,000', ''], ['+44 pages @ ₱60', '₱2,640', 'rival'], ['Regular', '₱5,640', 'rule'], ['After voucher', '₱3,462', 'pay']]} />
+        <h3 className="font-display text-lg font-semibold text-dark mb-1">What Photobook PH charges</h3>
+        <p className="text-sm text-medium mb-3">
+          Their standard-bind books start at <b>40 pages</b>, checked {PHOTOBOOK_CHECKED}. A standing 50% code
+          ("PERFECTSAVING", valid to 1 Jan 2027) halves every price, and shipping is free nationwide. Extra pages
+          run about ₱{PHOTOBOOK_PER_PAGE} each at list.
+        </p>
+        <div className="overflow-x-auto border border-line rounded-xl">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="bg-warm-white text-light">
+                {['Their size', 'Softcover', 'with code', 'Hardcover', 'with code'].map((h, i) => (
+                  <th key={h} className={`px-4 py-2.5 text-[11px] uppercase tracking-wide font-semibold ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="font-mono tabular-nums">
+              {[...new Map(Object.values(PHOTOBOOK).map((p) => [p!.label, p!])).values()].map((p) => (
+                <tr key={p.label} className="border-t border-line-soft">
+                  <td className="px-4 py-2.5 text-left font-sans text-dark">{p.label}</td>
+                  <td className="px-4 py-2.5 text-right text-medium">{peso(p.soft)}</td>
+                  <td className="px-4 py-2.5 text-right text-dark">{peso(p.soft / 2)}</td>
+                  <td className="px-4 py-2.5 text-right text-medium">{peso(p.hard)}</td>
+                  <td className="px-4 py-2.5 text-right text-dark">{peso(p.hard / 2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -517,7 +686,7 @@ function PricingGroup({ bind, model }: { bind: Binding; model: PricingModel }) {
   return (
     <>
       <tr className="bg-warm-white">
-        <td colSpan={5} className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-rust">
+        <td colSpan={6} className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-rust">
           {bind === 'soft' ? 'Softcover' : 'Hardbound'} · 40 pages
         </td>
       </tr>
@@ -525,6 +694,7 @@ function PricingGroup({ bind, model }: { bind: Binding; model: PricingModel }) {
         const c = costOf(model, k, bind, 40);
         const cpp = perPageCost(model, k);
         const prem = model.sizes[k].surcharge;
+        const isFixed = fixedPriceOf(model, k, bind) !== null;
         return (
           <tr key={k} className="border-t border-line-soft">
             <td className="px-4 py-2.5 text-left font-sans text-dark">
@@ -532,30 +702,16 @@ function PricingGroup({ bind, model }: { bind: Binding; model: PricingModel }) {
               {prem > 0 && <span className="ml-1.5 text-[10px] font-sans text-cocoa">+{peso(prem)}</span>}
             </td>
             <td className="px-4 py-2.5 text-right text-dark">{peso(c)}</td>
-            <td className="px-4 py-2.5 text-right text-success">{peso(ownerPriceOf(model, k, bind, 40, 3))}</td>
-            <td className="px-4 py-2.5 text-right text-rust">{peso(ownerPriceOf(model, k, bind, 40, 5))}</td>
+            <td className="px-4 py-2.5 text-right text-dark font-semibold">
+              {peso(ownerPriceOf(model, k, bind, 40, model.price_multiple))}
+              {isFixed && <span className="ml-1.5 text-[10px] font-sans font-normal text-cocoa">fixed</span>}
+            </td>
+            <td className="px-4 py-2.5 text-right text-success">{peso(formulaPriceOf(model, k, bind, 40, 3))}</td>
+            <td className="px-4 py-2.5 text-right text-rust">{peso(formulaPriceOf(model, k, bind, 40, 5))}</td>
             <td className="px-4 py-2.5 text-right text-medium">₱{cpp.toFixed(2)}</td>
           </tr>
         );
       })}
     </>
-  );
-}
-
-function RivalCard({ title, meta, lines }: { title: string; meta: string; lines: [string, string, string][] }) {
-  return (
-    <div className="border border-line rounded-xl p-4 bg-white">
-      <h4 className="text-sm font-semibold text-dark">{title}</h4>
-      <p className="text-xs text-light mb-3">{meta}</p>
-      <div className="font-mono tabular-nums text-[13px]">
-        {lines.map(([l, v, kind]) => (
-          <div key={l}
-            className={`flex justify-between py-1 ${kind === 'rule' ? 'border-t border-sand-deep mt-1 pt-2 font-semibold' : ''}`}
-            style={{ color: kind === 'rival' ? '#B0503A' : kind === 'pay' ? '#2E7D4A' : '#2D2D2D', fontWeight: kind === 'pay' ? 600 : undefined }}>
-            <span className="font-sans text-medium">{l}</span><span>{v}</span>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }

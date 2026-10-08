@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, extraPagesCharge,
-  qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE,
+  priceOf, priceBreakdown, costOf, ownerPriceOf, formulaPriceOf, scheduleFrom, extraPagesCharge,
+  fixedPriceOf, qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE,
   hostingTiersOf, hostingTermCharge, includedHostingYears, DEFAULT_HOSTING_TIERS,
   hdMemoriesPriceOf, hdMemoriesCharge,
   MIN_PAGES, SIZE_LABELS,
-  type Binding, type PricingModel,
+  type Binding, type PricingModel, type FixedPrices,
 } from './pricing';
 import type { AlbumSizePreset } from '../pages/builder/types';
 
@@ -346,6 +346,15 @@ describe('pricing invariants', () => {
     }
   });
 
+  it('with no fixed prices, the operator price is the plain cost × multiple formula (pre-0041 prices unchanged)', () => {
+    for (const multiple of MULTIPLES)
+      for (const size of SIZE_KEYS)
+        for (const binding of BINDINGS)
+          for (const pages of PAGE_COUNTS)
+            expect(ownerPriceOf(MODEL, size, binding, pages, multiple))
+              .toBe(formulaPriceOf(MODEL, size, binding, pages, multiple));
+  });
+
   it('10 more pages on an 8×8 are 3 more sheets of 4: ₱318 at ₱106 a sheet, not "10 × ₱27"', () => {
     const schedule = { ...scheduleFrom(MODEL, 3), sheet_rate: 106, min_pages: 40 };
     schedule.sizes = { ...schedule.sizes, '8x8': { ...schedule.sizes['8x8'], pps: 4 } };
@@ -354,5 +363,146 @@ describe('pricing invariants', () => {
     expect(album.amount).toBe(priceOf(schedule, '8x8', 'soft', 40));
     expect(extra).toEqual({ label: 'Extra pages · 10 (pages print 4 to a sheet: 3 more sheets)', amount: 318 });
     expect(extraPagesCharge(schedule, '8x8', 'soft', 40)).toEqual({ pages: 0, sheets: 0, amount: 0 });
+  });
+});
+
+// ── Fixed prices (owner, 2026-10-08; migration 0041) ────────────────────────
+// The owner matched Photobook PH's live sale price (their standing 50% code,
+// photobook.com.ph, checked 2026-10-08) on 8×6, 6×8, 8×8 and 9×9 (vs their 8×11),
+// and held 6×4 / 6×6 at a floor: 2 × production cost + the ₱50 hosting
+// reserve, rounded UP to the next ₱50. Fixture mirrors the 0041 seed.
+const FIXED: FixedPrices = {
+  '6x4': { soft: 550, hard: 750 },
+  '6x6': { soft: 600, hard: 850 },
+  '8x6': { soft: 700, hard: 1375 },
+  '6x8': { soft: 700, hard: 1375 },
+  '8x8': { soft: 800, hard: 1500 },
+  '9x9': { soft: 900, hard: 1625 },
+};
+const FIXED_MODEL: PricingModel = { ...MODEL, fixed_prices: FIXED };
+const FIXED_KEYS = Object.keys(FIXED) as AlbumSizePreset[];
+const fixed = (size: AlbumSizePreset, binding: Binding) => FIXED[size]![binding]!;
+
+describe('fixed prices — the owner sets the 40-page price per size and cover (0041)', () => {
+  it('a fixed price is exactly what the customer pays for the included pages, at EVERY store multiple', () => {
+    for (const multiple of MULTIPLES) {
+      const schedule = scheduleFrom(FIXED_MODEL, multiple);
+      for (const size of FIXED_KEYS)
+        for (const binding of BINDINGS)
+          for (const pages of [1, 20, MIN_PAGES - 1, MIN_PAGES])
+            expect(priceOf(schedule, size, binding, pages), `${size} ${binding} ${pages} @${multiple}`)
+              .toBe(fixed(size, binding));
+    }
+  });
+
+  it('pages past the included ones are extra sheets × the same sheet rate — identical to before at a whole-peso rate (live 4× = ₱106)', () => {
+    for (const multiple of MULTIPLES) {
+      const before = scheduleFrom(MODEL, multiple);
+      const after = scheduleFrom(FIXED_MODEL, multiple);
+      for (const size of FIXED_KEYS)
+        for (const binding of BINDINGS)
+          for (const pages of PAGE_COUNTS.filter((p) => p > MIN_PAGES)) {
+            const was = extraPagesCharge(before, size, binding, pages);
+            const now = extraPagesCharge(after, size, binding, pages);
+            expect(now.sheets).toBe(was.sheets);
+            expect(now.amount).toBe(Math.round(now.sheets * after.sheet_rate));
+            // A sheet rate with centavos rounds once now instead of twice, so
+            // the extra-pages line can move by ₱1 — never more, never at ₱106.
+            expect(Math.abs(now.amount - was.amount)).toBeLessThanOrEqual(1);
+            if (Number.isInteger(after.sheet_rate)) expect(now.amount).toBe(was.amount);
+          }
+    }
+  });
+
+  it('schedule ↔ model agreement still holds with fixed prices (customer charge = operator report)', () => {
+    for (const multiple of MULTIPLES) {
+      const schedule = scheduleFrom(FIXED_MODEL, multiple);
+      for (const size of SIZE_KEYS)
+        for (const binding of BINDINGS)
+          for (const pages of PAGE_COUNTS)
+            expect(priceOf(schedule, size, binding, pages), `${size} ${binding} ${pages} @${multiple}`)
+              .toBe(ownerPriceOf(FIXED_MODEL, size, binding, pages, multiple));
+    }
+  });
+
+  it('a size or cover with no fixed price keeps the formula, byte-identical', () => {
+    for (const multiple of MULTIPLES) {
+      const formula = scheduleFrom(MODEL, multiple);
+      const withFixed = scheduleFrom(FIXED_MODEL, multiple);
+      expect(withFixed.sizes['11.5x8']).toEqual(formula.sizes['11.5x8']);
+      expect(withFixed.sizes['8.5x11']).toEqual(formula.sizes['8.5x11']);
+      expect(withFixed.sheet_rate).toBe(formula.sheet_rate);
+      // Only the hardbound fixed: softcover stays on the formula.
+      const hardOnly = scheduleFrom({ ...MODEL, fixed_prices: { '8x8': { hard: 1500 } } }, multiple);
+      expect(hardOnly.sizes['8x8'].soft_rate).toBe(formula.sizes['8x8'].soft_rate);
+      expect(priceOf(hardOnly, '8x8', 'hard', MIN_PAGES)).toBe(1500);
+    }
+  });
+
+  it('the hosting reserve is absorbed: raising or dropping it never moves a fixed price', () => {
+    for (const reserve of [0, 50, 120])
+      for (const size of FIXED_KEYS)
+        for (const binding of BINDINGS)
+          expect(priceOf(scheduleFrom({ ...FIXED_MODEL, hosting_reserve: reserve }, 4), size, binding, MIN_PAGES))
+            .toBe(fixed(size, binding));
+  });
+
+  it('the schedule still carries no cost, multiple, premium or fixed-price field', () => {
+    const json = JSON.stringify(scheduleFrom(FIXED_MODEL, 4));
+    for (const leak of ['price_multiple', 'sheet_cost', 'soft_cover_cost', 'soft_bind_cost', 'hb', 'surcharge', 'fixed'])
+      expect(json).not.toContain(leak);
+  });
+
+  it('a malformed fixed price is ignored (formula), never ₱0 or NaN', () => {
+    const junk = { '8x8': { soft: 'cheap', hard: -5 }, '6x6': { soft: 0, hard: Number.NaN }, '9x9': null } as unknown as FixedPrices;
+    const schedule = scheduleFrom({ ...MODEL, fixed_prices: junk }, 4);
+    expect(schedule).toEqual(scheduleFrom(MODEL, 4));
+    expect(fixedPriceOf({ ...MODEL, fixed_prices: junk }, '8x8', 'soft')).toBeNull();
+    expect(fixedPriceOf({ ...MODEL, fixed_prices: junk }, '9x9', 'hard')).toBeNull();
+    expect(fixedPriceOf(MODEL, '8x8', 'hard')).toBeNull();
+    expect(fixedPriceOf(FIXED_MODEL, '8x8', 'hard')).toBe(1500);
+  });
+
+  it('prices still never go down as pages go up, and hardbound is never cheaper than softcover', () => {
+    const schedule = scheduleFrom(FIXED_MODEL, 4);
+    for (const size of SIZE_KEYS)
+      for (const binding of BINDINGS) {
+        let prev = 0;
+        for (const pages of [...PAGE_COUNTS].sort((a, b) => a - b)) {
+          const p = priceOf(schedule, size, binding, pages);
+          expect(p).toBeGreaterThanOrEqual(prev);
+          prev = p;
+          if (binding === 'hard') expect(p).toBeGreaterThanOrEqual(priceOf(schedule, size, 'soft', pages));
+        }
+      }
+  });
+});
+
+describe('the 2026-10-08 price list (Photobook PH sale match + small-size floor)', () => {
+  it('every fixed price covers its production cost AND the hosting reserve — no album sells at a loss', () => {
+    for (const size of FIXED_KEYS)
+      for (const binding of BINDINGS)
+        expect(fixed(size, binding), `${size} ${binding}`)
+          .toBeGreaterThan(costOf(MODEL, size, binding, MIN_PAGES) + MODEL.hosting_reserve);
+  });
+
+  it('8×6, 6×8, 8×8 and 9×9 match Photobook PH\'s sale price (half their list price)', () => {
+    // Their 40-page list prices (pbx_product_configs, 2026-10-08), 50% code applied.
+    const photobookList: Partial<Record<AlbumSizePreset, { soft: number; hard: number }>> = {
+      '8x6': { soft: 1400, hard: 2750 },  // their 8×6
+      '6x8': { soft: 1400, hard: 2750 },  // same paper as 8×6; they sell no 6×8
+      '8x8': { soft: 1600, hard: 3000 },
+      '9x9': { soft: 1800, hard: 3250 },  // they sell no 9×9; nearest is 8×11
+    };
+    for (const [size, list] of Object.entries(photobookList) as [AlbumSizePreset, { soft: number; hard: number }][])
+      for (const binding of BINDINGS)
+        expect(fixed(size, binding), `${size} ${binding}`).toBe(list[binding] / 2);
+  });
+
+  it('6×4 and 6×6 sit at the floor: 2 × cost + ₱50 reserve, rounded up to the next ₱50', () => {
+    for (const size of ['6x4', '6x6'] as AlbumSizePreset[])
+      for (const binding of BINDINGS)
+        expect(fixed(size, binding), `${size} ${binding}`)
+          .toBe(Math.ceil((2 * costOf(MODEL, size, binding, MIN_PAGES) + MODEL.hosting_reserve) / 50) * 50);
   });
 });

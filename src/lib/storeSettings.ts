@@ -17,7 +17,7 @@
 
 import { supabase, supabaseConfigured } from './supabase';
 import type { AlbumSizePreset } from '../pages/builder/types';
-import type { PriceSchedule, PricingModel } from './pricing';
+import type { FixedPrices, PriceSchedule, PricingModel } from './pricing';
 
 let schedule: PriceSchedule | null = null;
 // Album sizes the owner has turned OFF (hidden from the customer size picker).
@@ -156,6 +156,17 @@ export async function setHdMemoriesPrice(next: number): Promise<string | null> {
   if (error) return error.message;
   await loadStoreSettings();
   return null;
+}
+
+/** Owner-only (definer RPC, 0041). Replaces the fixed 40-page prices — the SQL
+ *  refuses any price below cost + hosting reserve — and reloads the schedule so
+ *  checkout charges them at once. Returns the saved map, or the error. */
+export async function setFixedPrices(prices: FixedPrices): Promise<{ saved: FixedPrices } | { error: string }> {
+  if (!supabaseConfigured) return { error: 'Supabase not configured — change is local-only this session.' };
+  const { data, error } = await supabase.rpc('set_fixed_prices', { p_prices: prices });
+  if (error) return { error: error.message };
+  await loadStoreSettings();
+  return { saved: (data as FixedPrices) ?? {} };
 }
 
 /** Owner-only. The raw cost model behind the schedule, for the admin Pricing

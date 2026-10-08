@@ -57,7 +57,15 @@ export interface PricingModel {
    *  0032). Standard 720p is included; HD is a value tier, not cost recovery. */
   hd_memories_price: number;
   sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
+  /** Owner-set prices for the INCLUDED pages (owner, 2026-10-08; migration
+   *  0041). Where one is set, it replaces cost × multiple for that size and
+   *  cover; pages past the included ones still add sheets at the marked-up sheet
+   *  rate. The hosting reserve is absorbed into it. Absent on a pre-0041 model. */
+  fixed_prices?: FixedPrices;
 }
+
+/** { "<size>": { soft?: ₱, hard?: ₱ } } — the customer price at min_pages. */
+export type FixedPrices = Partial<Record<AlbumSizePreset, { soft?: number; hard?: number }>>;
 
 export interface HostingTier { years: number; price: number }
 
@@ -296,10 +304,18 @@ export function perPageCost(model: PricingModel, size: AlbumSizePreset): number 
   return model.sheet_cost / model.sizes[size].pps;
 }
 
-/** The operator's view of the customer price, computed from the raw model at an
- *  arbitrary multiple (the Pricing panel's what-if slider). At the store's own
- *  multiple this must equal priceOf() on the schedule — see the spec. */
-export function ownerPriceOf(
+/** The owner's fixed price for the included pages, or null when that size and
+ *  cover price by the formula. A malformed save (not a positive number) counts
+ *  as unset, so it can never quote ₱0 — same rule as the SQL. */
+export function fixedPriceOf(model: Pick<PricingModel, 'fixed_prices'>, size: AlbumSizePreset, binding: Binding): number | null {
+  const entry = model.fixed_prices?.[size];
+  const n = entry && typeof entry === 'object' ? entry[binding] : undefined;
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+/** Cost × multiple + size premium + hosting reserve — the price before 0041,
+ *  and still the price of any size and cover without a fixed price. */
+export function formulaPriceOf(
   model: PricingModel,
   size: AlbumSizePreset,
   binding: Binding,
@@ -311,26 +327,58 @@ export function ownerPriceOf(
     + hostingReserveOf(model);
 }
 
+/** The operator's view of the customer price, computed from the raw model at an
+ *  arbitrary multiple (the Pricing panel's what-if slider). At the store's own
+ *  multiple this must equal priceOf() on the schedule — see the spec. A fixed
+ *  price covers the included pages; the multiple then only prices the extra
+ *  sheets. */
+export function ownerPriceOf(
+  model: PricingModel,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  multiple: number,
+): number {
+  const fixed = fixedPriceOf(model, size, binding);
+  if (fixed === null) return formulaPriceOf(model, size, binding, pages, multiple);
+  const pps = model.sizes[size].pps;
+  const extraSheets = sheetsFor(pps, model.min_pages, pages) - sheetsFor(pps, model.min_pages, model.min_pages);
+  return fixed + Math.round(extraSheets * model.sheet_cost * multiple);
+}
+
 /** Pure mirror of public_price_schedule()'s arithmetic. Lives here so the spec
  *  can prove the schedule and the raw model agree without standing up a
- *  database; the SQL is the runtime source of truth. */
+ *  database; the SQL is the runtime source of truth.
+ *
+ *  A fixed price rides in the SAME schedule shape — no new field, so clients
+ *  that predate 0041 charge it correctly. Its rate is the fixed price less the
+ *  hosting reserve and the included sheets, so priceOf() at the included pages
+ *  lands exactly on it. That rate can be negative (₱800 for 40 pages is less
+ *  than ten sheets at ₱106); priceOf() only ever adds it to the sheets. */
 export function scheduleFrom(
   model: PricingModel,
   multiple: number,
   disabledSizes: AlbumSizePreset[] = [],
 ): PriceSchedule {
   const sizes = {} as PriceSchedule['sizes'];
+  const sheetRate = model.sheet_cost * multiple;
+  const reserve = hostingReserveOf(model);
   for (const key of Object.keys(model.sizes) as AlbumSizePreset[]) {
     const s = model.sizes[key];
+    const included = sheetsFor(s.pps, model.min_pages, model.min_pages) * sheetRate;
+    const rateFor = (binding: Binding, formula: number) => {
+      const fixed = fixedPriceOf(model, key, binding);
+      return fixed === null ? formula : fixed - reserve - included;
+    };
     sizes[key] = {
       pps: s.pps,
-      soft_rate: (model.soft_cover_cost + model.soft_bind_cost) * multiple + s.surcharge,
-      hard_rate: s.hb * multiple + s.surcharge,
+      soft_rate: rateFor('soft', (model.soft_cover_cost + model.soft_bind_cost) * multiple + s.surcharge),
+      hard_rate: rateFor('hard', s.hb * multiple + s.surcharge),
     };
   }
   return {
     min_pages: model.min_pages,
-    sheet_rate: model.sheet_cost * multiple,
+    sheet_rate: sheetRate,
     hosting_reserve: model.hosting_reserve,
     hosting_tiers: model.hosting_tiers,
     hd_memories_price: model.hd_memories_price,
