@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitPortrait, mainFace, TARGET_EYE_GAP, badgeHitsHead } from './portraitFit';
+import { fitPortrait, mainFace, TARGET_EYE_GAP, MAX_EYE_GAP, badgeHitsHead, sectionEyeGap } from './portraitFit';
 import type { FaceGeom } from './types';
 
 /** A face whose eyes sit at (cx ± gap/2, ey) in a W×H photo, all in pixels. */
@@ -64,5 +64,24 @@ describe('fitPortrait', () => {
     const small = face(2000, 2500, 300, 300, 40), big = face(2000, 2500, 1000, 1000, 160);
     expect(mainFace([small, big])).toBe(big);
     expect(mainFace([])).toBeNull();
+  });
+});
+
+describe('sectionEyeGap', () => {
+  const photo = (gap: number) => ({ width: 1200, height: 1500, faces: [face(1200, 1500, 600, 600, gap)] });
+  it('keeps the standard head size when the photos allow it', () => {
+    expect(sectionEyeGap([photo(120), photo(140), photo(150)])).toBeCloseTo(TARGET_EYE_GAP, 6);
+  });
+  it('matches a photographer who cropped tighter, so the heads still match', () => {
+    const t = sectionEyeGap(Array.from({ length: 10 }, () => photo(225))); // eye gap 15% of the frame
+    expect(t).toBeCloseTo(0.15, 3);
+    const fit = fitPortrait(1200, 1500, photo(225).faces[0], 0.8, t);
+    expect(fit.tight).toBe(false);
+  });
+  it('caps it: an extreme close-up is still flagged', () => {
+    const list = [...Array.from({ length: 9 }, () => photo(150)), photo(330)];
+    const t = sectionEyeGap(list);
+    expect(t).toBeLessThanOrEqual(MAX_EYE_GAP);
+    expect(fitPortrait(1200, 1500, photo(330).faces[0], 0.8, t).tight).toBe(true);
   });
 });

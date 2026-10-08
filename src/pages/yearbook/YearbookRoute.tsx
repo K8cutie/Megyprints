@@ -3,6 +3,7 @@
    same painter as the print file. Right: this class's settings with live
    pages and price. Everything is saved on this computer as you go. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Download, Plus, QrCode, RotateCcw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useYearbook } from './useYearbook';
@@ -21,8 +22,7 @@ import { countBook, densityOptions, pricePerCopy } from '@/yearbook/budget';
 import { guideSteps, type GuideAction, type GuideStep } from '@/yearbook/guide';
 import { parseClassList, displayName, type ParsedClassList } from '@/yearbook/classList';
 import { LOOKS_PER_PAGE } from '@/yearbook/geometry';
-import { drawSampleGroup, drawSamplePortrait, sampleClassListText, SAMPLE_ADVISER, SAMPLE_SECTION, SAMPLE_STUDENTS } from '@/yearbook/sample';
-import { importPhoto } from '@/yearbook/importPhotos';
+import { fetchSampleManifest, loadSamplePhotos, sampleClassListText } from '@/yearbook/sample';
 import { pagesToPdf, downloadBlob } from '@/yearbook/pdf';
 import { qrTestSheet } from '@/yearbook/qrTestSheet';
 import { bitmapNow, loadBitmap } from '@/yearbook/store';
@@ -147,39 +147,40 @@ export default function YearbookRoute() {
 
   const loadSample = async () => {
     setDialog(null);
-    const total = SAMPLE_STUDENTS.length * 3 + 2;
-    let done = 0;
-    const tick = (label: string) => setBusy({ label, done: ++done, total });
-    setBusy({ label: 'Drawing the sample class…', done: 0, total });
-    const made: PhotoMeta[] = [];
-    const looks = [['toga', 'toga'], ['formal', 'filipiniana'], ['creative', 'creative']] as const;
-    for (let i = 0; i < SAMPLE_STUDENTS.length; i++) {
-      const s = SAMPLE_STUDENTS[i];
-      for (const [look, word] of looks) {
-        const d = await drawSamplePortrait(i, s.fem, look);
-        const name = `${s.last.toUpperCase().replace(/\s+/g, '')}_${s.first.replace(/\s+|\./g, '')}_${word}.jpg`;
-        made.push(await importPhoto(d.blob, name, 'portrait', made.length, { faces: [d.face] }));
-        tick(`Drawing ${s.first} ${s.last}…`);
-      }
+    setBusy({ label: 'Bringing in the sample class…', done: 0, total: 1 });
+    try {
+      const m = await fetchSampleManifest();
+      const { portraits, classPhoto } = await loadSamplePhotos(m, (done, total, name) => setBusy({ label: `Reading ${name}…`, done, total }));
+      addPhotos([...portraits, classPhoto]);
+      const base = project && project.school ? project : { ...newProject(m.school, m.batch), ...(project ? { id: project.id, sections: project.sections } : {}) };
+      const s0 = sectionFromClassList(m.section, parseClassList(sampleClassListText(m)));
+      const r = applyMatch({ ...s0, pool: portraits.map((p) => p.id) }, portraits);
+      const s1 = { ...r.section, groupPhotoId: classPhoto.id };
+      setProject({ ...base, sections: [...base.sections, s1], updatedAt: Date.now() });
+      setSectionId(s1.id);
+      setMatchMethod(r.method);
+      const students = m.people.filter((p) => p.role === 'student').length;
+      const unread = portraits.filter((p) => p.flags.includes('no_face')).length;
+      setNotice(`The sample class is in: ${students} students and their adviser (free sample photos, made-up names). Megy matched every file to a name and lined up the faces${unread ? `; ${unread} photo has no face it could read, so it's flagged` : ''}. Next: check every name.`);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'The sample class didn’t load. Check the internet connection and try again.');
+    } finally {
+      setBusy(null);
     }
-    const adv = await drawSamplePortrait(99, true, 'adviser');
-    made.push(await importPhoto(adv.blob, `${SAMPLE_ADVISER.last.toUpperCase()}_${SAMPLE_ADVISER.first}.jpg`, 'portrait', made.length, { faces: [adv.face] }));
-    tick('Drawing the class adviser…');
-    const g = await drawSampleGroup(SAMPLE_STUDENTS.length);
-    const group = await importPhoto(g.blob, 'class-photo.jpg', 'group', 0, { faces: g.faces });
-    tick('Drawing the class photo…');
-    addPhotos([...made, group]);
-
-    const base = project && project.school ? project : { ...newProject('St. Joseph Academy', '2027'), ...(project ? { id: project.id, sections: project.sections } : {}) };
-    const s0 = sectionFromClassList(SAMPLE_SECTION, parseClassList(sampleClassListText()));
-    const r = applyMatch({ ...s0, pool: made.map((p) => p.id) }, made);
-    const s1 = { ...r.section, groupPhotoId: group.id };
-    setProject({ ...base, sections: [...base.sections, s1], updatedAt: Date.now() });
-    setSectionId(s1.id);
-    setMatchMethod(r.method);
-    setBusy(null);
-    setNotice('The sample class is in: 30 students and their adviser, drawn portraits with heads of different sizes. Megy has already lined them up. Next: check every name.');
   };
+
+  // "Try the sample class" on the landing page opens /yearbooks/app?sample.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const sampleAsked = useRef(false);
+  useEffect(() => {
+    if (!ready || sampleAsked.current || !new URLSearchParams(location.search).has('sample')) return;
+    sampleAsked.current = true;
+    navigate('/yearbooks/app', { replace: true });
+    // On the next tick: loading the sample sets state, which an effect body shouldn't do directly.
+    if (!project?.sections.length) window.setTimeout(() => void loadSample(), 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, location.search]);
 
   /* ── Print files ─────────────────────────────────────────────────────── */
 
@@ -251,7 +252,7 @@ export default function YearbookRoute() {
   return (
     <div className="flex h-screen flex-col bg-background font-body text-foreground">
       <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-card px-4">
-        <a href="#/" className="font-display text-xl font-bold tracking-tight">MEGY<span className="text-primary">earbooks</span></a>
+        <a href="#/yearbooks" className="font-display text-xl font-bold tracking-tight">MEGY<span className="text-primary">earbooks</span></a>
         <div className="flex items-center gap-2">
           <input ref={schoolRef} data-guide="school-name" aria-label="School name" value={project?.school ?? ''} onChange={(e) => setProject((p) => ({ ...(p ?? newProject('', '2027')), school: e.target.value, updatedAt: Date.now() }))} placeholder="School name" className="h-9 w-64 rounded-md border border-input bg-background px-2 text-sm" />
           <label className="flex items-center gap-1 text-sm text-muted-foreground" htmlFor="yb-year">Batch

@@ -7,6 +7,7 @@ import PortraitThumb from './PortraitThumb';
 import { displayName, sortForPage } from '@/yearbook/classList';
 import { fitPortrait, mainFace } from '@/yearbook/portraitFit';
 import { assignPhoto, removePhoto } from '@/yearbook/project';
+import { sectionEyeGapFor } from '@/yearbook/layout';
 import type { PhotoMeta, Section } from '@/yearbook/types';
 
 interface Props {
@@ -31,6 +32,7 @@ export default function NameCheckDialog({ open, section, photos, method, onClose
   const pool = (section.pool ?? []).map((id) => photos[id]).filter((p): p is PhotoMeta => !!p);
   const used = new Set(Object.values(section.assignments).flat());
   const unchecked = people.filter((p) => !section.checked[p.id]).length;
+  const eyeGap = useMemo(() => sectionEyeGapFor(section, photos), [section, photos]);
 
   const toggle = (id: string) => onChange({ ...section, checked: { ...section.checked, [id]: !section.checked[id] } });
   const confirmAll = () => onChange({ ...section, checked: Object.fromEntries(people.map((p) => [p.id, true])) });
@@ -51,12 +53,12 @@ export default function NameCheckDialog({ open, section, photos, method, onClose
             const ids = section.assignments[p.id] ?? [];
             const main = ids[0] ? photos[ids[0]] : undefined;
             const conf = section.confidence[p.id];
-            const tight = main ? fitPortrait(main.width, main.height, mainFace(main.faces)).tight : false;
+            const tight = main ? fitPortrait(main.width, main.height, mainFace(main.faces), 0.8, eyeGap).tight : false;
             const ok = !!section.checked[p.id];
             return (
               <div key={p.id} className={`flex gap-3 rounded-lg border p-2.5 ${ok ? 'border-primary/40 bg-secondary/40' : 'border-border bg-card'}`}>
                 <div className="flex flex-col gap-1">
-                  <PortraitThumb photo={main} width={64} />
+                  <PortraitThumb photo={main} width={64} eyeGap={eyeGap} />
                   {ids.slice(1).map((id) => <PortraitThumb key={id} photo={photos[id]} width={30} />)}
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-1">

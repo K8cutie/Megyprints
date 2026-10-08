@@ -18,7 +18,7 @@
    • nothing within 0.5 in of the spine; page numbers in the outside corner. */
 import { GRID, HEADER_H, clampDensity, NAME_MIN_PT, NAME_PT, PORTRAIT_ASPECT, QR_BADGE_IN, QR_BADGE_INSET, CLASS_QR_IN, TRIM, isRecto, liveArea, ptToIn, type Density } from './geometry';
 import { displayName, sortForPage } from './classList';
-import { badgeHitsHead, fitPortrait, mainFace, otherFaceOvals, rectHitsOval, type Crop, type PortraitFit } from './portraitFit';
+import { badgeHitsHead, fitPortrait, mainFace, otherFaceOvals, rectHitsOval, sectionEyeGap, type Crop, type PortraitFit } from './portraitFit';
 import type { Person, PhotoMeta, Section } from './types';
 
 export type FontRole = 'display' | 'body';
@@ -62,6 +62,8 @@ export interface LayoutCtx {
   qrData: (memoryCode: string) => string;
   firstPage: number;
   schoolYear: string;
+  /** One head size for the class (set by layoutSection; see sectionEyeGap). */
+  eyeGap?: number;
 }
 
 const INK = '#1d1f22';
@@ -70,9 +72,9 @@ const MUTED = '#5b6168';
 /** The head of a standard fitted portrait, for photos with no face data. */
 const STANDARD_HEAD = { x0: 0.26, x1: 0.74, y0: 0.08, y1: 0.62 };
 
-function portraitFitFor(photo: PhotoMeta | undefined, aspect = PORTRAIT_ASPECT): PortraitFit | null {
+function portraitFitFor(photo: PhotoMeta | undefined, aspect = PORTRAIT_ASPECT, eyeGap?: number): PortraitFit | null {
   if (!photo) return null;
-  return fitPortrait(photo.width, photo.height, mainFace(photo.faces), aspect);
+  return fitPortrait(photo.width, photo.height, mainFace(photo.faces), aspect, eyeGap);
 }
 
 function cornerBadge(frameW: number, frameH: number, size = QR_BADGE_IN) {
@@ -230,7 +232,7 @@ function portraitPages(section: Section, adviser: Person | undefined, cells: Cel
       const fx = G.sx + (fw - fwAdj) / 2, fy = G.top;
       const aPhoto = section.assignments[adviser.id]?.[0];
       const meta = aPhoto ? ctx.photos[aPhoto] : undefined;
-      els.push(...portraitEls({ person: adviser, photo: meta, fit: portraitFitFor(meta), feature: true }, fx, fy, fwAdj, fh, density, qrMode, ctx));
+      els.push(...portraitEls({ person: adviser, photo: meta, fit: portraitFitFor(meta, PORTRAIT_ASPECT, ctx.eyeGap), feature: true }, fx, fy, fwAdj, fh, density, qrMode, ctx));
     }
     for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) if (!taken.has(`${r},${c}`)) slots.push({ r, c });
     const onPage = cells.slice(idx, idx + slots.length);
@@ -284,7 +286,7 @@ function looksPages(section: Section, cells: { person: Person; photos: PhotoMeta
   // Decide the QR spot once for the section from the main (toga) photos.
   const L0 = liveArea(startPage);
   const geo = looksGeometry(n, L0);
-  const anyHit = cells.some((c) => hits(portraitFitFor(c.photos[0]), geo.mainW, geo.mainH, c.photos[0]));
+  const anyHit = cells.some((c) => hits(portraitFitFor(c.photos[0], PORTRAIT_ASPECT, ctx.eyeGap), geo.mainW, geo.mainH, c.photos[0]));
   const qrMode: QrMode = n === 4 || anyHit ? 'name' : 'corner';
   for (let i = 0, page = startPage; i < cells.length; i += n, page++) {
     const L = liveArea(page);
@@ -293,13 +295,13 @@ function looksPages(section: Section, cells: { person: Person; photos: PhotoMeta
     cells.slice(i, i + n).forEach((cell, k) => {
       const by = L.y0 + HEADER_H + k * (G.blockH + G.rg);
       const [main, ...more] = cell.photos;
-      const fitMain = portraitFitFor(main);
+      const fitMain = portraitFitFor(main, PORTRAIT_ASPECT, ctx.eyeGap);
       const mx = G.mainX, my = by;
       els.push({ kind: 'photo', photoId: main.id, x: mx, y: my, w: G.mainW, h: G.mainH, crop: fitMain!.crop, personId: cell.person.id });
       G.small.forEach((s, j) => {
         const ph = more[j];
         if (!ph) return;
-        const f = portraitFitFor(ph, s.w / s.h);
+        const f = portraitFitFor(ph, s.w / s.h, ctx.eyeGap);
         els.push({ kind: 'photo', photoId: ph.id, x: s.x, y: by + s.dy, w: s.w, h: s.h, crop: f!.crop, personId: cell.person.id });
       });
       const qr = ctx.qrData(cell.person.memoryCode);
@@ -365,8 +367,9 @@ function lowestY(page: YbPage): number {
 
 /* ── A whole section ──────────────────────────────────────────────────────── */
 
-export function layoutSection(input: Section, ctx: LayoutCtx): SectionLayoutResult {
+export function layoutSection(input: Section, rawCtx: LayoutCtx): SectionLayoutResult {
   const section = { ...input, density: clampDensity(input.density) };
+  const ctx: LayoutCtx = { ...rawCtx, eyeGap: rawCtx.eyeGap ?? sectionEyeGapFor(section, rawCtx.photos) };
   const adviser = section.people.find((p) => p.role === 'class_adviser');
   const students = sortForPage(section.people.filter((p) => p.role === 'student'));
   const withPhoto = students.filter((p) => section.assignments[p.id]?.length && ctx.photos[section.assignments[p.id][0]]);
@@ -390,7 +393,7 @@ export function layoutSection(input: Section, ctx: LayoutCtx): SectionLayoutResu
   } else {
     const cells: Cell[] = withPhoto.map((person) => {
       const photo = ctx.photos[section.assignments[person.id][0]];
-      const fit = portraitFitFor(photo);
+      const fit = portraitFitFor(photo, PORTRAIT_ASPECT, ctx.eyeGap);
       if (fit?.tight) tight.push(displayName(person));
       return { person, photo, fit };
     });
@@ -417,6 +420,11 @@ export function layoutSection(input: Section, ctx: LayoutCtx): SectionLayoutResu
     }
   }
   return { pages, qrMode, portrait, notPictured, tight };
+}
+
+/** One head size for every portrait in the class (main photos only). */
+export function sectionEyeGapFor(section: Section, photos: Record<string, PhotoMeta>): number {
+  return sectionEyeGap(section.people.map((p) => photos[section.assignments[p.id]?.[0] ?? '']).filter((p): p is PhotoMeta => !!p));
 }
 
 /** Pages a section would take at a given portrait size (for the budget tool). */

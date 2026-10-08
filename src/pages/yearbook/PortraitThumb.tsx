@@ -4,7 +4,7 @@ import { fitPortrait, mainFace } from '@/yearbook/portraitFit';
 import { bitmapNow, loadBitmap } from '@/yearbook/store';
 import type { PhotoMeta } from '@/yearbook/types';
 
-export default function PortraitThumb({ photo, width = 72, fitted = true }: { photo?: PhotoMeta; width?: number; fitted?: boolean }) {
+export default function PortraitThumb({ photo, width = 72, fitted = true, eyeGap }: { photo?: PhotoMeta; width?: number; fitted?: boolean; eyeGap?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [tick, setTick] = useState(0);
   const height = Math.round(width / 0.8);
@@ -23,13 +23,13 @@ export default function PortraitThumb({ photo, width = 72, fitted = true }: { ph
     ctx.fillRect(0, 0, c.width, c.height);
     const bmp = photo ? bitmapNow(photo.id) : null;
     if (!photo || !bmp) return;
-    const crop = fitted ? fitPortrait(photo.width, photo.height, mainFace(photo.faces)).crop : { x: 0, y: 0, w: photo.width, h: photo.height };
+    const crop = fitted ? fitPortrait(photo.width, photo.height, mainFace(photo.faces), 0.8, eyeGap).crop : { x: 0, y: 0, w: photo.width, h: photo.height };
     if (fitted) ctx.drawImage(bmp, crop.x, crop.y, crop.w, crop.h, 0, 0, c.width, c.height);
     else {
       const s = Math.min(c.width / photo.width, c.height / photo.height);
       ctx.drawImage(bmp, (c.width - photo.width * s) / 2, (c.height - photo.height * s) / 2, photo.width * s, photo.height * s);
     }
-  }, [photo, width, height, tick, fitted]);
+  }, [photo, width, height, tick, fitted, eyeGap]);
 
   return <canvas ref={ref} style={{ width, height }} className="rounded-sm block shrink-0" />;
 }

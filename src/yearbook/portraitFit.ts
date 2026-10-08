@@ -23,8 +23,12 @@ export interface PortraitFit {
   tight: boolean;
 }
 
-/** Eye gap the fit aims for, as a fraction of the frame HEIGHT. */
+/** Eye gap the fit aims for, as a fraction of the frame HEIGHT: the
+ *  standard (head ≈ half the frame). A class whose photographer cropped
+ *  tighter gets a section target up to MAX_EYE_GAP (head ≈ 58%), so every
+ *  head still matches; only photos tighter than that are flagged. */
 export const TARGET_EYE_GAP = HEAD.heightFrac / HEAD.headPerEyeGap;
+export const MAX_EYE_GAP = 0.16;
 
 /** Biggest face in the photo (the student, not someone in the background). */
 export function mainFace(faces: FaceGeom[]): FaceGeom | null {
@@ -32,7 +36,30 @@ export function mainFace(faces: FaceGeom[]): FaceGeom | null {
   return faces.reduce((a, b) => (b.box.w * b.box.h > a.box.w * a.box.h ? b : a));
 }
 
-export function fitPortrait(width: number, height: number, face: FaceGeom | null, aspect = PORTRAIT_ASPECT): PortraitFit {
+function eyeGapPx(width: number, height: number, face: FaceGeom): number {
+  const gap = Math.hypot((face.rightEye.x - face.leftEye.x) * width, (face.rightEye.y - face.leftEye.y) * height);
+  const boxH = face.box.h * height;
+  // Implausible landmarks (profile, glasses glare): fall back to the face box.
+  return gap > boxH * 0.2 && gap < boxH * 0.7 ? gap : boxH * 0.4;
+}
+
+/** The smallest head a photo allows: its eye gap when the frame is as big
+ *  as the photo itself. */
+export function minEyeGap(width: number, height: number, face: FaceGeom | null, aspect = PORTRAIT_ASPECT): number | null {
+  if (!face) return null;
+  return eyeGapPx(width, height, face) / Math.min(height, width / aspect);
+}
+
+/** One head size for a whole class: the standard, or — when the
+ *  photographer cropped tighter — what 85% of the photos can reach, capped. */
+export function sectionEyeGap(photos: { width: number; height: number; faces: FaceGeom[] }[], aspect = PORTRAIT_ASPECT): number {
+  const needs = photos.map((p) => minEyeGap(p.width, p.height, mainFace(p.faces), aspect)).filter((n): n is number => n !== null).sort((a, b) => a - b);
+  if (!needs.length) return TARGET_EYE_GAP;
+  const q = needs[Math.min(needs.length - 1, Math.floor(needs.length * 0.85))];
+  return Math.min(MAX_EYE_GAP, Math.max(TARGET_EYE_GAP, q));
+}
+
+export function fitPortrait(width: number, height: number, face: FaceGeom | null, aspect = PORTRAIT_ASPECT, targetGap = TARGET_EYE_GAP): PortraitFit {
   const W = width, H = height;
   if (!face) {
     // No face found: a centred cover crop, nudged up a little (heads are high).
@@ -45,12 +72,10 @@ export function fitPortrait(width: number, height: number, face: FaceGeom | null
 
   const lx = face.leftEye.x * W, ly = face.leftEye.y * H, rx = face.rightEye.x * W, ry = face.rightEye.y * H;
   const ex = (lx + rx) / 2, ey = (ly + ry) / 2;
-  let gap = Math.hypot(rx - lx, ry - ly);
-  // Implausible landmarks (profile, glasses glare): fall back to the face box.
+  const gap = eyeGapPx(W, H, face);
   const boxH = face.box.h * H;
-  if (!(gap > boxH * 0.2 && gap < boxH * 0.7)) gap = boxH * 0.4;
 
-  let ch = gap / TARGET_EYE_GAP, cw = ch * aspect;
+  let ch = gap / targetGap, cw = ch * aspect;
   let tight = false;
   const s = Math.min(1, W / cw, H / ch);
   if (s < 1) { cw *= s; ch *= s; if (s < 0.92) tight = true; }

@@ -2,6 +2,7 @@
 import { Check, MousePointerClick } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { currentStep, type GuideAction, type GuideStep } from '@/yearbook/guide';
+import GuideExample from './GuideExample';
 
 interface Props {
   steps: GuideStep[];
@@ -37,6 +38,7 @@ export default function GuidePanel({ steps, onAction, onShowMe }: Props) {
                 <div className="ml-7 mt-2 flex flex-col gap-2">
                   <p className="text-sm leading-snug text-foreground/80">{s.say}</p>
                   {s.progress ? <p className="text-xs font-medium text-primary">{s.progress}</p> : null}
+                  <GuideExample step={s.id} />
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => onAction(s.action.do)}>{s.action.label}</Button>
                     <Button size="sm" variant="outline" onClick={() => onShowMe(s)}><MousePointerClick /> Show me</Button>
