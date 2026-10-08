@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, type CSSProperties } from 'react';
 import { ChevronLeft, ShoppingCart, Plus, Trash2, Sparkles, X, Loader2, Pencil, BookOpen, FileText } from 'lucide-react';
 import SpreadTurnButton, { SPREAD_TURN_W } from './SpreadTurnButton';
 import PreviewTurnBar from './PreviewTurnBar';
@@ -24,6 +24,8 @@ import { checkOrderReadiness, readinessMessage, coverIsBlank, BLANK_COVER_MESSAG
 import { missingPhotos, missingPhotosMessage, copyNotesMessage } from '../../lib/photoPresence';
 import { fillableBoxCount } from './generateAlbum';
 import { BOOK } from './bookFeel';
+import PageTurnLayer from './PageTurnLayer';
+import { planTurn, type TurnFace, type TurnPlan } from './pageTurn';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoDomBox } from './slotPhotoFit';
 import { applyMask, isMaskId, textureOverlayCss } from './masks';
@@ -61,7 +63,15 @@ interface BuilderPreviewProps {
   orderRequested?: boolean;
   /** The preview took the request: it runs once, through handleOrder. */
   onOrderRequestTaken?: () => void;
+  /** Turn pages with the page-turn animation (pageTurn). Off in unit tests,
+   *  where pages change at once as they always did; and off for anyone whose
+   *  device asks for reduced motion. */
+  turnAnimation?: boolean;
 }
+
+/** The device asks for less motion: pages change without the turn. */
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
 
 function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = false, displayScale = 1): React.CSSProperties {
   if (!bg) return {};
@@ -739,7 +749,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   );
 }
 
-export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError, orderRequested = false, onOrderRequestTaken }: BuilderPreviewProps) {
+export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError, orderRequested = false, onOrderRequestTaken, turnAnimation = import.meta.env.MODE !== 'test' }: BuilderPreviewProps) {
   const total = pages.length;
   const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId } = useBuilderContext();
 
@@ -878,12 +888,36 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // Turn one page (upright) or one open book (2 pages) at a time; the cover
   // sits before page 1 (previewPaging).
   const pos: PreviewPosition = { view, index: currentIndex, total, onCover, hasCover: !!coverFront };
+  // THE PAGE TURN (owner, 2026-10-09: "I don't feel the page turning action").
+  // The preview changes page at once, as it always did; the turn plays as a
+  // layer over the new page for a moment (pageTurn, PageTurnLayer). A tap
+  // during a turn starts the next turn from where the book already is.
+  const [turnAnim, setTurnAnim] = useState<{ plan: TurnPlan; go: boolean; n: number } | null>(null);
+  const turnSeq = useRef(0);
+  const animateTurns = useMemo(() => turnAnimation && !prefersReducedMotion(), [turnAnimation]);
   const go = (t: Turn | null) => {
     if (!t) return;
-    if (t.cover) { setCoverAt(currentIndex); return; }
-    setCoverAt(null);
-    if (t.index !== currentIndex) onGoToPage(t.index);
+    const plan = animateTurns ? planTurn(pos, t) : null;
+    if (t.cover) setCoverAt(currentIndex);
+    else {
+      setCoverAt(null);
+      if (t.index !== currentIndex) onGoToPage(t.index);
+    }
+    setTurnAnim(plan ? { plan, go: false, n: ++turnSeq.current } : null);
   };
+  useEffect(() => {
+    if (!turnAnim) return;
+    const { n } = turnAnim;
+    if (!turnAnim.go) {
+      // The leaf lies at its start for one frame, then turns.
+      let id = requestAnimationFrame(() => {
+        id = requestAnimationFrame(() => setTurnAnim((a) => (a && a.n === n ? { ...a, go: true } : a)));
+      });
+      return () => cancelAnimationFrame(id);
+    }
+    const id = window.setTimeout(() => setTurnAnim((a) => (a && a.n === n ? null : a)), turnAnim.plan.ms + 80);
+    return () => window.clearTimeout(id);
+  }, [turnAnim]);
   const navPrev = () => go(turnBack(pos));
   const navNext = () => go(turnForward(pos));
   // A swipe across the page turns it too (upright).
@@ -994,7 +1028,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // the last open book) (useEndOfAlbumPrompt). It can be dismissed (keep
   // browsing) and it offers a real way back to the pages (owner, 2026-09-13:
   // "there doesn't seem to be a way to go back").
-  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos));
+  // It waits for the last page turn to land.
+  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim);
   const currentPage = pages[currentIndex];
 
   // Megy's "Place Order →" (Step 7) lands here and orders exactly like the
@@ -1029,6 +1064,40 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         {openBook ? <><FileText size={13} /> One page at a time</> : <><BookOpen size={13} /> See it as an open book</>}
       </button>
       {!openBook && <span className="text-[11px] text-taupe">or turn your phone sideways</span>}
+    </div>
+  );
+
+  // What a turning leaf shows: a page as it prints, the front cover, or a blank page.
+  const turnFace = (f: TurnFace) => {
+    if (f.kind === 'page' && pages[f.index]) {
+      return (
+        <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
+          <PageView page={pages[f.index]} photos={photos} singleW={singleW} H={H} pageIndex={f.index} asPrinted />
+        </div>
+      );
+    }
+    if (f.kind === 'cover' && coverFront) {
+      return (
+        <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
+          <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
+          <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
+          <div aria-hidden="true" style={BOOK.hinge} />
+        </div>
+      );
+    }
+    return null;
+  };
+  // The turn draws over the book that is showing (it changes view if the phone turns mid-turn: then no turn).
+  const layoutNow: TurnPlan['layout'] = onCover && coverFront ? 'closed' : view === 'page' && currentPage ? 'page' : 'spread';
+  const turnNow = turnAnim && turnAnim.plan.layout === layoutNow ? turnAnim : null;
+  const lip = BOOK.lip(fitScale);
+  // Opening or closing slides the book so a closed book sits in the middle.
+  const bookSlide: CSSProperties = turnNow && (turnNow.plan.shift[0] !== 0 || turnNow.plan.shift[1] !== 0)
+    ? { transform: `translateX(${(turnNow.go ? turnNow.plan.shift[1] : turnNow.plan.shift[0]) * singleW}px)`, transition: turnNow.go ? `transform ${turnNow.plan.ms}ms cubic-bezier(.45,.05,.25,1)` : 'none' }
+    : {};
+  const turnLayer = (spineX: number, width: number, offset: number) => turnNow && (
+    <div style={{ position: 'absolute', left: offset, top: offset, width, height: H, pointerEvents: 'none' }}>
+      <PageTurnLayer plan={turnNow.plan} go={turnNow.go} W={singleW} H={H} spineX={spineX} face={turnFace} />
     </div>
   );
 
@@ -1081,10 +1150,13 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           {/* The closed book: the front cover, as it prints. */}
           {onCover && coverFront ? (
           <div className="flex flex-col items-center gap-3">
-            <div style={BOOK.closed(singleW, H, fitScale)} data-testid="preview-cover">
-              <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
-              <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
-              <div aria-hidden="true" style={BOOK.hinge} />
+            <div className="relative" style={bookSlide}>
+              <div style={BOOK.closed(singleW, H, fitScale)} data-testid="preview-cover">
+                <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
+                <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
+                <div aria-hidden="true" style={BOOK.hinge} />
+              </div>
+              {turnLayer(0, singleW, 0)}
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs font-medium text-medium" data-testid="preview-caption">Front cover</span>
@@ -1098,6 +1170,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           /* One page out of the open book (an upright phone): its own side of
              the gutter shows which side it is bound on. */
           <div className="flex flex-col items-center gap-3">
+            <div className="relative" style={bookSlide}>
             <div style={BOOK.cover(singleW, H, fitScale)} data-testid="preview-book">
               <div aria-hidden="true" style={BOOK.edges(singleW, H, fitScale)} />
               <div className="relative bg-white" style={{ width: singleW, height: H, isolation: 'isolate' }} data-testid="preview-single-page">
@@ -1112,6 +1185,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                 <div aria-hidden="true" style={BOOK.spine(bindingEdge(currentIndex))} data-testid="preview-spine" data-spine={bindingEdge(currentIndex)} />
               </div>
             </div>
+            {turnLayer(0, singleW, lip)}
+            </div>
             <span className="text-xs font-medium text-medium tabular-nums" data-testid="preview-caption">{previewCaption(pos)}</span>
             {openBookToggle}
           </div>
@@ -1124,7 +1199,9 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                 soft vignette over the pages, on a lit table. Every layer is
                 CSS on top of the untouched pages — nothing in the layout moves,
                 and the overlays never take a tap (pointer-events: none). */}
-            <div style={BOOK.cover(singleW * 2, H, fitScale)} data-testid="preview-book">
+            <div className="relative" style={bookSlide}>
+            {/* Opening the cover: the left side is still empty table until the cover lands there. */}
+            <div style={turnNow?.plan.hideLeft ? { ...BOOK.cover(singleW * 2, H, fitScale), clipPath: 'inset(-200px -200px -200px 50%)' } : BOOK.cover(singleW * 2, H, fitScale)} data-testid="preview-book">
               {/* page-block edges under the spread */}
               <div aria-hidden="true" style={BOOK.edges(singleW * 2, H, fitScale)} />
             {/* Spread container */}
@@ -1163,6 +1240,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                 : <div aria-hidden="true" style={BOOK.edgeShade('right')} />}
             </div>
             </div>
+            {turnLayer(singleW, singleW * 2, lip)}
+            </div>
 
             {/* One caption under the book, like a page number in the corner */}
             <span className="text-xs font-medium text-medium tabular-nums" data-testid="preview-caption">
@@ -1172,7 +1251,13 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           </div>
           )}
 
-          {!upright && <SpreadTurnButton dir="next" show={hasNext} onClick={navNext} />}
+          {/* While the cover swings shut, the open book is still drawn where this
+              button now sits beside the closed cover: it fades in once it has shut. */}
+          {!upright && (
+            <div style={{ opacity: turnNow?.plan.layout === 'closed' ? 0 : 1, transition: turnNow?.plan.layout === 'closed' ? 'none' : 'opacity 200ms' }}>
+              <SpreadTurnButton dir="next" show={hasNext} onClick={navNext} />
+            </div>
+          )}
         </div>
       </div>
 
