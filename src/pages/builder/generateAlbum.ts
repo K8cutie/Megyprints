@@ -1,7 +1,7 @@
-import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll } from './types';
+import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll, QrFill } from './types';
 import { medianSharpness, isBlurry, photoQuality } from '../../lib/photoCheck';
 import { separateLookAlikes } from './lookAlikes';
-import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, photoSlotCount } from './pageTemplates';
+import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 
 /* ── Ratio LOOSENING budget ───────────────────────────────────────────────────
    Ratio matching is loosened, not removed: a photo still prefers its own ratio,
@@ -252,6 +252,20 @@ export function isMemoryReady(page: AlbumPage): boolean {
   return hasActiveQr(page) || canTakeMemoryQr(page);
 }
 
+/** The video memories on a page: its badge, plus any placed in a frame or a
+ *  box before memories moved to full pages. */
+export function memoriesOn(page: AlbumPage): QrFill[] {
+  return [...(page.qrFills ?? []), ...(page.textSlotQr ?? [])].filter((q): q is QrFill => q != null);
+}
+
+/** Can a video memory sit on this layout? A memory only ever sits on a
+ *  full-bleed, one-photo page — the photo over the whole sheet, no box —
+ *  with its QR as the corner badge (owner, 2026-10-08). The QR-badge
+ *  layouts themselves qualify. */
+export function layoutHoldsMemory(t: PageTemplate): boolean {
+  return photoSlotCount(t) === 1 && !(t.textSlots?.length) && coversWholeSheet(t);
+}
+
 /* ── Which photos go on the memory pages ──────────────────────────────────
    A full-page single shows the photo object-cover across the whole sheet, so
    any photo that isn't the page's shape loses an edge. Losing the SIDES is
@@ -279,16 +293,20 @@ function fitsFullPage(photo: UploadedPhoto, pageAspect: number): boolean {
   const { crop, vertical } = fullPageCrop(photo, pageAspect);
   return vertical ? crop <= TOP_CROP_OK + 1e-9 : crop <= SIDE_CROP_OK + 1e-9;
 }
+/** A portrait on a landscape page or vice versa: it loses ~half the photo. */
+function crossesOrientation(photo: UploadedPhoto, pageAspect: number): boolean {
+  const a = photo.width > 0 && photo.height > 0 ? photo.width / photo.height : 1;
+  const orient = (x: number) => (x > 1.05 ? 'L' : x < 0.95 ? 'P' : 'S');
+  const po = orient(a), pg = orient(pageAspect);
+  return (po === 'L' && pg === 'P') || (po === 'P' && pg === 'L');
+}
 /** May this photo go on a full page at all? Fitting photos, plus — for an
  *  album short of those — a top/bottom cut up to TOP_CROP_MAX. Never across
  *  orientation (a portrait on a landscape page or vice versa loses ~half the
  *  photo — the rule the whole layout engine is built on). */
 function allowedOnFullPage(photo: UploadedPhoto, pageAspect: number): boolean {
   if (fitsFullPage(photo, pageAspect)) return true;
-  const a = photo.width > 0 && photo.height > 0 ? photo.width / photo.height : 1;
-  const orient = (x: number) => (x > 1.05 ? 'L' : x < 0.95 ? 'P' : 'S');
-  const po = orient(a), pg = orient(pageAspect);
-  if ((po === 'L' && pg === 'P') || (po === 'P' && pg === 'L')) return false;
+  if (crossesOrientation(photo, pageAspect)) return false;
   const { crop, vertical } = fullPageCrop(photo, pageAspect);
   return vertical ? crop <= TOP_CROP_MAX + 1e-9 : crop <= SIDE_CROP_OK + 1e-9;
 }
@@ -360,6 +378,68 @@ export function memoryShortfall(photos: UploadedPhoto[], size: AlbumSizePreset, 
     .filter((s) => s !== size && memorySingleTemplate(s) && fitOn(s) >= MIN_MEMORY_PAGES)
     .sort((a, b) => flip(a) - flip(b) || fitOn(b) - fitOn(a))[0];
   return { have, missing: MIN_MEMORY_PAGES - have, shape, ...(betterSize ? { betterSize } : {}) };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   A NEW SIZE KEEPS THE VIDEO MEMORIES (2026-10-08). A memory is the
+   customer's video and its printed QR. Changing a made album's size lays
+   every page out again, and the generator never carried a QR over: every
+   memory was dropped, with no word. Now each one comes along onto a full page
+   of the new size, as its corner badge on the same photo, in the same corner.
+   A memory whose photo can't fill a page of the new size can't come; the
+   caller asks before it comes off (actionEngine change_size).
+   ══════════════════════════════════════════════════════════════════════════ */
+export interface CarriedMemory {
+  /** The photo it sits on: an index into the photos. */
+  photo: number;
+  fill: QrFill;
+  /** Its badge corner. null for a memory placed in a frame or a box before
+   *  memories moved to full pages: the caller picks the corner away from the
+   *  face, the way "Add a video memory" does. */
+  corner: QrCorner | null;
+}
+
+/** Can this memory photo be the full page of `size`? What the generator
+ *  allows any memory page (allowedOnFullPage), or — for a photo that was a
+ *  full page of `was` already, which the customer saw — no more cut than it
+ *  had there. Never across orientation. */
+export function memoryPhotoFits(photo: UploadedPhoto, size: AlbumSizePreset, was?: AlbumSizePreset): boolean {
+  const aspect = PAGE_ASPECT[size] ?? 1;
+  if (allowedOnFullPage(photo, aspect)) return true;
+  if (!was || crossesOrientation(photo, aspect)) return false;
+  return fullPageCrop(photo, aspect).crop <= fullPageCrop(photo, PAGE_ASPECT[was] ?? 1).crop + 1e-9;
+}
+
+/** Which of the album's memories a change from `from` to `to` carries, each
+ *  on its photo (`photos` indexes), and which can't come. A badge comes with
+ *  its own photo; a frame or box memory with the first photo on its page
+ *  that fits. A memory placed twice (a duplicated page) comes along once. */
+export function memoriesAcrossSize(
+  pages: AlbumPage[], photos: UploadedPhoto[], from: AlbumSizePreset, to: AlbumSizePreset,
+): { carried: CarriedMemory[]; lost: QrFill[] } {
+  const carried: CarriedMemory[] = [];
+  const lost: QrFill[] = [];
+  const seen = new Set<string>();
+  const taken = new Set<number>();
+  const badgeOK = !!qrBadgeTemplate(to, 'br');
+  for (const page of pages) {
+    const memories = memoriesOn(page);
+    if (!memories.length) continue;
+    const t = page.templateId ? getTemplateById(page.templateId) : undefined;
+    const corner = qrBadgeCornerOf(page.templateId);
+    const was = t && layoutHoldsMemory(t) ? ((page.size as AlbumSizePreset | undefined) ?? from) : undefined;
+    const onPage = [...new Set([...(page.slotFills ?? []), ...(page.textSlotFills ?? [])].filter((f): f is number => f != null))];
+    for (const fill of memories) {
+      if (seen.has(fill.code)) continue;
+      seen.add(fill.code);
+      const candidates = corner ? onPage.slice(0, 1) : onPage;
+      const photo = badgeOK ? candidates.find((f) => !taken.has(f) && photos[f] && memoryPhotoFits(photos[f], to, was)) : undefined;
+      if (photo == null) { lost.push(fill); continue; }
+      taken.add(photo);
+      carried.push({ photo, fill, corner: memories.length === 1 ? corner : null });
+    }
+  }
+  return { carried, lost };
 }
 
 /** Pick `k` memory photos spread across the album's chronological order:
@@ -439,11 +519,13 @@ function pickMemoryPhotos(
 }
 
 /** Put each reserved photo's full-page single back where its photo falls in
- *  the album's order, never right beside another full-page single. Mutates. */
+ *  the album's order, never right beside another full-page single. A photo
+ *  that carries a memory (`badges`) gets its badge page instead. Mutates. */
 function insertMemoryPages(
-  pages: AlbumPage[], reserved: number[], solo: PageTemplate, photos: UploadedPhoto[],
+  pages: AlbumPage[], reserved: number[], solo: PageTemplate | undefined, photos: UploadedPhoto[],
   size: AlbumSizePreset, background?: AlbumPage['background'],
   options?: { border?: { color: string; width: number }; cornerBase?: string },
+  badges?: Map<number, CarriedMemory>,
 ): void {
   const order = groupPhotosByMoment(photos).flat();
   const pos = new Map(order.map((idx, p) => [idx, p]));
@@ -454,7 +536,7 @@ function insertMemoryPages(
   };
   const isFullPage = (p: AlbumPage | undefined) => {
     const t = p?.templateId ? getTemplateById(p.templateId) : undefined;
-    return !!t && t.slots.length === 1 && coversWholeSheet(t);
+    return !!t && photoSlotCount(t) === 1 && coversWholeSheet(t);
   };
   for (const r of [...reserved].sort((a, b) => (pos.get(a) ?? 0) - (pos.get(b) ?? 0))) {
     // Right after the LAST page that starts before this photo. "Before the
@@ -470,13 +552,35 @@ function insertMemoryPages(
       else if (at - 1 >= 0 && !isFullPage(pages[at - 2]) && !isFullPage(pages[at - 1])) at -= 1;
     }
     const page = createEmptyPage(pages.length, size, background, options?.border, options?.cornerBase);
-    page.templateId = solo.id;
-    page.slotFills = [r];
-    page.slotScales = [1];
-    page.slotOffsetsX = [0];
-    page.slotOffsetsY = [0];
+    const memory = badges?.get(r);
+    const badge = memory ? qrBadgeTemplate(size, memory.corner ?? 'br') : undefined;
+    if (memory && badge) asBadgePage(page, badge, r, memory.fill);
+    else if (solo) {
+      page.templateId = solo.id;
+      page.slotFills = [r];
+      page.slotScales = [1];
+      page.slotOffsetsX = [0];
+      page.slotOffsetsY = [0];
+    } else continue;
     pages.splice(at, 0, page);
   }
+}
+
+/** The page "Add a video memory" makes (applyMemoryQr): the photo over the
+ *  whole sheet, the QR chip in its corner, and no theme corners, which would
+ *  sit over the chip. Mutates. */
+function asBadgePage(page: AlbumPage, badge: PageTemplate, photo: number, fill: QrFill): void {
+  const n = badge.slots.length;
+  const photoSlot = badge.slots.findIndex((s) => s.kind !== 'qr');
+  page.templateId = badge.id;
+  page.slotFills = badge.slots.map((_, i) => (i === photoSlot ? photo : null));
+  page.qrFills = badge.slots.map((s) => (s.kind === 'qr' ? fill : null));
+  page.slotTexts = new Array(n).fill(null);
+  page.ornamentFills = new Array(n).fill(null);
+  page.slotScales = new Array(n).fill(1);
+  page.slotOffsetsX = new Array(n).fill(0);
+  page.slotOffsetsY = new Array(n).fill(0);
+  page.cornerBase = undefined;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -987,6 +1091,9 @@ export interface GenerateOptions {
    *  generation for memoryFaceCandidates() — used only when an album is short
    *  of photos that fit a full page, to crop the ones whose faces survive. */
   faceCenters?: Record<number, { x: number; y: number }>;
+  /** Video memories that come along (a new album size, memoriesAcrossSize):
+   *  each goes on its photo (an index into the photos) as its corner badge. */
+  memories?: CarriedMemory[];
 }
 
 /**
@@ -995,7 +1102,8 @@ export interface GenerateOptions {
  * first, spread across the album, and each gets its own full-bleed single
  * (where "Add a video memory" goes); every other photo is laid out exactly as
  * before (layoutAlbum, with that many fewer pages to fill); the memory pages
- * then go back where their photos fall in the album's order.
+ * then go back where their photos fall in the album's order. Memories that
+ * come along take their full pages first, as badges on their own photos.
  */
 export function generateAlbum(
   photos: UploadedPhoto[],
@@ -1006,11 +1114,15 @@ export function generateAlbum(
 ): AlbumPage[] {
   const minPages = Math.max(1, Math.floor(options?.minPages ?? MIN_PAGES));
   const solo = memorySingleTemplate(albumSize);
-  const want = solo ? Math.min(MIN_MEMORY_PAGES, photos.length) : 0;
-  const reserved = solo && want > 0 ? pickMemoryPhotos(photos, albumSize, want, options?.faceCenters, options?.randomize) : [];
-  if (!solo || reserved.length === 0) {
+  const badges = new Map<number, CarriedMemory>();
+  for (const m of options?.memories ?? []) {
+    if (photos[m.photo] && !badges.has(m.photo) && qrBadgeTemplate(albumSize, m.corner ?? 'br')) badges.set(m.photo, m);
+  }
+  const want = solo ? Math.max(0, Math.min(MIN_MEMORY_PAGES, photos.length) - badges.size) : 0;
+  const reserved = [...badges.keys(), ...(want > 0 ? pickMemoryPhotosBesides(photos, albumSize, want, badges, options) : [])];
+  if (reserved.length === 0) {
     const plain = layoutAlbum(photos, albumSize, photosPerPage, background, options);
-    separateLookAlikes(plain, photos, canTakeMemoryQr);
+    separateLookAlikes(plain, photos, isMemoryReady);
     return plain;
   }
   const taken = new Set(reserved);
@@ -1022,11 +1134,23 @@ export function generateAlbum(
     // density cap at the boundary (119 photos at 2/page dealt 3s).
     { photos: photos.length, minPages });
   remapSlotFills(pages, restMap);
-  insertMemoryPages(pages, reserved, solo, photos, albumSize, background, options);
-  // Two shots of the same moment the customer kept never share a page.
-  separateLookAlikes(pages, photos, canTakeMemoryQr);
+  insertMemoryPages(pages, reserved, solo, photos, albumSize, background, options, badges);
+  // Two shots of the same moment the customer kept never share a page (and
+  // never swap a memory page's photo out from under its QR).
+  separateLookAlikes(pages, photos, isMemoryReady);
   pages.forEach((p, i) => { p.id = makePageId(i); });
   return pages;
+}
+
+/** pickMemoryPhotos, from the photos that don't already carry a memory. */
+function pickMemoryPhotosBesides(
+  photos: UploadedPhoto[], size: AlbumSizePreset, k: number, taken: Map<number, CarriedMemory>, options?: GenerateOptions,
+): number[] {
+  if (taken.size === 0) return pickMemoryPhotos(photos, size, k, options?.faceCenters, options?.randomize);
+  const others = photos.map((_, i) => i).filter((i) => !taken.has(i));
+  const faces: Record<number, { x: number; y: number }> = {};
+  others.forEach((i, k2) => { const f = options?.faceCenters?.[i]; if (f) faces[k2] = f; });
+  return pickMemoryPhotos(others.map((i) => photos[i]), size, k, faces, options?.randomize).map((k2) => others[k2]);
 }
 
 /**

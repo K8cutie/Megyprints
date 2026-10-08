@@ -100,7 +100,9 @@ function SizeCard({ size, selected, onSelect }: {
 
 interface BuilderSetupProps {
   selectedSize: AlbumSizePreset;
-  onSizeChange: (size: AlbumSizePreset) => void;
+  /** `reason` 'size_hidden': Setup moved off a size the shop no longer
+   *  offers, with no tap (a made album asks before memories come off). */
+  onSizeChange: (size: AlbumSizePreset, reason?: 'size_hidden') => void;
   onNext: () => void;
   /** The album's name (wizard step 1, asked with the occasion). */
   albumTitle: string;
@@ -131,7 +133,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext, album
       // If the current selection is no longer offered, move to the first that is.
       if (!isSizeOfferable(selectedSize)) {
         const first = offerableAlbumSizes()[0];
-        if (first) onSizeChange(first.preset);
+        if (first) onSizeChange(first.preset, 'size_hidden');
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

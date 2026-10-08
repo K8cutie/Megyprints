@@ -346,7 +346,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       const ask = rebuildQuestion(intent, builderRef.current,
         schedule ? (size, pages) => extraPagesCharge(schedule, size, 'soft', pages).amount : null);
       if (ask) {
-        rebuildAskedRef.current = intent;
+        // The yes is to what was asked — for a size change that includes the
+        // video memories that would come off — so it runs it confirmed.
+        rebuildAskedRef.current = { ...intent, payload: { ...intent.payload, confirmed: true } };
         setIsThinking(false);
         setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', content: ask, intent, timestamp: new Date() }]);
         return;
@@ -390,12 +392,21 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         };
         const size = Object.keys(sizes).find(k => action.includes(k));
         // One size per double tap, on whichever surface the second tap lands.
+        // The card moves on once the size is set. A made album whose video
+        // memories can't all come along asks first (ResizeAlbumAsk opens over
+        // this) and stays on the size, as does a size Megy can't make (she
+        // says why: it said "Size set" and moved on).
         if (size && !tooSoonAfterScreenTap()) {
           noteScreenTap();
-          void builder.dispatch({ type: 'change_size', payload: { size: sizes[size] }, rawMessage: `change size to ${sizes[size]}` });
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
-          showToast(`Size set: ${size}`);
+          void builder.dispatch({ type: 'change_size', payload: { size: sizes[size] }, rawMessage: `change size to ${sizes[size]}` })
+            .then((r) => {
+              if (!r.success) { if (!r.asked) showToast(r.message, 6000); return; }
+              if (wizardRef.current.state.step === 'pick_size') {
+                wizardRef.current.advance();
+                setWizardStep(wizardRef.current.state.step);
+              }
+              showToast(`Size set: ${size}`);
+            });
         }
         break;
       case 'upload_photos':
@@ -710,7 +721,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                         </button>
                         {short.betterSize && (
                           <button type="button" className={nudgeBtn} data-testid="memory-nudge-switch"
-                            onClick={() => { void builder.dispatch({ type: 'change_size', payload: { size: short.betterSize }, rawMessage: `change size to ${short.betterSize}` }); showToast(`Size set: ${better}`); }}>
+                            onClick={() => { void builder.dispatch({ type: 'change_size', payload: { size: short.betterSize }, rawMessage: `change size to ${short.betterSize}` }).then((r) => { if (r.success) showToast(`Size set: ${better}`); else if (!r.asked) showToast(r.message, 6000); }); }}>
                             Switch to {better}
                           </button>
                         )}
@@ -1116,7 +1127,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 </p>
                 {recommendedSize && recommendedSize !== builder.albumSize ? (
                   <button
-                    onClick={() => { void builder.dispatch({ type: 'change_size', payload: { size: recommendedSize }, rawMessage: `change size to ${recommendedSize}` }); showToast(`Switched to ${recommendedSize}`); }}
+                    onClick={() => { void builder.dispatch({ type: 'change_size', payload: { size: recommendedSize }, rawMessage: `change size to ${recommendedSize}` }).then((r) => { if (r.success) showToast(`Switched to ${recommendedSize}`); else if (!r.asked) showToast(r.message, 6000); }); }}
                     className="mt-2 w-full text-[11px] font-medium py-1.5 rounded-lg bg-peach text-white hover:brightness-105 transition-all"
                   >
                     Best fit: switch to {recommendedSize} →

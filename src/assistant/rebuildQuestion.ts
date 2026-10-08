@@ -11,11 +11,15 @@
    step does: "change the album size to 8x8" on a 40-page 6×4 at 2 a page
    made 50 single pages (₱318 more) and the question never said (1-star
    testers round 3, the Indecisive One).
+   A size change says what happens to the video memories: they come along,
+   each on its own photo as a full page, or — the ones whose photos can't
+   fill a page of the new shape — how many would come off (2026-10-08: it
+   dropped every memory without a word).
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AssistantIntent } from './types';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '../pages/builder/types';
-import { photosPerPageNote } from '../pages/builder/generateAlbum';
+import { photosPerPageNote, memoriesAcrossSize } from '../pages/builder/generateAlbum';
 
 /** An album is made once any page holds a photo. */
 export function albumIsMade(pages: AlbumPage[]): boolean {
@@ -36,6 +40,32 @@ export function occasionQuotesMessage(occasion: string, changed: number, cleared
   return `Your album is about ${occasion} now, so Megy changed ${lines(changed)} she wrote to ${occasion} ones`
     + (cleared > 0 ? ` and cleared ${lines(cleared)} she had no new line for` : '')
     + '. Lines you wrote or picked stay. Undo puts the old ones back.';
+}
+
+const sizeLabel = (size: string) => size.replace('x', '×');
+
+/** What a size change does to the album's video memories, before it runs:
+ *  `memories` placed, `lost` of them can't come along to `size`. '' when the
+ *  album has none. */
+export function resizeMemoriesLine(memories: number, lost: number, size: AlbumSizePreset): string {
+  if (memories === 0) return '';
+  if (lost === 0) {
+    return memories === 1
+      ? 'Your video memory comes along, on its photo as a full page.'
+      : `Your ${memories} video memories come along, each on its own photo as a full page.`;
+  }
+  const who = lost < memories ? `${lost} of your ${memories} video memories` : memories === 1 ? 'Your video memory' : `Your ${memories} video memories`;
+  const one = lost === 1;
+  return `${who} can't come along: ${one ? "its photo doesn't" : "their photos don't"} fit a full ${sizeLabel(size)} page, so ${one ? "it'd" : "they'd"} come off the album (you'd add ${one ? 'it' : 'them'} again).`;
+}
+
+/** What Megy says once the size changed: the memories that came along and
+ *  the ones that came off. '' when the album had none. */
+export function resizedMemoriesNote(carried: number, lost: number): string {
+  const memories = (n: number) => `${n} video ${n === 1 ? 'memory' : 'memories'}`;
+  if (lost > 0) return ` ${memories(lost)} came off${carried > 0 ? `; the other ${carried} came along, each on its own photo` : ''}.`;
+  if (carried === 0) return '';
+  return carried === 1 ? ' Your video memory came along on its photo.' : ` Your ${memories(carried)} came along, each on its own photo.`;
 }
 
 /** What making a made album again replaces, in the customer's words. */
@@ -68,7 +98,9 @@ export function rebuildQuestion(
     const note = photosPerPageNote(album.uploadedPhotos ?? [], size, album.photosPerPage,
       extraCost ? (pages) => extraCost(size, pages) : null);
     const grows = note && /more than the \d+ included/.test(note) ? ` ${note}` : '';
-    return `That makes your album ${size.replace('x', '×')} and lays out every page again for the new shape. Your photos stay; your layout changes are replaced, Studio pages too.${grows} Say "yes" to go ahead, or keep editing.`;
+    const { carried, lost } = memoriesAcrossSize(album.albumPages, album.uploadedPhotos ?? [], album.albumSize, size);
+    const memories = resizeMemoriesLine(carried.length + lost.length, lost.length, size);
+    return `That makes your album ${sizeLabel(size)} and lays out every page again for the new shape. Your photos stay; your layout changes are replaced, Studio pages too.${memories ? ` ${memories}` : ''}${grows} Say "yes" to go ahead, or keep editing.`;
   }
   return null;
 }
