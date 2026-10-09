@@ -7,16 +7,46 @@ import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AssistantIntent, ExecutedAction } from './types';
 import type { AlbumBackground, AlbumSizePreset, TemplateType, TextElement, FrameStyle } from '../pages/builder/types';
 import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
+import { memoriesAcrossSize } from '../pages/builder/generateAlbum';
 import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '../pages/builder/types';
 import { photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
-import { albumIsMade } from './rebuildQuestion';
+import { albumIsMade, resizeMemoriesLine, resizedMemoriesNote } from './rebuildQuestion';
 import { leftOutNote } from '../lib/pickedFiles';
+import { memoriesOn } from '../pages/builder/generateAlbum';
+
+/** A video memory only ever sits on a full-page photo (owner, 2026-10-08), so
+ *  a page with one keeps its layout — say so instead of "Next layout." */
+function memoryKeepsPage(builder: BuilderActions, type: AssistantIntent['type']): ExecutedAction | null {
+  // The album page the layout actions change — not currentPage, which is the
+  // cover while the cover is being edited.
+  const page = builder.albumPages?.[builder.currentPageIndex];
+  return page && memoriesOn(page).length
+    ? { intentType: type, success: false, message: MEMORY_PAGE_STAYS }
+    : null;
+}
+export const MEMORY_PAGE_STAYS = 'This page has a video memory, so it stays one full photo with the QR in the corner. To change its layout, tap the QR and remove the video first.';
 
 /** THE 40-PHOTO GATE (see albumMinimum): no album is made with fewer photos
  *  going in than pages. Returns Megy's answer when short, null when enough. */
 function tooFewPhotos(builder: BuilderActions, type: AssistantIntent['type']): ExecutedAction | null {
   const have = photosGoingIn(builder.uploadedPhotos ?? []);
   return photosShortBy(have) > 0 ? { intentType: type, success: false, message: tooFewToMakeMessage(have) } : null;
+}
+
+/** A size change would take video memories off: nothing changes, the
+ *  question opens (ResizeAlbumAsk), and Megy says it in words too. */
+function askResize(
+  builder: BuilderActions, type: AssistantIntent['type'], size: AlbumSizePreset,
+  plan: ReturnType<typeof memoriesAcrossSize>, reason?: 'size_hidden',
+): ExecutedAction {
+  const memories = plan.carried.length + plan.lost.length;
+  const lost = plan.lost.length;
+  builder.setResizeAsk?.({ size, memories, lost, lostCodes: plan.lost.map((q) => q.code), ...(reason ? { reason } : {}) });
+  const label = (s: string) => s.replace('x', '×');
+  return {
+    intentType: type, success: false, asked: true,
+    message: `${resizeMemoriesLine(memories, lost, size)} Keep ${label(builder.albumSize)}, or change to ${label(size)} without ${lost === 1 ? 'it' : 'them'}.`,
+  };
 }
 
 /** STUDIO pages are kept through a reshuffle — say so. */
@@ -45,18 +75,24 @@ export class ActionEngine {
           return { intentType: intent.type, success: true, message: `Album generated! Your photos have been arranged across all pages.${studioNote(this.builder)}` };
         }
 
-        case 'shuffle_layout':
+        case 'shuffle_layout': {
+          const stays = memoryKeepsPage(this.builder, intent.type);
+          if (stays) return stays;
           // Cycle through the available templates IN ORDER (exhaust every option
           // before repeating), not a random pick — matches the mobile "Change".
           this.builder.cycleLayout();
           return { intentType: intent.type, success: true, message: 'Next layout.' };
+        }
 
-        case 'regenerate_page':
+        case 'regenerate_page': {
+          const stays = memoryKeepsPage(this.builder, intent.type);
+          if (stays) return stays;
           if (this.builder.currentPage?.studio) {
             return { intentType: intent.type, success: false, message: 'This page is yours — I won’t rearrange it. Use “Megy, fix this page” if you want it back the way I had it.' };
           }
           this.builder.regeneratePage();
           return { intentType: intent.type, success: true, message: 'This page has been regenerated with a fresh layout.' };
+        }
 
         case 'auto_fill': {
           // This page's empty frames only, with photos not yet in the album.
@@ -120,11 +156,27 @@ export class ActionEngine {
           // A made album is laid out for its size: changing size lays every
           // page out again for the new shape. It used to set the size alone and
           // leave the old layout squashed onto it (1-star testers, 2026-10-04).
+          // EVERY size tap lands here (Setup's grid, the wizard's size step,
+          // "Switch to …", "Best fit", typing it), so this is where the video
+          // memories are kept: they come along, each a badge on its photo. One
+          // that can't never comes off without a yes — ask, on screen, with
+          // how many (it dropped them all without a word, 2026-10-08). A yes
+          // (`confirmedLost`) names the memories it agreed to lose; one it
+          // didn't (added since the question, say) is asked about again.
           if (albumIsMade(this.builder.albumPages ?? []) && size !== this.builder.albumSize) {
             const short = tooFewPhotos(this.builder, intent.type);
             if (short) return short;
-            await this.builder.generateAlbum(this.builder.currentPage?.background, { size });
-            return { intentType: intent.type, success: true, message: `Album size changed to ${size.replace('x', '×')}. Every page is laid out again for the new shape.` };
+            const agreed = Array.isArray(intent.payload?.confirmedLost) ? (intent.payload.confirmedLost as string[]) : [];
+            const plan = memoriesAcrossSize(this.builder.albumPages, this.builder.uploadedPhotos ?? [], this.builder.albumSize, size);
+            const reason = intent.payload?.reason === 'size_hidden' ? 'size_hidden' as const : undefined;
+            if (plan.lost.some((q) => !agreed.includes(q.code))) return askResize(this.builder, intent.type, size, plan, reason);
+            const made = await this.builder.generateAlbum(this.builder.currentPage?.background, { size, ...(agreed.length ? { confirmedLost: agreed } : {}) });
+            // The builder measured the photos again and its plan says more:
+            // ask with ITS numbers.
+            if (made?.made === false) return askResize(this.builder, intent.type, size, made.memories, reason);
+            if (this.builder.resizeAsk) this.builder.setResizeAsk(null); // answered (a typed yes, say)
+            const done = made?.memories ?? plan;
+            return { intentType: intent.type, success: true, message: `Album size changed to ${size.replace('x', '×')}. Every page is laid out again for the new shape.${resizedMemoriesNote(done.carried.length, done.lost.length)}` };
           }
           this.builder.setAlbumSize(size);
           return { intentType: intent.type, success: true, message: `Album size changed to ${size}.` };
@@ -135,6 +187,8 @@ export class ActionEngine {
           if (!templateId) {
             return { intentType: intent.type, success: false, message: 'Which template?' };
           }
+          const stays = memoryKeepsPage(this.builder, intent.type);
+          if (stays) return stays;
           this.builder.setPageTemplate(templateId);
           return { intentType: intent.type, success: true, message: 'Page template changed.' };
         }

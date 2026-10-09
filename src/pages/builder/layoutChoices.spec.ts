@@ -21,11 +21,11 @@ vi.mock('./faceDetection', () => ({ initFaceApi: async () => {}, detectFaceCente
 
 import { layoutChoicesForPage, nextLayoutInCycle, relayPageOnTemplate } from './useBuilderState';
 import { generateAlbum } from './generateAlbum';
-import { getTemplateById, photoSlotCount } from './pageTemplates';
+import { getTemplateById, photoSlotCount, qrBadgeTemplate } from './pageTemplates';
 import { analyzePhotos, getRatioValue } from './photoAnalyzer';
 import { ALBUM_INCHES } from './templateKit';
 import LayoutPicker from './LayoutPicker';
-import type { AlbumPage, AlbumSizePreset, PageTemplate, UploadedPhoto } from './types';
+import type { AlbumPage, AlbumSizePreset, PageTemplate, QrFill, UploadedPhoto } from './types';
 import { seedMathRandom } from '../../test/seededRandom';
 
 seedMathRandom(); // generateAlbum deals with Math.random
@@ -183,10 +183,10 @@ let host: HTMLDivElement | undefined;
 let root: Root | undefined;
 afterEach(() => { if (root) act(() => root!.unmount()); host?.remove(); root = undefined; host = undefined; });
 
-function openSheet(page: AlbumPage, photos: UploadedPhoto[], size: AlbumSizePreset): Element[] {
+function openSheet(page: AlbumPage, photos: UploadedPhoto[], size: AlbumSizePreset, offered?: PageTemplate[]): Element[] {
   const actions = {
     layoutPickerOpen: true, currentPageIndex: 0, albumSize: size, albumPages: [page], uploadedPhotos: photos,
-    availableTemplatesForCurrentPage: () => layoutChoicesForPage(page, photos, size),
+    availableTemplatesForCurrentPage: () => offered ?? layoutChoicesForPage(page, photos, size),
     layoutChangeLoses: () => ({ photos: 0, captions: 0 }), applyPageLayout: vi.fn(), setLayoutPickerOpen: vi.fn(),
   };
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
@@ -211,5 +211,17 @@ describe('the Change layout sheet', () => {
     expect(layoutChoicesForPage(page, wide, '6x4').map((t) => t.id)).toEqual([solo.id]);
     expect(openSheet(page, wide, '6x4').map(label)).toEqual(['✓ Current']);
     expect(host!.textContent).toContain('No other layouts fit this page.');
+  });
+  it('a page with a video memory: the sheet gives the memory note only, not a second "No other layouts" note', () => {
+    // The builder offers a memory page only itself (availableTemplatesForCurrentPage).
+    const badge = qrBadgeTemplate('8x8', 'tl')!;
+    const qrFills: (QrFill | null)[] = badge.slots.map((s) => (s.kind === 'qr' ? {
+      code: 'MEM12345', destination: 'https://example.test/clip.mp4', qrPngDataUrl: 'data:image/png;base64,AA',
+      memoryUrl: 'https://megyprints.com/m/MEM12345', createdAt: 1791100000000, kind: 'clip',
+    } : null));
+    const page = { ...pageOn(badge, [0]), qrFills } as AlbumPage;
+    expect(openSheet(page, roll, '8x8', [badge]).map(label)).toEqual(['✓ Current']);
+    expect(host!.querySelector('[data-testid="layout-memory-note"]')).not.toBeNull();
+    expect(host!.textContent).not.toContain('No other layouts fit this page.');
   });
 });

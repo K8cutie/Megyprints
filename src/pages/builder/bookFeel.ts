@@ -11,9 +11,11 @@ export const BOOK = {
   table: {
     background: 'radial-gradient(ellipse at 50% 38%, rgb(var(--t-paper)) 0%, rgb(var(--t-paper)) 35%, #E3DED6 75%, #D8D1C8 100%)',
   } as CSSProperties,
+  /** How far the cover peeks out around the pages, at a scale. */
+  lip: (s: number): number => Math.max(5, Math.round(11 * s)),
   /** The cover peeking out around the page block, and the book's shadow on the table. */
   cover: (w: number, h: number, s: number): CSSProperties => {
-    const lip = Math.max(5, Math.round(11 * s));
+    const lip = BOOK.lip(s);
     return {
       position: 'relative', padding: lip, borderRadius: Math.max(2, Math.round(4 * s)),
       background: 'linear-gradient(135deg, #5A463B 0%, #3F2F27 55%, #4A382F 100%)',
@@ -23,7 +25,7 @@ export const BOOK = {
   },
   /** The stack of page edges under the spread: thin light/dark lines that step out on the outer sides and the foot. */
   edges: (w: number, h: number, s: number): CSSProperties => {
-    const lip = Math.max(5, Math.round(11 * s));
+    const lip = BOOK.lip(s);
     const step = Math.max(1, Math.round(1.6 * s));
     const shadow: string[] = [];
     for (let i = 1; i <= 4; i++) {

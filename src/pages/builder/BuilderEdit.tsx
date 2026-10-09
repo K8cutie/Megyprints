@@ -179,10 +179,14 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     onTextSlotClick: useCallback((slotIndex: number) => {
       setTextEditSlot(slotIndex);
     }, []),
+    /* A video memory's QR opens its editor (change the video, move the
+       corner, remove it) in Studio too: the chip is never a movable frame,
+       and "tap the QR and remove the video" is how a memory page gets other
+       layouts (LayoutPicker). It bailed out on containerMode, so on desktop
+       clicking the QR did nothing. */
     onQrSlotClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
       setQrEditSlot(slotIndex);
-    }, [containerMode]),
+    }, []),
     onOrnamentSlotClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
       setOrnamentEditSlot(slotIndex);
@@ -211,10 +215,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       setSelectedSlotForPicker(slotIndex);
       setShowPhotoPicker(true);
     }, [containerMode]),
+    // A memory in a box (old albums): double-click opens its editor in Studio
+    // too — a single click/drag still moves it (see onQrSlotClick).
     onTextSlotQrClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
       setTextSlotQrEditSlot(slotIndex);
-    }, [containerMode]),
+    }, []),
     onTextSlotOrnamentClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
       setTextSlotOrnamentEditSlot(slotIndex);

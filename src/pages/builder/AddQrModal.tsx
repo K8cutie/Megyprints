@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Youtube, Trash2, Loader2, LogIn, Play, Video, Upload, Clock } from 'lucide-react';
-import type { QrFill } from './types';
+import type { QrFill, AlbumPage } from './types';
 import { QR_CORNERS, type QrCorner } from './pageTemplates';
 import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination, videoEmbedInfo } from '../../lib/qrMemory';
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
 import {
   hostedMemoriesEnabled, validateClipFile, stageClip, getStagedClip, removeStagedClip, publicClipUrl,
-  listStagedCodes, currentClipQuality, setClipQuality, QUALITY_TARGETS,
+  listStagedCodes, currentClipQuality, setClipQuality, stagedClipQuality, QUALITY_TARGETS,
   MAX_CLIP_SECONDS, type ClipExt, type ClipQuality,
 } from '../../lib/memoryClips';
 import { useAuth } from '../../lib/authContext';
@@ -14,6 +14,7 @@ import { useAuthModal } from '../../components/AuthModalProvider';
 import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
 import { getPriceSchedule } from '../../lib/storeSettings';
 import { useModalDialog } from '../../lib/useModalDialog';
+import { useBuilderContext } from './BuilderContext';
 
 const CORNER_LABELS: Record<QrCorner, string> = {
   tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right',
@@ -69,11 +70,30 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   // re-encode from once one is staged. null = still counting.
   const [quality, setQuality] = useState<ClipQuality>(() => currentClipQuality());
   const [tierLocked, setTierLocked] = useState<boolean | null>(null);
+  // The tier THIS album's kept clips were encoded for, once read (null: none
+  // kept on this phone). New clips for the album follow it, not the
+  // phone-wide setting, which follows whichever album was edited last.
+  const [albumTier, setAlbumTier] = useState<ClipQuality | null>(null);
+  // Locked by THIS album's videos only. The phone now keeps video copies until
+  // their order is paid (0042), so another album's kept copies must not lock
+  // the choice for a new one.
+  // Every host of this dialog is inside the builder (Edit, Preview, Review).
+  const albumPages: AlbumPage[] = useBuilderContext().albumPages;
   useEffect(() => {
     let alive = true;
-    void listStagedCodes().then((codes) => { if (alive) setTierLocked(codes.length > 0); });
+    const fills = albumPages.flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
+    const albumHasClip = fills.some((f) => f?.kind === 'clip');
+    const albumCodes = new Set(fills.filter((f) => !!f).map((f) => f!.code));
+    void listStagedCodes().then(async (codes) => {
+      const mine = codes.filter((c) => albumCodes.has(c));
+      const tier = mine.length ? await stagedClipQuality(mine) : null;
+      if (!alive) return;
+      setTierLocked(albumHasClip || mine.length > 0);
+      setAlbumTier(tier);
+      if (tier) setQuality(tier);
+    });
     return () => { alive = false; };
-  }, []);
+  }, [albumPages]);
   const offerTier = !initial && tierLocked === false && hdPrice > 0;
 
   // Preview the PICKED file (object URL), revoked on change/unmount.
@@ -139,7 +159,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
       if (offerTier) setClipQuality(quality);
       await stageClip({
         code, ext: meta.ext, blob: file, size: file.size, durationSec: meta.durationSec, name: file.name,
-        quality: offerTier ? quality : currentClipQuality(),
+        quality: offerTier ? quality : (albumTier ?? currentClipQuality()),
       });
       onSave({
         code, destination: publicClipUrl(code, meta.ext), qrPngDataUrl, memoryUrl: memUrl,

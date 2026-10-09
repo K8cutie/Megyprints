@@ -13,6 +13,7 @@ import { generateAlbumPdf, generateCoverWrapPdf } from '../pages/builder/generat
 import type { CoverPrintInput } from '../pages/builder/printPipeline';
 import type { PrintJob } from './printQueue';
 import { selectOrderAlbum } from './orderAlbum';
+import { isUnpaidLimitError, UnpaidLimitError } from './orderExpiry';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
 
 export interface ShippingDetails {
@@ -135,6 +136,9 @@ export async function createOrderFromAlbum(opts: {
     .select('id, order_number, status')
     .single();
 
+  // The 4th unpaid order on this account (0042): a plain sentence, not a
+  // database message.
+  if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
   if (error) throw new Error(`Could not place your order: ${error.message}`);
 
   // NOTE: the QR "living memory" reliability belt runs in Order.handlePay over
