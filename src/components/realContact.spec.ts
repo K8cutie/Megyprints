@@ -63,10 +63,13 @@ describe('the Contact page', () => {
 
 describe('the photo count the pages promise is the gate', () => {
   it(`"${MIN_ALBUM_PHOTOS} or more", from the one constant (source guard)`, () => {
-    for (const f of ['../pages/Home.tsx', './WizardGuide.tsx', '../pages/BuilderDemoSection.tsx']) {
+    // Home's and the editor demo's words live in homeCopy.ts (2026-10-09).
+    for (const f of ['../pages/homeCopy.ts', './WizardGuide.tsx']) {
       const src = readFileSync(resolve(__dirname, f), 'utf8');
-      expect(src, f).not.toMatch(/20 or more/);
       expect(src, f).toMatch(/\$\{MIN_ALBUM_PHOTOS\} or more/);
+    }
+    for (const f of ['../pages/homeCopy.ts', '../pages/Home.tsx', './WizardGuide.tsx', '../pages/BuilderDemoSection.tsx']) {
+      expect(readFileSync(resolve(__dirname, f), 'utf8'), f).not.toMatch(/20 or more/);
     }
   });
 });
