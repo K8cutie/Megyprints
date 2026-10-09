@@ -18,6 +18,7 @@ import { useAuth } from '../lib/authContext';
 import { startFreshAlbum } from '../lib/albumSession';
 import { readLocalDraftSummary, albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
 import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
+import MegyMascot from '../components/MegyMascot';
 import { MIN_ALBUM_PHOTOS } from './builder/albumMinimum';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -618,12 +619,7 @@ export default function Home() {
   // Megy (assistant/MegyAssistant) guides them. No separate home wizard.
   const megyComponent = (
     <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 text-center">
-      <img
-        src="/megy-character.png"
-        alt="Megy"
-        className="w-24 h-24 mx-auto object-contain drop-shadow-lg mb-4"
-        draggable={false}
-      />
+      <MegyMascot size={96} className="mx-auto object-contain drop-shadow-lg mb-4" />
       <h1 className="font-display text-2xl sm:text-3xl font-bold text-dark mb-2">
         Hi, I&apos;m Megy 👋
       </h1>

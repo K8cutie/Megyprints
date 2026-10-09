@@ -8,6 +8,7 @@ import { chooseResumeOffer, type ResumeOffer } from '../lib/resumeOffer';
 import { wasResumeAsked, markResumeAsked, clearResumeAsked, startFreshAlbum } from '../lib/albumSession';
 import { formatRelativeTime } from './UserProjectsSection';
 import { useModalDialog } from '../lib/useModalDialog';
+import MegyMascot from './MegyMascot';
 
 /* ══════════════════════════════════════════════════════════════════════════
    ResumePrompt — "Pick up where you left off?"
@@ -115,7 +116,7 @@ export function ResumePrompt() {
         <button onClick={close} aria-label="Close" className="absolute top-3 right-3 p-1.5 rounded-full text-light hover:text-medium hover:bg-line-soft transition-colors">
           <X size={16} />
         </button>
-        <img src="/megy-character.png" alt="" className="w-16 h-16 mx-auto object-contain mb-2" draggable={false} />
+        <MegyMascot size={64} alt="" className="mx-auto object-contain mb-2" />
         <h2 id="resume-title" className="font-display text-xl font-semibold text-dark">
           {firstName ? `Welcome back, ${firstName}!` : 'Welcome back!'}
         </h2>
