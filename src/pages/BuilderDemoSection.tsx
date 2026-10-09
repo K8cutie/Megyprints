@@ -4,7 +4,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import {
   Upload,
-  Images,
+  Heart,
   Paintbrush,
   Type,
   Eye,
@@ -12,7 +12,7 @@ import {
   Check,
   Sparkles,
 } from 'lucide-react';
-import { MIN_ALBUM_PHOTOS } from './builder/albumMinimum';
+import { DEMO_OCCASIONS, DEMO_STEP_DETAILS } from './homeCopy';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -34,16 +34,21 @@ const DEMO_SLOTS = [
   { id: 's4', x: 3, y: 62, w: 94, h: 35, shape: 'rounded' as const },
 ];
 
-/* ─── step config ─── */
+/* ─── step config ───
+   The real wizard's order: the occasion comes first (there are no templates
+   or themes to pick any more). The words are in homeCopy.ts. */
 const STEPS = [
+  { key: 'occasion', label: 'Occasion', icon: Heart, color: '#B8A9D9' },
   { key: 'upload', label: 'Upload', icon: Upload, color: '#B85C38' },
-  { key: 'template', label: 'Template', icon: Images, color: '#B8A9D9' },
   { key: 'design', label: 'Design', icon: Paintbrush, color: '#9BCFB8' },
   { key: 'text', label: 'Add Text', icon: Type, color: '#8FBFE0' },
   { key: 'preview', label: 'Preview', icon: Eye, color: '#D4B896' },
 ] as const;
 
 type StepKey = (typeof STEPS)[number]['key'];
+
+/* ─── the occasion step's chips ─── */
+const DEMO_CHIPS = DEMO_OCCASIONS.map((name, i) => ({ name, color: ['#B85C38', '#9BCFB8', '#8FBFE0'][i % 3] }));
 
 /* ═══════════════════════════════════════════════════════════
    ANIMATED DEMO CANVAS
@@ -208,7 +213,7 @@ function DemoCanvas({ step }: { step: StepKey }) {
                 fontFamily: '"Playfair Display", serif',
               }}
             >
-              {textEdited ? 'Our Wedding Day' : 'Double-click to edit...'}
+              {textEdited ? 'Our Wedding Day' : 'Add a caption…'}
             </p>
             {textEdited && (
               <motion.div
@@ -247,7 +252,7 @@ function DemoCanvas({ step }: { step: StepKey }) {
       </AnimatePresence>
 
       {/* Sidebar mock (design step only) */}
-      {!previewMode && step !== 'upload' && step !== 'template' && (
+      {!previewMode && step !== 'upload' && step !== 'occasion' && (
         <motion.div
           initial={{ x: 20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
@@ -271,18 +276,14 @@ function DemoCanvas({ step }: { step: StepKey }) {
           >
             <Upload size={20} className="text-peach" />
           </motion.div>
-          <span className="font-body text-[0.65rem] text-medium">Drop photos here</span>
+          <span className="font-body text-[0.65rem] text-medium">Add your photos</span>
         </div>
       )}
 
-      {/* Template cards (template step) */}
-      {step === 'template' && (
+      {/* Occasion chips (occasion step): the first chips of the real step 1 */}
+      {step === 'occasion' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 z-10 p-3">
-          {[
-            { name: 'Wedding', color: '#B85C38' },
-            { name: 'Minimalist', color: '#9BCFB8' },
-            { name: 'Birthday', color: '#8FBFE0' },
-          ].map((t, i) => (
+          {DEMO_CHIPS.map((t, i) => (
             <motion.div
               key={t.name}
               initial={{ x: 30, opacity: 0 }}
@@ -406,7 +407,7 @@ export default function BuilderDemoSection() {
             See the Editor in Action
           </h2>
           <p className="font-body text-[1rem] font-normal text-medium mt-3 max-w-[520px] mx-auto">
-            Watch how easy it is to create a stunning album in minutes — no design skills needed
+            Here&apos;s what making an album looks like. No design skills needed.
           </p>
         </div>
 
@@ -555,16 +556,16 @@ export default function BuilderDemoSection() {
                 </div>
 
                 <h3 className="font-display text-xl font-semibold text-dark mb-2">
-                  {STEP_DETAILS[currentStep.key].title}
+                  {DEMO_STEP_DETAILS[currentStep.key].title}
                 </h3>
 
                 <p className="font-body text-sm text-medium leading-[1.7] mb-4">
-                  {STEP_DETAILS[currentStep.key].desc}
+                  {DEMO_STEP_DETAILS[currentStep.key].desc}
                 </p>
 
                 {/* Feature bullets */}
                 <ul className="space-y-2">
-                  {STEP_DETAILS[currentStep.key].features.map((feature, i) => (
+                  {DEMO_STEP_DETAILS[currentStep.key].features.map((feature, i) => (
                     <motion.li
                       key={feature}
                       initial={{ opacity: 0, x: 10 }}
@@ -590,55 +591,3 @@ export default function BuilderDemoSection() {
     </section>
   );
 }
-
-/* ─── step detail copy ─── */
-const STEP_DETAILS: Record<
-  StepKey,
-  { title: string; desc: string; features: string[] }
-> = {
-  upload: {
-    title: 'Upload Your Photos',
-    desc: `Drag and drop ${MIN_ALBUM_PHOTOS} or more of your favorite photos — as many as you like. We support JPG and PNG formats with instant preview.`,
-    features: [
-      'Bulk upload with drag & drop',
-      'Auto thumbnail generation',
-      'Organize before you build',
-    ],
-  },
-  template: {
-    title: 'Choose a Template',
-    desc: 'Browse 10 curated themes and 123+ page layouts. From weddings to birthdays, find your perfect style.',
-    features: [
-      '10 themes, 123+ layouts',
-      'Live preview of each style',
-      'One-click theme application',
-    ],
-  },
-  design: {
-    title: 'Design Your Pages',
-    desc: 'Photos automatically fill template slots. Drag, resize, rotate, and arrange until it\'s perfect.',
-    features: [
-      'Smart auto-fill slots',
-      'Drag, resize & rotate',
-      'Shape clipping (circle, rounded)',
-    ],
-  },
-  text: {
-    title: 'Add Personal Text',
-    desc: 'Double-click anywhere to add text. Choose from 30+ fonts, customize colors, alignment, and styling.',
-    features: [
-      '30+ Google Fonts',
-      'Double-click inline editing',
-      'Full styling control',
-    ],
-  },
-  preview: {
-    title: 'Preview & Order',
-    desc: 'See exactly how your album will look. Export pages, choose materials, and place your order.',
-    features: [
-      'Pixel-perfect preview',
-      'Export pages as PNG',
-      'Live price calculator',
-    ],
-  },
-};
