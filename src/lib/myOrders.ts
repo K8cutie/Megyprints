@@ -83,3 +83,13 @@ export async function getMyOrder(userId: string, orderId: string): Promise<MyOrd
   if (error) throw new Error(error.message);
   return (data as MyOrder | null) ?? null;
 }
+
+/** Cancel one of my orders that's still waiting for payment (0042). Only
+ *  before "I've sent ₱X": after that, money may be on its way and the shop
+ *  decides. False when the order is no longer cancellable (paid, sent, or
+ *  already closed). */
+export async function cancelMyUnpaidOrder(orderId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('cancel_my_unpaid_order', { p_order_id: orderId });
+  if (error) throw new Error(error.message);
+  return data === true;
+}
