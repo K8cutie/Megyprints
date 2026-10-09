@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Package, Loader2, Landmark } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
-import { listMyOrders, type MyOrder } from '../lib/myOrders';
+import { listMyOrders, cancelMyUnpaidOrder, type MyOrder } from '../lib/myOrders';
+import { payByDate, UNPAID_ORDER_DAYS } from '../lib/orderExpiry';
 import { trackOf } from '../lib/orderTracker';
 import { PAYEE } from '../lib/payment';
 import { ALBUM_SIZES } from './builder/types';
@@ -30,6 +31,8 @@ export default function MyOrders() {
   const [params] = useSearchParams();
   const focusId = params.get('order');
 
+  // A cancel re-reads the list, so the card shows what the shop now has.
+  const [reloadTick, setReloadTick] = useState(0);
   useEffect(() => {
     if (!user) return;
     let alive = true;
@@ -37,7 +40,7 @@ export default function MyOrders() {
       .then((r) => { if (alive) setOrders(r); })
       .catch((e: Error) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
-  }, [user]);
+  }, [user, reloadTick]);
 
   return (
     // pt-24: below the fixed header — the title was drawn over the logo (RC).
@@ -63,14 +66,33 @@ export default function MyOrders() {
       )}
 
       <div className="space-y-4">
-        {orders?.map((o) => <OrderCard key={o.id} order={o} focused={o.id === focusId} />)}
+        {orders?.map((o) => <OrderCard key={o.id} order={o} focused={o.id === focusId} onChanged={() => setReloadTick((n) => n + 1)} />)}
       </div>
     </div>
   );
 }
 
-function OrderCard({ order, focused }: { order: MyOrder; focused?: boolean }) {
+function OrderCard({ order, focused, onChanged }: { order: MyOrder; focused?: boolean; onChanged?: () => void }) {
   const track = trackOf(order);
+  // Cancel asks once more before it acts (two taps, both in words).
+  const [askCancel, setAskCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelErr, setCancelErr] = useState('');
+  const payBy = payByDate(order.created_at);
+  const cancel = async () => {
+    setCancelling(true);
+    setCancelErr('');
+    try {
+      const ok = await cancelMyUnpaidOrder(order.id);
+      if (!ok) setCancelErr('This order can no longer be cancelled here. If you already sent the money, message us.');
+      onChanged?.();
+    } catch (e) {
+      setCancelErr(e instanceof Error ? e.message : 'Could not cancel the order. Please try again.');
+    } finally {
+      setCancelling(false);
+      setAskCancel(false);
+    }
+  };
   const size = ALBUM_SIZES.find((s) => s.preset === order.album_size)?.name ?? order.album_size ?? '';
   const albumName = isDefaultAlbumName(order.album_title) ? '' : cleanAlbumName(order.album_title);
   const ref = useRef<HTMLDivElement>(null);
@@ -91,7 +113,7 @@ function OrderCard({ order, focused }: { order: MyOrder; focused?: boolean }) {
       <p className={`mt-3 text-sm font-semibold ${track.cancelled ? 'text-red-600' : 'text-dark'}`} data-testid="order-headline">{track.headline}</p>
 
       {track.cancelled ? (
-        <p className="mt-1 text-xs text-medium">This order was cancelled. If that's a surprise, <Link to="/contact" className="underline font-semibold">message us</Link>.</p>
+        <p className="mt-1 text-xs text-medium">This order was cancelled. Your album is still saved, so you can order it again. If that's a surprise, <Link to="/contact" className="underline font-semibold">message us</Link>.</p>
       ) : (
         <div className="mt-2"><OrderTracker track={track} compact /></div>
       )}
@@ -102,6 +124,27 @@ function OrderCard({ order, focused }: { order: MyOrder; focused?: boolean }) {
           <p>Open your bank or e-wallet app, choose <b>Scan QR</b> / <b>InstaPay</b> and scan this code ({PAYEE.bank} · {PAYEE.name}, account ending {PAYEE.accountLast4}). Put <span className="font-mono">{order.order_number}</span> in the note if your app asks.</p>
           <img src={PAYEE.qrSrc} alt={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} className="mt-2 w-36 h-36 object-contain rounded-lg bg-white" draggable={false} />
           <p className="mt-2">Already paid? <Link to="/contact" className="underline font-semibold">Send us your receipt</Link> and we'll match it.</p>
+          <p className="mt-2" data-testid="order-pay-by">{payBy ? <>Please pay by <b className="text-dark">{payBy}</b>.</> : <>Please pay within {UNPAID_ORDER_DAYS} days.</>} After that this order closes by itself, and your album stays saved.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {!askCancel ? (
+              <button type="button" onClick={() => setAskCancel(true)} data-testid="order-cancel"
+                className="px-3 py-1.5 rounded-lg border border-peach bg-white text-xs font-semibold text-cocoa hover:bg-blush">
+                Cancel this order
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={() => void cancel()} disabled={cancelling} data-testid="order-cancel-yes"
+                  className="px-3 py-1.5 rounded-lg bg-blush-pink text-white text-xs font-semibold hover:brightness-105 disabled:opacity-60 disabled:cursor-wait inline-flex items-center gap-1.5">
+                  {cancelling && <Loader2 size={12} className="animate-spin" />} Yes, cancel order {order.order_number}
+                </button>
+                <button type="button" onClick={() => setAskCancel(false)} disabled={cancelling} data-testid="order-cancel-keep"
+                  className="px-3 py-1.5 rounded-lg border border-peach bg-white text-xs font-semibold text-cocoa hover:bg-blush">
+                  Keep it
+                </button>
+              </>
+            )}
+          </div>
+          {cancelErr && <p className="mt-2 text-red-600" role="alert">{cancelErr}</p>}
         </div>
       )}
 

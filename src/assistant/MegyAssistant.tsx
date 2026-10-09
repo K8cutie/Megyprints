@@ -17,12 +17,14 @@ import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
 import { SIZE_LABELS, extraPagesCharge } from '../lib/pricing';
 import { getPriceSchedule } from '../lib/storeSettings';
 import type { AssistantMessage, AssistantIntent } from './types';
-import { rebuildQuestion, placedMemories, albumIsMade, occasionQuotesMessage } from './rebuildQuestion';
+import { rebuildQuestion, placedMemories, albumIsMade, occasionQuotesMessage, confirmedIntent } from './rebuildQuestion';
 import RemakeAlbumAsk from './RemakeAlbumAsk';
+import ResizeAlbumAsk from './ResizeAlbumAsk';
 import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackground } from '../pages/builder/types';
 import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
+import MegyMascot from '../components/MegyMascot';
 import PhotoCheckCard from './PhotoCheckCard';
 import { useSettleGuard, noteScreenTap, tooSoonAfterScreenTap } from '../lib/settleGuard';
 import { useModalDialog } from '../lib/useModalDialog';
@@ -346,7 +348,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       const ask = rebuildQuestion(intent, builderRef.current,
         schedule ? (size, pages) => extraPagesCharge(schedule, size, 'soft', pages).amount : null);
       if (ask) {
-        rebuildAskedRef.current = intent;
+        // The yes is to what was asked: for a size change, the video memories
+        // it said would come off, and only those (confirmedIntent).
+        rebuildAskedRef.current = confirmedIntent(intent, builderRef.current);
         setIsThinking(false);
         setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', content: ask, intent, timestamp: new Date() }]);
         return;
@@ -371,6 +375,16 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const handleSubmit = (e?: React.FormEvent) => { e?.preventDefault(); sendMessage(input); };
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } };
 
+  /* A size was set (Step 2's card, or a yes to the memories question): the
+     size step moves on, and Megy says so. */
+  const sizeSet = (label: string) => {
+    if (wizardRef.current.state.step === 'pick_size') {
+      wizardRef.current.advance();
+      setWizardStep(wizardRef.current.state.step);
+    }
+    showToast(`Size set: ${label}`);
+  };
+
   /* ── Wizard action handler ── */
   const handleWizardAction = useCallback((action: string) => {
     const step = wizardRef.current.state.step;
@@ -390,12 +404,17 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         };
         const size = Object.keys(sizes).find(k => action.includes(k));
         // One size per double tap, on whichever surface the second tap lands.
+        // The card moves on once the size is set. A made album whose video
+        // memories can't all come along asks first (ResizeAlbumAsk opens over
+        // this) and stays on the size, as does a size Megy can't make (she
+        // says why: it said "Size set" and moved on).
         if (size && !tooSoonAfterScreenTap()) {
           noteScreenTap();
-          void builder.dispatch({ type: 'change_size', payload: { size: sizes[size] }, rawMessage: `change size to ${sizes[size]}` });
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
-          showToast(`Size set: ${size}`);
+          void builder.dispatch({ type: 'change_size', payload: { size: sizes[size] }, rawMessage: `change size to ${sizes[size]}` })
+            .then((r) => {
+              if (r.success) sizeSet(size);
+              else if (!r.asked) showToast(r.message, 6000);
+            });
         }
         break;
       case 'upload_photos':
@@ -471,7 +490,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         }
         break;
     }
-  }, [builder, showToast, onPlaceOrder]);
+  }, [builder, showToast, onPlaceOrder, sizeSet]);
   const doRestartWizard = () => {
     // Signed in, the album is saved to the account and keeps its photos (see
     // reset); signed out, it really is gone.
@@ -571,6 +590,23 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       onRemake={() => { setRemakeAsk(false); handleWizardAction('Generate Album →'); }} />
   );
 
+  // A new size that would take video memories off asks first, from any size
+  // tap (Setup's grid, Step 2, "Switch to …", typed): actionEngine
+  // change_size opens it. The yes lets exactly the memories it named come off.
+  const resizeAsk = builder.resizeAsk;
+  const resizeAskEl = resizeAsk && (
+    <ResizeAlbumAsk ask={resizeAsk} from={builder.albumSize}
+      onKeep={() => builder.setResizeAsk(null)}
+      onChange={() => {
+        builder.setResizeAsk(null);
+        void builder.dispatch({ type: 'change_size', payload: { size: resizeAsk.size, confirmedLost: resizeAsk.lostCodes }, rawMessage: `change size to ${resizeAsk.size}` })
+          .then((r) => {
+            if (r.success) sizeSet(resizeAsk.size.replace('x', '×'));
+            else if (!r.asked) showToast(r.message, 6000);
+          });
+      }} />
+  );
+
   if (centerStage) {
     const msg = wizardRef.current.getMessage();
     const prog = wizardRef.current.getProgress();
@@ -578,6 +614,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       <div ref={stageRef} role="dialog" aria-modal="true" aria-label="Megy's guide" tabIndex={-1}
         className="fixed inset-0 z-[95] bg-warm-white flex flex-col items-center [justify-content:safe_center] p-6 overflow-auto outline-none">
         {remakeAskEl}
+        {resizeAskEl}
         {/* Hidden file input so the Upload step works on the center stage too */}
         <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleFileUpload} className="hidden" />
         {/* Megy's answer on the center stage too: the toast lived only in the
@@ -599,7 +636,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <Home size={14} /> Home
         </Link>
 
-        <img src="/megy-character.png" alt="Megy" className="w-20 h-20 object-contain mb-4 drop-shadow-lg" draggable={false} />
+        <MegyMascot size={80} className="object-contain mb-4 drop-shadow-lg" />
 
         <div className="w-full max-w-lg">
           <div className="flex items-center mb-1">
@@ -710,7 +747,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                         </button>
                         {short.betterSize && (
                           <button type="button" className={nudgeBtn} data-testid="memory-nudge-switch"
-                            onClick={() => { void builder.dispatch({ type: 'change_size', payload: { size: short.betterSize }, rawMessage: `change size to ${short.betterSize}` }); showToast(`Size set: ${better}`); }}>
+                            onClick={() => { void builder.dispatch({ type: 'change_size', payload: { size: short.betterSize }, rawMessage: `change size to ${short.betterSize}` }).then((r) => { if (r.success) showToast(`Size set: ${better}`); else if (!r.asked) showToast(r.message, 6000); }); }}>
                             Switch to {better}
                           </button>
                         )}
@@ -784,6 +821,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
   return (
     <>
+      {/* Outside the panel: it shows even with Megy folded away. */}
+      {resizeAskEl}
       {/* Mobile (post-wizard): Megy collapses to a small character icon in the
           upper-right; tap it to pull Megy DOWN from the top. */}
       {mobilePulldown && !mobileExpanded && (
@@ -793,7 +832,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           className="lg:hidden fixed top-1.5 right-3 z-[95] w-10 h-10 rounded-full bg-peach shadow-lg flex items-center justify-center overflow-hidden active:scale-95 transition-transform"
           aria-label="Open Megy"
         >
-          <img src="/megy-character.png" alt="Megy" className="w-7 h-7 object-contain" draggable={false} />
+          <MegyMascot size={28} className="object-contain" />
         </button>
       )}
 
@@ -805,7 +844,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
       {/* Collapsed rail — desktop only, when minimized: Megy icon + expand */}
       <div className={`hidden ${collapsed ? 'lg:flex' : ''} lg:flex-col lg:items-center lg:gap-3 lg:pt-4`}>
-        <img src="/megy-character.png" alt="Megy" className="w-8 h-8 object-contain" draggable={false} />
+        <MegyMascot size={32} className="object-contain" />
         <button onClick={() => setCollapsed(false)} title="Expand Megy" aria-label="Expand Megy"
           className="p-1.5 text-light hover:text-blush-pink hover:bg-blush rounded-lg transition-colors">
           <ChevronRight className="w-5 h-5" />
@@ -829,7 +868,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       <div className="bg-peach px-4 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
-            <img src="/megy-character.png" alt="Megy" className="w-7 h-7 object-contain" draggable={false} />
+            <MegyMascot size={28} className="object-contain" />
           </div>
           <div>
             <span className="font-semibold text-white text-sm">Megy Assistant</span>
@@ -1116,7 +1155,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 </p>
                 {recommendedSize && recommendedSize !== builder.albumSize ? (
                   <button
-                    onClick={() => { void builder.dispatch({ type: 'change_size', payload: { size: recommendedSize }, rawMessage: `change size to ${recommendedSize}` }); showToast(`Switched to ${recommendedSize}`); }}
+                    onClick={() => { void builder.dispatch({ type: 'change_size', payload: { size: recommendedSize }, rawMessage: `change size to ${recommendedSize}` }).then((r) => { if (r.success) showToast(`Switched to ${recommendedSize}`); else if (!r.asked) showToast(r.message, 6000); }); }}
                     className="mt-2 w-full text-[11px] font-medium py-1.5 rounded-lg bg-peach text-white hover:brightness-105 transition-all"
                   >
                     Best fit: switch to {recommendedSize} →

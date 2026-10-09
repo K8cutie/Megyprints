@@ -159,7 +159,8 @@ describe('readDraftAlbumForOrder — the device draft can price the album after 
 describe('the order page never prices from defaults (source guard)', () => {
   const src = readFileSync(resolve(__dirname, '../pages/Order.tsx'), 'utf8');
   it('Place order needs the album: no album → nothing to price', () => {
-    expect(src).toMatch(/const priceReady = settingsReady && schedule !== null && info !== null;/);
+    // (and, with memory videos, until this album's own video tier is read, 0042)
+    expect(src).toMatch(/const priceReady = settingsReady && schedule !== null && info !== null( && clipTierReady)?;/);
   });
   it('no free size picker: the size always comes from the album', () => {
     expect(src).not.toMatch(/setSize\(/);

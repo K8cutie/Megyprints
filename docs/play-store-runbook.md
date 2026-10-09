@@ -208,6 +208,8 @@ The MEGY cube (`megy icon logo.png`, full-bleed 1021px PNG) is now the icon
 everywhere: Play listing 512, pwa-192/512, maskable pair, launcher mipmaps,
 and the splash (backgrounds moved to icon-edge orange `#F05239`). AAB + APK
 rebuilt and emulator-verified — proof shots `store/emulator-splash-newicon.png`
-and `store/emulator-drawer-newicon.png`. `public/megy-character.png` stays the
-IN-APP mascot only. If the art ever changes again: replace the source file,
-re-run the generator, push, `bubblewrap update && build`, re-upload.
+and `store/emulator-drawer-newicon.png`. The Megy mascot is the IN-APP picture
+only, not an icon: master `store/megy-character-master.png`, shipped as shrunk
+copies `public/megy-character-{128,192,256,384}.png` made by
+`scripts/build-mascot.mjs`. If the icon art ever changes again: replace the
+source file, re-run the generator, push, `bubblewrap update && build`, re-upload.

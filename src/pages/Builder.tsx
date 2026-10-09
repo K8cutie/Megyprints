@@ -33,7 +33,7 @@ const SetupPhase = memo(function SetupPhase({ actions }: { actions: BuilderConte
   return (
     <BuilderSetup
       selectedSize={actions.albumSize}
-      onSizeChange={(size) => { void actions.dispatch({ type: 'change_size', payload: { size }, rawMessage: `change size to ${size}` }); }}
+      onSizeChange={(size, reason) => { void actions.dispatch({ type: 'change_size', payload: { size, reason }, rawMessage: `change size to ${size}` }); }}
       /* Option A: "Start Creating" advances Megy's wizard past the size step to
          the cover step; the center screen (phase) follows the wizard. */
       onNext={() => { actions.setWizardStep('design_cover'); actions.setPhase('cover'); }}

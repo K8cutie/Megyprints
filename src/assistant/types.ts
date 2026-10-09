@@ -58,6 +58,8 @@ export interface ExecutedAction {
   intentType: AssistantIntentType;
   success: boolean;
   message: string;
+  /** Not done yet: a question opened on screen (ResizeAlbumAsk) that says it. */
+  asked?: boolean;
 }
 
 export interface QuickSuggestion {

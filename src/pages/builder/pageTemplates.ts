@@ -1617,7 +1617,11 @@ export function getTemplatesForAlbum(albumSize: AlbumSizePreset): PageTemplate[]
 export type PhotoOrientation = 'landscape' | 'portrait' | 'square';
 
 export function orientationOfRatio(r: PhotoRatio): PhotoOrientation {
-  const v = RATIOS[r] ?? 1;
+  return orientationOfShape(RATIOS[r] ?? 1);
+}
+
+/** The orientation of a shape given as width / height (a frame, a page). */
+export function orientationOfShape(v: number): PhotoOrientation {
   return v > 1.02 ? 'landscape' : v < 0.98 ? 'portrait' : 'square';
 }
 
