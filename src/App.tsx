@@ -12,6 +12,8 @@ import Order from './pages/Order';
 import Profile from './pages/Profile';
 import MyMemories from './pages/MyMemories';
 import MyOrders from './pages/MyOrders';
+import Events from './pages/Events';
+import EventBook from './pages/EventBook';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Code-split the two heavy routes so their weight never lands on Home or the
@@ -71,6 +73,8 @@ export default function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/order" element={<Order />} />
+          <Route path="/events" element={<Events />} />
+          <Route path="/events/book" element={<EventBook />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />

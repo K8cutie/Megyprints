@@ -40,6 +40,8 @@ const freshDb = () => ({
     { id: 'ord-delivered', status: 'delivered', user_id: 'user-1' },
   ],
   ordersErr: null,
+  bookings: [],
+  bookingsErr: null,
   clips: { data: ['k7m2p9qz.mp4', 'w4n8r2ta.mov'], error: null },
   removeErr: () => null,
   deleteResult: { data: { deleted_albums: 1, deleted_memories: 2, anonymized_orders: 2 }, error: null },
@@ -54,8 +56,9 @@ const userClient = () => ({
     if (name === 'delete_own_account') return db.deleteResult;
     return { data: null, error: { message: `unexpected rpc ${name}` } };
   },
-  // db.orders is what RLS lets the caller read; .eq() filters narrow it the way
-  // PostgREST would, and every filter used is kept in ordersFilters.
+  // db.orders / db.bookings are what RLS lets the caller read; .eq() filters
+  // narrow them the way PostgREST would, and every filter used is kept in
+  // ordersFilters (both reads).
   from: (table) => ({
     select: () => {
       const eqs = {};
@@ -64,10 +67,12 @@ const userClient = () => ({
         in: async (_col, statuses) => {
           log.push(table);
           ordersFilters.push({ ...eqs });
-          const rows = db.orders
+          const error = table === 'event_bookings' ? db.bookingsErr : db.ordersErr;
+          if (error) return { data: null, error };
+          const rows = (table === 'event_bookings' ? db.bookings : db.orders)
             .filter((o) => Object.entries(eqs).every(([c, v]) => o[c] === v))
             .filter((o) => statuses.includes(o.status));
-          return { data: rows.map(({ id, status }) => ({ id, status })), error: db.ordersErr };
+          return { data: rows.map(({ id, status }) => ({ id, status })), error: null };
         },
       };
       return q;
@@ -130,6 +135,7 @@ describe('happy path', () => {
     expect(log).toEqual([
       'rpc:account_deletion_preflight',
       'orders',
+      'event_bookings',
       'rpc:my_memory_clip_names',
       PDFS,
       PROOFS,
@@ -172,7 +178,7 @@ describe('happy path', () => {
     const res = await call();
     expect(res.code).toBe(200);
     expect(clientKeys).toEqual(['anon-test']);
-    expect(log).toEqual(['rpc:account_deletion_preflight', 'orders', 'rpc:my_memory_clip_names', 'rpc:delete_own_account']);
+    expect(log).toEqual(['rpc:account_deletion_preflight', 'orders', 'event_bookings', 'rpc:my_memory_clip_names', 'rpc:delete_own_account']);
     expect(res.body.deleted_videos).toBe(0);
   });
 
@@ -204,9 +210,9 @@ describe('only the caller\'s own orders (Kraken: an owner account wiped every cu
     ]);
   });
 
-  it('the orders read is filtered by the caller\'s user_id from their verified token, not left to RLS', async () => {
+  it('the orders and bookings reads are filtered by the caller\'s user_id from their verified token, not left to RLS', async () => {
     await call();
-    expect(ordersFilters).toEqual([{ user_id: 'user-1' }]);
+    expect(ordersFilters).toEqual([{ user_id: 'user-1' }, { user_id: 'user-1' }]);
   });
 
   it('an owner with no orders of their own removes no print file and no receipt at all', async () => {
@@ -235,6 +241,92 @@ describe('the cover wrap and the receipt go with the order', () => {
     db.orders = [...db.orders, { id: 'ord-printing', status: 'in_production', user_id: 'user-1' }];
     await call();
     expect(log.join('\n')).not.toMatch(/ord-printing/);
+  });
+});
+
+describe('event booking receipts go with the account (0043)', () => {
+  const BK = (id) => `remove:payment-proofs:${mod.bookingProofNames(id).join(',')}`;
+
+  it('each of the caller\'s bookings loses every receipt name it can have, after the order receipts', async () => {
+    db.bookings = [
+      { id: 'bk-quoted', status: 'quoted', user_id: 'user-1' },
+      { id: 'bk-done', status: 'completed', user_id: 'user-1' },
+    ];
+    const res = await call();
+    expect(res.code).toBe(200);
+    expect(removals()).toEqual([
+      PDFS,
+      PROOFS,
+      'remove:payment-proofs:' + [...mod.bookingProofNames('bk-quoted'), ...mod.bookingProofNames('bk-done')].join(','),
+      'remove:memory-clips:k7m2p9qz.mp4,w4n8r2ta.mov',
+    ]);
+  });
+
+  it('a booking receipt name is booking-<id>-<deposit|balance>.<jpg|png|webp|pdf>, 8 per booking', () => {
+    expect(new Set(mod.bookingProofNames('X'))).toEqual(new Set(
+      ['deposit', 'balance'].flatMap((k) => ['jpg', 'png', 'webp', 'pdf'].map((e) => `booking-X-${k}.${e}`)),
+    ));
+  });
+
+  it('only the caller\'s bookings: another host\'s receipts are never named', async () => {
+    db.bookings = [
+      { id: 'bk-mine', status: 'cancelled', user_id: 'user-1' },
+      { id: 'host-b', status: 'quoted', user_id: 'user-2' },
+    ];
+    await call();
+    expect(log.join('\n')).not.toMatch(/host-b/);
+    expect(removals()).toContain(BK('bk-mine'));
+  });
+
+  it('a booked or paid booking keeps its receipts (the database refuses that host before anything)', async () => {
+    db.bookings = [
+      { id: 'bk-booked', status: 'booked', user_id: 'user-1' },
+      { id: 'bk-paid', status: 'paid', user_id: 'user-1' },
+    ];
+    await call();
+    expect(log.join('\n')).not.toMatch(/bk-booked|bk-paid/);
+  });
+
+  it('bookings only, no orders or clips → the service client still removes the receipts', async () => {
+    db.orders = [];
+    db.clips = { data: [], error: null };
+    db.bookings = [{ id: 'bk-only', status: 'declined', user_id: 'user-1' }];
+    const res = await call();
+    expect(res.code).toBe(200);
+    expect(clientKeys).toEqual(['anon-test', 'service-test']);
+    expect(removals()).toEqual([BK('bk-only')]);
+  });
+
+  it('before 0043 is applied (no such table), deleting an account still works', async () => {
+    db.bookingsErr = { code: 'PGRST205', message: 'Could not find the table public.event_bookings in the schema cache' };
+    const res = await call();
+    expect(res.code).toBe(200);
+    expect(removals()).toEqual([PDFS, PROOFS, 'remove:memory-clips:k7m2p9qz.mp4,w4n8r2ta.mov']);
+  });
+
+  it('any other bookings read error → 500, nothing removed, account stays', async () => {
+    db.bookingsErr = { code: '57014', message: 'canceling statement due to statement timeout' };
+    const res = await call();
+    expect(res.code).toBe(500);
+    expect(removals()).toEqual([]);
+    expect(log).not.toContain('rpc:delete_own_account');
+  });
+
+  it('a booking with money in flight → 409 naming the booking, and no file is touched', async () => {
+    db.preflight = { data: { blocking: [{ order_number: 'EV-2026-7K2QW9X', status: 'booked', kind: 'booking' }] }, error: null };
+    const res = await call();
+    expect(res.code).toBe(409);
+    expect(res.body.error).toBe(
+      'Event booking EV-2026-7K2QW9X is paid and not finished yet, so the account cannot be deleted yet. Contact the shop to cancel or complete it first.',
+    );
+    expect(removals()).toEqual([]);
+  });
+
+  it('an order AND a booking in flight → the order is named first, as the database does', () => {
+    expect(mod.blockedMessage([
+      { order_number: 'EV-2026-AAAAAAA', kind: 'booking' },
+      { order_number: 'MP-2026-BBBBBBB', kind: 'order' },
+    ])).toMatch(/^Order MP-2026-BBBBBBB is paid/);
   });
 });
 
@@ -384,5 +476,25 @@ describe('migrations', () => {
     const m = /'(Order % is paid and not yet delivered[^']*)'/.exec(body);
     expect(m).not.toBeNull();
     expect(mod.blockedMessage([{ order_number: '%' }])).toBe(m[1]);
+  });
+
+  it('...and for an event booking, the booking sentence word for word (0043)', () => {
+    const body = fnBody('delete_own_account');
+    const m = /'(Event booking % is paid and not finished yet[^']*)'/.exec(body);
+    expect(m).not.toBeNull();
+    expect(mod.blockedMessage([{ order_number: '%', kind: 'booking' }])).toBe(m[1]);
+  });
+
+  it('the latest delete_own_account() refuses while a booking receipt remains, and the endpoint removes exactly those names', () => {
+    const body = fnBody('delete_own_account');
+    expect(body).toMatch(/s\.name = any\(public\.booking_proof_names\(b\.id\)\)/);
+    expect(body).toMatch(/if v_bproofs > 0 then\s+raise exception/);
+    expect(body).toMatch(/b\.status in \('booked', 'paid'\)/);
+    // The SQL builds the names from these two lists; the endpoint must name the same 8.
+    const sql = latestDefining('delete_own_account');
+    const fn = sql.slice(sql.indexOf('create or replace function public.booking_proof_names('));
+    const kinds = /unnest\(array\[([^\]]+)\]\) as k/.exec(fn)[1].match(/'([a-z]+)'/g).map((s) => s.slice(1, -1));
+    const exts = /unnest\(array\[([^\]]+)\]\) as e/.exec(fn)[1].match(/'([a-z]+)'/g).map((s) => s.slice(1, -1));
+    expect(new Set(mod.bookingProofNames('X'))).toEqual(new Set(kinds.flatMap((k) => exts.map((e) => `booking-X-${k}.${e}`))));
   });
 });

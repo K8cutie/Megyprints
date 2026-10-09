@@ -1,13 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════════
    /admin — the OPERATOR CONSOLE. Separate from the customer app; gated by ROLE.
-     • owner       — Overview · Orders (full, incl. price) · Templates · Team
+     • owner       — Overview · Orders (full, incl. price) · Bookings · Templates · Team
      • fulfillment — Orders only, status changes only (no money, no overview)
    Role resolution + the DB functions in migration 0007 are the real guard.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, ClipboardList, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
+import { BarChart3, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
@@ -19,11 +19,13 @@ import TemplatesPanel from './admin/TemplatesPanel';
 import TeamPanel from './admin/TeamPanel';
 import PricingPanel from './admin/PricingPanel';
 import MessagesPanel from './admin/MessagesPanel';
+import BookingsPanel from './admin/BookingsPanel';
 
-type Tab = 'overview' | 'orders' | 'messages' | 'templates' | 'pricing' | 'team';
+type Tab = 'overview' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'team';
 const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3, ownerOnly: true },
   { id: 'orders', label: 'Orders', icon: ClipboardList, ownerOnly: false },
+  { id: 'bookings', label: 'Bookings', icon: CalendarHeart, ownerOnly: true },
   { id: 'messages', label: 'Messages', icon: Mail, ownerOnly: true },
   { id: 'templates', label: 'Templates', icon: LayoutGrid, ownerOnly: true },
   { id: 'pricing', label: 'Pricing', icon: Calculator, ownerOnly: true },
@@ -189,6 +191,7 @@ export default function Admin() {
             )}
           </>
         ))}
+        {tab === 'bookings' && isOwner && <BookingsPanel />}
         {tab === 'messages' && isOwner && <MessagesPanel />}
         {tab === 'templates' && isOwner && <TemplatesPanel />}
         {tab === 'pricing' && isOwner && <PricingPanel />}

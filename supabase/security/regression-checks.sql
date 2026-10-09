@@ -150,5 +150,36 @@ begin
   raise notice 'PASS: account deletion removes and verifies print PDFs, cover wraps, receipts and memory videos';
 end $$;
 
+-- ── GUARD 7: event bookings stay owner-priced and host-read-only (0043) ─────
+-- A host may read their own booking and send a request; every change goes
+-- through the functions. The cost to make (the margin) is never readable by a
+-- host. The deposit floor and account deletion must still know bookings.
+do $$
+declare src text;
+begin
+  if to_regclass('public.event_bookings') is null then
+    raise notice 'SKIP: event_bookings not created yet (0043)';
+    return;
+  end if;
+  if has_table_privilege('authenticated', 'public.event_bookings', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.event_bookings', 'DELETE')
+     or has_table_privilege('anon', 'public.event_bookings', 'SELECT')
+     or has_table_privilege('anon', 'public.event_bookings', 'INSERT') then
+    raise exception 'REGRESSION (event bookings): a customer or anon can change bookings directly, or anon can read them';
+  end if;
+  if has_column_privilege('authenticated', 'public.event_bookings', 'deal_cost', 'SELECT') then
+    raise exception 'REGRESSION (event bookings): hosts can read deal_cost (the cost to make)';
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'event_bookings_deal_money_chk'
+                 and pg_get_constraintdef(oid) like '%deal_deposit > deal_cost%') then
+    raise exception 'REGRESSION (event bookings): the deposit no longer has to be more than the cost to make';
+  end if;
+  select pg_get_functiondef('public.delete_own_account()'::regprocedure) into src;
+  if src not like '%booking_proof_names%' or src not like '%event_bookings%' then
+    raise exception 'REGRESSION (event bookings): delete_own_account() no longer removes-and-checks booking receipts or bookings in flight';
+  end if;
+  raise notice 'PASS: event bookings are owner-priced, host-read-only, and go with the account';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;

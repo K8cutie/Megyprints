@@ -18,6 +18,18 @@ import { MIN_ALBUM_PHOTOS } from './builder/albumMinimum';
 import { FREE_QR_MEMORIES } from '../lib/pricing';
 import { FONTS } from './builder/fonts';
 import { COMMON_THEMES } from '../lib/albumTheme';
+import { EVENT_MIN_GUESTS } from '../lib/eventBookings';
+
+/** The Megyprints Events card under Megy's welcome card. Events for 15 or
+ *  more guests are BOOKED (owner, 2026-10-10), so the card says who it's for
+ *  and leads to booking. The words are the owner's own. */
+export const EVENTS_CARD = {
+  label: 'Megyprints Events',
+  title: 'Shared Memories, Different Perspectives',
+  body: 'Every photo from every phone, finally in one album. Your guests just scan your QR.',
+  who: `For weddings, debuts and celebrations with ${EVENT_MIN_GUESTS} or more guests.`,
+  cta: 'Book your event',
+} as const;
 
 export type HomeFeatureKey = 'printed' | 'layout' | 'memories' | 'photos';
 
