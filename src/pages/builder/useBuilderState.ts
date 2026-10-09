@@ -29,6 +29,7 @@ import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
 import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
+import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
@@ -583,6 +584,24 @@ function getInitialState(): SerializedState {
 /** The stages of a whole-album generation, in order. Shown to the customer. */
 export type GeneratingPhase = 'measuring' | 'laying_out' | 'quotes' | 'finishing';
 
+/** What generateAlbum did, and (for a new size) the memories' plan. */
+export type GenerateResult =
+  | { made: true; memories?: MemoryPlan }
+  | { made: false; memories: MemoryPlan };
+export type MemoryPlan = ReturnType<typeof memoriesAcrossSize>;
+
+/** A size change that would take video memories off: asked before it runs. */
+export interface ResizeAsk {
+  size: AlbumSizePreset;
+  /** The album's memories, and how many of them can't come along. */
+  memories: number;
+  lost: number;
+  /** Those memories' codes: a yes lets exactly these come off. */
+  lostCodes: string[];
+  /** Setup moved off a size the shop no longer offers (no tap). */
+  reason?: 'size_hidden';
+}
+
 /** Resolve after the browser has had one frame to paint pending state. */
 const paintFrame = () => new Promise<void>((resolve) => {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
@@ -672,8 +691,12 @@ export interface BuilderActions {
    *  photo is never placed by its fallback ratio. Callers may fire-and-forget. */
   /** `size`: lay the album out for a NEW size (it becomes the album's size
    *  with the pages, in one step). Every page is laid out again — a Studio
-   *  page is laid out for the old shape, so it can't be kept. */
-  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset }) => Promise<void>;
+   *  page is laid out for the old shape, so it can't be kept. The video
+   *  memories come along, each a badge on its own photo. One that can't comes
+   *  off only when its code is in `confirmedLost` (the customer said yes to
+   *  exactly those); any other and nothing changes ({ made: false } with the
+   *  plan, to ask about). */
+  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }) => Promise<GenerateResult>;
   /** What generateAlbum is doing RIGHT NOW, or null when idle. The builder
    *  shows a "making your album" screen while this is set — a whole-album
    *  generation can take several seconds (measuring, laying out, waiting on
@@ -694,6 +717,10 @@ export interface BuilderActions {
   /** The "Change layout" picker open state — shared by mobile + desktop. */
   layoutPickerOpen: boolean;
   setLayoutPickerOpen: (v: boolean) => void;
+  /** "Change the size? N video memories can't come along" — open while it is
+   *  asked (ResizeAlbumAsk), wherever the size was tapped (change_size). */
+  resizeAsk: ResizeAsk | null;
+  setResizeAsk: (ask: ResizeAsk | null) => void;
   /** Fill the current page's empty photo frames with photos not yet in the
    *  album. Returns how many it filled, and how many were empty. */
   autoFillSlots: () => { filled: number; empty: number };
@@ -1025,6 +1052,7 @@ export function useBuilderState(): BuilderActions {
   // ── Layout picker (the "Change layout" sheet/modal) — shared so the mobile
   //    review and the desktop panel both open the same picker ──
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
+  const [resizeAsk, setResizeAsk] = useState<ResizeAsk | null>(null);
   // ── Wizard step tracking — assistant is the primary controller ──
   const [wizardStep, setWizardStep] = useState<WizardStep>('welcome');
 
@@ -1913,8 +1941,8 @@ export function useBuilderState(): BuilderActions {
     }
   }, []);
 
-  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset }) => {
-    const { size: newSize, ...genOptions } = options ?? {};
+  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }): Promise<GenerateResult> => {
+    const { size: newSize, confirmedLost, ...genOptions } = options ?? {};
     const size = newSize ?? albumSize;
     const resizing = size !== albumSize;
     // Show the "making your album" screen for the whole run and let the browser
@@ -1936,6 +1964,11 @@ export function useBuilderState(): BuilderActions {
       const m = measuredRef.current.get(p.id);
       return m && (p.width !== m.width || p.height !== m.height) ? { ...p, ...m } : p;
     });
+    // A NEW SIZE KEEPS THE VIDEO MEMORIES: each comes along as its badge on
+    // its photo. One that can't (its photo won't fill a page of the new
+    // shape) never comes off without a yes to it — the caller asks (change_size).
+    const memories = resizing ? memoriesAcrossSize(albumPagesRef.current, photos, albumSize, size) : null;
+    if (memories?.lost.some((q) => !confirmedLost?.includes(q.code))) return { made: false, memories };
     pushSnapshot();
     // Bake the active theme's photo frame + corner art onto every generated page.
     // A custom Border picked on the wizard overrides the theme's border here.
@@ -1962,9 +1995,24 @@ export function useBuilderState(): BuilderActions {
     // A NEW SIZE re-lays out every page: a Studio page is laid out for the old
     // shape and would be squashed onto the new one (1-star testers).
     const { kept, used } = resizing ? { kept: [], used: new Set<number>() } : splitStudioPages(albumPagesRef.current);
-    // Photos the customer left out (Megy's photo check) stay out.
-    const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i) && !photos[i].leftOut);
+    // Photos the customer left out (Megy's photo check) stay out — not one
+    // that carries a memory.
+    const memoryPhotos = new Set((memories?.carried ?? []).map((m) => m.photo));
+    const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i) && (!photos[i].leftOut || memoryPhotos.has(i)));
     const pool = poolMap.map((i) => photos[i]);
+    // A memory from a frame or a box has no corner yet: away from the face,
+    // as "Add a video memory" picks it.
+    const carried: CarriedMemory[] = [];
+    for (const m of memories?.carried ?? []) {
+      let corner = m.corner;
+      if (!corner) {
+        const url = photos[m.photo]?.previewUrl;
+        let face: { x: number; y: number } | null = null;
+        try { face = url ? await detectFaceCenter(url) : null; } catch { face = null; }
+        corner = qrCornerAwayFromFace(face);
+      }
+      carried.push({ ...m, photo: poolMap.indexOf(m.photo), corner });
+    }
     // MEMORY PAGES (owner, 2026-10-02): the album's video memories go on
     // full-page photos, which take the photos that crop least. Only an album
     // SHORT of those has to crop others — and then it should crop the ones
@@ -1985,7 +2033,7 @@ export function useBuilderState(): BuilderActions {
         }
       } catch { /* no faces known → least-crop order */ }
     }
-    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     setGenerating('quotes');
@@ -2020,6 +2068,7 @@ export function useBuilderState(): BuilderActions {
     }
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
+    return { made: true, ...(memories ? { memories } : {}) };
     } finally {
       setGenerating(null);
     }
@@ -3692,6 +3741,8 @@ export function useBuilderState(): BuilderActions {
     applyPageLayout,
     layoutPickerOpen,
     setLayoutPickerOpen,
+    resizeAsk,
+    setResizeAsk,
     autoFillSlots,
     clearAllSlots,
     fillSlot,

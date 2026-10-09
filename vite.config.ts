@@ -17,7 +17,8 @@ export default defineConfig(({ command }) => ({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['megy-character.png', 'pwa-192.png', 'pwa-512.png', 'pwa-maskable-192.png', 'pwa-maskable-512.png'],
+      // The shrunk mascot copies (src/lib/megyMascot.ts), not the 1.5 MB master.
+      includeAssets: ['megy-character-*.png', 'pwa-192.png', 'pwa-512.png', 'pwa-maskable-192.png', 'pwa-maskable-512.png'],
       manifest: {
         id: '/',
         name: 'Megy Prints',

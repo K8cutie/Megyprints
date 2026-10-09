@@ -12,6 +12,7 @@
 import { X, BookOpen, Sparkles } from 'lucide-react';
 import type { LocalDraftSummary } from '../lib/localDraft';
 import { useModalDialog } from '../lib/useModalDialog';
+import MegyMascot from './MegyMascot';
 
 export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onStartNew, onClose }: {
   draft: LocalDraftSummary;
@@ -30,7 +31,7 @@ export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onSta
         <button onClick={onClose} aria-label="Close" className="absolute top-3 right-3 p-1.5 rounded-full text-light hover:text-medium hover:bg-line-soft transition-colors">
           <X size={16} />
         </button>
-        <img src="/megy-character.png" alt="" className="w-16 h-16 mx-auto object-contain mb-2" draggable={false} />
+        <MegyMascot size={64} alt="" className="mx-auto object-contain mb-2" />
         <h2 id="start-new-title" className="font-display text-xl font-semibold text-dark">You have an album in progress</h2>
         <div className="flex items-center gap-3 text-left rounded-xl border border-line bg-paper px-4 py-3 my-4">
           <div className="w-10 h-10 shrink-0 rounded-full bg-blush flex items-center justify-center">

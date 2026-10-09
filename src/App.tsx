@@ -24,6 +24,7 @@ const BuilderRoute = lazy(() => import('./pages/builder/BuilderRoute'));
 const Admin = lazy(() => import('./pages/Admin'));
 import InstallPrompt from './components/InstallPrompt';
 import ResumePrompt from './components/ResumePrompt';
+import PaidClipSweep from './components/PaidClipSweep';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
 
@@ -57,6 +58,8 @@ export default function App() {
       <InstallPrompt />
       {/* "Pick up where you left off?" — once per signed-in visit. */}
       <ResumePrompt />
+      {/* Paid orders free the phone's kept video copies (0042). */}
+      <PaidClipSweep />
       <Suspense fallback={<div className="min-h-screen bg-cream" aria-busy="true" />}>
       <Routes>
         <Route element={<Layout><Outlet /></Layout>}>
