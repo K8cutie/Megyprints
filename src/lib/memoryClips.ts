@@ -197,8 +197,10 @@ export interface StagedClip {
   quality?: ClipQuality;
   /** Set once compression has run (or been given up on) for this clip. */
   transcoded?: boolean;
-  /** Set once the clip is in the bucket (kept until the order completes so a
-   *  retry never re-uploads a finished clip). */
+  /** Set once the clip has been in the bucket. A hint only: an order that
+   *  expires unpaid has its cloud copy removed (0042), so checkout asks the
+   *  bucket again before trusting it. The phone keeps the clip until its
+   *  order is PAID (freePaidStagedClips), so a reorder can upload it again. */
   uploaded?: boolean;
   /** This clip REPLACES what the code pointed at before (a prior upload, or a
    *  legacy link): upload with upsert and re-point the memory row. */
@@ -387,10 +389,47 @@ export function uploadStagedClips(
 
 /** Fire-and-forget start of the uploads (Order page open). Errors are swallowed
  *  here on purpose: the Pay tap re-runs the same set and is where a failure is
- *  shown and retried. Resolves to whether the run finished clean. */
-export function prefetchStagedClipUploads(codes: string[], onProgress?: ClipUploadProgress): Promise<boolean> {
-  if (!codes.length) return Promise.resolve(true);
-  return uploadStagedClips(codes, onProgress).then(() => true, (e) => { console.warn('[memories] early clip upload failed; the Pay tap will retry:', e); return false; });
+ *  shown and retried. Resolves to whether the run finished clean, and which
+ *  videos are gone (neither on this phone nor in the cloud): those need the
+ *  customer, not a retry or Wi-Fi. */
+export function prefetchStagedClipUploads(codes: string[], onProgress?: ClipUploadProgress): Promise<{ ok: boolean; missing: string[] }> {
+  if (!codes.length) return Promise.resolve({ ok: true, missing: [] });
+  return uploadStagedClips(codes, onProgress).then(
+    () => ({ ok: true, missing: [] }),
+    (e) => {
+      console.warn('[memories] early clip upload failed; the Pay tap will retry:', e);
+      return { ok: false, missing: e instanceof MissingClipError ? e.codes : [] };
+    });
+}
+
+/** Memory videos the album points at that are neither on this phone nor in
+ *  the cloud (an expired order's video, after the phone copy was freed by the
+ *  old checkout). Printing would ship a QR that plays nothing, so checkout
+ *  stops and names the pages. */
+export class MissingClipError extends Error {
+  readonly codes: string[];
+  constructor(codes: string[]) {
+    super(codes.length === 1
+      ? 'One of your memory videos is no longer saved. Open your album and choose that video again.'
+      : `${codes.length} of your memory videos are no longer saved. Open your album and choose those videos again.`);
+    this.name = 'MissingClipError';
+    this.codes = codes;
+  }
+}
+
+/** Is this code's clip in the bucket right now? Asks with list(), a POST that
+ *  reads Storage's own table (0034 lets the uploader see their own clips), so
+ *  a removed file is gone the moment it's removed. Not exists() and not the
+ *  public URL: on a public bucket those are plain reads a CDN may answer from
+ *  cache after a delete (proved on a local stack: exists() even answers for
+ *  another account). Throws when Storage can't answer, so checkout stops and
+ *  retries rather than guessing. */
+export async function clipInBucket(code: string, ext?: ClipExt): Promise<boolean> {
+  if (!supabaseConfigured) throw new Error('Cloud storage is not configured.');
+  const { data, error } = await supabase.storage.from(CLIP_BUCKET).list('', { search: code, limit: 20 });
+  if (error) throw new Error(`Could not check your memory video (${error.message || 'storage error'}).`);
+  const names = (data ?? []).map((o) => o?.name).filter((n): n is string => typeof n === 'string');
+  return ext ? names.includes(clipObjectPath(code, ext)) : names.some((n) => n.startsWith(`${code}.`));
 }
 
 async function runUploadStagedClips(
@@ -400,18 +439,82 @@ async function runUploadStagedClips(
   const unique = [...new Set(codes)];
   await ensureClipsTranscoded(unique, (d, t) => onProgress?.(d, t, 'compress'));
 
-  const staged = (await Promise.all(unique.map((c) => getStagedClip(c)))).filter((c): c is StagedClip => !!c);
-  const total = staged.length;
+  const stagedByCode = new Map<string, StagedClip>();
+  for (const c of await Promise.all(unique.map((code) => getStagedClip(code)))) if (c) stagedByCode.set(c.code, c);
+  const total = stagedByCode.size;
   let done = 0;
   onProgress?.(0, total, 'upload');
   const uploaded: string[] = [];
   const replaced: string[] = [];
-  for (const clip of staged) {
-    if (!clip.uploaded) await uploadClip(clip.code, clip.ext, clip.blob, { replace: !!clip.replace });
+  const missing: string[] = [];
+  for (const code of unique) {
+    const clip = stagedByCode.get(code);
+    if (!clip) {
+      // Not on this phone: it has to be in the cloud already, or the printed
+      // QR would play nothing.
+      if (!(await clipInBucket(code))) missing.push(code);
+      continue;
+    }
+    // "Uploaded" is a hint. An expired order's video is removed from the
+    // cloud (0042), so check before skipping, and upload again from here.
+    const needsUpload = !clip.uploaded || !(await clipInBucket(code, clip.ext));
+    if (needsUpload) await uploadClip(clip.code, clip.ext, clip.blob, { replace: !!clip.replace });
     await markClipUploaded(clip.code);
     uploaded.push(clip.code);
     if (clip.replace) replaced.push(clip.code);
     onProgress?.(++done, total, 'upload');
   }
+  if (missing.length) throw new MissingClipError(missing);
   return { uploaded, replaced };
+}
+
+/** The tier these codes' kept clips were encoded for: 'hd' if any is HD,
+ *  'standard' if some are kept and none is, null when none is on this phone.
+ *  An album's own answer, unlike currentClipQuality(), which follows whichever
+ *  album was edited last (and kept clips now stay until paid, 0042). */
+export async function stagedClipQuality(codes: string[]): Promise<ClipQuality | null> {
+  const clips = (await Promise.all([...new Set(codes)].map((c) => getStagedClip(c)))).filter((c): c is StagedClip => !!c);
+  if (!clips.length) return null;
+  return clips.some((c) => c.quality === 'hd') ? 'hd' : 'standard';
+}
+
+/** The codes that are neither on this phone nor in the cloud. Checkout asks
+ *  BEFORE it creates the order, so a video that's gone never leaves an unpaid
+ *  order behind (each one counts toward the 3-order limit). */
+export async function findMissingClips(codes: string[]): Promise<string[]> {
+  const missing: string[] = [];
+  for (const code of [...new Set(codes)]) {
+    if (await getStagedClip(code)) continue;
+    if (!(await clipInBucket(code))) missing.push(code);
+  }
+  return missing;
+}
+
+/** Free this phone's copies of videos whose order is PAID. Until then the copy
+ *  stays, because an order that expires unpaid loses its cloud copy (0042) and
+ *  a reorder uploads it again from here. Only clips already uploaded AND seen
+ *  in the cloud right now, so the last copy of a video is never the one
+ *  dropped (a late payment on an order whose files were already removed).
+ *  Quiet on any failure (offline, 0042 not applied yet): keeping a copy is
+ *  always the safe side. */
+export async function freePaidStagedClips(): Promise<number> {
+  if (!supabaseConfigured) return 0;
+  const staged = (await Promise.all((await listStagedCodes()).map((c) => getStagedClip(c))))
+    .filter((c): c is StagedClip => !!c && c.uploaded === true);
+  if (!staged.length) return 0;
+  try {
+    const { data, error } = await supabase.rpc('my_paid_memory_codes', { p_codes: staged.slice(0, 500).map((c) => c.code) });
+    if (error || !Array.isArray(data)) return 0;
+    const paid = new Set(data.filter((c): c is string => typeof c === 'string'));
+    let freed = 0;
+    for (const clip of staged) {
+      if (!paid.has(clip.code)) continue;
+      if (!(await clipInBucket(clip.code, clip.ext))) continue;
+      await removeStagedClip(clip.code);
+      freed += 1;
+    }
+    return freed;
+  } catch {
+    return 0;
+  }
 }
