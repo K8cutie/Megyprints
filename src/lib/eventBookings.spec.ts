@@ -31,7 +31,7 @@ vi.mock('./supabase', () => {
 import {
   EVENT_MIN_GUESTS, EVENT_MAX_GUESTS, OPEN_BOOKING_LIMIT, EVENT_TYPES, HOST_COLUMNS, BOOKING_STEPS, GUEST_STORAGE_COST,
   requestProblems, manilaToday, normalizeMobile, bookingView, balanceOf, costToMake, dealProblem, bookingProofPath,
-  bookingErrorMessage, requestBooking, listMyBookings, submitBookingPayment, type EventBooking, type BookingRequest, type DealDraft,
+  bookingErrorMessage, requestBooking, listMyBookings, submitBookingPayment, needsOwner, type EventBooking, type BookingRequest, type DealDraft,
 } from './eventBookings';
 import { costOf, type PricingModel } from './pricing';
 import { ALBUM_SIZES } from '../pages/builder/types';
@@ -212,5 +212,20 @@ describe('the owner\'s deal: the deposit covers the cost to make and some extra'
     const c = costToMake(model, 150, draft());
     expect(dealProblem(draft({ deposit: 5000, total: 4000 }), c, 40)).toMatch(/total can’t be less/);
     expect(dealProblem(draft({ pages: 30 }), c, 40)).toMatch(/at least 40 pages/);
+  });
+});
+
+describe('what waits on the owner (the Bookings tab count)', () => {
+  it.each([
+    ['requested', {}, true],
+    ['quoted', {}, false],
+    ['quoted', { deposit_submitted_at: 'x' }, true],
+    ['booked', {}, false],
+    ['booked', { balance_submitted_at: 'x' }, true],
+    ['paid', {}, false],
+    ['declined', {}, false],
+    ['cancelled', {}, false],
+  ] as const)('%s %o → %s', (status, over, waits) => {
+    expect(needsOwner(booking({ status, ...over }))).toBe(waits);
   });
 });

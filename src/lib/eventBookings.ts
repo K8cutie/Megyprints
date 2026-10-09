@@ -255,6 +255,13 @@ export function bookingView(b: EventBooking): BookingView {
   }
 }
 
+/** Waiting on the owner: a new request to price, or a payment the host says
+ *  is sent. The Bookings tab counts these (no email or SMS: they cost money). */
+export const needsOwner = (b: Pick<EventBooking, 'status' | 'deposit_submitted_at' | 'balance_submitted_at'>) =>
+  b.status === 'requested'
+  || (b.status === 'quoted' && !!b.deposit_submitted_at)
+  || (b.status === 'booked' && !!b.balance_submitted_at);
+
 // ── The owner's deal ──────────────────────────────────────────────────────
 
 /** Photo storage for one guest's share (20 photos as print + view copies,
