@@ -8,6 +8,7 @@ import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
 import { fetchThemeQuotes } from '../../lib/quotes';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT } from '../../lib/albumTheme';
 import AlbumThemeStep from '../../assistant/AlbumThemeStep';
+import MegyMascot from '../../components/MegyMascot';
 import { isStepOneReady } from '../../assistant/wizard';
 import { noteScreenTap, tooSoonAfterScreenTap } from '../../lib/settleGuard';
 
@@ -15,11 +16,6 @@ import { noteScreenTap, tooSoonAfterScreenTap } from '../../lib/settleGuard';
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
    ═══════════════════════════════════════════════════════════ */
 
-
-function MegyFace({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' | 'xl' }) {
-  const sz = { sm: 'w-10 h-10', md: 'w-16 h-16', lg: 'w-24 h-24', xl: 'w-32 h-32' };
-  return <img src="/megy-character.png" alt="Megy" className={`${sz[size]} object-contain drop-shadow-lg`} draggable={false} />;
-}
 
 function TypeText({ text, speed = 28 }: { text: string; speed?: number }) {
   const [d, setD] = useState('');
@@ -150,7 +146,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext, album
           animate={{ y: [0, -6, 0] }}
           transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
         >
-          <MegyFace size="xl" />
+          <MegyMascot size={128} className="object-contain drop-shadow-lg" />
         </motion.div>
         <h1 className="font-display text-2xl md:text-3xl text-dark mt-4 mb-2">
           <TypeText text="Let's pick the perfect size for your album!" speed={30} />
