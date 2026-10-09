@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { Download, X } from 'lucide-react';
+import MegyMascot from './MegyMascot';
 
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState<Event | null>(null);
@@ -45,7 +46,7 @@ export default function InstallPrompt() {
 
   return (
     <div className="fixed bottom-3 left-3 right-3 z-[200] lg:hidden bg-white rounded-2xl shadow-xl border border-peach/30 p-3 flex items-center gap-3">
-      <img src="/megy-character.png" alt="Megy" className="w-10 h-10 rounded-xl shrink-0" draggable={false} />
+      <MegyMascot size={40} className="rounded-xl shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-dark">Install Megy Prints</p>
         <p className="text-[11px] text-medium leading-snug">

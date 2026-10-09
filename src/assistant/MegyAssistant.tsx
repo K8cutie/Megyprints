@@ -24,6 +24,7 @@ import type { TemplateType, TextElement, CanvasPhoto, PhotoFilters, AlbumBackgro
 import { getThemeBackgroundVariants } from '../pages/builder/types';
 import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
+import MegyMascot from '../components/MegyMascot';
 import PhotoCheckCard from './PhotoCheckCard';
 import { useSettleGuard, noteScreenTap, tooSoonAfterScreenTap } from '../lib/settleGuard';
 import { useModalDialog } from '../lib/useModalDialog';
@@ -635,7 +636,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <Home size={14} /> Home
         </Link>
 
-        <img src="/megy-character.png" alt="Megy" className="w-20 h-20 object-contain mb-4 drop-shadow-lg" draggable={false} />
+        <MegyMascot size={80} className="object-contain mb-4 drop-shadow-lg" />
 
         <div className="w-full max-w-lg">
           <div className="flex items-center mb-1">
@@ -831,7 +832,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           className="lg:hidden fixed top-1.5 right-3 z-[95] w-10 h-10 rounded-full bg-peach shadow-lg flex items-center justify-center overflow-hidden active:scale-95 transition-transform"
           aria-label="Open Megy"
         >
-          <img src="/megy-character.png" alt="Megy" className="w-7 h-7 object-contain" draggable={false} />
+          <MegyMascot size={28} className="object-contain" />
         </button>
       )}
 
@@ -843,7 +844,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
 
       {/* Collapsed rail — desktop only, when minimized: Megy icon + expand */}
       <div className={`hidden ${collapsed ? 'lg:flex' : ''} lg:flex-col lg:items-center lg:gap-3 lg:pt-4`}>
-        <img src="/megy-character.png" alt="Megy" className="w-8 h-8 object-contain" draggable={false} />
+        <MegyMascot size={32} className="object-contain" />
         <button onClick={() => setCollapsed(false)} title="Expand Megy" aria-label="Expand Megy"
           className="p-1.5 text-light hover:text-blush-pink hover:bg-blush rounded-lg transition-colors">
           <ChevronRight className="w-5 h-5" />
@@ -867,7 +868,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       <div className="bg-peach px-4 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
-            <img src="/megy-character.png" alt="Megy" className="w-7 h-7 object-contain" draggable={false} />
+            <MegyMascot size={28} className="object-contain" />
           </div>
           <div>
             <span className="font-semibold text-white text-sm">Megy Assistant</span>
