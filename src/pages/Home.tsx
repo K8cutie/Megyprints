@@ -574,15 +574,6 @@ function CTASection() {
             Get Started &mdash; It&apos;s Free!
           </Link>
         </div>
-
-        <div className="mt-4">
-          <Link
-            to="/templates"
-            className="inline-flex items-center font-body text-[0.875rem] font-medium text-white/80 hover:text-white hover:underline transition-all duration-200"
-          >
-            Or browse templates first &rarr;
-          </Link>
-        </div>
       </div>
     </section>
   );
@@ -651,12 +642,6 @@ export default function Home() {
       >
         <Sparkles size={18} /> Start Creating
       </button>
-      <Link
-        to="/templates"
-        className="inline-block mt-3 text-sm font-medium text-taupe hover:text-peach transition-colors"
-      >
-        Or browse templates first →
-      </Link>
     </div>
   );
 
