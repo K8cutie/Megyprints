@@ -18,6 +18,7 @@ import { useAuth } from '../lib/authContext';
 import { startFreshAlbum } from '../lib/albumSession';
 import { readLocalDraftSummary, albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
 import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
+import MegyMascot from '../components/MegyMascot';
 import { MIN_ALBUM_PHOTOS } from './builder/albumMinimum';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -574,15 +575,6 @@ function CTASection() {
             Get Started &mdash; It&apos;s Free!
           </Link>
         </div>
-
-        <div className="mt-4">
-          <Link
-            to="/templates"
-            className="inline-flex items-center font-body text-[0.875rem] font-medium text-white/80 hover:text-white hover:underline transition-all duration-200"
-          >
-            Or browse templates first &rarr;
-          </Link>
-        </div>
       </div>
     </section>
   );
@@ -627,18 +619,18 @@ export default function Home() {
   // Megy (assistant/MegyAssistant) guides them. No separate home wizard.
   const megyComponent = (
     <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 text-center">
-      <img
-        src="/megy-character.png"
-        alt="Megy"
-        className="w-24 h-24 mx-auto object-contain drop-shadow-lg mb-4"
-        draggable={false}
-      />
+      <MegyMascot size={96} className="mx-auto object-contain drop-shadow-lg mb-4" />
       <h1 className="font-display text-2xl sm:text-3xl font-bold text-dark mb-2">
         Hi, I&apos;m Megy 👋
       </h1>
       <p className="font-body text-medium leading-relaxed mb-6">
-        Your personal album designer. Upload your photos and I&apos;ll build a
-        beautiful, print-ready album for you — no design skills needed.
+        {/* Says PRINTED and SHIPPED up front: "build a print-ready album" read
+            as an online album to a real visitor. Megy Prints is a physical
+            album creator — digital printing on premium paper (owner,
+            2026-10-08). */}
+        Your personal album designer. Upload your photos and I&apos;ll design
+        the pages. Then we print your physical album with digital printing on
+        premium paper and ship it to your door. No design skills needed.
       </p>
       <button
         onClick={() => handleMegyAction('go-builder')}
@@ -646,12 +638,6 @@ export default function Home() {
       >
         <Sparkles size={18} /> Start Creating
       </button>
-      <Link
-        to="/templates"
-        className="inline-block mt-3 text-sm font-medium text-taupe hover:text-peach transition-colors"
-      >
-        Or browse templates first →
-      </Link>
     </div>
   );
 
