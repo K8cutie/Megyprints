@@ -628,8 +628,13 @@ export default function Home() {
         Hi, I&apos;m Megy 👋
       </h1>
       <p className="font-body text-medium leading-relaxed mb-6">
-        Your personal album designer. Upload your photos and I&apos;ll build a
-        beautiful, print-ready album for you — no design skills needed.
+        {/* Says PRINTED and SHIPPED up front: "build a print-ready album" read
+            as an online album to a real visitor. Megy Prints is a physical
+            album creator — digital printing on premium paper (owner,
+            2026-10-08). */}
+        Your personal album designer. Upload your photos and I&apos;ll design
+        the pages. Then we print your physical album with digital printing on
+        premium paper and ship it to your door. No design skills needed.
       </p>
       <button
         onClick={() => handleMegyAction('go-builder')}
