@@ -20,6 +20,8 @@ import type { AlbumPage, PageTemplate } from './types';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
 import { useModalDialog } from '../../lib/useModalDialog';
+import { relayPageOnTemplate } from './useBuilderState';
+import { memoriesOn } from './generateAlbum';
 
 export default function LayoutPicker({ actions }: { actions: BuilderContextValue }) {
   const open = actions.layoutPickerOpen;
@@ -48,9 +50,9 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
   const H = Math.round(W / aspect);
 
   const layouts = open && page ? actions.availableTemplatesForCurrentPage() : [];
-  const existingFills = page
-    ? [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))]
-    : [];
+  // A video memory only ever sits on a full-page photo, so its page offers
+  // only that (relayPageOnTemplate). Say why, and how to get more layouts.
+  const hasMemory = !!page && memoriesOn(page).length > 0;
 
   return (
     <AnimatePresence>
@@ -71,6 +73,11 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
               <span id="layout-picker-title" className="text-sm font-semibold text-dark">Choose a layout</span>
               <button onClick={close} className="text-light p-1" aria-label="Close"><X size={18} /></button>
             </div>
+            {hasMemory && !asking && (
+              <p className="px-4 pt-3 text-sm text-medium" data-testid="layout-memory-note">
+                This page has a video memory, so it stays one full photo with the QR in the corner. To use a layout with more photos, tap the QR and remove the video first.
+              </p>
+            )}
             {asking ? (
               <LeftoverQuestion asking={asking} onNewPage={() => apply('new-page')} onLeaveOut={() => apply('leave-out')} onBack={() => setAsking(null)} />
             ) : layouts.length === 0 ? (
@@ -79,15 +86,11 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
               <div className="overflow-y-auto p-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {layouts.map((t) => {
                   const current = t.id === page.templateId;
-                  const slotCount = t.slots.length;
-                  const previewPage: AlbumPage = {
-                    ...page,
-                    templateId: t.id,
-                    slotFills: new Array(slotCount).fill(null).map((_, i) => existingFills[i] ?? null),
-                    slotScales: new Array(slotCount).fill(1),
-                    slotOffsetsX: new Array(slotCount).fill(0),
-                    slotOffsetsY: new Array(slotCount).fill(0),
-                  };
+                  // The page as this layout would make it — the same re-lay the
+                  // tap applies. The preview used to build its own copy and kept
+                  // the page's QR by slot number, drawing a memory's QR as a
+                  // whole photo square in layouts it could never go on.
+                  const previewPage: AlbumPage = relayPageOnTemplate(page, t);
                   return (
                     <button key={t.id} data-autofocus={current ? true : undefined} aria-pressed={current}
                       onClick={() => choose(t)}
