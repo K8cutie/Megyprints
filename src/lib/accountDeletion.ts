@@ -33,7 +33,9 @@
 import { supabase, supabaseConfigured } from './supabase';
 
 /** What a deletion would touch. `blocking` is non-empty when the account has an
- *  order that is paid but not yet delivered — the one case we refuse. */
+ *  order that is paid but not yet delivered, or an event booking whose deposit
+ *  or balance is confirmed and not finished (0043, kind 'booking'): the cases
+ *  we refuse. A booking's number rides in `order_number`. */
 export interface DeletionPreflight {
   albums: number;
   memories: number;
@@ -42,7 +44,20 @@ export interface DeletionPreflight {
   videos: number;
   /** Latest hosting end date still ahead among those videos, ISO; null if none. */
   videos_hosted_until: string | null;
-  blocking: { order_number: string; status: string }[];
+  blocking: { order_number: string; status: string; kind?: 'order' | 'booking' }[];
+}
+
+/** The dialog's sentence for what blocks deletion, naming orders and event
+ *  bookings for what they are. */
+export function blockingSentence(blocking: DeletionPreflight['blocking']): { lead: string; numbers: string } {
+  const orders = blocking.filter((b) => b.kind !== 'booking');
+  const bookings = blocking.filter((b) => b.kind === 'booking');
+  const lead = orders.length && bookings.length
+    ? 'You have an order and an event booking that are paid and not finished yet'
+    : bookings.length
+      ? 'You have an event booking that’s paid and not finished yet'
+      : 'You have an order that’s paid and not delivered yet';
+  return { lead, numbers: blocking.map((b) => b.order_number).join(', ') };
 }
 
 export interface DeletionResult {

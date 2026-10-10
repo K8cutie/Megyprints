@@ -8,6 +8,7 @@ import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
 import { fetchThemeQuotes } from '../../lib/quotes';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT } from '../../lib/albumTheme';
 import AlbumThemeStep from '../../assistant/AlbumThemeStep';
+import MegyMascot from '../../components/MegyMascot';
 import { isStepOneReady } from '../../assistant/wizard';
 import { noteScreenTap, tooSoonAfterScreenTap } from '../../lib/settleGuard';
 
@@ -15,11 +16,6 @@ import { noteScreenTap, tooSoonAfterScreenTap } from '../../lib/settleGuard';
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
    ═══════════════════════════════════════════════════════════ */
 
-
-function MegyFace({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' | 'xl' }) {
-  const sz = { sm: 'w-10 h-10', md: 'w-16 h-16', lg: 'w-24 h-24', xl: 'w-32 h-32' };
-  return <img src="/megy-character.png" alt="Megy" className={`${sz[size]} object-contain drop-shadow-lg`} draggable={false} />;
-}
 
 function TypeText({ text, speed = 28 }: { text: string; speed?: number }) {
   const [d, setD] = useState('');
@@ -100,14 +96,18 @@ function SizeCard({ size, selected, onSelect }: {
 
 interface BuilderSetupProps {
   selectedSize: AlbumSizePreset;
-  onSizeChange: (size: AlbumSizePreset) => void;
+  /** `reason` 'size_hidden': Setup moved off a size the shop no longer
+   *  offers, with no tap (a made album asks before memories come off). */
+  onSizeChange: (size: AlbumSizePreset, reason?: 'size_hidden') => void;
   onNext: () => void;
   /** The album's name (wizard step 1, asked with the occasion). */
   albumTitle: string;
   onAlbumTitleChange: (title: string) => void;
+  /** An event album (0045): only its deal's size is offered. */
+  onlySize?: AlbumSizePreset | null;
 }
 
-export default function BuilderSetup({ selectedSize, onSizeChange, onNext, albumTitle, onAlbumTitleChange }: BuilderSetupProps) {
+export default function BuilderSetup({ selectedSize, onSizeChange, onNext, albumTitle, onAlbumTitleChange, onlySize }: BuilderSetupProps) {
   // The name + occasion are asked by the wizard's Step 1; this is the backstop
   // for every path that reaches the size page without them (wizard dismissed,
   // deep link, old draft). Same component, same gate.
@@ -131,12 +131,12 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext, album
       // If the current selection is no longer offered, move to the first that is.
       if (!isSizeOfferable(selectedSize)) {
         const first = offerableAlbumSizes()[0];
-        if (first) onSizeChange(first.preset);
+        if (first) onSizeChange(first.preset, 'size_hidden');
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const sizes = offerableAlbumSizes();
+  const sizes = offerableAlbumSizes().filter((s) => !onlySize || s.preset === onlySize);
   return (
     <div className="h-full flex flex-col items-center justify-center bg-warm-white overflow-y-auto px-4 py-8">
       {/* Megy — center attraction */}
@@ -150,7 +150,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext, album
           animate={{ y: [0, -6, 0] }}
           transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
         >
-          <MegyFace size="xl" />
+          <MegyMascot size={128} className="object-contain drop-shadow-lg" />
         </motion.div>
         <h1 className="font-display text-2xl md:text-3xl text-dark mt-4 mb-2">
           <TypeText text="Let's pick the perfect size for your album!" speed={30} />

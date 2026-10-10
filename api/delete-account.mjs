@@ -12,8 +12,9 @@
 //     behind would make "we deleted your account" untrue for exactly the data
 //     that is most exposed.
 //   • `payment-proofs` (private, 0033) — the receipt screenshot they attached
-//     at `<order id>.<jpg|png|webp|pdf>`. A bank receipt shows their name, and
-//     the record we keep is meant to have none.
+//     at `<order id>.<jpg|png|webp|pdf>`, and for an event booking (0043) at
+//     `booking-<id>-<deposit|balance>.<ext>`. A bank receipt shows their name,
+//     and the record we keep is meant to have none.
 //
 // Two doors are shut on removing those files from SQL or from the customer's
 // own session, and both are shut on purpose:
@@ -73,6 +74,19 @@ const PROOF_BUCKET = 'payment-proofs';
 /** Every name an order's files can have, exactly as 0017 and 0033 allow them. */
 export const pdfNames = (orderId) => [`${orderId}.pdf`, `${orderId}-cover.pdf`];
 export const proofNames = (orderId) => ['jpg', 'png', 'webp', 'pdf'].map((ext) => `${orderId}.${ext}`);
+/** Every receipt name an event booking can have: 0043's booking_proof_names(). */
+export const bookingProofNames = (bookingId) =>
+  ['balance', 'deposit'].flatMap((kind) => ['jpg', 'pdf', 'png', 'webp'].map((ext) => `booking-${bookingId}-${kind}.${ext}`));
+
+/** Bookings whose receipts may go. A booking with a confirmed deposit or
+ *  balance that isn't finished (booked, paid) blocks the whole deletion in the
+ *  database, the same rule as a paid order on the press. */
+const BOOKING_REMOVABLE = ['requested', 'quoted', 'completed', 'declined', 'cancelled'];
+
+/** PostgREST's "no such table" (event_bookings before 0043 is applied: the
+ *  endpoint deploys before the migration, and deleting an account must keep
+ *  working in between). */
+const isMissingTable = (error) => error?.code === 'PGRST205' || error?.code === '42P01';
 
 /** Storage's remove() takes a list of names per request (up to 1000). Batches
  *  stay well under that; 0030 caps an account at 200 clips. */
@@ -90,10 +104,24 @@ function bearer(req) {
 }
 
 /** The refusal delete_own_account() gives, word for word, so the customer reads
- *  the same sentence whichever check stops them. */
+ *  the same sentence whichever check stops them. Orders are checked first
+ *  there, so they're named first here; a booking (0043) has its own sentence. */
 export function blockedMessage(blocking) {
-  const numbers = blocking.map((o) => o.order_number).join(', ');
-  return `Order ${numbers} is paid and not yet delivered, so the account cannot be deleted yet. Contact the shop to cancel or complete it first.`;
+  const orders = blocking.filter((o) => o.kind !== 'booking');
+  if (orders.length) {
+    const numbers = orders.map((o) => o.order_number).join(', ');
+    return `Order ${numbers} is paid and not yet delivered, so the account cannot be deleted yet. Contact the shop to cancel or complete it first.`;
+  }
+  const list = (status) => blocking.filter((o) => status.includes(o.status ?? 'booked')).map((o) => o.order_number).join(', ');
+  if (list(['booked', 'paid'])) {
+    return `Event booking ${list(['booked', 'paid'])} is paid and not finished yet, so the account cannot be deleted yet. Contact the shop to cancel or complete it first.`;
+  }
+  // A deposit sent, not confirmed yet (0043 a3).
+  if (list(['quoted'])) {
+    return `The deposit you sent for booking ${list(['quoted'])} is waiting for us to confirm it, so the account cannot be deleted yet. Message us and we'll confirm it or send it back first.`;
+  }
+  // A closed booking whose money isn't settled yet (0043 a4).
+  return `We still have to settle the money for booking ${list(['cancelled', 'declined'])} with you, so the account cannot be deleted yet. Message us and we'll settle it first.`;
 }
 
 async function removeAll(admin, bucket, names) {
@@ -159,6 +187,16 @@ export default async function handler(req, res) {
     const pdfPaths = orderIds.flatMap(pdfNames);
     const proofPaths = orderIds.flatMap(proofNames);
 
+    // The caller's event bookings (0043), same rule: their own user_id, not RLS
+    // (the owner's account can read every booking).
+    const { data: bookings, error: bookingsErr } = await asUser
+      .from('event_bookings')
+      .select('id, status')
+      .eq('user_id', uid)
+      .in('status', BOOKING_REMOVABLE);
+    if (bookingsErr && !isMissingTable(bookingsErr)) throw new Error(bookingsErr.message);
+    const bookingProofPaths = (bookingsErr ? [] : bookings ?? []).flatMap((b) => bookingProofNames(b.id));
+
     const { data: clipList, error: clipsErr } = await asUser.rpc('my_memory_clip_names');
     if (clipsErr || !Array.isArray(clipList)) {
       throw new Error('Could not look up your memory videos, so nothing was deleted. Please try again.');
@@ -168,12 +206,13 @@ export default async function handler(req, res) {
     // ── 3. Remove the PDFs (their photos), the clips (their videos) and the
     //       receipts (their name). A name with no file behind it is skipped
     //       by Storage, so trying all four receipt types costs nothing. ──
-    if (pdfPaths.length || clipNames.length) {
+    if (pdfPaths.length || clipNames.length || bookingProofPaths.length) {
       const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
       await removeAll(admin, PDF_BUCKET, pdfPaths);
       await removeAll(admin, PROOF_BUCKET, proofPaths);
+      await removeAll(admin, PROOF_BUCKET, bookingProofPaths);
       await removeAll(admin, CLIP_BUCKET, clipNames);
     }
 

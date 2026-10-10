@@ -170,7 +170,7 @@ describe('serializeUploads — the Order-page prefetch and the Pay tap never rac
   });
   it('prefetch with nothing staged is a clean no-op', async () => {
     const { prefetchStagedClipUploads } = await import('./memoryClips');
-    expect(await prefetchStagedClipUploads([])).toBe(true);
+    expect(await prefetchStagedClipUploads([])).toEqual({ ok: true, missing: [] });
   });
 });
 

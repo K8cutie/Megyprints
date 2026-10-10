@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Youtube, Trash2, Loader2, LogIn, Play, Video, Upload, Clock } from 'lucide-react';
-import type { QrFill } from './types';
+import type { QrFill, AlbumPage } from './types';
 import { QR_CORNERS, type QrCorner } from './pageTemplates';
 import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination, videoEmbedInfo } from '../../lib/qrMemory';
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
 import {
   hostedMemoriesEnabled, validateClipFile, stageClip, getStagedClip, removeStagedClip, publicClipUrl,
-  listStagedCodes, currentClipQuality, setClipQuality, QUALITY_TARGETS,
+  listStagedCodes, currentClipQuality, setClipQuality, stagedClipQuality, QUALITY_TARGETS,
   MAX_CLIP_SECONDS, type ClipExt, type ClipQuality,
 } from '../../lib/memoryClips';
 import { useAuth } from '../../lib/authContext';
@@ -14,6 +14,8 @@ import { useAuthModal } from '../../components/AuthModalProvider';
 import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
 import { getPriceSchedule } from '../../lib/storeSettings';
 import { useModalDialog } from '../../lib/useModalDialog';
+import { useBuilderContext } from './BuilderContext';
+import { eventVideosForAlbum, eventLinkForAlbum, type EventVideoChoice } from '../../lib/eventAlbum';
 
 const CORNER_LABELS: Record<QrCorner, string> = {
   tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right',
@@ -69,12 +71,40 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   // re-encode from once one is staged. null = still counting.
   const [quality, setQuality] = useState<ClipQuality>(() => currentClipQuality());
   const [tierLocked, setTierLocked] = useState<boolean | null>(null);
+  // The tier THIS album's kept clips were encoded for, once read (null: none
+  // kept on this phone). New clips for the album follow it, not the
+  // phone-wide setting, which follows whichever album was edited last.
+  const [albumTier, setAlbumTier] = useState<ClipQuality | null>(null);
+  // Locked by THIS album's videos only. The phone now keeps video copies until
+  // their order is paid (0042), so another album's kept copies must not lock
+  // the choice for a new one.
+  // Every host of this dialog is inside the builder (Edit, Preview, Review).
+  const builderCtx = useBuilderContext();
+  const albumPages: AlbumPage[] = builderCtx.albumPages;
+  // An album made from an event (0045): the videos the host picked from what
+  // guests shared, offered next to "Choose a video".
+  const eventVideos = initial ? [] : eventVideosForAlbum(builderCtx.getAlbumId());
+  // Its booking pays for the whole album (₱0 at checkout), so no memory prices
+  // here, and standard quality: the deal's cost to make doesn't count HD.
+  const fromEvent = !!eventLinkForAlbum(builderCtx.getAlbumId());
+  useEffect(() => { if (fromEvent) setQuality('standard'); }, [fromEvent]);
+  const [fetchingEvent, setFetchingEvent] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    void listStagedCodes().then((codes) => { if (alive) setTierLocked(codes.length > 0); });
+    const fills = albumPages.flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
+    const albumHasClip = fills.some((f) => f?.kind === 'clip');
+    const albumCodes = new Set(fills.filter((f) => !!f).map((f) => f!.code));
+    void listStagedCodes().then(async (codes) => {
+      const mine = codes.filter((c) => albumCodes.has(c));
+      const tier = mine.length ? await stagedClipQuality(mine) : null;
+      if (!alive) return;
+      setTierLocked(albumHasClip || mine.length > 0);
+      setAlbumTier(tier);
+      if (tier) setQuality(tier);
+    });
     return () => { alive = false; };
-  }, []);
-  const offerTier = !initial && tierLocked === false && hdPrice > 0;
+  }, [albumPages]);
+  const offerTier = !initial && tierLocked === false && hdPrice > 0 && !fromEvent;
 
   // Preview the PICKED file (object URL), revoked on change/unmount.
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
@@ -111,6 +141,24 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
     }
   };
 
+  // A guest's video: downloaded from the event, then the same checks as a
+  // video picked from the phone.
+  const pickEventVideo = async (v: EventVideoChoice) => {
+    setError('');
+    setFetchingEvent(v.id);
+    try {
+      const res = await fetch(v.url);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const type = blob.type || (v.ext === 'mov' ? 'video/quicktime' : v.ext === 'webm' ? 'video/webm' : 'video/mp4');
+      await pick(new File([blob], `event-${v.id}.${v.ext}`, { type }));
+    } catch {
+      setError('That video couldn’t be downloaded. Check your connection and try again.');
+    } finally {
+      setFetchingEvent(null);
+    }
+  };
+
   const confirm = async () => {
     if (!file || !meta) { setError('Choose a video first.'); return; }
     setError('');
@@ -139,7 +187,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
       if (offerTier) setClipQuality(quality);
       await stageClip({
         code, ext: meta.ext, blob: file, size: file.size, durationSec: meta.durationSec, name: file.name,
-        quality: offerTier ? quality : currentClipQuality(),
+        quality: offerTier ? quality : (albumTier ?? currentClipQuality()),
       });
       onSave({
         code, destination: publicClipUrl(code, meta.ext), qrPngDataUrl, memoryUrl: memUrl,
@@ -181,8 +229,9 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
               </p>
               <p className="text-[11px] text-stone mt-1.5 flex items-center gap-1">
                 <Clock size={11} className="shrink-0" />
-                {FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after
-                {includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}
+                {fromEvent
+                  ? <span data-testid="qr-event-included">Part of your event deal{includedYears ? ` · live for ${includedYears} years` : ''}</span>
+                  : <>{FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>}
               </p>
             </div>
           )}
@@ -239,6 +288,20 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
             {checking ? <><Loader2 size={16} className="animate-spin" /> Checking your video…</>
               : <><Upload size={16} /> {file ? 'Choose a different video' : initial ? 'Replace with a new video' : 'Choose a video'}</>}
           </button>
+          {eventVideos.length > 0 && (
+            <div data-testid="qr-event-videos">
+              <p className="text-xs text-medium mb-1.5">Or one your guests shared:</p>
+              <div className="space-y-1.5">
+                {eventVideos.map((v) => (
+                  <button key={v.id} type="button" onClick={() => void pickEventVideo(v)} disabled={!!fetchingEvent || checking || busy}
+                    className="w-full rounded-lg border border-line px-3 py-2 text-left text-sm text-dark flex items-center gap-2 hover:bg-paper disabled:opacity-60">
+                    {fetchingEvent === v.id ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} className="text-blush-pink" />}
+                    {v.by ? `${v.by}’s video` : 'A guest’s video'}{v.durationS ? ` · ${Math.round(v.durationS)} s` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {error && <p className="text-xs text-red-500" role="alert">{error}</p>}
 
           {/* Preview of the picked file — the live proof, before anything is saved */}
