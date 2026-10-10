@@ -71,7 +71,11 @@ export default function App() {
       <PaidClipSweep />
       <Suspense fallback={<div className="min-h-screen bg-cream" aria-busy="true" />}>
       <Routes>
-        <Route element={<Layout><Outlet /></Layout>}>
+        {/* A lazy page inside Layout waits HERE, under the page's fade-in. With
+            only the outer boundary, opening /events/:id fresh (a reload, a
+            bookmark) hid the whole Layout while the page loaded, and the fade-in
+            never came back: a blank page under the menu. */}
+        <Route element={<Layout><Suspense fallback={<div className="min-h-[60vh]" aria-busy="true" />}><Outlet /></Suspense></Layout>}>
           <Route path="/" element={<Home />} />
           <Route path="/templates" element={<Templates />} />
           {/* About page + Navbar/Footer both linked to /about, but the route was

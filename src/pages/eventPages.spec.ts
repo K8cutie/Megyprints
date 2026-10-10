@@ -184,6 +184,19 @@ describe('the guest page (/e/:code)', () => {
   });
 });
 
+describe('the event pages load lazily without blanking the page (source guard)', () => {
+  // Opening /events/:id fresh (a reload, a bookmark) suspended on the page's
+  // chunk with only App's outer Suspense above Layout: React hid the whole
+  // Layout, and its fade-in stayed at opacity 0 — a blank page under the menu.
+  it('the Layout route waits for a lazy page inside Layout, under the fade-in', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const app = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
+    expect(app).toMatch(/<Route element=\{<Layout><Suspense fallback=\{[^}]*\}><Outlet \/><\/Suspense><\/Layout>\}>/);
+    expect(app).toMatch(/const EventManage = lazy\(/);
+  });
+});
+
 describe('the host’s event page (/events/:id)', () => {
   const BOOKING = {
     id: 'b1', booking_number: 'EV-2026-A2474MV', user_id: 'host-1', status: 'paid', event_type: 'wedding', event_date: '2026-10-10',
@@ -217,7 +230,7 @@ describe('the host’s event page (/events/:id)', () => {
     await render('/events/b1');
     expect($('manage-make-album')?.textContent).toBe('Make my album with 38 photos');
     await click($('manage-make-album'));
-    expect($('manage-album-short')?.textContent).toBe('An album needs at least 40 photos. Pick 2 more below (tap ★ on a photo).');
+    expect($('manage-album-short')?.textContent).toBe('An album needs at least 40 photos. Pick 2 more below (tap “Pick” on a photo).');
     expect(h.downloads).toEqual([]);
   });
 

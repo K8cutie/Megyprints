@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Loader2, Copy, Check, Printer, Monitor, Star, EyeOff, Eye, Play, BookOpen, Users, ExternalLink, Pause } from 'lucide-react';
+import { Loader2, Copy, Check, Printer, Monitor, Star, Play, BookOpen, Users, ExternalLink, Pause } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { eventTypeLabel, getMyBooking, peso, type EventBooking } from '../lib/eventBookings';
 import { eventMediaUrl, guestLink, screenLink, shortDate } from '../lib/eventCamera';
@@ -221,7 +221,7 @@ function AlbumCard({ booking, ev, pool, navigate, userId }: { booking: EventBook
           </button>
           {tried && short > 0 && (
             <p className="mt-2 text-xs text-[#8A5A12]" role="alert" data-testid="manage-album-short">
-              An album needs at least {MIN_ALBUM_PHOTOS} photos. Pick {short} more below (tap ★ on a photo).
+              An album needs at least {MIN_ALBUM_PHOTOS} photos. Pick {short} more below (tap “Pick” on a photo).
             </p>
           )}
           {err && <p className="mt-2 text-xs text-red-600" role="alert">{err}</p>}
@@ -331,17 +331,19 @@ function PoolCard({ pool, onChanged }: { pool: PoolItem[]; onChanged: () => Prom
                   className={`w-full h-full object-cover ${p.hidden ? 'opacity-40' : ''}`} />
               </button>
               {p.kind === 'video' && <span className="absolute left-1 top-1 rounded-full bg-black/60 p-1"><Play size={11} className="text-white" fill="white" /></span>}
-              <div className="absolute right-1 top-1 flex flex-col gap-1">
-                <button type="button" onClick={() => void change(p, { picked: !p.picked })} aria-label={p.picked ? 'Unpick' : 'Pick for the album'} data-testid="manage-pick"
-                  className={`rounded-full p-1.5 ${p.picked ? 'bg-[#D4A017] text-white' : 'bg-white/90 text-dark'}`}>
-                  <Star size={13} fill={p.picked ? 'white' : 'none'} />
+              {p.picked && <span className="absolute right-1 top-1 rounded-full bg-[#D4A017] p-1"><Star size={11} className="text-white" fill="white" /></span>}
+              <p className="px-1.5 pt-1 text-[10px] text-medium truncate">{p.guest_name ?? 'A guest'}{p.hidden ? ' · hidden' : ''}</p>
+              {/* In words, not bare icons: hosts aren't all app people. */}
+              <div className="grid grid-cols-2 gap-1 p-1">
+                <button type="button" onClick={() => void change(p, { picked: !p.picked })} aria-pressed={p.picked} data-testid="manage-pick"
+                  className={`rounded-md py-1 text-[11px] font-semibold inline-flex items-center justify-center gap-1 ${p.picked ? 'bg-[#D4A017] text-white' : 'bg-white border border-line text-dark'}`}>
+                  {p.picked ? 'Picked' : 'Pick'}
                 </button>
-                <button type="button" onClick={() => void change(p, { hidden: !p.hidden })} aria-label={p.hidden ? 'Show to guests' : 'Hide from guests'} data-testid="manage-hide"
-                  className="rounded-full p-1.5 bg-white/90 text-dark">
-                  {p.hidden ? <Eye size={13} /> : <EyeOff size={13} />}
+                <button type="button" onClick={() => void change(p, { hidden: !p.hidden })} aria-pressed={p.hidden} data-testid="manage-hide"
+                  className="rounded-md py-1 text-[11px] font-semibold inline-flex items-center justify-center gap-1 bg-white border border-line text-dark">
+                  {p.hidden ? 'Show' : 'Hide'}
                 </button>
               </div>
-              <p className="px-1.5 py-1 text-[10px] text-medium truncate">{p.guest_name ?? 'A guest'}{p.hidden ? ' · hidden' : ''}</p>
             </div>
           ))}
         </div>
