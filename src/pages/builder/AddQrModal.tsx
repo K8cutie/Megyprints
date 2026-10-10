@@ -15,7 +15,7 @@ import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceO
 import { getPriceSchedule } from '../../lib/storeSettings';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { useBuilderContext } from './BuilderContext';
-import { eventVideosForAlbum, type EventVideoChoice } from '../../lib/eventAlbum';
+import { eventVideosForAlbum, eventLinkForAlbum, type EventVideoChoice } from '../../lib/eventAlbum';
 
 const CORNER_LABELS: Record<QrCorner, string> = {
   tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right',
@@ -84,6 +84,10 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   // An album made from an event (0045): the videos the host picked from what
   // guests shared, offered next to "Choose a video".
   const eventVideos = initial ? [] : eventVideosForAlbum(builderCtx.getAlbumId());
+  // Its booking pays for the whole album (₱0 at checkout), so no memory prices
+  // here, and standard quality: the deal's cost to make doesn't count HD.
+  const fromEvent = !!eventLinkForAlbum(builderCtx.getAlbumId());
+  useEffect(() => { if (fromEvent) setQuality('standard'); }, [fromEvent]);
   const [fetchingEvent, setFetchingEvent] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
@@ -100,7 +104,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
     });
     return () => { alive = false; };
   }, [albumPages]);
-  const offerTier = !initial && tierLocked === false && hdPrice > 0;
+  const offerTier = !initial && tierLocked === false && hdPrice > 0 && !fromEvent;
 
   // Preview the PICKED file (object URL), revoked on change/unmount.
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
@@ -225,8 +229,9 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
               </p>
               <p className="text-[11px] text-stone mt-1.5 flex items-center gap-1">
                 <Clock size={11} className="shrink-0" />
-                {FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after
-                {includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}
+                {fromEvent
+                  ? <span data-testid="qr-event-included">Part of your event deal{includedYears ? ` · live for ${includedYears} years` : ''}</span>
+                  : <>{FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>}
               </p>
             </div>
           )}

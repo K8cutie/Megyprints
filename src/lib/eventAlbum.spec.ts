@@ -173,6 +173,13 @@ describe('the wiring (source guards)', () => {
     expect(paid).toBeLessThan(qr);
     expect(order.slice(paid, qr)).toMatch(/setStep\('tracking'\);\s+return;/);
   });
+  it('the video memory box on an event album shows no memory prices and no paid HD tier', () => {
+    const qr = src('../pages/builder/AddQrModal.tsx');
+    expect(qr).toContain('const fromEvent = !!eventLinkForAlbum(builderCtx.getAlbumId());');
+    expect(qr).toMatch(/const offerTier = [^\n]*&& !fromEvent;/);
+    expect(qr).toMatch(/\{fromEvent\s+\? <span data-testid="qr-event-included">Part of your event deal/);
+    expect(qr).toContain("useEffect(() => { if (fromEvent) setQuality('standard'); }, [fromEvent]);");
+  });
   it('an event album never shows the album price, even while it waits for the balance', () => {
     expect(order).toContain(`data-testid="order-total">{eventLink ? '₱0'`);
     expect(order).toContain('data-testid="order-event-line"');
