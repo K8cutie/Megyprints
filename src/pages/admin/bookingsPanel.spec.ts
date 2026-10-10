@@ -174,3 +174,25 @@ describe('the console', () => {
     expect(src).toContain("{tab === 'bookings' && isOwner && <BookingsPanel />}");
   });
 });
+
+describe('money to settle on a closed booking (0043)', () => {
+  it('a booking cancelled after its deposit was confirmed shows the amount and a button to mark it settled', async () => {
+    h.rows = [booking({ status: 'cancelled', deal_total: 45000, deal_deposit: 20000, deposit_paid_at: '2026-10-01T00:00:00Z', cancelled_at: '2026-10-05T00:00:00Z' })];
+    await render();
+    expect($('booking-money-to-settle')?.textContent).toContain('you confirmed ₱20,000 for this booking');
+    expect($('booking-money-to-settle')?.textContent).toContain('Until then the host’s account can’t be deleted.');
+    await click($('booking-settle'));
+    expect(rpcs('settle_booking_money')).toEqual([{ p_id: 'b1' }]);
+  });
+  it('nothing to settle: no money ever sent, or already settled', async () => {
+    h.rows = [booking({ status: 'cancelled', cancelled_at: 'x' }), booking({ id: 'b2', status: 'cancelled', deposit_paid_at: 'x', money_settled_at: 'y' })];
+    await render();
+    expect($('booking-money-to-settle')).toBeNull();
+  });
+  it('the owner function behind it is owner-only and the sentence matches the database', () => {
+    const sql = readFileSync(resolve(__dirname, '../../../supabase/migrations/0043_event_bookings.sql'), 'utf8');
+    const fn = sql.slice(sql.indexOf('create or replace function public.settle_booking_money(p_id uuid)'));
+    expect(fn.slice(0, 400)).toContain("if public.operator_role() is distinct from 'owner' then");
+    expect(sql).toContain('revoke all on function public.settle_booking_money(uuid) from public, anon;');
+  });
+});

@@ -112,8 +112,16 @@ export function blockedMessage(blocking) {
     const numbers = orders.map((o) => o.order_number).join(', ');
     return `Order ${numbers} is paid and not yet delivered, so the account cannot be deleted yet. Contact the shop to cancel or complete it first.`;
   }
-  const numbers = blocking.map((o) => o.order_number).join(', ');
-  return `Event booking ${numbers} is paid and not finished yet, so the account cannot be deleted yet. Contact the shop to cancel or complete it first.`;
+  const list = (status) => blocking.filter((o) => status.includes(o.status ?? 'booked')).map((o) => o.order_number).join(', ');
+  if (list(['booked', 'paid'])) {
+    return `Event booking ${list(['booked', 'paid'])} is paid and not finished yet, so the account cannot be deleted yet. Contact the shop to cancel or complete it first.`;
+  }
+  // A deposit sent, not confirmed yet (0043 a3).
+  if (list(['quoted'])) {
+    return `The deposit you sent for booking ${list(['quoted'])} is waiting for us to confirm it, so the account cannot be deleted yet. Message us and we'll confirm it or send it back first.`;
+  }
+  // A closed booking whose money isn't settled yet (0043 a4).
+  return `We still have to settle the money for booking ${list(['cancelled', 'declined'])} with you, so the account cannot be deleted yet. Message us and we'll settle it first.`;
 }
 
 async function removeAll(admin, bucket, names) {

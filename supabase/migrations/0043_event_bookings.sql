@@ -48,7 +48,7 @@ create or replace function public.open_booking_limit()
 returns integer language sql immutable set search_path = '' as $$ select 3 $$;
 
 revoke all on function public.event_min_guests() from public;
-revoke all on function public.open_booking_limit() from public;
+revoke all on function public.open_booking_limit() from public, anon;
 grant execute on function public.event_min_guests() to anon, authenticated, service_role;
 grant execute on function public.open_booking_limit() to authenticated, service_role;
 
@@ -94,6 +94,9 @@ create table if not exists public.event_bookings (
   cancelled_by         text,
   close_reason         text,
   customer_deleted_at  timestamptz,
+  -- A closed booking that had money (sent or confirmed): when the owner has
+  -- settled it with the host (refunded, or kept under the deal).
+  money_settled_at     timestamptz,
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now(),
 
@@ -125,6 +128,8 @@ create table if not exists public.event_bookings (
   constraint event_bookings_cancelled_stamped_chk check (status <> 'cancelled' or cancelled_at is not null)
 );
 
+alter table public.event_bookings add column if not exists money_settled_at timestamptz;
+
 create index if not exists event_bookings_user_idx on public.event_bookings (user_id, created_at desc);
 create index if not exists event_bookings_status_idx on public.event_bookings (status, created_at desc);
 
@@ -142,7 +147,7 @@ grant select (
   deal_total, deal_deposit, deal_album_size, deal_cover, deal_pages, deal_includes, quoted_at,
   deposit_reference, deposit_proof_path, deposit_submitted_at, deposit_paid_at,
   balance_reference, balance_proof_path, balance_submitted_at, balance_paid_at,
-  cancelled_at, cancelled_by, close_reason, customer_deleted_at, created_at, updated_at
+  cancelled_at, cancelled_by, close_reason, customer_deleted_at, money_settled_at, created_at, updated_at
 ) on public.event_bookings to authenticated;
 grant all on public.event_bookings to service_role;
 
@@ -230,12 +235,15 @@ begin
   new.cancelled_by         := null;
   new.close_reason         := null;
   new.customer_deleted_at  := null;
+  new.money_settled_at     := null;
   new.created_at           := now();
   new.updated_at           := now();
 
-  new.venue     := btrim(new.venue);
-  new.host_name := btrim(new.host_name);
-  new.notes     := nullif(btrim(coalesce(new.notes, '')), '');
+  -- No control characters (a line break in a venue could forge a line in the
+  -- owner's Bookings record); notes keep their line breaks only.
+  new.venue     := btrim(regexp_replace(new.venue, '[[:cntrl:]]+', ' ', 'g'));
+  new.host_name := btrim(regexp_replace(new.host_name, '[[:cntrl:]]+', ' ', 'g'));
+  new.notes     := nullif(btrim(regexp_replace(coalesce(new.notes, ''), '[\x01-\x09\x0b-\x1f\x7f]+', ' ', 'g')), '');
   new.mobile    := regexp_replace(coalesce(new.mobile, ''), '[^0-9+]', '', 'g');
 
   if new.guest_count is null or new.guest_count < public.event_min_guests() then
@@ -304,6 +312,9 @@ begin
      or (old.balance_paid_at is not null and new.balance_paid_at is distinct from old.balance_paid_at) then
     raise exception 'A confirmed payment can''t be undone.' using errcode = 'EV005';
   end if;
+  if old.money_settled_at is not null and new.money_settled_at is distinct from old.money_settled_at then
+    raise exception 'Settled money stays settled.' using errcode = 'EV005';
+  end if;
 
   -- The deal the host is paying for doesn't change under them.
   if (old.deposit_submitted_at is not null or old.deposit_paid_at is not null)
@@ -330,6 +341,32 @@ end;
 $$;
 revoke all on function public.event_bookings_guard() from public, anon, authenticated;
 
+create or replace function public.event_bookings_auth_gone()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if old.user_id is not null and new.user_id is null and new.customer_deleted_at is null then
+    new.customer_deleted_at := now();
+    new.host_name := null;
+    new.mobile    := null;
+    new.venue     := null;
+    new.notes     := null;
+    if new.status in ('requested', 'quoted') and new.deposit_submitted_at is null then
+      new.status       := 'cancelled';
+      new.cancelled_by := 'customer';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.event_bookings_auth_gone() from public, anon, authenticated;
+drop trigger if exists event_bookings_auth_gone_trg on public.event_bookings;
+create trigger event_bookings_auth_gone_trg
+  before update on public.event_bookings
+  for each row execute function public.event_bookings_auth_gone();
+
 drop trigger if exists event_bookings_guard_trg on public.event_bookings;
 create trigger event_bookings_guard_trg
   before update on public.event_bookings
@@ -349,7 +386,7 @@ as $$
          unnest(array['jpg', 'png', 'webp', 'pdf']) as e
    where p_kind is null or k = p_kind;
 $$;
-revoke all on function public.booking_proof_names(uuid, text) from public;
+revoke all on function public.booking_proof_names(uuid, text) from public, anon;
 grant execute on function public.booking_proof_names(uuid, text) to authenticated, service_role;
 
 -- A host can add the receipt for the payment that's due now, on their own
@@ -365,6 +402,18 @@ create policy "payment_proofs_insert_own_booking"
          and ((b.status = 'quoted' and storage.objects.name = any(public.booking_proof_names(b.id, 'deposit')))
            or (b.status = 'booked' and storage.objects.name = any(public.booking_proof_names(b.id, 'balance'))))
     )
+  );
+
+-- Booking receipts are the owner's, like everything else about bookings:
+-- 0033's operator read now skips them for the other roles (fulfillment staff
+-- read order receipts, not a host's deposit).
+drop policy if exists "payment_proofs_select_operators" on storage.objects;
+create policy "payment_proofs_select_operators"
+  on storage.objects for select to authenticated
+  using (
+    bucket_id = 'payment-proofs'
+    and public.operator_role() is not null
+    and (storage.objects.name not like 'booking-%' or public.operator_role() = 'owner')
   );
 
 -- ══════ 6. What the host can do ══════
@@ -412,7 +461,7 @@ begin
   if auth.uid() is null then
     raise exception 'Sign in to send a payment.' using errcode = '42501';
   end if;
-  if p_kind not in ('deposit', 'balance') then
+  if p_kind is null or p_kind not in ('deposit', 'balance') then
     raise exception 'Unknown payment.' using errcode = '22023';
   end if;
   if p_proof_path is not null and not (p_proof_path = any(public.booking_proof_names(p_id, p_kind))) then
@@ -592,6 +641,43 @@ $$;
 revoke all on function public.close_booking(uuid, text, text) from public, anon;
 grant execute on function public.close_booking(uuid, text, text) to authenticated;
 
+-- A closed booking that had money: the owner settles it with the host
+-- (refunded, or kept under the deal), and says so here. Until then the host's
+-- account can't be deleted (the contact and receipt are how it's settled).
+create or replace function public.booking_money_to_settle(b public.event_bookings)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select b.status in ('cancelled', 'declined')
+     and b.money_settled_at is null
+     and (b.deposit_submitted_at is not null or b.deposit_paid_at is not null
+          or b.balance_submitted_at is not null or b.balance_paid_at is not null)
+$$;
+revoke all on function public.booking_money_to_settle(public.event_bookings) from public, anon;
+grant execute on function public.booking_money_to_settle(public.event_bookings) to authenticated, service_role;
+
+create or replace function public.settle_booking_money(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if public.operator_role() is distinct from 'owner' then
+    raise exception 'Only the owner can settle a booking''s money.' using errcode = '42501';
+  end if;
+  update public.event_bookings b set money_settled_at = now()
+   where b.id = p_id and public.booking_money_to_settle(b);
+  if not found then
+    raise exception 'Nothing to settle on this booking.' using errcode = 'EV005';
+  end if;
+end;
+$$;
+revoke all on function public.settle_booking_money(uuid) from public, anon;
+grant execute on function public.settle_booking_money(uuid) to authenticated;
+
 -- ══════ 8. Account deletion knows about bookings ══════
 -- 0035's preflight, plus: a booking whose money is in flight (deposit or
 -- balance confirmed, album not delivered) blocks deletion like a paid order.
@@ -650,7 +736,8 @@ begin
              jsonb_build_object('order_number', b.booking_number, 'status', b.status, 'kind', 'booking')
         from public.event_bookings b
        where b.user_id = v_uid
-         and b.status in ('booked', 'paid')
+         and (b.status in ('booked', 'paid') or (b.status = 'quoted' and b.deposit_submitted_at is not null)
+              or public.booking_money_to_settle(b))
     ) x;
 
   return jsonb_build_object(
@@ -718,6 +805,37 @@ begin
   if v_blocked is not null then
     raise exception
       'Event booking % is paid and not finished yet, so the account cannot be deleted yet. Contact the shop to cancel or complete it first.',
+      v_blocked
+      using errcode = 'P0001';
+  end if;
+
+  -- (a3) A deposit sent but not confirmed yet: deleting would cancel the
+  --      booking and wipe the name, mobile and receipt needed to match it.
+  select string_agg(b.booking_number, ', ' order by b.created_at)
+    into v_blocked
+    from public.event_bookings b
+   where b.user_id = v_uid
+     and b.status = 'quoted'
+     and b.deposit_submitted_at is not null;
+
+  if v_blocked is not null then
+    raise exception
+      'The deposit you sent for booking % is waiting for us to confirm it, so the account cannot be deleted yet. Message us and we''ll confirm it or send it back first.',
+      v_blocked
+      using errcode = 'P0001';
+  end if;
+
+  -- (a4) A closed booking whose money isn't settled with them yet (a refund
+  --      owed, say): the contact and receipt are how it gets settled.
+  select string_agg(b.booking_number, ', ' order by b.created_at)
+    into v_blocked
+    from public.event_bookings b
+   where b.user_id = v_uid
+     and public.booking_money_to_settle(b);
+
+  if v_blocked is not null then
+    raise exception
+      'We still have to settle the money for booking % with you, so the account cannot be deleted yet. Message us and we''ll settle it first.',
       v_blocked
       using errcode = 'P0001';
   end if;
@@ -881,6 +999,17 @@ select 'the booking receipt policy names its bucket',
   (exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects'
             and policyname = 'payment_proofs_insert_own_booking'
             and with_check like '%payment-proofs%'))::text
+union all
+select 'only the owner settles a closed booking''s money',
+  (not has_function_privilege('anon', 'public.settle_booking_money(uuid)', 'EXECUTE')
+   and has_function_privilege('authenticated', 'public.settle_booking_money(uuid)', 'EXECUTE')
+   and pg_get_functiondef('public.settle_booking_money(uuid)'::regprocedure) like '%operator_role() is distinct from ''owner''%')::text
+union all
+select 'only the owner role reads booking receipts',
+  ((select count(*) from pg_policies
+     where schemaname = 'storage' and tablename = 'objects'
+       and policyname = 'payment_proofs_select_operators'
+       and qual like '%booking-%' and qual like '%owner%') = 1)::text
 union all
 select 'account deletion checks booking receipts and bookings in flight',
   (pg_get_functiondef('public.delete_own_account()'::regprocedure) like '%booking_proof_names%'

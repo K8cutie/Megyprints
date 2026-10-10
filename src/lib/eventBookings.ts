@@ -85,6 +85,8 @@ export interface EventBooking {
   screen_paused?: boolean;
   /** The album order the booking paid for (0045). */
   album_order_id?: string | null;
+  /** A closed booking's money, settled with the host by the owner (0043). */
+  money_settled_at?: string | null;
 }
 
 /** What the host sees (no cost to make: that's the owner's number). */
@@ -93,7 +95,7 @@ export const HOST_COLUMNS = [
   'deal_total', 'deal_deposit', 'deal_album_size', 'deal_cover', 'deal_pages', 'deal_includes', 'quoted_at',
   'deposit_reference', 'deposit_proof_path', 'deposit_submitted_at', 'deposit_paid_at',
   'balance_reference', 'balance_proof_path', 'balance_submitted_at', 'balance_paid_at',
-  'cancelled_at', 'cancelled_by', 'close_reason', 'created_at', 'updated_at',
+  'cancelled_at', 'cancelled_by', 'close_reason', 'money_settled_at', 'created_at', 'updated_at',
   'event_title', 'kids_on', 'tables', 'copies_on', 'guest_code', 'screen_key', 'screen_paused', 'album_order_id',
 ].join(', ');
 
@@ -281,10 +283,20 @@ export function bookingView(b: EventBooking): BookingView {
 
 /** Waiting on the owner: a new request to price, or a payment the host says
  *  is sent. The Bookings tab counts these (no email or SMS: they cost money). */
-export const needsOwner = (b: Pick<EventBooking, 'status' | 'deposit_submitted_at' | 'balance_submitted_at'>) =>
+type MoneyFields = Pick<EventBooking, 'status' | 'deposit_submitted_at' | 'deposit_paid_at' | 'balance_submitted_at' | 'balance_paid_at' | 'money_settled_at'>;
+
+/** A closed booking that had money (sent or confirmed) the owner hasn't
+ *  settled with the host yet: refunded, or kept under the deal. Mirrors 0043's
+ *  booking_money_to_settle(); until it's settled the host's account stays. */
+export const moneyToSettle = (b: MoneyFields) =>
+  (b.status === 'cancelled' || b.status === 'declined') && !b.money_settled_at
+  && !!(b.deposit_submitted_at || b.deposit_paid_at || b.balance_submitted_at || b.balance_paid_at);
+
+export const needsOwner = (b: MoneyFields) =>
   b.status === 'requested'
   || (b.status === 'quoted' && !!b.deposit_submitted_at)
-  || (b.status === 'booked' && !!b.balance_submitted_at);
+  || (b.status === 'booked' && !!b.balance_submitted_at)
+  || moneyToSettle(b);
 
 // ── The owner's deal ──────────────────────────────────────────────────────
 

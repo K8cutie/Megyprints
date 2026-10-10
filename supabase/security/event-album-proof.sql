@@ -186,6 +186,53 @@ begin
   exception when sqlstate 'MPOK0' then null;
   end;
 
+  -- ── T. Hardening (Kraken 2026-10-10) ───────────────────────────────────────
+  declare
+    ev2 uuid; o3 uuid; o4 uuid; cp uuid;
+  begin
+    ev2 := pg_temp.do_as(H, 'authenticated',
+            $q$insert into public.event_bookings (user_id, event_type, event_date, venue, guest_count, host_name, mobile)
+               values (auth.uid(), 'debut', (now() at time zone 'Asia/Manila')::date, 'Zz Hall 2', 60, 'Zz Host', '09170000000') returning id::text$q$, 'value')::uuid;
+    perform pg_temp.do_as(OWN, 'authenticated', format('select public.set_booking_deal(%L, 30000, 12000, 9000, ''8x8'', ''hard'', 48)', ev2));
+    perform pg_temp.do_as(OWN, 'authenticated', format('select public.mark_booking_paid(%L, ''deposit'')', ev2), 'value');
+    perform pg_temp.do_as(OWN, 'authenticated', format('select public.mark_booking_paid(%L, ''balance'')', ev2), 'value');
+    -- T1. The deal is the album with its memories at the included term, standard.
+    o3 := pg_temp.do_as(H, 'authenticated', pg_temp.order_sql(), 'value')::uuid;
+    update public.orders set hd_memories = true, hosting_years = 10 where id = o3;
+    perform pg_temp.do_as(H, 'authenticated', format('select public.cover_order_with_booking(%L, %L)', o3, ev2));
+    r := r || pg_temp.line('T1', 'a covered album drops paid add-ons: HD off, the included term', 'paid|false|true',
+           (select concat_ws('|', payment_status, hd_memories::text, (hosting_years = public.included_hosting_years())::text) from public.orders where id = o3));
+    -- T2. Cancelled, another album covered, then the first reopened: refused.
+    update public.orders set status = 'cancelled' where id = o3;
+    o4 := pg_temp.do_as(H, 'authenticated', pg_temp.order_sql(), 'value')::uuid;
+    perform pg_temp.do_as(H, 'authenticated', format('select public.cover_order_with_booking(%L, %L)', o4, ev2));
+    begin
+      update public.orders set status = 'paid' where id = o3;   -- the owner reopening it
+      got := 'ALLOWED';
+    exception when others then got := 'REFUSED ' || sqlstate || ' ' || sqlerrm;
+    end;
+    r := r || pg_temp.line('T2', 'reopening the cancelled album while the booking paid for another is refused', 'REFUSED EV035', got);
+    -- T3. With the booking free again, a reopened album is its album again.
+    update public.orders set status = 'cancelled' where id = o4;
+    update public.orders set status = 'paid' where id = o4;
+    r := r || pg_temp.line('T3', 'reopened with the booking free: linked again, so no second free album', 'true|REFUSED EV032',
+           (select (album_order_id = o4)::text from public.event_bookings where id = ev2) || '|' ||
+           left(pg_temp.do_as(H, 'authenticated', format('select public.cover_order_with_booking(%L, %L)',
+                pg_temp.do_as(H, 'authenticated', pg_temp.order_sql(), 'value'), ev2)), 13));
+    -- T4. A copy carries none of the hosts' numbers.
+    perform pg_temp.do_as(H, 'authenticated', format('select public.set_my_event(%L, ''Bea''''s debut'', false, 10, true)', ev2));
+    cp := (pg_temp.do_as(G, 'authenticated', format($q$select public.place_event_copy_order(%L, %L::jsonb) ->> 'order_id'$q$,
+            (select guest_code from public.event_bookings where id = ev2), pg_temp.ship()), 'value'))::uuid;
+    r := r || pg_temp.line('T4', 'the copy buyer''s order holds no hosts'' order or booking number', 'false|false',
+           (select (album_snapshot ? 'copy_of')::text || '|' || (album_snapshot ? 'event')::text from public.orders where id = cp));
+    -- T5. The host deletes their account: no more copies.
+    update public.event_bookings set customer_deleted_at = now() where id = ev2;
+    r := r || pg_temp.line('T5', 'after the host''s account is deleted, copies aren''t offered', '<null>',
+           coalesce(pg_temp.do_as(null, 'anon', format('select public.event_copy_offer(%L)::text', (select guest_code from public.event_bookings where id = ev2)), 'value'), '<null>'));
+    raise exception using errcode = 'MPOK0';
+  exception when sqlstate 'MPOK0' then null;
+  end;
+
   fails := (length(r) - length(replace(r, ' FAIL |', ''))) / length(' FAIL |');
   total := (length(r) - length(replace(r, E'\n', '')));
   raise exception using message = format('EVENT ALBUM PROOF — %s/%s PASS (rolled back; nothing written)%s', total - fails, total, r);

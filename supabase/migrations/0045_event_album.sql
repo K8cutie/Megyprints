@@ -93,18 +93,24 @@ begin
   if not found then
     raise exception 'Order not found, or it''s already paid.' using errcode = 'EV033';
   end if;
+  -- Null-safe: an order missing its cover or page count doesn't match.
   if o.album_size is distinct from b.deal_album_size
-     or ((o.cover = 'softcover') <> (b.deal_cover = 'soft'))
-     or coalesce(o.page_count, 0) > b.deal_pages then
+     or o.cover is null or o.page_count is null
+     or ((o.cover = 'softcover') is distinct from (b.deal_cover = 'soft'))
+     or o.page_count > b.deal_pages then
     raise exception 'Your deal''s album is %, %, up to % pages. This one is %, %, % pages. Change it to match, or ask us to update your deal.',
       b.deal_album_size, case when b.deal_cover = 'soft' then 'softcover' else 'hardbound' end, b.deal_pages,
       o.album_size, case when o.cover = 'softcover' then 'softcover' else 'hardbound' end, o.page_count
       using errcode = 'EV034';
   end if;
+  -- The deal is the album with its memories at the included term, standard
+  -- quality: the paid add-ons (a longer term, HD) aren't in it.
   update public.orders
      set status           = 'paid',
          payment_status   = 'paid',
          amount           = 0,
+         hd_memories      = false,
+         hosting_years    = case when o.hosting_years is null then null else public.included_hosting_years() end,
          event_booking_id = b.id,
          status_history   = coalesce(status_history, '[]'::jsonb)
                             || jsonb_build_object('status', 'paid', 'at', now(), 'by', 'booking')
@@ -122,6 +128,8 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_other text;
 begin
   if new.event_booking_id is not null and new.status is distinct from old.status then
     if new.status = 'delivered' then
@@ -130,6 +138,19 @@ begin
     elsif new.status = 'cancelled' then
       update public.event_bookings set album_order_id = null
        where id = new.event_booking_id and album_order_id = new.id;
+    elsif old.status = 'cancelled' then
+      -- Reopened: it's the booking's album again, unless the booking has
+      -- paid for another one since (one free album per booking).
+      select o.order_number into v_other
+        from public.event_bookings b
+        join public.orders o on o.id = b.album_order_id
+       where b.id = new.event_booking_id and b.album_order_id <> new.id and o.status <> 'cancelled';
+      if v_other is not null then
+        raise exception 'This booking already paid for another album (%). Reopen that one instead.', v_other
+          using errcode = 'EV035';
+      end if;
+      update public.event_bookings set album_order_id = new.id
+       where id = new.event_booking_id and album_order_id is distinct from new.id;
     end if;
   end if;
   return new;
@@ -161,6 +182,7 @@ as $$
     join public.orders o on o.id = b.album_order_id
    where b.guest_code = p_code
      and b.copies_on
+     and b.customer_deleted_at is null
      and b.status in ('paid', 'completed')
      and o.status in ('paid', 'in_production', 'printed', 'shipped', 'delivered')
      and o.purge_started_at is null
@@ -210,8 +232,9 @@ begin
                              ship_name, ship_phone, ship_address, ship_region, ship_province, ship_city,
                              ship_barangay, ship_street, ship_zip, copy_of_order_id, status_history)
   values (auth.uid(), null,
-          jsonb_build_object('title', coalesce(b.event_title, 'Event album'), 'album_size', src.album_size,
-                             'copy_of', src.order_number, 'event', b.booking_number),
+          -- The buyer's own row: no hosts' order or booking numbers in it (the
+          -- owner's console names them through operator_orders).
+          jsonb_build_object('title', coalesce(b.event_title, 'Event album'), 'album_size', src.album_size),
           src.album_size, src.material, src.cover, src.page_count,
           btrim(p_ship ->> 'name'), p_ship ->> 'phone', p_ship ->> 'address', p_ship ->> 'region', p_ship ->> 'province',
           p_ship ->> 'city', p_ship ->> 'barangay', btrim(p_ship ->> 'street'), p_ship ->> 'zip', src.id,

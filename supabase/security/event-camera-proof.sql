@@ -218,7 +218,7 @@ begin
     mv := pg_temp.begin_item(cd, tokA, 'video', 'mp4')::uuid;
     perform pg_temp.begin_item(cd, tokA, 'video', 'mov');
     r := r || pg_temp.line('M12', 'a 3rd video is refused', 'REFUSED EV024', pg_temp.begin_item(cd, tokA, 'video', 'webm'));
-    r := r || pg_temp.line('M13', 'a video is the file and its poster, in the public bucket', 'event-media,event-media',
+    r := r || pg_temp.line('M13', 'a video''s poster goes to event-media, the video to event-videos', 'event-media,event-videos',
            (select string_agg(o.bucket, ',') from public.event_media m, public.event_media_objects(m.booking_id, m.id, m.kind, m.ext) o where m.id = mv));
     r := r || pg_temp.line('M14', 'a photo can''t claim to be a video file', 'REFUSED 23514', pg_temp.begin_item(cd, tokB, 'photo', 'mp4'));
     r := r || pg_temp.line('M15', 'a wrong token can''t upload', 'REFUSED EV025', pg_temp.begin_item(cd, 'not-a-token'));
@@ -272,8 +272,9 @@ begin
     r := r || pg_temp.line('O8', 'B can''t upload any more', 'REFUSED EV025', pg_temp.begin_item(cd, tokB));
     r := r || pg_temp.line('O9', 'B''s photo is hidden from A', '2',
            pg_temp.do_as(null, 'anon', format('select count(*)::text from public.event_feed(%L, %L)', cd, tokA), 'value'));
-    r := r || pg_temp.line('O10', 'the host still sees B''s, hidden', 'true',
-           pg_temp.do_as(H, 'authenticated', format('select hidden::text from public.my_event_media(%L) where id = %L', ev, mB), 'value'));
+    r := r || pg_temp.line('O10', 'B''s items leave the host''s pool and are marked to go (the cleanup takes the files)', '0|true',
+           pg_temp.do_as(H, 'authenticated', format('select count(*)::text from public.my_event_media(%L) where id = %L', ev, mB), 'value')
+           || '|' || (select (deleted_at is not null)::text from public.event_media where id = mB));
     raise exception using errcode = 'MPOK0';
   exception when sqlstate 'MPOK0' then null;
   end;
@@ -321,6 +322,130 @@ begin
     alter table public.event_bookings enable trigger event_bookings_guard_trg;
     r := r || pg_temp.line('Q6', 'a booking cancelled 4 days ago: all its files are due', 'true',
            pg_temp.do_as(null, 'service_role', format('select (count(*) >= 6)::text from public.event_media_files_to_purge(1000) where name like %L', ev || '/%'), 'value'));
+    raise exception using errcode = 'MPOK0';
+  exception when sqlstate 'MPOK0' then null;
+  end;
+
+  -- ── S. Abuse limits and lifecycle (Kraken 2026-10-10) ─────────────────────
+  declare
+    tC text; tD text; tE text; tF text; tG text; mm uuid; i int; ev2 uuid; cd2 text; bd uuid; bk uuid;
+  begin
+    -- S1. Delete-and-share can't keep files coming: twice the limit a day.
+    tC := pg_temp.join(cd, 'Churner');
+    for i in 1..40 loop
+      mm := pg_temp.begin_item(cd, tC)::uuid;
+      perform pg_temp.do_as(null, 'anon', format('select public.event_media_delete(%L, %L, %L)', cd, tC, mm), 'value');
+    end loop;
+    got := pg_temp.begin_item(cd, tC);
+    r := r || pg_temp.line('S1', 'after 40 begun-and-deleted photos in a day, the 41st is refused', 'REFUSED EV024', got);
+    r := r || pg_temp.line('S2', '...in words', 'true', (got like '%shared and deleted a lot today%')::text);
+
+    -- S3. An item begun long ago can't be finished later (the hour-later bypass).
+    tD := pg_temp.join(cd, 'Late finisher');
+    mm := pg_temp.begin_item(cd, tD)::uuid;
+    update public.event_media set created_at = now() - interval '2 hours' where id = mm;
+    r := r || pg_temp.line('S3', 'an item begun 2 hours ago doesn''t become ready', 'false', pg_temp.finish(cd, tD, mm));
+
+    -- S4. ready() counts again: a 21st can't slip in.
+    tE := pg_temp.join(cd, 'Squeezer');
+    for i in 1..20 loop
+      perform pg_temp.finish(cd, tE, pg_temp.begin_item(cd, tE)::uuid);
+    end loop;
+    insert into public.event_media (booking_id, guest_id, kind, ext)
+    values (ev, (select id from public.event_guests where token_hash = public.event_token_hash(tE)), 'photo', 'jpg') returning id into mm;
+    r := r || pg_temp.line('S4', 'with 20 ready, a 21st item made some other way isn''t finished', 'REFUSED EV024',
+           pg_temp.finish(cd, tE, mm));
+
+    -- S5–S6. What really landed: an oversized thumbnail is refused; sizes recorded.
+    tF := pg_temp.join(cd, 'Big thumb');
+    mm := pg_temp.begin_item(cd, tF)::uuid;
+    perform pg_temp.put(o.bucket, o.name) from public.event_media_objects(ev, mm, 'photo', 'jpg') o;
+    update storage.objects set metadata = jsonb_build_object('size', case when name like '%-t.jpg' then 2000000 else 1000 end)
+     where name like ev || '/' || mm || '%';
+    r := r || pg_temp.line('S5', 'a 2 MB "thumbnail" doesn''t become ready', 'REFUSED EV026',
+           pg_temp.do_as(null, 'anon', format('select public.event_media_ready(%L, %L, %L)', cd, tF, mm), 'value'));
+    update storage.objects set metadata = jsonb_build_object('size', 3000) where name like ev || '/' || mm || '%';
+    perform pg_temp.do_as(null, 'anon', format('select public.event_media_ready(%L, %L, %L)', cd, tF, mm), 'value');
+    r := r || pg_temp.line('S6', 'ready records the bytes that really landed', '9000', (select bytes::text from public.event_media where id = mm));
+
+    -- S7. The event's space: full is full.
+    insert into public.event_media (booking_id, guest_id, kind, ext, status, ready_at, bytes)
+    select ev, null, 'photo', 'jpg', 'ready', now(), 104857600 from generate_series(1, 30);
+    r := r || pg_temp.line('S7', 'past the event''s space, a new share is refused', 'REFUSED EV027', pg_temp.begin_item(cd, tF));
+    raise exception using errcode = 'MPOK0';
+  exception when sqlstate 'MPOK0' then null;
+  end;
+
+  declare
+    tG text; tH text; mm uuid; ev2 uuid; cd2 text; key2 text; bd uuid; bk uuid; gid uuid;
+  begin
+    -- S8. "Mine" is the guest's own, all of them.
+    tG := pg_temp.join(cd, 'Mine only');
+    mm := pg_temp.begin_item(cd, tG)::uuid;
+    perform pg_temp.finish(cd, tG, mm);
+    r := r || pg_temp.line('S8', 'the Mine feed holds only the guest''s own', '1',
+           pg_temp.do_as(null, 'anon', format('select count(*)::text from public.event_feed(%L, %L, null, 100, true)', cd, tG), 'value'));
+    -- S9. A purged item leaves every list.
+    update public.event_media set purged_at = now() where id = mm;
+    r := r || pg_temp.line('S9', 'a purged item is in no feed and not in the host''s pool', '0|0',
+           pg_temp.do_as(null, 'anon', format('select count(*)::text from public.event_feed(%L, %L, null, 100, true)', cd, tG), 'value')
+           || '|' || pg_temp.do_as(H, 'authenticated', format('select count(*)::text from public.my_event_media(%L) where id = %L', ev, mm), 'value'));
+    -- S10. Control characters don't reach the pool, the list or the screen.
+    tH := pg_temp.join(cd, E'Bea\nTable 9');
+    r := r || pg_temp.line('S10', 'a guest name loses its line breaks', 'Bea Table 9',
+           (select name from public.event_guests where token_hash = public.event_token_hash(tH)));
+    perform pg_temp.do_as(H, 'authenticated', format('select public.set_my_event(%L, %L, false, 10, true)', ev, E'Ana\n& Ben'));
+    r := r || pg_temp.line('S11', '...and so does the event''s name', 'Ana & Ben', (select event_title from public.event_bookings where id = ev));
+
+    -- S12. The host deletes their account: the event closes at once.
+    update public.event_bookings set customer_deleted_at = now() where id = ev;
+    r := r || pg_temp.line('S12', 'the guest page, the feed and the screen are gone; no copies; names cleared', '<null>|0|<null>|<null>|false|0',
+           coalesce(pg_temp.do_as(null, 'anon', format('select public.event_public(%L)::text', cd), 'value'), '<null>')
+           || '|' || pg_temp.do_as(null, 'anon', format('select count(*)::text from public.event_feed(%L, %L)', cd, tG), 'value')
+           || '|' || pg_temp.do_as(null, 'anon', format('select public.event_screen(%L, %L)::text', cd, (select screen_key from public.event_bookings where id = ev)), 'value')
+           || '|' || coalesce((select event_title from public.event_bookings where id = ev), '<null>')
+           || '|' || (select copies_on::text from public.event_bookings where id = ev)
+           || '|' || (select count(*)::text from public.event_guests where booking_id = ev and name <> 'Guest'));
+    r := r || pg_temp.line('S13', 'nobody new can join it', 'REFUSED EV020',
+           pg_temp.do_as(null, 'anon', format('select public.event_join(%L, ''Newcomer'')', cd), 'value'));
+    raise exception using errcode = 'MPOK0';
+  exception when sqlstate 'MPOK0' then null;
+  end;
+
+  declare
+    ev2 uuid; t2 text; bd uuid; bk uuid;
+  begin
+    -- S14. Retention: guests' names once the event's files are gone.
+    ev2 := pg_temp.mk_event(H, OWN, 0);
+    t2 := pg_temp.join(pg_temp.code(ev2), 'Old guest');
+    update public.event_bookings set event_date = event_date - 200 where id = ev2;
+    -- S15. A request declined 200 days ago with no money: contact cleared; one a deposit was sent for: kept.
+    bd := pg_temp.do_as(O, 'authenticated', format(
+            $q$insert into public.event_bookings (user_id, event_type, event_date, venue, guest_count, host_name, mobile)
+               values (auth.uid(), 'debut', (now() at time zone 'Asia/Manila')::date + 30, 'Zz Old Hall', 30, 'Zz Old Host', '09170000001') returning id::text$q$), 'value')::uuid;
+    bk := pg_temp.do_as(O, 'authenticated', format(
+            $q$insert into public.event_bookings (user_id, event_type, event_date, venue, guest_count, host_name, mobile)
+               values (auth.uid(), 'debut', (now() at time zone 'Asia/Manila')::date + 31, 'Zz Kept Hall', 30, 'Zz Kept Host', '09170000002') returning id::text$q$), 'value')::uuid;
+    perform pg_temp.do_as(OWN, 'authenticated', format('select public.set_booking_deal(%L, 30000, 12000, 9000, ''8x8'', ''hard'', 40)', bk));
+    perform pg_temp.do_as(O, 'authenticated', format('select public.submit_booking_payment(%L, ''deposit'', ''777'')', bk));
+    perform pg_temp.do_as(OWN, 'authenticated', format('select public.close_booking(%L, ''declined'', null)', bd));
+    perform pg_temp.do_as(OWN, 'authenticated', format('select public.close_booking(%L, ''declined'', null)', bk));
+    alter table public.event_bookings disable trigger event_bookings_guard_trg;
+    update public.event_bookings set updated_at = now() - interval '200 days' where id in (bd, bk);
+    alter table public.event_bookings enable trigger event_bookings_guard_trg;
+    r := r || pg_temp.line('S14', 'only the service role sweeps', 'REFUSED 42501|REFUSED 42501',
+           left(pg_temp.do_as(null, 'anon', 'select public.event_retention_sweep()'), 13) || '|' || left(pg_temp.do_as(O, 'authenticated', 'select public.event_retention_sweep()'), 13));
+    perform pg_temp.do_as(null, 'service_role', 'select public.event_retention_sweep()', 'value');
+    r := r || pg_temp.line('S15', 'the sweep clears the old event''s guest names', 'Guest',
+           (select name from public.event_guests where token_hash = public.event_token_hash(t2)));
+    r := r || pg_temp.line('S16', '...the old no-money request''s contact, and keeps the one a deposit was sent for', '<null>|<null>|Zz Kept Host|09170000002',
+           (select coalesce(host_name, '<null>') || '|' || coalesce(mobile, '<null>') from public.event_bookings where id = bd)
+           || '|' || (select host_name || '|' || mobile from public.event_bookings where id = bk));
+    r := r || pg_temp.line('S17', 'the buckets: originals private 20 MB, copies 4 MB jpeg, videos 50 MB', '3',
+           (select count(*)::text from storage.buckets where
+              (id = 'event-originals' and not public and file_size_limit = 20971520)
+           or (id = 'event-media' and public and file_size_limit = 4194304 and allowed_mime_types = array['image/jpeg'])
+           or (id = 'event-videos' and public and file_size_limit = 52428800)));
     raise exception using errcode = 'MPOK0';
   exception when sqlstate 'MPOK0' then null;
   end;

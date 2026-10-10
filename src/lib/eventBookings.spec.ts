@@ -227,6 +227,11 @@ describe('what waits on the owner (the Bookings tab count)', () => {
     ['paid', {}, false],
     ['declined', {}, false],
     ['cancelled', {}, false],
+    // A closed booking with money the owner hasn't settled with the host.
+    ['cancelled', { deposit_paid_at: 'x' }, true],
+    ['cancelled', { deposit_submitted_at: 'x' }, true],
+    ['declined', { deposit_submitted_at: 'x' }, true],
+    ['cancelled', { deposit_paid_at: 'x', money_settled_at: 'y' }, false],
   ] as const)('%s %o → %s', (status, over, waits) => {
     expect(needsOwner(booking({ status, ...over }))).toBe(waits);
   });

@@ -21,8 +21,6 @@ export const EVENT_VIDEOS_PER_GUEST = 2;
 export const EVENT_VIDEO_MAX_SECONDS = 30;
 /** The event-media bucket's limit (0044). */
 export const EVENT_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
-/** Videos bigger than this are shrunk on the phone first, where it can. */
-export const EVENT_VIDEO_SHRINK_OVER = 20 * 1024 * 1024;
 
 export type MediaKind = 'photo' | 'video';
 export type VideoExt = 'mp4' | 'mov' | 'webm';
@@ -75,12 +73,12 @@ export const guestLink = (code: string, table?: number | null, origin: string = 
 export const screenLink = (code: string, key: string, origin: string = appOrigin()) =>
   `${origin}/#/e/${code}/screen?k=${key}`;
 
-/** A file in the public event-media bucket. */
+/** A file in the public buckets: the small copies in event-media, videos in event-videos (0044). */
 export function eventMediaUrl(bookingId: string, mediaId: string, variant: 'view' | 'thumb' | 'video', ext = 'mp4'): string {
   const name = variant === 'view' ? `${bookingId}/${mediaId}-v.jpg`
     : variant === 'thumb' ? `${bookingId}/${mediaId}-t.jpg`
       : `${bookingId}/${mediaId}.${ext}`;
-  return supabase.storage.from('event-media').getPublicUrl(name).data.publicUrl;
+  return supabase.storage.from(variant === 'video' ? 'event-videos' : 'event-media').getPublicUrl(name).data.publicUrl;
 }
 
 /** The print master's name in the private bucket (the host downloads it). */
@@ -136,8 +134,9 @@ export async function guestMe(code: string, token: string): Promise<GuestMe | nu
   return (data as GuestMe | null) ?? null;
 }
 
-export async function eventFeed(code: string, token: string, before?: string | null, limit = 40): Promise<FeedItem[]> {
-  const { data, error } = await supabase.rpc('event_feed', { p_code: code, p_token: token, p_before: before ?? null, p_limit: limit });
+/** mine: only this guest's own, all of them (the Mine tab). */
+export async function eventFeed(code: string, token: string, before?: string | null, limit = 40, mine = false): Promise<FeedItem[]> {
+  const { data, error } = await supabase.rpc('event_feed', { p_code: code, p_token: token, p_before: before ?? null, p_limit: limit, p_mine: mine });
   if (error) throw new Error(cameraErrorMessage(error));
   return (data ?? []) as FeedItem[];
 }
@@ -150,7 +149,7 @@ export async function deleteMyMedia(code: string, token: string, mediaId: string
 
 // ── Sharing a photo or video ──────────────────────────────────────────────
 
-interface Begun { media_id: string; booking_id: string; objects: { bucket: string; name: string }[] }
+export interface Begun { media_id: string; booking_id: string; objects: { bucket: string; name: string }[] }
 
 async function begin(code: string, token: string, kind: MediaKind, ext: string, facts: { bytes: number; width?: number; height?: number; durationS?: number }): Promise<Begun> {
   const { data, error } = await supabase.rpc('event_media_begin', {
@@ -178,10 +177,23 @@ async function ready(code: string, token: string, mediaId: string) {
 
 export type ShareStage = 'preparing' | 'uploading' | 'done';
 
-export async function sharePhoto(code: string, token: string, file: File, onStage?: (s: ShareStage) => void): Promise<string> {
+/** What a retry picks up: the item the database already named for this file.
+ *  A retry used to begin a new one each time, and every failed try held one
+ *  of the guest's 20 places for an hour. */
+export interface ShareResume { begun?: Begun; at?: number }
+/** event_upload_allowed() takes uploads for an item up to an hour old. */
+const RESUME_MS = 50 * 60 * 1000;
+async function beginOnce(resume: ShareResume | undefined, start: () => Promise<Begun>): Promise<Begun> {
+  if (resume?.begun && resume.at && Date.now() - resume.at < RESUME_MS) return resume.begun;
+  const b = await start();
+  if (resume) { resume.begun = b; resume.at = Date.now(); }
+  return b;
+}
+
+export async function sharePhoto(code: string, token: string, file: File, onStage?: (s: ShareStage) => void, resume?: ShareResume): Promise<string> {
   onStage?.('preparing');
   const c = await makePhotoCopies(file);
-  const b = await begin(code, token, 'photo', 'jpg', { bytes: c.original.size, width: c.width, height: c.height });
+  const b = await beginOnce(resume, () => begin(code, token, 'photo', 'jpg', { bytes: c.original.size, width: c.width, height: c.height }));
   onStage?.('uploading');
   const body: Record<string, Blob> = {
     [`${b.booking_id}/${b.media_id}.jpg`]: c.original,
@@ -215,20 +227,23 @@ export function videoProblem(file: { type?: string; name?: string; size: number 
   return '';
 }
 
-export async function shareVideo(code: string, token: string, file: File, onStage?: (s: ShareStage) => void): Promise<string> {
+export async function shareVideo(code: string, token: string, file: File, onStage?: (s: ShareStage) => void, resume?: ShareResume): Promise<string> {
   onStage?.('preparing');
   const facts = await videoFacts(file);
   const bad = videoProblem(file, facts.durationS);
   if (bad) throw new Error(bad);
   let body: Blob = file;
   let ext = videoExtOf(file)!;
-  if (file.size > EVENT_VIDEO_SHRINK_OVER && transcodeSupported()) {
+  // Made again on the phone wherever it can: smaller, and without the
+  // camera's own data (where it was shot, the phone) in a public file.
+  // Photos lose it the same way (makePhotoCopies draws them fresh).
+  if (transcodeSupported()) {
     try { body = (await transcodeToMp4(file, 'standard')).blob; ext = 'mp4'; } catch { /* keep the original */ }
   }
   if (body.size > EVENT_VIDEO_MAX_BYTES) {
     throw new Error('That video is too big to share here. Try a shorter one.');
   }
-  const b = await begin(code, token, 'video', ext, { bytes: body.size, width: facts.width, height: facts.height, durationS: facts.durationS });
+  const b = await beginOnce(resume, () => begin(code, token, 'video', ext, { bytes: body.size, width: facts.width, height: facts.height, durationS: facts.durationS }));
   onStage?.('uploading');
   for (const o of b.objects) {
     if (o.name.endsWith('-t.jpg')) await put(o.bucket, o.name, facts.thumb, 'image/jpeg');

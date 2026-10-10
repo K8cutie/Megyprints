@@ -7,9 +7,10 @@ import { dirname, join } from 'node:path';
    /api/event-cleanup — the nightly cleanup of Megyprints Events files (0044).
    These lock:
      · no CRON_SECRET → it doesn't run; a wrong secret → nothing is read;
-     · it removes exactly the names the DATABASE lists, only in the two event
+     · it removes exactly the names the DATABASE lists, only in the three event
        buckets, in batches, then records those items; nothing comes from the
        request;
+     · then it clears old personal details (event_retention_sweep);
      · an item whose files didn't go isn't retried in the same run (no loop);
      · a failed removal records nothing (tomorrow tries again);
      · Vercel runs it nightly.
@@ -27,12 +28,13 @@ const freshDb = () => ({
   pages: [
     { data: [
       ...rowsFor('m1', [['event-originals', 'b/m1.jpg'], ['event-media', 'b/m1-v.jpg'], ['event-media', 'b/m1-t.jpg']]),
-      ...rowsFor('m2', [['event-media', 'b/m2.mp4'], ['event-media', 'b/m2-t.jpg']]),
+      ...rowsFor('m2', [['event-videos', 'b/m2.mp4'], ['event-media', 'b/m2-t.jpg']]),
     ], error: null },
     { data: [], error: null },
   ],
   removeErr: () => null,
   finished: (ids) => ids.length,
+  sweep: () => ({ data: { guests: 3, bookings: 1 }, error: null }),
 });
 
 const adminClient = () => ({
@@ -40,6 +42,7 @@ const adminClient = () => ({
     log.push(`rpc:${name}${args?.p_ids ? `:${args.p_ids.join(',')}` : ''}`);
     if (name === 'event_media_files_to_purge') return db.pages.shift() ?? { data: [], error: null };
     if (name === 'finish_event_media_purge') return { data: db.finished(args.p_ids), error: null };
+    if (name === 'event_retention_sweep') return db.sweep();
     return { data: null, error: { message: `unexpected rpc ${name}` } };
   },
   from: () => { throw new Error('the cleanup must not read tables directly'); },
@@ -94,12 +97,14 @@ describe('what it removes', () => {
     expect(log).toEqual([
       'rpc:event_media_files_to_purge',
       'remove:event-originals:b/m1.jpg',
-      'remove:event-media:b/m1-v.jpg,b/m1-t.jpg,b/m2.mp4,b/m2-t.jpg',
+      'remove:event-media:b/m1-v.jpg,b/m1-t.jpg,b/m2-t.jpg',
+      'remove:event-videos:b/m2.mp4',
       'rpc:finish_event_media_purge:m1,m2',
       'rpc:event_media_files_to_purge',
+      'rpc:event_retention_sweep',
     ]);
     expect(log.join('\n')).not.toMatch(/victim/);
-    expect(res.body).toMatchObject({ removed: 5, recorded: 2, more: false });
+    expect(res.body).toMatchObject({ removed: 5, recorded: 2, more: false, swept: { guests: 3, bookings: 1 } });
   });
 
   it('never touches another bucket, whatever the list says', () => {
@@ -107,8 +112,10 @@ describe('what it removes', () => {
       { media_id: 'x', bucket: 'print-pdfs', name: 'order.pdf' },
       { media_id: 'x', bucket: 'event-media', name: 'b/x-t.jpg' },
       { media_id: 'x', bucket: 'payment-proofs', name: 'r.png' },
+      { media_id: 'x', bucket: 'event-videos', name: 'b/x.mp4' },
+      { media_id: 'x', bucket: 'memory-clips', name: 'abcd.mp4' },
     ]);
-    expect([...groups.keys()]).toEqual(['event-media']);
+    expect([...groups.keys()]).toEqual(['event-media', 'event-videos']);
   });
 
   it('an item whose files didn\'t go is not retried in the same run', async () => {
@@ -125,6 +132,19 @@ describe('what it removes', () => {
     const res = await call();
     expect(res.code).toBe(500);
     expect(log).not.toContain('rpc:finish_event_media_purge:m1,m2');
+  });
+});
+
+describe('the sweep', () => {
+  it('a failed sweep says so (500), after the files are done', async () => {
+    db.sweep = () => ({ data: null, error: { message: 'sweep broke' } });
+    const res = await call();
+    expect(res.code).toBe(500);
+    expect(log).toContain('rpc:finish_event_media_purge:m1,m2');
+  });
+  it('the buckets it names are the ones 0044 makes', () => {
+    const sql = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'supabase', 'migrations', '0044_event_camera.sql'), 'utf8');
+    for (const b of mod.EVENT_BUCKETS) expect(sql).toContain(`values ('${b}', '${b}',`);
   });
 });
 

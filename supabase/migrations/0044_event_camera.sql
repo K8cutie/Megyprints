@@ -18,12 +18,22 @@
 --  through event_upload_allowed().
 --
 --  Files:
---    event-originals (private)  <booking>/<media>.jpg       print master
---    event-media     (public)   <booking>/<media>-v.jpg     view copy
---                               <booking>/<media>-t.jpg     thumbnail / video poster
---                               <booking>/<media>.<mp4|mov|webm>  video
---  The public bucket is never listable (no SELECT policy) and its names hold
---  a random id, the same rule as memory-clips (0030).
+--    event-originals (private, 20 MB)  <booking>/<media>.jpg       print master
+--    event-media     (public, 4 MB)    <booking>/<media>-v.jpg     view copy
+--                                      <booking>/<media>-t.jpg     thumbnail / video poster
+--    event-videos    (public, 50 MB)   <booking>/<media>.<mp4|mov|webm>  video
+--  The public buckets are never listable (no SELECT policy) and their names
+--  hold a random id, the same rule as memory-clips (0030). Small copies and
+--  videos live in different buckets so a "thumbnail" can't be 50 MB; on top,
+--  event_media_ready() measures what really landed (a thumbnail over 1 MB, a
+--  view copy over 4 MB is refused and goes with the cleanup), and an event
+--  has event_bytes_per_guest() of space per expected guest.
+--
+--  Abuse limits (anyone with the table QR is a guest): event_join() caps an
+--  event's guests at twice the booked count + 20; a guest shares at most
+--  event_photos_per_guest() photos and event_videos_per_guest() videos at a
+--  time, and begins at most twice that in a day (deleting and re-sharing
+--  doesn't open the tap); event_media_ready() checks the count again.
 --
 --  Cleanup (api/event-cleanup.mjs, service role): deleted items, uploads
 --  never finished, a cancelled or declined booking's media, and every item
@@ -45,12 +55,17 @@ create or replace function public.event_keep_days()
 returns integer language sql immutable set search_path = '' as $$ select 120 $$;
 create or replace function public.event_screen_delay_seconds()
 returns integer language sql immutable set search_path = '' as $$ select 10 $$;
+-- An event's file space per booked guest. A guest who shares everything they
+-- can is about 110 MB (20 print masters + copies, 2 short videos).
+create or replace function public.event_bytes_per_guest()
+returns bigint language sql immutable set search_path = '' as $$ select 125829120::bigint $$;
 
 do $$
 declare f text;
 begin
   foreach f in array array['event_photos_per_guest', 'event_videos_per_guest', 'event_days_before',
-                           'event_days_after', 'event_keep_days', 'event_screen_delay_seconds'] loop
+                           'event_days_after', 'event_keep_days', 'event_screen_delay_seconds',
+                           'event_bytes_per_guest'] loop
     execute format('revoke all on function public.%I() from public', f);
     execute format('grant execute on function public.%I() to anon, authenticated, service_role', f);
   end loop;
@@ -163,6 +178,32 @@ create trigger event_bookings_open_event_trg
   before update on public.event_bookings
   for each row execute function public.event_bookings_open_event();
 
+-- The host deleted their account (0043's delete_own_account sets
+-- customer_deleted_at): the event closes to guests at once (event_guest_of,
+-- event_public and event_screen check it), its name and the guests' names go,
+-- no more copies are sold, and its files go with the cleanup 3 days later.
+create or replace function public.event_bookings_host_deleted()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.customer_deleted_at is not null and old.customer_deleted_at is null then
+    new.event_title   := null;
+    new.copies_on     := false;
+    new.screen_paused := true;
+    update public.event_guests g set name = 'Guest', table_no = null where g.booking_id = new.id;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.event_bookings_host_deleted() from public, anon, authenticated;
+drop trigger if exists event_bookings_host_deleted_trg on public.event_bookings;
+create trigger event_bookings_host_deleted_trg
+  before update on public.event_bookings
+  for each row execute function public.event_bookings_host_deleted();
+
 -- Taking photos: from event_days_before() before the event day to
 -- event_days_after() after it (Manila), while booked or paid.
 create or replace function public.event_upload_window(p_date date)
@@ -246,7 +287,7 @@ as $$
     (case when p_kind = 'photo' then 'event-originals' end, p_booking::text || '/' || p_id::text || '.jpg'),
     (case when p_kind = 'photo' then 'event-media' end,     p_booking::text || '/' || p_id::text || '-v.jpg'),
     ('event-media',                                         p_booking::text || '/' || p_id::text || '-t.jpg'),
-    (case when p_kind = 'video' then 'event-media' end,     p_booking::text || '/' || p_id::text || '.' || p_ext)
+    (case when p_kind = 'video' then 'event-videos' end,    p_booking::text || '/' || p_id::text || '.' || p_ext)
   ) v(bucket, name)
   where bucket is not null;
 $$;
@@ -254,19 +295,20 @@ revoke all on function public.event_media_objects(uuid, uuid, text, text) from p
 grant execute on function public.event_media_objects(uuid, uuid, text, text) to anon, authenticated, service_role;
 
 -- ══════ 4. The buckets ══════
-do $$
-begin
-  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-  values ('event-originals', 'event-originals', false, 20971520, array['image/jpeg'])
-  on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit,
-                                 allowed_mime_types = excluded.allowed_mime_types;
-  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-  values ('event-media', 'event-media', true, 52428800, array['image/jpeg', 'video/mp4', 'video/quicktime', 'video/webm'])
-  on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit,
-                                 allowed_mime_types = excluded.allowed_mime_types;
-exception when others then
-  raise notice 'event buckets not created (%): create them in the dashboard', sqlerrm;
-end $$;
+-- No error is swallowed here: a bucket that didn't get its settings (the
+-- originals public, no size limit for anonymous uploads) must stop the push.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('event-originals', 'event-originals', false, 20971520, array['image/jpeg'])
+on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit,
+                               allowed_mime_types = excluded.allowed_mime_types;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('event-media', 'event-media', true, 4194304, array['image/jpeg'])
+on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit,
+                               allowed_mime_types = excluded.allowed_mime_types;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('event-videos', 'event-videos', true, 52428800, array['video/mp4', 'video/quicktime', 'video/webm'])
+on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit,
+                               allowed_mime_types = excluded.allowed_mime_types;
 
 -- An upload is allowed only for a file event_media_begin() just named: the
 -- item is still uploading, under an hour old, and its event is open.
@@ -322,7 +364,7 @@ drop policy if exists "event_uploads_named_by_begin" on storage.objects;
 create policy "event_uploads_named_by_begin"
   on storage.objects for insert to anon, authenticated
   with check (
-    bucket_id in ('event-originals', 'event-media')
+    bucket_id in ('event-originals', 'event-media', 'event-videos')
     and public.event_upload_allowed(bucket_id, name)
   );
 
@@ -354,6 +396,7 @@ as $$
    where b.guest_code = p_code
      and g.token_hash = public.event_token_hash(p_token)
      and g.removed_at is null
+     and b.customer_deleted_at is null
 $$;
 revoke all on function public.event_guest_of(text, text) from public, anon, authenticated;
 
@@ -381,6 +424,7 @@ as $$
     from public.event_bookings b
    where b.guest_code = p_code
      and b.status in ('booked', 'paid', 'completed')
+     and b.customer_deleted_at is null
 $$;
 revoke all on function public.event_public(text) from public;
 grant execute on function public.event_public(text) to anon, authenticated;
@@ -395,13 +439,15 @@ set search_path = ''
 as $$
 declare
   b      public.event_bookings;
-  v_name text := btrim(coalesce(p_name, ''));
+  -- No line breaks or other control characters: the name shows on the host's
+  -- pool, the guest list and the venue screen.
+  v_name text := btrim(regexp_replace(coalesce(p_name, ''), '[[:cntrl:]]+', ' ', 'g'));
   v_tok  text;
   v_id   uuid;
   v_n    integer;
 begin
   select * into b from public.event_bookings where guest_code = p_code;
-  if not found or b.status not in ('booked', 'paid', 'completed') then
+  if not found or b.status not in ('booked', 'paid', 'completed') or b.customer_deleted_at is not null then
     raise exception 'We can''t find this event. Check the QR on your table, or ask the hosts.' using errcode = 'EV020';
   end if;
   if not public.event_is_open(b.status, b.guest_code, b.event_date) then
@@ -485,13 +531,33 @@ begin
   end if;
   perform pg_advisory_xact_lock(hashtextextended('event_media:' || g.id::text, 0));
   v_max := case when p_kind = 'photo' then public.event_photos_per_guest() else public.event_videos_per_guest() end;
+  -- Shared, or on its way (an upload is taken for an hour).
   select count(*) into v_n from public.event_media m
-   where m.guest_id = g.id and m.kind = p_kind and m.deleted_at is null
+   where m.guest_id = g.id and m.kind = p_kind and m.deleted_at is null and m.purged_at is null
      and (m.status = 'ready' or m.created_at > now() - interval '1 hour');
   if v_n >= v_max then
     raise exception 'You''ve shared % %, the most for one guest. Delete one to add another.',
       v_max, case when p_kind = 'photo' then 'photos' else 'videos' end
       using errcode = 'EV024';
+  end if;
+  -- Deleting to share another is fine, up to twice the limit in a day: a
+  -- delete-and-share loop can't keep files coming between cleanups.
+  select count(*) into v_n from public.event_media m
+   where m.guest_id = g.id and m.kind = p_kind and m.created_at > now() - interval '1 day';
+  if v_n >= v_max * 2 then
+    raise exception 'You''ve shared and deleted a lot today. Try again tomorrow, or ask the hosts.' using errcode = 'EV024';
+  end if;
+  -- The event's space: what's in (measured when each item finished) plus
+  -- what may still come (an upload begun today, at the most it can be).
+  perform pg_advisory_xact_lock(hashtextextended('event_space:' || b.id::text, 0));
+  if (select coalesce(sum(case when m.status = 'ready' then coalesce(m.bytes, 0)
+                               when m.kind = 'photo' then 29360128      -- 20 MB + 4 MB + 4 MB
+                               else 56623104 end), 0)                   -- 50 MB + 4 MB
+        from public.event_media m
+       where m.booking_id = b.id and m.purged_at is null
+         and (m.status = 'ready' or m.created_at > now() - interval '1 day'))
+     >= greatest(2147483648, b.guest_count::bigint * public.event_bytes_per_guest()) then
+    raise exception 'This event is out of space for new photos. Ask the hosts.' using errcode = 'EV027';
   end if;
   insert into public.event_media (booking_id, guest_id, kind, ext, bytes, width, height, duration_s)
   values (b.id, g.id, p_kind, p_ext, p_bytes, p_width, p_height, p_duration)
@@ -515,19 +581,42 @@ security definer
 set search_path = ''
 as $$
 declare
-  g public.event_guests;
-  m public.event_media;
+  g         public.event_guests;
+  m         public.event_media;
+  v_missing integer;
+  v_bytes   bigint;
+  v_big     boolean;
+  v_n       integer;
+  v_max     integer;
 begin
   select * into g from public.event_guest_of(p_code, p_token);
   if g.id is null then return false; end if;
+  perform pg_advisory_xact_lock(hashtextextended('event_media:' || g.id::text, 0));
   select * into m from public.event_media where id = p_media_id and guest_id = g.id and deleted_at is null;
   if not found then return false; end if;
   if m.status = 'ready' then return true; end if;
-  if exists (select 1 from public.event_media_objects(m.booking_id, m.id, m.kind, m.ext) o
-              where not exists (select 1 from storage.objects s where s.bucket_id = o.bucket and s.name = o.name)) then
-    return false;
+  -- Uploads are taken for an hour (event_upload_allowed), and so is finishing
+  -- one: an item begun long ago can't count past the limit later.
+  if m.created_at < now() - interval '70 minutes' then return false; end if;
+  -- Every file is in, at a size the camera makes (the bucket caps the rest).
+  select count(*) filter (where s.id is null),
+         coalesce(sum((s.metadata ->> 'size')::bigint), 0),
+         coalesce(bool_or(o.name like '%-t.jpg' and (s.metadata ->> 'size')::bigint > 1048576), false)
+    into v_missing, v_bytes, v_big
+    from public.event_media_objects(m.booking_id, m.id, m.kind, m.ext) o
+    left join storage.objects s on s.bucket_id = o.bucket and s.name = o.name;
+  if v_missing > 0 then return false; end if;
+  if v_big then
+    raise exception 'That file isn''t one this page made. Share it again from here.' using errcode = 'EV026';
   end if;
-  update public.event_media set status = 'ready', ready_at = now() where id = m.id;
+  -- Still within the guest's share, counted again here.
+  select count(*) into v_n from public.event_media x
+   where x.guest_id = g.id and x.kind = m.kind and x.status = 'ready' and x.deleted_at is null and x.purged_at is null;
+  v_max := case when m.kind = 'photo' then public.event_photos_per_guest() else public.event_videos_per_guest() end;
+  if v_n >= v_max then
+    raise exception 'You''ve shared the most for one guest. Delete one to add another.' using errcode = 'EV024';
+  end if;
+  update public.event_media set status = 'ready', ready_at = now(), bytes = greatest(v_bytes, 1) where id = m.id;
   return true;
 end;
 $$;
@@ -557,7 +646,9 @@ grant execute on function public.event_media_delete(text, text, uuid) to anon, a
 
 -- The shared feed: everyone's ready items the host hasn't hidden, newest
 -- first, a page at a time. A guest also sees their own hidden ones, marked.
-create or replace function public.event_feed(p_code text, p_token text, p_before timestamptz default null, p_limit integer default 40)
+-- p_mine: only the guest's own (the "Mine" tab), so their older ones are
+-- never cut off by everyone's newest.
+create or replace function public.event_feed(p_code text, p_token text, p_before timestamptz default null, p_limit integer default 40, p_mine boolean default false)
 returns table (id uuid, booking_id uuid, kind text, ext text, guest_name text, table_no integer,
                ready_at timestamptz, mine boolean, hidden boolean, width integer, height integer)
 language sql
@@ -572,13 +663,14 @@ as $$
    where me.id is not null
      and m.status = 'ready'
      and m.deleted_at is null
-     and (m.guest_id = me.id or (not m.hidden and gg.removed_at is null))
+     and m.purged_at is null
+     and (m.guest_id = me.id or (not coalesce(p_mine, false) and not m.hidden and gg.removed_at is null))
      and (p_before is null or m.ready_at < p_before)
    order by m.ready_at desc
    limit greatest(1, least(coalesce(p_limit, 40), 100))
 $$;
-revoke all on function public.event_feed(text, text, timestamptz, integer) from public;
-grant execute on function public.event_feed(text, text, timestamptz, integer) to anon, authenticated;
+revoke all on function public.event_feed(text, text, timestamptz, integer, boolean) from public;
+grant execute on function public.event_feed(text, text, timestamptz, integer, boolean) to anon, authenticated;
 
 -- ══════ 7. What the host can do (the booking's own account) ══════
 create or replace function public.event_booking_of_host(p_booking_id uuid)
@@ -615,9 +707,9 @@ as $$
            'closes_on',     upper(public.event_upload_window(b.event_date)) - 1,
            'kept_until',    b.event_date + public.event_keep_days(),
            'guests',        (select count(*) from public.event_guests g where g.booking_id = b.id and g.removed_at is null),
-           'photos',        (select count(*) from public.event_media m where m.booking_id = b.id and m.kind = 'photo' and m.status = 'ready' and m.deleted_at is null),
-           'videos',        (select count(*) from public.event_media m where m.booking_id = b.id and m.kind = 'video' and m.status = 'ready' and m.deleted_at is null),
-           'picked',        (select count(*) from public.event_media m where m.booking_id = b.id and m.picked and m.status = 'ready' and m.deleted_at is null))
+           'photos',        (select count(*) from public.event_media m where m.booking_id = b.id and m.kind = 'photo' and m.status = 'ready' and m.deleted_at is null and m.purged_at is null),
+           'videos',        (select count(*) from public.event_media m where m.booking_id = b.id and m.kind = 'video' and m.status = 'ready' and m.deleted_at is null and m.purged_at is null),
+           'picked',        (select count(*) from public.event_media m where m.booking_id = b.id and m.picked and m.status = 'ready' and m.deleted_at is null and m.purged_at is null))
     from public.event_booking_of_host(p_booking_id) b
    where b.id is not null
 $$;
@@ -633,7 +725,7 @@ set search_path = ''
 as $$
 begin
   update public.event_bookings b
-     set event_title = nullif(left(btrim(coalesce(p_title, '')), 80), ''),
+     set event_title = nullif(left(btrim(regexp_replace(coalesce(p_title, ''), '[[:cntrl:]]+', ' ', 'g')), 80), ''),
          kids_on     = coalesce(p_kids_on, false),
          tables      = case when p_tables between 1 and 200 then p_tables end,
          copies_on   = coalesce(p_copies_on, false)
@@ -659,7 +751,7 @@ as $$
     from public.event_booking_of_host(p_booking_id) b
     join public.event_media m on m.booking_id = b.id
     left join public.event_guests g on g.id = m.guest_id
-   where b.id is not null and m.status = 'ready' and m.deleted_at is null
+   where b.id is not null and m.status = 'ready' and m.deleted_at is null and m.purged_at is null
    order by m.ready_at desc
 $$;
 revoke all on function public.my_event_media(uuid) from public, anon;
@@ -694,7 +786,7 @@ security definer
 set search_path = ''
 as $$
   select g.id, g.name, g.table_no, g.kids_ok, g.joined_at, g.removed_at,
-         (select count(*) from public.event_media m where m.guest_id = g.id and m.kind = 'photo' and m.status = 'ready' and m.deleted_at is null),
+         (select count(*) from public.event_media m where m.guest_id = g.id and m.kind = 'photo' and m.status = 'ready' and m.deleted_at is null and m.purged_at is null),
          (select count(*) from public.event_media m where m.guest_id = g.id and m.kind = 'video' and m.status = 'ready' and m.deleted_at is null)
     from public.event_booking_of_host(p_booking_id) b
     join public.event_guests g on g.booking_id = b.id
@@ -724,7 +816,9 @@ begin
      and g.removed_at is null
   returning g.booking_id into v_booking;
   if v_booking is null then return false; end if;
-  update public.event_media set hidden = true where guest_id = p_guest_id;
+  -- Everything they shared goes too (the cleanup removes the files that
+  -- night): hiding alone left their files at public addresses.
+  update public.event_media set hidden = true, deleted_at = coalesce(deleted_at, now()) where guest_id = p_guest_id;
   return true;
 end;
 $$;
@@ -767,7 +861,7 @@ as $$
                from (select m.id, m.booking_id, m.kind, m.ext, g.name as guest_name, g.table_no, m.ready_at
                        from public.event_media m
                        left join public.event_guests g on g.id = m.guest_id
-                      where m.booking_id = b.id and m.status = 'ready' and m.deleted_at is null and not m.hidden
+                      where m.booking_id = b.id and m.status = 'ready' and m.deleted_at is null and m.purged_at is null and not m.hidden
                         and (g.id is null or g.removed_at is null)
                         and m.ready_at <= now() - make_interval(secs => public.event_screen_delay_seconds())
                       order by m.ready_at desc
@@ -775,6 +869,7 @@ as $$
     from public.event_bookings b
    where b.guest_code = p_code and b.screen_key = p_key and p_key is not null
      and b.status in ('booked', 'paid', 'completed')
+     and b.customer_deleted_at is null
 $$;
 revoke all on function public.event_screen(text, text, integer) from public;
 grant execute on function public.event_screen(text, text, integer) to anon, authenticated;
@@ -829,6 +924,48 @@ $$;
 revoke all on function public.finish_event_media_purge(uuid[]) from public, anon, authenticated;
 grant execute on function public.finish_event_media_purge(uuid[]) to service_role;
 
+-- Personal details kept no longer than they're needed (Data Privacy Act
+-- proportionality), run nightly after the purge:
+--   * guests' names and tables, once the event's files are gone
+--     (event_keep_days() after it). The counts and the kids-OK record stay.
+--   * a request that was declined or cancelled with no payment ever sent:
+--     the host's name, mobile, venue and notes after 180 days. A booking a
+--     payment was sent or confirmed for keeps its record and receipt (the
+--     shop's books, or a payment still to match).
+create or replace function public.event_retention_sweep()
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_guests   integer;
+  v_bookings integer;
+begin
+  update public.event_guests g
+     set name = 'Guest', table_no = null
+    from public.event_bookings b
+   where b.id = g.booking_id
+     and b.event_date + public.event_keep_days() < (now() at time zone 'Asia/Manila')::date
+     and (g.name <> 'Guest' or g.table_no is not null);
+  get diagnostics v_guests = row_count;
+
+  update public.event_bookings b
+     set host_name = null, mobile = null, venue = null, notes = null
+   where b.status in ('declined', 'cancelled')
+     and b.deposit_submitted_at is null and b.deposit_paid_at is null
+     and b.balance_submitted_at is null and b.balance_paid_at is null
+     and coalesce(b.cancelled_at, b.updated_at) < now() - interval '180 days'
+     and (b.host_name is not null or b.mobile is not null or b.venue is not null or b.notes is not null);
+  get diagnostics v_bookings = row_count;
+
+  return jsonb_build_object('guests', v_guests, 'bookings', v_bookings);
+end;
+$$;
+revoke all on function public.event_retention_sweep() from public, anon, authenticated;
+grant execute on function public.event_retention_sweep() to service_role;
+
 -- ══════ Verify ══════
 select 'event tables have RLS on and no customer grants' as check,
   ((select bool_and(relrowsecurity) from pg_class where oid in ('public.event_guests'::regclass, 'public.event_media'::regclass))
@@ -848,6 +985,18 @@ select 'the event storage policies name their buckets',
   ((select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects'
      and policyname in ('event_uploads_named_by_begin', 'event_originals_host_reads')
      and coalesce(with_check, qual) like '%event-%') = 2)::text
+union all
+select 'the event buckets: originals private, small copies 4 MB jpeg, videos 50 MB',
+  ((select count(*) from storage.buckets where
+      (id = 'event-originals' and not public and file_size_limit = 20971520 and allowed_mime_types = array['image/jpeg'])
+   or (id = 'event-media' and public and file_size_limit = 4194304 and allowed_mime_types = array['image/jpeg'])
+   or (id = 'event-videos' and public and file_size_limit = 52428800
+       and allowed_mime_types = array['video/mp4', 'video/quicktime', 'video/webm'])) = 3)::text
+union all
+select 'only the service role sweeps old details',
+  (not has_function_privilege('anon', 'public.event_retention_sweep()', 'EXECUTE')
+   and not has_function_privilege('authenticated', 'public.event_retention_sweep()', 'EXECUTE')
+   and has_function_privilege('service_role', 'public.event_retention_sweep()', 'EXECUTE'))::text
 union all
 select 'the deal cost is still hidden from hosts',
   (not has_column_privilege('authenticated', 'public.event_bookings', 'deal_cost', 'SELECT'))::text;

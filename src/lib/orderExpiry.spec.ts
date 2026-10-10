@@ -84,7 +84,8 @@ describe('checkout order of steps (red-team, 2026-10-09)', () => {
     for (const reset of ['setProofFile(null)', "setPayRef('')", 'clearCheckoutOrder()', 'createdOrderRef.current = null']) expect(fn).toContain(reset);
   });
   it('HD is priced from this album\'s own kept clips, not the phone-wide setting alone', () => {
-    expect(orderPage).toMatch(/const hdMemories = qrCount > 0 && \(albumTier \?\? currentClipQuality\(\)\) === 'hd'/);
+    // (An event album's memories are part of its deal: never HD, 0045.)
+    expect(orderPage).toMatch(/const hdMemories = !eventLink && qrCount > 0 && \(albumTier \?\? currentClipQuality\(\)\) === 'hd'/);
     expect(orderPage).toMatch(/const priceReady = [^\n]*clipTierReady/);
   });
   it('a closed order shows no payment QR (the status is read on the payment step too)', () => {

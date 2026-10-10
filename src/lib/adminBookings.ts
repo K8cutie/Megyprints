@@ -40,6 +40,12 @@ export async function closeBooking(id: string, status: 'declined' | 'cancelled',
   return error ? bookingErrorMessage(error) : null;
 }
 
+/** A closed booking's money is settled with the host (refunded, or kept under the deal). */
+export async function settleBookingMoney(id: string): Promise<string | null> {
+  const { error } = await supabase.rpc('settle_booking_money', { p_id: id });
+  return error ? bookingErrorMessage(error) : null;
+}
+
 /** A receipt in the private payment-proofs bucket, for two minutes. */
 export async function receiptUrl(path: string): Promise<string | null> {
   const { data, error } = await supabase.storage.from('payment-proofs').createSignedUrl(path, 120);

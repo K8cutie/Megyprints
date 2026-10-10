@@ -1,7 +1,7 @@
 // Nightly cleanup of Megyprints Events files (0044).
 //
 // ── WHY THIS ENDPOINT EXISTS ────────────────────────────────────────────────
-// Guests' photos and videos live in Storage (event-originals, event-media).
+// Guests' photos and videos live in Storage (event-originals, event-media, event-videos).
 // The database decides which may go (event_media_files_to_purge):
 //   • items a guest deleted;
 //   • uploads that never finished (a day old);
@@ -25,6 +25,9 @@ import { createClient } from '@supabase/supabase-js';
 import { secretMatches } from './expire-orders.mjs';
 import { REMOVE_BATCH } from './delete-account.mjs';
 
+/** The only buckets this ever removes from (0044). */
+export const EVENT_BUCKETS = new Set(['event-originals', 'event-media', 'event-videos']);
+
 /** Files listed per round; the rest wait for the next round or night. */
 export const PURGE_PAGE = 500;
 /** Stop starting new rounds after this long, well inside the function limit. */
@@ -41,7 +44,7 @@ export function byBucket(rows) {
   const out = new Map();
   for (const r of rows) {
     if (!r || typeof r.bucket !== 'string' || typeof r.name !== 'string' || !r.name) continue;
-    if (r.bucket !== 'event-originals' && r.bucket !== 'event-media') continue; // only ever these two
+    if (!EVENT_BUCKETS.has(r.bucket)) continue; // only ever these three
     if (!out.has(r.bucket)) out.set(r.bucket, []);
     out.get(r.bucket).push(r.name);
   }
@@ -87,6 +90,11 @@ export default async function handler(req, res) {
       if (finErr) throw new Error(`record: ${finErr.message}`);
       summary.recorded += typeof n === 'number' ? n : 0;
     }
+    // Then the old personal details (0044 event_retention_sweep): guests'
+    // names once an event's files are gone, abandoned requests' contact.
+    const { data: swept, error: swErr } = await admin.rpc('event_retention_sweep');
+    if (swErr) throw new Error(`sweep: ${swErr.message}`);
+    summary.swept = swept ?? null;
   } catch (err) {
     console.error('[event-cleanup] failed:', err instanceof Error ? err.message : err);
     res.status(500).json({ ...summary, error: 'Cleanup failed.' });

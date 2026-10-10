@@ -19,6 +19,8 @@ const h = vi.hoisted(() => ({
   downloads: [] as string[],
   booking: null as unknown,
   fresh: vi.fn(),
+  // When set, the next photo waits here (an upload still going).
+  hold: null as Promise<void> | null,
   // One object, as the real auth context gives: a new one each render loops the page's effects.
   auth: { user: { id: 'host-1', email: 'host@example.test' }, loading: false },
 }));
@@ -46,7 +48,11 @@ vi.mock('../lib/supabase', () => {
   };
 });
 vi.mock('../lib/eventImage', () => ({
-  makePhotoCopies: async () => ({ original: new Blob(['o']), view: new Blob(['v']), thumb: new Blob(['t']), width: 3600, height: 2400 }),
+  makePhotoCopies: async () => {
+    const wait = h.hold; h.hold = null;
+    if (wait) await wait;
+    return { original: new Blob(['o']), view: new Blob(['v']), thumb: new Blob(['t']), width: 3600, height: 2400 };
+  },
   videoFacts: async () => ({ thumb: new Blob(['t']), durationS: 5, width: 1080, height: 1920 }),
 }));
 vi.mock('../lib/videoTranscode', () => ({ transcodeSupported: () => false, transcodeToMp4: vi.fn() }));
@@ -169,6 +175,24 @@ describe('the guest page (/e/:code)', () => {
     expect($('guest-queue')?.textContent).toContain('Shared');
   });
 
+  it('photos picked while one is still uploading all go through, in turn', async () => {
+    localStorage.setItem('megy-event-guest:abc12345', JSON.stringify({ token: 'tok-1', guestId: 'g1', name: 'Tita Lorna', table: 5 }));
+    let n = 0;
+    h.rpc.event_media_begin = () => { n++; return { data: { media_id: `m${n}`, booking_id: 'b1', objects: [{ bucket: 'event-media', name: `b1/m${n}-t.jpg` }] }, error: null }; };
+    await render('/e/abc12345');
+    let release!: () => void;
+    h.hold = new Promise<void>((r) => { release = r; });
+    const jpg = (name: string) => new File(['x'], name, { type: 'image/jpeg' });
+    await pickFiles($('guest-pick-input'), [jpg('first.jpg')]);
+    await pickFiles($('guest-pick-input'), [jpg('second.jpg'), jpg('third.jpg')]);
+    expect(h.calls.filter(([c]) => c === 'event_media_begin')).toHaveLength(0);
+    await act(async () => { release(); });
+    await settle();
+    expect(h.calls.filter(([c]) => c === 'event_media_begin')).toHaveLength(3);
+    expect(($('guest-queue')?.textContent ?? '').match(/Shared/g)).toHaveLength(3);
+    expect($('guest-queue')?.textContent).not.toContain('Getting it ready');
+  });
+
   it('the feed: everyone’s, and mine; mine hidden by the hosts says so; a failed delete says so', async () => {
     localStorage.setItem('megy-event-guest:abc12345', JSON.stringify({ token: 'tok-1', guestId: 'g1', name: 'Tita Lorna', table: 5 }));
     h.rpc.event_feed = () => ({ data: [feedItem('m1'), feedItem('m2', { mine: true, hidden: true, guest_name: 'Tita Lorna' })], error: null });
@@ -260,7 +284,7 @@ describe('the host’s event page (/events/:id)', () => {
     const imp = takePendingEventImport()!;
     expect(imp).toMatchObject({ bookingId: 'b1', bookingNumber: 'EV-2026-A2474MV', title: 'Ana & Ben', size: '8x8', cover: 'hard', pages: 80 });
     expect(imp.files.map((f) => f.name)).toEqual(Array.from({ length: 41 }, (_, i) => `Migo-m${i}.jpg`));
-    expect(imp.videos).toEqual([{ id: 'm52', url: 'https://x/event-media/b1/m52.mp4', ext: 'mp4', by: 'Bea', durationS: 4 }]);
+    expect(imp.videos).toEqual([{ id: 'm52', url: 'https://x/event-videos/b1/m52.mp4', ext: 'mp4', by: 'Bea', durationS: 4 }]);
     expect(h.fresh).toHaveBeenCalledWith('host-1');
     expect($('where')?.textContent).toBe('/builder');
   });

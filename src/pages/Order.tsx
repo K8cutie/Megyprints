@@ -322,7 +322,8 @@ export default function Order() {
   }, [clipKey]);
   const clipTierReady = !clipKey || clipTier?.key === clipKey;
   const albumTier = clipKey && clipTier?.key === clipKey ? clipTier.tier : null;
-  const hdMemories = qrCount > 0 && (albumTier ?? currentClipQuality()) === 'hd';
+  // An event album's memories are part of its deal: standard, the included term.
+  const hdMemories = !eventLink && qrCount > 0 && (albumTier ?? currentClipQuality()) === 'hd';
   const [clipPrep, setClipPrep] = useState<{ phase: ClipUploadPhase | 'ready' | 'failed' | 'missing' | null; done: number; total: number; bytes: number | null; missing: string[] }>({ phase: null, done: 0, total: 0, bytes: null, missing: [] });
   useEffect(() => {
     if (!clipKey) return;
@@ -357,7 +358,7 @@ export default function Order() {
   const schedule = getPriceSchedule(); // re-read each render; non-null once loaded
   const tiers = schedule ? hostingTiersOf(schedule) : [];
   const includedYears = schedule ? includedHostingYears(schedule) : null;
-  const effectiveYears = qrCount > 0 ? (hostingYears ?? includedYears) : null;
+  const effectiveYears = qrCount > 0 ? (eventLink ? includedYears : (hostingYears ?? includedYears)) : null;
   const hdPrice = schedule ? hdMemoriesPriceOf(schedule) : 0;
 
   // Cheap arithmetic — recomputed per render on purpose (schedule is read fresh).
@@ -1160,7 +1161,7 @@ export default function Order() {
                   </p>
                 </div>
               )}
-              {qrCount > 0 && tiers.length > 0 && (
+              {qrCount > 0 && tiers.length > 0 && !eventLink && (
                 <div className="mt-3 rounded-xl border border-line-soft bg-white px-3 py-3">
                   <p className="text-xs font-semibold text-dark">How long should your memories stay live?</p>
                   <p className="text-[11px] text-light mb-2">Your videos play from the printed QR for the whole term. Renew anytime after.</p>

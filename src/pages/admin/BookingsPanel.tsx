@@ -9,9 +9,9 @@ import { Loader2, Check, Receipt, RefreshCw, Phone } from 'lucide-react';
 import { loadOwnerPricingModel } from '../../lib/storeSettings';
 import type { PricingModel } from '../../lib/pricing';
 import {
-  balanceOf, costToMake, dealProblem, eventTypeLabel, peso, type DealDraft, type EventBooking, type PaymentKind,
+  balanceOf, costToMake, dealProblem, eventTypeLabel, moneyToSettle, peso, type DealDraft, type EventBooking, type PaymentKind,
 } from '../../lib/eventBookings';
-import { closeBooking, fetchOwnerBookings, markBookingPaid, receiptUrl, setBookingDeal } from '../../lib/adminBookings';
+import { closeBooking, fetchOwnerBookings, markBookingPaid, receiptUrl, setBookingDeal, settleBookingMoney } from '../../lib/adminBookings';
 import { ALBUM_SIZES } from '../builder/types';
 
 /** A database time as the owner reads it: Manila, not UTC (a deposit sent
@@ -180,6 +180,20 @@ function BookingRow({ b, model, onChanged }: { b: EventBooking; model: PricingMo
               <button onClick={() => { setClosing(null); setReason(''); }} className="h-8 px-3 rounded-lg border border-line text-medium">Keep it</button>
             </>
           )}
+        </div>
+      )}
+      {moneyToSettle(b) && (
+        <div className="mt-3 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12]" data-testid="booking-money-to-settle">
+          <p>
+            {b.deposit_paid_at || b.balance_paid_at
+              ? <>Money to settle: you confirmed {peso(Number(b.balance_paid_at ? b.deal_total : b.deal_deposit))} for this booking.</>
+              : <>Money to settle: the host sent a payment you didn’t confirm. Check your bank.</>}
+            {' '}Refund it or keep it under the deal, then mark it settled. Until then the host’s account can’t be deleted.
+          </p>
+          <button onClick={() => void run(() => settleBookingMoney(b.id))} disabled={saving} data-testid="booking-settle"
+            className="mt-2 h-8 px-3 rounded-lg bg-white border border-[#F0D9A8] font-medium text-dark disabled:opacity-50">
+            Mark money settled
+          </button>
         </div>
       )}
       {err && <p className="text-xs text-red-600 mt-2" role="alert" data-testid="booking-row-error">{err}</p>}

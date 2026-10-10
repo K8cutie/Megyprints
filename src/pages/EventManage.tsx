@@ -373,16 +373,18 @@ function GuestsCard({ guests, onChanged }: { guests: EventGuest[]; onChanged: ()
       {guests.length === 0 ? <p className="text-sm text-medium">No one yet.</p> : (
         <ul className="divide-y divide-line-soft">
           {guests.map((g) => (
-            <li key={g.id} className="py-2 flex items-center gap-3 text-sm" data-testid="manage-guest">
-              <span className={`flex-1 ${g.removed_at ? 'text-light line-through' : 'text-dark'}`}>
-                {g.name}{g.table_no ? ` · Table ${g.table_no}` : ''} <span className="text-medium">· {g.photos} photos, {g.videos} videos</span>
+            <li key={g.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" data-testid="manage-guest">
+              <span className={`flex-1 min-w-[12rem] ${g.removed_at ? 'text-light line-through' : 'text-dark'}`}>
+                {g.name}{g.table_no ? ` · Table ${g.table_no}` : ''}{' '}
+                <span className="text-medium">· {g.photos} photo{g.photos === 1 ? '' : 's'}, {g.videos} video{g.videos === 1 ? '' : 's'}</span>
               </span>
               {!g.removed_at && (asking === g.id ? (
-                <>
+                // Its own line under the name, so the name isn't squeezed on a phone.
+                <div className="w-full flex flex-wrap justify-end gap-2">
                   <button type="button" onClick={() => { void removeGuest(g.id).then(onChanged); setAsking(null); }} data-testid="manage-remove-yes"
-                    className="px-2.5 py-1 rounded-lg bg-[#FDE7E7] text-[#C0392B] text-xs font-semibold">Yes, remove {g.name}</button>
+                    className="px-2.5 py-1 rounded-lg bg-[#FDE7E7] text-[#C0392B] text-xs font-semibold">Yes, remove {g.name} and their photos</button>
                   <button type="button" onClick={() => setAsking(null)} className="px-2.5 py-1 rounded-lg border border-line text-xs">Keep</button>
-                </>
+                </div>
               ) : (
                 <button type="button" onClick={() => setAsking(g.id)} data-testid="manage-remove"
                   className="px-2.5 py-1 rounded-lg border border-line text-xs text-medium">Remove</button>
@@ -391,7 +393,7 @@ function GuestsCard({ guests, onChanged }: { guests: EventGuest[]; onChanged: ()
           ))}
         </ul>
       )}
-      <p className="mt-2 text-[11px] text-light">Removing someone stops them sharing and hides everything they shared.</p>
+      <p className="mt-2 text-[11px] text-light">Removing someone stops them sharing and deletes everything they shared.</p>
     </Card>
   );
 }

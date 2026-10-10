@@ -157,9 +157,10 @@ end $$;
 do $$
 declare src text;
 begin
+  -- Missing is a failure, not a skip: the app ships Events, so a database
+  -- without 0043 is a migration that was declared but never run.
   if to_regclass('public.event_bookings') is null then
-    raise notice 'SKIP: event_bookings not created yet (0043)';
-    return;
+    raise exception 'REGRESSION (event bookings): public.event_bookings is missing: 0043 was never applied here';
   end if;
   if has_table_privilege('authenticated', 'public.event_bookings', 'UPDATE')
      or has_table_privilege('authenticated', 'public.event_bookings', 'DELETE')
@@ -178,7 +179,69 @@ begin
   if src not like '%booking_proof_names%' or src not like '%event_bookings%' then
     raise exception 'REGRESSION (event bookings): delete_own_account() no longer removes-and-checks booking receipts or bookings in flight';
   end if;
+  if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects'
+                 and policyname = 'payment_proofs_select_operators' and qual like '%booking-%') then
+    raise exception 'REGRESSION (event bookings): non-owner operators can read booking receipts again';
+  end if;
+  if has_function_privilege('anon', 'public.settle_booking_money(uuid)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.booking_proof_names(uuid, text)', 'EXECUTE') then
+    raise exception 'REGRESSION (event bookings): anon can run an owner or host booking function';
+  end if;
+  if src not like '%booking_money_to_settle%' then
+    raise exception 'REGRESSION (event bookings): account deletion no longer waits for a closed booking''s money to be settled';
+  end if;
   raise notice 'PASS: event bookings are owner-priced, host-read-only, and go with the account';
+end $$;
+
+-- ── GUARD 8: the guest camera and the event album (0044, 0045) ─────────────
+-- Guests have no account: everything they do goes through (code, token)
+-- functions, the files go only where event_media_begin() named them, the
+-- print masters stay private, a "thumbnail" can't be 50 MB, the hosts'
+-- functions aren't anon's, and a booking pays for one album.
+do $$
+declare f text;
+begin
+  if to_regclass('public.event_media') is null or to_regclass('public.event_guests') is null then
+    raise exception 'REGRESSION (guest camera): event_media / event_guests are missing: 0044 was never applied here';
+  end if;
+  if has_table_privilege('anon', 'public.event_media', 'SELECT') or has_table_privilege('authenticated', 'public.event_media', 'SELECT')
+     or has_table_privilege('anon', 'public.event_guests', 'SELECT') or has_table_privilege('authenticated', 'public.event_guests', 'SELECT') then
+    raise exception 'REGRESSION (guest camera): customers can read event_media / event_guests (token hashes) directly';
+  end if;
+  if (select count(*) from storage.buckets where
+        (id = 'event-originals' and not public and file_size_limit = 20971520)
+     or (id = 'event-media' and public and file_size_limit <= 4194304 and allowed_mime_types = array['image/jpeg'])
+     or (id = 'event-videos' and public and file_size_limit <= 52428800)) <> 3 then
+    raise exception 'REGRESSION (guest camera): an event bucket is missing, public when it should be private, or lost its size/type limit';
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and cmd = 'SELECT'
+             and (coalesce(qual, '') like '%event-media%' or coalesce(qual, '') like '%event-videos%')) then
+    raise exception 'REGRESSION (guest camera): the public event buckets became listable (a SELECT policy names them)';
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects'
+                 and policyname = 'event_uploads_named_by_begin' and with_check like '%event_upload_allowed%') then
+    raise exception 'REGRESSION (guest camera): guest uploads are no longer limited to the names event_media_begin() gave';
+  end if;
+  foreach f in array array['public.my_event(uuid)', 'public.my_event_media(uuid)', 'public.set_event_media(uuid, boolean, boolean)',
+                           'public.remove_event_guest(uuid)', 'public.set_event_screen(uuid, boolean)',
+                           'public.cover_order_with_booking(uuid, uuid)', 'public.place_event_copy_order(text, jsonb)',
+                           'public.event_media_files_to_purge(integer)', 'public.event_retention_sweep()'] loop
+    if has_function_privilege('anon', f, 'EXECUTE') then
+      raise exception 'REGRESSION (guest camera): anon can run %', f;
+    end if;
+  end loop;
+  if has_function_privilege('authenticated', 'public.event_media_files_to_purge(integer)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.event_retention_sweep()', 'EXECUTE') then
+    raise exception 'REGRESSION (guest camera): a signed-in customer can run the service-only cleanup';
+  end if;
+  if not exists (select 1 from pg_trigger where tgname = 'orders_event_columns_guard_trg')
+     or not exists (select 1 from pg_trigger where tgname = 'orders_event_follow_trg') then
+    raise exception 'REGRESSION (event album): customers can point an order at a booking, or a reopened order can be a second free album';
+  end if;
+  if pg_get_functiondef('public.event_copy_offer(text)'::regprocedure) not like '%customer_deleted_at is null%' then
+    raise exception 'REGRESSION (event album): copies of a deleted host''s album are on offer again';
+  end if;
+  raise notice 'PASS: the guest camera is limited, its files private or unlistable, and a booking pays for one album';
 end $$;
 
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────

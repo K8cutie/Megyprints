@@ -15,6 +15,8 @@ const h = vi.hoisted(() => ({
   begun: null as unknown,
   uploadError: null as { message: string } | null,
   readyData: true as unknown,
+  transcode: false,
+  uploadFailOnce: false,
 }));
 vi.mock('./supabase', () => ({
   supabaseConfigured: true,
@@ -28,7 +30,11 @@ vi.mock('./supabase', () => ({
     },
     storage: {
       from: (bucket: string) => ({
-        upload: async (name: string, body: Blob, opts: unknown) => { h.calls.push(['upload', bucket, name, body, opts]); return { error: h.uploadError }; },
+        upload: async (name: string, body: Blob, opts: unknown) => {
+          h.calls.push(['upload', bucket, name, body, opts]);
+          if (h.uploadFailOnce) { h.uploadFailOnce = false; return { error: { message: 'Failed to fetch' } }; }
+          return { error: h.uploadError };
+        },
         getPublicUrl: (name: string) => ({ data: { publicUrl: `https://x.supabase.co/storage/v1/object/public/${bucket}/${name}` } }),
       }),
     },
@@ -44,7 +50,10 @@ vi.mock('./eventImage', async (importOriginal) => ({
   makePhotoCopies: async () => ({ ...copies, width: 3600, height: 2400 }),
   videoFacts: async () => ({ thumb: copies.thumb, durationS: 12.345, width: 1080, height: 1920 }),
 }));
-vi.mock('./videoTranscode', () => ({ transcodeSupported: () => false, transcodeToMp4: vi.fn() }));
+vi.mock('./videoTranscode', () => ({
+  transcodeSupported: () => h.transcode,
+  transcodeToMp4: async () => ({ blob: new Blob(['small-mp4'], { type: 'video/mp4' }) }),
+}));
 
 import {
   EVENT_PHOTOS_PER_GUEST, EVENT_VIDEOS_PER_GUEST, EVENT_VIDEO_MAX_BYTES, EVENT_VIDEO_MAX_SECONDS,
@@ -58,7 +67,7 @@ const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/0044_even
 const g = globalThis as unknown as { localStorage?: unknown };
 let store: Record<string, string>;
 beforeEach(() => {
-  h.calls = []; h.uploadError = null; h.readyData = true;
+  h.calls = []; h.uploadError = null; h.readyData = true; h.transcode = false; h.uploadFailOnce = false;
   store = {};
   g.localStorage = {
     getItem: (k: string) => (k in store ? store[k] : null),
@@ -73,8 +82,9 @@ describe('the numbers are the database’s', () => {
     expect(sql).toMatch(new RegExp(`event_photos_per_guest\\(\\)\\s+returns integer language sql immutable set search_path = '' as \\$\\$ select ${EVENT_PHOTOS_PER_GUEST} \\$\\$`));
     expect(sql).toMatch(new RegExp(`event_videos_per_guest\\(\\)\\s+returns integer language sql immutable set search_path = '' as \\$\\$ select ${EVENT_VIDEOS_PER_GUEST} \\$\\$`));
   });
-  it('a video can be no bigger than the event-media bucket takes', () => {
-    expect(sql).toContain(`values ('event-media', 'event-media', true, ${EVENT_VIDEO_MAX_BYTES},`);
+  it('a video can be no bigger than the event-videos bucket takes; small copies have their own 4 MB jpeg bucket', () => {
+    expect(sql).toContain(`values ('event-videos', 'event-videos', true, ${EVENT_VIDEO_MAX_BYTES},`);
+    expect(sql).toContain("values ('event-media', 'event-media', true, 4194304, array['image/jpeg'])");
   });
   it('the print master fits the private bucket’s 20 MB, as a JPEG', () => {
     expect(sql).toContain("values ('event-originals', 'event-originals', false, 20971520, array['image/jpeg'])");
@@ -93,7 +103,7 @@ describe('links and file names', () => {
     }
     expect(eventMediaUrl('b1', 'm1', 'view')).toMatch(/\/event-media\/b1\/m1-v\.jpg$/);
     expect(eventMediaUrl('b1', 'm1', 'thumb')).toMatch(/\/event-media\/b1\/m1-t\.jpg$/);
-    expect(eventMediaUrl('b1', 'm1', 'video', 'mov')).toMatch(/\/event-media\/b1\/m1\.mov$/);
+    expect(eventMediaUrl('b1', 'm1', 'video', 'mov')).toMatch(/\/event-videos\/b1\/m1\.mov$/);
     expect(originalName('b1', 'm1')).toBe('b1/m1.jpg');
   });
   it('photo copies never upscale, and keep the shape', () => {
@@ -163,7 +173,7 @@ describe('sharing', () => {
     await expect(sharePhoto('abc12345', 'tok', new File(['x'], 'a.jpg'))).rejects.toThrow('Your upload didn’t finish. Try again.');
   });
   it('a video: the poster goes to -t.jpg, the video to its own name, with its type', async () => {
-    h.begun = { media_id: 'm2', booking_id: 'b1', objects: [{ bucket: 'event-media', name: 'b1/m2-t.jpg' }, { bucket: 'event-media', name: 'b1/m2.mov' }] };
+    h.begun = { media_id: 'm2', booking_id: 'b1', objects: [{ bucket: 'event-media', name: 'b1/m2-t.jpg' }, { bucket: 'event-videos', name: 'b1/m2.mov' }] };
     const file = new File(['video'], 'clip.MOV', { type: 'video/quicktime' });
     await shareVideo('abc12345', 'tok', file);
     expect(h.calls[0]).toEqual(['rpc', 'event_media_begin', { p_code: 'abc12345', p_token: 'tok', p_kind: 'video', p_ext: 'mov', p_bytes: 5, p_width: 1080, p_height: 1920, p_duration: 12.35 }]);
@@ -172,6 +182,30 @@ describe('sharing', () => {
       ['b1/m2-t.jpg', copies.thumb, 'image/jpeg'],
       ['b1/m2.mov', file, 'video/quicktime'],
     ]);
+  });
+  it('a retry picks up the same item: one place used, not one per try', async () => {
+    h.begun = BEGUN_PHOTO;
+    h.uploadFailOnce = true;
+    const resume = {};
+    await expect(sharePhoto('abc12345', 'tok', new File(['x'], 'a.jpg'), undefined, resume)).rejects.toThrow('Your upload stopped.');
+    await expect(sharePhoto('abc12345', 'tok', new File(['x'], 'a.jpg'), undefined, resume)).resolves.toBe('m1');
+    expect(h.calls.filter((c) => c[1] === 'event_media_begin')).toHaveLength(1);
+    expect(h.calls.filter((c) => c[1] === 'event_media_ready')).toHaveLength(1);
+  });
+  it('a retry after the hour the database takes uploads for begins a new item', async () => {
+    h.begun = BEGUN_PHOTO;
+    const resume = { begun: BEGUN_PHOTO, at: Date.now() - 55 * 60 * 1000 };
+    await sharePhoto('abc12345', 'tok', new File(['x'], 'a.jpg'), undefined, resume);
+    expect(h.calls.filter((c) => c[1] === 'event_media_begin')).toHaveLength(1);
+  });
+  it('a video is made again on the phone where it can: an mp4 without the camera’s data', async () => {
+    h.transcode = true;
+    h.begun = { media_id: 'm3', booking_id: 'b1', objects: [{ bucket: 'event-media', name: 'b1/m3-t.jpg' }, { bucket: 'event-videos', name: 'b1/m3.mp4' }] };
+    await shareVideo('abc12345', 'tok', new File(['a-big-original-video'], 'clip.MOV', { type: 'video/quicktime' }));
+    expect(h.calls[0]).toMatchObject(['rpc', 'event_media_begin', { p_kind: 'video', p_ext: 'mp4', p_bytes: 9 }]);
+    const video = h.calls.find((c) => c[0] === 'upload' && c[2] === 'b1/m3.mp4')!;
+    expect(await (video[3] as Blob).text()).toBe('small-mp4');
+    expect((video[4] as { contentType: string }).contentType).toBe('video/mp4');
   });
   it('a video that’s wrong is refused before anything uploads, in words', () => {
     expect(videoProblem({ type: 'video/x-msvideo', name: 'a.avi', size: 10 }, 5)).toMatch(/MP4 or MOV/);

@@ -333,22 +333,79 @@ begin
     r := r || pg_temp.line('J2', 'X cannot delete the account while it is booked', 'REFUSED P0001', got);
     r := r || pg_temp.line('J3', '...named as an event booking', 'true', (got like '%Event booking EV-%is paid and not finished yet%')::text);
 
-    -- Y has a quoted booking with a deposit receipt still in storage.
+    -- Y sent a deposit (receipt in storage), not confirmed yet: money in flight.
     by_ := pg_temp.do_as(Y, 'authenticated', pg_temp.req_sql(), 'value')::uuid;
     perform pg_temp.do_as(OWN, 'authenticated', pg_temp.deal_sql(by_));
     perform pg_temp.do_as(Y, 'authenticated', format($q$insert into storage.objects (bucket_id, name, owner, owner_id) values ('payment-proofs', %L, auth.uid(), auth.uid()::text)$q$, 'booking-' || by_ || '-deposit.png'));
     perform pg_temp.do_as(Y, 'authenticated', format('select public.submit_booking_payment(%L, ''deposit'', ''55443322'', %L)', by_, 'booking-' || by_ || '-deposit.png'));
+    r := r || pg_temp.line('J4', 'Y''s preflight names the booking with a deposit sent', 'booking|quoted',
+           pg_temp.do_as(Y, 'authenticated', $q$select (public.account_deletion_preflight() -> 'blocking' -> 0 ->> 'kind') || '|' || (public.account_deletion_preflight() -> 'blocking' -> 0 ->> 'status')$q$, 'value'));
     got := pg_temp.do_as(Y, 'authenticated', 'select public.delete_own_account()::text', 'value');
-    r := r || pg_temp.line('J4', 'Y cannot delete while a booking receipt is still stored', 'REFUSED P0001', got);
-    r := r || pg_temp.line('J5', '...saying which', 'true', (got like '%Could not remove 1 booking receipt%')::text);
+    r := r || pg_temp.line('J5', 'Y can''t delete while the deposit they sent waits to be confirmed', 'REFUSED P0001', got);
+    r := r || pg_temp.line('J6', '...saying so', 'true', (got like '%The deposit you sent for booking EV-% is waiting for us to confirm it%')::text);
+
+    -- The owner confirms it, then cancels the booking: money to settle (a refund, say).
+    perform pg_temp.do_as(OWN, 'authenticated', format('select public.mark_booking_paid(%L, ''deposit'')', by_), 'value');
+    perform pg_temp.do_as(OWN, 'authenticated', format('select public.close_booking(%L, ''cancelled'', ''Venue closed: refund due'')', by_));
+    got := pg_temp.do_as(Y, 'authenticated', 'select public.delete_own_account()::text', 'value');
+    r := r || pg_temp.line('J7', 'cancelled after the deposit was confirmed: Y still can''t delete', 'REFUSED P0001', got);
+    r := r || pg_temp.line('J8', '...the money isn''t settled yet', 'true', (got like '%We still have to settle the money for booking EV-%')::text);
+    r := r || pg_temp.line('J9', 'the host can''t mark their own money settled', 'REFUSED 42501',
+           pg_temp.do_as(Y, 'authenticated', format('select public.settle_booking_money(%L)', by_)));
+    r := r || pg_temp.line('J10', 'the owner marks it settled', 'ALLOWED',
+           pg_temp.do_as(OWN, 'authenticated', format('select public.settle_booking_money(%L)', by_)));
+    r := r || pg_temp.line('J11', '...once', 'REFUSED EV005',
+           pg_temp.do_as(OWN, 'authenticated', format('select public.settle_booking_money(%L)', by_)));
+    r := r || pg_temp.line('J12', 'settled stays settled, even for the service role', 'REFUSED EV005',
+           pg_temp.do_as(null, 'service_role', format('update public.event_bookings set money_settled_at = null where id = %L', by_)));
+
+    -- Settled: the receipt rule is next.
+    got := pg_temp.do_as(Y, 'authenticated', 'select public.delete_own_account()::text', 'value');
+    r := r || pg_temp.line('J13', 'Y can''t delete while a booking receipt is still stored', 'REFUSED P0001', got);
+    r := r || pg_temp.line('J14', '...saying which', 'true', (got like '%Could not remove 1 booking receipt%')::text);
     perform pg_temp.do_as(null, 'service_role', format($q$delete from storage.objects where bucket_id = 'payment-proofs' and name = %L$q$, 'booking-' || by_ || '-deposit.png'));
     got := pg_temp.do_as(Y, 'authenticated', 'select (public.delete_own_account() ->> ''anonymized_bookings'')', 'value');
-    r := r || pg_temp.line('J6', 'once the receipt is gone, Y''s account is deleted', '1', got);
-    r := r || pg_temp.line('J7', '...and the booking is kept without the person', 'cancelled|customer|<null>|<null>|<null>|<null>|<null>|true|55443322|12000.00',
+    r := r || pg_temp.line('J15', 'once the receipt is gone, Y''s account is deleted', '1', got);
+    r := r || pg_temp.line('J16', '...and the booking is kept without the person, money and settlement on record', 'cancelled|owner|<null>|<null>|<null>|<null>|<null>|true|true|55443322|12000.00',
            (select concat_ws('|', status, cancelled_by, coalesce(user_id::text, '<null>'), coalesce(host_name, '<null>'), coalesce(mobile, '<null>'),
                              coalesce(venue, '<null>'), coalesce(deposit_proof_path, '<null>'), (customer_deleted_at is not null)::text,
-                             deposit_reference, deal_deposit)
+                             (money_settled_at is not null)::text, deposit_reference, deal_deposit)
               from public.event_bookings where id = by_));
+    raise exception using errcode = 'MPOK0';
+  exception when sqlstate 'MPOK0' then null;
+  end;
+
+  -- ── K. Hardening (Kraken 2026-10-10) ───────────────────────────────────────
+  declare
+    Z uuid; F uuid; bz uuid; bz2 uuid;
+  begin
+    Z := pg_temp.mk_user('z'); F := pg_temp.mk_user('f');
+    insert into public.operator_roles (email, role) values ('zz-probe-evf@probe.invalid', 'fulfillment');
+    -- Control characters can't forge lines in the owner's record.
+    bz := pg_temp.do_as(Z, 'authenticated', format($q$insert into public.event_bookings (user_id, event_type, event_date, venue, guest_count, host_name, mobile, notes)
+            values (auth.uid(), 'debut', (now() at time zone 'Asia/Manila')::date + 30, %L, 80, %L, '0917 000 0000', %L) returning id::text$q$,
+            E'Zz Hall\nReason: fake', E'Zz\rHost', E'Line one\nLine two\u0007'), 'value')::uuid;
+    r := r || pg_temp.line('K1', 'no line breaks in the venue or name; notes keep theirs, nothing else', 'Zz Hall Reason: fake|Zz Host|true|false',
+           (select concat_ws('|', venue, host_name, (notes like E'Line one\nLine two%')::text, (notes ~ '[\x01-\x09\x0b-\x1f]')::text) from public.event_bookings where id = bz));
+    r := r || pg_temp.line('K2', '"I''ve sent" with no kind is refused, not taken as the balance', 'REFUSED 22023',
+           pg_temp.do_as(Z, 'authenticated', format('select public.submit_booking_payment(%L, null, ''123'')', bz)));
+    -- Booking receipts are the owner's; fulfillment reads order receipts only.
+    perform pg_temp.do_as(null, 'service_role', $q$insert into storage.objects (bucket_id, name) values ('payment-proofs', 'booking-00000000-0000-0000-0000-00000000000z-deposit.png'), ('payment-proofs', '00000000-0000-0000-0000-00000000000z.png')$q$);
+    r := r || pg_temp.line('K3', 'fulfillment staff can''t read a booking receipt', '0',
+           pg_temp.do_as(F, 'authenticated', $q$select count(*)::text from storage.objects where bucket_id = 'payment-proofs' and name = 'booking-00000000-0000-0000-0000-00000000000z-deposit.png'$q$, 'value'));
+    r := r || pg_temp.line('K4', '...but still reads order receipts', '1',
+           pg_temp.do_as(F, 'authenticated', $q$select count(*)::text from storage.objects where bucket_id = 'payment-proofs' and name = '00000000-0000-0000-0000-00000000000z.png'$q$, 'value'));
+    r := r || pg_temp.line('K5', 'the owner reads booking receipts', '1',
+           pg_temp.do_as(OWN, 'authenticated', $q$select count(*)::text from storage.objects where bucket_id = 'payment-proofs' and name = 'booking-00000000-0000-0000-0000-00000000000z-deposit.png'$q$, 'value'));
+    r := r || pg_temp.line('K6', 'anon can''t run the receipt-name or settle functions', 'false|false',
+           (has_function_privilege('anon', 'public.booking_proof_names(uuid, text)', 'EXECUTE')::text || '|' ||
+            has_function_privilege('anon', 'public.settle_booking_money(uuid)', 'EXECUTE')::text));
+    -- The host removed at the auth layer (the "email us to delete" route).
+    bz2 := pg_temp.do_as(Z, 'authenticated', pg_temp.req_sql(), 'value')::uuid;
+    execute format('delete from auth.users where id = %L', Z);  -- as the auth admin would
+    r := r || pg_temp.line('K7', 'deleted at the auth layer: the request closes and loses the person', 'cancelled|customer|<null>|<null>|<null>|<null>|true',
+           (select concat_ws('|', status, cancelled_by, coalesce(user_id::text, '<null>'), coalesce(host_name, '<null>'), coalesce(mobile, '<null>'),
+                             coalesce(venue, '<null>'), (customer_deleted_at is not null)::text) from public.event_bookings where id = bz2));
     raise exception using errcode = 'MPOK0';
   exception when sqlstate 'MPOK0' then null;
   end;

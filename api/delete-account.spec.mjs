@@ -485,6 +485,26 @@ describe('migrations', () => {
     expect(mod.blockedMessage([{ order_number: '%', kind: 'booking' }])).toBe(m[1]);
   });
 
+  it('...and for a deposit sent but not confirmed, that sentence word for word (0043 a3)', () => {
+    const body = fnBody('delete_own_account');
+    const m = /'(The deposit you sent for booking % is waiting for us to confirm it[^']*(?:''[^']*)*)'/.exec(body);
+    expect(m).not.toBeNull();
+    expect(mod.blockedMessage([{ order_number: '%', kind: 'booking', status: 'quoted' }])).toBe(m[1].replace(/''/g, "'"));
+    expect(body).toMatch(/b\.status = 'quoted'\s+and b\.deposit_submitted_at is not null/);
+    // The dialog lists it before anything is touched.
+    expect(fnBody('account_deletion_preflight')).toMatch(/b\.status = 'quoted' and b\.deposit_submitted_at is not null/);
+  });
+
+  it('...and for a closed booking whose money isn\'t settled, that sentence word for word (0043 a4)', () => {
+    const body = fnBody('delete_own_account');
+    const m = /'(We still have to settle the money for booking %[^']*(?:''[^']*)*)'/.exec(body);
+    expect(m).not.toBeNull();
+    expect(mod.blockedMessage([{ order_number: '%', kind: 'booking', status: 'cancelled' }])).toBe(m[1].replace(/''/g, "'"));
+    expect(mod.blockedMessage([{ order_number: '%', kind: 'booking', status: 'declined' }])).toBe(m[1].replace(/''/g, "'"));
+    expect(body).toMatch(/public\.booking_money_to_settle\(b\)/);
+    expect(fnBody('account_deletion_preflight')).toMatch(/public\.booking_money_to_settle\(b\)/);
+  });
+
   it('the latest delete_own_account() refuses while a booking receipt remains, and the endpoint removes exactly those names', () => {
     const body = fnBody('delete_own_account');
     expect(body).toMatch(/s\.name = any\(public\.booking_proof_names\(b\.id\)\)/);

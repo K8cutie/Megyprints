@@ -4,7 +4,7 @@ import { Camera, ImagePlus, Loader2, Check, X, Trash2, Play, RefreshCw, BookOpen
 import {
   EVENT_PHOTOS_PER_GUEST, EVENT_VIDEOS_PER_GUEST, EVENT_VIDEO_MAX_SECONDS, deleteMyMedia, eventFeed, eventMediaUrl, eventPublic,
   forgetPass, guestMe, joinEvent, readPass, sharePhoto, shareVideo, shortDate,
-  type EventPublic, type FeedItem, type GuestMe, type GuestPass, type ShareStage,
+  type EventPublic, type FeedItem, type GuestMe, type GuestPass, type ShareStage, type ShareResume,
 } from '../lib/eventCamera';
 import { eventTypeLabel } from '../lib/eventBookings';
 import { supabase } from '../lib/supabase';
@@ -17,7 +17,7 @@ import { supabase } from '../lib/supabase';
    from the gallery until the closing date.
    ══════════════════════════════════════════════════════════════════════════ */
 
-type QueueItem = { key: string; name: string; kind: 'photo' | 'video'; stage: ShareStage | 'failed'; error?: string; file: File };
+type QueueItem = { key: string; name: string; kind: 'photo' | 'video'; stage: ShareStage | 'failed'; error?: string; file: File; resume: ShareResume };
 
 export default function EventGuest() {
   const { code = '' } = useParams();
@@ -208,8 +208,9 @@ function Camera_({ ev, code, pass, me, onChanged }: { ev: EventPublic; code: str
   const runningRef = useRef(false);
 
   const loadFeed = useCallback(async () => {
-    try { setFeed(await eventFeed(code, pass.token, null, 100)); } catch { /* keep the last feed */ }
-  }, [code, pass.token]);
+    // Mine asks for the guest's own only, so their older ones aren't cut off by everyone's newest.
+    try { setFeed(await eventFeed(code, pass.token, null, 100, tab === 'mine')); } catch { /* keep the last feed */ }
+  }, [code, pass.token, tab]);
   useEffect(() => {
     void loadFeed();
     const t = window.setInterval(() => { if (document.visibilityState === 'visible') void loadFeed(); }, 30_000);
@@ -219,15 +220,20 @@ function Camera_({ ev, code, pass, me, onChanged }: { ev: EventPublic; code: str
   const photosLeft = Math.max(0, EVENT_PHOTOS_PER_GUEST - (me?.photos ?? 0) - queue.filter((q) => q.kind === 'photo' && q.stage !== 'done' && q.stage !== 'failed').length);
   const videosLeft = Math.max(0, EVENT_VIDEOS_PER_GUEST - (me?.videos ?? 0) - queue.filter((q) => q.kind === 'video' && q.stage !== 'done' && q.stage !== 'failed').length);
 
+  // One at a time, and everything added while one is going waits its turn:
+  // photos picked mid-upload used to sit on "Getting it ready…" forever.
+  const waitingRef = useRef<QueueItem[]>([]);
   const run = useCallback(async (items: QueueItem[]) => {
+    waitingRef.current.push(...items);
     if (runningRef.current) return;
     runningRef.current = true;
     try {
-      for (const it of items) {
-        const set = (patch: Partial<QueueItem>) => setQueue((q) => q.map((x) => (x.key === it.key ? { ...x, ...patch } : x)));
+      for (let it = waitingRef.current.shift(); it; it = waitingRef.current.shift()) {
+        const key = it.key;
+        const set = (patch: Partial<QueueItem>) => setQueue((q) => q.map((x) => (x.key === key ? { ...x, ...patch } : x)));
         try {
-          if (it.kind === 'photo') await sharePhoto(code, pass.token, it.file, (s) => set({ stage: s }));
-          else await shareVideo(code, pass.token, it.file, (s) => set({ stage: s }));
+          if (it.kind === 'photo') await sharePhoto(code, pass.token, it.file, (s) => set({ stage: s }), it.resume);
+          else await shareVideo(code, pass.token, it.file, (s) => set({ stage: s }), it.resume);
           set({ stage: 'done' });
         } catch (e) {
           set({ stage: 'failed', error: e instanceof Error ? e.message : 'It didn’t go through.' });
@@ -251,7 +257,7 @@ function Camera_({ ev, code, pass, me, onChanged }: { ev: EventPublic; code: str
       const kind = f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/i.test(f.name) ? 'video' : 'photo';
       if (kind === 'photo' ? p <= 0 : v <= 0) { skipped++; continue; }
       if (kind === 'photo') p--; else v--;
-      take.push({ key: `${Date.now()}-${Math.random()}`, name: f.name, kind, stage: 'preparing', file: f });
+      take.push({ key: `${Date.now()}-${Math.random()}`, name: f.name, kind, stage: 'preparing', file: f, resume: {} });
     }
     if (skipped) setNote(`${skipped} left out: you can share ${EVENT_PHOTOS_PER_GUEST} photos and ${EVENT_VIDEOS_PER_GUEST} videos. Delete one of yours to add another.`);
     if (!take.length) return;
