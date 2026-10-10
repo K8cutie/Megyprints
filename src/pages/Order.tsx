@@ -12,10 +12,11 @@ import { saveDraftToAccount as saveDraftAlbumToAccount } from '../lib/draftAccou
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
 import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, AlbumChangedElsewhereError } from '../lib/orderAlbum';
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
-import { saveCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
+import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
-import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, removeStagedClip, currentClipQuality, type ClipUploadPhase } from '../lib/memoryClips';
+import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
+import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { PAYEE, checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
 import { updateMemoryDestination } from '../lib/qrMemories';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady, onStoreSettingsChange, retryStoreSettings } from '../lib/storeSettings';
@@ -30,6 +31,8 @@ import { trackOf } from '../lib/orderTracker';
 import { missingPhotos, missingPhotosMessage } from '../lib/photoPresence';
 import { getMyOrder, openOrderForAlbum, lastOrderForAlbum, type MyOrder } from '../lib/myOrders';
 import OrderTracker from '../components/OrderTracker';
+import { eventLinkForAlbum, eventDealState, coverOrderWithBooking, bookingsWaitingForAlbum, linkFromBooking, linkAlbumToBooking, unlinkAlbum } from '../lib/eventAlbum';
+import { getMyBooking, listMyBookings, type EventBooking } from '../lib/eventBookings';
 
 // The front cover at checkout — lazy: it brings the page renderer.
 const CoverThumb = lazy(() => import('./builder/CoverThumb'));
@@ -78,10 +81,14 @@ export default function Order() {
   // second order is asked, never placed silently (1-star testers round 2, Q1).
   const [openOrder, setOpenOrder] = useState<MyOrder | null>(null);
   const [askSecond, setAskSecond] = useState(false);
+  // The account already holds the most unpaid orders it may (0042): offer
+  // the way to them.
+  const [unpaidLimit, setUnpaidLimit] = useState(false);
   const secondOkRef = useRef(false);
   useEffect(() => {
     const orderId = createdOrderRef.current?.id;
-    if (step !== 'tracking' || !user || !orderId) return;
+    // The payment step too: an order that closed (0042) must not show a QR.
+    if ((step !== 'tracking' && step !== 'payment') || !user || !orderId) return;
     let alive = true;
     const refresh = () => { getMyOrder(user.id, orderId).then((o) => { if (alive && o) setPlacedOrder(o); }).catch(() => { /* keep what's shown */ }); };
     refresh();
@@ -236,10 +243,60 @@ export default function Order() {
   // Every QR on the album — both homes — for the checkout belt + clip uploads.
   const allQrFills = (info?.pages ?? []).flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
   const clipCodes = allQrFills.filter((f) => f?.kind === 'clip').map((f) => f!.code);
-  // HD (1080p) memories — chosen with the first memory in the builder, priced
-  // here. Standard 720p is included, so this bills only when HD was picked.
-  const hdMemories = qrCount > 0 && currentClipQuality() === 'hd';
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
+
+  // ── Megyprints Events (0045): an album made from an event booking ──
+  // The event page linked it to its booking on this device. The booking pays
+  // for it (₱0 here) once the balance is in and it matches the deal; the
+  // database checks again (cover_order_with_booking). undefined = still asking.
+  const [, setLinkTick] = useState(0);
+  const [eventBooking, setEventBooking] = useState<EventBooking | null | undefined>(undefined);
+  const eventLink = eventLinkForAlbum(info?.albumId);
+  // The link lives on the device that made the album: on another one, offer
+  // the host's bookings still waiting for their album.
+  const [waitingBookings, setWaitingBookings] = useState<EventBooking[]>([]);
+  useEffect(() => {
+    if (eventLink || !user || !info?.albumId) return;
+    let alive = true;
+    listMyBookings(user.id)
+      .then((all) => { if (alive) setWaitingBookings(bookingsWaitingForAlbum(all)); })
+      .catch(() => { /* no offer: checkout works as a normal album */ });
+    return () => { alive = false; };
+  }, [user, info?.albumId, !!eventLink]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The deal sets the cover; undoing gives back the one they had picked.
+  const coverBeforeLinkRef = useRef<CoverType | null>(null);
+  const linkThisBooking = (b: EventBooking) => {
+    const link = linkFromBooking(b);
+    if (!link || !info?.albumId) return;
+    coverBeforeLinkRef.current = cover;
+    linkAlbumToBooking(info.albumId, link);
+    setEventBooking(undefined);
+    setLinkTick((t) => t + 1);
+  };
+  const notMyEventAlbum = () => {
+    if (!info?.albumId) return;
+    unlinkAlbum(info.albumId);
+    if (coverBeforeLinkRef.current) setCover(coverBeforeLinkRef.current);
+    setEventBooking(undefined);
+    setErrorMsg('');
+    setLinkTick((t) => t + 1);
+  };
+  useEffect(() => {
+    if (!eventLink || !user) return;
+    let alive = true;
+    getMyBooking(user.id, eventLink.bookingId)
+      .then((b) => { if (alive) setEventBooking(b); })
+      .catch(() => { if (alive) setEventBooking(null); });
+    return () => { alive = false; };
+  }, [eventLink?.bookingId, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  const eventDeal = eventLink && eventBooking !== undefined
+    ? eventDealState(eventLink, eventBooking, { size: info?.albumSize ?? '8x8', pages: info?.pages.length ?? MIN_PAGES })
+    : null;
+  const coveredByBooking = eventDeal?.state === 'covered';
+  // The deal fixes the cover.
+  useEffect(() => {
+    if (eventLink) setCover(eventLink.cover === 'soft' ? 'softcover' : 'hardboundLeather');
+  }, [eventLink?.cover]); // eslint-disable-line react-hooks/exhaustive-deps
   // THE 40-PHOTO GATE (builder/albumMinimum): the Preview's Order stops a
   // short album, but /order can be opened directly (an old tab, a bookmark).
   const jobPhotos = info ? albumPhotoCount(info.pages) : null;
@@ -252,14 +309,29 @@ export default function Order() {
   // The Pay tap still runs the same upload as the REQUIRED backstop; it is
   // serialized with this one and skips whatever already landed.
   const clipKey = clipCodes.join(',');
-  const [clipPrep, setClipPrep] = useState<{ phase: ClipUploadPhase | 'ready' | 'failed' | null; done: number; total: number; bytes: number | null }>({ phase: null, done: 0, total: 0, bytes: null });
+  // HD (1080p) memories — chosen with the album's first memory in the builder,
+  // priced here. Standard 720p is included, so this bills only when HD was
+  // picked. Read from THIS album's kept clips: the phone-wide setting follows
+  // whichever album was edited last, and kept clips now stay until paid (0042).
+  const [clipTier, setClipTier] = useState<{ key: string; tier: ClipQuality | null } | null>(null);
+  useEffect(() => {
+    if (!clipKey) return;
+    let alive = true;
+    void stagedClipQuality(clipKey.split(',')).then((tier) => { if (alive) setClipTier({ key: clipKey, tier }); });
+    return () => { alive = false; };
+  }, [clipKey]);
+  const clipTierReady = !clipKey || clipTier?.key === clipKey;
+  const albumTier = clipKey && clipTier?.key === clipKey ? clipTier.tier : null;
+  // An event album's memories are part of its deal: standard, the included term.
+  const hdMemories = !eventLink && qrCount > 0 && (albumTier ?? currentClipQuality()) === 'hd';
+  const [clipPrep, setClipPrep] = useState<{ phase: ClipUploadPhase | 'ready' | 'failed' | 'missing' | null; done: number; total: number; bytes: number | null; missing: string[] }>({ phase: null, done: 0, total: 0, bytes: null, missing: [] });
   useEffect(() => {
     if (!clipKey) return;
     const codes = clipKey.split(',');
     let alive = true;
     void stagedClipBytes(codes).then((bytes) => { if (alive) setClipPrep((c) => ({ ...c, bytes })); });
     void prefetchStagedClipUploads(codes, (done, total, phase) => { if (alive) setClipPrep((c) => ({ ...c, phase, done, total })); })
-      .then((ok) => { if (alive) setClipPrep((c) => ({ ...c, phase: ok ? 'ready' : 'failed' })); });
+      .then((r) => { if (alive) setClipPrep((c) => ({ ...c, phase: r.ok ? 'ready' : r.missing.length ? 'missing' : 'failed', missing: r.missing })); });
     return () => { alive = false; };
   }, [clipKey]);
 
@@ -286,7 +358,7 @@ export default function Order() {
   const schedule = getPriceSchedule(); // re-read each render; non-null once loaded
   const tiers = schedule ? hostingTiersOf(schedule) : [];
   const includedYears = schedule ? includedHostingYears(schedule) : null;
-  const effectiveYears = qrCount > 0 ? (hostingYears ?? includedYears) : null;
+  const effectiveYears = qrCount > 0 ? (eventLink ? includedYears : (hostingYears ?? includedYears)) : null;
   const hdPrice = schedule ? hdMemoriesPriceOf(schedule) : 0;
 
   // Cheap arithmetic — recomputed per render on purpose (schedule is read fresh).
@@ -297,7 +369,7 @@ export default function Order() {
   // Loaded AND priceable. `settingsReady` alone only means the load settled — it
   // can settle with no schedule (offline, RPC blocked), and quoting ₱0 then would
   // charge nothing for a real album.
-  const priceReady = settingsReady && schedule !== null && info !== null;
+  const priceReady = settingsReady && schedule !== null && info !== null && clipTierReady;
 
   // ── Back after a reload (checkoutSession) ──
   // An order already placed in this checkout returns to where it was — the
@@ -321,6 +393,11 @@ export default function Order() {
   // ── Form → Payment ──
   const handleProceedToPayment = () => {
     setErrorMsg('');
+    // An event album that its booking can't pay for (yet): say why, place nothing.
+    if (eventLink && eventDeal?.state !== 'covered') {
+      setErrorMsg(eventDeal?.state === 'blocked' ? eventDeal.message : 'Checking your event booking… try again in a moment.');
+      return;
+    }
     const cleanName = normalizeFullName(name);
     const canonicalPhone = normalizePHPhone(phone);
     const addrErrs = validateAddress(address);
@@ -376,6 +453,33 @@ export default function Order() {
     return true;
   };
 
+  /** A closed order's checkout starts over: a new order, a new payment code,
+   *  and nothing carried over from the old payment screen. */
+  const startOverAfterClosed = () => {
+    clearCheckoutOrder();
+    createdOrderRef.current = null;
+    orderRecordRef.current = null;
+    secondOkRef.current = false;
+    setPlacedOrder(null);
+    setOrderNumber('');
+    setPlacedAmount(null);
+    setProofFile(null);
+    setProofError('');
+    setPayRef('');
+    setRefError('');
+    setErrorMsg('');
+    setStep('form');
+  };
+
+  /** Which pages hold the videos that are gone, in the words the builder uses. */
+  const missingClipMessage = (codes: string[]): string => {
+    const pages = (info?.pages ?? []).flatMap((p, i) =>
+      [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])].some((f) => !!f && codes.includes(f.code)) ? [i + 1] : []);
+    if (!pages.length) return new MissingClipError(codes).message;
+    const where = pages.length === 1 ? `page ${pages[0]}` : `pages ${pages.slice(0, -1).join(', ')} and ${pages[pages.length - 1]}`;
+    return `The memory video on ${where} is no longer saved. Open your album and choose the video again for the QR on ${where}, then order.`;
+  };
+
   // ── Place the order → REQUIRED print-PDF upload → show the payment QR ──
   // Manual bank transfer (0033): the order row exists BEFORE the customer pays
   // so its number can be the transfer reference; it stays pending_payment
@@ -388,6 +492,7 @@ export default function Order() {
   const placeOrder = async () => {
     setErrorMsg('');
     setAlbumNotSaved(false);
+    setUnpaidLimit(false);
     // Short of 40 photos: no order row, nothing uploaded.
     const handed = getPendingPrintJob();
     if (handed && photosShortBy(albumPhotoCount(handed.pages)) > 0) {
@@ -404,6 +509,29 @@ export default function Order() {
     }
     setSubmitting(true);
     try {
+      // A checkout brought back in this tab (a reload) may hold an order that
+      // has since closed: cancelled in Your orders, or 7 days unpaid (0042).
+      // Start a new one rather than push files at a closed order (refused).
+      // A paid one keeps going: an upload retried after the owner marked it paid.
+      if (createdOrderRef.current && user) {
+        const current = await getMyOrder(user.id, createdOrderRef.current.id).catch(() => null);
+        if (current?.status === 'cancelled') {
+          clearCheckoutOrder();
+          createdOrderRef.current = null;
+          orderRecordRef.current = null;
+        }
+      }
+
+      // 0. Every memory video must be on this phone or already in the cloud,
+      //    checked BEFORE the order row exists: a video that's gone must not
+      //    leave an unpaid order behind (each counts toward the 3-order
+      //    limit, 0042).
+      if (clipCodes.length && !createdOrderRef.current) {
+        setPrepMsg('Checking your memory videos…');
+        const gone = await findMissingClips(clipCodes);
+        if (gone.length) throw new MissingClipError(gone);
+      }
+
       // 1. Create the order — but only once. A retry after a failed upload reuses
       //    the same order row (no duplicate); a PDF already in the bucket from
       //    the earlier attempt counts as uploaded.
@@ -496,6 +624,7 @@ export default function Order() {
       //    errors it propagates to the outer catch, the order does NOT advance,
       //    and the user stays on Pay to retry. (Create-only upload, never upsert:
       //    customers can't read this bucket, so an upsert is refused by RLS.)
+      setPrepMsg('Making your print file…');
       await uploadOrderPrintPdf(order.id, printJob);
 
       // 3b. BEST-EFFORT: build + upload the front·spine·back cover wrap as its own
@@ -527,6 +656,16 @@ export default function Order() {
         reportError(e, { path: 'checkout', step: 'cover_pdf', orderId: order.id });
       }
 
+      // 3c. The videos once more, right before their memory rows: the nightly
+      //     cleanup (0042) may have removed one this order shares since 2b
+      //     (another, closed order of the same video). The phone's copy puts
+      //     it back; a missing one stops here, before the QR screen.
+      if (clipCodes.length) {
+        setPrepMsg('Checking your memory videos…');
+        const again = await uploadStagedClips(clipCodes);
+        replacedCodes = [...new Set([...replacedCodes, ...again.replaced])];
+      }
+
       // 4. Reliability belt (best-effort, non-blocking): ensure every QR "living
       //    memory" we're about to PRINT has a resolvable row. Runs AFTER the
       //    required upload so a QR hiccup can't block the PDF. Runs over the exact
@@ -556,9 +695,21 @@ export default function Order() {
         reportError(e, { path: 'checkout', step: 'qr_ensure', orderId: order.id });
         if (hasClips) throw e;
       }
-      // Staged clips are safely in the bucket + rows: free the device storage.
-      for (const code of clipCodes) void removeStagedClip(code);
+      // The phone KEEPS its copy of each video until the order is paid
+      // (freePaidStagedClips, on the next app open). If this order expires
+      // unpaid, its cloud copy is removed (0042) and a reorder uploads it
+      // again from here.
       setPrepMsg('');
+
+      // 5a. An event album: its booking pays (0045), no QR. The files are in.
+      if (eventLink && coveredByBooking) {
+        setPrepMsg('Paying with your event booking…');
+        await coverOrderWithBooking(order.id, eventLink.bookingId);
+        setPrepMsg('');
+        recordOrder('tracking');
+        setStep('tracking');
+        return;
+      }
 
       // 5. Only NOW — with the PDF safely in the bucket — show the payment QR.
       recordOrder('payment');
@@ -568,8 +719,10 @@ export default function Order() {
       // The money path must never fail silently in production — the customer sees
       // the message, and the operator/owner sees the cause in Sentry/the endpoint.
       if (!(err instanceof TooFewPhotosError)) reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
-      setErrorMsg(err instanceof Error ? err.message : 'Something went wrong placing your order.');
-      setAlbumNotSaved(err instanceof AlbumNotSavedError || err instanceof TooFewPhotosError);
+      setErrorMsg(err instanceof MissingClipError ? missingClipMessage(err.codes)
+        : err instanceof Error ? err.message : 'Something went wrong placing your order.');
+      setAlbumNotSaved(err instanceof AlbumNotSavedError || err instanceof TooFewPhotosError || err instanceof MissingClipError);
+      setUnpaidLimit(err instanceof UnpaidLimitError);
     } finally {
       setSubmitting(false);
     }
@@ -631,7 +784,11 @@ export default function Order() {
             {orderNumber && (
               <p className="mt-2 text-sm font-medium text-dark">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
             )}
-            <p className="mt-2 text-xs text-taupe max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-dark">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
+            {eventLink && coveredByBooking ? (
+              <p className="mt-2 text-xs text-taupe max-w-sm mx-auto" data-testid="order-paid-by-booking">Your event booking <span className="font-mono">{eventLink.bookingNumber}</span> paid for this album. We print it and ship it to your door.</p>
+            ) : (
+              <p className="mt-2 text-xs text-taupe max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-dark">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
+            )}
           </div>
 
           {/* Status tracker — the order's real status (orderTracker). */}
@@ -669,6 +826,24 @@ export default function Order() {
     // Read the order NUMBER from state, not the ref, during render (react-hooks/refs).
     const placed = orderNumber ? { order_number: orderNumber } : null;
     const amountLabel = `₱${(placedAmount ?? totalPrice).toLocaleString('en-PH')}`;
+    // The order closed (cancelled, or 7 days unpaid — 0042): no QR, so nobody
+    // sends money for an order the shop won't print.
+    if (placedOrder?.status === 'cancelled') {
+      return (
+        <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-sm text-center" data-testid="order-closed">
+            <h1 className="font-display text-2xl font-bold text-dark mb-2">This order has closed</h1>
+            <p className="text-sm text-medium">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span> is cancelled, so please don't send money for it.</p>
+            <p className="mt-2 text-sm text-medium">Your album is still saved. Order it again to get a new payment code.</p>
+            <button onClick={startOverAfterClosed} data-testid="order-closed-again"
+              className="w-full mt-4 py-3 bg-blush-pink text-white font-semibold rounded-xl hover:brightness-105 flex items-center justify-center gap-2">
+              <ShoppingCart size={16} /> Order this album again
+            </button>
+            <p className="mt-3 text-xs text-light">Already sent the money? <Link to="/contact" className="underline font-semibold">Message us with your receipt</Link> and we'll sort it out.</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
@@ -726,6 +901,7 @@ export default function Order() {
                 : <><Check size={16} /> I've sent {amountLabel}</>}
             </button>
             <p className="mt-3 text-[11px] text-light text-center">We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</p>
+            <p className="mt-1.5 text-[11px] text-light text-center" data-testid="pay-within">{PAY_WITHIN_MESSAGE}</p>
             {shownError && <p className="mt-3 text-xs text-red-500 text-center">{shownError}</p>}
             <details className="mt-3 text-xs text-light">
               <summary className="cursor-pointer text-center hover:text-medium">Order summary</summary>
@@ -771,6 +947,39 @@ export default function Order() {
           </div>
         )}
 
+        {eventLink && (
+          <div role="status" data-testid="order-event-deal" data-state={eventDeal?.state ?? 'loading'}
+            className={`mb-6 rounded-2xl border px-5 py-4 text-sm ${coveredByBooking ? 'border-[#BFE3C8] bg-[#EEF8F1] text-[#1F5C33]' : 'border-[#F0D9A8] bg-[#FFF6E5] text-[#8A5A12]'}`}>
+            <p className="font-semibold text-dark">Your event album · booking <span className="font-mono">{eventLink.bookingNumber}</span></p>
+            <p className="mt-1">
+              {eventDeal === null ? 'Checking your event booking…'
+                : eventDeal.state === 'covered' ? 'Your booking pays for this album. There’s nothing more to pay.'
+                  : eventDeal.state === 'blocked' ? eventDeal.message : ''}
+            </p>
+            {eventLink.atCheckout && (
+              <button type="button" onClick={notMyEventAlbum} data-testid="order-event-unlink"
+                className="mt-3 rounded-full border border-current px-4 py-1.5 text-xs font-semibold hover:bg-white/60">
+                Not my event album: order it as a normal album
+              </button>
+            )}
+          </div>
+        )}
+
+        {!eventLink && waitingBookings.length > 0 && (
+          <div data-testid="order-event-offer" className="mb-6 rounded-2xl border border-line-soft bg-white px-5 py-4 text-sm">
+            <p className="font-semibold text-dark">Is this your event album?</p>
+            <p className="mt-1 text-medium">Your event booking pays for its printed album. Made this album on another phone or computer? Use your booking for it here.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {waitingBookings.map((b) => (
+                <button key={b.id} type="button" onClick={() => linkThisBooking(b)} data-testid="order-event-use"
+                  className="rounded-full border border-blush-pink px-4 py-1.5 text-xs font-semibold text-blush-pink hover:bg-blush">
+                  Use booking <span className="font-mono">{b.booking_number}</span> for this album
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left: Options */}
           <div className="lg:col-span-2 space-y-6">
@@ -799,6 +1008,12 @@ export default function Order() {
             {/* Cover */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
               <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><HardDrive size={18} /> Cover Type</h3>
+              {eventLink ? (
+                <div className="flex items-center justify-between rounded-xl border-2 border-peach bg-cream px-4 py-3" data-testid="order-cover-locked">
+                  <span className="text-sm text-medium">From your event deal</span>
+                  <span className="text-sm font-semibold text-dark">{COVERS.find((c) => c.type === cover)?.name}</span>
+                </div>
+              ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {COVERS.map((c) => (
                   <button key={c.type} onClick={() => setCover(c.type)}
@@ -809,6 +1024,7 @@ export default function Order() {
                   </button>
                 ))}
               </div>
+              )}
             </div>
 
             {/* Size — locked to the album you built when a design is in progress */}
@@ -882,21 +1098,32 @@ export default function Order() {
                 <div className="flex justify-between items-center gap-3"><span className="text-medium">Cover</span><span className="font-semibold text-blush-pink text-right">{COVERS.find((c) => c.type === cover)?.name}</span></div>
                 <div className="flex justify-between items-center gap-3"><span className="text-medium">Size</span><span className="font-semibold text-blush-pink text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span></div>
                 <div className="border-t border-line-soft pt-3 mt-3 space-y-2">
-                  {breakdown.items.map((item) => (
+                  {/* An event album is part of its booking's deal: it never shows the
+                      album price, even while checkout waits for the balance. */}
+                  {eventLink ? (
+                    <div className="flex justify-between gap-3 text-[13px]" data-testid="order-event-line">
+                      <span className="text-medium">Album — part of booking <span className="font-mono">{eventLink.bookingNumber}</span></span>
+                      <span className="font-medium text-dark text-right whitespace-nowrap">₱0</span>
+                    </div>
+                  ) : breakdown.items.map((item) => (
                     <div key={item.label} className="flex justify-between gap-3 text-[13px]">
                       <span className="text-medium">{item.label}</span>
                       <span className="font-medium text-dark text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{priceReady ? `₱${totalPrice.toLocaleString('en-PH')}` : '—'}</span></div>
+                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{eventLink ? '₱0' : <>{priceReady ? `₱${totalPrice.toLocaleString('en-PH')}` : '—'}</>}</span></div>
+                  {coveredByBooking && <p className="text-xs text-success text-right" data-testid="order-covered">Covered by your event booking</p>}
+                  {eventLink && !coveredByBooking && <p className="text-xs text-medium text-right" data-testid="order-covered-later">Your booking pays for it. See the note at the top.</p>}
                 </div>
               </div>
               <div className="mt-4 flex items-start gap-2 rounded-xl bg-blush border border-peach/60 px-3 py-2.5">
                 <QrCode size={16} className="text-blush-pink shrink-0 mt-0.5" />
                 <p className="text-xs text-cocoa leading-snug">
-                  <b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
+                  {eventLink
+                    ? <><b className="text-dark">Video memories are part of your event deal</b> — a video plays when anyone scans your printed album.</>
+                    : <><b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.</>}
                   {qrCount > 0 && <> This album has <b className="text-dark">{qrCount}</b>.</>}
-                  {qrCount > 0 && hdPrice > 0 && (
+                  {qrCount > 0 && hdPrice > 0 && !eventLink && (
                     <> Quality: <b className="text-dark">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>
                   )}
                 </p>
@@ -905,12 +1132,16 @@ export default function Order() {
                 <div className="mt-2 flex items-start gap-2 rounded-xl border border-line-soft bg-white px-3 py-2.5" role="status" aria-live="polite">
                   {clipPrep.phase === 'ready'
                     ? <Check size={16} className="text-[#5AA469] shrink-0 mt-0.5" />
+                    : clipPrep.phase === 'missing'
+                      ? <QrCode size={16} className="text-blush-pink shrink-0 mt-0.5" />
                     : clipPrep.phase === 'failed'
                       ? <Wifi size={16} className="text-blush-pink shrink-0 mt-0.5" />
                       : <Loader2 size={16} className="animate-spin text-[#C98A5E] shrink-0 mt-0.5" />}
                   <p className="text-xs text-cocoa leading-snug">
                     {clipPrep.phase === 'ready' ? (
                       <><b className="text-dark">Your {clipCodes.length === 1 ? 'memory video is' : `${clipCodes.length} memory videos are`} uploaded.</b> Nothing to wait for at payment.</>
+                    ) : clipPrep.phase === 'missing' ? (
+                      <b className="text-dark" data-testid="order-clip-missing">{missingClipMessage(clipPrep.missing)}</b>
                     ) : clipPrep.phase === 'failed' ? (
                       <><b className="text-dark">Upload paused.</b> We'll try again when you tap Pay — a Wi-Fi connection helps.</>
                     ) : (
@@ -930,7 +1161,7 @@ export default function Order() {
                   </p>
                 </div>
               )}
-              {qrCount > 0 && tiers.length > 0 && (
+              {qrCount > 0 && tiers.length > 0 && !eventLink && (
                 <div className="mt-3 rounded-xl border border-line-soft bg-white px-3 py-3">
                   <p className="text-xs font-semibold text-dark">How long should your memories stay live?</p>
                   <p className="text-[11px] text-light mb-2">Your videos play from the printed QR for the whole term. Renew anytime after.</p>
@@ -965,6 +1196,7 @@ export default function Order() {
                 data-testid="order-place"
                 className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                 {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
+                  : eventLink ? <><ShoppingCart size={16} /> Place my event album order</>
                   : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${totalPrice.toLocaleString('en-PH')}`} by bank transfer</>
                     : !settingsReady || albumInfo === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
                       // A tap that answers: try the prices again (they also come back on their own).
@@ -995,6 +1227,12 @@ export default function Order() {
                 <button onClick={() => navigate('/builder')} data-testid="order-open-album"
                   className="w-full mt-3 py-2.5 rounded-xl border border-peach text-cocoa text-sm font-semibold hover:bg-blush transition-colors flex items-center justify-center gap-2">
                   <BookOpen size={16} /> Open my album
+                </button>
+              )}
+              {unpaidLimit && (
+                <button onClick={() => navigate('/orders')} data-testid="order-open-orders"
+                  className="w-full mt-3 py-2.5 rounded-xl border border-peach text-cocoa text-sm font-semibold hover:bg-blush transition-colors flex items-center justify-center gap-2">
+                  <ShoppingCart size={16} /> Open my orders
                 </button>
               )}
             </div>

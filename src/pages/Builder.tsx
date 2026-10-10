@@ -21,6 +21,8 @@ import SoftAuthGate from '../components/SoftAuthGate';
 import { useIsMobile } from '../hooks/use-mobile';
 import { cleanAlbumName } from '../lib/albumName';
 import { noteOrderHandoff } from '../lib/printQueue';
+import { takePendingEventImport, linkAlbumToBooking, eventLinkForAlbum } from '../lib/eventAlbum';
+import { writeAlbumTheme } from '../lib/albumTheme';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 const phases = [
@@ -33,12 +35,13 @@ const SetupPhase = memo(function SetupPhase({ actions }: { actions: BuilderConte
   return (
     <BuilderSetup
       selectedSize={actions.albumSize}
-      onSizeChange={(size) => { void actions.dispatch({ type: 'change_size', payload: { size }, rawMessage: `change size to ${size}` }); }}
+      onSizeChange={(size, reason) => { void actions.dispatch({ type: 'change_size', payload: { size, reason }, rawMessage: `change size to ${size}` }); }}
       /* Option A: "Start Creating" advances Megy's wizard past the size step to
          the cover step; the center screen (phase) follows the wizard. */
       onNext={() => { actions.setWizardStep('design_cover'); actions.setPhase('cover'); }}
       albumTitle={actions.albumTitle}
       onAlbumTitleChange={actions.setAlbumTitle}
+      onlySize={eventLinkForAlbum(actions.getAlbumId())?.size ?? null}
     />
   );
 });
@@ -126,6 +129,32 @@ export default function Builder() {
       sessionStorage.removeItem('megy-fresh-start');
       actions.reset();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── Megyprints Events: the host's picked photos (event page → "Make my
+     album"). After the fresh start above, the new album gets the event's
+     name and occasion and the deal's size, the photos go in through the same
+     door as an upload, and the album is linked to its booking on this device
+     so checkout knows the booking pays for it (0045). Taken once: a second
+     run of this effect (StrictMode) finds nothing. */
+  useEffect(() => {
+    const imp = takePendingEventImport();
+    if (!imp) return;
+    window.setTimeout(() => {
+      actions.setAlbumTitle(imp.title);
+      writeAlbumTheme(imp.occasion);
+      void actions.dispatch({ type: 'change_size', payload: { size: imp.size }, rawMessage: `change size to ${imp.size}` })
+        .then(() => actions.dispatch({ type: 'add_photos', payload: { files: imp.files }, rawMessage: 'add photos' }))
+        .then(() => {
+          const albumId = actions.getAlbumId();
+          if (albumId) {
+            linkAlbumToBooking(albumId, {
+              bookingId: imp.bookingId, bookingNumber: imp.bookingNumber, size: imp.size, cover: imp.cover, pages: imp.pages, videos: imp.videos,
+            });
+          }
+        });
+    }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

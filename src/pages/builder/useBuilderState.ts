@@ -18,17 +18,18 @@ import type {
   FrameStyle,
   TextStyle,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
 import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
+import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
@@ -115,8 +116,19 @@ function reflowFills(
 /* Re-lay a page onto a new template: carry QR/text (trimmed to the new slot
    count), reflow the existing photos into the new slots, and reset per-slot
    framing. Shared by shuffle / cycle / apply-layout so the "change the layout"
-   behavior lives in exactly one place. */
+   behavior lives in exactly one place.
+   A video memory only ever sits on a full-bleed, one-photo page, as its corner
+   badge (owner, 2026-10-08). A layout that can't hold the page's memory leaves
+   the page exactly as it is: the QR used to ride along by slot number into the
+   second photo frame — the QR-in-a-square look retired on 2026-10-02. */
 export function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage {
+  const memories = memoriesOn(page);
+  if (memories.length && (memories.length > 1 || !layoutHoldsMemory(template))) return page;
+  const relaid = relayPhotosOnTemplate(page, template);
+  return memories.length ? asMemoryBadge(page, relaid, memories[0], template) : relaid;
+}
+
+function relayPhotosOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage {
   const existingFills = [...new Set(
     (page.slotFills ?? []).filter((f): f is number => f !== null),
   )];
@@ -153,7 +165,7 @@ export function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): Al
     slotOffsetsX: new Array(slotCount).fill(0),
     slotOffsetsY: new Array(slotCount).fill(0),
   };
-  return keepMemories(page, relaid, template);
+  return relaid;
 }
 
 /** What laying `page` out on `template` would take off it: the photos that no
@@ -171,66 +183,39 @@ export function layoutChangeLeftovers(page: AlbumPage, template: PageTemplate): 
 /* A layout change never drops a video memory (1-star testers round 2, MMC-3):
    "Three Squares" then "Full Page" sliced the QR off with the slot it sat in —
    no message, the gold "Add a video memory" button came back, and checkout
-   counted one memory fewer. Each memory the new layout lost goes back on the
-   page: on a full-page photo as its corner badge (the badge "Add a video
-   memory" makes, in the corner it had), else in an empty frame, else in a
-   caption box, else in the last frame (that photo leaves this page and is
-   back among the unused ones — a photo can be placed again, a memory's
-   printed QR is the customer's video). */
-function keepMemories(before: AlbumPage, after: AlbumPage, template: PageTemplate): AlbumPage {
-  const memoriesOf = (p: AlbumPage) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])].filter((q): q is QrFill => q != null);
-  const kept = new Set(memoriesOf(after).map((q) => q.code));
-  const lost = memoriesOf(before).filter((q) => !kept.has(q.code));
-  let page = after;
+   counted one memory fewer. On a full-page layout the memory goes back on as
+   its corner badge (the badge "Add a video memory" makes, in the corner it
+   had), on the page's first photo. A memory in a frame or a box (placed before
+   memories moved to full pages) comes out of there into the badge the same
+   way. No badge layout for the size: the page stays as it is. */
+function asMemoryBadge(before: AlbumPage, relaid: AlbumPage, memory: QrFill, template: PageTemplate): AlbumPage {
   const size = (before.size ?? template.albumSizes[0]) as AlbumSizePreset;
-  for (const memory of lost) {
-    const t = (page.templateId ? getTemplateById(page.templateId) : undefined) ?? template;
-    const photoSlots = t.slots.filter((sl) => sl.kind !== 'qr').length;
-    // 1. A full-page photo: the corner badge.
-    const badge = photoSlots === 1 && !(t.textSlots?.length) && !t.slots.some((sl) => sl.kind === 'qr')
-      ? qrBadgeTemplate(size, qrBadgeCornerOf(before.templateId) ?? 'br')
-      : undefined;
-    if (badge) {
-      const n = badge.slots.length;
-      const slotFills: (number | null)[] = new Array(n).fill(null);
-      slotFills[0] = (page.slotFills ?? []).find((f): f is number => f != null) ?? null;
-      const qrFills: (QrFill | null)[] = new Array(n).fill(null);
-      qrFills[badge.slots.findIndex((sl) => sl.kind === 'qr')] = memory;
-      page = {
-        ...page, templateId: badge.id, slotFills, qrFills,
-        slotTexts: new Array(n).fill(null), ornamentFills: new Array(n).fill(null),
-        slotScales: new Array(n).fill(1), slotOffsetsX: new Array(n).fill(0), slotOffsetsY: new Array(n).fill(0),
-        cornerBase: undefined, // theme corners would sit over the chip
-      };
-      continue;
-    }
-    const fills = [...(page.slotFills ?? [])];
-    const qrs = [...(page.qrFills ?? [])];
-    const open = (i: number) => fills[i] == null && !qrs[i] && !page.slotTexts?.[i] && !page.ornamentFills?.[i];
-    // 2. An empty frame (a QR frame first).
-    const slotOrder = t.slots.map((sl, i) => ({ sl, i })).sort((a, b) => Number(b.sl.kind === 'qr') - Number(a.sl.kind === 'qr'));
-    const free = slotOrder.find(({ i }) => open(i));
-    if (free) {
-      qrs[free.i] = memory;
-      page = { ...page, qrFills: qrs };
-      continue;
-    }
-    // 3. A caption box with nothing in it.
-    const boxQr = [...(page.textSlotQr ?? [])];
-    const box = (t.textSlots ?? []).findIndex((_, j) => !boxQr[j] && page.textSlotFills?.[j] == null
-      && !page.textSlotOrnament?.[j] && !(page.textElements ?? []).some((e) => e.boxIndex === j));
-    if (box >= 0) {
-      boxQr[box] = memory;
-      page = { ...page, textSlotQr: boxQr };
-      continue;
-    }
-    // 4. The last frame.
-    const last = t.slots.length - 1;
-    fills[last] = null;
-    qrs[last] = memory;
-    page = { ...page, slotFills: fills, qrFills: qrs };
-  }
-  return page;
+  const corner = qrBadgeCornerOf(before.templateId);
+  const badge = qrBadgeTemplate(size, corner ?? 'br');
+  if (!badge) return before;
+  const n = badge.slots.length;
+  const slotFills: (number | null)[] = new Array(n).fill(null);
+  slotFills[0] = (before.slotFills ?? []).find((f): f is number => f != null) ?? null;
+  const qrFills: (QrFill | null)[] = new Array(n).fill(null);
+  qrFills[badge.slots.findIndex((sl) => sl.kind === 'qr')] = memory;
+  // Already a badge page: the photo keeps the framing it had.
+  const keep = (a?: number[], fallback = 0) => [corner ? a?.[0] ?? fallback : fallback, ...new Array(n - 1).fill(fallback)];
+  return {
+    ...relaid, templateId: badge.id, slotFills, qrFills,
+    slotTexts: new Array(n).fill(null), ornamentFills: new Array(n).fill(null),
+    textSlotQr: [], textSlotQrGeom: [],
+    slotScales: keep(before.slotScales, 1), slotOffsetsX: keep(before.slotOffsetsX), slotOffsetsY: keep(before.slotOffsetsY),
+    ...fullBleedPhoto(before, !!corner),
+    cornerBase: undefined, // theme corners would sit over the chip
+  };
+}
+
+/** A memory page's photo covers the whole sheet: no Studio-moved frame and no
+ *  mask (both are kept by slot number, and every renderer applies them to the
+ *  QR slot too — a moved frame printed the QR as a big square mid-page). The
+ *  photo keeps its filter when it stays the same photo (`samePhoto`). */
+export function fullBleedPhoto(page: AlbumPage, samePhoto: boolean): Pick<AlbumPage, 'slotGeometries' | 'slotMasks' | 'slotLooks'> {
+  return { slotGeometries: [], slotMasks: [], slotLooks: samePhoto && page.slotLooks?.[0] ? [page.slotLooks[0]] : [] };
 }
 
 /* The page's dominant photo ratio (the most common ratio among the photos
@@ -251,6 +236,47 @@ function dominantPageRatio(
     if ((tally[r] ?? 0) > bestR) { bestR = tally[r]!; pageRatio = r; }
   }
   return pageRatio;
+}
+
+/** The layouts the "Change layout" sheet offers for `page` (LayoutPicker):
+ *  the page's own layout FIRST — the sheet's "✓ Current" — then every layout
+ *  that holds its photos the way the generator deals them: each photo in a
+ *  frame of its own orientation, cropped no more than the loose budget
+ *  (frameTakesPhoto), judged on the page a tap would make. Same photo count
+ *  first, then the nearest counts.
+ *  It used to want layouts built for the photos' EXACT ratio. Three 4:3
+ *  landscapes on Hero Top (3:2 frames, an 11% crop the generator deals all
+ *  the time) got only "Four Landscapes + Box Above / Below": no "✓ Current",
+ *  no 3-photo layout (phone walk, 2026-10-08). */
+export function layoutChoicesForPage(page: AlbumPage, photos: UploadedPhoto[], size: AlbumSizePreset): PageTemplate[] {
+  const ratioOf = analyzePhotos(photos).assignments;
+  const count = new Set((page.slotFills ?? []).filter((f): f is number => f !== null)).size;
+  const holdsPhotos = (t: PageTemplate) => {
+    const relaid = relayPageOnTemplate(page, t);
+    // A memory can turn a full page into its badge layout: judge what's laid.
+    const laid = (relaid.templateId ? getTemplateById(relaid.templateId) : undefined) ?? t;
+    return (relaid.slotFills ?? []).every((f, i) =>
+      f == null || ratioOf[f] == null || frameTakesPhoto(frameShape(laid, i, size), ratioOf[f]));
+  };
+  const current = page.templateId ? getTemplateById(page.templateId) : undefined;
+  const fits = getTemplatesForAlbum(size)
+    .filter((t) => t.id !== current?.id && holdsPhotos(t))
+    .sort((a, b) => Math.abs(photoSlotCount(a) - count) - Math.abs(photoSlotCount(b) - count) || a.id.localeCompare(b.id));
+  return current ? [current, ...fits] : fits;
+}
+
+/** Where Megy's "next layout" (cycleLayout) takes `page`: the next of the
+ *  sheet's layouts that hold the same number of photos, in id order, looping.
+ *  Undefined when no other one does. It used to fall back to ANY layout of
+ *  that count: three landscapes went from Hero Top to Three Squares, losing
+ *  a quarter of each photo. */
+export function nextLayoutInCycle(page: AlbumPage, photos: UploadedPhoto[], size: AlbumSizePreset): PageTemplate | undefined {
+  const count = new Set((page.slotFills ?? []).filter((f): f is number => f !== null)).size;
+  const pool = layoutChoicesForPage(page, photos, size)
+    .filter((t) => photoSlotCount(t) === count)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const next = pool[(pool.findIndex((t) => t.id === page.templateId) + 1) % Math.max(1, pool.length)];
+  return next && next.id !== page.templateId ? next : undefined;
 }
 
 /** New pages for `photos` (photo indices), on layouts that hold exactly them:
@@ -599,6 +625,24 @@ function getInitialState(): SerializedState {
 /** The stages of a whole-album generation, in order. Shown to the customer. */
 export type GeneratingPhase = 'measuring' | 'laying_out' | 'quotes' | 'finishing';
 
+/** What generateAlbum did, and (for a new size) the memories' plan. */
+export type GenerateResult =
+  | { made: true; memories?: MemoryPlan }
+  | { made: false; memories: MemoryPlan };
+export type MemoryPlan = ReturnType<typeof memoriesAcrossSize>;
+
+/** A size change that would take video memories off: asked before it runs. */
+export interface ResizeAsk {
+  size: AlbumSizePreset;
+  /** The album's memories, and how many of them can't come along. */
+  memories: number;
+  lost: number;
+  /** Those memories' codes: a yes lets exactly these come off. */
+  lostCodes: string[];
+  /** Setup moved off a size the shop no longer offers (no tap). */
+  reason?: 'size_hidden';
+}
+
 /** Resolve after the browser has had one frame to paint pending state. */
 const paintFrame = () => new Promise<void>((resolve) => {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
@@ -688,8 +732,12 @@ export interface BuilderActions {
    *  photo is never placed by its fallback ratio. Callers may fire-and-forget. */
   /** `size`: lay the album out for a NEW size (it becomes the album's size
    *  with the pages, in one step). Every page is laid out again — a Studio
-   *  page is laid out for the old shape, so it can't be kept. */
-  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset }) => Promise<void>;
+   *  page is laid out for the old shape, so it can't be kept. The video
+   *  memories come along, each a badge on its own photo. One that can't comes
+   *  off only when its code is in `confirmedLost` (the customer said yes to
+   *  exactly those); any other and nothing changes ({ made: false } with the
+   *  plan, to ask about). */
+  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }) => Promise<GenerateResult>;
   /** What generateAlbum is doing RIGHT NOW, or null when idle. The builder
    *  shows a "making your album" screen while this is set — a whole-album
    *  generation can take several seconds (measuring, laying out, waiting on
@@ -710,6 +758,10 @@ export interface BuilderActions {
   /** The "Change layout" picker open state — shared by mobile + desktop. */
   layoutPickerOpen: boolean;
   setLayoutPickerOpen: (v: boolean) => void;
+  /** "Change the size? N video memories can't come along" — open while it is
+   *  asked (ResizeAlbumAsk), wherever the size was tapped (change_size). */
+  resizeAsk: ResizeAsk | null;
+  setResizeAsk: (ask: ResizeAsk | null) => void;
   /** Fill the current page's empty photo frames with photos not yet in the
    *  album. Returns how many it filled, and how many were empty. */
   autoFillSlots: () => { filled: number; empty: number };
@@ -1041,6 +1093,7 @@ export function useBuilderState(): BuilderActions {
   // ── Layout picker (the "Change layout" sheet/modal) — shared so the mobile
   //    review and the desktop panel both open the same picker ──
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
+  const [resizeAsk, setResizeAsk] = useState<ResizeAsk | null>(null);
   // ── Wizard step tracking — assistant is the primary controller ──
   const [wizardStep, setWizardStep] = useState<WizardStep>('welcome');
 
@@ -1929,8 +1982,8 @@ export function useBuilderState(): BuilderActions {
     }
   }, []);
 
-  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset }) => {
-    const { size: newSize, ...genOptions } = options ?? {};
+  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }): Promise<GenerateResult> => {
+    const { size: newSize, confirmedLost, ...genOptions } = options ?? {};
     const size = newSize ?? albumSize;
     const resizing = size !== albumSize;
     // Show the "making your album" screen for the whole run and let the browser
@@ -1952,6 +2005,11 @@ export function useBuilderState(): BuilderActions {
       const m = measuredRef.current.get(p.id);
       return m && (p.width !== m.width || p.height !== m.height) ? { ...p, ...m } : p;
     });
+    // A NEW SIZE KEEPS THE VIDEO MEMORIES: each comes along as its badge on
+    // its photo. One that can't (its photo won't fill a page of the new
+    // shape) never comes off without a yes to it — the caller asks (change_size).
+    const memories = resizing ? memoriesAcrossSize(albumPagesRef.current, photos, albumSize, size) : null;
+    if (memories?.lost.some((q) => !confirmedLost?.includes(q.code))) return { made: false, memories };
     pushSnapshot();
     // Bake the active theme's photo frame + corner art onto every generated page.
     // A custom Border picked on the wizard overrides the theme's border here.
@@ -1978,9 +2036,24 @@ export function useBuilderState(): BuilderActions {
     // A NEW SIZE re-lays out every page: a Studio page is laid out for the old
     // shape and would be squashed onto the new one (1-star testers).
     const { kept, used } = resizing ? { kept: [], used: new Set<number>() } : splitStudioPages(albumPagesRef.current);
-    // Photos the customer left out (Megy's photo check) stay out.
-    const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i) && !photos[i].leftOut);
+    // Photos the customer left out (Megy's photo check) stay out — not one
+    // that carries a memory.
+    const memoryPhotos = new Set((memories?.carried ?? []).map((m) => m.photo));
+    const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i) && (!photos[i].leftOut || memoryPhotos.has(i)));
     const pool = poolMap.map((i) => photos[i]);
+    // A memory from a frame or a box has no corner yet: away from the face,
+    // as "Add a video memory" picks it.
+    const carried: CarriedMemory[] = [];
+    for (const m of memories?.carried ?? []) {
+      let corner = m.corner;
+      if (!corner) {
+        const url = photos[m.photo]?.previewUrl;
+        let face: { x: number; y: number } | null = null;
+        try { face = url ? await detectFaceCenter(url) : null; } catch { face = null; }
+        corner = qrCornerAwayFromFace(face);
+      }
+      carried.push({ ...m, photo: poolMap.indexOf(m.photo), corner });
+    }
     // MEMORY PAGES (owner, 2026-10-02): the album's video memories go on
     // full-page photos, which take the photos that crop least. Only an album
     // SHORT of those has to crop others — and then it should crop the ones
@@ -2001,7 +2074,7 @@ export function useBuilderState(): BuilderActions {
         }
       } catch { /* no faces known → least-crop order */ }
     }
-    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     setGenerating('quotes');
@@ -2036,12 +2109,22 @@ export function useBuilderState(): BuilderActions {
     }
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
+    return { made: true, ...(memories ? { memories } : {}) };
     } finally {
       setGenerating(null);
     }
   }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate]);
 
+  /** Does the current page carry a video memory? Then its layout stays the
+   *  full photo with the QR badge (see relayPageOnTemplate), and the layout
+   *  actions leave it alone without an undo step. */
+  const currentPageHasMemory = useCallback(() => {
+    const page = albumPagesRef.current[currentPageIndex];
+    return !!page && memoriesOn(page).length > 0;
+  }, [currentPageIndex]);
+
   const regeneratePage = useCallback(() => {
+    if (currentPageHasMemory()) return;
     pushSnapshot();
     setAlbumPages((prev) => {
       const next = [...prev];
@@ -2049,6 +2132,7 @@ export function useBuilderState(): BuilderActions {
       if (!page) return prev;
       // STUDIO: the customer's page is never rearranged behind their back.
       if (page.studio) return prev;
+      if (memoriesOn(page).length) return prev;
 
       // ── 1. Collect existing photos on this page (preserve these). Dedup so a
       //       page that already has duplicates gets cleaned on regenerate. ──
@@ -2145,9 +2229,10 @@ export function useBuilderState(): BuilderActions {
       next[currentPageIndex] = newPage;
       return next;
     });
-  }, [currentPageIndex, albumSize, uploadedPhotos, photosPerPage]);
+  }, [currentPageIndex, albumSize, uploadedPhotos, photosPerPage, currentPageHasMemory]);
 
   const shuffleLayout = useCallback(() => {
+    if (currentPageHasMemory()) return;
     pushSnapshot();
     setAlbumPages((prev) => {
       const next = [...prev];
@@ -2169,54 +2254,44 @@ export function useBuilderState(): BuilderActions {
 
       return next;
     });
-  }, [currentPageIndex, photosPerPage, albumSize]);
+  }, [currentPageIndex, photosPerPage, albumSize, currentPageHasMemory]);
 
-  /* Cycle the current page through ratio-MATCHED layouts (same photo count AND
-     same slot ratio as the photos), in order, looping — powers mobile "Change".
-     Re-flows the photos so they never get cropped into a mismatched slot. */
+  /* Cycle the current page through the layouts that hold its photos (same
+     photo count, no bad crop — nextLayoutInCycle), in order, looping — powers
+     Megy's "next layout". Re-flows the photos into the new frames. */
   const cycleLayout = useCallback(() => {
+    if (currentPageHasMemory()) return;
+    const before = albumPagesRef.current[currentPageIndex];
+    const template = before && nextLayoutInCycle(before, uploadedPhotos, albumSize);
+    if (!template) return; // nothing else holds these photos: no undo step for nothing
     pushSnapshot();
-    const analysis = analyzePhotos(uploadedPhotos);
     setAlbumPages((prev) => {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page) return prev;
-      const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
-      const count = existingFills.length;
-      // The page's dominant photo ratio → only cycle templates whose slots match.
-      const pageRatio = dominantPageRatio(existingFills, analysis.assignments);
-      const allForSize = getTemplatesForAlbum(albumSize);
-      let pool = allForSize.filter((t) => t.slotCount === count && (!pageRatio || t.targetRatio === pageRatio));
-      if (pool.length === 0) pool = allForSize.filter((t) => t.slotCount === count);
-      if (pool.length === 0) pool = allForSize;
-      pool = [...pool].sort((a, b) => a.id.localeCompare(b.id));
-      if (pool.length === 0) return prev;
-      const curIdx = pool.findIndex((t) => t.id === page.templateId);
-      const template = pool[(curIdx + 1) % pool.length];
       next[currentPageIndex] = relayPageOnTemplate(page, template);
       return next;
     });
-  }, [currentPageIndex, albumSize, uploadedPhotos]);
+  }, [currentPageIndex, albumSize, uploadedPhotos, currentPageHasMemory]);
 
-  /** The templates available for the current page (same pool the cycle uses:
-   *  matching the page's photo count + dominant ratio, active only), sorted —
-   *  for the layout picker so the user can choose directly. */
+  /** The layouts the picker offers for the current page: its own first ("✓
+   *  Current"), then the ones that hold its photos (layoutChoicesForPage).
+   *  Photos a smaller layout can't hold, the picker asks about first; a
+   *  bigger one leaves empty "+" frames to fill. */
   const availableTemplatesForCurrentPage = useCallback((): PageTemplate[] => {
     const page = albumPages[currentPageIndex];
     if (!page) return [];
-    const analysis = analyzePhotos(uploadedPhotos);
-    const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
-    const count = existingFills.length;
-    const pageRatio = dominantPageRatio(existingFills, analysis.assignments);
-    const allForSize = getTemplatesForAlbum(albumSize);
-    // EXPERIMENT: slotCount removed from the qualification — show EVERY layout whose
-    // ratio matches the page's photos, regardless of photo count. Strict RATIO match
-    // stays (no crop). Note: picking a layout with FEWER slots than photos drops the
-    // extra photos from this page; MORE slots leaves empty "+" slots to fill.
-    let pool = allForSize.filter((t) => (!pageRatio || t.targetRatio === pageRatio));
-    if (pool.length === 0) pool = allForSize;
-    // Same photo count first, then nearest counts, then by id.
-    return [...pool].sort((a, b) => Math.abs(a.slotCount - count) - Math.abs(b.slotCount - count) || a.id.localeCompare(b.id));
+    // A page with a video memory stays a full-bleed, one-photo page (see
+    // relayPageOnTemplate): a badge page is its own and only layout; a memory
+    // placed in a frame or box before gets the full-page layouts, which turn
+    // it into the badge.
+    const memories = memoriesOn(page);
+    if (memories.length) {
+      const current = page.templateId ? getTemplateById(page.templateId) : undefined;
+      if (current && layoutHoldsMemory(current)) return [current];
+      return memories.length === 1 ? getTemplatesForAlbum(albumSize).filter(layoutHoldsMemory) : [];
+    }
+    return layoutChoicesForPage(page, uploadedPhotos, albumSize);
   }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
 
   /** Apply a SPECIFIC template to the current page (the picker's choice), keeping
@@ -2240,6 +2315,11 @@ export function useBuilderState(): BuilderActions {
     const template = getTemplateById(templateId);
     if (!template) return;
     const before = albumPages[currentPageIndex];
+    // A layout this page can't take (a memory page onto more photos), or a
+    // memory page's own layout (the sheet's "✓ Current"), leaves it as it is —
+    // no undo step for nothing.
+    if (before && relayPageOnTemplate(before, template) === before) return;
+    if (before && memoriesOn(before).length && template.id === before.templateId) return;
     const spare = leftover === 'new-page' && before ? layoutChangeLeftovers(before, template).photos : [];
     const assignments = spare.length ? analyzePhotos(uploadedPhotos).assignments : {};
     pushSnapshot();
@@ -2500,6 +2580,9 @@ export function useBuilderState(): BuilderActions {
         slotScales: [p.slotScales?.[0] ?? 1, 1],
         slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
         slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
+        // The photo goes full bleed under its memory: a mask or a moved frame
+        // on this single would make the memory page something else.
+        ...fullBleedPhoto(p, true),
         // Drop any theme decorative corners — they sit in all four corners and
         // would overlay (and in print obscure) the QR chip.
         cornerBase: undefined,
@@ -2537,6 +2620,7 @@ export function useBuilderState(): BuilderActions {
         slotScales: [p.slotScales?.[0] ?? 1, 1],
         slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
         slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
+        ...fullBleedPhoto(p, true),
         cornerBase: undefined,
       };
     });
@@ -3289,6 +3373,7 @@ export function useBuilderState(): BuilderActions {
 
   /* ── Template ── */
   const setPageTemplate = useCallback((templateId: string) => {
+    if (currentPageHasMemory()) return;
     pushSnapshot();
     updateCurrentPage((page) => ({
       ...page,
@@ -3298,7 +3383,7 @@ export function useBuilderState(): BuilderActions {
       slotOffsetsX: [],
       slotOffsetsY: [],
     }));
-  }, [updateCurrentPage]);
+  }, [updateCurrentPage, currentPageHasMemory]);
 
   const hideTemplate = useCallback((id: string) => {
     setRejectedTemplateIds((prev) => [...prev, id]);
@@ -3676,6 +3761,8 @@ export function useBuilderState(): BuilderActions {
     applyPageLayout,
     layoutPickerOpen,
     setLayoutPickerOpen,
+    resizeAsk,
+    setResizeAsk,
     autoFillSlots,
     clearAllSlots,
     fillSlot,

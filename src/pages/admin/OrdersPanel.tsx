@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { Loader2, Check, Download, AlertTriangle, Receipt } from 'lucide-react';
 import {
-  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus,
+  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, printFilesOf,
 } from '../../lib/adminOrders';
 import { supabase } from '../../lib/supabase';
 
@@ -22,7 +22,7 @@ export default function OrdersPanel({ orders, onChanged, canSeeFinancials, print
   }
   return (
     <div className="space-y-3">
-      {orders.map((o) => <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReadyIds.has(o.id)} />)}
+      {orders.map((o) => <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReadyIds.has(printFilesOf(o))} />)}
     </div>
   );
 }
@@ -62,7 +62,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
     setSaving(true); setErr(null);
     const { data, error } = await supabase.storage
       .from('print-pdfs')
-      .createSignedUrl(`${o.id}.pdf`, 120, { download: `megyprints-${o.order_number}.pdf` });
+      .createSignedUrl(`${printFilesOf(o)}.pdf`, 120, { download: `megyprints-${o.order_number}.pdf` });
     setSaving(false);
     if (error || !data?.signedUrl) { setErr('Print file not ready for this order yet.'); return; }
     window.open(data.signedUrl, '_blank');
@@ -74,7 +74,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
     setSaving(true); setErr(null);
     const { data, error } = await supabase.storage
       .from('print-pdfs')
-      .createSignedUrl(`${o.id}-cover.pdf`, 120, { download: `megyprints-${o.order_number}-cover.pdf` });
+      .createSignedUrl(`${printFilesOf(o)}-cover.pdf`, 120, { download: `megyprints-${o.order_number}-cover.pdf` });
     setSaving(false);
     if (error || !data?.signedUrl) { setErr('Cover file not ready for this order yet.'); return; }
     window.open(data.signedUrl, '_blank');
@@ -106,6 +106,18 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
               title={saysPaid ? `Customer marked it sent on ${o.payment_submitted_at!.slice(0, 16).replace('T', ' ')} — match it in the GoTyme app, then Mark paid.` : undefined}>
               {paid ? 'Paid' : saysPaid ? 'Customer says paid' : 'Unpaid'}
             </span>
+            {o.copy_of_order_number && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#F1ECFF] text-[#7A5EC9]" data-testid="order-copy-of"
+                title="A guest's copy of an event album: print it from that order's files (Print PDF and Cover PDF here already do).">
+                Copy of {o.copy_of_order_number}
+              </span>
+            )}
+            {o.event_booking_number && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#E6F4EA] text-success" data-testid="order-event-album"
+                title="An event album: paid by its booking, not by transfer.">
+                Event album · {o.event_booking_number}
+              </span>
+            )}
             {!printReady && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1"
                 title="No print-ready PDF is in the fulfillment bucket for this order. Do not print until the customer re-orders from the device that holds the photos.">
