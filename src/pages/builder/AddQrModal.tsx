@@ -15,6 +15,7 @@ import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceO
 import { getPriceSchedule } from '../../lib/storeSettings';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { useBuilderContext } from './BuilderContext';
+import { eventVideosForAlbum, type EventVideoChoice } from '../../lib/eventAlbum';
 
 const CORNER_LABELS: Record<QrCorner, string> = {
   tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right',
@@ -78,7 +79,12 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   // their order is paid (0042), so another album's kept copies must not lock
   // the choice for a new one.
   // Every host of this dialog is inside the builder (Edit, Preview, Review).
-  const albumPages: AlbumPage[] = useBuilderContext().albumPages;
+  const builderCtx = useBuilderContext();
+  const albumPages: AlbumPage[] = builderCtx.albumPages;
+  // An album made from an event (0045): the videos the host picked from what
+  // guests shared, offered next to "Choose a video".
+  const eventVideos = initial ? [] : eventVideosForAlbum(builderCtx.getAlbumId());
+  const [fetchingEvent, setFetchingEvent] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
     const fills = albumPages.flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
@@ -128,6 +134,24 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
       setMeta({ ext: v.ext, durationSec: v.durationSec });
     } finally {
       setChecking(false);
+    }
+  };
+
+  // A guest's video: downloaded from the event, then the same checks as a
+  // video picked from the phone.
+  const pickEventVideo = async (v: EventVideoChoice) => {
+    setError('');
+    setFetchingEvent(v.id);
+    try {
+      const res = await fetch(v.url);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const type = blob.type || (v.ext === 'mov' ? 'video/quicktime' : v.ext === 'webm' ? 'video/webm' : 'video/mp4');
+      await pick(new File([blob], `event-${v.id}.${v.ext}`, { type }));
+    } catch {
+      setError('That video couldn’t be downloaded. Check your connection and try again.');
+    } finally {
+      setFetchingEvent(null);
     }
   };
 
@@ -259,6 +283,20 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
             {checking ? <><Loader2 size={16} className="animate-spin" /> Checking your video…</>
               : <><Upload size={16} /> {file ? 'Choose a different video' : initial ? 'Replace with a new video' : 'Choose a video'}</>}
           </button>
+          {eventVideos.length > 0 && (
+            <div data-testid="qr-event-videos">
+              <p className="text-xs text-medium mb-1.5">Or one your guests shared:</p>
+              <div className="space-y-1.5">
+                {eventVideos.map((v) => (
+                  <button key={v.id} type="button" onClick={() => void pickEventVideo(v)} disabled={!!fetchingEvent || checking || busy}
+                    className="w-full rounded-lg border border-line px-3 py-2 text-left text-sm text-dark flex items-center gap-2 hover:bg-paper disabled:opacity-60">
+                    {fetchingEvent === v.id ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} className="text-blush-pink" />}
+                    {v.by ? `${v.by}’s video` : 'A guest’s video'}{v.durationS ? ` · ${Math.round(v.durationS)} s` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {error && <p className="text-xs text-red-500" role="alert">{error}</p>}
 
           {/* Preview of the picked file — the live proof, before anything is saved */}

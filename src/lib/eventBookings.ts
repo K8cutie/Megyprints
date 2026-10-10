@@ -75,6 +75,16 @@ export interface EventBooking {
   close_reason: string | null;
   created_at: string;
   updated_at: string;
+  /** The event (0044): set once the deposit is confirmed. */
+  event_title?: string | null;
+  kids_on?: boolean;
+  tables?: number | null;
+  copies_on?: boolean;
+  guest_code?: string | null;
+  screen_key?: string | null;
+  screen_paused?: boolean;
+  /** The album order the booking paid for (0045). */
+  album_order_id?: string | null;
 }
 
 /** What the host sees (no cost to make: that's the owner's number). */
@@ -84,6 +94,7 @@ export const HOST_COLUMNS = [
   'deposit_reference', 'deposit_proof_path', 'deposit_submitted_at', 'deposit_paid_at',
   'balance_reference', 'balance_proof_path', 'balance_submitted_at', 'balance_paid_at',
   'cancelled_at', 'cancelled_by', 'close_reason', 'created_at', 'updated_at',
+  'event_title', 'kids_on', 'tables', 'copies_on', 'guest_code', 'screen_key', 'screen_paused', 'album_order_id',
 ].join(', ');
 
 export const peso = (n: number | null | undefined) =>
@@ -181,6 +192,19 @@ export async function listMyBookings(userId: string): Promise<EventBooking[]> {
     .order('created_at', { ascending: false });
   if (error) throw new Error(bookingErrorMessage(error));
   return (data ?? []) as unknown as EventBooking[];
+}
+
+/** One of the host's own bookings, or null. */
+export async function getMyBooking(userId: string, id: string): Promise<EventBooking | null> {
+  if (!supabaseConfigured) return null;
+  const { data, error } = await supabase
+    .from('event_bookings')
+    .select(HOST_COLUMNS)
+    .eq('user_id', userId)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw new Error(bookingErrorMessage(error));
+  return (data as unknown as EventBooking | null) ?? null;
 }
 
 export async function cancelMyBooking(id: string): Promise<boolean> {

@@ -5,10 +5,12 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "crons": [
-    { "path": "/api/expire-orders", "schedule": "0 19 * * *" }
+    { "path": "/api/expire-orders", "schedule": "0 19 * * *" },
+    { "path": "/api/event-cleanup", "schedule": "30 19 * * *" }
   ],
   "functions": {
-    "api/expire-orders.mjs": { "maxDuration": 60 }
+    "api/expire-orders.mjs": { "maxDuration": 60 },
+    "api/event-cleanup.mjs": { "maxDuration": 60 }
   },
   "rewrites": [
     { "source": "/m/:code", "destination": "/api/m?code=:code" },

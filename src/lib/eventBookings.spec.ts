@@ -58,8 +58,10 @@ describe('the app and 0043 say the same thing', () => {
   });
 
   it('every column the app reads as the host is granted to hosts, and the cost to make is not', () => {
-    const grant = /grant select \(([\s\S]+?)\) on public\.event_bookings to authenticated/.exec(SQL)!;
-    const granted = grant[1].split(',').map((c) => c.trim());
+    // 0043 grants the booking's columns, 0044 the event's.
+    const SQL44 = readFileSync(resolve(__dirname, '../../supabase/migrations/0044_event_camera.sql'), 'utf8');
+    const granted = [SQL, SQL44].flatMap((src) =>
+      [...src.matchAll(/grant select \(([\s\S]+?)\)\s+on public\.event_bookings to authenticated/g)].flatMap((m) => m[1].split(',').map((c) => c.trim())));
     const read = HOST_COLUMNS.split(',').map((c) => c.trim());
     expect(read.filter((c) => !granted.includes(c))).toEqual([]);
     expect(granted).not.toContain('deal_cost');

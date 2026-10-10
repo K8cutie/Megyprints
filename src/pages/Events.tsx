@@ -204,6 +204,16 @@ function BookingCard({ booking: b, focused, onChanged }: { booking: EventBooking
 
       {notice && <p className="mt-3 text-xs text-medium" role="status">{notice}</p>}
 
+      {/* Booked: the event is open — its QR, the screen, the photos, the album.
+          Outlined when a payment is the card's one filled button. */}
+      {(b.status === 'booked' || b.status === 'paid' || b.status === 'completed') && (
+        <Link to={`/events/${b.id}`} data-testid="booking-open-event"
+          className={`mt-4 w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-1.5 ${view.action === 'pay-balance'
+            ? 'border-2 border-peach text-cocoa hover:bg-blush' : 'bg-blush-pink text-white hover:brightness-105'}`}>
+          Open your event: QR, photos and album <ChevronRight size={16} />
+        </Link>
+      )}
+
       {view.action === 'pay-deposit' && paying !== 'deposit' && (
         <button type="button" onClick={() => setPaying('deposit')} data-testid="booking-pay-deposit"
           className="mt-4 w-full py-3 bg-blush-pink text-white font-semibold rounded-xl hover:brightness-105">

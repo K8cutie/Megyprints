@@ -24,6 +24,13 @@ import ProtectedRoute from './components/ProtectedRoute';
 // the entry chunk (which is exactly why it wasn't splitting before).
 const BuilderRoute = lazy(() => import('./pages/builder/BuilderRoute'));
 const Admin = lazy(() => import('./pages/Admin'));
+// Megyprints Events, loaded when opened: the guest camera brings the video
+// encoder, and most visitors never need any of it.
+const EventManage = lazy(() => import('./pages/EventManage'));
+const EventCards = lazy(() => import('./pages/EventCards'));
+const EventGuest = lazy(() => import('./pages/EventGuest'));
+const EventScreen = lazy(() => import('./pages/EventScreen'));
+const EventCopy = lazy(() => import('./pages/EventCopy'));
 import InstallPrompt from './components/InstallPrompt';
 import ResumePrompt from './components/ResumePrompt';
 import PaidClipSweep from './components/PaidClipSweep';
@@ -75,6 +82,8 @@ export default function App() {
           <Route path="/order" element={<Order />} />
           <Route path="/events" element={<Events />} />
           <Route path="/events/book" element={<EventBook />} />
+          <Route path="/events/:id" element={<ProtectedRoute><EventManage /></ProtectedRoute>} />
+          <Route path="/e/:code/copy" element={<EventCopy />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
@@ -86,6 +95,11 @@ export default function App() {
         <Route path="/builder/*" element={<BuilderRoute />} />
         {/* Operator console — outside the customer Layout (its own chrome) */}
         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+        {/* Megyprints Events, own chrome: the guest camera (from a table QR),
+            the venue screen, and the printable table cards. */}
+        <Route path="/e/:code" element={<EventGuest />} />
+        <Route path="/e/:code/screen" element={<EventScreen />} />
+        <Route path="/events/:id/cards" element={<ProtectedRoute><EventCards /></ProtectedRoute>} />
         {/* Catch-all: an unknown hash previously mounted nothing (blank screen).
             Send it home instead of showing an empty page. */}
         <Route path="*" element={<Navigate to="/" replace />} />
