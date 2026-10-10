@@ -43,12 +43,12 @@ function HeroSection({ onStart }: { onStart: () => void }) {
       <div className="absolute inset-0 bg-[rgba(45,40,36,0.22)]" />
 
       {/* pt-24: the cards must not slide under the fixed header. */}
-      <div className="relative z-10 w-full max-w-[1040px] mx-auto px-4 sm:px-6 pt-24 pb-10">
+      <div className="relative z-10 w-full max-w-[1040px] lg:max-w-[1280px] mx-auto px-4 sm:px-6 pt-24 pb-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6 md:items-stretch max-w-[480px] md:max-w-none mx-auto"
+          className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6 lg:gap-8 md:items-stretch max-w-[480px] md:max-w-none mx-auto"
         >
           <AlbumsCard onStart={onStart} />
           <EventsCard />

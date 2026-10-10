@@ -157,7 +157,7 @@ function TruckChip({ label, x, y }: { label: string; x: number; y: number }) {
 /** A slide: 150 px, warm paper, a big soft circle behind the picture. */
 function Scene({ gold = false, circle = 'left', children }: { gold?: boolean; circle?: 'left' | 'right'; children: ReactNode }) {
   return (
-    <div className={`relative flex h-[150px] items-center overflow-hidden ${gold ? 'bg-[#FBF4E6]' : 'bg-[#FBF1EB]'}`}>
+    <div className={`relative flex h-[150px] lg:h-[200px] items-center overflow-hidden ${gold ? 'bg-[#FBF4E6]' : 'bg-[#FBF1EB]'}`}>
       <div aria-hidden="true" className={`absolute rounded-full ${gold ? 'bg-[#F3E2BE]' : 'bg-[#F3DCCF]'} ${circle === 'left' ? '-left-9 -top-6 h-[196px] w-[196px]' : '-right-10 -top-[30px] h-[200px] w-[200px]'}`} />
       {children}
     </div>
@@ -167,13 +167,13 @@ function Scene({ gold = false, circle = 'left', children }: { gold?: boolean; ci
 /** "STEP 1" + its title and line, beside the picture. */
 function StepText({ n, step, gold = false }: { n: number; step: HomeStep; gold?: boolean }) {
   return (
-    <div className="relative flex min-w-0 flex-1 flex-col gap-[3px] pr-3.5">
+    <div className="relative flex min-w-0 flex-1 flex-col gap-[3px] pr-3.5 lg:gap-1 lg:pr-5">
       <span className="flex items-baseline gap-1.5">
-        <span className={`text-[11px] font-extrabold tracking-[0.12em] ${gold ? 'text-[#8A6420]' : 'text-[#9A4A2C]'}`}>STEP</span>
-        <span className={`font-display text-[34px] font-bold leading-none ${gold ? 'text-[#B8862B]' : 'text-[#B85C38]'}`}>{n}</span>
+        <span className={`text-[11px] lg:text-[13px] font-extrabold tracking-[0.12em] ${gold ? 'text-[#8A6420]' : 'text-[#9A4A2C]'}`}>STEP</span>
+        <span className={`font-display text-[34px] lg:text-[44px] font-bold leading-none ${gold ? 'text-[#B8862B]' : 'text-[#B85C38]'}`}>{n}</span>
       </span>
-      <span className="text-[16px] font-extrabold leading-[1.25] text-[#2D2D2D]">{step.title}</span>
-      <span className="text-[13px] leading-[1.4] text-[#4A423F]">{step.desc}</span>
+      <span className="text-[16px] lg:text-[20px] font-extrabold leading-[1.25] text-[#2D2D2D]">{step.title}</span>
+      <span className="text-[13px] lg:text-[15px] leading-[1.4] text-[#4A423F]">{step.desc}</span>
     </div>
   );
 }
@@ -187,11 +187,12 @@ function HookSlide({ text, how, onHow, phones = false }: { text: string; how: st
     : [[6, 46, -14, { width: 349.6, left: -252, top: -172.5 }], [70, 46, 13, { width: 362.9, left: -196.2, top: -153.9 }], [38, 30, -2, { width: 229.4, left: -52.4, top: -115.2 }]];
   return (
     <Scene circle="right">
-      <div className="relative flex min-w-0 flex-1 flex-col gap-1.5 pl-3.5">
-        <p className="m-0 text-[13px] leading-[1.45] text-[#4A423F] sm:text-[14px]">{text}</p>
-        <button type="button" onClick={onHow} className="self-start text-[13px] font-extrabold text-[#9A4A2C] hover:underline">{how} ›</button>
+      <div className="relative flex min-w-0 flex-1 flex-col gap-1.5 pl-3.5 lg:gap-2 lg:pl-5">
+        <p className="m-0 text-[13px] leading-[1.45] text-[#4A423F] sm:text-[14px] lg:text-[16px]">{text}</p>
+        <button type="button" onClick={onHow} className="self-start text-[13px] lg:text-[15px] font-extrabold text-[#9A4A2C] hover:underline">{how} ›</button>
       </div>
-      <div className="home-float relative ml-2.5 h-[150px] w-[136px] flex-none" aria-hidden="true">
+      <div className="relative ml-2.5 h-[150px] w-[136px] flex-none lg:ml-[51px] lg:origin-right lg:scale-[1.3]" aria-hidden="true">
+        <div className="home-float absolute inset-0">
         {fan.map(([x, y, rot, c], k) => (
           <div key={k} className="absolute" style={{ left: x, top: y, transform: `rotate(${rot}deg)` }}>
             <Photo src={fam} w={54} h={64} c={c} className={`rounded-[3px] ${k === 2 ? 'shadow-[0_0_0_3px_#fff,0_10px_20px_rgba(45,30,20,0.35)]' : 'shadow-[0_0_0_3px_#fff,0_8px_16px_rgba(45,30,20,0.3)]'}`} />
@@ -201,6 +202,7 @@ function HookSlide({ text, how, onHow, phones = false }: { text: string; how: st
             )}
           </div>
         ))}
+        </div>
       </div>
     </Scene>
   );
@@ -225,7 +227,7 @@ function Phone({ w, h, children, className = '' }: { w: number; h: number; child
 function CardShell({ children, testid }: { children: ReactNode; testid: string }) {
   return (
     <section data-testid={testid}
-      className="flex h-full flex-col gap-2 rounded-[22px] bg-white p-4 pb-3.5 shadow-[0_16px_40px_rgba(0,0,0,0.2)] text-left font-body">
+      className="flex h-full flex-col gap-2 rounded-[22px] bg-white p-4 pb-3.5 shadow-[0_16px_40px_rgba(0,0,0,0.2)] text-left font-body lg:gap-3 lg:rounded-[26px] lg:p-6 lg:pb-5">
       {children}
     </section>
   );
@@ -236,12 +238,12 @@ export function AlbumsCard({ onStart }: { onStart: () => void }) {
   const [s1, s2, s3, s4] = ALBUMS_CARD.steps;
   return (
     <CardShell testid="home-albums-card">
-      <span className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#9A4A2C]">{ALBUMS_CARD.label}</span>
-      <h1 className="m-0 font-display text-[22px] font-bold leading-[1.2] text-[#2D2D2D] sm:text-[24px]">{ALBUMS_CARD.title}</h1>
+      <span className="text-[11px] lg:text-[13px] font-extrabold uppercase tracking-[0.1em] text-[#9A4A2C]">{ALBUMS_CARD.label}</span>
+      <h1 className="m-0 font-display text-[22px] font-bold leading-[1.2] text-[#2D2D2D] sm:text-[24px] lg:text-[32px] lg:[text-wrap:balance]">{ALBUMS_CARD.title}</h1>
       <StepCarousel name={ALBUMS_CARD.label} testid="home-albums-slides" startDelayMs={SLIDE_MS / 2} slides={(go) => [
         <HookSlide key="hook" text={ALBUMS_CARD.hook} how={ALBUMS_CARD.how} onHow={() => go(1)} />,
         <Scene key="1">
-          <div className="relative h-[150px] w-[150px] flex-none" aria-hidden="true">
+          <div className="relative h-[150px] w-[150px] flex-none lg:origin-left lg:scale-[1.3] lg:mr-[45px]" aria-hidden="true">
             <div className="absolute left-[38px] top-3 -rotate-[5deg]">
               <Phone w={70} h={126} className="home-float">
                 <div className="grid grid-cols-[repeat(3,17px)] content-start gap-0.5 px-1 pt-3">
@@ -260,7 +262,7 @@ export function AlbumsCard({ onStart }: { onStart: () => void }) {
           <StepText n={1} step={s1} />
         </Scene>,
         <Scene key="2">
-          <div className="relative h-[150px] w-[150px] flex-none">
+          <div className="relative h-[150px] w-[150px] flex-none lg:origin-left lg:scale-[1.3] lg:mr-[45px]">
             <div className="absolute left-4 top-[18px] rotate-[3deg]">
               <Photo src={fam} w={128} h={110} c={{ width: 156.4, left: -13.7, top: -46.3 }} alt="An album laid out by Megy"
                 className="rounded-lg shadow-[0_0_0_3px_#fff,0_14px_26px_rgba(45,30,20,0.32)]" />
@@ -274,7 +276,7 @@ export function AlbumsCard({ onStart }: { onStart: () => void }) {
         </Scene>,
         // The video memory always shines: the builder's own gold button.
         <Scene key="3" gold>
-          <div className="relative h-[150px] w-[150px] flex-none" aria-hidden="true">
+          <div className="relative h-[150px] w-[150px] flex-none lg:origin-left lg:scale-[1.3] lg:mr-[45px]" aria-hidden="true">
             <div className="home-float absolute left-4 top-2">
               <div className="-rotate-3 relative">
                 <Photo src={fam} w={104} h={88} c={crop(104, 88, 180, 440, 250, 200)} className="rounded-[3px] shadow-[0_14px_24px_rgba(45,30,20,0.32)]" />
@@ -290,7 +292,7 @@ export function AlbumsCard({ onStart }: { onStart: () => void }) {
           <StepText n={3} step={s3} gold />
         </Scene>,
         <Scene key="4">
-          <div className="relative h-[150px] w-[150px] flex-none">
+          <div className="relative h-[150px] w-[150px] flex-none lg:origin-left lg:scale-[1.3] lg:mr-[45px]">
             <div className="home-float absolute left-[22px] top-3">
               <Photo src="/album-travel.jpg" w={106} h={112} c={{ width: 162.3, left: -40.8, top: -56.5 }} alt="A printed album"
                 className="-rotate-[4deg] rounded-lg shadow-[0_16px_28px_rgba(45,30,20,0.35)]" />
@@ -301,7 +303,7 @@ export function AlbumsCard({ onStart }: { onStart: () => void }) {
         </Scene>,
       ]} />
       <button type="button" onClick={onStart} data-testid="home-start-creating"
-        className="mt-auto flex h-[52px] w-full items-center justify-center gap-2 rounded-[14px] bg-peach text-[16px] font-bold text-white shadow-[0_6px_16px_rgba(184,92,56,0.3)] hover:bg-blush-pink active:scale-[0.98] transition-[transform,background-color]">
+        className="mt-auto flex h-[52px] w-full items-center justify-center gap-2 rounded-[14px] bg-peach text-[16px] font-bold lg:h-[60px] lg:text-[18px] text-white shadow-[0_6px_16px_rgba(184,92,56,0.3)] hover:bg-blush-pink active:scale-[0.98] transition-[transform,background-color]">
         <Sparkles size={18} /> {ALBUMS_CARD.cta}
       </button>
     </CardShell>
@@ -314,15 +316,15 @@ export function EventsCard() {
   const phones: [number, number, number][] = [[4, 8, 0], [22, 54, 3], [4, 100, 2]];
   return (
     <CardShell testid="home-events-card">
-      <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#9A4A2C]">
+      <span className="flex items-center gap-1.5 text-[11px] lg:text-[13px] font-extrabold uppercase tracking-[0.1em] text-[#9A4A2C]">
         <span className="rounded-full bg-[#B85C38] px-1.5 py-0.5 tracking-[0.08em] text-white">New</span>
         {EVENTS_CARD.label}
       </span>
-      <h2 className="m-0 font-display text-[22px] font-bold leading-[1.2] text-[#2D2D2D] sm:text-[24px]">{EVENTS_CARD.title}</h2>
+      <h2 className="m-0 font-display text-[22px] font-bold leading-[1.2] text-[#2D2D2D] sm:text-[24px] lg:text-[32px] lg:[text-wrap:balance]">{EVENTS_CARD.title}</h2>
       <StepCarousel name={EVENTS_CARD.label} testid="home-events-slides" slides={(go) => [
         <HookSlide key="hook" text={EVENTS_CARD.body} how={EVENTS_CARD.how} onHow={() => go(1)} phones />,
         <Scene key="1">
-          <div className="relative h-[150px] w-[150px] flex-none" aria-hidden="true">
+          <div className="relative h-[150px] w-[150px] flex-none lg:origin-left lg:scale-[1.3] lg:mr-[45px]" aria-hidden="true">
             <div className="absolute left-10 top-3 -rotate-6">
               <Phone w={70} h={126} className="home-float">
                 <div className="flex flex-col items-center gap-1.5 pt-3">
@@ -340,7 +342,7 @@ export function EventsCard() {
           <StepText n={1} step={s1} />
         </Scene>,
         <Scene key="2">
-          <div className="relative h-[150px] w-[150px] flex-none" aria-hidden="true">
+          <div className="relative h-[150px] w-[150px] flex-none lg:origin-left lg:scale-[1.3] lg:mr-[45px]" aria-hidden="true">
             <div className="absolute left-1 top-28 h-6 w-[132px] rounded-full bg-[#E9D2C3]" />
             <div className="absolute left-3.5 top-12 box-border flex h-[72px] w-14 flex-col items-center justify-center gap-[5px] rounded-[5px] bg-white shadow-[0_10px_18px_rgba(45,30,20,0.25)]">
               <FakeQr seed={23} cell={2} />
@@ -359,7 +361,7 @@ export function EventsCard() {
           <StepText n={2} step={s2} />
         </Scene>,
         <Scene key="3">
-          <div className="relative h-[150px] w-[150px] flex-none" aria-hidden="true">
+          <div className="relative h-[150px] w-[150px] flex-none lg:origin-left lg:scale-[1.3] lg:mr-[45px]" aria-hidden="true">
             {phones.map(([x, y, region], k) => {
               const r = FAMILY_REGIONS[region];
               return (
@@ -382,7 +384,7 @@ export function EventsCard() {
           <StepText n={3} step={s3} />
         </Scene>,
         <Scene key="4">
-          <div className="relative h-[150px] w-[150px] flex-none">
+          <div className="relative h-[150px] w-[150px] flex-none lg:origin-left lg:scale-[1.3] lg:mr-[45px]">
             <div className="home-float absolute left-[18px] top-3">
               <Photo src="/album-wedding.jpg" w={112} h={112} c={{ width: 154.4, left: -21.6, top: -46.6 }} alt="A printed wedding album"
                 className="-rotate-3 rounded-lg shadow-[0_16px_28px_rgba(45,30,20,0.35)]" />
@@ -396,10 +398,10 @@ export function EventsCard() {
         </Scene>,
       ]} />
       <div className="mt-auto flex flex-col gap-2">
-      <p className="m-0 text-center text-[12px] text-[#6B625E]">{EVENTS_CARD.who}</p>
+      <p className="m-0 text-center text-[12px] lg:text-[14px] text-[#6B625E]">{EVENTS_CARD.who}</p>
       {/* Outlined: Start Creating stays the one filled button on Home. */}
       <Link to="/events" data-testid="home-events-book"
-        className="flex h-[50px] w-full items-center justify-center gap-2 rounded-[14px] border-2 border-peach bg-white text-[16px] font-bold text-[#9A4A2C] no-underline hover:bg-blush transition-colors">
+        className="flex h-[50px] w-full items-center justify-center gap-2 rounded-[14px] border-2 border-peach bg-white text-[16px] font-bold lg:h-[60px] lg:text-[18px] text-[#9A4A2C] no-underline hover:bg-blush transition-colors">
         <CalendarHeart size={18} /> {EVENTS_CARD.cta} ›
       </Link>
       </div>

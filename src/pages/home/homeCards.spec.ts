@@ -114,6 +114,30 @@ describe('the step slides', () => {
   });
 });
 
+describe('bigger on desktop, the same on a phone (owner, 2026-10-10)', () => {
+  // "make it bigger on the desktop but looking at the mobile no changes":
+  // the phone sizes stay as they were; desktop (lg, 1024 px+) adds its own.
+  it('each size keeps its phone value and adds a desktop one', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const src = readFileSync(resolve(__dirname, 'HomeCards.tsx'), 'utf8');
+    const home = readFileSync(resolve(__dirname, '../Home.tsx'), 'utf8');
+    for (const pair of [
+      'h-[150px] lg:h-[200px]',                       // the slides
+      'w-[150px] flex-none lg:origin-left lg:scale-[1.3]', // their pictures
+      'text-[22px]',                                  // the headlines on a phone…
+      'sm:text-[24px] lg:text-[32px]',                // …and bigger on desktop
+      'text-[16px] lg:text-[20px]',                   // step titles
+      'text-[13px] lg:text-[15px]',                   // step lines
+      'h-[52px] w-full', 'lg:h-[60px] lg:text-[18px]', // the buttons
+      'p-4 pb-3.5', 'lg:p-6 lg:pb-5',                 // the cards
+    ]) expect(src).toContain(pair);
+    expect(home).toContain('max-w-[1040px] lg:max-w-[1280px]');
+    // No other breakpoint grows them (md is a tablet: unchanged).
+    expect(src).not.toMatch(/\b(md|sm):(h-\[200px\]|scale-|p-6)/);
+  });
+});
+
 describe('the buttons', () => {
   it('Start Creating is the one filled button; it starts an album', () => {
     render();
