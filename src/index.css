@@ -45,8 +45,9 @@
 
 /* Home's two cards (src/pages/home/HomeCards.tsx): the step slides slide, and
    their little scenes move a bit (the owner's canvas board). Under
-   prefers-reduced-motion nothing moves: the slides don't play by themselves
-   either (StepCarousel starts paused). */
+   prefers-reduced-motion nothing moves: the slides still change every 4 s,
+   but they jump to the next one instead of sliding, and the scenes hold
+   still. */
 .home-slide-track { transition: transform 480ms cubic-bezier(.2, .8, .2, 1); }
 .home-float { animation: homeFloat 3.2s ease-in-out infinite; }
 .home-scan { animation: homeScan 1.4s ease-in-out infinite alternate; }

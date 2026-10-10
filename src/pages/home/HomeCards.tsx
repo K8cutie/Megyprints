@@ -5,11 +5,14 @@
    the steps by itself (a slide every 4 s, dots to jump, Pause/Play), and its
    button stays put. Start Creating is the one filled button. The Albums
    slides move half a beat after the Events ones, so the two never slide at
-   the same moment. Nothing moves for people who asked for less motion.
+   the same moment. On a phone a finger swipes them, and a finger on them
+   holds the clock. For people who asked for less motion the slides still
+   change every 4 s, but jump instead of sliding, and the scenes hold still
+   (index.css).
    The words live in homeCopy.ts (homeCopy.spec.ts keeps them true).
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, Video, CalendarHeart } from 'lucide-react';
 import MegyMascot from '../../components/MegyMascot';
@@ -17,14 +20,11 @@ import { ALBUMS_CARD, EVENTS_CARD, type HomeStep } from '../homeCopy';
 
 /** One slide's time on screen (the board's default). */
 export const SLIDE_MS = 4000;
-
-function prefersReducedMotion(): boolean {
-  try {
-    return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  } catch {
-    return false;
-  }
-}
+/** How far a finger drags before it counts as a swipe to the next slide. */
+export const SWIPE_PX = 48;
+/** A finger has to move this far sideways (and more sideways than up or
+ *  down) before the slides follow it; until then the page scrolls as usual. */
+const DRAG_START_PX = 8;
 
 /* ── The carousel ─────────────────────────────────────────────────────── */
 
@@ -38,27 +38,89 @@ export function StepCarousel({ name, slides, startDelayMs = 0, testid }: {
   testid: string;
 }) {
   const [i, setI] = useState(0);
-  const [paused, setPaused] = useState(prefersReducedMotion);
+  const [paused, setPaused] = useState(false);
   // A jump restarts the clock (no half beat after the first run).
   const [epoch, setEpoch] = useState(0);
+  // A finger on the slides holds the clock; dx is how far it has dragged them.
+  const [held, setHeld] = useState(false);
+  const [dx, setDx] = useState(0);
+  const finger = useRef<{ id: number; x: number; y: number; dragging: boolean } | null>(null);
+  // A swipe that ends on a button must not also press it.
+  const swiped = useRef(false);
+  const region = useRef<HTMLDivElement>(null);
   const list = slides((k: number) => { setI(k); setEpoch((e) => e + 1); });
   const n = list.length;
   const go = useCallback((k: number) => { setI(k); setEpoch((e) => e + 1); }, []);
 
   useEffect(() => {
-    if (paused || n < 2) return;
+    if (paused || held || n < 2) return;
     let tick: number | undefined;
     const first = window.setTimeout(() => {
       setI((k) => (k + 1) % n);
       tick = window.setInterval(() => setI((k) => (k + 1) % n), SLIDE_MS);
     }, SLIDE_MS + (epoch === 0 ? startDelayMs : 0));
     return () => { window.clearTimeout(first); window.clearInterval(tick); };
-  }, [paused, n, epoch, startDelayMs]);
+  }, [paused, held, n, epoch, startDelayMs]);
+
+  // Once the finger is swiping the slides, its moves are the swipe's, not the
+  // page's: otherwise the phone flings the page sideways (nothing moves) and
+  // the next tap only stops that fling, so a tap on Pause did nothing.
+  // React listens to touchmove passively, so this has to be a native listener.
+  useEffect(() => {
+    const el = region.current;
+    if (!el) return;
+    const onMove = (e: TouchEvent) => { if (finger.current?.dragging && e.cancelable) e.preventDefault(); };
+    el.addEventListener('touchmove', onMove, { passive: false });
+    return () => el.removeEventListener('touchmove', onMove);
+  }, []);
+
+  // Fingers and pens only: a mouse has the dots.
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse' || n < 2 || finger.current) return;
+    finger.current = { id: e.pointerId, x: e.clientX, y: e.clientY, dragging: false };
+    swiped.current = false;
+    setHeld(true);
+  };
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    const f = finger.current;
+    if (!f || e.pointerId !== f.id) return;
+    const mx = e.clientX - f.x;
+    if (!f.dragging) {
+      if (Math.abs(mx) < DRAG_START_PX || Math.abs(mx) <= Math.abs(e.clientY - f.y)) return;
+      f.dragging = true;
+      // Keep the finger's moves coming here even if it slides off the card.
+      try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* already gone */ }
+    }
+    // Past the first or last slide they give a little, then stop.
+    const beyond = (i === 0 && mx > 0) || (i === n - 1 && mx < 0);
+    setDx(beyond ? mx / 3 : mx);
+  };
+  const onPointerEnd = (e: PointerEvent<HTMLDivElement>) => {
+    const f = finger.current;
+    if (!f || e.pointerId !== f.id) return;
+    finger.current = null;
+    setHeld(false);
+    setDx(0);
+    // A cancel is the page taking over (an up-and-down scroll): no swipe.
+    if (!f.dragging || e.type === 'pointercancel') return;
+    swiped.current = true;
+    const mx = e.clientX - f.x;
+    if (mx <= -SWIPE_PX && i < n - 1) go(i + 1);
+    else if (mx >= SWIPE_PX && i > 0) go(i - 1);
+  };
 
   return (
     <div data-testid={testid} data-slide={i}>
-      <div role="region" aria-roledescription="carousel" aria-label={`${name}, how it works`} className="overflow-hidden rounded-2xl">
-        <div className="home-slide-track flex" style={{ transform: `translateX(-${i * 100}%)` }}>
+      {/* touch-pan-y: up-and-down stays the page's scroll; sideways is the swipe. */}
+      <div ref={region} role="region" aria-roledescription="carousel" aria-label={`${name}, how it works`}
+        className="overflow-hidden rounded-2xl touch-pan-y"
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}
+        onClickCapture={(e) => { if (swiped.current) { swiped.current = false; e.preventDefault(); e.stopPropagation(); } }}>
+        <div className="home-slide-track flex" data-dragging={dx !== 0 ? 'true' : undefined}
+          style={dx !== 0
+            ? { transform: `translateX(calc(-${i * 100}% + ${dx}px))`, transition: 'none' }
+            : { transform: `translateX(-${i * 100}%)` }}>
           {list.map((slide, k) => (
             <div key={k} role="group" aria-roledescription="slide" aria-label={`${k + 1} of ${n}`} aria-hidden={k !== i}
               className="w-full shrink-0">
