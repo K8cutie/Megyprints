@@ -204,14 +204,114 @@ export function solidOf(bg?: AlbumBackground): string {
   return bg.solid ?? '#FFFBF7';
 }
 
+/* ── The spine fits, and reads (1-star testers, 2026-10-04) ─────────────────
+   A long title ran off both ends of the spine (only its middle printed), and a
+   white title on a photo cover printed white on the cream spine. The title now
+   shrinks to fit the spine's length — and only past a floor is it shortened,
+   ending in "…" — and the spine's ink is the title's colour only while that
+   colour reads on the spine. ───────────────────────────────────────────────── */
+
+/** Width in px of one line of `text` at `fontSize`, in the style's face. */
+export type SpineMeasure = (text: string, style: TextStyle, fontSize: number) => number;
+
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+/** The canvas's own measure (the print canvas draws the spine with the same
+ *  font string); an estimate where there is no canvas. */
+export const measureSpineText: SpineMeasure = (text, style, fontSize) => {
+  if (measureCtx === undefined) {
+    try {
+      measureCtx = typeof document !== 'undefined' && !/jsdom/i.test(globalThis.navigator?.userAgent ?? '')
+        ? document.createElement('canvas').getContext('2d')
+        : null;
+    } catch { measureCtx = null; }
+  }
+  if (measureCtx) {
+    measureCtx.font = `${style.italic ? 'italic' : 'normal'} ${style.bold ? 'bold' : 'normal'} ${fontSize}px ${style.fontFamily || 'serif'}`;
+    return measureCtx.measureText(text).width;
+  }
+  return Array.from(text).length * fontSize * 0.62;
+};
+
+/** The spine line: the title at the largest size up to `max` that fits
+ *  `length`, never below `min`. Still too long at `min`, it is cut — at a word
+ *  when that costs little — and ends in "…". */
+export function fitSpineLine(
+  title: string, style: TextStyle, max: number, min: number, length: number,
+  measure: SpineMeasure = measureSpineText,
+): { text: string; fontSize: number; shortened: boolean } {
+  let size = max;
+  for (;;) {
+    const w = measure(title, style, size);
+    if (w <= length) return { text: title, fontSize: size, shortened: false };
+    if (size <= min) break;
+    // Width scales with size: jump straight to about where it fits.
+    size = Math.max(min, Math.min(size - 1, Math.floor((size * length) / w)));
+  }
+  const chars = Array.from(title); // never split an emoji
+  const fits = (n: number) => measure(chars.slice(0, n).join('').trimEnd() + '…', style, min) <= length;
+  let lo = 0;
+  let hi = chars.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (fits(mid)) lo = mid; else hi = mid - 1;
+  }
+  let cut = chars.slice(0, lo).join('');
+  const space = cut.lastIndexOf(' ');
+  if (space > 0 && space >= cut.length * 0.6) cut = cut.slice(0, space);
+  return { text: cut.trimEnd() + '…', fontSize: min, shortened: true };
+}
+
+/** The smallest the spine title gets before it is shortened: 18 px (≈4.3 pt
+ *  at 300 dpi), the size a thin softcover spine already prints at. One floor
+ *  for every cover, so whether a title is shortened doesn't hang on the cover
+ *  type chosen at checkout — the editor (which can't know it yet) tells the truth. */
+export const SPINE_MIN_FONT_PX = 18;
+
+/** Dark and light spine inks, for a title colour that would not show. */
+export const SPINE_DARK_INK = '#2D2D2D';
+export const SPINE_LIGHT_INK = '#FFFBF7';
+
+/** WCAG contrast ratio (1..21) of two CSS colours; null when either can't be read. */
+export function contrastRatio(a: string, b: string): number | null {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  if (la == null || lb == null) return null;
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** The spine's ink: the title's own colour while it reads on the spine colour
+ *  (3:1, the large-text bar) — or while its outline does — else whichever of
+ *  the dark and light inks reads better there. */
+export function spineInk(title: Pick<TextStyle, 'color' | 'outlineColor' | 'outlineWidth'>, bg: string): string {
+  const reads = (c?: string) => { const r = c ? contrastRatio(c, bg) : null; return r == null || r >= 3; };
+  if (reads(title.color)) return title.color;
+  if (title.outlineWidth && title.outlineColor && reads(title.outlineColor)) return title.color;
+  return (contrastRatio(SPINE_DARK_INK, bg) ?? 21) >= (contrastRatio(SPINE_LIGHT_INK, bg) ?? 21) ? SPINE_DARK_INK : SPINE_LIGHT_INK;
+}
+
+export interface SpineInfo {
+  /** The line that prints: fitted size, readable colour, shortened text if it had to be. */
+  text: TextStyle;
+  bg: string;
+  /** The front title the spine was made from (whole). */
+  title: string;
+  /** True when it prints smaller than the spine's full size, to fit. */
+  shrunk: boolean;
+  /** True when even the smallest size couldn't fit it and it ends in "…". */
+  shortened: boolean;
+  /** True when the title's colour wouldn't show on the spine and it prints in another ink. */
+  inkChanged: boolean;
+}
+
 /** Derive the spine's text + colour from the FRONT cover page.
  *  TEXT selection (deterministic): (1) the bound-caption title (a TextElement on
  *  textSlot 0 — the cover template's title box); else (2) the largest free
  *  TextElement (lowest index wins ties) — the visual "title"; else (3) empty.
  *  The chosen element's styling is copied but the SIZE is re-fit to the physical
- *  spine (the front title size is in page-design space and must not be used raw).
+ *  spine (the front title size is in page-design space and must not be used raw)
+ *  and to its LENGTH (fitSpineLine), and the colour to the spine (spineInk).
  *  COLOUR = solidOf(front.background). */
-export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry): { text: TextStyle; bg: string } {
+export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry, measure: SpineMeasure = measureSpineText): SpineInfo {
   const bg = solidOf(front.background);
   const spineFontSize = Math.round(Math.min(g.panels.spine.width * 0.5, g.panels.front.height * 0.035));
   const nonEmpty = (front.textElements ?? []).filter((t) => !!t.text && t.text.trim().length > 0);
@@ -225,9 +325,10 @@ export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry): { text: Tex
   }
   if (!chosen) chosen = nonEmpty[0];                  // fall back to any caption (e.g. a subtitle)
 
+  const title = chosen ? chosen.text.trim() : '';
   const text: TextStyle = chosen
     ? {
-        text: chosen.text.trim(),
+        text: title,
         fontSize: spineFontSize,
         fontFamily: chosen.fontFamily,
         color: chosen.color,
@@ -250,7 +351,20 @@ export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry): { text: Tex
         alignment: 'center',
       };
 
-  return { text, bg };
+  if (!title) return { text, bg, title, shrunk: false, shortened: false, inkChanged: false };
+  // The line runs up the spine inside the same safe inset the print canvas
+  // draws in (insetRect(spine, safeInsetPx)).
+  const length = g.panels.spine.height - 2 * g.safeInsetPx;
+  const fit = fitSpineLine(title, text, spineFontSize, Math.min(spineFontSize, SPINE_MIN_FONT_PX), length, measure);
+  const ink = spineInk(text, bg);
+  return {
+    text: { ...text, text: fit.text, fontSize: fit.fontSize, color: ink },
+    bg,
+    title,
+    shrunk: fit.fontSize < spineFontSize,
+    shortened: fit.shortened,
+    inkChanged: ink !== text.color,
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -270,21 +384,33 @@ export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry): { text: Tex
 export const BRAND_BACK_WORDMARK = 'Megy Prints';
 export const BRAND_BACK_TAGLINE = 'megyprints.com';
 
+/** [r, g, b] (0..255) of a CSS colour in #rgb/#rrggbb/rgb() form; null otherwise. */
+function parseRgb(color: string): [number, number, number] | null {
+  const c = (color || '').trim();
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
+  const rgb = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(c);
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].split('').map((ch) => ch + ch).join('') : hex[1];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  if (rgb) return [+rgb[1], +rgb[2], +rgb[3]];
+  return null;
+}
+
+/** WCAG relative luminance (0..1); null for a colour parseRgb can't read. */
+function relativeLuminance(color: string): number | null {
+  const rgb = parseRgb(color);
+  if (!rgb) return null;
+  const [r, g, b] = rgb.map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 /** Perceived luminance (0..1) of a CSS colour; tolerant of #rgb/#rrggbb/rgb().
  *  Unknown formats read as light (→ dark ink), matching the light defaults. */
 function perceivedLuminance(color: string): number {
-  const c = color.trim();
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
-  const rgb = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(c);
-  let r: number, g: number, b: number;
-  if (hex) {
-    const h = hex[1].length === 3 ? hex[1].split('').map((ch) => ch + ch).join('') : hex[1];
-    r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16);
-  } else if (rgb) {
-    r = +rgb[1]; g = +rgb[2]; b = +rgb[3];
-  } else {
-    return 1;
-  }
+  const rgb = parseRgb(color);
+  if (!rgb) return 1;
+  const [r, g, b] = rgb;
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 

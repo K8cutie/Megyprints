@@ -1,16 +1,19 @@
 // ──────────────────────────────────────────────────────────────────────────
 // Orders — customer-side order creation.
 //
-// When a logged-in user places an order, we take a FROZEN snapshot of their
-// latest saved album and insert it into the `orders` table. The insert runs
+// When a logged-in user places an order, we take a FROZEN snapshot of the
+// album they are ordering and insert it into the `orders` table. The insert runs
 // under the customer's session, so RLS ("auth.uid() = user_id") authorizes it.
 // The operator/fulfillment side reads these later via the backend (service_role).
 // ──────────────────────────────────────────────────────────────────────────
 
 import { supabase } from './supabase';
+import { uploadOnce } from './storageUpload';
 import { generateAlbumPdf, generateCoverWrapPdf } from '../pages/builder/generateAlbumPdf';
 import type { CoverPrintInput } from '../pages/builder/printPipeline';
 import type { PrintJob } from './printQueue';
+import { selectOrderAlbum } from './orderAlbum';
+import { isUnpaidLimitError, UnpaidLimitError } from './orderExpiry';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
 
 export interface ShippingDetails {
@@ -30,31 +33,56 @@ export interface CreatedOrder {
   id: string;
   order_number: string;
   status: string;
+  /** The album the order froze. The print PDF must be rebuilt from THIS row. */
+  album_id: string;
 }
 
+/** The album columns an order freezes (cover_front only once 0036 is applied). */
+type OrderAlbumRow = {
+  id: string; title: string | null; album_type: string | null; album_size: string | null;
+  selected_template: string | null; photos_per_page: number | null;
+  pages: unknown; photos: unknown; cover_photo: string | null; cover_front?: unknown;
+};
+
 /**
- * Create an order for the given user by snapshotting their most recently
- * updated album. Throws a friendly Error if there's no album to order.
+ * Create an order for the given user by snapshotting the album being ordered
+ * (see orderAlbum). Throws a friendly Error if there's no album to order, and
+ * AlbumNotSavedError if the named album isn't in the account.
  */
-export async function createOrderFromLatestAlbum(opts: {
+export async function createOrderFromAlbum(opts: {
   userId: string;
+  /** The album being ordered (print job / device draft). Only when no id is
+   *  known does the order fall back to the most recently updated album. */
+  albumId?: string;
   specs: OrderSpecs;
   shipping: ShippingDetails;
   amount: number;
+  /** Chosen memory-hosting term (0030). Stored for the operator + stamped on
+   *  the album's memory rows at checkout. */
+  hostingYears?: number | null;
+  /** HD (1080p) memory upgrade chosen for this album (0032). */
+  hdMemories?: boolean;
 }): Promise<CreatedOrder> {
-  // 1. Load the latest album to freeze into the order.
-  const { data: albums, error: albErr } = await supabase
-    .from('albums')
-    .select('id, title, album_type, album_size, selected_template, photos_per_page, pages, photos, cover_photo')
-    .eq('user_id', opts.userId)
-    .order('updated_at', { ascending: false })
-    .limit(1);
-
-  if (albErr) throw new Error(`Could not load your album: ${albErr.message}`);
-  const album = albums?.[0];
-  if (!album) {
+  // 1. Load the album being ordered to freeze into the order. '*' rather than a
+  //    column list so its front cover (cover_front, 0036) comes along when the
+  //    database has it — naming that column fails the whole read on one that
+  //    doesn't yet.
+  const row = await selectOrderAlbum<OrderAlbumRow>(supabase, {
+    userId: opts.userId,
+    albumId: opts.albumId,
+    columns: '*',
+  });
+  if (!row) {
     throw new Error('No saved album found to order. Build and save an album first, then place your order.');
   }
+  // The frozen copy. The cover is in it so the order keeps the design the
+  // customer approved even when the best-effort cover PDF upload fails.
+  const album = {
+    id: row.id, title: row.title, album_type: row.album_type, album_size: row.album_size,
+    selected_template: row.selected_template, photos_per_page: row.photos_per_page,
+    pages: row.pages, photos: row.photos, cover_photo: row.cover_photo,
+    cover_front: row.cover_front ?? null,
+  };
 
   const pageCount = Array.isArray(album.pages) ? album.pages.length : 0;
 
@@ -101,11 +129,16 @@ export async function createOrderFromLatestAlbum(opts: {
       ship_barangay: addr.barangayName,
       ship_street: normalizeStreet(addr.street),
       ship_zip: addr.zip.trim(),
+      hosting_years: opts.hostingYears ?? null,
+      hd_memories: !!opts.hdMemories,
       status_history: [{ status: 'pending_payment', at: new Date().toISOString() }],
     })
     .select('id, order_number, status')
     .single();
 
+  // The 4th unpaid order on this account (0042): a plain sentence, not a
+  // database message.
+  if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
   if (error) throw new Error(`Could not place your order: ${error.message}`);
 
   // NOTE: the QR "living memory" reliability belt runs in Order.handlePay over
@@ -113,7 +146,7 @@ export async function createOrderFromLatestAlbum(opts: {
   // rather than this frozen DB album, which can lag behind a QR added moments
   // before checkout (throttled cloud save). See ensureMemoriesForFills there.
 
-  return data as CreatedOrder;
+  return { ...(data as Omit<CreatedOrder, 'album_id'>), album_id: album.id };
 }
 
 /**
@@ -121,26 +154,24 @@ export async function createOrderFromLatestAlbum(opts: {
  * `print-pdfs` bucket (path "<order_id>.pdf"). MUST run on the customer's device
  * — the photos live only in their browser (the print job carries them). Only
  * operators can later download it, so the album can't be printed elsewhere.
- * Throws on failure so the caller can surface it.
+ * Create-only (see storageUpload.ts): a retry that finds the file already there
+ * counts as done. Throws on failure so the caller can surface it.
  */
 export async function uploadOrderPrintPdf(orderId: string, job: PrintJob): Promise<void> {
   const blob = await generateAlbumPdf(job.pages, job.photos, job.albumSize);
-  const { error } = await supabase.storage
-    .from('print-pdfs')
-    .upload(`${orderId}.pdf`, blob, { contentType: 'application/pdf', upsert: true });
+  const error = await uploadOnce('print-pdfs', `${orderId}.pdf`, blob, { contentType: 'application/pdf' });
   if (error) throw new Error(`Print file upload failed: ${error.message}`);
 }
 
 /**
  * Build the front·spine·back cover wrap and upload it as its OWN object
- * ("<order_id>-cover.pdf") next to the interior PDF. Same device constraint +
- * operator-only read as uploadOrderPrintPdf. Requires migration 0017 (the RLS
- * name gate) to be applied, or the upload is rejected. Throws on failure.
+ * ("<order_id>-cover.pdf") next to the interior PDF. Same device constraint,
+ * operator-only read and create-only upload as uploadOrderPrintPdf. Requires
+ * migration 0017 (the RLS name gate) to be applied, or the upload is rejected.
+ * Throws on failure.
  */
 export async function uploadOrderCoverPdf(orderId: string, input: CoverPrintInput): Promise<void> {
   const blob = await generateCoverWrapPdf(input);
-  const { error } = await supabase.storage
-    .from('print-pdfs')
-    .upload(`${orderId}-cover.pdf`, blob, { contentType: 'application/pdf', upsert: true });
+  const error = await uploadOnce('print-pdfs', `${orderId}-cover.pdf`, blob, { contentType: 'application/pdf' });
   if (error) throw new Error(`Cover file upload failed: ${error.message}`);
 }

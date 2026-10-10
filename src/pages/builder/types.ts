@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import type { PhotoCheck } from '../../lib/photoCheck';
 
 export type BuilderPhase = 'setup' | 'upload' | 'template' | 'edit' | 'cover' | 'preview';
 
@@ -11,7 +12,9 @@ export type LayoutStyle =
   | 'heroSupporting' | 'portraitSingle' | 'collage' | 'collage3'
   | 'trio' | 'asymDuo' | 'panorama' | 'freeform';
 
-export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star';
+export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star' | 'arch'
+  | 'leaf' | 'scallop' | 'hexagon' | 'octagon' | 'diamond' | 'ticket' | 'cloud'
+  | 'pinking' | 'stamp' | 'wavy' | 'halftone';
 
 /** Slot purpose. Absent/'photo' = normal photo slot (default; back-compat).
  *  'qr' = QR living-memory slot — filled by page.qrFills[idx], not slotFills.
@@ -91,6 +94,10 @@ export interface PageTemplate {
   /** True full-bleed: the photo runs to ALL four page edges — no safe margin and
    *  no binding gutter. Use only for single-photo full-page layouts. */
   fullBleed?: boolean;
+  /** Auto-generation deals this layout only when the customer CHOSE at least
+   *  this many photos per page. Absent → dealt at every density, AUTO included.
+   *  The layout picker and manual swaps ignore it. */
+  minDensity?: number;
 }
 
 export interface FilledSlot {
@@ -155,6 +162,11 @@ export interface AlbumBackground {
    *  revoked / dies after a reload), but the id re-resolves to a fresh URL from
    *  IndexedDB — so a photo-background survives a reload. */
   photoId?: string;
+  /** A photo the customer uploaded for the COVER itself (not one of the album
+   *  photos). Its bytes are kept in the same IndexedDB photo store under this
+   *  id, so `image` (a blob: URL that dies with the tab) can be pointed at a
+   *  fresh URL after the app was closed (coverPhoto.withLiveCoverPhoto). */
+  localPhotoId?: string;
   x?: number;
   y?: number;
   width?: number;
@@ -301,11 +313,21 @@ export interface TextElement extends TextStyle {
    *  preview and the cover print. Ignored on interior pages (coverMode only). */
   offsetX?: number;
   offsetY?: number;
+  /** COVER-ONLY: this title is the album's name, put there by Megy — it follows
+   *  a rename until the customer types a title of their own. */
+  fromAlbumName?: boolean;
+  /** A quote Megy dealt for this occasion: it follows an occasion change
+   *  (useBuilderState.requoteForOccasion) until the customer writes or picks
+   *  a line of their own for the box. */
+  fromOccasion?: string;
 }
 
-/** Per-slot geometry overrides for container editing mode.
- *  Each index corresponds to template.slots[index].
- *  Only stores modified values — undefined = use template default. */
+/** STUDIO: a customer-moved photo frame. Each index corresponds to
+ *  template.slots[index]; the four box fields are FRACTIONS OF THE SAFE AREA
+ *  (the space template slots are authored in), so all three renderers place
+ *  the frame with the same arithmetic — see slotGeometry.ts, which also owns
+ *  the guardrails every write passes through. Absent = template default.
+ *  `rotation` is legacy and never printed; the setter drops it. */
 export interface SlotGeometryOverride {
   x?: number;
   y?: number;
@@ -427,6 +449,11 @@ export interface QrFill {
    *  change can't desync the management thumbnail from the physical print. */
   memoryUrl: string;
   createdAt: number;
+  /** 'clip' = a video the customer picked in the app, staged locally and
+   *  uploaded at checkout to `memory-clips/<code>.<clipExt>` (destination is
+   *  that object's public URL). Absent/'link' = legacy pasted link. */
+  kind?: 'link' | 'clip';
+  clipExt?: 'mp4' | 'mov' | 'webm' | 'm4v';
 }
 
 /** Fill data for an ORNAMENT slot — a themed vector SVG placed into a combo-box
@@ -500,6 +527,16 @@ export const DEFAULT_COVER_DESIGN: CoverDesign = {
  *  photos into caption boxes — that stays a manual choice.) */
 export type BoxRoll = 'quote' | 'text' | 'qr';
 
+/** What box j's invitation offers. 'qr' was retired from combo boxes (owner,
+ *  2026-10-02: "remove templates with add a QR" — video memories live on
+ *  full-page photos now), so a box an older album dealt 'qr' is an ordinary
+ *  undealt box: the plain hint, and the tap opens the quote / text chooser.
+ *  Every surface that reads a roll reads it through here. */
+export function dealtBoxRoll(page: { textSlotRoll?: (BoxRoll | null)[] }, j: number): Exclude<BoxRoll, 'qr'> | null {
+  const r = page.textSlotRoll?.[j] ?? null;
+  return r === 'qr' ? null : r;
+}
+
 export interface AlbumPage {
   id: string;
   layout: LayoutStyle;
@@ -510,6 +547,19 @@ export interface AlbumPage {
   slotOffsetsY?: number[];
   /** User-modified slot container geometries */
   slotGeometries?: SlotGeometryOverride[];
+  /** STUDIO: the customer moved or resized a frame on this page, so the page
+   *  is theirs — Regenerate and Surprise Me keep it exactly as it is (its
+   *  photos are held back from the reshuffle). "Megy, fix this page" clears
+   *  it along with the overrides. */
+  studio?: boolean;
+  /** STUDIO masks: a shape / soft edge per PHOTO slot (masks.ts MaskId),
+   *  positional like slotFills. Null/absent = the template's own shape. */
+  slotMasks?: (string | null)[];
+  /** STUDIO looks: a colour treatment per PHOTO slot (looks.ts LookId). */
+  slotLooks?: (string | null)[];
+  /** STUDIO stickers: free graphics on the page (stickers.ts Sticker — the
+   *  ornament fill plus a centre-based page-fraction transform). */
+  stickers?: import('./stickers').Sticker[];
   /** QR living-memory fills. Positional, parallel to template.slots — index i
    *  is used only when slots[i].kind === 'qr'. Serializes as-is (local, cloud,
    *  order snapshot). */
@@ -604,6 +654,17 @@ export interface UploadedPhoto {
   width: number;
   height: number;
   capturedAt?: number | null; // EXIF DateTimeOriginal (ms) — drives moment grouping
+  /** Megy's free photo check (blur, fingerprint, closed eyes) — lib/photoCheck. */
+  check?: PhotoCheck;
+  /** The customer said keep it: never suggested out again. */
+  kept?: boolean;
+  /** Left out of the album (the customer accepted Megy's suggestion). Stays in
+   *  the list, so indexes don't move and it can be brought back. */
+  leftOut?: boolean;
+  /** Put back from a re-added file on this device (photoRelink): 'differentCopy'
+   *  = same name, another size; 'smaller' = fewer pixels than the original (may
+   *  print softer); 'mismatch' = another shape (probably not the same picture). */
+  copyNote?: 'differentCopy' | 'smaller' | 'mismatch';
 }
 
 export interface ThemeConfig {

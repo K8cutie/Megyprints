@@ -13,6 +13,7 @@
  *  ══════════════════════════════════════════════════════════════════════════ */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   normalizeGradient,
   gradientToCss,
@@ -26,6 +27,16 @@ import { getPrintMultiplier, getPrintDimensions } from './printPipeline';
 import { PREVIEW_DIMS } from './PreviewSizeConstants';
 import { DENSITY_BY_SIZE } from './densities';
 import { SIZE_ALIASES } from '../../assistant/intentParser';
+import { getTemplatesForAlbum } from './pageTemplates';
+import {
+  slotPhotoRect,
+  slotPhotoDomBox,
+  panRoom,
+  faceCentrePan,
+  slotDesignSize,
+  type Size,
+  type Rect,
+} from './slotPhotoFit';
 
 /* ── Gradient: one resolver, both stored formats ─────────────────────────── */
 
@@ -157,5 +168,212 @@ describe('album-size surfaces (the 9x9 class of bug)', () => {
       expect(reachable.has(p), `SIZE_ALIASES cannot reach ${p} — Megy can't set it by chat`).toBe(true);
     }
     for (const target of reachable) expect(presets).toContain(target);
+  });
+});
+
+/* ── STUDIO frames: one resolver in all three renderers ─────────────────── */
+describe('Studio slot overrides go through resolveSlotBox in every renderer', () => {
+  it('BuilderPreview (DOM), useCanvasEngine (Fabric), printPipeline (print)', () => {
+    for (const f of ['src/pages/builder/BuilderPreview.tsx', 'src/pages/builder/useCanvasEngine.ts', 'src/pages/builder/printPipeline.ts']) {
+      const src = readFileSync(f, 'utf8');
+      expect(src, f).toContain("from './slotGeometry'");
+      expect(src, f).toMatch(/resolveSlotBox\(/);
+    }
+    // and no renderer merges the override by hand any more
+    expect(readFileSync('src/pages/builder/useCanvasEngine.ts', 'utf8')).not.toMatch(/\.\.\.rawSlot, \.\.\.geom/);
+  });
+  it('Studio masks come from masks.ts in every renderer, and stickers are drawn by every renderer', () => {
+    const dom = readFileSync('src/pages/builder/BuilderPreview.tsx', 'utf8');
+    const domShape = readFileSync('src/pages/builder/slotShapeStyle.ts', 'utf8');
+    const fabric = readFileSync('src/pages/builder/useCanvasEngine.ts', 'utf8');
+    const print = readFileSync('src/pages/builder/printPipeline.ts', 'utf8');
+    for (const [name, src] of [['dom', dom], ['fabric', fabric], ['print', print]] as const) {
+      expect(src, name).toMatch(/applyMask\(/);
+      expect(src, name).toMatch(/page\.stickers/);
+    }
+    for (const [name, src] of [['dom-shape', domShape], ['fabric', fabric], ['print', print]] as const) {
+      expect(src, name).toContain("from './masks'");
+    }
+    // the star and the arch are generated, never hand-drawn per renderer
+    expect(print).toMatch(/starPoints\(/);
+    expect(fabric).toMatch(/starPoints\(/);
+    expect(domShape).toMatch(/starPolygonCss\(/);
+    expect(print).toMatch(/archRy\(/);
+    expect(fabric).toMatch(/archPathCentered\(/);
+    expect(domShape).toMatch(/archPath\(/);
+    // the path shapes (leaf, scallop, hexagon…) come from maskPathD in all three
+    for (const [name, src] of [['dom-shape', domShape], ['fabric', fabric], ['print', print]] as const) {
+      expect(src, name).toMatch(/maskPathD\(/);
+    }
+    // textured edges: the DOM masks with the texture URL, Fabric + print multiply alpha with the same asset
+    expect(domShape).toMatch(/textureMaskCss\(/);
+    expect(fabric).toMatch(/applyTextureAlpha\(/);
+    expect(print).toMatch(/applyTextureAlpha\(/);
+    // an edge that paints (torn paper's white rim) is drawn by all three
+    expect(dom).toMatch(/textureOverlayCss\(/);
+    expect(fabric).toMatch(/loadMaskOverlay\(/);
+    expect(print).toMatch(/loadMaskOverlay\(/);
+    expect(fabric).toMatch(/applyTextureAlpha\([^)]*overlay\)/);
+    expect(print).toMatch(/applyTextureAlpha\([^)]*overlay\)/);
+    // looks: the DOM uses lookCss, Fabric + print apply the same ops to pixels
+    expect(dom).toMatch(/lookCss\(/);
+    expect(fabric).toMatch(/applyLookPixels\(/);
+    expect(print).toMatch(/applyLookPixels\(/);
+  });
+});
+
+/* ── Slot photo PAN: the preview shows the crop that prints ─────────────── */
+// The DOM preview pans a slot photo with CSS — the <img> keeps the slot's box,
+// object-fit: cover fits the photo, object-position slides it — while print
+// draws slotPhotoRect onto a canvas. These model what the browser does with
+// that CSS (CSS Images 3 object-fit / object-position, CSS Values 4 clamp) and
+// check that for the same stored offset the SAME part of the photo shows in
+// the slot, edge to edge, in both. (Bug, 2026-10-02: the preview moved the
+// photo's BOX by the pan, so at zoom 1 any pan slid the whole photo and left
+// an empty strip that print never had.)
+describe('slot photo pan — the preview and print show the same crop', () => {
+  type Box = ReturnType<typeof slotPhotoDomBox>;
+
+  /** Split an object-position "X Y" whose halves may hold spaces in brackets. */
+  const axes = (css: string): [string, string] => {
+    let depth = 0;
+    for (let i = 0; i < css.length; i++) {
+      if (css[i] === '(') depth++;
+      else if (css[i] === ')') depth--;
+      else if (css[i] === ' ' && depth === 0) return [css.slice(0, i), css.slice(i + 1)];
+    }
+    throw new Error(`object-position needs two axes: ${css}`);
+  };
+
+  /** One object-position axis, resolved the way the browser does: a percentage
+   *  is of (box − photo); clamp(MIN, VAL, MAX) = max(MIN, min(VAL, MAX)). */
+  const resolve = (token: string, basis: number): number => {
+    if (token === '50%') return basis / 2;
+    const m = /^clamp\(calc\(100% - ([\d.]+)px\), calc\(50% ([+-]) ([\d.]+)px\), ([\d.]+)px\)$/.exec(token);
+    if (!m) throw new Error(`unexpected object-position axis: ${token}`);
+    const min = basis - Number(m[1]);
+    const val = basis / 2 + (m[2] === '-' ? -1 : 1) * Number(m[3]);
+    const max = Number(m[4]);
+    return Math.max(min, Math.min(val, max));
+  };
+
+  /** What the browser paints for the preview's slot <img>: the photo
+   *  cover-fitted into the box, placed by object-position, clipped to the box.
+   *  Slot-relative px. */
+  const domPaint = (box: Box, img: Size) => {
+    const k = Math.max(box.width / img.w, box.height / img.h);
+    const w = img.w * k;
+    const h = img.h * k;
+    const [px, py] = axes(box.objectPosition);
+    const photo = { x: box.left + resolve(px, box.width - w), y: box.top + resolve(py, box.height - h), w, h };
+    return { photo, clip: { x: box.left, y: box.top, w: box.width, h: box.height } };
+  };
+
+  /** The part of the photo showing in the slot, as 0–1 fractions of the
+   *  photo, and whether any of the slot is left uncovered. */
+  const crop = (photo: Rect, slot: Size, clip: Rect = { x: 0, y: 0, w: slot.w, h: slot.h }) => {
+    const x0 = Math.max(0, clip.x, photo.x);
+    const x1 = Math.min(slot.w, clip.x + clip.w, photo.x + photo.w);
+    const y0 = Math.max(0, clip.y, photo.y);
+    const y1 = Math.min(slot.h, clip.y + clip.h, photo.y + photo.h);
+    const e = 1e-6 * Math.max(slot.w, slot.h);
+    return {
+      u0: (x0 - photo.x) / photo.w, u1: (x1 - photo.x) / photo.w,
+      v0: (y0 - photo.y) / photo.h, v1: (y1 - photo.y) / photo.h,
+      gap: x0 > e || y0 > e || x1 < slot.w - e || y1 < slot.h - e,
+    };
+  };
+
+  const PHOTOS: Size[] = [{ w: 2400, h: 1200 }, { w: 4032, h: 3024 }, { w: 3024, h: 4032 }, { w: 1080, h: 1920 }, { w: 1000, h: 1000 }];
+
+  it('every size and photo shape, zoom ≥ 1: the same crop and no gap — pans inside, at and far past the overflow', () => {
+    let cases = 0;
+    for (const { preset } of ALBUM_SIZES) {
+      const ui = getCanvasDimensions(preset);
+      const print = getPrintDimensions(preset);
+      // A phone-sized page at the printed page's shape (the editor canvas
+      // rounds its short side, which is a page-size matter, not a pan one).
+      const dom = { w: 358, h: (358 * print.height) / print.width };
+      const toPrint = { x: print.width / ui.width, y: print.height / ui.height }; // printPipeline's printScale
+      const toDom = { x: dom.w / ui.width, y: dom.h / ui.height }; // PageView's sx, sy
+      for (const t of getTemplatesForAlbum(preset).slice(0, 6)) {
+        t.slots.forEach((_, i) => {
+          const design = slotDesignSize({ templateId: t.id }, i, preset, 1);
+          if (!design) return;
+          for (const img of PHOTOS) for (const zoom of [1, 1.3]) {
+            const r = panRoom(img, design, zoom);
+            const pans = [
+              { x: 0, y: 0 },
+              { x: 0.4 * r.x, y: -0.4 * r.y },
+              { x: -0.85 * r.x, y: 0.85 * r.y },
+              { x: r.x, y: -r.y },
+              { x: 3 * r.x + 40, y: -3 * r.y - 40 }, // past the overflow → held at the photo edge
+            ];
+            for (const pan of pans) {
+              const printSlot = { w: design.w * toPrint.x, h: design.h * toPrint.y };
+              const inPrint = crop(slotPhotoRect(img, printSlot, zoom, { x: pan.x * toPrint.x, y: pan.y * toPrint.y }), printSlot);
+              const domSlot = { w: design.w * toDom.x, h: design.h * toDom.y };
+              const painted = domPaint(slotPhotoDomBox(domSlot, zoom, { x: pan.x * toDom.x, y: pan.y * toDom.y }), img);
+              const onScreen = crop(painted.photo, domSlot, painted.clip);
+              const where = `${preset} ${t.id}#${i} ${img.w}x${img.h} zoom ${zoom} pan ${pan.x.toFixed(1)},${pan.y.toFixed(1)}`;
+              expect(inPrint.gap, `print gap: ${where}`).toBe(false);
+              expect(onScreen.gap, `preview gap: ${where}`).toBe(false);
+              for (const k of ['u0', 'u1', 'v0', 'v1'] as const) {
+                expect(Math.abs(onScreen[k] - inPrint[k]), `${k}: ${where}`).toBeLessThan(1e-5);
+              }
+              cases++;
+            }
+          }
+        });
+      }
+    }
+    expect(cases).toBeGreaterThan(1000);
+  });
+
+  it('the live-proof page: a face a third of the way in lands mid-slot on the phone AND in print', () => {
+    const img = { w: 2400, h: 1200 };
+    const design = slotDesignSize({ templateId: 't88-fb-solo' }, 0, '8x8', 1)!;
+    const pan = faceCentrePan({ x: 1 / 3, y: 0.5 }, img, design);
+    const phone = 358 / 750; // MobileReview on a 390-px-wide phone: sx = sy
+    const domSlot = { w: design.w * phone, h: design.h * phone };
+    const painted = domPaint(slotPhotoDomBox(domSlot, 1, { x: pan.x * phone, y: pan.y * phone }), img);
+    const onPhone = crop(painted.photo, domSlot, painted.clip);
+    const s = 2400 / 750;
+    const printSlot = { w: design.w * s, h: design.h * s };
+    const inPrint = crop(slotPhotoRect(img, printSlot, 1, { x: pan.x * s, y: pan.y * s }), printSlot);
+    for (const c of [onPhone, inPrint]) {
+      expect(c.gap).toBe(false);
+      expect((c.u0 + c.u1) / 2).toBeCloseTo(1 / 3, 5);
+    }
+  });
+
+  it('at zoom 1 the pan never moves the photo BOX — it stays on the slot and the photo slides inside it', () => {
+    const slot = { w: 300, h: 240 };
+    for (const pan of [{ x: 80, y: 0 }, { x: -120, y: 35 }]) {
+      const box = slotPhotoDomBox(slot, 1, pan);
+      expect({ left: box.left, top: box.top, width: box.width, height: box.height }).toEqual({ left: 0, top: 0, width: 300, height: 240 });
+      expect(box.objectPosition).not.toBe('50% 50%');
+    }
+    expect(slotPhotoDomBox(slot, 1, { x: 0, y: 0 }).objectPosition).toBe('50% 50%');
+  });
+
+  it('all three renderers draw from slotPhotoFit, and the face auto-centre converts into it', () => {
+    const dom = readFileSync('src/pages/builder/BuilderPreview.tsx', 'utf8');
+    const fabric = readFileSync('src/pages/builder/useCanvasEngine.ts', 'utf8');
+    const print = readFileSync('src/pages/builder/printPipeline.ts', 'utf8');
+    const state = readFileSync('src/pages/builder/useBuilderState.ts', 'utf8');
+    for (const [name, src] of [['dom', dom], ['fabric', fabric], ['print', print], ['state', state]] as const) {
+      expect(src, name).toContain("from './slotPhotoFit'");
+    }
+    expect(dom).toMatch(/slotPhotoDomBox\(/);
+    expect(dom).toMatch(/objectPosition: photoBox\.objectPosition/);
+    // the base `img { max-width: 100% }` rule must not hold a zoomed box to the
+    // frame's width (it did: a strip opened down the right side at 130%)
+    expect(dom).toMatch(/width: photoBox\.width, height: photoBox\.height,\s*maxWidth: 'none'/);
+    expect(fabric).toMatch(/slotPhotoRect\(/);
+    expect(print).toMatch(/slotPhotoRect\(/);
+    expect(state).toMatch(/faceCentrePan\(/);
+    // the raw −1…+1 offset is never written as a pan again
+    expect(state).not.toMatch(/computeFaceOffset\(/);
   });
 });

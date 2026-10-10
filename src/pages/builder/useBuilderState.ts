@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import type { WizardStep } from '../../assistant/wizard';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import type {
   AlbumSizePreset,
   AlbumPage,
@@ -17,22 +18,45 @@ import type {
   FrameStyle,
   TextStyle,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
-import { getThemedPhotoBorder, getThemeCornerBase, getThemedBackground, getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
+import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, type BoxContentOptions } from './generateAlbum';
-import { quotesForThemeNow, fetchThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
+import { clampSlotGeometry, type GuardReason } from './slotGeometry';
+import { isMaskId, type MaskId } from './masks';
+import { isLookId, type LookId } from './looks';
+import { clampStickerGeom } from './stickers';
+import { MIN_ALBUM_PAGES } from './densities';
+import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
+import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
-import { useAlbumSync } from '../../lib/useAlbumSync';
-import type { AlbumData } from '../../lib/useAlbumSync';
-import { useIndexedDBPhotos } from '../../lib/useIndexedDBPhotos';
-import { detectFaceCenter, computeFaceOffset, initFaceApi } from './faceDetection';
-import { templateTracker } from './varietyTracker';
+import { useAlbumSync, serializeAlbum as toAlbumRow } from '../../lib/useAlbumSync';
+import type { AlbumData, SaveResult } from '../../lib/useAlbumSync';
+import { readSyncRecord, albumContentKey, decideSync, draftSyncRecord, toDraftSync, type DraftSync, type SyncRecord } from '../../lib/albumSyncRecord';
+import { useIndexedDBPhotos, getImageDimensions } from '../../lib/useIndexedDBPhotos';
+import { supabase } from '../../lib/supabase';
+import { photosToForget } from '../../lib/photoKeeping';
+import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
+import { albumDataFromDraft, type StoredDraft } from '../../lib/draftAlbum';
+import { kindOfPick } from '../../lib/pickedFiles';
+import { planRelink, copyQuality } from '../../lib/photoRelink';
+import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
+import { detectFaceCenter, initFaceApi } from './faceDetection';
+import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
+import { createLimiter } from '../../lib/limit';
+import { templateTracker, shuffleArray } from './varietyTracker';
+import { captionBoxSize, captionFits } from './textFit';
+import { TEXT_LINE_HEIGHT } from './wordArt';
 import { readCaptureTime } from './exif';
-import { normalizeStoredPageFields } from './pageNormalize';
+import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
+import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
+import { DEFAULT_TITLE_FONT } from './fonts';
+import { readAlbumTheme, writeAlbumTheme } from '../../lib/albumTheme';
+import { checkPhoto, facesForAllPhotos } from '../../lib/photoCheckRunner';
+import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
 /* ══════════════════════════════════════════════════════════════════════════
    useBuilderState — All builder state + localStorage persistence
@@ -40,7 +64,18 @@ import { normalizeStoredPageFields } from './pageNormalize';
    ══════════════════════════════════════════════════════════════════════════ */
 
 const MIN_PAGES = 40;
-const STORAGE_KEY = 'megy-album-v5';
+const STORAGE_KEY = DRAFT_STORAGE_KEY;
+
+/** A fresh album row id, minted on the device so a draft knows which album it
+ *  is from its first moment (see albumIdRef). */
+function newAlbumId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // RFC 4122 v4 from Math.random — only for engines without randomUUID.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 // AlbumType is not exported from types.ts — define locally
 type AlbumType = 'standard';
@@ -81,8 +116,19 @@ function reflowFills(
 /* Re-lay a page onto a new template: carry QR/text (trimmed to the new slot
    count), reflow the existing photos into the new slots, and reset per-slot
    framing. Shared by shuffle / cycle / apply-layout so the "change the layout"
-   behavior lives in exactly one place. */
-function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage {
+   behavior lives in exactly one place.
+   A video memory only ever sits on a full-bleed, one-photo page, as its corner
+   badge (owner, 2026-10-08). A layout that can't hold the page's memory leaves
+   the page exactly as it is: the QR used to ride along by slot number into the
+   second photo frame — the QR-in-a-square look retired on 2026-10-02. */
+export function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage {
+  const memories = memoriesOn(page);
+  if (memories.length && (memories.length > 1 || !layoutHoldsMemory(template))) return page;
+  const relaid = relayPhotosOnTemplate(page, template);
+  return memories.length ? asMemoryBadge(page, relaid, memories[0], template) : relaid;
+}
+
+function relayPhotosOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage {
   const existingFills = [...new Set(
     (page.slotFills ?? []).filter((f): f is number => f !== null),
   )];
@@ -98,9 +144,14 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
   const carriedTextSlotOrnament = (page.textSlotOrnament ?? []).slice(0, textSlotCount);
   const carriedTextSlotOrnamentGeom = (page.textSlotOrnamentGeom ?? []).slice(0, textSlotCount);
   const carriedTextSlotQrGeom = (page.textSlotQrGeom ?? []).slice(0, textSlotCount);
-  return {
+  const relaid: AlbumPage = {
     ...page,
     templateId: template.id,
+    // A caption bound to a box the new layout doesn't have goes with the old
+    // layout. It stayed: the editor drew it over the photo, the preview hid it,
+    // and the print drew it as loose text where it once sat (1-star testers
+    // round 3, the Indecisive One).
+    textElements: (page.textElements ?? []).filter((t) => t.boxIndex == null || t.boxIndex < textSlotCount),
     qrFills: carriedQr,
     slotTexts: carriedText,
     ornamentFills: carriedOrnament,
@@ -114,6 +165,57 @@ function relayPageOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPage
     slotOffsetsX: new Array(slotCount).fill(0),
     slotOffsetsY: new Array(slotCount).fill(0),
   };
+  return relaid;
+}
+
+/** What laying `page` out on `template` would take off it: the photos that no
+ *  longer fit (in page order) and the captions whose box the layout lacks. */
+export function layoutChangeLeftovers(page: AlbumPage, template: PageTemplate): { photos: number[]; captions: number } {
+  const relaid = relayPageOnTemplate(page, template);
+  const kept = new Set([...(relaid.slotFills ?? []), ...(relaid.textSlotFills ?? [])].filter((f): f is number => f != null));
+  const had = [...new Set([...(page.slotFills ?? []), ...(page.textSlotFills ?? [])].filter((f): f is number => f != null))];
+  return {
+    photos: had.filter((f) => !kept.has(f)),
+    captions: (page.textElements?.length ?? 0) - (relaid.textElements?.length ?? 0),
+  };
+}
+
+/* A layout change never drops a video memory (1-star testers round 2, MMC-3):
+   "Three Squares" then "Full Page" sliced the QR off with the slot it sat in —
+   no message, the gold "Add a video memory" button came back, and checkout
+   counted one memory fewer. On a full-page layout the memory goes back on as
+   its corner badge (the badge "Add a video memory" makes, in the corner it
+   had), on the page's first photo. A memory in a frame or a box (placed before
+   memories moved to full pages) comes out of there into the badge the same
+   way. No badge layout for the size: the page stays as it is. */
+function asMemoryBadge(before: AlbumPage, relaid: AlbumPage, memory: QrFill, template: PageTemplate): AlbumPage {
+  const size = (before.size ?? template.albumSizes[0]) as AlbumSizePreset;
+  const corner = qrBadgeCornerOf(before.templateId);
+  const badge = qrBadgeTemplate(size, corner ?? 'br');
+  if (!badge) return before;
+  const n = badge.slots.length;
+  const slotFills: (number | null)[] = new Array(n).fill(null);
+  slotFills[0] = (before.slotFills ?? []).find((f): f is number => f != null) ?? null;
+  const qrFills: (QrFill | null)[] = new Array(n).fill(null);
+  qrFills[badge.slots.findIndex((sl) => sl.kind === 'qr')] = memory;
+  // Already a badge page: the photo keeps the framing it had.
+  const keep = (a?: number[], fallback = 0) => [corner ? a?.[0] ?? fallback : fallback, ...new Array(n - 1).fill(fallback)];
+  return {
+    ...relaid, templateId: badge.id, slotFills, qrFills,
+    slotTexts: new Array(n).fill(null), ornamentFills: new Array(n).fill(null),
+    textSlotQr: [], textSlotQrGeom: [],
+    slotScales: keep(before.slotScales, 1), slotOffsetsX: keep(before.slotOffsetsX), slotOffsetsY: keep(before.slotOffsetsY),
+    ...fullBleedPhoto(before, !!corner),
+    cornerBase: undefined, // theme corners would sit over the chip
+  };
+}
+
+/** A memory page's photo covers the whole sheet: no Studio-moved frame and no
+ *  mask (both are kept by slot number, and every renderer applies them to the
+ *  QR slot too — a moved frame printed the QR as a big square mid-page). The
+ *  photo keeps its filter when it stays the same photo (`samePhoto`). */
+export function fullBleedPhoto(page: AlbumPage, samePhoto: boolean): Pick<AlbumPage, 'slotGeometries' | 'slotMasks' | 'slotLooks'> {
+  return { slotGeometries: [], slotMasks: [], slotLooks: samePhoto && page.slotLooks?.[0] ? [page.slotLooks[0]] : [] };
 }
 
 /* The page's dominant photo ratio (the most common ratio among the photos
@@ -136,12 +238,104 @@ function dominantPageRatio(
   return pageRatio;
 }
 
+/** The layouts the "Change layout" sheet offers for `page` (LayoutPicker):
+ *  the page's own layout FIRST — the sheet's "✓ Current" — then every layout
+ *  that holds its photos the way the generator deals them: each photo in a
+ *  frame of its own orientation, cropped no more than the loose budget
+ *  (frameTakesPhoto), judged on the page a tap would make. Same photo count
+ *  first, then the nearest counts.
+ *  It used to want layouts built for the photos' EXACT ratio. Three 4:3
+ *  landscapes on Hero Top (3:2 frames, an 11% crop the generator deals all
+ *  the time) got only "Four Landscapes + Box Above / Below": no "✓ Current",
+ *  no 3-photo layout (phone walk, 2026-10-08). */
+export function layoutChoicesForPage(page: AlbumPage, photos: UploadedPhoto[], size: AlbumSizePreset): PageTemplate[] {
+  const ratioOf = analyzePhotos(photos).assignments;
+  const count = new Set((page.slotFills ?? []).filter((f): f is number => f !== null)).size;
+  const holdsPhotos = (t: PageTemplate) => {
+    const relaid = relayPageOnTemplate(page, t);
+    // A memory can turn a full page into its badge layout: judge what's laid.
+    const laid = (relaid.templateId ? getTemplateById(relaid.templateId) : undefined) ?? t;
+    return (relaid.slotFills ?? []).every((f, i) =>
+      f == null || ratioOf[f] == null || frameTakesPhoto(frameShape(laid, i, size), ratioOf[f]));
+  };
+  const current = page.templateId ? getTemplateById(page.templateId) : undefined;
+  const fits = getTemplatesForAlbum(size)
+    .filter((t) => t.id !== current?.id && holdsPhotos(t))
+    .sort((a, b) => Math.abs(photoSlotCount(a) - count) - Math.abs(photoSlotCount(b) - count) || a.id.localeCompare(b.id));
+  return current ? [current, ...fits] : fits;
+}
+
+/** Where Megy's "next layout" (cycleLayout) takes `page`: the next of the
+ *  sheet's layouts that hold the same number of photos, in id order, looping.
+ *  Undefined when no other one does. It used to fall back to ANY layout of
+ *  that count: three landscapes went from Hero Top to Three Squares, losing
+ *  a quarter of each photo. */
+export function nextLayoutInCycle(page: AlbumPage, photos: UploadedPhoto[], size: AlbumSizePreset): PageTemplate | undefined {
+  const count = new Set((page.slotFills ?? []).filter((f): f is number => f !== null)).size;
+  const pool = layoutChoicesForPage(page, photos, size)
+    .filter((t) => photoSlotCount(t) === count)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const next = pool[(pool.findIndex((t) => t.id === page.templateId) + 1) % Math.max(1, pool.length)];
+  return next && next.id !== page.templateId ? next : undefined;
+}
+
+/** New pages for `photos` (photo indices), on layouts that hold exactly them:
+ *  ratio-matched first, then any layout of that count, splitting when no
+ *  layout holds that many. */
+function pagesForPhotos(photos: number[], size: AlbumSizePreset, assignments: Partial<Record<number, PhotoRatio>>): AlbumPage[] {
+  const pages: AlbumPage[] = [];
+  let rest = [...photos];
+  const all = getTemplatesForAlbum(size);
+  while (rest.length) {
+    let placed = false;
+    for (let k = rest.length; k >= 1 && !placed; k--) {
+      const chunk = rest.slice(0, k);
+      const ratio = dominantPageRatio(chunk, assignments);
+      const fits = (t: PageTemplate) => t.slots.filter((sl) => sl.kind !== 'qr').length === k;
+      const t = all.find((x) => fits(x) && (!ratio || x.targetRatio === ratio)) ?? all.find(fits);
+      if (!t) continue;
+      const blank = { ...createEmptyPage(0, size), id: `page-${Date.now()}-${Math.random().toString(36).slice(2)}`, slotFills: chunk };
+      pages.push(relayPageOnTemplate(blank, t));
+      rest = rest.slice(k);
+      placed = true;
+    }
+    if (!placed) break; // no layout at all for this size (never in practice)
+  }
+  return pages;
+}
+
+/** Auto-fill's choice for a page: every EMPTY photo slot (not a QR slot, not
+ *  claimed by a QR/text/ornament) gets the next photo that is NOT ALREADY IN
+ *  THE ALBUM. `skip` = photos used on any page plus the ones left out. It used
+ *  to skip only this page's photos, so it filled frames with photos already on
+ *  other pages — each would print twice — while new uploads sat unused
+ *  (1-star testers, 2026-10-04). No unused photo left → the frame stays empty. */
+export function autoFillPlan(page: AlbumPage, photoCount: number, skip: ReadonlySet<number> = new Set()): (number | null)[] {
+  const tmplForFill = PAGE_TEMPLATES.find((t) => t.id === page.templateId);
+  const fills = [...(page.slotFills ?? [])];
+  let photoIdx = 0;
+  for (let i = 0; i < fills.length; i++) {
+    if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
+    if (page.qrFills?.[i] || page.slotTexts?.[i] || page.ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
+    if (fills[i] === null && photoIdx < photoCount) {
+      while (photoIdx < photoCount && (fills.includes(photoIdx) || skip.has(photoIdx))) {
+        photoIdx++;
+      }
+      if (photoIdx < photoCount) {
+        fills[i] = photoIdx;
+        photoIdx++;
+      }
+    }
+  }
+  return fills;
+}
+
 function createEmptyPage(index: number, size: AlbumSizePreset): AlbumPage {
   return {
     id: `page-${Date.now()}-${index}`,
     layout: 'freeform',
     size,
-    background: { type: 'solid', solid: '#FFFBF7' },
+    background: { type: 'solid', solid: '#FFFFFF' }, // plain white (owner, 2026-09-14)
     photos: [],
     textElements: [],
     slotFills: [],
@@ -168,6 +362,25 @@ function createCoverPage(size: AlbumSizePreset): AlbumPage {
   return tmpl ? relayPageOnTemplate(blank, tmpl) : blank;
 }
 
+/** The cover with the album's name as its title — unless the customer wrote
+ *  a title of their own. An empty name takes Megy's title away again. */
+export function withNameTitle(cover: AlbumPage, name: string): AlbumPage {
+  const t = cover.templateId ? getTemplateById(cover.templateId) : undefined;
+  if (!t?.textSlots?.length) return cover; // a cover with no title box
+  const el = cover.textElements?.find((x) => x.boxIndex === 0);
+  if (el && !el.fromAlbumName) return cover; // the customer's own title
+  const others = (cover.textElements ?? []).filter((x) => x.boxIndex !== 0);
+  if (!name) return el ? { ...cover, textElements: others } : cover;
+  if (el) return el.text === name ? cover : { ...cover, textElements: (cover.textElements ?? []).map((x) => (x.boxIndex === 0 ? { ...x, text: name } : x)) };
+  const title: TextElement = {
+    // The cover editor's title defaults (CoverEditor), so it looks the same as one typed there.
+    id: `cover-ft-${Date.now()}`, text: name, boxIndex: 0, x: 0, y: 0, rotation: 0, opacity: 1,
+    fontSize: 32, fontFamily: DEFAULT_TITLE_FONT, color: '#2D2D2D', bold: true, italic: false, underline: false,
+    alignment: 'center', fromAlbumName: true,
+  };
+  return { ...cover, textElements: [...others, title] };
+}
+
 /** Migrate a legacy CoverDesign (the old stacked Front/Spine/Back form) into a
  *  front cover PAGE so an in-flight draft keeps its title + background colour.
  *  Best-effort: title→front title box, panel background colour. A legacy hero
@@ -189,6 +402,11 @@ function coverDesignToFront(d: CoverDesign, size: AlbumSizePreset): AlbumPage {
   };
 }
 
+/** Signed in, the album is saved to the account this long after it stops
+ *  changing — and at least this often while it keeps changing. */
+export const CLOUD_SAVE_QUIET_MS = 15_000;
+export const CLOUD_SAVE_MAX_WAIT_MS = 120_000;
+
 interface SerializedState {
   albumType: AlbumType;
   albumSize: AlbumSizePreset;
@@ -203,6 +421,20 @@ interface SerializedState {
    *  predate it and are migrated from coverDesign on restore. (A stored
    *  coverBack from the pre-reserved-back era is simply ignored.) */
   coverFront: AlbumPage;
+  /** The album's name (wizard step 1) — its title in Your Projects. */
+  title?: string;
+  /** This album's row id in the cloud (see albumIdRef). Absent in old drafts. */
+  albumId?: string;
+  /** The account this draft was worked on under, if any. Sticky: a draft that
+   *  was ever signed in is a saved album, so throwing it away later (even signed
+   *  out) must not delete its photos — see photosToForget. */
+  accountId?: string | null;
+  /** When the album itself last changed on this device (ms) — not a page
+   *  turn, not photos waking up after a reload. */
+  editedAt?: number;
+  /** The cloud version this draft is based on (albumSyncRecord). Stored WITH
+   *  the content, so a tab never borrows another tab's version. */
+  sync?: DraftSync | null;
 }
 
 /* ── Undo snapshot ── */
@@ -246,23 +478,17 @@ function isDeadBlobUrl(url: string | undefined): boolean {
 }
 
 function isStateCorrupted(state: SerializedState): boolean {
-  // Check for common corruption patterns:
-  // 1. Pages with broken photo references (photo indices pointing nowhere)
-  // 2. All pages are empty but state claims to have photos
+  // Corruption = pages with broken photo references (photo indices pointing
+  // nowhere).
   // NOTE: Dead blob URLs are NOT corruption — rehydration effect restores
   // them from IndexedDB on mount. Do NOT purge here.
   if (!state.albumPages || state.albumPages.length === 0) return false; // Clean slate
 
   const totalPhotos = state.uploadedPhotos?.length ?? 0;
 
-  const hasAnyContent = state.albumPages.some((p) =>
-    (p.photos?.length ?? 0) > 0 ||
-    (p.slotFills?.some((f) => f !== null) ?? false) ||
-    (p.textElements?.length ?? 0) > 0
-  );
-
-  // Has photos uploaded but no content anywhere = likely corrupted
-  if (totalPhotos > 0 && !hasAnyContent) return true;
+  // NOTE: "photos uploaded but nothing on the pages" is NOT corruption — it is
+  // every album between the upload step and Generate. Treating it as corrupt
+  // deleted that album the moment the customer came back to it.
 
   // Check for out-of-bounds photo indices in slot fills
   const maxPhotoIndex = totalPhotos - 1;
@@ -348,6 +574,7 @@ function getInitialState(): SerializedState {
       photosPerPage: undefined,
       coverDesign: DEFAULT_COVER_DESIGN,
       coverFront: createCoverPage('8x8'),
+      title: '',
     };
   }
 
@@ -387,7 +614,55 @@ function getInitialState(): SerializedState {
     coverDesign: effectiveSaved?.coverDesign ?? DEFAULT_COVER_DESIGN,
     coverFront: effectiveSaved?.coverFront
       ?? (effectiveSaved?.coverDesign ? coverDesignToFront(effectiveSaved.coverDesign, effectiveSaved?.albumSize ?? defaultSize) : createCoverPage(effectiveSaved?.albumSize ?? defaultSize)),
+    title: effectiveSaved?.title ?? '',
+    albumId: effectiveSaved?.albumId,
+    accountId: effectiveSaved?.accountId ?? null,
+    editedAt: effectiveSaved?.editedAt ?? 0,
+    sync: effectiveSaved?.sync ?? null,
   };
+}
+
+/** The stages of a whole-album generation, in order. Shown to the customer. */
+export type GeneratingPhase = 'measuring' | 'laying_out' | 'quotes' | 'finishing';
+
+/** What generateAlbum did, and (for a new size) the memories' plan. */
+export type GenerateResult =
+  | { made: true; memories?: MemoryPlan }
+  | { made: false; memories: MemoryPlan };
+export type MemoryPlan = ReturnType<typeof memoriesAcrossSize>;
+
+/** A size change that would take video memories off: asked before it runs. */
+export interface ResizeAsk {
+  size: AlbumSizePreset;
+  /** The album's memories, and how many of them can't come along. */
+  memories: number;
+  lost: number;
+  /** Those memories' codes: a yes lets exactly these come off. */
+  lostCodes: string[];
+  /** Setup moved off a size the shop no longer offers (no tap). */
+  reason?: 'size_hidden';
+}
+
+/** Resolve after the browser has had one frame to paint pending state. */
+const paintFrame = () => new Promise<void>((resolve) => {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
+  else setTimeout(resolve, 0);
+});
+
+/** The album's default look since the Style step was removed (2026-09-14):
+ *  plain white paper, photos with no line around them. */
+export const PLAIN_BACKGROUND: AlbumBackground = { type: 'solid', solid: '#FFFFFF' };
+export const PLAIN_BORDER = { color: '#FFFFFF', width: 0 };
+
+/** What adding text came to (addTextElement). */
+export interface AddedText {
+  added: boolean;
+  /** The size it went on at. */
+  fontSize: number;
+  /** Made smaller than the default so it fits. */
+  shrunk: boolean;
+  /** Too long to fit even at the smallest size: nothing was added. */
+  tooLong: boolean;
 }
 
 export interface BuilderActions {
@@ -419,13 +694,28 @@ export interface BuilderActions {
   /** Apply a cover layout template to the active cover page (respects editScope). */
   applyCoverLayout: (templateId: string) => void;
 
+  /** The album's name, asked on wizard step 1. Saved as its title. */
+  albumTitle: string;
+  setAlbumTitle: (title: string) => void;
+
   // Photos
   uploadedPhotos: UploadedPhoto[];
   /** Appends files, skipping any already in the album (same name + size).
    *  Returns what actually happened so callers can report an HONEST count —
    *  reporting the selected count lies whenever a re-picked batch is deduped. */
-  addPhotos: (files: FileList | File[]) => { added: number; skipped: number };
+  /** `videos`/`others`: picked files left out — only photos go on pages
+   *  (lib/pickedFiles); the confirmation says so. */
+  addPhotos: (files: FileList | File[]) => { added: number; skipped: number; videos: number; others: number; restored: number; otherCopies: number };
   removePhoto: (id: string) => void;
+  /** Megy's free photo check (lib/photoCheck): runs on the phone in the
+   *  background. `ready` = every photo checked for blur and repeats. */
+  photoCheck: { ready: boolean; progress: { done: number; total: number }; suggestion: LeaveOutSuggestion };
+  /** Leave these photos out of the album (Megy's suggestion, accepted). */
+  leaveOutPhotos: (ids: string[]) => void;
+  /** Keep these photos: never suggested out again. */
+  keepPhotos: (ids: string[]) => void;
+  /** Put every left-out photo back (and keep it). */
+  bringBackPhotos: () => void;
   replacePhoto: (id: string, file: File) => void;
 
   // Pages
@@ -440,18 +730,41 @@ export interface BuilderActions {
   // Generation
   /** Async: waits for any in-flight photo measurement before laying out, so a
    *  photo is never placed by its fallback ratio. Callers may fire-and-forget. */
-  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean }) => Promise<void>;
+  /** `size`: lay the album out for a NEW size (it becomes the album's size
+   *  with the pages, in one step). Every page is laid out again — a Studio
+   *  page is laid out for the old shape, so it can't be kept. The video
+   *  memories come along, each a badge on its own photo. One that can't comes
+   *  off only when its code is in `confirmedLost` (the customer said yes to
+   *  exactly those); any other and nothing changes ({ made: false } with the
+   *  plan, to ask about). */
+  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }) => Promise<GenerateResult>;
+  /** What generateAlbum is doing RIGHT NOW, or null when idle. The builder
+   *  shows a "making your album" screen while this is set — a whole-album
+   *  generation can take several seconds (measuring, laying out, waiting on
+   *  the theme's quotes) and a silent wait reads as a hang (owner, 2026-09-12). */
+  generating: GeneratingPhase | null;
   regeneratePage: () => void;
   shuffleLayout: () => void;
   cycleLayout: () => void;
   /** Templates available for the current page (for the layout picker). */
   availableTemplatesForCurrentPage: () => PageTemplate[];
-  /** Apply a chosen template to the current page, keeping its photos. */
-  applyPageLayout: (templateId: string) => void;
+  /** Apply a chosen template to the current page, keeping its photos. Photos
+   *  that no longer fit go on a new page after it ('new-page') or leave the
+   *  album ('leave-out', the default). */
+  applyPageLayout: (templateId: string, leftover?: 'new-page' | 'leave-out') => void;
+  /** What a layout would take off the current page: photos that no longer fit
+   *  and captions whose box it lacks. */
+  layoutChangeLoses: (templateId: string) => { photos: number; captions: number };
   /** The "Change layout" picker open state — shared by mobile + desktop. */
   layoutPickerOpen: boolean;
   setLayoutPickerOpen: (v: boolean) => void;
-  autoFillSlots: () => void;
+  /** "Change the size? N video memories can't come along" — open while it is
+   *  asked (ResizeAlbumAsk), wherever the size was tapped (change_size). */
+  resizeAsk: ResizeAsk | null;
+  setResizeAsk: (ask: ResizeAsk | null) => void;
+  /** Fill the current page's empty photo frames with photos not yet in the
+   *  album. Returns how many it filled, and how many were empty. */
+  autoFillSlots: () => { filled: number; empty: number };
   clearAllSlots: () => void;
 
   // Slot management
@@ -459,7 +772,21 @@ export interface BuilderActions {
   clearSlot: (slotIndex: number) => void;
   setSlotScale: (slotIndex: number, scale: number) => void;
   setSlotOffset: (slotIndex: number, dx: number, dy: number) => void;
-  updateSlotGeometry: (slotIndex: number, geometry: SlotGeometryOverride) => void;
+  /** STUDIO: move/resize a photo frame on the current page. The box passes
+   *  the print guardrails (spine, safe area, 2" floor) on the way in and the
+   *  page becomes the customer's (`studio`). Returns the rules that moved it,
+   *  empty when it landed as asked. */
+  updateSlotGeometry: (slotIndex: number, geometry: SlotGeometryOverride) => GuardReason[];
+  /** "Megy, fix this page": drop every frame override, mask and sticker and hand the page back. */
+  resetStudioPage: () => void;
+  /** STUDIO masks: a shape / soft edge on one photo slot (null = the template's shape). Marks the page yours. */
+  setSlotMask: (slotIndex: number, mask: MaskId | null) => void;
+  /** STUDIO looks: a colour treatment on one photo slot (null = as shot). Marks the page yours. */
+  setSlotLook: (slotIndex: number, look: LookId | null) => void;
+  /** Move / resize / rotate a placed sticker — clamped to the safe area and the
+   *  size floor. (Stickers are retired: none can be added or swapped.) */
+  updateStickerGeom: (uid: string, geom: OrnamentTransform) => GuardReason[];
+  removeSticker: (uid: string) => void;
   setQrFill: (slotIndex: number, fill: QrFill | null, pageIndex?: number) => void;
   /** True when the current page is a single-photo page a living-memory QR badge
    *  can be applied to. */
@@ -498,7 +825,9 @@ export interface BuilderActions {
   sendToBack: (id: string) => void;
 
   // Text
-  addTextElement: (x: number, y: number, text?: string) => void;
+  /** New text centred on (x, y) (default: the page's centre), made smaller
+   *  to fit; nothing is added when it can't fit at all. */
+  addTextElement: (x?: number, y?: number, text?: string) => AddedText;
   /** Place a themed quote in the current page's free space; returns the quote, or null if no room. */
   addThemedQuote: () => string | null;
   updateTextElement: (id: string, updates: Partial<TextElement>) => void;
@@ -511,10 +840,19 @@ export interface BuilderActions {
    *  album-wide with a theme quote the album hasn't used yet (never-repeat
    *  holds). One undo step. Returns counts for the CTA's feedback —
    *  remaining>0 means the pool ran dry and that many boxes stayed empty. */
-  finishBoxesWithQuotes: () => { filled: number; remaining: number };
+  /** Fill empty boxes with unused theme quotes. heldBack = kept open by the
+   *  quote cadence (by design); noLine = no unused line left for the theme. */
+  finishBoxesWithQuotes: () => Promise<{ filled: number; remaining: number; heldBack: number; noLine: number }>;
+  /** Swap the quotes Megy dealt for another occasion for this one's (Step 1's
+   *  Next on a made album); the customer's own lines stay. */
+  requoteForOccasion: (occasion: string) => Promise<{ changed: number; cleared: number }>;
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
+  /** COVER: put a photo the customer picked on the cover. The file is kept in
+   *  the device's photo store, so the cover still has it after the app is
+   *  closed (coverPhoto). Resolves once it is on the cover. */
+  setCoverPhoto: (file: File) => Promise<void>;
   /** COVER-only: reposition/zoom an image background (focal point + zoom). */
   setBackgroundCrop: (crop: { focusX?: number; focusY?: number; zoom?: number }) => void;
   /** COVER-only: move a bound caption off its template slot (panel fractions). */
@@ -545,8 +883,8 @@ export interface BuilderActions {
   setPhase: (phase: string) => void;
 
   // Wizard
-  wizardStep: 'welcome' | 'pick_size' | 'design_cover' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize';
-  setWizardStep: (step: 'welcome' | 'pick_size' | 'design_cover' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize') => void;
+  wizardStep: WizardStep;
+  setWizardStep: (step: WizardStep) => void;
 
   // Undo / Redo
   undo: () => void;
@@ -561,16 +899,40 @@ export interface BuilderActions {
   cloudSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   lastSavedAt: Date | null;
   isLoadingCloud: boolean;
-  manualSave: () => Promise<void>;
+  /** Save the album to the account now. Resolves true once the cloud row
+   *  holds it, false when it could not be saved (or no one is signed in). */
+  manualSave: () => Promise<boolean>;
   /** Synchronous localStorage flush of the current draft (see return note). */
   saveDraftNow: () => void;
+  /** The album's row id in the cloud (albumIdRef) — which album this is. */
+  getAlbumId: () => string | undefined;
+  /** Another device saved this album since this device's version, and both
+   *  changed it: which to keep is ASKED (AlbumConflictBar), never picked. */
+  cloudConflict: { updatedAt: string } | null;
+  /** The conflict as of now (for callbacks that outlive a render). */
+  getCloudConflict: () => { updatedAt: string } | null;
+  /** One line after the newer version from another device was opened. */
+  cloudNotice: string | null;
+  dismissCloudNotice: () => void;
+  /** Open the version saved on the other device (this device's changes go). */
+  openNewerVersion: () => Promise<void>;
+  /** Keep the album on this device: it replaces the other device's version. */
+  keepThisVersion: () => Promise<boolean>;
+  /** The album open here was deleted on another device: whether to keep it
+   *  is ASKED (AlbumConflictBar), it never comes back by itself. */
+  cloudGone: boolean;
+  /** Keep it: what is on screen saves as a NEW album (new id). */
+  saveAsNewAlbum: () => Promise<boolean>;
+  /** Let it go: start fresh. */
+  letDeletedAlbumGo: () => void;
 
   // ── Phase 1: Photo URL resolution ──
   getPhotoUrl: (photoOrId: UploadedPhoto | string) => string;
 
   // ── Cloud album loading ──
   user: { id: string } | null;
-  loadAlbum: (albumId: string) => Promise<void>;
+  /** `replace`: the same album's cloud version replaces the one on screen. */
+  loadAlbum: (albumId: string, opts?: { replace?: boolean }) => Promise<void>;
 
   // ── Selection tracking (for assistant / properties panel) ──
   selectedTextId: string | null;
@@ -583,6 +945,9 @@ export interface BuilderActions {
   setSelectedElementId: (id: string | null) => void;
 }
 
+/** Photos stored + measured at a time (see addPhotos). Module-level so back-to-back picks share it. */
+const measureLimit = createLimiter(3);
+
 export function useBuilderState(): BuilderActions {
   // ── Phase 1: Cloud hooks ──
   const { user } = useAuth();
@@ -593,6 +958,7 @@ export function useBuilderState(): BuilderActions {
   const [albumType, setAlbumTypeState] = useState<AlbumType>(() => getInitialState().albumType);
   const [albumSize, setAlbumSizeState] = useState<AlbumSizePreset>(() => getInitialState().albumSize);
   const [selectedTemplate, setSelectedTemplateState] = useState<TemplateType>(() => getInitialState().selectedTemplate);
+  const [albumTitle, setAlbumTitle] = useState<string>(() => getInitialState().title ?? '');
   const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>(() => getInitialState().uploadedPhotos);
   // Live mirror of uploadedPhotos so addPhotos can dedup against the current set
   // (and same-tick repeats) without a stale closure.
@@ -607,7 +973,44 @@ export function useBuilderState(): BuilderActions {
    *  by the time the measurement promise resolves, so the state (and the ref
    *  mirroring it) can still say 0×0. This map cannot. */
   const measuredRef = useRef<Map<string, { width: number; height: number }>>(new Map());
+  /** This album's row id in the cloud. Minted when the draft starts and kept in
+   *  the draft. It used to come from the first save and was never written
+   *  down, so every new session saved the same album as ANOTHER row — Your
+   *  Projects filled with copies, and a copy could be a stale one. */
+  const albumIdRef = useRef<string | undefined>(undefined);
+  if (albumIdRef.current === undefined) albumIdRef.current = getInitialState().albumId ?? newAlbumId();
+  /** Account this draft belongs to (SerializedState.accountId). */
+  const draftAccountRef = useRef<string | null | undefined>(undefined);
+  if (draftAccountRef.current === undefined) draftAccountRef.current = getInitialState().accountId ?? null;
+  if (user?.id && draftAccountRef.current !== user.id) {
+    // Another account picked this draft up on a shared device. Its album id
+    // belongs to the first account (a save to it would be refused), so from
+    // here on it is a new album of this account.
+    if (draftAccountRef.current) albumIdRef.current = newAlbumId();
+    draftAccountRef.current = user.id;
+  }
+  /** The cloud version the album on screen is based on (albumSyncRecord). Held
+   *  by THIS tab and saved inside its draft: two tabs share one draft, and a
+   *  record kept per device let a stale tab save its old album onto the other
+   *  tab's newer version (Kraken, 2026-10-05). A draft saved before records
+   *  moved into it reads the old per-device one, once. */
+  const syncRecRef = useRef<SyncRecord | null | undefined>(undefined);
+  if (syncRecRef.current === undefined) {
+    const init = getInitialState();
+    syncRecRef.current = draftSyncRecord(init.albumId, init.sync) ?? readSyncRecord(init.albumId);
+  }
+  /** The record for `albumId`, when it is the one this tab holds. */
+  const syncRecFor = useCallback((albumId: string | undefined): SyncRecord | null => {
+    const rec = syncRecRef.current;
+    return albumId && rec?.albumId === albumId ? rec : null;
+  }, []);
+  /** When the album last changed on this device (SerializedState.editedAt). */
+  const editedAtRef = useRef<number | undefined>(undefined);
+  if (editedAtRef.current === undefined) editedAtRef.current = getInitialState().editedAt ?? 0;
   const [albumPages, setAlbumPages] = useState<AlbumPage[]>(() => getInitialState().albumPages);
+  const [generating, setGenerating] = useState<GeneratingPhase | null>(null);
+  const albumPagesRef = useRef(albumPages);
+  useEffect(() => { albumPagesRef.current = albumPages; }, [albumPages]);
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState().currentPageIndex);
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState().rejectedTemplateIds);
   const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState().photosPerPage);
@@ -630,6 +1033,20 @@ export function useBuilderState(): BuilderActions {
   // stale closure. (No coverBack state: the back is the reserved Megy Prints
   // panel, derived from the front at wrap time.)
   const [coverFront, setCoverFrontPage] = useState<AlbumPage>(() => getInitialState().coverFront);
+
+  /* The album's name is its cover title until the customer writes their own
+     (1-star testers round 2: two albums went to print with a plain white
+     cover — the name typed in Step 1 never reached the cover, or the spine
+     that follows it). Naming or renaming the album (the customer's setter —
+     not a load) puts the name in the cover's title box; a title the customer
+     typed themselves is never touched. */
+  const renameAlbum = useCallback((title: string) => {
+    setAlbumTitle(title);
+    setCoverFrontPage((cover) => withNameTitle(cover, cleanAlbumName(title)));
+  }, []);
+  // For reset() and the cover-photo restore (coverPhoto), which read it outside a render.
+  const coverFrontRef = useRef<AlbumPage>(coverFront);
+  useEffect(() => { coverFrontRef.current = coverFront; }, [coverFront]);
   const [editScope, setEditScope] = useState<'interior' | 'coverFront'>('interior');
   const editScopeRef = useRef(editScope);
   editScopeRef.current = editScope;
@@ -676,8 +1093,9 @@ export function useBuilderState(): BuilderActions {
   // ── Layout picker (the "Change layout" sheet/modal) — shared so the mobile
   //    review and the desktop panel both open the same picker ──
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
+  const [resizeAsk, setResizeAsk] = useState<ResizeAsk | null>(null);
   // ── Wizard step tracking — assistant is the primary controller ──
-  const [wizardStep, setWizardStep] = useState<'welcome' | 'pick_size' | 'design_cover' | 'pick_background' | 'upload_photos' | 'review_pages' | 'add_text' | 'finalize'>('welcome');
+  const [wizardStep, setWizardStep] = useState<WizardStep>('welcome');
 
   // ── Selection tracking ──
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -693,37 +1111,33 @@ export function useBuilderState(): BuilderActions {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
+  /** The album as of the last commit: what an undo step saves and gives back.
+   *  Read from a ref, never a closure. Most actions that call pushSnapshot are
+   *  memoized on their own deps (clearSlot only changes with the page, the
+   *  apply-to-all-pages ones never do), so a closure pushSnapshot saved the
+   *  album as it was when the ACTION was last made, and undo threw away every
+   *  edit since. A layout effect keeps it current before any tap, chat command
+   *  or useEffect can run. */
+  const undoableRef = useRef<Snapshot>({ albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate });
+  useLayoutEffect(() => {
+    undoableRef.current = { albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate };
+  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+
   /** Capture current state for undo */
   const pushSnapshot = useCallback(() => {
-    const snapshot: Snapshot = {
-      albumPages,
-      uploadedPhotos,
-      currentPageIndex,
-      albumSize,
-      photosPerPage,
-      selectedTemplate,
-    };
-    undoStackRef.current.push(snapshot);
+    undoStackRef.current.push(undoableRef.current);
     if (undoStackRef.current.length > MAX_UNDO_DEPTH) {
       undoStackRef.current.shift(); // drop oldest
     }
     redoStackRef.current = []; // clear redo on new action
     setCanUndo(true);
     setCanRedo(false);
-  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+  }, []);
 
   const undo = useCallback(() => {
     if (undoStackRef.current.length === 0) return;
-    const current: Snapshot = {
-      albumPages,
-      uploadedPhotos,
-      currentPageIndex,
-      albumSize,
-      photosPerPage,
-      selectedTemplate,
-    };
     const snapshot = undoStackRef.current.pop()!;
-    redoStackRef.current.push(current);
+    redoStackRef.current.push(undoableRef.current);
     setAlbumPages(snapshot.albumPages);
     setUploadedPhotos(snapshot.uploadedPhotos);
     setCurrentPageIndex(snapshot.currentPageIndex);
@@ -732,20 +1146,12 @@ export function useBuilderState(): BuilderActions {
     setSelectedTemplateState(snapshot.selectedTemplate);
     setCanUndo(undoStackRef.current.length > 0);
     setCanRedo(true);
-  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+  }, []);
 
   const redo = useCallback(() => {
     if (redoStackRef.current.length === 0) return;
-    const current: Snapshot = {
-      albumPages,
-      uploadedPhotos,
-      currentPageIndex,
-      albumSize,
-      photosPerPage,
-      selectedTemplate,
-    };
     const snapshot = redoStackRef.current.pop()!;
-    undoStackRef.current.push(current);
+    undoStackRef.current.push(undoableRef.current);
     setAlbumPages(snapshot.albumPages);
     setUploadedPhotos(snapshot.uploadedPhotos);
     setCurrentPageIndex(snapshot.currentPageIndex);
@@ -754,15 +1160,33 @@ export function useBuilderState(): BuilderActions {
     setSelectedTemplateState(snapshot.selectedTemplate);
     setCanUndo(true);
     setCanRedo(redoStackRef.current.length > 0);
-  }, [albumPages, uploadedPhotos, currentPageIndex, albumSize, photosPerPage, selectedTemplate]);
+  }, []);
 
   // ── Phase 1: Cloud state ──
   const [cloudSaveStatus, setCloudSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cloudAlbumIdRef = useRef<string | undefined>(undefined);
   const skipCloudLoadRef = useRef(false);
+  // Two devices, one album (albumSyncRecord): the open question of which
+  // version to keep, a note after a newer one was opened, and "asking the
+  // cloud right now" (no save goes out meanwhile).
+  const [cloudConflict, setCloudConflictState] = useState<{ updatedAt: string } | null>(null);
+  const cloudConflictRef = useRef<{ updatedAt: string } | null>(null);
+  const setCloudConflict = useCallback((c: { updatedAt: string } | null) => {
+    cloudConflictRef.current = c;
+    setCloudConflictState(c);
+  }, []);
+  const [cloudNotice, setCloudNotice] = useState<string | null>(null);
+  // Deleted on another device while open here: whether to keep it is asked
+  // (saveAsNewAlbum / letDeletedAlbumGo). It used to come back silently.
+  const [cloudGone, setCloudGoneState] = useState(false);
+  const cloudGoneRef = useRef(false);
+  const setCloudGone = useCallback((gone: boolean) => {
+    cloudGoneRef.current = gone;
+    setCloudGoneState(gone);
+  }, []);
+  const reconcilingRef = useRef(false);
 
   const currentPage =
     editScope === 'coverFront' ? coverFront
@@ -773,72 +1197,243 @@ export function useBuilderState(): BuilderActions {
     // Only sync lightweight metadata to Supabase DB.
     // Actual photo bytes stay in IndexedDB — zero cloud Storage I/O.
     return {
-      id: cloudAlbumIdRef.current,
-      title: 'My Album',
+      id: albumIdRef.current,
+      title: albumNameToSave(albumTitle),
       sizePreset: albumSize,
       pages: albumPages as unknown as AlbumData['pages'],
       photos: uploadedPhotos.map((p) => ({
         id: p.id,
         name: p.name,
+        // Size, pixels, capture time: how another device knows this photo again.
+        ...(p.size ? { size: p.size } : {}),
+        ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
+        ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
         // No cloudUrl, no storagePath — all local-only now.
+        ...(p.check ? { check: p.check } : {}),
+        ...(p.kept ? { kept: true } : {}),
+        ...(p.leftOut ? { leftOut: true } : {}),
       })),
       coverPhoto: pageSnapshotsRef.current[albumPages[0]?.id] ?? null,
+      coverFront: coverFront as unknown as AlbumData['coverFront'],
+      // The album's occasion and photos-per-page go with it (round 2, N4).
+      occasion: readAlbumTheme() || null,
+      photosPerPage: photosPerPage ?? null,
     };
-  }, [albumSize, albumPages, uploadedPhotos]);
+  }, [albumTitle, albumSize, albumPages, uploadedPhotos, coverFront, photosPerPage]);
+
+  /** An album opened from the cloud brings its own occasion and photos-per-page
+   *  (a fresh browser had none: "Generate Album" bounced back to Step 1, and the
+   *  "2 per page" pick was back to Surprise — round 2, N4). One saved without
+   *  them has none: the last album's (or the last account's) used to carry
+   *  over into it, and out with its next save (Kraken, 2026-10-05). Only the
+   *  SAME album reopened keeps what this device has for it. */
+  const restoreAlbumChoices = useCallback((a: AlbumData, sameAlbum = false) => {
+    if (a.occasion) writeAlbumTheme(a.occasion);
+    else if (!sameAlbum) writeAlbumTheme('');
+    if (a.photosPerPage != null) setPhotosPerPage(a.photosPerPage);
+    else if (!sameAlbum) setPhotosPerPage(undefined);
+  }, []);
 
   /* ── Persistence strategy ──
      • Local (localStorage): debounced ~30s — cheap and client-only.
-     • Cloud (Supabase): every 10 minutes, on tab-hide / app exit, on unmount,
-       or a manual save. Photo bytes live in IndexedDB, so the cloud copy is
-       just a light backup of the layout and doesn't need frequent writes. ── */
+     • Cloud (Supabase), signed in: CLOUD_SAVE_QUIET_MS after the album stops
+       changing (at most CLOUD_SAVE_MAX_WAIT_MS while it keeps changing), plus
+       every 10 minutes, on tab-hide / app exit, on unmount, or a manual save.
+       It used to be only the 10-minute / leaving saves, so Your Projects —
+       "All your projects are automatically saved to the cloud" — had no copy
+       of a just-generated, edited album until checkout, and a crash lost it
+       (1-star testers, 2026-10-04). Photo bytes live in IndexedDB, so the
+       cloud copy is the light layout: a write per pause, not per tap. ── */
   const cloudDirtyRef = useRef(false);
+
+  /* ── Two devices, one album (1-star testers round 2, TD-3) ──
+     Every album save goes through saveToCloud: it lands only on the cloud
+     version this device works from, and remembers the new one. When another
+     device saved since, nothing is overwritten — the customer is asked
+     (cloudConflict); deleted there, it is not put back without asking
+     (cloudGone). `quiet`: a save of an album being put away or left (reset,
+     opening another album) — nobody to ask, so it just doesn't land.
+
+     Saves go out ONE AT A TIME (saveChainRef): two at once both started from
+     the same version, so the second was refused as "changed on another
+     device" — by this device's own first save. Each starts from the version
+     the one before it left behind. */
+  const saveAlbumFn = albumSync.save;
+  const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const saveToCloud = useCallback((
+    userId: string,
+    data: AlbumData,
+    opts?: { overwrite?: string; quiet?: boolean; rec?: SyncRecord | null },
+  ): Promise<SaveResult> => {
+    const albumId = data.id;
+    // The version this album was on when the save was asked for. If it is put
+    // away before its turn comes, that is still what it saves onto.
+    const askedRec = opts?.rec !== undefined ? opts.rec : syncRecFor(albumId);
+    const onScreen = () => !!albumId && albumIdRef.current === albumId;
+    const run = async (): Promise<SaveResult> => {
+      const rec = onScreen() ? syncRecFor(albumId) : askedRec;
+      const key = albumContentKey(toAlbumRow(data));
+      // Before sending: if the app closes before the reply, the cloud may hold
+      // this save — and it is still this copy's own work.
+      if (albumId && onScreen()) syncRecRef.current = { albumId, base: rec?.base ?? null, key: rec?.key ?? '', sentKey: key };
+      const res = await saveAlbumFn(userId, data, { base: opts?.overwrite ?? rec?.base ?? null });
+      if (res.gone === 'taken' && onScreen()) {
+        // Its id is used by a row this account can't see. This album was never
+        // in the cloud here, so it simply becomes a new album with a new id.
+        const fresh = newAlbumId();
+        albumIdRef.current = fresh;
+        syncRecRef.current = null;
+        const again = await saveAlbumFn(userId, { ...data, id: fresh }, { base: null });
+        if (again.success && albumIdRef.current === fresh) syncRecRef.current = { albumId: fresh, base: again.updatedAt ?? null, key };
+        return again;
+      }
+      if (res.success && albumId && onScreen()) syncRecRef.current = { albumId, base: res.updatedAt ?? null, key };
+      if (!opts?.quiet && onScreen()) {
+        if (res.conflict) setCloudConflict(res.conflict);
+        else if (res.gone === 'deleted') setCloudGone(true);
+      }
+      return res;
+    };
+    const next = saveChainRef.current.then(run, run);
+    saveChainRef.current = next.catch(() => undefined);
+    return next;
+  }, [saveAlbumFn, setCloudConflict, setCloudGone, syncRecFor]);
+
   const persistRef = useRef<{
     local: SerializedState;
     serializeAlbum: () => AlbumData;
-    save: typeof albumSync.save;
+    saveToCloud: typeof saveToCloud;
     userId: string | undefined;
     isLoadingCloud: boolean;
     justLoaded: () => boolean;
   } | null>(null);
   persistRef.current = {
-    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront },
+    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, title: albumTitle, albumId: albumIdRef.current, accountId: draftAccountRef.current },
     serializeAlbum,
-    save: albumSync.save,
+    saveToCloud,
     userId: user?.id,
     isLoadingCloud,
     justLoaded: () => Date.now() - cloudLoadCompletedRef.current < 500,
   };
 
+  /** The album on screen, as its cloud row would hold it — one short key. */
+  const localAlbumKey = useCallback(
+    () => (persistRef.current ? albumContentKey(toAlbumRow(persistRef.current.serializeAlbum())) : ''),
+    [],
+  );
+
+  /** After a cloud version was opened: this tab works from that version at
+   *  once, and once the album on screen has settled into it (pages are
+   *  normalized on the way in), from what it looks like here. */
+  const settleSyncRecord = useCallback((albumId: string, base: string, cloudKey: string) => {
+    syncRecRef.current = { albumId, base, key: cloudKey };
+    setTimeout(() => {
+      if (albumIdRef.current !== albumId || syncRecRef.current?.base !== base) return;
+      syncRecRef.current = { albumId, base, key: localAlbumKey() };
+    }, 600);
+  }, [localAlbumKey]);
+
+  /** Did the album itself change in the burst of changes just settled? Then
+   *  editedAt is when that burst began (see the change effect below). */
+  const editedKeyRef = useRef<string | null>(null);
+  const editedCheckRef = useRef<{ since: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const settleEdited = useCallback(() => {
+    const pending = editedCheckRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    editedCheckRef.current = null;
+    const key = localAlbumKey();
+    if (editedKeyRef.current !== null && editedKeyRef.current !== key) editedAtRef.current = pending.since;
+    editedKeyRef.current = key;
+  }, [localAlbumKey]);
+
   const flushLocal = useCallback(() => {
-    if (persistRef.current) saveState(persistRef.current.local);
-  }, []);
+    // editedAt and the version are read at flush time: the change effect and
+    // the saves set them AFTER the render that built persistRef.
+    settleEdited();
+    const p = persistRef.current;
+    if (p) saveState({ ...p.local, editedAt: editedAtRef.current, sync: toDraftSync(syncRecFor(p.local.albumId)) });
+  }, [syncRecFor, settleEdited]);
 
   const flushCloud = useCallback(() => {
     const p = persistRef.current;
     if (!p || !p.userId || p.isLoadingCloud || p.justLoaded() || !cloudDirtyRef.current) return;
+    // Waiting on which version to keep, deleted elsewhere and not yet asked,
+    // or asking the cloud right now: no save goes out.
+    if (cloudConflictRef.current || cloudGoneRef.current || reconcilingRef.current) return;
+    // Nothing worth keeping yet (no photos, nothing on a page, no name): don't
+    // save it. Opening the builder and leaving used to add an empty "My Album"
+    // to Your Projects every time — one "resume" could then offer.
+    if (!draftHasContent(p.local) && !cleanAlbumName(p.local.title)) return;
+    const data = p.serializeAlbum();
+    // Nothing changed since the version this device saved or opened (turning
+    // pages, photos waking up after a reload): no write. Re-saving it is how a
+    // phone that only LOOKED at an album pushed its old copy over the
+    // laptop's newer one.
+    const rec = syncRecFor(data.id);
+    if (rec?.base && rec.key === albumContentKey(toAlbumRow(data))) { cloudDirtyRef.current = false; return; }
     cloudDirtyRef.current = false;
     setCloudSaveStatus('saving');
-    p.save(p.userId, p.serializeAlbum())
+    p.saveToCloud(p.userId, data)
       .then((result) => {
         if (result.success) {
-          if (result.albumId) cloudAlbumIdRef.current = result.albumId;
+          // The album id is minted with the draft; never adopt one from a
+          // reply — a reply landing after "Start Creating" would point the NEW
+          // album at the old album's row.
           setCloudSaveStatus('saved');
           setLastSavedAt(new Date());
+        } else if (result.conflict || result.gone === 'deleted') {
+          // Not saved, on purpose: the customer is asked which version to
+          // keep, or whether to keep an album deleted on another device.
+          cloudDirtyRef.current = true;
+          setCloudSaveStatus('idle');
         } else {
           cloudDirtyRef.current = true; // failed — retry on the next cycle
           setCloudSaveStatus('error');
         }
       })
       .catch(() => { cloudDirtyRef.current = true; setCloudSaveStatus('error'); });
-  }, []);
+  }, [syncRecFor]);
 
   // Any change → mark cloud dirty + debounce the LOCAL save (~30s).
+  // editedAt moves only when the ALBUM changed (what its cloud row would hold),
+  // not on a page turn, and not when photos wake up from this device's store
+  // after a reload. That reload used to stamp every stale copy "edited just
+  // now", so it looked newer than the cloud's (Kraken, 2026-10-05). The album
+  // is compared once a burst of changes settles (a drag is many), stamped
+  // with when the burst began.
   useEffect(() => {
+    if (editedKeyRef.current === null) editedKeyRef.current = localAlbumKey(); // the album as it opened
+    else {
+      const since = editedCheckRef.current?.since ?? Date.now();
+      if (editedCheckRef.current) clearTimeout(editedCheckRef.current.timer);
+      editedCheckRef.current = { since, timer: setTimeout(settleEdited, 800) };
+    }
     cloudDirtyRef.current = true;
     if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(flushLocal, 30000);
     return () => { if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current); };
-  }, [albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, flushLocal]);
+  }, [albumType, albumSize, selectedTemplate, albumTitle, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, flushLocal, localAlbumKey, settleEdited]);
+
+  // Cloud save once the album goes quiet (see the persistence strategy). Only
+  // what the saved row holds counts: turning pages changes nothing in it.
+  const cloudQuietTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cloudFirstChangeAtRef = useRef<number | null>(null);
+  const cloudQuietEffectRanRef = useRef(false);
+  useEffect(() => {
+    if (!cloudQuietEffectRanRef.current) { cloudQuietEffectRanRef.current = true; return; } // the album as it opened
+    const now = Date.now();
+    if (cloudFirstChangeAtRef.current == null) cloudFirstChangeAtRef.current = now;
+    const wait = Math.max(0, Math.min(CLOUD_SAVE_QUIET_MS, cloudFirstChangeAtRef.current + CLOUD_SAVE_MAX_WAIT_MS - now));
+    if (cloudQuietTimerRef.current !== null) clearTimeout(cloudQuietTimerRef.current);
+    cloudQuietTimerRef.current = setTimeout(() => {
+      cloudQuietTimerRef.current = null;
+      cloudFirstChangeAtRef.current = null;
+      flushLocal();
+      flushCloud();
+    }, wait);
+  }, [albumTitle, albumSize, uploadedPhotos, albumPages, coverFront, flushLocal, flushCloud]);
+  useEffect(() => () => { if (cloudQuietTimerRef.current !== null) clearTimeout(cloudQuietTimerRef.current); }, []);
 
   // Cloud backup every 10 minutes (only if something changed).
   useEffect(() => {
@@ -861,6 +1456,26 @@ export function useBuilderState(): BuilderActions {
       window.removeEventListener('pagehide', onHide);
     };
   }, [flushLocal, flushCloud]);
+
+  // Back to the app (the phone woken up, the laptop window clicked): did the
+  // album move on on the other device meanwhile? At most every 15 s.
+  const reconcileRef = useRef<(() => Promise<void>) | null>(null);
+  useEffect(() => {
+    let lastAsked = 0;
+    const onShow = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastAsked < 15_000) return;
+      lastAsked = now;
+      void reconcileRef.current?.();
+    };
+    document.addEventListener('visibilitychange', onShow);
+    window.addEventListener('focus', onShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onShow);
+      window.removeEventListener('focus', onShow);
+    };
+  }, []);
 
   /* ── Phase 1: Face API init + Cloud load on mount / login ── */
   useEffect(() => {
@@ -909,13 +1524,17 @@ export function useBuilderState(): BuilderActions {
         // If localStorage has meaningful data (photos, slot fills, text),
         // the user did work locally that hasn't been synced yet.
         // Skip cloud load; local data will auto-save to cloud shortly.
-        const hasLocalData = albumPages.some((p) =>
-          (p.photos?.length ?? 0) > 0 ||
-          (p.slotFills?.some((f) => f !== null) ?? false) ||
-          (p.textElements?.length ?? 0) > 0
-        );
-        if (hasLocalData) {
+        // Uploaded photos ARE local work — an album uploaded but not generated
+        // yet. (That state used to be wiped as "corrupt" on load, so it never
+        // got here; now it survives, and swapping it for the latest cloud
+        // album would lose it. Which album to open is the resume prompt's
+        // question — asked, never assumed.)
+        // It IS asked, though, whether THIS album moved on on another device
+        // since this device last saved or opened it (TD-3): the phone used to
+        // reopen its own older copy without a word.
+        if (draftHasContent({ uploadedPhotos, albumPages })) {
           setIsLoadingCloud(false);
+          void reconcileRef.current?.();
           return;
         }
 
@@ -944,22 +1563,32 @@ export function useBuilderState(): BuilderActions {
             const restored = await Promise.all(
               albumData.photos.map(async (p) => {
                 const stored = await idbPhotos.get(p.id);
+                // Not on this device: an empty preview (photoPresence), and
+                // what the cloud knows of the file (photoRelink matches it).
                 return {
                   id: p.id,
                   name: p.name ?? 'Untitled',
                   previewUrl: stored?.url ?? '',
                   type: stored?.type ?? 'image/jpeg',
-                  size: stored?.size ?? 0,
-                  width: stored?.width ?? 0,
-                  height: stored?.height ?? 0,
+                  size: stored?.size ?? p.size ?? 0,
+                  width: stored?.width ?? p.width ?? 0,
+                  height: stored?.height ?? p.height ?? 0,
+                  ...(p.capturedAt != null ? { capturedAt: p.capturedAt } : {}),
+                  // Megy's photo check + the customer's keep / leave-out choice.
+                  ...(p.check ? { check: p.check } : {}),
+                  ...(p.kept ? { kept: true } : {}),
+                  ...(p.leftOut ? { leftOut: true } : {}),
                 };
               })
             );
             setUploadedPhotos(restored);
           }
           if (albumData.id) {
-            cloudAlbumIdRef.current = albumData.id;
+            albumIdRef.current = albumData.id;
+            if (albumData.updatedAt) settleSyncRecord(albumData.id, albumData.updatedAt, albumContentKey(toAlbumRow(albumData)));
           }
+          restoreAlbumChoices(albumData);
+          setAlbumTitle(albumData.title ?? '');
         }
       } finally {
         if (!cancelled) {
@@ -1034,15 +1663,42 @@ export function useBuilderState(): BuilderActions {
               height: stored.height ?? photo.height,
             };
           }
-          // IndexedDB miss — keep as-is (broken image, but don't lose metadata)
-          return photo;
+          // Not on this device (another device's album, or its store was
+          // cleared): keep everything about it but say so — an empty preview
+          // is "missing" (photoPresence); adding the file again puts it back.
+          return { ...photo, previewUrl: '' };
         })
       );
 
-      setUploadedPhotos(rehydrated);
+      // Patch by id, never replace the list: an album opened from Your Projects
+      // or the resume prompt (loadAlbum) can land while this runs, and
+      // overwriting its photos with this draft's pairs its pages with the
+      // wrong photos. Only touch a photo still exactly as we found it.
+      const startedFrom = new Map(uploadedPhotos.map((p) => [p.id, p.previewUrl]));
+      const byId = new Map(rehydrated.map((p) => [p.id, p]));
+      setUploadedPhotos((prev) => prev.map((p) => {
+        const r = byId.get(p.id);
+        return r && p.previewUrl === startedFrom.get(p.id) ? r : p;
+      }));
     }
 
     void rehydrate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── The cover's own uploaded photo, after the app was closed ──
+     Its blob: link died with the old tab; the file is in the photo store under
+     background.localPhotoId (coverPhoto). Separate from the album photos above,
+     which return early at the cover step: there are none yet. Same fresh-start
+     guards. Only a cover still showing the link we started from is patched. */
+  useEffect(() => {
+    if (sessionStorage.getItem('megy-fresh-start') === '1' || skipCloudLoadRef.current) return;
+    const start = coverFrontRef.current;
+    if (!coverLocalPhotoId(start)) return;
+    void withLiveCoverPhoto(start, idbPhotos.get).then((live) => {
+      if (live === start) return;
+      setCoverFrontPage((p) => (p.background?.localPhotoId === start.background.localPhotoId && p.background?.image === start.background.image ? { ...p, background: live.background } : p));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1072,21 +1728,49 @@ export function useBuilderState(): BuilderActions {
   }, [updateCurrentPage]);
 
   /* ── Photo handling (IndexedDB — zero cloud I/O) ── */
-  const addPhotos = useCallback((files: FileList | File[]): { added: number; skipped: number } => {
-    const fileArray = Array.from(files);
+  const addPhotos = useCallback((files: FileList | File[]): { added: number; skipped: number; videos: number; others: number; restored: number; otherCopies: number } => {
+    // Only photos go on pages; videos and other files are counted, not added.
+    const picked = Array.from(files);
+    const fileArray = picked.filter((f) => kindOfPick(f) === 'photo');
+    const videos = picked.filter((f) => kindOfPick(f) === 'video').length;
+    const others = picked.length - fileArray.length - videos;
 
-    // ── Dedup: never add the same photo twice. Skip files already uploaded
-    // (same name + size) and repeats within this batch — covers re-selecting
-    // the same folder AND a double-fired upload event. ──
-    const seen = new Set(uploadedPhotosRef.current.map((p) => `${p.name}__${p.size}`));
-    const freshFiles: File[] = [];
-    for (const f of fileArray) {
-      const key = `${f.name}__${f.size}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      freshFiles.push(f);
+    // ── The same photo is never added twice (same name + size, or a repeat in
+    // this pick), and a photo this album is MISSING on this device goes back
+    // in its own place (photoRelink) — same frame, crop and caption. ──
+    const plan = planRelink(fileArray, uploadedPhotosRef.current);
+    const freshFiles = plan.fresh.map((i) => fileArray[i]);
+    if (plan.relink.length > 0) {
+      const back = new Map(plan.relink.map((r) => [uploadedPhotosRef.current[r.photo].id, { file: fileArray[r.file], sameCopy: r.sameCopy }]));
+      const recorded = new Map(uploadedPhotosRef.current.filter((p) => back.has(p.id)).map((p) => [p.id, { width: p.width, height: p.height }]));
+      const refill = (p: UploadedPhoto): UploadedPhoto => {
+        const b = back.get(p.id);
+        if (!b) return p;
+        // A fresh file: any note about an earlier copy no longer applies.
+        return { ...p, copyNote: b.sameCopy ? undefined : 'differentCopy', previewUrl: URL.createObjectURL(b.file), type: b.file.type, size: b.file.size };
+      };
+      uploadedPhotosRef.current = uploadedPhotosRef.current.map(refill);
+      setUploadedPhotos((prev) => prev.map(refill));
+      for (const [id, { file }] of back) {
+        // Stored under the photo's OWN id, so the next reload finds it here.
+        const task = measureLimit(async () => {
+          const stored = await idbPhotos.store(file, id);
+          const dims = stored ?? await getImageDimensions(file);
+          const capturedAt = await readCaptureTime(file);
+          if (dims.width > 0 && dims.height > 0) measuredRef.current.set(id, { width: dims.width, height: dims.height });
+          const note = copyQuality(recorded.get(id) ?? { width: 0, height: 0 }, dims);
+          setUploadedPhotos((prev) => prev.map((p) => (p.id === id
+            ? { ...p, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(note ? { copyNote: note } : {}) }
+            : p)));
+        });
+        pendingMeasureRef.current.add(task);
+        void task.catch(() => { /* a failed measure must not block generation */ })
+          .finally(() => pendingMeasureRef.current.delete(task));
+      }
     }
-    if (freshFiles.length === 0) return { added: 0, skipped: fileArray.length };
+    const restored = plan.relink.length;
+    const otherCopies = plan.relink.filter((r) => !r.sameCopy).length;
+    if (freshFiles.length === 0) return { added: 0, skipped: plan.duplicate.length, videos, others, restored, otherCopies };
 
     // Create placeholder metadata with preview URLs
     const newPhotos: UploadedPhoto[] = freshFiles.map((file) => ({
@@ -1109,28 +1793,90 @@ export function useBuilderState(): BuilderActions {
     for (const photo of newPhotos) {
       const file = freshFiles.find((f) => f.name === photo.name && f.size === photo.size);
       if (!file) continue;
-      const task = (async () => {
+      // Bounded: each task fully decodes the photo (createImageBitmap) — all at
+      // once, a 250-photo pick decoded ~12 GB and the phone killed the app.
+      const task = measureLimit(async () => {
         const stored = await idbPhotos.store(file, photo.id);
+        // A failed write (e.g. a full disk) returns null — still measure, or the
+        // photo stays 0×0 and gets classified by guesswork.
+        const dims = stored ?? await getImageDimensions(file);
         const capturedAt = await readCaptureTime(file);
         // Record the size SYNCHRONOUSLY here — see measuredRef.
-        if (stored && stored.width > 0 && stored.height > 0) {
-          measuredRef.current.set(photo.id, { width: stored.width, height: stored.height });
+        if (dims.width > 0 && dims.height > 0) {
+          measuredRef.current.set(photo.id, { width: dims.width, height: dims.height });
         }
         setUploadedPhotos((prev) =>
           prev.map((p) =>
             p.id === photo.id
-              ? { ...p, ...(stored ? { width: stored.width, height: stored.height } : {}), capturedAt }
+              ? { ...p, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), capturedAt }
               : p,
           ),
         );
-      })();
+      });
       pendingMeasureRef.current.add(task);
       void task.catch(() => { /* a failed measure must not block generation */ })
         .finally(() => pendingMeasureRef.current.delete(task));
     }
 
-    return { added: freshFiles.length, skipped: fileArray.length - freshFiles.length };
+    return { added: freshFiles.length, skipped: plan.duplicate.length, videos, others, restored, otherCopies };
   }, [idbPhotos]);
+
+  /* ── Megy's free photo check (lib/photoCheck) ──
+     One photo at a time, in the background, on the phone: blur + fingerprint
+     for every photo first (~20 ms each), then the face pass (closed eyes) —
+     repeats first. Reads the bytes from the photo store, so it also picks up
+     photos from an older draft. Each result is stored on the photo, so a photo
+     is checked once. `checkTriedRef` keeps a failed photo from looping. */
+  const checkTriedRef = useRef<Set<string>>(new Set());
+  const checkRunningRef = useRef(false);
+  useEffect(() => {
+    // A browser that can't decode a small copy (no createImageBitmap) skips the check.
+    if (typeof createImageBitmap !== 'function') return;
+    if (checkRunningRef.current || !nextCheckJob(uploadedPhotos, checkTriedRef.current, facesForAllPhotos())) return;
+    checkRunningRef.current = true;
+    void (async () => {
+      try {
+        for (;;) {
+          const job = nextCheckJob(uploadedPhotosRef.current, checkTriedRef.current, facesForAllPhotos());
+          if (!job) break;
+          checkTriedRef.current.add(`${job.stage}:${job.id}`);
+          const photo = uploadedPhotosRef.current.find((p) => p.id === job.id);
+          const stored = photo ? await idbPhotos.get(job.id) : null;
+          if (!photo || !stored?.blob) continue;
+          try {
+            const res = await checkPhoto(stored.blob, photo.width, photo.height, { faces: job.stage === 'faces' });
+            const merge = (p: UploadedPhoto): UploadedPhoto => job.stage === 'basic'
+              ? { ...p, check: { ...res, faces: null, facesTried: false } }
+              : { ...p, check: p.check ? { ...p.check, faces: res.faces, eyesClosed: res.eyesClosed, facesTried: true } : p.check };
+            uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === job.id ? merge(p) : p));
+            setUploadedPhotos((prev) => prev.map((p) => (p.id === job.id ? merge(p) : p)));
+          } catch { /* an unreadable photo is just not checked */ }
+          await new Promise((r) => setTimeout(r, 0)); // let the screen breathe between photos
+        }
+      } finally {
+        checkRunningRef.current = false;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadedPhotos]);
+
+  const photoCheck = useMemo(() => ({
+    ready: checkIsReady(uploadedPhotos),
+    progress: checkProgress(uploadedPhotos),
+    suggestion: suggestLeaveOut(uploadedPhotos),
+  }), [uploadedPhotos]);
+
+  const leaveOutPhotos = useCallback((ids: string[]) => {
+    const out = new Set(ids);
+    setUploadedPhotos((prev) => prev.map((p) => (out.has(p.id) ? { ...p, leftOut: true } : p)));
+  }, []);
+  const keepPhotos = useCallback((ids: string[]) => {
+    const keep = new Set(ids);
+    setUploadedPhotos((prev) => prev.map((p) => (keep.has(p.id) ? { ...p, kept: true, leftOut: false } : p)));
+  }, []);
+  const bringBackPhotos = useCallback(() => {
+    setUploadedPhotos((prev) => prev.map((p) => (p.leftOut ? { ...p, leftOut: false, kept: true } : p)));
+  }, []);
 
   const removePhoto = useCallback((id: string) => {
     pushSnapshot();
@@ -1236,7 +1982,16 @@ export function useBuilderState(): BuilderActions {
     }
   }, []);
 
-  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean }) => {
+  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }): Promise<GenerateResult> => {
+    const { size: newSize, confirmedLost, ...genOptions } = options ?? {};
+    const size = newSize ?? albumSize;
+    const resizing = size !== albumSize;
+    // Show the "making your album" screen for the whole run and let the browser
+    // PAINT it before the synchronous layout work starts (a state update alone
+    // would be batched behind the heavy loop and never appear).
+    setGenerating('measuring');
+    await paintFrame();
+    try {
     // NEVER lay out unmeasured photos. Uploads are added optimistically at 0×0
     // and measured in the background, so generating straight after a big upload
     // (the normal move on a phone) used to classify every photo by the fallback
@@ -1244,33 +1999,96 @@ export function useBuilderState(): BuilderActions {
     // heads off. Wait for the measurements, then read sizes from measuredRef,
     // which is authoritative the instant a measurement lands.
     await whenPhotosMeasured();
+    setGenerating('laying_out');
+    await paintFrame();
     const photos = uploadedPhotosRef.current.map((p) => {
       const m = measuredRef.current.get(p.id);
       return m && (p.width !== m.width || p.height !== m.height) ? { ...p, ...m } : p;
     });
+    // A NEW SIZE KEEPS THE VIDEO MEMORIES: each comes along as its badge on
+    // its photo. One that can't (its photo won't fill a page of the new
+    // shape) never comes off without a yes to it — the caller asks (change_size).
+    const memories = resizing ? memoriesAcrossSize(albumPagesRef.current, photos, albumSize, size) : null;
+    if (memories?.lost.some((q) => !confirmedLost?.includes(q.code))) return { made: false, memories };
     pushSnapshot();
     // Bake the active theme's photo frame + corner art onto every generated page.
     // A custom Border picked on the wizard overrides the theme's border here.
+    // Owner (2026-09-14): plain white pages, no theme border, no corner art —
+    // the Style step is gone; a chosen border (set_border) still wins.
     const border: { color: string; width: number; style?: 'solid' | 'dashed' | 'dotted' } =
-      wizardBorderRef.current ?? getThemedPhotoBorder(selectedTemplate);
-    const cornerBase = getThemeCornerBase(selectedTemplate);
+      wizardBorderRef.current ?? PLAIN_BORDER;
+    const cornerBase = undefined;
     // Fall back to the theme's own background so image-less palette themes
     // (e.g. baptism) don't generate as plain white when no bg is passed.
-    const bg = wizardBackground ?? getThemedBackground(selectedTemplate, 0);
-    // Megy deals each combo box's content (see BOX_ROLL_WEIGHTS). Quotes draw
-    // from what's available NOW — cached AI lines for the typed theme, else the
-    // curated corpus — while fetchThemeQuotes warms the AI cache in the
-    // background for the NEXT generation instead of delaying this one. Styling
-    // mirrors setBoxText's defaults so a dealt quote ≡ a QuotePickerModal pick.
-    const albumTheme = currentAlbumTheme();
-    void fetchThemeQuotes(albumTheme);
+    const bg = wizardBackground ?? PLAIN_BACKGROUND;
+    // Lay the pages out FIRST, then size the quote pool to them. Megy deals
+    // each combo box's content (see BOX_ROLL_WEIGHTS) and never repeats a line,
+    // so the pool must hold one line per box: a fixed 25-line pool left the
+    // second half of an 80-page album with no quotes at all (2026-09-09).
+    // ensureThemeQuotes tops the cached AI set up in batches for the typed
+    // theme (curated corpus when the proxy is unavailable) and returns what it
+    // has once the wait budget is spent — the rest keeps landing in the cache
+    // for the finish-line sweep. Styling mirrors setBoxText's defaults so a
+    // dealt quote ≡ a QuotePickerModal pick.
+    // STUDIO: pages the customer moved frames on are kept exactly as they are.
+    // Their photos leave the pool, the rest of the album is dealt around them
+    // (with a smaller minimum), fresh pages map back to the full photo list.
+    // A NEW SIZE re-lays out every page: a Studio page is laid out for the old
+    // shape and would be squashed onto the new one (1-star testers).
+    const { kept, used } = resizing ? { kept: [], used: new Set<number>() } : splitStudioPages(albumPagesRef.current);
+    // Photos the customer left out (Megy's photo check) stay out — not one
+    // that carries a memory.
+    const memoryPhotos = new Set((memories?.carried ?? []).map((m) => m.photo));
+    const poolMap = photos.map((_, i) => i).filter((i) => !used.has(i) && (!photos[i].leftOut || memoryPhotos.has(i)));
+    const pool = poolMap.map((i) => photos[i]);
+    // A memory from a frame or a box has no corner yet: away from the face,
+    // as "Add a video memory" picks it.
+    const carried: CarriedMemory[] = [];
+    for (const m of memories?.carried ?? []) {
+      let corner = m.corner;
+      if (!corner) {
+        const url = photos[m.photo]?.previewUrl;
+        let face: { x: number; y: number } | null = null;
+        try { face = url ? await detectFaceCenter(url) : null; } catch { face = null; }
+        corner = qrCornerAwayFromFace(face);
+      }
+      carried.push({ ...m, photo: poolMap.indexOf(m.photo), corner });
+    }
+    // MEMORY PAGES (owner, 2026-10-02): the album's video memories go on
+    // full-page photos, which take the photos that crop least. Only an album
+    // SHORT of those has to crop others — and then it should crop the ones
+    // whose faces survive, so find the faces first (bounded; skipped
+    // entirely in the common case, and harmless when detection fails).
+    let faceCenters: Record<number, { x: number; y: number }> | undefined;
+    const faceCands = memoryFaceCandidates(pool, size);
+    if (faceCands.length > 0) {
+      faceCenters = {};
+      try {
+        await initFaceApi();
+        const deadline = Date.now() + 8000;
+        for (const i of faceCands) {
+          if (Date.now() > deadline) break;
+          const url = pool[i]?.previewUrl;
+          const c = url ? await detectFaceCenter(url) : null;
+          if (c) faceCenters[i] = c;
+        }
+      } catch { /* no faces known → least-crop order */ }
+    }
+    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
+    setGenerating('quotes');
+    const quotePool = await ensureThemeQuotes(currentAlbumTheme(), countAlbumBoxes(newPages), { budgetMs: 12_000 });
+    setGenerating('finishing');
+    await paintFrame();
     const boxContent: BoxContentOptions = {
-      quotePool: quotesForThemeNow(albumTheme),
+      quotePool,
       quoteFontFamily: quoteTheme.fontFamily,
       quoteColor: quoteTheme.textColor,
+      occasion: currentAlbumTheme(),
     };
-    let newPages = generateAlbum(photos, albumSize, photosPerPage, bg, { ...options, border, cornerBase, boxContent });
+    dealAlbumBoxes(newPages, boxContent);
+    newPages = mergeStudioPages(newPages, kept);
     // createEmptyPage only carries border color/width — also apply the border STYLE
     // and the decorative FRAME (when chosen) onto every freshly generated page.
     const bStyle = border.style;
@@ -1285,16 +2103,36 @@ export function useBuilderState(): BuilderActions {
     // NOTE: no auto-placed cover title. The builder used to drop a themed title
     // ("Our Story" etc.) onto page 1, but that forced unwanted text over the
     // user's photos — removed. Users add their own title/text if they want one.
+    if (resizing) {
+      setAlbumSizeState(size);
+      setCoverFrontPage((c) => ({ ...c, size }));
+    }
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
+    return { made: true, ...(memories ? { memories } : {}) };
+    } finally {
+      setGenerating(null);
+    }
   }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate]);
 
+  /** Does the current page carry a video memory? Then its layout stays the
+   *  full photo with the QR badge (see relayPageOnTemplate), and the layout
+   *  actions leave it alone without an undo step. */
+  const currentPageHasMemory = useCallback(() => {
+    const page = albumPagesRef.current[currentPageIndex];
+    return !!page && memoriesOn(page).length > 0;
+  }, [currentPageIndex]);
+
   const regeneratePage = useCallback(() => {
+    if (currentPageHasMemory()) return;
     pushSnapshot();
     setAlbumPages((prev) => {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page) return prev;
+      // STUDIO: the customer's page is never rearranged behind their back.
+      if (page.studio) return prev;
+      if (memoriesOn(page).length) return prev;
 
       // ── 1. Collect existing photos on this page (preserve these). Dedup so a
       //       page that already has duplicates gets cleaned on regenerate. ──
@@ -1391,9 +2229,10 @@ export function useBuilderState(): BuilderActions {
       next[currentPageIndex] = newPage;
       return next;
     });
-  }, [currentPageIndex, albumSize, uploadedPhotos, photosPerPage]);
+  }, [currentPageIndex, albumSize, uploadedPhotos, photosPerPage, currentPageHasMemory]);
 
   const shuffleLayout = useCallback(() => {
+    if (currentPageHasMemory()) return;
     pushSnapshot();
     setAlbumPages((prev) => {
       const next = [...prev];
@@ -1415,71 +2254,119 @@ export function useBuilderState(): BuilderActions {
 
       return next;
     });
-  }, [currentPageIndex, photosPerPage, albumSize]);
+  }, [currentPageIndex, photosPerPage, albumSize, currentPageHasMemory]);
 
-  /* Cycle the current page through ratio-MATCHED layouts (same photo count AND
-     same slot ratio as the photos), in order, looping — powers mobile "Change".
-     Re-flows the photos so they never get cropped into a mismatched slot. */
+  /* Cycle the current page through the layouts that hold its photos (same
+     photo count, no bad crop — nextLayoutInCycle), in order, looping — powers
+     Megy's "next layout". Re-flows the photos into the new frames. */
   const cycleLayout = useCallback(() => {
+    if (currentPageHasMemory()) return;
+    const before = albumPagesRef.current[currentPageIndex];
+    const template = before && nextLayoutInCycle(before, uploadedPhotos, albumSize);
+    if (!template) return; // nothing else holds these photos: no undo step for nothing
     pushSnapshot();
-    const analysis = analyzePhotos(uploadedPhotos);
     setAlbumPages((prev) => {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page) return prev;
-      const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
-      const count = existingFills.length;
-      // The page's dominant photo ratio → only cycle templates whose slots match.
-      const pageRatio = dominantPageRatio(existingFills, analysis.assignments);
-      const allForSize = getTemplatesForAlbum(albumSize);
-      let pool = allForSize.filter((t) => t.slotCount === count && (!pageRatio || t.targetRatio === pageRatio));
-      if (pool.length === 0) pool = allForSize.filter((t) => t.slotCount === count);
-      if (pool.length === 0) pool = allForSize;
-      pool = [...pool].sort((a, b) => a.id.localeCompare(b.id));
-      if (pool.length === 0) return prev;
-      const curIdx = pool.findIndex((t) => t.id === page.templateId);
-      const template = pool[(curIdx + 1) % pool.length];
       next[currentPageIndex] = relayPageOnTemplate(page, template);
       return next;
     });
-  }, [currentPageIndex, albumSize, uploadedPhotos]);
+  }, [currentPageIndex, albumSize, uploadedPhotos, currentPageHasMemory]);
 
-  /** The templates available for the current page (same pool the cycle uses:
-   *  matching the page's photo count + dominant ratio, active only), sorted —
-   *  for the layout picker so the user can choose directly. */
+  /** The layouts the picker offers for the current page: its own first ("✓
+   *  Current"), then the ones that hold its photos (layoutChoicesForPage).
+   *  Photos a smaller layout can't hold, the picker asks about first; a
+   *  bigger one leaves empty "+" frames to fill. */
   const availableTemplatesForCurrentPage = useCallback((): PageTemplate[] => {
     const page = albumPages[currentPageIndex];
     if (!page) return [];
-    const analysis = analyzePhotos(uploadedPhotos);
-    const existingFills = [...new Set((page.slotFills ?? []).filter((f): f is number => f !== null))];
-    const count = existingFills.length;
-    const pageRatio = dominantPageRatio(existingFills, analysis.assignments);
-    const allForSize = getTemplatesForAlbum(albumSize);
-    // EXPERIMENT: slotCount removed from the qualification — show EVERY layout whose
-    // ratio matches the page's photos, regardless of photo count. Strict RATIO match
-    // stays (no crop). Note: picking a layout with FEWER slots than photos drops the
-    // extra photos from this page; MORE slots leaves empty "+" slots to fill.
-    let pool = allForSize.filter((t) => (!pageRatio || t.targetRatio === pageRatio));
-    if (pool.length === 0) pool = allForSize;
-    // Same photo count first, then nearest counts, then by id.
-    return [...pool].sort((a, b) => Math.abs(a.slotCount - count) - Math.abs(b.slotCount - count) || a.id.localeCompare(b.id));
+    // A page with a video memory stays a full-bleed, one-photo page (see
+    // relayPageOnTemplate): a badge page is its own and only layout; a memory
+    // placed in a frame or box before gets the full-page layouts, which turn
+    // it into the badge.
+    const memories = memoriesOn(page);
+    if (memories.length) {
+      const current = page.templateId ? getTemplateById(page.templateId) : undefined;
+      if (current && layoutHoldsMemory(current)) return [current];
+      return memories.length === 1 ? getTemplatesForAlbum(albumSize).filter(layoutHoldsMemory) : [];
+    }
+    return layoutChoicesForPage(page, uploadedPhotos, albumSize);
   }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
 
   /** Apply a SPECIFIC template to the current page (the picker's choice), keeping
    *  the existing photos (re-filled into the new slots — unlike setPageTemplate
    *  which clears them). */
-  const applyPageLayout = useCallback((templateId: string) => {
+  /** What the chosen layout would take off the current page (the picker asks
+   *  before it does: LayoutPicker). */
+  const layoutChangeLoses = useCallback((templateId: string): { photos: number; captions: number } => {
+    const template = getTemplateById(templateId);
+    const page = albumPages[currentPageIndex];
+    if (!template || !page) return { photos: 0, captions: 0 };
+    const left = layoutChangeLeftovers(page, template);
+    return { photos: left.photos.length, captions: left.captions };
+  }, [albumPages, currentPageIndex]);
+
+  /** Apply a chosen layout. Photos that no longer fit go on a new page right
+   *  after this one ('new-page'), or leave the album ('leave-out', back among
+   *  the unused photos). They used to just leave, without a word (1-star
+   *  testers round 3, the Indecisive One: 50 photos, 48 in the album). */
+  const applyPageLayout = useCallback((templateId: string, leftover: 'new-page' | 'leave-out' = 'leave-out') => {
     const template = getTemplateById(templateId);
     if (!template) return;
+    const before = albumPages[currentPageIndex];
+    // A layout this page can't take (a memory page onto more photos), or a
+    // memory page's own layout (the sheet's "✓ Current"), leaves it as it is —
+    // no undo step for nothing.
+    if (before && relayPageOnTemplate(before, template) === before) return;
+    if (before && memoriesOn(before).length && template.id === before.templateId) return;
+    const spare = leftover === 'new-page' && before ? layoutChangeLeftovers(before, template).photos : [];
+    const assignments = spare.length ? analyzePhotos(uploadedPhotos).assignments : {};
     pushSnapshot();
     setAlbumPages((prev) => {
       const next = [...prev];
       const page = next[currentPageIndex];
       if (!page) return prev;
       next[currentPageIndex] = relayPageOnTemplate(page, template);
+      if (spare.length) next.splice(currentPageIndex + 1, 0, ...pagesForPhotos(spare, albumSize, assignments));
       return next;
     });
-  }, [currentPageIndex]);
+  }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
+
+  /* ── Face-centred auto-pan ──
+     detectFaceCenter gives the face as a 0–1 point on the photo; every renderer
+     reads the pan in DESIGN px (slotPhotoFit). Writing computeFaceOffset's −1…+1
+     straight into slotOffsets moved the photo by at most 1 px, so it never
+     centred anything. faceCentrePan converts against the slot's real box,
+     worked out when the result lands, on the page it lands on — so a moved or
+     zoomed frame, or the cover panel, uses its own box. A slot whose photo
+     changed in the meantime is left alone. */
+  const centreOnFace = useCallback((slotIndex: number, photoIndex: number) => {
+    const photoUrl = uploadedPhotos[photoIndex]?.previewUrl;
+    if (!photoUrl) return;
+    const pageIndex = currentPageIndex;
+    void detectFaceCenter(photoUrl).then((face) => {
+      if (!face) return;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const natural = { w: img.naturalWidth, h: img.naturalHeight };
+        const coverMode = editScopeRef.current === 'coverFront';
+        updateCurrentPage((p) => {
+          if ((p.slotFills ?? [])[slotIndex] !== photoIndex) return p;
+          const slot = slotDesignSize(p, slotIndex, albumSize, pageIndex, coverMode);
+          if (!slot) return p;
+          const pan = faceCentrePan(face, natural, slot, p.slotScales?.[slotIndex]);
+          const offsetsX = [...(p.slotOffsetsX ?? [])];
+          const offsetsY = [...(p.slotOffsetsY ?? [])];
+          offsetsX[slotIndex] = pan.x;
+          offsetsY[slotIndex] = pan.y;
+          return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
+        });
+      };
+      img.src = photoUrl;
+    });
+  }, [uploadedPhotos, currentPageIndex, updateCurrentPage, albumSize]);
 
   /* ── Slot management ── */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
@@ -1510,34 +2397,8 @@ export function useBuilderState(): BuilderActions {
       fills[slotIndex] = photoIndex;
       return { ...page, slotFills: fills, qrFills, slotTexts, ornamentFills };
     });
-
-    // ── Face-centered auto-pan ──
-    const photo = uploadedPhotos[photoIndex];
-    if (!photo) return;
-    const photoUrl = photo.previewUrl;
-    if (!photoUrl) return;
-    const template = PAGE_TEMPLATES.find((t) => t.id === (albumPages[currentPageIndex]?.templateId ?? ''));
-    const slot = template?.slots?.[slotIndex];
-
-    detectFaceCenter(photoUrl).then((faceCenter) => {
-      if (!faceCenter || !slot) return;
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const photoAspect = img.naturalWidth / img.naturalHeight;
-        const slotAspect = slot.width / slot.height;
-        const { offsetX, offsetY } = computeFaceOffset(faceCenter, photoAspect, slotAspect);
-        updateCurrentPage((p) => {
-          const offsetsX = [...(p.slotOffsetsX ?? [])];
-          const offsetsY = [...(p.slotOffsetsY ?? [])];
-          offsetsX[slotIndex] = offsetX;
-          offsetsY[slotIndex] = offsetY;
-          return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
-        });
-      };
-      img.src = photoUrl;
-    });
-  }, [updateCurrentPage, uploadedPhotos, albumPages, currentPageIndex]);
+    centreOnFace(slotIndex, photoIndex);
+  }, [updateCurrentPage, centreOnFace, pushSnapshot]);
 
   const clearSlot = useCallback((slotIndex: number) => {
     pushSnapshot();
@@ -1568,14 +2429,68 @@ export function useBuilderState(): BuilderActions {
     });
   }, [updateCurrentPage]);
 
-  const updateSlotGeometry = useCallback((slotIndex: number, geometry: SlotGeometryOverride) => {
+  const updateSlotGeometry = useCallback((slotIndex: number, geometry: SlotGeometryOverride): GuardReason[] => {
+    // THE chokepoint: nothing outside the printable rules can be stored.
+    const page = currentPage;
+    const template = page?.templateId ? getTemplateById(page.templateId) : null;
+    const slot = template?.slots[slotIndex];
+    if (!page || !slot) return [];
+    const ctx = { albumSize, pageIndex: currentPageIndex, template, coverMode: phase === 'cover' };
+    const prior = page.slotGeometries?.[slotIndex] ?? {};
+    const { geom, reasons } = clampSlotGeometry(slot, { ...prior, ...geometry }, ctx);
     pushSnapshot();
-    updateCurrentPage((page) => {
-      const geoms = [...(page.slotGeometries ?? [])];
-      geoms[slotIndex] = { ...(geoms[slotIndex] ?? {}), ...geometry };
-      return { ...page, slotGeometries: geoms };
+    updateCurrentPage((p) => {
+      const geoms = [...(p.slotGeometries ?? [])];
+      geoms[slotIndex] = geom;
+      return { ...p, slotGeometries: geoms, studio: true };
     });
-  }, [updateCurrentPage]);
+    return reasons;
+  }, [updateCurrentPage, currentPage, albumSize, currentPageIndex, phase, pushSnapshot]);
+
+  const resetStudioPage = useCallback(() => {
+    pushSnapshot();
+    updateCurrentPage((p) => ({ ...p, slotGeometries: [], slotMasks: [], slotLooks: [], stickers: [], studio: false }));
+  }, [updateCurrentPage, pushSnapshot]);
+
+  /* ── STUDIO masks + stickers (masks.ts / stickers.ts hold the shared rules) ── */
+  const studioCtx = useCallback(() => {
+    const page = currentPage;
+    const template = page?.templateId ? getTemplateById(page.templateId) : null;
+    return { albumSize, pageIndex: currentPageIndex, template, coverMode: phase === 'cover' };
+  }, [currentPage, albumSize, currentPageIndex, phase]);
+
+  const setSlotMask = useCallback((slotIndex: number, mask: MaskId | null) => {
+    if (mask != null && !isMaskId(mask)) return;
+    pushSnapshot();
+    updateCurrentPage((p) => {
+      const slotMasks = [...(p.slotMasks ?? [])];
+      slotMasks[slotIndex] = mask && mask !== 'none' ? mask : null;
+      return { ...p, slotMasks, studio: true };
+    });
+  }, [updateCurrentPage, pushSnapshot]);
+
+  const setSlotLook = useCallback((slotIndex: number, look: LookId | null) => {
+    if (look != null && !isLookId(look)) return;
+    pushSnapshot();
+    updateCurrentPage((p) => {
+      const slotLooks = [...(p.slotLooks ?? [])];
+      slotLooks[slotIndex] = look;
+      return { ...p, slotLooks, studio: true };
+    });
+  }, [updateCurrentPage, pushSnapshot]);
+
+  /* Stickers are retired (owner, 2026-10-01): none can be added or swapped.
+     Placed ones still render and print, so they can still be moved and removed. */
+  const updateStickerGeom = useCallback((uid: string, geom: OrnamentTransform): GuardReason[] => {
+    const { geom: clamped, reasons } = clampStickerGeom(geom, studioCtx());
+    updateCurrentPage((p) => ({ ...p, stickers: (p.stickers ?? []).map((k) => (k.uid === uid ? { ...k, geom: clamped } : k)) }));
+    return reasons;
+  }, [updateCurrentPage, studioCtx]);
+
+  const removeSticker = useCallback((uid: string) => {
+    pushSnapshot();
+    updateCurrentPage((p) => ({ ...p, stickers: (p.stickers ?? []).filter((k) => k.uid !== uid) }));
+  }, [updateCurrentPage, pushSnapshot]);
 
   /** Set (or clear, with null) the QR living-memory fill for a template QR slot.
    *  pageIndex defaults to the current page; the preview spread passes it explicitly. */
@@ -1613,20 +2528,10 @@ export function useBuilderState(): BuilderActions {
   stateRefForQr.current = { page: currentPage ?? null, photos: uploadedPhotos, size: albumSize };
 
   /** Is the current page a plain single-photo page that a living-memory QR
-   *  badge can be applied to? (Exactly one photo slot, with a photo in it.) */
-  const canAddMemoryQr = useMemo(() => {
-    const t = currentPage?.templateId ? getTemplateById(currentPage.templateId) : null;
-    if (!t) return false;
-    const filled = (currentPage?.slotFills ?? []).some((f) => f != null);
-    // Gate on an ACTIVE QR (a filled qrFill), not merely a qr SLOT: a badge page
-    // whose QR was removed has an empty qr slot but should re-offer the button
-    // (otherwise removing a memory strands the page). Exclude caption-bearing
-    // pages — the badge template has no textSlots, so a bound caption would be
-    // orphaned (invisible) after the swap.
-    const hasActiveQr = (currentPage?.qrFills ?? []).some((q) => q != null)
-      || (currentPage?.textSlotQr ?? []).some((q) => q != null);
-    return photoSlotCount(t) === 1 && filled && !hasActiveQr && !(t.textSlots?.length);
-  }, [currentPage]);
+   *  badge can be applied to? The SAME rule the generator uses to guarantee
+   *  the album's memory pages (canTakeMemoryQr) — one source, so the button
+   *  and the floor can never disagree. */
+  const canAddMemoryQr = useMemo(() => (currentPage ? canTakeMemoryQr(currentPage) : false), [currentPage]);
 
   /** Turn the current single-photo page into a full-bleed QR living-memory
    *  badge: keep the photo full-bleed, tuck the scannable QR chip into the
@@ -1675,6 +2580,9 @@ export function useBuilderState(): BuilderActions {
         slotScales: [p.slotScales?.[0] ?? 1, 1],
         slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
         slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
+        // The photo goes full bleed under its memory: a mask or a moved frame
+        // on this single would make the memory page something else.
+        ...fullBleedPhoto(p, true),
         // Drop any theme decorative corners — they sit in all four corners and
         // would overlay (and in print obscure) the QR chip.
         cornerBase: undefined,
@@ -1712,6 +2620,7 @@ export function useBuilderState(): BuilderActions {
         slotScales: [p.slotScales?.[0] ?? 1, 1],
         slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
         slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
+        ...fullBleedPhoto(p, true),
         cornerBase: undefined,
       };
     });
@@ -1942,63 +2851,29 @@ export function useBuilderState(): BuilderActions {
 
   /* ── Auto-fill ── */
   const autoFillSlots = useCallback(() => {
+    // Skip every photo already in the album, and the ones left out.
+    const skip = new Set(uploadedPhotos.flatMap((p, i) => (p.leftOut ? [i] : [])));
+    for (const p of albumPages) {
+      for (const f of p.slotFills ?? []) if (f != null) skip.add(f);
+      for (const f of p.textSlotFills ?? []) if (f != null) skip.add(f);
+      for (const ph of p.photos ?? []) if (ph?.photoIndex != null) skip.add(ph.photoIndex);
+    }
+    const before = currentPage.slotFills ?? [];
+    const plan = autoFillPlan(currentPage, uploadedPhotos.length, skip);
+    const filled = plan.filter((f, i) => f != null && before[i] == null).length;
+    const empty = before.filter((f) => f == null).length;
+    if (filled === 0) return { filled, empty };
     pushSnapshot();
-    updateCurrentPage((page) => {
-      const tmplForFill = PAGE_TEMPLATES.find((t) => t.id === page.templateId);
-      const slotCount = page.slotFills?.length ?? 0;
-      if (slotCount === 0) return page;
-      const fills = [...(page.slotFills ?? [])];
-      let photoIdx = 0;
-      for (let i = 0; i < slotCount; i++) {
-        if (tmplForFill?.slots?.[i]?.kind === 'qr') continue; // never auto-place a photo into a QR slot
-        if (page.qrFills?.[i] || page.slotTexts?.[i] || page.ornamentFills?.[i]) continue; // slot claimed by QR/text/ornament
-        if (fills[i] === null && photoIdx < uploadedPhotos.length) {
-          while (photoIdx < uploadedPhotos.length && fills.includes(photoIdx)) {
-            photoIdx++;
-          }
-          if (photoIdx < uploadedPhotos.length) {
-            fills[i] = photoIdx;
-            photoIdx++;
-          }
-        }
-      }
-      return { ...page, slotFills: fills };
+    updateCurrentPage((page) => (page.slotFills?.length ? { ...page, slotFills: autoFillPlan(page, uploadedPhotos.length, skip) } : page));
+    // Face-centre the photos this just placed — and only those; a photo already
+    // on the page keeps its framing. (This used to walk the page as it was
+    // BEFORE the fill, so it re-panned the photos already there and skipped
+    // the new ones.)
+    plan.forEach((fill, slotIndex) => {
+      if (fill != null && before[slotIndex] == null) centreOnFace(slotIndex, fill);
     });
-
-    // ── Face-centered auto-pan for all filled slots ──
-    const page = albumPages[currentPageIndex];
-    const template = PAGE_TEMPLATES.find((t) => t.id === (page?.templateId ?? ''));
-    if (!template) return;
-
-    (page?.slotFills ?? []).forEach((fill, slotIndex) => {
-      if (fill === null) return;
-      const photo = uploadedPhotos[fill];
-      if (!photo) return;
-      const photoUrl = photo.previewUrl;
-      if (!photoUrl) return;
-      const slot = template.slots?.[slotIndex];
-      if (!slot) return;
-
-      detectFaceCenter(photoUrl).then((faceCenter) => {
-        if (!faceCenter) return;
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const photoAspect = img.naturalWidth / img.naturalHeight;
-          const slotAspect = slot.width / slot.height;
-          const { offsetX, offsetY } = computeFaceOffset(faceCenter, photoAspect, slotAspect);
-          updateCurrentPage((p) => {
-            const offsetsX = [...(p.slotOffsetsX ?? [])];
-            const offsetsY = [...(p.slotOffsetsY ?? [])];
-            offsetsX[slotIndex] = offsetX;
-            offsetsY[slotIndex] = offsetY;
-            return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
-          });
-        };
-        img.src = photoUrl;
-      });
-    });
-  }, [updateCurrentPage, uploadedPhotos, albumPages, currentPageIndex]);
+    return { filled, empty };
+  }, [pushSnapshot, updateCurrentPage, uploadedPhotos, albumPages, currentPage, centreOnFace]);
 
   const clearAllSlots = useCallback(() => {
     pushSnapshot();
@@ -2109,8 +2984,17 @@ export function useBuilderState(): BuilderActions {
   }, [updateCurrentPage]);
 
   /* ── Text ── */
-  const addTextElement = useCallback((x: number, y: number, text?: string) => {
-    pushSnapshot();
+  /** New text on the current page, centred on (x, y) (default: the page's
+   *  centre). A long one is made smaller until it fits — its box, or 80% of
+   *  the page — and placed inside the page: Megy's chat put a 190-character
+   *  caption at the far right edge in large type, running off the side and
+   *  the bottom (1-star testers round 3, the Rule-Breaker; its canvas centre
+   *  was 1200 × 800 on a 750 × 750 page). Too long even at the smallest size:
+   *  nothing is added, and the caller says so. */
+  const addTextElement = useCallback((x?: number, y?: number, text?: string): AddedText => {
+    const { width: cw, height: ch } = getCanvasDimensions(albumSize);
+    const cx = x ?? cw / 2;
+    const cy = y ?? ch / 2;
     // New text inherits the active theme's font + color so captions match the
     // occasion. The user can still restyle any text element afterward.
     const theme = THEMES[selectedTemplate];
@@ -2130,12 +3014,22 @@ export function useBuilderState(): BuilderActions {
       cur?.textSlotFills?.[i] == null &&
       !cur?.textSlotQr?.[i] &&
       !cur?.textSlotOrnament?.[i]);
+    const inBox = slots.length > 0 && emptyBox >= 0;
+    // The size it fits at: its box (textFit, as the editor's warning and
+    // Order's check measure it), or 80% of the page for free text.
+    const boxSize = inBox && cur ? captionBoxSize(cur, emptyBox, albumSize, currentPageIndex) : null;
+    const freeW = Math.round(cw * 0.8);
+    const start = inBox ? 28 : 32;
+    const fit = trimmed ? captionFits(trimmed, { fontSize: start, fontFamily: theme.fontFamily }, boxSize ?? { w: freeW, h: ch * 0.8 }) : null;
+    if (fit && !fit.fits && fit.fitsAt == null) return { added: false, fontSize: start, shrunk: false, tooLong: true };
+    const fontSize = fit && !fit.fits && fit.fitsAt != null ? fit.fitsAt : start;
+    pushSnapshot();
     updateCurrentPage((page) => {
-      if (slots.length > 0 && emptyBox >= 0) {
+      if (inBox) {
         const newText: TextElement = {
           id: `box-${emptyBox}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           text: trimmed || 'Double-tap to edit',
-          x: 0, y: 0, fontSize: 28,
+          x: 0, y: 0, fontSize,
           fontFamily: theme.fontFamily, color: theme.textColor,
           bold: false, italic: false, underline: false,
           alignment: (slots[emptyBox].align ?? 'center') as TextElement['alignment'],
@@ -2143,17 +3037,25 @@ export function useBuilderState(): BuilderActions {
         };
         return { ...page, textElements: [...page.textElements, newText] };
       }
+      // Free text: a box 80% of the page wide (the text wraps inside it),
+      // centred on (cx, cy) and kept inside the page.
+      const words = trimmed || 'Double click to edit';
+      const lines = Math.max(1, Math.ceil((words.length * fontSize * 0.6) / freeW));
+      const blockH = lines * fontSize * TEXT_LINE_HEIGHT;
       const newText: TextElement = {
         id: `text-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        text: trimmed || 'Double click to edit',
-        x, y, fontSize: 32,
+        text: words,
+        x: Math.round(Math.min(Math.max(0, cx - freeW / 2), cw - freeW)),
+        y: Math.round(Math.min(Math.max(0, cy - blockH / 2), Math.max(0, ch - blockH))),
+        fontSize,
         fontFamily: theme.fontFamily, color: theme.textColor,
         bold: false, italic: false, underline: false,
-        alignment: 'center', rotation: 0, opacity: 100, width: 200,
+        alignment: 'center', rotation: 0, opacity: 100, width: freeW,
       };
       return { ...page, textElements: [...page.textElements, newText] };
     });
-  }, [updateCurrentPage, selectedTemplate, albumPages, currentPageIndex]);
+    return { added: true, fontSize, shrunk: fontSize < start, tooLong: false };
+  }, [updateCurrentPage, selectedTemplate, albumPages, currentPageIndex, albumSize]);
 
   // Drop a themed quote into the current page's largest empty band (so the user
   // doesn't have to type). Returns the quote placed, or null when the page is
@@ -2206,7 +3108,10 @@ export function useBuilderState(): BuilderActions {
     pushSnapshot();
     updateCurrentPage((page) => ({
       ...page,
-      textElements: page.textElements.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+      // New words are the customer's: they stop following the occasion.
+      textElements: page.textElements.map((t) => (t.id === id
+        ? { ...t, ...updates, ...(updates.text != null && updates.text !== t.text ? { fromOccasion: undefined } : {}) }
+        : t)),
     }));
   }, [updateCurrentPage]);
 
@@ -2249,7 +3154,11 @@ export function useBuilderState(): BuilderActions {
           textSlotOrnament,
           textSlotQrGeom,
           textElements: page.textElements.map((t) =>
-            t.boxIndex === slotIndex ? { ...t, ...content, text: content.text } : t),
+            t.boxIndex === slotIndex
+              // A title the customer types is theirs: it stops following the album name.
+              // A line the customer writes or picks is theirs too: it stops following the occasion.
+              ? { ...t, ...content, text: content.text, fromAlbumName: content.text === t.text ? t.fromAlbumName : undefined, fromOccasion: content.text === t.text ? t.fromOccasion : undefined }
+              : t),
         };
       }
       const newText: TextElement = {
@@ -2292,6 +3201,22 @@ export function useBuilderState(): BuilderActions {
     updateCurrentPage((page) => ({ ...page, background: bg }));
   }, [updateCurrentPage]);
 
+  const setCoverPhoto = useCallback(async (file: File) => {
+    const id = newCoverPhotoId(albumIdRef.current ?? 'draft');
+    // Keep the file on the device first. If that fails (storage blocked), the
+    // photo still goes on the cover for this visit, as it always did.
+    const kept = await idbPhotos.store(file, id);
+    const live = kept ? await idbPhotos.get(id) : null;
+    pushSnapshot();
+    setCoverFrontPage((p) => ({
+      ...p,
+      background: live?.url
+        ? { type: 'image', image: live.url, localPhotoId: id }
+        : { type: 'image', image: URL.createObjectURL(file) },
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idbPhotos]);
+
   /** COVER: nudge a bound caption off its template slot (fractions of the panel).
    *  No undo snapshot per call — a drag fires many updates (see
    *  setTextSlotOrnamentGeom). */
@@ -2299,19 +3224,60 @@ export function useBuilderState(): BuilderActions {
    *  quotes into every empty caption box (sweepFillQuotes excludes any line
    *  the album already carries, so the never-repeat rule survives the sweep).
    *  Styling mirrors setBoxText's defaults, same as generation-time deals. */
-  const finishBoxesWithQuotes = useCallback((): { filled: number; remaining: number } => {
+  const finishBoxesWithQuotes = useCallback(async (): Promise<{ filled: number; remaining: number; heldBack: number; noLine: number }> => {
     const theme = THEMES[selectedTemplate];
-    const { pages, filled, remaining } = sweepFillQuotes(albumPages, {
-      quotePool: quotesForThemeNow(currentAlbumTheme()),
-      quoteFontFamily: theme.fontFamily,
-      quoteColor: theme.textColor,
+    // Grow the theme's pool to what a FULL sweep needs before dealing — the
+    // sweep excludes every line the album already carries, so a pool sized
+    // only for generation would leave the late boxes empty again.
+    const quotePool = await ensureThemeQuotes(currentAlbumTheme(), quotesNeededForSweep(albumPages), { budgetMs: 12_000 });
+    const box: BoxContentOptions = { quotePool, quoteFontFamily: theme.fontFamily, quoteColor: theme.textColor, occasion: currentAlbumTheme() };
+    // Sweep the LATEST pages (the customer may have edited during the wait);
+    // the functional updater sees them, the closure above may not.
+    let result = { filled: 0, remaining: 0, heldBack: 0, noLine: 0 };
+    pushSnapshot();
+    setAlbumPages((prev) => {
+      const { pages, filled, remaining, heldBack, noLine } = sweepFillQuotes(prev, box);
+      result = { filled, remaining, heldBack, noLine };
+      return filled > 0 ? pages : prev;
     });
-    if (filled > 0) {
-      pushSnapshot();
-      setAlbumPages(pages);
-    }
-    return { filled, remaining };
-  }, [albumPages, selectedTemplate]);
+    return result;
+  }, [albumPages, selectedTemplate, pushSnapshot]);
+
+  /** The occasion changed on a made album (Step 1, then Next): every quote
+   *  Megy dealt for another occasion gets an unused line for this one, in the
+   *  same box and style; the customer's own lines stay. One undo step. A
+   *  "Family" album switched to "Vacation" kept "The table is always full"
+   *  while Step 1 promised "Megy writes the quotes on your pages to match it"
+   *  (1-star testers round 3, the Indecisive One). Returns the quotes changed
+   *  and the ones cleared for want of a new line (they print as paper, never
+   *  as the old occasion's). */
+  const requoteForOccasion = useCallback(async (occasion: string): Promise<{ changed: number; cleared: number }> => {
+    const key = (s?: string) => (s ?? '').trim().toLowerCase();
+    const stale = (t: TextElement) => t.fromOccasion != null && key(t.fromOccasion) !== key(occasion);
+    const count = albumPages.reduce((n, p) => n + p.textElements.filter(stale).length, 0);
+    if (!key(occasion) || count === 0) return { changed: 0, cleared: 0 };
+    const pool = await ensureThemeQuotes(occasion, quotesNeededForSweep(albumPages) + count, { budgetMs: 12_000 });
+    // The pages as they are NOW (the customer may have edited during the wait).
+    const prev = albumPagesRef.current;
+    const result = { changed: 0, cleared: 0 };
+    const used = new Set(prev.flatMap((p) => p.textElements.filter((t) => !stale(t)).map((t) => t.text)));
+    const deck = shuffleArray(pool.filter((l) => !used.has(l)));
+    let di = 0;
+    const next = prev.map((p) => {
+      if (!p.textElements.some(stale)) return p;
+      const textElements: TextElement[] = [];
+      for (const t of p.textElements) {
+        if (!stale(t)) { textElements.push(t); continue; }
+        if (di < deck.length) { textElements.push({ ...t, text: deck[di++], fromOccasion: occasion }); result.changed++; }
+        else result.cleared++;
+      }
+      return { ...p, textElements };
+    });
+    if (result.changed + result.cleared === 0) return result;
+    pushSnapshot();
+    setAlbumPages(next);
+    return result;
+  }, [albumPages, pushSnapshot]);
 
   const setBoxTextOffset = useCallback((slotIndex: number, offsetX: number, offsetY: number) => {
     updateCurrentPage((page) => ({
@@ -2407,6 +3373,7 @@ export function useBuilderState(): BuilderActions {
 
   /* ── Template ── */
   const setPageTemplate = useCallback((templateId: string) => {
+    if (currentPageHasMemory()) return;
     pushSnapshot();
     updateCurrentPage((page) => ({
       ...page,
@@ -2416,7 +3383,7 @@ export function useBuilderState(): BuilderActions {
       slotOffsetsX: [],
       slotOffsetsY: [],
     }));
-  }, [updateCurrentPage]);
+  }, [updateCurrentPage, currentPageHasMemory]);
 
   const hideTemplate = useCallback((id: string) => {
     setRejectedTemplateIds((prev) => [...prev, id]);
@@ -2436,21 +3403,23 @@ export function useBuilderState(): BuilderActions {
   }, []);
 
   /* ── Phase 1: Manual cloud save ── */
-  const manualSave = useCallback(async () => {
-    if (!user) return;
+  const manualSave = useCallback(async (): Promise<boolean> => {
+    if (!user) return false;
     setCloudSaveStatus('saving');
-    const result = await albumSync.save(user.id, serializeAlbum());
+    const result = await saveToCloud(user.id, serializeAlbum());
     if (result.success) {
-      if (result.albumId) {
-        cloudAlbumIdRef.current = result.albumId;
-      }
       cloudDirtyRef.current = false;
       setCloudSaveStatus('saved');
       setLastSavedAt(new Date());
     } else {
-      setCloudSaveStatus('error');
+      // A conflict (or an album deleted elsewhere) isn't a failure to show as
+      // one: the bar asks the question.
+      setCloudSaveStatus(result.conflict || result.gone === 'deleted' ? 'idle' : 'error');
     }
-  }, [user, albumSync, serializeAlbum]);
+    return result.success;
+  }, [user, saveToCloud, serializeAlbum]);
+
+  const getAlbumId = useCallback(() => albumIdRef.current, []);
 
   /* ── Resolve photo URL (all photos are local — IndexedDB) ── */
   const getPhotoUrl = useCallback((photoOrId: UploadedPhoto | string): string => {
@@ -2463,10 +3432,53 @@ export function useBuilderState(): BuilderActions {
 
   /* ── Reset ── */
   const reset = useCallback(() => {
-    // ── LEAK FIX #4: Clear IndexedDB photos ──
-    // Without this, old photos from previous sessions survive reset()
-    // and leak into new albums via the rehydration effect.
-    idbPhotos.clear().catch(() => { /* ignore */ });
+    // ── The album being put away ──
+    // What is on disk (Home → "Start Creating" arrives here with an already-
+    // empty state) plus what is in memory (a restart can land inside the 30 s
+    // local-save debounce).
+    const stored = loadState();
+    const discardedPhotoIds = [...(stored?.uploadedPhotos ?? []), ...uploadedPhotosRef.current].map((p) => p.id);
+    // The cover's own uploaded photo goes the same way (coverPhoto).
+    for (const c of [stored?.coverFront, coverFrontRef.current]) {
+      const id = coverLocalPhotoId(c as AlbumPage | undefined);
+      if (id) discardedPhotoIds.push(id);
+    }
+    const discardedAccount = stored?.accountId ?? draftAccountRef.current ?? null;
+    // The version the album being put away is on (in memory, else its draft's).
+    const leavingRec = syncRecFor(albumIdRef.current) ?? draftSyncRecord(stored?.albumId, stored?.sync);
+    const leaving: AlbumData | null = draftHasContent(persistRef.current?.local)
+      ? serializeAlbum()
+      : stored && draftHasContent(stored)
+        ? albumDataFromDraft(stored as StoredDraft)
+        : null;
+    // getSession reads the saved session directly, so this is right even while
+    // the auth context is still loading (it is, on the fresh-start mount).
+    void supabase.auth.getSession().then(async ({ data }) => {
+      const session = data.session;
+      // 1. Its latest version goes to the account before we let go. The cloud
+      //    copy is only refreshed every 10 min or on leaving, so the draft on
+      //    this device can be newer — and it is the album the customer will
+      //    come back to.
+      if (session && leaving && (!discardedAccount || discardedAccount === session.user.id)) {
+        // Only onto the version this device had: a newer one saved on another
+        // device is not overwritten by the copy being put away.
+        await saveToCloud(session.user.id, leaving, { quiet: true, rec: leavingRec });
+      }
+      // 2. Its photos. This used to wipe the WHOLE photo store — which every
+      //    saved album on the device shares — so each "Start Creating" or
+      //    restart left every saved album blank when the customer came back.
+      //    Only a draft that never touched an account loses its photos now.
+      //    (Nothing leaks into the new album: rehydration only looks up the
+      //    ids in uploadedPhotos, which is emptied below.)
+      await idbPhotos.deleteMany(photosToForget({ photoIds: discardedPhotoIds, accountId: discardedAccount }, !!session));
+    }).catch(() => { /* can't tell who is signed in → keep everything */ });
+    draftAccountRef.current = user?.id ?? null;
+    albumIdRef.current = newAlbumId();
+    editedAtRef.current = 0;
+    setCloudConflict(null);
+    setCloudGone(false);
+    setCloudNotice(null);
+    setAlbumTitle('');
 
     setAlbumTypeState('standard');
     setAlbumSizeState('8x8');
@@ -2476,6 +3488,8 @@ export function useBuilderState(): BuilderActions {
     setCurrentPageIndex(0);
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
+    // A new album is a new occasion (Step 1 asks it again).
+    writeAlbumTheme('');
     setCoverDesign(DEFAULT_COVER_DESIGN);
     setCoverFrontPage(createCoverPage('8x8'));
     setEditScope('interior');
@@ -2483,17 +3497,31 @@ export function useBuilderState(): BuilderActions {
     // ── Phase 1: Clear cloud state ──
     setCloudSaveStatus('idle');
     setLastSavedAt(null);
-    cloudAlbumIdRef.current = undefined;
     skipCloudLoadRef.current = true;  // Prevent cloud load from overwriting fresh state
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     // ── Clear wizard state so it restarts from step 1 ──
     try { localStorage.removeItem('megy_wizard_state'); } catch { /* ignore */ }
-  }, [idbPhotos]);
+  }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict, setCloudGone, syncRecFor]);
+
+  /* ── Another account's album is not opened for this one ──
+     A shared device: B signs in where A's album was left. It used to open as
+     B's (a new id, A's pages and photos), and a guest's album that checkout
+     had saved to A's account opened for B under A's id, refusing every save
+     (Kraken, 2026-10-05). B gets a fresh album; A's stays in A's account,
+     and its photos stay on the device (reset keeps an account's photos).
+     Before paint, so B never sees A's album. */
+  const draftOwnerRef = useRef<string | null>(getInitialState().accountId ?? null);
+  useLayoutEffect(() => {
+    if (!user?.id) return;
+    const owner = draftOwnerRef.current;
+    draftOwnerRef.current = user.id;
+    if (owner && owner !== user.id) reset();
+  }, [user?.id, reset]);
 
   /* ── Load specific album by ID — SAFE: respects local data ── */
   const cloudLoadCompletedRef = useRef<number>(0);
 
-  const loadAlbum = useCallback(async (albumId: string) => {
+  const loadAlbum = useCallback(async (albumId: string, opts?: { replace?: boolean }) => {
     if (!user?.id) return;
     // NOTE: loadAlbum ALWAYS loads the requested album from cloud.
     // The hasLocalData guard was removed — when user clicks "Continue"
@@ -2501,8 +3529,34 @@ export function useBuilderState(): BuilderActions {
     // localStorage. The guard is kept only in loadFromCloud (auto-load).
     setIsLoadingCloud(true);
     try {
+      // The album on screen is about to be replaced. If it is a DIFFERENT
+      // album with real work in it, push its latest version to the account
+      // first — the draft on this device can be newer than its cloud copy.
+      const onScreen = persistRef.current?.local;
+      const wasOnScreen = albumIdRef.current === albumId;
+      if (albumIdRef.current !== albumId && draftHasContent(onScreen)) {
+        void saveToCloud(user.id, serializeAlbum(), { quiet: true });
+      }
       const albumData = await albumSync.load(user.id, albumId);
+      // SAME album already on screen: which version is newer is decided by
+      // what each side changed since this device's version (albumSyncRecord) —
+      // not by comparing this device's clock with the server's.
+      if (albumData && albumIdRef.current === albumId && draftHasContent(onScreen) && !opts?.replace) {
+        const rec = syncRecFor(albumId);
+        const cloudKey = albumContentKey(toAlbumRow(albumData));
+        const decision = albumData.updatedAt
+          ? decideSync({ rec, cloudUpdatedAt: albumData.updatedAt, cloudKey, localKey: localAlbumKey() })
+          : 'in-sync';
+        if (decision !== 'take-cloud') {
+          if (decision === 'conflict') setCloudConflict({ updatedAt: albumData.updatedAt! });
+          else if (decision === 'ours' && albumData.updatedAt) syncRecRef.current = { albumId, base: albumData.updatedAt, key: cloudKey };
+          setPhase('edit');
+          return;
+        }
+      }
       if (albumData) {
+        setCloudConflict(null);
+        setCloudGone(false);
         if (albumData.sizePreset) {
           setAlbumSizeState(albumData.sizePreset as AlbumSizePreset);
         }
@@ -2530,29 +3584,148 @@ export function useBuilderState(): BuilderActions {
             albumData.photos.map(async (p) => {
               // Try to get the actual file from IndexedDB
               const stored = await idbPhotos.get(p.id);
+              // Not on this device: an empty preview (photoPresence), and what
+              // the cloud knows of the file (photoRelink matches it).
               return {
                 id: p.id,
                 name: p.name ?? 'Untitled',
-                previewUrl: stored?.url ?? p.previewUrl ?? '',
+                previewUrl: stored?.url ?? '',
                 type: stored?.type ?? 'image/jpeg',
-                size: stored?.size ?? 0,
-                width: stored?.width ?? 0,
-                height: stored?.height ?? 0,
+                size: stored?.size ?? p.size ?? 0,
+                width: stored?.width ?? p.width ?? 0,
+                height: stored?.height ?? p.height ?? 0,
+                ...(p.capturedAt != null ? { capturedAt: p.capturedAt } : {}),
+                // Megy's photo check + the customer's keep / leave-out choice.
+                ...(p.check ? { check: p.check } : {}),
+                ...(p.kept ? { kept: true } : {}),
+                ...(p.leftOut ? { leftOut: true } : {}),
               };
             })
           );
           setUploadedPhotos(restored);
         }
-        if (albumData.id) {
-          cloudAlbumIdRef.current = albumData.id;
+        // The album's own front cover. Its photo slots index THIS album's
+        // photos, so an album saved without one (before 0036) gets a fresh
+        // cover, never the one left on screen by the draft on this device.
+        // Reopening the SAME album: the cover on screen is its own — keep it.
+        const sizeForCover = (albumData.sizePreset as AlbumSizePreset) ?? albumSize;
+        const savedCover: AlbumPage | null = storedCoverPage(albumData.coverFront, sizeForCover);
+        if (savedCover) {
+          setCoverFrontPage(savedCover);
+          // Its own uploaded photo, from this device's photo store (coverPhoto).
+          void withLiveCoverPhoto(savedCover, idbPhotos.get).then((live) => {
+            if (live !== savedCover) setCoverFrontPage((p) => (p === savedCover ? live : p));
+          });
         }
+        else if (albumIdRef.current !== albumId) setCoverFrontPage(createCoverPage(sizeForCover));
+        if (albumData.id) {
+          albumIdRef.current = albumData.id;
+          if (albumData.updatedAt) settleSyncRecord(albumData.id, albumData.updatedAt, albumContentKey(toAlbumRow(albumData)));
+        }
+        draftAccountRef.current = user.id;
+        restoreAlbumChoices(albumData, wasOnScreen);
+        setAlbumTitle(albumData.title ?? '');
         setPhase('edit');
       }
     } finally {
       setIsLoadingCloud(false);
       cloudLoadCompletedRef.current = Date.now();
     }
-  }, [user, albumSync, albumSize, albumPages]);
+  }, [user, albumSync, albumSize, albumPages, serializeAlbum, saveToCloud, localAlbumKey, settleSyncRecord, setCloudConflict, setCloudGone, restoreAlbumChoices, syncRecFor]);
+
+  /** Ask the cloud whether THIS album moved on on another device (on opening
+   *  it, on coming back to the app): nothing changed here -> open the newer
+   *  version, and say so; both changed -> ask which to keep (TD-3). */
+  const reconcile = useCallback(async () => {
+    const p = persistRef.current;
+    const albumId = albumIdRef.current;
+    if (!p?.userId || !albumId || reconcilingRef.current || p.isLoadingCloud || cloudConflictRef.current || cloudGoneRef.current) return;
+    reconcilingRef.current = true;
+    let takeCloud = false;
+    try {
+      const rec = syncRecFor(albumId);
+      // One small read first: the version only.
+      const { data: head, error } = await supabase.from('albums').select('updated_at').eq('id', albumId).maybeSingle();
+      if (error) return; // offline: nothing to compare with
+      if (!head) {
+        // Saved from here before, and now gone: deleted on another device.
+        // Asked, not re-created. (Never saved: nothing to compare with.)
+        if (rec?.base && albumIdRef.current === albumId) setCloudGone(true);
+        return;
+      }
+      if (rec?.base && rec.base === (head as { updated_at: string }).updated_at) return;
+      const cloud = await albumSync.load(p.userId, albumId);
+      if (!cloud?.updatedAt || albumIdRef.current !== albumId) return;
+      const cloudKey = albumContentKey(toAlbumRow(cloud));
+      const decision = decideSync({ rec: syncRecFor(albumId), cloudUpdatedAt: cloud.updatedAt, cloudKey, localKey: localAlbumKey() });
+      if (decision === 'ours') {
+        syncRecRef.current = { albumId, base: cloud.updatedAt, key: cloudKey };
+      } else if (decision === 'conflict') {
+        setCloudConflict({ updatedAt: cloud.updatedAt });
+      } else if (decision === 'take-cloud') {
+        takeCloud = true;
+      }
+    } catch {
+      /* can't reach the cloud: keep working; saves still never overwrite */
+    } finally {
+      reconcilingRef.current = false;
+    }
+    if (takeCloud) {
+      await loadAlbum(albumId, { replace: true });
+      setCloudNotice('This album was changed on your other device, so that newer version is open now.');
+    }
+  }, [albumSync, localAlbumKey, loadAlbum, setCloudConflict, setCloudGone, syncRecFor]);
+  useLayoutEffect(() => { reconcileRef.current = reconcile; }, [reconcile]);
+
+  const openNewerVersion = useCallback(async () => {
+    const albumId = albumIdRef.current;
+    if (!albumId) return;
+    setCloudConflict(null);
+    await loadAlbum(albumId, { replace: true });
+  }, [loadAlbum, setCloudConflict]);
+
+  const keepThisVersion = useCallback(async (): Promise<boolean> => {
+    const conflict = cloudConflictRef.current;
+    if (!conflict || !user) return false;
+    setCloudConflict(null);
+    setCloudSaveStatus('saving');
+    // Deliberately onto the other device's version: the customer chose this one.
+    const res = await saveToCloud(user.id, serializeAlbum(), { overwrite: conflict.updatedAt });
+    if (res.success) {
+      cloudDirtyRef.current = false;
+      setCloudSaveStatus('saved');
+      setLastSavedAt(new Date());
+    } else {
+      setCloudSaveStatus(res.conflict ? 'idle' : 'error');
+    }
+    return res.success;
+  }, [user, saveToCloud, serializeAlbum, setCloudConflict]);
+  /** Deleted on another device, and the customer keeps it: a NEW album (new
+   *  id) with what is on screen. The deleted one stays deleted. */
+  const saveAsNewAlbum = useCallback(async (): Promise<boolean> => {
+    if (!user) return false;
+    albumIdRef.current = newAlbumId();
+    syncRecRef.current = null;
+    setCloudGone(false);
+    setCloudSaveStatus('saving');
+    const res = await saveToCloud(user.id, serializeAlbum());
+    if (res.success) {
+      cloudDirtyRef.current = false;
+      setCloudSaveStatus('saved');
+      setLastSavedAt(new Date());
+    } else {
+      cloudDirtyRef.current = true;
+      setCloudSaveStatus('error');
+    }
+    return res.success;
+  }, [user, saveToCloud, serializeAlbum, setCloudGone]);
+  /** Deleted on another device, and the customer lets it go: start fresh. */
+  const letDeletedAlbumGo = useCallback(() => {
+    setCloudGone(false);
+    reset();
+  }, [reset, setCloudGone]);
+  const getCloudConflict = useCallback(() => cloudConflictRef.current, []);
+  const dismissCloudNotice = useCallback(() => setCloudNotice(null), []);
 
   return {
     albumType,
@@ -2561,9 +3734,15 @@ export function useBuilderState(): BuilderActions {
     setAlbumSize: setAlbumSizeState,
     setAlbumType: setAlbumTypeState,
     setSelectedTemplate: setSelectedTemplateState,
+    albumTitle,
+    setAlbumTitle: renameAlbum,
     uploadedPhotos,
     addPhotos,
     removePhoto,
+    photoCheck,
+    leaveOutPhotos,
+    keepPhotos,
+    bringBackPhotos,
     replacePhoto,
     albumPages,
     currentPageIndex,
@@ -2573,13 +3752,17 @@ export function useBuilderState(): BuilderActions {
     deletePage,
     duplicatePage,
     generateAlbum: generateAlbumAction,
+    generating,
     regeneratePage,
     shuffleLayout,
     cycleLayout,
     availableTemplatesForCurrentPage,
+    layoutChangeLoses,
     applyPageLayout,
     layoutPickerOpen,
     setLayoutPickerOpen,
+    resizeAsk,
+    setResizeAsk,
     autoFillSlots,
     clearAllSlots,
     fillSlot,
@@ -2587,6 +3770,11 @@ export function useBuilderState(): BuilderActions {
     setSlotScale,
     setSlotOffset,
     updateSlotGeometry,
+    resetStudioPage,
+    setSlotMask,
+    setSlotLook,
+    updateStickerGeom,
+    removeSticker,
     setQrFill,
     canAddMemoryQr,
     applyMemoryQr,
@@ -2611,7 +3799,9 @@ export function useBuilderState(): BuilderActions {
     deleteTextElement,
     setBoxText,
     finishBoxesWithQuotes,
+    requoteForOccasion,
     setPageBackground,
+    setCoverPhoto,
     setBackgroundCrop,
     setBoxTextOffset,
     updateBackgroundTransform,
@@ -2655,6 +3845,16 @@ export function useBuilderState(): BuilderActions {
      *  teardown (unlike the async cloud save) — used by the mobile back-button
      *  guard so an accidental Back never loses work in the 30s debounce window. */
     saveDraftNow: flushLocal,
+    getAlbumId,
+    cloudConflict,
+    getCloudConflict,
+    cloudNotice,
+    dismissCloudNotice,
+    openNewerVersion,
+    keepThisVersion,
+    cloudGone,
+    saveAsNewAlbum,
+    letDeletedAlbumGo,
     getPhotoUrl,
     user,
     loadAlbum,

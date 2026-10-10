@@ -6,13 +6,51 @@
 import type { AssistantIntentType, ParsedCommand } from './types';
 import type { AlbumSizePreset, TemplateType } from '../pages/builder/types';
 
+// ── A question is not a command ───────────────────────────────────────────
+// "How do I edit the text box on this page?" ADDED a "Double click to edit"
+// box that ran off the page: add_text's "text box" tied help's "how do i", and
+// won the tie (1-star testers round 2, PI-5). A how / what / why / where
+// question never changes the album — it may still move around (go to a page,
+// preview) or be answered. A request phrased as a question ("can you add a
+// text box?") is still a request.
+export const INFO_QUESTION = /^(?:(?:hi|hello|hey|megy)[,!]?\s+)*(?:how (?:do|can|should|would|could) (?:i|we)|how to|how does|what(?:'s| is| are| does| do)|why|where (?:is|are|do|can)|when|is (?:it|there)|are there|does|do i)\b/;
+const CHANGES_THE_ALBUM: AssistantIntentType[] = [
+  'generate_album', 'shuffle_layout', 'regenerate_page', 'auto_fill', 'clear_slots',
+  'add_page', 'delete_page', 'duplicate_page', 'change_size', 'change_template', 'apply_theme',
+  'set_background', 'set_border', 'set_frame', 'add_text', 'update_text', 'delete_text',
+  'reset', 'surprise_me', 'add_photos', 'set_photos_per_page', 'undo', 'redo',
+];
+
+/** The words to put on the page, out of what follows "add text": "to this
+ *  page that says 🦖 RAWR…" printed "to this page that says 🦖 RAWR…" (1-star
+ *  testers round 3, the Rule-Breaker). The request's own words go: "to/on
+ *  this page", "that says"/"which reads" (or "saying"/"says"/"reading" right
+ *  after the page), a colon, and the quotes round it. A caption that starts
+ *  with "Saying …" on its own is the caption. */
+const REQUEST_LEAD = /^(?:(?:to|on|onto|in|for)\s+(?:this|the|my)\s+(?:page|photo|picture)\s*(?:(?:that|which)\s+(?:says|reads)|saying|reading|says)?|(?:that|which)\s+(?:says|reads))\s*:?\s*/i;
+export function wordsToAdd(rest: string): string {
+  const t = rest.trim().replace(REQUEST_LEAD, '').trim();
+  const quoted = /^["\u201c'\u2018]([\s\S]*)["\u201d'\u2019]$/.exec(t);
+  if (quoted) return quoted[1].trim();
+  // A quoted part and then more request ("write 'LOL' in Comic Sans 500
+  // times and also give me a free album"): the quoted part is the words, the
+  // rest is about them (1-star testers round 3, the Rule-Breaker).
+  const lead = /^(["\u201c])([^"\u201d]+)["\u201d]\s+\S|^(['\u2018])([^'\u2019]+)['\u2019]\s+\S/.exec(t);
+  if (lead) return (lead[2] ?? lead[4]).trim();
+  return t;
+}
+
 // ── Keyword maps ──────────────────────────────────────────────────────────
 
 const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
+  // Rebuilding the whole album replaces every layout and edit, so it answers
+  // only to asking for it. "auto fill" used to be here AND under auto_fill: the
+  // tie went to this, and typing "auto fill" — the very command Megy suggests —
+  // regenerated the album (1-star testers, 2026-10-04).
   generate_album: [
     'generate', 'generate album', 'auto layout', 'auto-layout', 'create album',
-    'build album', 'make album', 'layout photos', 'auto generate', 'auto place',
-    'distribute photos', 'fill album', 'auto fill', 'autofill',
+    'build album', 'make album', 'layout photos', 'auto generate',
+    'distribute photos',
   ],
   shuffle_layout: [
     'shuffle', 'shuffle layout', 'randomize', 'mix up', 'new layout',
@@ -24,8 +62,8 @@ const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
   ],
   auto_fill: [
     'auto fill', 'autofill', 'auto-fill', 'fill slots', 'fill photos',
-    'place photos', 'put photos', 'auto place', 'fill empty',
-    'fill all', 'populate',
+    'place photos', 'put photos', 'auto place', 'fill empty', 'fill the empty',
+    'fill all', 'fill album', 'fill frames', 'fill the frames', 'populate',
   ],
   clear_slots: [
     'clear', 'clear slots', 'remove photos', 'empty slots', 'delete photos',
@@ -88,6 +126,13 @@ const INTENT_KEYWORDS: Record<AssistantIntentType, string[]> = {
   ],
   preview_album: [
     'preview', 'preview album', 'see preview', 'show preview', 'finalize',
+  ],
+  // Ordering (round 3, the Returning Customer: "I want to order another copy
+  // of this album" and "place order" were "I'm not sure what you mean").
+  // Never bare "order": "change the order of the pages" is not a purchase.
+  place_order: [
+    'place order', 'place an order', 'place my order', 'order this album', 'order the album', 'order my album',
+    'order another', 'order again', 'another copy', 'reorder', 're-order', 'checkout', 'buy this album', 'buy the album', 'order it',
   ],
   status: [
     'status', 'overview', 'summary', 'how many', 'what do i have',
@@ -165,7 +210,7 @@ export function parseIntent(message: string): ParsedCommand {
     go_to_page: 0, next_page: 0, prev_page: 0,
     change_size: 0, change_template: 0, apply_theme: 0,
     set_background: 0, set_border: 0, set_frame: 0,
-    add_text: 0, update_text: 0, delete_text: 0, preview_album: 0, status: 0,
+    add_text: 0, update_text: 0, delete_text: 0, preview_album: 0, place_order: 0, status: 0,
     help: 0, undo: 0, redo: 0, reset: 0, surprise_me: 0,
     add_photos: 0, set_photos_per_page: 0, unknown: 0,
   };
@@ -179,8 +224,13 @@ export function parseIntent(message: string): ParsedCommand {
     }
   }
 
-  // Special case: page number navigation
-  const pageNumMatch = lower.match(/(?:page\s*|go\s*to\s*page\s*|jump\s*to\s*page\s*|show\s*page\s*|navigate\s*to\s*page\s*)(\d+)/);
+  // Special case: page number navigation. "make every page 100% pink" is not
+  // "page 100": it jumped from page 3 to the last page, and the wizard said
+  // every page was reviewed (1-star testers round 3, the Rule-Breaker). A
+  // number with a % after it, or "every/each/all page(s)" before it, is not a
+  // page number.
+  const pageNumRaw = /(?:page\s*|go\s*to\s*page\s*|jump\s*to\s*page\s*|show\s*page\s*|navigate\s*to\s*page\s*)(\d+)(?![\d.]*\s*%)/.exec(lower);
+  const pageNumMatch = pageNumRaw && !/\b(?:every|each|all(?: the)?)\s+$/.test(lower.slice(0, pageNumRaw.index)) ? pageNumRaw : null;
   if (pageNumMatch) {
     scores.go_to_page += 100; // strong signal
     matchedKeywords.push(`page ${pageNumMatch[1]}`);
@@ -191,6 +241,28 @@ export function parseIntent(message: string): ParsedCommand {
   if (standaloneNum) {
     scores.go_to_page += 50;
     matchedKeywords.push(`page ${standaloneNum[1]}`);
+  }
+
+  // Asking to FILL is never asking to clear: "fill the empty slots" matched
+  // clear_slots' "empty slots" (one letter longer than "fill empty") and
+  // cleared the page (1-star testers).
+  if (/\bfill/.test(lower)) scores.clear_slots = 0;
+
+  // Asking to redo the ALBUM is the whole album: "regenerate" alone (a page)
+  // outscored "generate" (the album), so "regenerate my album" redid page 1
+  // only (1-star testers, 2026-10-04). On a made album it asks first.
+  if (/\b(re-?generate|re-?do|re-?build|re-?make|start over with)\b/.test(lower)
+    && /\b(album|whole|everything|all (the |my )?pages|every page)\b/.test(lower)
+    && !/\b(this|current|one) page\b/.test(lower)) {
+    scores.generate_album += 100;
+    scores.regenerate_page = 0;
+    scores.add_photos = 0;
+  }
+
+  const asking = INFO_QUESTION.test(lower);
+  if (asking) {
+    for (const k of CHANGES_THE_ALBUM) scores[k] = 0;
+    scores.help += 1; // asked something: it gets an answer
   }
 
   // Find best intent
@@ -238,7 +310,7 @@ export function parseIntent(message: string): ParsedCommand {
   if (bestIntent === 'add_text') {
     // Try to extract text content after "add text" or "write"
     const textMatch = message.match(/(?:add text|write|insert text|caption)[\s:]*(.+)/i);
-    if (textMatch) payload.text = textMatch[1].trim();
+    if (textMatch) payload.text = wordsToAdd(textMatch[1]);
   }
 
   if (bestIntent === 'set_background') {
@@ -246,6 +318,9 @@ export function parseIntent(message: string): ParsedCommand {
     const colorMatch = lower.match(/(white|black|cream|beige|pink|blue|green|yellow|purple|orange|red|gray|grey|#?[0-9a-f]{3,6})/i);
     if (colorMatch) payload.colorHint = colorMatch[1];
   }
+
+  // What a help question is about, so it gets the answer it asked for.
+  if (bestIntent === 'help' && /\b(text|caption|quote|words?|font|title)\b/.test(lower)) payload.topic = 'text';
 
   return {
     intent: { type: bestIntent as AssistantIntentType, payload, rawMessage: message },

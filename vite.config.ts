@@ -17,7 +17,8 @@ export default defineConfig(({ command }) => ({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['megy-character.png', 'pwa-192.png', 'pwa-512.png', 'pwa-maskable-192.png', 'pwa-maskable-512.png'],
+      // The shrunk mascot copies (src/lib/megyMascot.ts), not the 1.5 MB master.
+      includeAssets: ['megy-character-*.png', 'pwa-192.png', 'pwa-512.png', 'pwa-maskable-192.png', 'pwa-maskable-512.png'],
       manifest: {
         id: '/',
         name: 'Megy Prints',
@@ -52,6 +53,11 @@ export default defineConfig(({ command }) => ({
         cleanupOutdatedCaches: true,
         // App shell = network-first: when online, always fetch the latest HTML so
         // new asset hashes load right away; fall back to cache only when offline.
+        // vite-plugin-pwa registers a catch-all NavigationRoute → index.html that
+        // runs BEFORE runtimeCaching below. Without this denylist it served the
+        // app shell for QR links (/m/…), /api, and the static pages, so the
+        // exclusions below never took effect for a browser with the SW installed.
+        navigateFallbackDenylist: [/^\/m\//, /^\/api\//, /^\/\.well-known\//, /^\/delete-account\.html/, /^\/auth-native\./],
         runtimeCaching: [
           {
             // App-shell navigations only. CRUCIAL: exclude server-rendered routes
@@ -75,8 +81,12 @@ export default defineConfig(({ command }) => ({
   ],
   server: {
     port: Number(process.env.PORT) || 3000,
+    // The native shell's copied web assets must not trigger reloads.
+    watch: { ignored: ['**/android-native/**', '**/android/**'] },
   },
   optimizeDeps: {
+    // Skip the copied android-native web assets when scanning for deps.
+    entries: ['index.html'],
     include: ['fabric'],
   },
   resolve: {

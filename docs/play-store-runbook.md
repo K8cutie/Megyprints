@@ -60,8 +60,14 @@ While the 14 days run, finish Steps 3–5 (all doable immediately).
 
 - **Privacy policy URL:** `https://megyprints.vercel.app/#/privacy`
 - **Ads:** No ads.
-- **App access:** All functionality available without special access (guest flow
-  works; note the "Continue without an account" path).
+- **App access:** **Not** "available without special access" — the builder is
+  open, but the HARD gates (adding a QR memory, checkout) require sign-in, so a
+  reviewer cannot reach them. Choose *All or some functionality is restricted*
+  and supply a working demo email + password. A review that can't reach checkout
+  fails.
+- **Account deletion URL:** `https://megyprints.vercel.app/delete-account.html`
+  (goes in the Data safety form). Static page, no login wall — deliberately not
+  a HashRouter route, since a `#`-less URL would render the homepage.
 - **Content rating questionnaire:** Utility/Productivity → answers all "No" →
   Everyone.
 - **Target audience:** 18+ (simplest; avoids Families policy overhead).
@@ -75,7 +81,20 @@ While the 14 days run, finish Steps 3–5 (all doable immediately).
   - **Crash logs / diagnostics:** YES — Sentry is wired (`@sentry/react`).
     Declare *Crash logs + Diagnostics, collected, not shared, not linked to
     identity.*
-  - Data deleted on request via shop contact.
+  - **Account deletion:** answer YES to *users can request account deletion* and
+    give the URL above. Both the in-app path (My Profile → Delete my account)
+    and the web URL are required — one is not a substitute for the other.
+
+## Step 4b — Before deploying: one server env var
+
+`api/delete-account.mjs` needs **`SUPABASE_SERVICE_ROLE_KEY`** in Vercel →
+Project → Settings → Environment Variables (all environments). Server-only —
+never prefix it with `VITE_`. Without it the endpoint refuses deletion with
+"Account deletion is misconfigured" rather than deleting an account and leaving
+the customer's photos and videos in storage. Also apply migrations
+`0027_account_deletion` and `0035_account_deletion_clips` (`npm run db:push`
+from main); until 0035 is applied the endpoint refuses every deletion ("Could
+not look up your memory videos") rather than leaving the videos public.
 
 ## Step 5 — Payments note (why no Play Billing)
 
@@ -83,7 +102,15 @@ Megy Prints sells **physical goods** (printed albums). Google Play Billing is
 **not allowed** for physical goods — your own checkout (manual pay today,
 Xendit later) is the required path, and Google takes **0% of sales**.
 
-## Step 6 — THE critical post-upload step (don't skip)
+## Step 6 — ✅ DONE 2026-09-03: Play App Signing cert added + Google-verified
+
+Play signing cert `2E:D4:9B:E6:…:ED:EE:76` is live in assetlinks alongside the
+upload key (commit 4bd420f), and Google's Digital Asset Links API returns BOTH
+statements for com.megyprints.app. Store installs verify full-screen. If a
+device installed the app BEFORE this fix and shows a browser bar: uninstall +
+reinstall from the tester link (verification runs at install time).
+
+Original instructions (for reference):
 
 Play re-signs the app with **Play App Signing**, so the store build's
 certificate is Google's, not the upload key. Until that cert is in assetlinks,
@@ -105,11 +132,64 @@ the installed app opens with a **browser URL bar** (verification fails).
 2. Promote the tested release to **Production** → choose countries
    (start: Philippines) → submit for review (typically hours–3 days).
 
+## 1.1.0 — native shell replaces the TWA (2026-10-01)
+
+**Why:** in the TWA the photo button opened Android's Photo Picker, which stops
+at ~100 photos per pick. The app is now a Capacitor shell (`android-native/`)
+that still loads the live site, but its file chooser opens the Files picker
+instead: no cap, and **⋮ → Select all** in a folder. Same package id
+(`com.megyprints.app`) and same upload key, so it's an ordinary update of the
+same listing. Emulator-proven: 250 twelve-megapixel photos in one pick (~6 s),
+94-page album generated on a 2.5 GB phone.
+
+**Order matters — web first, then the app:**
+1. Merge the web PR and let Vercel deploy. The app needs the web side for Google
+   sign-in (Google blocks sign-in inside an app WebView; the site hands it to a
+   Chrome tab) and for the memory fix (without it, generating from ~250
+   full-size photos runs a phone out of memory).
+2. Check the deploy: `https://megyprints.vercel.app/auth-native.html` must show
+   "You're signed in" (not the app's home page).
+3. Upload `android-native/release/megyprints-1.1.0-code2.aab` (versionCode 2) to
+   the **closed track (Alpha)** → release notes: "Pick as many photos as you
+   like — no more 100-photo limit." Google's rule is 12+ testers opted in for
+   14 days straight; pushing an update to the same track isn't listed as
+   resetting that — keep testers opted in and don't pause the track.
+4. Nothing in App content changes: still INTERNET-only, no ads/analytics SDKs,
+   same data handling.
+
+**Phone check before telling testers (5 min):**
+- Upload → ☰ → Images → a camera folder → ⋮ → Select all → Select (try 150+).
+- Generate the album; flip a few pages — photos show.
+- Log in → Sign in with Google → a Chrome tab opens → pick the account → you
+  land back in the app, signed in.
+- Airplane mode → open the app → "You're offline" page, not a browser error.
+
+**Rebuilding** (JDK 21 at `C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot`;
+signing reads the gitignored `android-native/keystore.properties`):
+
+```bash
+npx cap sync android
+```
+
+```bash
+cd android-native && ./gradlew.bat bundleRelease
+```
+
+Bump `versionCode`/`versionName` in `android-native/app/build.gradle` first.
+For a debug build that loads a local dev server, sync with
+`CAP_SERVER_URL=http://10.0.2.2:5173` — and re-sync WITHOUT it before any
+release build (the release must point at megyprints.vercel.app).
+
+The old `android/` TWA project is kept for reference only; don't build from it.
+
 ## Updating the app later
 
 - **Web changes** (layouts, quotes, checkout…): just deploy to Vercel. Store app
   updates instantly. No Play work at all.
-- **Wrapper changes** (final icon art, app name, splash): bump
+- **Shell changes** (icon, splash, native code): see the 1.1.0 section above —
+  bump versionCode, `bundleRelease`, upload. (The TWA instructions below are
+  historical.)
+- **Wrapper changes (TWA — historical)** (final icon art, app name, splash): bump
   `appVersionCode` (+1) and `appVersion` in `android/twa-manifest.json`, then:
 
 ```bash
@@ -128,6 +208,8 @@ The MEGY cube (`megy icon logo.png`, full-bleed 1021px PNG) is now the icon
 everywhere: Play listing 512, pwa-192/512, maskable pair, launcher mipmaps,
 and the splash (backgrounds moved to icon-edge orange `#F05239`). AAB + APK
 rebuilt and emulator-verified — proof shots `store/emulator-splash-newicon.png`
-and `store/emulator-drawer-newicon.png`. `public/megy-character.png` stays the
-IN-APP mascot only. If the art ever changes again: replace the source file,
-re-run the generator, push, `bubblewrap update && build`, re-upload.
+and `store/emulator-drawer-newicon.png`. The Megy mascot is the IN-APP picture
+only, not an icon: master `store/megy-character-master.png`, shipped as shrunk
+copies `public/megy-character-{128,192,256,384}.png` made by
+`scripts/build-mascot.mjs`. If the icon art ever changes again: replace the
+source file, re-run the generator, push, `bubblewrap update && build`, re-upload.

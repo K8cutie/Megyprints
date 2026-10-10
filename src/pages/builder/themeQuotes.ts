@@ -7,97 +7,11 @@
     ══════════════════════════════════════════════════════════════════════════ */
 
 import type { TemplateType, PageTemplate } from './types';
+import { QUOTE_BANK } from './quoteBank';
 
-export const THEME_QUOTES: Record<TemplateType, string[]> = {
-  wedding: [
-    'Two hearts, one journey',
-    'Forever starts today',
-    'To have and to hold',
-    'Love wrote this story',
-    'Together is a beautiful place',
-    'The beginning of always',
-  ],
-  baby: [
-    'Welcome to the world, little one',
-    'Tiny hands, full hearts',
-    'Our greatest adventure',
-    'Worth the wait',
-    'So small, so loved',
-    'Sweet dreams, little dreamer',
-  ],
-  birthday: [
-    'Another year of wonderful',
-    'Make a wish',
-    'Today we celebrate you',
-    'Cheers to you',
-    'The best is yet to come',
-    'Let the good times roll',
-  ],
-  family: [
-    'Home is where our story begins',
-    'Together is our favorite place',
-    'Love makes a family',
-    'Gathered with grateful hearts',
-    'The days we will remember',
-    'Where life begins and love never ends',
-  ],
-  graduation: [
-    'The tassel was worth the hassle',
-    'Off to chase the dreams',
-    'The future is bright',
-    'And so the adventure begins',
-    'Dream big, work hard',
-    'This is just the beginning',
-  ],
-  travel: [
-    'Adventure awaits',
-    'Collect moments, not things',
-    'Wander often, wonder always',
-    'The journey is the destination',
-    'Make memories everywhere',
-    'Born to explore',
-  ],
-  minimalist: [
-    'Less, but better',
-    'Simply us',
-    'In this moment',
-    'Quiet beauty',
-    'Just enough',
-    'Stillness',
-  ],
-  kids: [
-    'Oh, the fun we had',
-    'Little moments, big memories',
-    'Pure joy',
-    'Adventure buddies',
-    'Growing up wild and free',
-    'Playtime forever',
-  ],
-  vintage: [
-    'Once upon a time',
-    'The good old days',
-    'Timeless memories',
-    'A moment to remember',
-    'Made with love, kept forever',
-    'Some things never fade',
-  ],
-  classic: [
-    'Cherished moments',
-    'Timeless and true',
-    'A story worth telling',
-    'Moments to treasure',
-    'Forever in our hearts',
-    'Some moments last a lifetime',
-  ],
-  baptism: [
-    'Child of God',
-    'Washed in grace',
-    'A new beginning in faith',
-    'Blessed and beloved',
-    'Held in His hands',
-    'Let the little children come',
-  ],
-};
+/** The pre-loaded lines per theme — one list, kept in quoteBank.ts (100 per
+ *  occasion, original or public domain). */
+export const THEME_QUOTES: Record<TemplateType, string[]> = QUOTE_BANK;
 
 /** Pick a themed quote not already used (so the album does not repeat lines).
  *  Falls back to any quote once all have been used. */

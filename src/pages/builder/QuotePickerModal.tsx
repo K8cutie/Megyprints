@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Quote, Loader2, RefreshCw, Trash2 } from 'lucide-react';
-import { fetchThemeQuotes, forgetThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
-
-const THEME_KEY = 'megy-album-theme';
+import { useModalDialog } from '../../lib/useModalDialog';
+import { fetchThemeQuotes, moreThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
+import { readAlbumTheme, writeAlbumTheme, cleanAlbumTheme, MAX_THEME_LENGTH } from '../../lib/albumTheme';
 
 /* Themed quote picker for a caption box. Reads the album's free-text theme
    (asked at setup, stored locally), asks the /api/theme-quotes proxy for short
@@ -19,22 +19,25 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   onClose: () => void;
   mobile?: boolean;
 }) {
+  // Keyboard (KB-2): focus in, Tab kept inside, Escape closes.
+  const panelRef = useModalDialog<HTMLDivElement>(true, onClose);
   // Seeded from the theme picked at setup, so the first render already has it —
   // no setState inside the mount effect.
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem(THEME_KEY) || ''; } catch { return ''; }
-  });
+  const [theme, setTheme] = useState(readAlbumTheme);
   const [quotes, setQuotes] = useState<string[]>([]);
   const [source, setSource] = useState<'ai' | 'curated'>('curated');
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async (t: string, fresh = false) => {
-    const q = t.trim();
-    try { if (q) localStorage.setItem(THEME_KEY, q); } catch { /* ignore */ }
+    // The album's occasion, held to the same length as Step 1 (albumTheme):
+    // an uncapped one broke albums_occasion_chk and every save after it.
+    const q = cleanAlbumTheme(t);
+    if (q) writeAlbumTheme(q);
     setLoading(true);
     try {
-      if (fresh && q) forgetThemeQuotes(q);   // "More lines" → regenerate, don't serve the cache
-      const set = await fetchThemeQuotes(q);
+      // "More lines" → GROW the theme's pool (the album deals from it, so the
+      // held lines are kept — never thrown away and regenerated).
+      const set = fresh && q ? await moreThemeQuotes(q) : await fetchThemeQuotes(q);
       setQuotes(set.quotes);
       setSource(set.source);
     } catch {
@@ -56,20 +59,21 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   const Body = (
     <>
       <div className="px-4 pt-3 pb-2 shrink-0">
-        <label className="text-[11px] text-[#9B8B7A] mb-1 block">Lines written for your album’s theme</label>
+        <label className="text-[11px] text-stone mb-1 block">Lines written for your album’s theme</label>
         <div className="flex gap-2">
           <input
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
+            maxLength={MAX_THEME_LENGTH}
             onKeyDown={(e) => { if (e.key === 'Enter') void load(theme, true); }}
             placeholder="e.g. Marriage, 1st birthday, Palawan trip"
-            className="flex-1 border border-[#E8E8E8] rounded-lg px-3 py-2 text-sm"
+            className="flex-1 border border-line rounded-lg px-3 py-2 text-sm"
           />
           <button
             onClick={() => void load(theme, true)}
             disabled={loading}
             title="More lines"
-            className="px-3 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5"
+            className="px-3 rounded-lg bg-peach text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5"
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
           </button>
@@ -78,8 +82,8 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
 
       <div className="px-4 pb-4 overflow-y-auto">
         {loading && (
-          <div className="py-10 flex flex-col items-center gap-2 text-[#9B9B9B]">
-            <Loader2 size={22} className="animate-spin text-[#E8A598]" />
+          <div className="py-10 flex flex-col items-center gap-2 text-light">
+            <Loader2 size={22} className="animate-spin text-blush-pink" />
             <span className="text-xs">Writing lines for “{theme.trim() || 'your album'}”…</span>
           </div>
         )}
@@ -92,18 +96,18 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
                 onClick={() => { onPick(q); onClose(); }}
                 className={`text-left px-3.5 py-3 rounded-xl border transition active:scale-[0.99] ${
                   q === initial
-                    ? 'border-[#E8A598] bg-[#FDE8E4]'
-                    : 'border-[#EDE7E0] bg-[#FFF8F0] hover:bg-[#FDE8E4]'
+                    ? 'border-blush-pink bg-blush'
+                    : 'border-line-soft bg-cream hover:bg-blush'
                 }`}
               >
-                <span className="text-sm text-[#2D2D2D] font-serif italic leading-snug">{q}</span>
+                <span className="text-sm text-dark font-serif italic leading-snug">{q}</span>
               </button>
             ))}
           </div>
         )}
 
         {!loading && quotes.length === 0 && (
-          <p className="py-8 text-center text-xs text-[#9B9B9B]">
+          <p className="py-8 text-center text-xs text-light">
             Type what your album’s about, then tap refresh.
           </p>
         )}
@@ -123,16 +127,16 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   );
 
   const Header = (
-    <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8] shrink-0">
-      <span className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
-        <Quote size={18} className="text-[#E8A598]" /> {initial ? 'Change quote' : 'Add a quote'}
+    <div className="flex items-center justify-between px-5 py-3 border-b border-line shrink-0">
+      <span className="text-sm font-semibold text-dark flex items-center gap-2">
+        <Quote size={18} className="text-blush-pink" /> {initial ? 'Change quote' : 'Add a quote'}
       </span>
-      <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+      <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
     </div>
   );
 
   const Footer = initial && onRemove ? (
-    <div className="px-5 py-3 border-t border-[#E8E8E8] shrink-0">
+    <div className="px-5 py-3 border-t border-line shrink-0">
       <button onClick={() => { onRemove(); onClose(); }}
         className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
         <Trash2 size={14} /> Remove quote
@@ -143,7 +147,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   if (mobile) {
     return (
       <div className="absolute inset-0 z-[120] bg-black/40 flex items-end" onClick={onClose}>
-        <div className="w-full bg-white rounded-t-2xl flex flex-col max-h-[80%]" onClick={(e) => e.stopPropagation()}>
+        <div ref={panelRef} role="dialog" aria-modal="true" aria-label={'Choose a quote'} tabIndex={-1} className="w-full bg-white rounded-t-2xl flex flex-col max-h-[80%]" onClick={(e) => e.stopPropagation()}>
           {Header}{Body}{Footer}
         </div>
       </div>
@@ -152,7 +156,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
 
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={'Choose a quote'} tabIndex={-1} className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
         {Header}{Body}{Footer}
       </div>
     </div>

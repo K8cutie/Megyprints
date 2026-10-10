@@ -9,6 +9,8 @@
 // renderers expect. Keep it here, in one place, so the two can never drift.
 // ──────────────────────────────────────────────────────────────────────────
 
+import type { AlbumPage, AlbumSizePreset } from './types';
+
 /** Coalesce snake_case / camelCase JSONB fields of a stored page into the
  *  builder AlbumPage field shape. Returns a plain object spread over the
  *  original `p` — callers apply their own trivial defaults (e.g. templateId
@@ -37,6 +39,12 @@ export function normalizeStoredPageFields(p: any): any {
     slotOffsetsX: get('slotOffsetsX', 'slot_offsets_x') ?? [],
     slotOffsetsY: get('slotOffsetsY', 'slot_offsets_y') ?? [],
     slotGeometries: get('slotGeometries', 'slot_geometries') ?? [],
+    studio: !!p.studio,
+    slotMasks: get('slotMasks', 'slot_masks') ?? [],
+    slotLooks: get('slotLooks', 'slot_looks') ?? [],
+    stickers: Array.isArray(p.stickers)
+      ? p.stickers.filter((k: unknown) => !!k && typeof k === 'object' && typeof (k as { uid?: unknown }).uid === 'string' && typeof (k as { pngDataUrl?: unknown }).pngDataUrl === 'string' && !!(k as { geom?: unknown }).geom)
+      : [],
     qrFills: get('qrFills', 'qr_fills') ?? [],
     slotTexts: get('slotTexts', 'slot_texts') ?? [],
     ornamentFills,
@@ -49,5 +57,21 @@ export function normalizeStoredPageFields(p: any): any {
     photos: p.photos ?? [],
     background: p.background ?? { type: 'solid', solid: '#FFFBF7' },
     layout: p.layout ?? 'freeform',
+  };
+}
+
+/** The front cover saved with an album (albums.cover_front, migration 0036)
+ *  back in builder page shape, sized to the album — or null when there is none
+ *  to restore (saved before 0036, or not a page object). Its photo slots index
+ *  THAT album's photo list, so a caller left with null must not fall back to a
+ *  cover from any other album. */
+export function storedCoverPage(raw: unknown, size: AlbumSizePreset): AlbumPage | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const p = normalizeStoredPageFields(raw);
+  return {
+    ...p,
+    id: typeof p.id === 'string' && p.id ? p.id : `cover-front-${Date.now()}`,
+    templateId: (p.templateId ?? p.template_id) ?? undefined,
+    size,
   };
 }

@@ -30,16 +30,19 @@
 // (a normal album makes one call per theme, cached client-side after that).
 
 /** Reject a body larger than this many bytes. A theme is capped at 200 chars
- *  downstream; 2 KB leaves generous headroom for JSON overhead while still
- *  refusing a payload crafted to balloon token spend. */
-const MAX_BODY_BYTES = 2048;
+ *  downstream, and a TOP-UP call also carries an `avoid` list of up to 200
+ *  lines × ≤50 chars (≈11 KB with JSON quoting) so the model doesn't repeat
+ *  lines the album already holds. 16 KB covers that legitimate maximum while
+ *  still refusing a payload crafted to balloon token spend (the endpoint
+ *  re-clamps every field, so an oversized-but-under-cap body buys nothing). */
+const MAX_BODY_BYTES = 16 * 1024;
 
 /** Rolling window for the per-IP counter. */
 const WINDOW_MS = 60_000;
 
-/** Max requests per IP per window. A customer makes ~1 paid call per theme
- *  (the client caches per theme), so 20/min is orders of magnitude above real
- *  use and only bites a scripted loop. */
+/** Max requests per IP per window. A customer makes 1–4 paid calls per theme
+ *  (one per 60-line top-up batch, sized to the album, cached per theme after
+ *  that), so 20/min is far above real use and only bites a scripted loop. */
 const MAX_PER_WINDOW = 20;
 
 /** Stop the counter Map from growing without bound on a long-lived instance. */
@@ -73,8 +76,15 @@ function allowedOrigins() {
 
 /** Inspect a request. Returns null when it may proceed, or
  *  { status, error, retryAfter? } describing how to reject it. Pure w.r.t. the
- *  response — the caller sends the status so this stays easy to reason about. */
-export function guard(req) {
+ *  response — the caller sends the status so this stays easy to reason about.
+ *
+ *  opts.checkOrigin (default true): the origin allow-list only makes sense for
+ *  XHR/fetch callers (the builder's paid proxies). A TOP-LEVEL NAVIGATION — a
+ *  phone camera opening a scanned /m/<code> — carries NO Origin and NO Referer,
+ *  so the allow-list must be skipped for the QR resolver. (Live bug 2026-08-12
+ *  → 2026-09-09: every scan answered 403 "Temporarily unavailable" once
+ *  ALLOWED_ORIGINS was set. Rate + body limits still apply there.) */
+export function guard(req, opts = {}) {
   // 1. body size — check the declared length first (cheap), then the actual body.
   // On Vercel a JSON request arrives ALREADY PARSED as an object, so a raw-string
   // check alone never fires; measure the serialized object too so the cap is real
@@ -89,8 +99,8 @@ export function guard(req) {
     if (n > MAX_BODY_BYTES) return { status: 413, error: 'request body too large' };
   }
 
-  // 2. origin allow-list (opt-in via ALLOWED_ORIGINS).
-  const allow = allowedOrigins();
+  // 2. origin allow-list (opt-in via ALLOWED_ORIGINS; skipped for navigations).
+  const allow = opts.checkOrigin === false ? [] : allowedOrigins();
   if (allow.length) {
     const origin = req.headers.origin || '';
     const referer = req.headers.referer || '';

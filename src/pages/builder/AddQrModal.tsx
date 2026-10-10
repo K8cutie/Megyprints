@@ -1,11 +1,21 @@
-import { useMemo, useState } from 'react';
-import { X, Youtube, Trash2, Loader2, LogIn, Play } from 'lucide-react';
-import type { QrFill } from './types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { X, Youtube, Trash2, Loader2, LogIn, Play, Video, Upload, Clock } from 'lucide-react';
+import type { QrFill, AlbumPage } from './types';
 import { QR_CORNERS, type QrCorner } from './pageTemplates';
 import { mintCode, memoryUrl, generateQrPngDataUrl, validateDestination, videoEmbedInfo } from '../../lib/qrMemory';
 import { tryCreateMemory, updateMemoryDestination } from '../../lib/qrMemories';
+import {
+  hostedMemoriesEnabled, validateClipFile, stageClip, getStagedClip, removeStagedClip, publicClipUrl,
+  listStagedCodes, currentClipQuality, setClipQuality, stagedClipQuality, QUALITY_TARGETS,
+  MAX_CLIP_SECONDS, type ClipExt, type ClipQuality,
+} from '../../lib/memoryClips';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
+import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
+import { getPriceSchedule } from '../../lib/storeSettings';
+import { useModalDialog } from '../../lib/useModalDialog';
+import { useBuilderContext } from './BuilderContext';
+import { eventVideosForAlbum, eventLinkForAlbum, type EventVideoChoice } from '../../lib/eventAlbum';
 
 const CORNER_LABELS: Record<QrCorner, string> = {
   tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right',
@@ -15,14 +25,8 @@ const CORNER_POS: Record<QrCorner, React.CSSProperties> = {
   bl: { bottom: 5, left: 5 }, br: { bottom: 5, right: 5 },
 };
 
-/* Add / edit a QR "living memory" for a template QR slot. New: mints a stable
-   code, generates a print-crisp QR encoding /m/:code, and returns the fill.
-   Edit: keeps the SAME code + printed QR image and only re-points the
-   destination — so the physical album never needs a reprint.
-   When `onCorner` is passed (the full-bleed memory-badge flow), a 4-corner
-   picker lets the user place the QR chip; `corner` is the current selection
-   (null = Auto, face-aware) and `allowAuto` shows the Auto option. */
-export default function AddQrModal({ initial, onSave, onRemove, onClose, corner, onCorner, allowAuto }: {
+export interface AddQrModalProps {
+  /** The fill currently in this box, if any — enables Replace/Remove wording. */
   initial: QrFill | null;
   onSave: (fill: QrFill) => void;
   onRemove: () => void;
@@ -30,16 +34,358 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose, corner,
   corner?: QrCorner | null;
   onCorner?: (corner: QrCorner | null) => void;
   allowAuto?: boolean;
-}) {
+}
+
+/* Add / edit a QR "living memory".
+   HOSTED (the product since 2026-09-09): the customer PICKS A VIDEO from their
+   phone. It is validated (≤60 s, ≤100 MB), previewed, staged locally under a
+   freshly minted code, and the QR is placed immediately — no link, no sign-in.
+   The clip uploads at checkout (where sign-in already lives) and the memory row
+   is created with the paid hosting term. Edit keeps the SAME code + printed QR:
+   replacing the video never needs a reprint.
+   LEGACY (only until migration 0030 is applied — hostedMemoriesEnabled() is
+   false): the previous paste-a-link flow, unchanged. */
+export default function AddQrModal(props: AddQrModalProps) {
+  return hostedMemoriesEnabled() ? <ClipModal {...props} /> : <LegacyLinkModal {...props} />;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HOSTED CLIP
+   ══════════════════════════════════════════════════════════════════════════ */
+function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allowAuto }: AddQrModalProps) {
+  const [file, setFile] = useState<File | null>(null);
+  const [meta, setMeta] = useState<{ ext: ClipExt; durationSec: number | null } | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [stagedUrl, setStagedUrl] = useState<string | null>(null); // local blob of a not-yet-uploaded clip
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Keyboard (KB-2): focus in, Tab kept inside, Escape closes — not mid-shrink.
+  const panelRef = useModalDialog<HTMLDivElement>(true, busy || checking ? undefined : onClose);
+  const schedule = getPriceSchedule();
+  const includedYears = includedHostingYears(schedule ?? {});
+  const hdPrice = hdMemoriesPriceOf(schedule ?? {});
+
+  // Quality tier: offered with the album's FIRST memory, then locked — each
+  // clip is encoded straight to its target, so there is no stored original to
+  // re-encode from once one is staged. null = still counting.
+  const [quality, setQuality] = useState<ClipQuality>(() => currentClipQuality());
+  const [tierLocked, setTierLocked] = useState<boolean | null>(null);
+  // The tier THIS album's kept clips were encoded for, once read (null: none
+  // kept on this phone). New clips for the album follow it, not the
+  // phone-wide setting, which follows whichever album was edited last.
+  const [albumTier, setAlbumTier] = useState<ClipQuality | null>(null);
+  // Locked by THIS album's videos only. The phone now keeps video copies until
+  // their order is paid (0042), so another album's kept copies must not lock
+  // the choice for a new one.
+  // Every host of this dialog is inside the builder (Edit, Preview, Review).
+  const builderCtx = useBuilderContext();
+  const albumPages: AlbumPage[] = builderCtx.albumPages;
+  // An album made from an event (0045): the videos the host picked from what
+  // guests shared, offered next to "Choose a video".
+  const eventVideos = initial ? [] : eventVideosForAlbum(builderCtx.getAlbumId());
+  // Its booking pays for the whole album (₱0 at checkout), so no memory prices
+  // here, and standard quality: the deal's cost to make doesn't count HD.
+  const fromEvent = !!eventLinkForAlbum(builderCtx.getAlbumId());
+  useEffect(() => { if (fromEvent) setQuality('standard'); }, [fromEvent]);
+  const [fetchingEvent, setFetchingEvent] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const fills = albumPages.flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
+    const albumHasClip = fills.some((f) => f?.kind === 'clip');
+    const albumCodes = new Set(fills.filter((f) => !!f).map((f) => f!.code));
+    void listStagedCodes().then(async (codes) => {
+      const mine = codes.filter((c) => albumCodes.has(c));
+      const tier = mine.length ? await stagedClipQuality(mine) : null;
+      if (!alive) return;
+      setTierLocked(albumHasClip || mine.length > 0);
+      setAlbumTier(tier);
+      if (tier) setQuality(tier);
+    });
+    return () => { alive = false; };
+  }, [albumPages]);
+  const offerTier = !initial && tierLocked === false && hdPrice > 0 && !fromEvent;
+
+  // Preview the PICKED file (object URL), revoked on change/unmount.
+  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  // Existing clip: staged locally (not yet uploaded) → play the local blob;
+  // otherwise it is in the bucket → play the public URL. Legacy link → none.
+  useEffect(() => {
+    if (!initial || initial.kind !== 'clip') return;
+    let alive = true;
+    let objUrl: string | null = null;
+    void getStagedClip(initial.code).then((c) => {
+      if (!alive || !c) return;
+      objUrl = URL.createObjectURL(c.blob);
+      setStagedUrl(objUrl);
+    });
+    return () => { alive = false; if (objUrl) URL.revokeObjectURL(objUrl); };
+  }, [initial]);
+  const currentUrl = initial?.kind === 'clip' ? (stagedUrl ?? initial.destination) : null;
+
+  const pick = async (f: File | null) => {
+    setError('');
+    setMeta(null);
+    setFile(null);
+    if (!f) return;
+    setChecking(true);
+    try {
+      const v = await validateClipFile(f);
+      if (!v.ok) { setError(v.error); return; }
+      setFile(f);
+      setMeta({ ext: v.ext, durationSec: v.durationSec });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  // A guest's video: downloaded from the event, then the same checks as a
+  // video picked from the phone.
+  const pickEventVideo = async (v: EventVideoChoice) => {
+    setError('');
+    setFetchingEvent(v.id);
+    try {
+      const res = await fetch(v.url);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const type = blob.type || (v.ext === 'mov' ? 'video/quicktime' : v.ext === 'webm' ? 'video/webm' : 'video/mp4');
+      await pick(new File([blob], `event-${v.id}.${v.ext}`, { type }));
+    } catch {
+      setError('That video couldn’t be downloaded. Check your connection and try again.');
+    } finally {
+      setFetchingEvent(null);
+    }
+  };
+
+  const confirm = async () => {
+    if (!file || !meta) { setError('Choose a video first.'); return; }
+    setError('');
+    setBusy(true);
+    try {
+      if (initial) {
+        // REPLACE: same code, same printed QR. If the old clip already reached
+        // the bucket (a past checkout), the next checkout overwrites it.
+        const prior = await getStagedClip(initial.code);
+        await stageClip({
+          code: initial.code, ext: meta.ext, blob: file, size: file.size,
+          durationSec: meta.durationSec, name: file.name,
+          quality: prior?.quality ?? currentClipQuality(),
+          replace: initial.kind !== 'clip' || !!prior?.uploaded || !prior,
+        });
+        onSave({ ...initial, kind: 'clip', clipExt: meta.ext, destination: publicClipUrl(initial.code, meta.ext) });
+        return;
+      }
+      // NEW: mint a code (re-mint on the astronomically rare local collision),
+      // stage the clip under it, generate the print-crisp QR, place it NOW.
+      let code = mintCode();
+      for (let i = 0; i < 5 && (await getStagedClip(code)); i++) code = mintCode();
+      const memUrl = memoryUrl(code);
+      const qrPngDataUrl = await generateQrPngDataUrl(memUrl);
+      // Lock the album's tier with its first memory (a no-op afterwards).
+      if (offerTier) setClipQuality(quality);
+      await stageClip({
+        code, ext: meta.ext, blob: file, size: file.size, durationSec: meta.durationSec, name: file.name,
+        quality: offerTier ? quality : (albumTier ?? currentClipQuality()),
+      });
+      onSave({
+        code, destination: publicClipUrl(code, meta.ext), qrPngDataUrl, memoryUrl: memUrl,
+        createdAt: Date.now(), kind: 'clip', clipExt: meta.ext,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save the video. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (initial) await removeStagedClip(initial.code);
+    onRemove();
+  };
+
+  const legacyLink = initial && initial.kind !== 'clip' ? initial.destination : null;
+  const mb = file ? (file.size / 1024 / 1024).toFixed(1) : null;
+
+  return (
+    <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="clip-modal-title" tabIndex={-1}
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line shrink-0">
+          <span id="clip-modal-title" className="text-sm font-semibold text-dark flex items-center gap-2">
+            <Video size={18} className="text-blush-pink" /> {initial ? 'Change this memory' : 'Add a video memory'}
+          </span>
+          <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-3 overflow-y-auto">
+          {!initial && (
+            <div className="rounded-xl bg-gradient-to-br from-blush to-warm-white border border-peach/50 px-4 py-3">
+              <p className="text-sm font-bold text-dark">Pick a video of this moment 🎬</p>
+              <p className="text-xs text-medium mt-1 leading-snug">
+                It plays the instant anyone scans the QR printed on this page — no app, no account.
+                Up to {Math.round(MAX_CLIP_SECONDS / 60)} minutes — we shrink it for you, so any phone video works.
+              </p>
+              <p className="text-[11px] text-stone mt-1.5 flex items-center gap-1">
+                <Clock size={11} className="shrink-0" />
+                {fromEvent
+                  ? <span data-testid="qr-event-included">Part of your event deal{includedYears ? ` · live for ${includedYears} years` : ''}</span>
+                  : <>{FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>}
+              </p>
+            </div>
+          )}
+
+          {/* What's in the box now (edit mode) */}
+          {initial && !file && (
+            currentUrl ? (
+              <div className="rounded-xl border border-line bg-[#FAFAFA] p-2">
+                <video src={currentUrl} controls muted playsInline preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
+                <p className="text-[11px] text-medium mt-2 text-center">This is what plays when someone scans this page.</p>
+              </div>
+            ) : legacyLink ? (
+              <div className="rounded-xl border border-line bg-[#FAFAFA] px-3 py-2.5 text-xs text-medium">
+                This memory currently points to a link on{' '}
+                <span className="font-semibold text-cocoa break-all">{safeHost(legacyLink)}</span>.
+                Replace it with a video and it will play right on the page — same QR, no reprint.
+              </div>
+            ) : null
+          )}
+
+          {/* Quality tier - first memory only, then locked for the album */}
+          {offerTier && (
+            <div>
+              <label className="text-xs text-medium mb-1.5 block">Video quality for this album</label>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Memory video quality">
+                {(['standard', 'hd'] as ClipQuality[]).map((q) => {
+                  const active = quality === q;
+                  return (
+                    <button key={q} type="button" role="radio" aria-checked={active}
+                      onClick={() => setQuality(q)}
+                      className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'border-blush-pink bg-blush' : 'border-line hover:border-peach'}`}>
+                      <div className="text-sm font-semibold text-dark">
+                        {q === 'hd' ? 'HD' : 'Standard'} {QUALITY_TARGETS[q].label}
+                      </div>
+                      <div className="text-[11px] text-cocoa">{q === 'hd' ? `+PHP ${hdPrice} once` : 'Included'}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-light mt-1">Applies to every memory in this album, for its whole hosting term.</p>
+            </div>
+          )}
+          {!initial && tierLocked === true && hdPrice > 0 && (
+            <p className="text-[11px] text-stone">
+              Quality: <b className="text-cocoa">{quality === 'hd' ? `HD ${QUALITY_TARGETS.hd.label}` : `Standard ${QUALITY_TARGETS.standard.label}`}</b> - set with your first memory.
+            </p>
+          )}
+
+          {/* Picker */}
+          <input ref={inputRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v" className="hidden"
+            onChange={(e) => void pick(e.target.files?.[0] ?? null)} />
+          <button type="button" onClick={() => inputRef.current?.click()} disabled={checking || busy} data-autofocus
+            className="w-full rounded-xl border-2 border-dashed border-peach bg-cream px-4 py-4 text-sm font-semibold text-cocoa flex items-center justify-center gap-2 disabled:opacity-60">
+            {checking ? <><Loader2 size={16} className="animate-spin" /> Checking your video…</>
+              : <><Upload size={16} /> {file ? 'Choose a different video' : initial ? 'Replace with a new video' : 'Choose a video'}</>}
+          </button>
+          {eventVideos.length > 0 && (
+            <div data-testid="qr-event-videos">
+              <p className="text-xs text-medium mb-1.5">Or one your guests shared:</p>
+              <div className="space-y-1.5">
+                {eventVideos.map((v) => (
+                  <button key={v.id} type="button" onClick={() => void pickEventVideo(v)} disabled={!!fetchingEvent || checking || busy}
+                    className="w-full rounded-lg border border-line px-3 py-2 text-left text-sm text-dark flex items-center gap-2 hover:bg-paper disabled:opacity-60">
+                    {fetchingEvent === v.id ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} className="text-blush-pink" />}
+                    {v.by ? `${v.by}’s video` : 'A guest’s video'}{v.durationS ? ` · ${Math.round(v.durationS)} s` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {error && <p className="text-xs text-red-500" role="alert">{error}</p>}
+
+          {/* Preview of the picked file — the live proof, before anything is saved */}
+          {file && previewUrl && (
+            <div className="rounded-xl border border-line bg-[#FAFAFA] p-2">
+              <video key={previewUrl} src={previewUrl} controls autoPlay muted playsInline preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
+              <p className="text-[11px] text-medium mt-2 flex items-center gap-1 justify-center text-center">
+                <Play size={11} className="text-blush-pink shrink-0" fill="currentColor" />
+                {file.name} · {mb} MB{meta?.durationSec != null ? ` · ${Math.round(meta.durationSec)} s` : ''}
+              </p>
+            </div>
+          )}
+
+          {onCorner && (
+            <div>
+              <label className="text-xs text-medium mb-1.5 block">Which corner should the QR sit in?</label>
+              <div className="flex items-center gap-3">
+                {allowAuto && (
+                  <button type="button" onClick={() => onCorner(null)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition ${corner == null ? 'bg-peach text-white' : 'bg-cream text-cocoa hover:bg-blush'}`}
+                    title="Auto — tuck it into the corner away from the face">
+                    ✨ Auto
+                  </button>
+                )}
+                <div className="relative rounded-lg border-2 border-dashed border-line bg-warm-white shrink-0" style={{ width: 92, height: 68 }}>
+                  {QR_CORNERS.map((c) => {
+                    const active = corner === c;
+                    return (
+                      <button key={c} type="button" onClick={() => onCorner(c)}
+                        aria-label={CORNER_LABELS[c]} title={CORNER_LABELS[c]}
+                        className={`absolute w-6 h-6 rounded-[5px] flex items-center justify-center transition ${active ? 'bg-blush-pink ring-2 ring-peach' : 'bg-white border border-line hover:bg-blush'}`}
+                        style={CORNER_POS[c]}>
+                        {active && <span className="w-2.5 h-2.5 rounded-[2px] bg-white" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="text-[11px] text-light leading-snug">
+                  {corner == null ? 'Auto places it away from the face.' : `Placed in the ${CORNER_LABELS[corner].toLowerCase()} corner.`}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {initial && (
+            <div className="flex items-center gap-3 rounded-lg bg-[#FAFAFA] p-2">
+              <img src={initial.qrPngDataUrl} alt="QR preview" className="w-12 h-12 shrink-0" />
+              <span className="text-[11px] text-light break-all">{initial.memoryUrl}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-line shrink-0">
+          {initial ? (
+            <button onClick={() => void remove()} className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
+              <Trash2 size={14} /> Remove
+            </button>
+          ) : <span />}
+          <button onClick={() => void confirm()} disabled={busy || !file}
+            className="px-5 py-2 rounded-lg bg-peach text-white text-sm font-semibold hover:brightness-105 disabled:opacity-60 flex items-center gap-2">
+            {busy ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : (initial ? 'Use this video' : 'Place QR')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function safeHost(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return 'a link'; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LEGACY LINK FLOW — retired once 0030 is live. Kept verbatim so a client that
+   deploys ahead of the migration behaves exactly as before.
+   ══════════════════════════════════════════════════════════════════════════ */
+function LegacyLinkModal({ initial, onSave, onRemove, onClose, corner, onCorner, allowAuto }: AddQrModalProps) {
   const { user } = useAuth();
   const { openLogin } = useAuthModal();
   const [url, setUrl] = useState(initial?.destination ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const panelRef = useModalDialog<HTMLDivElement>(true, busy ? undefined : onClose);
 
-  // Live proof: the moment a valid YouTube/Vimeo link is entered, embed the real
-  // player so the user WATCHES the exact video their QR will open — no printing,
-  // no scanning needed to confirm it's attached. Autoplays muted (no surprise).
   const embed = useMemo(() => videoEmbedInfo(url), [url]);
   const previewSrc = embed
     ? (embed.src.includes('player.vimeo.com')
@@ -51,9 +397,6 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose, corner,
     setError('');
     const v = validateDestination(url);
     if ('error' in v) { setError(v.error); return; }
-    // A QR memory lives in qr_memories, keyed to the owner (RLS). Without a signed-in
-    // account we CANNOT save a row — and a QR with no row resolves to "Memory not
-    // found" when anyone scans it. So require sign-in and never place a dead QR.
     if (!user) {
       setError('Please sign in first — a QR memory is saved to your Megyprints account so it opens for anyone who scans it (no app needed) and you can re-point it later.');
       return;
@@ -61,26 +404,22 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose, corner,
     setBusy(true);
     try {
       if (initial) {
-        // Relink: keep the SAME code + printed QR image; re-point the destination.
-        // Await it so we only update the local fill once the DB actually persisted.
         const ok = await updateMemoryDestination(initial.code, v.url);
         if (!ok) { setError('Couldn’t save the new link. Please try again.'); return; }
         onSave({ ...initial, destination: v.url });
         return;
       }
-      // New: mint a code, generate the QR encoding /m/:code, and persist. Only place
-      // the QR once the row is CONFIRMED created — otherwise a scan hits a dead code.
       let fill: QrFill | null = null;
       for (let attempt = 0; attempt < 5; attempt++) {
         const code = mintCode();
         const memUrl = memoryUrl(code);
         const qrPngDataUrl = await generateQrPngDataUrl(memUrl);
-        const candidate: QrFill = { code, destination: v.url, qrPngDataUrl, memoryUrl: memUrl, createdAt: Date.now() };
+        const candidate: QrFill = { code, destination: v.url, qrPngDataUrl, memoryUrl: memUrl, createdAt: Date.now(), kind: 'link' };
         const res = await tryCreateMemory(candidate);
-        if (res === 'conflict') continue; // re-mint and try again
+        if (res === 'conflict') continue;
         if (res === 'skip') { setError('Please sign in first to save the QR memory.'); return; }
         if (res === 'error') { setError('Couldn’t save the QR just now. Please try again.'); return; }
-        fill = candidate; // res === 'ok' — row created
+        fill = candidate;
         break;
       }
       if (!fill) { setError('Could not generate a unique code. Please try again.'); return; }
@@ -94,112 +433,60 @@ export default function AddQrModal({ initial, onSave, onRemove, onClose, corner,
 
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E8E8]">
-          <span className="text-sm font-semibold text-[#2D2D2D] flex items-center gap-2">
-            <Youtube size={18} className="text-[#E8A598]" /> {initial ? 'Edit YouTube Memory' : 'Add a YouTube Memory'}
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="link-modal-title" tabIndex={-1}
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+          <span id="link-modal-title" className="text-sm font-semibold text-dark flex items-center gap-2">
+            <Youtube size={18} className="text-blush-pink" /> {initial ? 'Edit YouTube Memory' : 'Add a YouTube Memory'}
           </span>
-          <button onClick={onClose} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+          <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
         </div>
-
         <div className="p-5 space-y-3">
           {!user && (
-            <div className="text-[11px] leading-snug text-[#8B6F47] bg-[#FFF3EC] border border-[#F4C2A1]/60 rounded-lg px-3 py-2">
+            <div className="text-[11px] leading-snug text-cocoa bg-blush border border-peach/60 rounded-lg px-3 py-2">
               <span className="font-semibold">Sign in to add a QR.</span> The link is saved to your account so it opens for anyone who scans it — no app needed — and you can re-point it anytime.
             </div>
           )}
-          <div className="rounded-xl bg-gradient-to-br from-[#FFF3EC] to-[#FDF6F1] border border-[#F4C2A1]/50 px-4 py-3">
-            <p className="text-sm font-bold text-[#2D2D2D]">Add a memory of this event 🎬</p>
-            <p className="text-xs text-[#6B6B6B] mt-1 leading-snug">
-              Paste a YouTube link — it plays the moment anyone scans the QR printed on this page. Your album stops being just photos and starts <span className="font-medium text-[#8B6F47]">reliving the day</span>.
-            </p>
-          </div>
           <div>
-            <label className="text-xs text-[#6B6B6B] mb-1 block">YouTube link</label>
-            <input
-              value={url}
-              onChange={(e) => { setUrl(e.target.value); if (error) setError(''); }}
+            <label className="text-xs text-medium mb-1 block">YouTube link</label>
+            <input value={url} onChange={(e) => { setUrl(e.target.value); if (error) setError(''); }}
               onKeyDown={(e) => { if (e.key === 'Enter') confirm(); }}
-              inputMode="url" autoComplete="off" placeholder="https://youtu.be/…"
-              aria-invalid={!!error}
-              className={`w-full border rounded-lg px-3 py-2 text-sm ${error ? 'border-red-400' : 'border-[#E8E8E8]'}`}
-            />
+              inputMode="url" autoComplete="off" placeholder="https://youtu.be/…" aria-invalid={!!error}
+              className={`w-full border rounded-lg px-3 py-2 text-sm ${error ? 'border-red-400' : 'border-line'}`} />
             {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
           </div>
           {embed && (
-            <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-2">
+            <div className="rounded-xl border border-line bg-[#FAFAFA] p-2">
               <div className={`relative overflow-hidden rounded-lg bg-black mx-auto ${embed.portrait ? 'w-[200px] aspect-[9/16]' : 'w-full aspect-video'}`}>
-                <iframe
-                  key={embed.src}
-                  src={previewSrc}
-                  title="Memory video preview"
-                  className="absolute inset-0 w-full h-full"
-                  allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                  allowFullScreen
-                />
+                <iframe key={embed.src} src={previewSrc} title="Memory video preview" className="absolute inset-0 w-full h-full"
+                  allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
               </div>
-              <p className="text-[11px] text-[#6B6B6B] mt-2 flex items-center gap-1 justify-center text-center">
-                <Play size={11} className="text-[#E8A598] shrink-0" fill="currentColor" />
-                This is exactly what plays when someone scans your QR.
-              </p>
             </div>
           )}
           {onCorner && (
-            <div>
-              <label className="text-xs text-[#6B6B6B] mb-1.5 block">Which corner should the QR sit in?</label>
-              <div className="flex items-center gap-3">
-                {allowAuto && (
-                  <button type="button" onClick={() => onCorner(null)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition ${corner == null ? 'bg-[#F4C2A1] text-white' : 'bg-[#FFF8F0] text-[#8B6F47] hover:bg-[#FDE8E4]'}`}
-                    title="Auto — tuck it into the corner away from the face">
-                    ✨ Auto
-                  </button>
-                )}
-                <div className="relative rounded-lg border-2 border-dashed border-[#E8D9CC] bg-[#FBF6F1] shrink-0" style={{ width: 92, height: 68 }}>
-                  {QR_CORNERS.map((c) => {
-                    const active = corner === c;
-                    return (
-                      <button key={c} type="button" onClick={() => onCorner(c)}
-                        aria-label={CORNER_LABELS[c]} title={CORNER_LABELS[c]}
-                        className={`absolute w-6 h-6 rounded-[5px] flex items-center justify-center transition ${active ? 'bg-[#E8A598] ring-2 ring-[#F4C2A1]' : 'bg-white border border-[#E0D3C6] hover:bg-[#FDE8E4]'}`}
-                        style={CORNER_POS[c]}>
-                        {active && <span className="w-2.5 h-2.5 rounded-[2px] bg-white" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                <span className="text-[11px] text-[#9B9B9B] leading-snug">
-                  {corner == null ? 'Auto places it away from the face.' : `Placed in the ${CORNER_LABELS[corner].toLowerCase()} corner.`}
-                </span>
+            <div className="flex items-center gap-3">
+              {allowAuto && (
+                <button type="button" onClick={() => onCorner(null)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 ${corner == null ? 'bg-peach text-white' : 'bg-cream text-cocoa'}`}>✨ Auto</button>
+              )}
+              <div className="relative rounded-lg border-2 border-dashed border-line bg-warm-white shrink-0" style={{ width: 92, height: 68 }}>
+                {QR_CORNERS.map((c) => (
+                  <button key={c} type="button" onClick={() => onCorner(c)} aria-label={CORNER_LABELS[c]}
+                    className={`absolute w-6 h-6 rounded-[5px] ${corner === c ? 'bg-blush-pink ring-2 ring-peach' : 'bg-white border border-line'}`}
+                    style={CORNER_POS[c]} />
+                ))}
               </div>
             </div>
           )}
-          {initial && (
-            <div className="flex items-center gap-3 rounded-lg bg-[#FAFAFA] p-2">
-              <img src={initial.qrPngDataUrl} alt="QR preview" className="w-12 h-12 shrink-0" />
-              <span className="text-[11px] text-[#9B9B9B] break-all">{initial.memoryUrl}</span>
-            </div>
-          )}
         </div>
-
-        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#E8E8E8]">
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-line">
           {initial ? (
-            <button onClick={onRemove} className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
-              <Trash2 size={14} /> Remove
-            </button>
+            <button onClick={onRemove} className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg"><Trash2 size={14} /> Remove</button>
           ) : <span />}
           {!user ? (
-            <button
-              onClick={openLogin}
-              className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold hover:brightness-105 flex items-center gap-2"
-            >
-              <LogIn size={15} /> Log In to continue
-            </button>
+            <button onClick={openLogin} className="px-5 py-2 rounded-lg bg-peach text-white text-sm font-semibold flex items-center gap-2"><LogIn size={15} /> Log In to continue</button>
           ) : (
-            <button
-              onClick={confirm} disabled={busy}
-              className="px-5 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold hover:brightness-105 disabled:opacity-60 flex items-center gap-2"
-            >
+            <button onClick={confirm} disabled={busy} className="px-5 py-2 rounded-lg bg-peach text-white text-sm font-semibold disabled:opacity-60 flex items-center gap-2">
               {busy ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : (initial ? 'Save' : 'Generate QR')}
             </button>
           )}

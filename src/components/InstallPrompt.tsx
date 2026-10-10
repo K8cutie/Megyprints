@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { Download, X } from 'lucide-react';
+import MegyMascot from './MegyMascot';
 
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState<Event | null>(null);
@@ -44,11 +45,11 @@ export default function InstallPrompt() {
   if (!deferred && !iosHint) return null;
 
   return (
-    <div className="fixed bottom-3 left-3 right-3 z-[200] lg:hidden bg-white rounded-2xl shadow-xl border border-[#F4C2A1]/30 p-3 flex items-center gap-3">
-      <img src="/megy-character.png" alt="Megy" className="w-10 h-10 rounded-xl shrink-0" draggable={false} />
+    <div className="fixed bottom-3 left-3 right-3 z-[200] lg:hidden bg-white rounded-2xl shadow-xl border border-peach/30 p-3 flex items-center gap-3">
+      <MegyMascot size={40} className="rounded-xl shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-[#2D2D2D]">Install Megy Prints</p>
-        <p className="text-[11px] text-[#6B6B6B] leading-snug">
+        <p className="text-sm font-semibold text-dark">Install Megy Prints</p>
+        <p className="text-[11px] text-medium leading-snug">
           {deferred
             ? 'Add it to your home screen for the full app.'
             : <>Tap <span className="font-semibold">Share</span>, then <span className="font-semibold">Add to Home Screen</span>.</>}
@@ -56,11 +57,11 @@ export default function InstallPrompt() {
       </div>
       {deferred && (
         <button onClick={doInstall}
-          className="px-3 py-2 bg-[#F4C2A1] text-white text-xs font-semibold rounded-lg flex items-center gap-1 shrink-0 active:scale-95 transition-transform">
+          className="px-3 py-2 bg-peach text-white text-xs font-semibold rounded-lg flex items-center gap-1 shrink-0 active:scale-95 transition-transform">
           <Download size={14} /> Install
         </button>
       )}
-      <button onClick={close} aria-label="Dismiss" className="text-[#9B9B9B] p-1 shrink-0"><X size={16} /></button>
+      <button onClick={close} aria-label="Dismiss" className="text-light p-1 shrink-0"><X size={16} /></button>
     </div>
   );
 }

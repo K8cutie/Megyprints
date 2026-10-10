@@ -1480,6 +1480,18 @@ export const PAGE_TEMPLATES: PageTemplate[] =
     // an off-orientation photo by a third.
     .concat(TEMPLATES_6X6, TEMPLATES_8X8, TEMPLATES_9X9, TEMPLATES_6X4, TEMPLATES_8X6, TEMPLATES_6X8);
 
+/* BORDERED SINGLES RETIRED (owner, 2026-10-02): "remove the 1 pic page
+   templates that are not full bleed". A single photo now gets a full-bleed
+   page — the full-page single (where video memories go) or a photo + box at
+   its true ratio. Retired, not deleted: albums and orders saved with one keep
+   their template id, so it must still resolve and render; RETIRED_TEMPLATE_IDS
+   keeps it out of generation and the layout picker without touching its
+   albumSizes — migrateRetiredPages only re-lays pages whose size was removed,
+   so a saved bordered page stays exactly as the customer saw it. */
+for (const t of PAGE_TEMPLATES) {
+  if (t.slots.filter((s) => s.kind !== 'qr').length === 1 && !t.fullBleed) RETIRED_TEMPLATE_IDS.add(t.id);
+}
+
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1605,7 +1617,11 @@ export function getTemplatesForAlbum(albumSize: AlbumSizePreset): PageTemplate[]
 export type PhotoOrientation = 'landscape' | 'portrait' | 'square';
 
 export function orientationOfRatio(r: PhotoRatio): PhotoOrientation {
-  const v = RATIOS[r] ?? 1;
+  return orientationOfShape(RATIOS[r] ?? 1);
+}
+
+/** The orientation of a shape given as width / height (a frame, a page). */
+export function orientationOfShape(v: number): PhotoOrientation {
   return v > 1.02 ? 'landscape' : v < 0.98 ? 'portrait' : 'square';
 }
 

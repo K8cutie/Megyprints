@@ -1,7 +1,22 @@
-import { useEffect, useState } from 'react';
-import { QrCode, Copy, Check, Trash2, Loader2, ExternalLink } from 'lucide-react';
-import { listMemories, updateMemoryDestination, removeMemory, type QrMemoryRow } from '../lib/qrMemories';
+import { useEffect, useRef, useState } from 'react';
+import { QrCode, Copy, Check, Trash2, Loader2, ExternalLink, Upload, Clock } from 'lucide-react';
+import { listMemories, updateMemoryDestination, removeMemory, pendingTermsByCode, pendingUntil, type QrMemoryRow, type PendingTerm } from '../lib/qrMemories';
+import { useAuth } from '../lib/authContext';
 import { memoryUrl, generateQrPngDataUrl, validateDestination } from '../lib/qrMemory';
+import { validateClipFile, uploadClip, versionedClipUrl, isHostedClipUrl } from '../lib/memoryClips';
+import { memoryPlaces, memoryDeleteWarning, deleteMemoryEverywhere } from '../lib/memoryRemoval';
+
+const fmtMonth = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+};
+const renewCodeFromHash = (): string | null => {
+  try {
+    const q = window.location.hash.split('?')[1] || '';
+    const c = new URLSearchParams(q).get('renew') || '';
+    return /^[a-z2-9]{4,32}$/.test(c) ? c : null;
+  } catch { return null; }
+};
 
 /* "My Memories" — manage the QR living-memories tied to your printed albums.
    The printed QR never changes; here you re-point where it goes (relink) —
@@ -10,6 +25,18 @@ export default function MyMemories() {
   const [rows, setRows] = useState<QrMemoryRow[] | null>(null);
   const [err, setErr] = useState('');
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [renewCode] = useState<string | null>(() => renewCodeFromHash());
+  // What the last delete took off (the albums and pages its QR came off).
+  const [notice, setNotice] = useState<string | null>(null);
+  // Terms bought with an order not confirmed yet (MMC-1).
+  const { user } = useAuth();
+  const [pending, setPending] = useState<Record<string, PendingTerm>>({});
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    void pendingTermsByCode(user.id).then((p) => { if (alive) setPending(p); });
+    return () => { alive = false; };
+  }, [user]);
 
   useEffect(() => {
     let alive = true;
@@ -29,23 +56,30 @@ export default function MyMemories() {
   }, []);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
+    <div className="max-w-3xl mx-auto px-4 pt-24 pb-10">
       <div className="flex items-center gap-2 mb-1">
-        <QrCode className="text-[#E8A598]" size={22} />
-        <h1 className="font-display text-2xl font-semibold text-[#2D2D2D]">My Memories</h1>
+        <QrCode className="text-blush-pink" size={22} />
+        <h1 className="font-display text-2xl font-semibold text-dark">My Memories</h1>
       </div>
-      <p className="text-sm text-[#6B6B6B] mb-6">
-        Each QR printed in your album points here. Re-point it anytime — <span className="font-medium text-[#8B6F47]">the printed code stays the same</span>, the video updates. No reprint.
+      <p className="text-sm text-medium mb-6">
+        Each QR printed in your album points here. Re-point it anytime — <span className="font-medium text-cocoa">the printed code stays the same</span>, the video updates. No reprint.
       </p>
 
+      {renewCode && (
+        <div className="mb-4 rounded-xl border border-peach bg-blush px-4 py-3 text-sm text-cocoa">
+          <b className="text-dark">Renew memory {renewCode}.</b> Renewals are handled by the Megy Prints team for now —
+          <a href="#/contact" className="underline font-semibold ml-1">message us</a> with this code and the term you want, and we'll extend it. Your video is kept safe meanwhile.
+        </div>
+      )}
       {err && <p className="text-sm text-red-500 mb-4">{err}</p>}
+      {notice && <p className="mb-4 rounded-xl border border-line bg-cream px-4 py-3 text-sm text-cocoa" data-testid="memory-deleted" role="status">{notice}</p>}
       {rows === null && !err && (
-        <div className="flex items-center gap-2 text-sm text-[#9B9B9B] py-10 justify-center">
+        <div className="flex items-center gap-2 text-sm text-light py-10 justify-center">
           <Loader2 size={16} className="animate-spin" /> Loading…
         </div>
       )}
       {rows && rows.length === 0 && (
-        <div className="text-center py-16 text-[#9B9B9B]">
+        <div className="text-center py-16 text-light">
           <QrCode size={40} className="mx-auto mb-3 opacity-40" />
           <p className="text-sm">No QR memories yet. Add one to any album page in the builder.</p>
         </div>
@@ -54,8 +88,12 @@ export default function MyMemories() {
       <div className="space-y-3">
         {rows?.map((row) => (
           <MemoryRow
-            key={row.code} row={row} thumb={thumbs[row.code]}
-            onRemoved={() => setRows((rs) => rs?.filter((r) => r.code !== row.code) ?? null)}
+            key={row.code} row={row} thumb={thumbs[row.code]} highlight={row.code === renewCode} pending={pending[row.code]} userId={user?.id ?? null}
+            onRemoved={(albums) => {
+              setRows((rs) => rs?.filter((r) => r.code !== row.code) ?? null);
+              const where = albums.map((a) => `${a.pages.length === 1 ? `page ${a.pages[0]}` : `pages ${a.pages.join(', ')}`} of \u201c${a.title}\u201d`).join(' and ');
+              setNotice(`Deleted.${where ? ` Its QR came off ${where}.` : ''}`);
+            }}
           />
         ))}
       </div>
@@ -63,14 +101,51 @@ export default function MyMemories() {
   );
 }
 
-function MemoryRow({ row, thumb, onRemoved }: { row: QrMemoryRow; thumb?: string; onRemoved: () => void }) {
+function MemoryRow({ row, thumb, highlight, pending, userId, onRemoved }: {
+  row: QrMemoryRow; thumb?: string; highlight?: boolean; pending?: PendingTerm; userId: string | null;
+  onRemoved: (albums: { title: string; pages: number[] }[]) => void;
+}) {
   const url = memoryUrl(row.code);
   const [dest, setDest] = useState(row.destination);
+  /** What the row points at NOW (updates after a relink/replace without
+   *  mutating the prop). */
+  const [saved, setSaved] = useState(row.destination);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [confirmDel, setConfirmDel] = useState(false);
-  const dirty = dest.trim() !== row.destination;
+  // Delete asks first, saying where the QR is (memoryPlaces): null = not
+  // asking, '' = looking it up.
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [now] = useState(() => Date.now());
+  const dirty = dest.trim() !== saved;
+  const isClip = row.kind === 'clip' || isHostedClipUrl(saved);
+  const expired = !!row.expires_at && new Date(row.expires_at).getTime() < now;
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Hosted clip: REPLACE the video in place — same code, same printed QR.
+  const replaceClip = async (f: File | null) => {
+    if (!f) return;
+    setSaving(true); setMsg(null);
+    try {
+      const v = await validateClipFile(f);
+      if (!v.ok) { setMsg({ text: v.error, ok: false }); return; }
+      await uploadClip(row.code, v.ext, f, { replace: true });
+      // A NEW link every replace (same object, new version): the old link is
+      // cached for a year on every phone that played it, and kept showing the
+      // old video there — and here — after "Video replaced ✓".
+      const next = versionedClipUrl(row.code, v.ext, Date.now());
+      const ok = await updateMemoryDestination(row.code, next);
+      if (!ok) { setMsg({ text: 'Uploaded, but could not re-point the QR. Try again.', ok: false }); return; }
+      setSaved(next); setDest(next);
+      setMsg({ text: 'Video replaced ✓ — same QR, new memory', ok: true });
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'Could not replace the video.', ok: false });
+    } finally {
+      setSaving(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   const save = async () => {
     const v = validateDestination(dest);
@@ -78,7 +153,7 @@ function MemoryRow({ row, thumb, onRemoved }: { row: QrMemoryRow; thumb?: string
     setSaving(true); setMsg(null);
     const ok = await updateMemoryDestination(row.code, v.url);
     setSaving(false);
-    if (ok) { setDest(v.url); row.destination = v.url; setMsg({ text: 'Re-pointed ✓ — same QR, new video', ok: true }); }
+    if (ok) { setDest(v.url); setSaved(v.url); setMsg({ text: 'Re-pointed ✓ — same QR, new video', ok: true }); }
     else setMsg({ text: 'Could not save. Try again.', ok: false });
   };
 
@@ -86,46 +161,104 @@ function MemoryRow({ row, thumb, onRemoved }: { row: QrMemoryRow; thumb?: string
     try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
   };
 
+  const askDelete = async () => {
+    setConfirmDel('');
+    try {
+      setConfirmDel(userId ? memoryDeleteWarning(await memoryPlaces(userId, row.code)) : 'Delete it?');
+    } catch {
+      setConfirmDel('Delete it?');
+    }
+  };
   const del = async () => {
-    if (!confirmDel) { setConfirmDel(true); return; }
-    if (await removeMemory(row.code)) onRemoved();
+    setDeleting(true);
+    try {
+      if (userId) {
+        const r = await deleteMemoryEverywhere(userId, row.code);
+        if (r.ok) onRemoved(r.albums); else setMsg({ text: 'Could not delete. Try again.', ok: false });
+      } else if (await removeMemory(row.code)) onRemoved([]);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
-    <div className="flex gap-4 bg-white rounded-2xl border border-[#F0F0F0] p-4">
-      <div className="shrink-0 w-20 h-20 rounded-lg border border-[#E8E8E8] bg-white flex items-center justify-center overflow-hidden">
+    <div className={`flex gap-4 bg-white rounded-2xl border p-4 ${highlight ? 'border-blush-pink ring-2 ring-peach/50' : 'border-line-soft'}`}>
+      <div className="shrink-0 w-20 h-20 rounded-lg border border-line bg-white flex items-center justify-center overflow-hidden">
         {thumb ? <img src={thumb} alt="QR" className="w-full h-full object-contain" /> : <QrCode size={28} className="text-[#D4D4D4]" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-2">
-          <code className="text-[11px] text-[#9B9B9B] truncate">{url}</code>
-          <button onClick={copy} className="shrink-0 text-[#9B9B9B] hover:text-[#E8A598] p-1" title="Copy link">
-            {copied ? <Check size={14} className="text-[#2E7D4A]" /> : <Copy size={14} />}
+          <code className="text-[11px] text-light truncate">{url}</code>
+          <button onClick={copy} className="shrink-0 text-light hover:text-blush-pink p-1" title="Copy link">
+            {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
           </button>
         </div>
-        <label className="text-[11px] text-[#6B6B6B] block mb-1">Points to</label>
+        {row.expires_at && (
+          <p className={`text-[11px] mb-1.5 flex items-center gap-1 ${expired ? 'text-red-600 font-semibold' : 'text-cocoa'}`}>
+            <Clock size={11} /> {expired ? `Hosting ended ${fmtMonth(row.expires_at)} — renew to bring it back` : `Live until ${fmtMonth(row.expires_at)}`}
+          </p>
+        )}
+        {(() => {
+          const until = pendingUntil(row, pending);
+          return until && (
+            <p className="text-[11px] mb-1.5 text-cocoa" data-testid="memory-pending-term">
+              Your {pending!.years}-year term (to {fmtMonth(until)}) starts once we confirm your payment for order <span className="font-mono">{pending!.orderNumber}</span>.
+            </p>
+          );
+        })()}
+        {isClip ? (
+          <div>
+            <video src={saved} controls muted playsInline preload="metadata" className="w-full max-h-48 rounded-lg bg-black mb-2" />
+            <input ref={fileRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v" className="hidden" onChange={(e) => void replaceClip(e.target.files?.[0] ?? null)} />
+            <button onClick={() => fileRef.current?.click()} disabled={saving}
+              className="px-3 py-2 rounded-lg bg-peach text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Replace video
+            </button>
+          </div>
+        ) : (<>
+        <label className="text-[11px] text-medium block mb-1">Points to</label>
         <div className="flex gap-2">
           <input
             value={dest}
             onChange={(e) => { setDest(e.target.value); if (msg) setMsg(null); }}
             onKeyDown={(e) => { if (e.key === 'Enter' && dirty) save(); }}
             inputMode="url" placeholder="https://youtu.be/…"
-            className="flex-1 min-w-0 border border-[#E8E8E8] rounded-lg px-3 py-2 text-sm"
+            className="flex-1 min-w-0 border border-line rounded-lg px-3 py-2 text-sm"
           />
-          <a href={row.destination} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center px-2 text-[#9B9B9B] hover:text-[#E8A598]" title="Open current"><ExternalLink size={16} /></a>
+          <a href={saved} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center px-2 text-light hover:text-blush-pink" title="Open current"><ExternalLink size={16} /></a>
           <button onClick={save} disabled={!dirty || saving}
-            className="shrink-0 px-3 py-2 rounded-lg bg-[#F4C2A1] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
+            className="shrink-0 px-3 py-2 rounded-lg bg-peach text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
             {saving ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
           </button>
         </div>
-        {msg && <p className={`text-xs mt-1 ${msg.ok ? 'text-[#2E7D4A]' : 'text-red-500'}`}>{msg.text}</p>}
+        </>)}
+        {msg && <p className={`text-xs mt-1 ${msg.ok ? 'text-success' : 'text-red-500'}`}>{msg.text}</p>}
         <div className="flex items-center justify-between mt-2">
-          <span className="text-[11px] text-[#9B9B9B]">{row.scan_count} scan{row.scan_count === 1 ? '' : 's'}</span>
-          <button onClick={del} onBlur={() => setConfirmDel(false)}
-            className={`text-xs flex items-center gap-1 px-2 py-1 rounded-lg ${confirmDel ? 'bg-red-50 text-red-600 font-semibold' : 'text-[#B4B4B4] hover:text-red-500'}`}>
-            <Trash2 size={13} /> {confirmDel ? 'Tap again to delete' : 'Delete'}
-          </button>
+          <span className="text-[11px] text-light">{row.scan_count} scan{row.scan_count === 1 ? '' : 's'}</span>
+          {confirmDel == null && (
+            <button onClick={() => void askDelete()} data-testid="memory-delete"
+              className="text-xs flex items-center gap-1 px-2 py-1 rounded-lg text-[#B4B4B4] hover:text-red-500">
+              <Trash2 size={13} /> Delete
+            </button>
+          )}
         </div>
+        {confirmDel != null && (
+          <div className="mt-2 rounded-xl border border-red-200 bg-red-50 p-3" data-testid="memory-delete-ask">
+            <p className="text-xs text-red-700 leading-relaxed mb-2" data-testid="memory-delete-warning">
+              {confirmDel || 'Checking where this QR is\u2026'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => void del()} disabled={!confirmDel || deleting} data-testid="memory-delete-confirm"
+                className="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold disabled:opacity-40 flex items-center gap-1.5">
+                {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete the video
+              </button>
+              <button onClick={() => setConfirmDel(null)} disabled={deleting} data-testid="memory-delete-keep"
+                className="px-3 py-2 rounded-lg border border-line bg-white text-xs font-semibold text-dark">
+                Keep it
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -4,19 +4,25 @@
     ═══════════════════════════════════════════════════════════════ */
 
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
+import { resolveSlotBox } from './slotGeometry';
+import { slotPhotoRect } from './slotPhotoFit';
+import { applyMask, isMaskId, archRy, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha } from './masks';
+import { applyLookPixels, isLookId } from './looks';
 import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT } from './wordArt';
+import { drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import { getCanvasDimensions } from './layouts';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 import { coverWrapGeometry, insetRect } from './coverGeometry';
 import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedText } from './coverLayout';
+import { withBleed, bleedPx, drawMirroredEdges } from './printBleed';
+import { loadFontFaces } from './fonts';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -94,7 +100,7 @@ async function renderPageManually(
   // enlarged every 750-authored size (6×6/8×8/6×4/11.5×8/9×9) by 750/576 ≈ 1.3×
   // on the printed page vs. what the customer designed. Scale by W/uiW so print
   // matches the WYSIWYG preview for every size.
-  const uiW = getCanvasDimensions(albumSize).width;
+  const { width: uiW, height: uiH } = getCanvasDimensions(albumSize);
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -126,7 +132,10 @@ async function renderPageManually(
     const fills = dedupeSlotFills(page.slotFills ?? []);
 
     for (let i = 0; i < adapted.slots.length; i++) {
-      const slot = adapted.slots[i];
+      // STUDIO: a moved frame prints exactly where the editor + preview show it,
+      // and a mask prints with the same shape module they draw from.
+      const rawMask = page.slotMasks?.[i];
+      const slot = applyMask(resolveSlotBox(adapted.slots[i], page.slotGeometries?.[i]), isMaskId(rawMask) ? rawMask : null);
       const sx = safeX + slot.x * safeW;
       const sy = safeY + slot.y * safeH;
       const sw = slot.width * safeW;
@@ -147,6 +156,7 @@ async function renderPageManually(
       }
       const st = page.slotTexts?.[i] ?? null;
       if (st) {
+        await loadFontFaces([st]); // a quote/text box's own font, never the fallback
         renderSlotText(ctx, st, sx, sy, sw, sh, W, uiW);
         continue;
       }
@@ -157,7 +167,7 @@ async function renderPageManually(
       const photo = photos[photoIdx];
       if (!photo) continue;
 
-      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false, W / uiW);
+      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false, { x: W / uiW, y: H / uiH });
     }
   }
 
@@ -176,18 +186,33 @@ async function renderPageManually(
     }
   }
 
+  // ── STUDIO stickers — free graphics at their centre-based page-fraction
+  // transform, the same draw as a dragged caption-box graphic above. ──
+  for (const k of page.stickers ?? []) {
+    const g = k.geom;
+    if (!g) continue;
+    const cw = g.w * W;
+    const ch = g.h * H;
+    try {
+      const img = await loadImage(k.pngDataUrl);
+      ctx.save();
+      ctx.translate(g.cx * W, g.cy * H);
+      if (g.rot) ctx.rotate((g.rot * Math.PI) / 180);
+      ctx.drawImage(img, -cw / 2, -ch / 2, cw, ch);
+      ctx.restore();
+    } catch { /* graphic failed to load — nothing prints in its place */ }
+  }
+
   // ── Text Elements ──
   // Bound captions (boxIndex) print INSIDE their textbox region; free text keeps
   // its x/y. Each element's chosen font is loaded before drawing so the canvas
   // doesn't silently fall back to the default serif.
   const textTpl = template ? adaptTemplateToOrientation(template, W, H) : null;
   const tm = textTpl ? marginForTemplate(textTpl, textTpl.margin, albumSize, pageIndex, { noBinding: coverMode }) : null;
+  // Every face this page's text uses, loaded up front (any stored family string
+  // — the old double-quote-only match skipped 'Great Vibes, cursive').
+  await loadFontFaces(page.textElements || []);
   for (const text of page.textElements || []) {
-    const fam = text.fontFamily || 'serif';
-    const primary = fam.match(/"([^"]+)"/)?.[1];
-    if (primary) {
-      try { await document.fonts.load(`${(text.fontSize || 24) * (W / uiW)}px "${primary}"`); } catch { /* ignore */ }
-    }
     let slot: { x: number; y: number; w: number; h: number; align?: 'left' | 'center' | 'right' } | null = null;
     if (text.boxIndex != null && textTpl && tm) {
       const ts = textTpl.textSlots?.[text.boxIndex];
@@ -307,17 +332,21 @@ async function renderPageManually(
   // Interior pages downscale to fit the storage cap; a cover PANEL passes
   // maxSide=Infinity (no downscale) so it stays crisp when composited into the
   // wrap, which applies its own MAX_COVER_SIDE cap at the end.
+  // An interior page goes out with its 0.125" bleed on every edge (PI-2): the
+  // page as approved, its edge mirrored outward (printBleed). A cover PANEL is
+  // composited into the wrap, which runs it into the turn-in itself.
+  const page300: HTMLCanvasElement = coverMode ? canvas : withBleed(canvas, bleedPx(PRINT_DPI));
   const MAX_SIDE = opts.maxSide ?? 1800;
-  const scale = Math.min(1, MAX_SIDE / Math.max(W, H));
-  let out: HTMLCanvasElement = canvas;
+  const scale = Math.min(1, MAX_SIDE / Math.max(page300.width, page300.height));
+  let out: HTMLCanvasElement = page300;
   if (scale < 1) {
     out = document.createElement('canvas');
-    out.width = Math.round(W * scale);
-    out.height = Math.round(H * scale);
+    out.width = Math.round(page300.width * scale);
+    out.height = Math.round(page300.height * scale);
     const octx = out.getContext('2d')!;
     octx.imageSmoothingEnabled = true;
     octx.imageSmoothingQuality = 'high';
-    octx.drawImage(canvas, 0, 0, out.width, out.height);
+    octx.drawImage(page300, 0, 0, out.width, out.height);
   }
   return new Promise((resolve) => {
     out.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.82);
@@ -414,7 +443,7 @@ async function renderBackground(
       try {
         const tile = await loadImage(textureDataUri((bg as any).texture, (bg as any).textureColor));
         // TEXTURE_TILE_PX is a DESIGN-px size (the 750-wide editor space), so
-        // the print tile scales by W/uiW — the same factor text and pan use.
+        // the print tile scales by W/uiW — the same factor text and the X pan use.
         // (The old code divided by a stale local size table, printing tiles
         // ~30% larger than the editor showed; worst on 9x9, which the table
         // didn't even list.)
@@ -494,7 +523,9 @@ async function renderSlotOrnament(
 }
 
 /** Render a single slot photo at print resolution.
- *  `printScale` = W/uiW — converts DESIGN-px slot pan offsets to print px. */
+ *  `printScale` = print px per DESIGN px on each axis (W/uiW, H/uiH) — converts
+ *  the slot pan offsets the same way the DOM preview does (its sx, sy), so a
+ *  size whose editor canvas rounds (8×6, 8.5×11 …) pans identically in both. */
 async function renderSlotPhoto(
   ctx: CanvasRenderingContext2D,
   photo: UploadedPhoto,
@@ -506,7 +537,7 @@ async function renderSlotPhoto(
   page: AlbumPage,
   slotIndex: number,
   fullBleed: boolean,
-  printScale: number,
+  printScale: { x: number; y: number },
 ) {
   // Load original photo at full resolution
   let img: HTMLImageElement;
@@ -525,7 +556,7 @@ async function renderSlotPhoto(
   const effBorderStyle = page.photoBorderStyle ?? 'solid';
   const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
   // Frames mirror Fabric: suppressed for full-bleed pages and the heart shape.
-  const drawFrame = effFrameStyle !== 'none' && slot.shape !== 'heart';
+  const drawFrame = effFrameStyle !== 'none' && slot.shape !== 'heart' && !slot.masked;
   const isRect = slot.shape !== 'circle' && slot.shape !== 'oval';
 
   // ── Decorative mat (matte / polaroid) — drawn BEHIND the photo, OUTSIDE the
@@ -595,44 +626,57 @@ async function renderSlotPhoto(
     ctx.translate(-(sx + sw / 2), -(sy + sh / 2));
   }
 
-  // Apply slot transform (scale/offset from user editing)
-  const slotScale = page.slotScales?.[slotIndex] ?? 1;
-  const slotOffsetX = page.slotOffsetsX?.[slotIndex] ?? 0;
-  const slotOffsetY = page.slotOffsetsY?.[slotIndex] ?? 0;
+  // Cover-fit × the user's zoom, centred, then the user's pan — the ONE fit the
+  // editor and the preview draw with too (slotPhotoFit), held to the photo's
+  // overflow so a pan can't uncover the slot. Offsets are stored in DESIGN px,
+  // so print converts them with printScale. (The old `* (sw / 100)` treated
+  // them as percent-of-slot, printing a panned photo displaced ~2.5–7×
+  // further than designed.)
+  const fit = slotPhotoRect(
+    { w: img.naturalWidth, h: img.naturalHeight },
+    { w: sw, h: sh },
+    page.slotScales?.[slotIndex],
+    { x: (page.slotOffsetsX?.[slotIndex] ?? 0) * printScale.x, y: (page.slotOffsetsY?.[slotIndex] ?? 0) * printScale.y },
+  );
+  const drawX = sx + fit.x;
+  const drawY = sy + fit.y;
+  const drawW = fit.w;
+  const drawH = fit.h;
 
-  // Cover-fit calculation at print resolution
-  const imgAspect = img.naturalWidth / img.naturalHeight;
-  const slotAspect = sw / sh;
-  let drawW: number, drawH: number;
-  if (imgAspect > slotAspect) {
-    drawH = sh;
-    drawW = drawH * imgAspect;
+  const rawLook = page.slotLooks?.[slotIndex];
+  const look = isLookId(rawLook) ? rawLook : null;
+  if (slot.feather || slot.texture || look) {
+    // Bake: draw the photo into its own box, apply the look to the pixels
+    // (the same matrices the DOM's CSS filter uses), then the soft edge or the
+    // textured edge on the alpha — exactly what the Fabric editor shows.
+    const t = document.createElement('canvas');
+    t.width = Math.max(1, Math.ceil(sw));
+    t.height = Math.max(1, Math.ceil(sh));
+    const tc = t.getContext('2d');
+    if (tc) {
+      tc.drawImage(img, drawX - sx, drawY - sy, drawW, drawH);
+      if (look) applyLookPixels(tc, 0, 0, t.width, t.height, look);
+      if (slot.feather) featherAlpha(tc, 0, 0, t.width, t.height, slot.feather, slot.featherSide);
+      if (slot.texture) {
+        try {
+          const [tex, overlay] = await Promise.all([loadMaskTexture(slot.texture), loadMaskOverlay(slot.texture)]);
+          applyTextureAlpha(tc, tex, 0, 0, t.width, t.height, overlay);
+        }
+        catch { /* texture missing — print the plain photo rather than nothing */ }
+      }
+      ctx.drawImage(t, sx, sy);
+    } else {
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    }
   } else {
-    drawW = sw;
-    drawH = drawW / imgAspect;
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
   }
-
-  // Apply user zoom
-  if (slotScale !== 1) {
-    drawW *= slotScale;
-    drawH *= slotScale;
-  }
-
-  // Center and apply the user's pan. Offsets are stored in DESIGN px (the
-  // Fabric editor writes canvas px; the DOM preview consumes them × its own
-  // display scale), so print converts with the same W/uiW factor as text.
-  // The old `* (sw / 100)` treated them as percent-of-slot, printing a panned
-  // photo displaced ~2.5–7× further than designed (error grew with slot size).
-  const drawX = sx + sw / 2 - drawW / 2 + slotOffsetX * printScale;
-  const drawY = sy + sh / 2 - drawH / 2 + slotOffsetY * printScale;
-
-  ctx.drawImage(img, drawX, drawY, drawW, drawH);
 
   // Draw the photo frame. The theme-baked page frame overrides the per-slot
   // template border when present; falls back to the slot border for old albums.
   // The `rounded` decorative frame thickens a thin border to 3px (matches
   // Fabric's max(borderWidth,3)) so the soft corner reads.
-  let frameWidth = fullBleed ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
+  let frameWidth = fullBleed || slot.masked ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
   if (drawFrame && effFrameStyle === 'rounded') frameWidth = Math.max(frameWidth ?? 0, 3);
   if (frameWidth) {
     ctx.strokeStyle = frameColor;
@@ -688,6 +732,12 @@ function applySlotClip(
 ) {
   ctx.beginPath();
 
+  // Path shapes: the ONE generator (masks.ts), clipped as a Path2D.
+  if (isPathShape(slot.shape)) {
+    ctx.clip(new Path2D(maskPathD(slot.shape, x, y, w, h)));
+    return;
+  }
+
   switch (slot.shape) {
     case 'circle': {
       const size = Math.min(w, h);
@@ -709,17 +759,18 @@ function applySlotClip(
       break;
     }
     case 'star': {
-      const cx = x + w / 2;
-      const cy = y + h / 2;
-      const outerR = Math.min(w, h) / 2;
-      const innerR = outerR * 0.4;
-      for (let i = 0; i < 10; i++) {
-        const radius = i % 2 === 0 ? outerR : innerR;
-        const angle = (i * Math.PI) / 5 - Math.PI / 2;
-        const px = cx + radius * Math.cos(angle);
-        const py = cy + radius * Math.sin(angle);
-        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-      }
+      // ONE star generator for the three renderers (masks.ts).
+      const pts = starPoints(x + w / 2, y + h / 2, Math.min(w, h) / 2);
+      pts.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+      ctx.closePath();
+      break;
+    }
+    case 'arch': {
+      const ry = archRy(w, h);
+      ctx.moveTo(x, y + h);
+      ctx.lineTo(x, y + ry);
+      ctx.ellipse(x + w / 2, y + ry, w / 2, ry, 0, Math.PI, Math.PI * 2);
+      ctx.lineTo(x + w, y + h);
       ctx.closePath();
       break;
     }
@@ -775,7 +826,7 @@ function renderTextElement(
     // break-word) and clips (overflow:hidden). Printing one unwrapped line let
     // any caption longer than the box run off the page edge — which a themed
     // QUOTE, being longer than a typical caption, hits routinely.
-    const pad = slot.w * 0.04;
+    const pad = slot.w * CAPTION_PAD_X;
     const cx = align === 'left' ? slot.x + pad : align === 'right' ? slot.x + slot.w - pad : slot.x + slot.w / 2;
     const cy = slot.y + slot.h / 2;
     ctx.save();
@@ -840,7 +891,7 @@ function renderSlotText(
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
 
-  const pad = w * 0.04;
+  const pad = w * CAPTION_PAD_X;
   const cx = align === 'left' ? x + pad : align === 'right' ? x + w - pad : x + w / 2;
   const cy = y + h / 2;
 
@@ -977,12 +1028,21 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
     ctx.fillRect(0, 0, splitX, H);
     ctx.fillStyle = frontBg;
     ctx.fillRect(splitX, 0, W - splitX, H);
+    // The spine repeats the front title in its font; the back has the brand mark.
+    await loadFontFaces([...branded.texts.map((t) => t.style), spine.text]);
     // Reserved back panel: the brand lockup only — no customer artwork.
     for (const t of branded.texts) drawCoverText(ctx, t);
     // Front panel page render, drawn edge-to-edge into its trim rect.
     const frontImg = await renderCoverPanelImage(coverFront, photos, albumSize);
     const { front, spine: spineRect } = geom.panels;
     ctx.drawImage(frontImg, front.x, front.y, front.width, front.height);
+    // The front carries on past its trim — top, bottom and the outer edge —
+    // through the turn-in (hardcover, 0.625") or the bleed (softcover, 0.125"),
+    // mirrored: a photo cover stopped at the 8×8 panel and the paper that wraps
+    // round the board was cream (PI-3). The hinge side keeps the cover colour.
+    drawMirroredEdges(ctx, frontImg, frontImg.naturalWidth || frontImg.width, frontImg.naturalHeight || frontImg.height,
+      { x: front.x, y: front.y, w: front.width, h: front.height },
+      { top: front.y, bottom: H - (front.y + front.height), right: W - (front.x + front.width), left: 0 });
     // Spine: fill + the derived front-page text, rotated up the spine.
     ctx.fillStyle = spine.bg;
     ctx.fillRect(spineRect.x, spineRect.y, spineRect.width, spineRect.height);
@@ -1000,6 +1060,7 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
     ctx.fillRect(0, 0, splitX, H);
     ctx.fillStyle = panelBg('front');
     ctx.fillRect(splitX, 0, W - splitX, H);
+    await loadFontFaces(layout.panels.flatMap((p) => p.texts.map((t) => t.style)));
 
     for (const p of layout.panels) {
       if (p.bg) {

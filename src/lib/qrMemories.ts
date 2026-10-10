@@ -12,6 +12,17 @@ export interface QrMemoryRow {
   scan_count: number;
   created_at: string;
   updated_at: string;
+  /** 'clip' = hosted video (0030); 'link' = legacy pasted link. */
+  kind?: 'link' | 'clip';
+  /** End of the paid hosting term (clips only); null = no expiry. */
+  expires_at?: string | null;
+}
+
+/** ISO expiry for a term bought now. */
+export function expiryForTerm(years: number, from: Date = new Date()): string {
+  const d = new Date(from.getTime());
+  d.setUTCFullYear(d.getUTCFullYear() + years);
+  return d.toISOString();
 }
 
 async function currentUserId(): Promise<string | null> {
@@ -27,7 +38,7 @@ export async function tryCreateMemory(fill: QrFill): Promise<'ok' | 'conflict' |
   if (!uid) return 'skip';
   const { error } = await supabase
     .from('qr_memories')
-    .insert({ code: fill.code, user_id: uid, destination: fill.destination });
+    .insert({ code: fill.code, user_id: uid, destination: fill.destination, kind: fill.kind ?? 'link' });
   if (!error) return 'ok';
   if ((error as { code?: string }).code === '23505') return 'conflict'; // unique_violation
   console.error('QR memory create failed:', error.message);
@@ -57,10 +68,61 @@ export async function updateMemoryDestination(code: string, destination: string)
 }
 
 /** List the signed-in owner's memories (for the management screen). */
+/** A longer hosting term bought with an order that isn't confirmed yet: the
+ *  memory still shows the included term until the shop marks the order paid
+ *  (apply_order_hosting_term). My Memories said "Live until 2031" to someone
+ *  who had just paid for 10 years, with no word that it changes (round 2, MMC-1). */
+export interface PendingTerm { years: number; orderNumber: string }
+
+/** The codes in an order's frozen album, as apply_order_hosting_term reads them. */
+export function memoryCodesInSnapshot(snapshot: unknown): string[] {
+  const pages = (snapshot as { pages?: unknown[] } | null)?.pages;
+  if (!Array.isArray(pages)) return [];
+  const codes = new Set<string>();
+  for (const p of pages as Record<string, unknown>[]) {
+    for (const f of [...((p?.qrFills ?? p?.qr_fills ?? []) as unknown[]), ...((p?.textSlotQr ?? p?.text_slot_qr ?? []) as unknown[])]) {
+      const code = (f as { code?: unknown } | null)?.code;
+      if (typeof code === 'string' && /^[a-z2-9]{4,32}$/.test(code)) codes.add(code);
+    }
+  }
+  return [...codes];
+}
+
+/** code → the term waiting on payment, from the customer's own unpaid orders. */
+export async function pendingTermsByCode(userId: string): Promise<Record<string, PendingTerm>> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('order_number, hosting_years, album_snapshot')
+    .eq('user_id', userId)
+    .eq('status', 'pending_payment')
+    .not('hosting_years', 'is', null);
+  if (error || !data) return {};
+  const out: Record<string, PendingTerm> = {};
+  for (const o of data as { order_number: string; hosting_years: number | null; album_snapshot: unknown }[]) {
+    if (!o.hosting_years) continue;
+    for (const code of memoryCodesInSnapshot(o.album_snapshot)) {
+      if (!out[code] || out[code].years < o.hosting_years) out[code] = { years: o.hosting_years, orderNumber: o.order_number };
+    }
+  }
+  return out;
+}
+
+/** When the paid term will end (the memory's start + the years bought), if
+ *  that is later than what it shows now — else null (already applied, or no
+ *  longer than the included term). */
+export function pendingUntil(row: Pick<QrMemoryRow, 'created_at' | 'expires_at' | 'kind'>, pending: PendingTerm | undefined): string | null {
+  if (!pending || row.kind !== 'clip') return null;
+  const start = new Date(row.created_at);
+  if (Number.isNaN(start.getTime())) return null;
+  const until = new Date(start.getTime());
+  until.setUTCFullYear(until.getUTCFullYear() + pending.years);
+  const now = row.expires_at ? new Date(row.expires_at).getTime() : 0;
+  return until.getTime() > now + 24 * 3600 * 1000 ? until.toISOString() : null;
+}
 export async function listMemories(): Promise<QrMemoryRow[]> {
   const { data, error } = await supabase
     .from('qr_memories')
-    .select('code,destination,title,scan_count,created_at,updated_at')
+    .select('code,destination,title,scan_count,created_at,updated_at,kind,expires_at')
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return data ?? [];
@@ -75,13 +137,28 @@ export async function removeMemory(code: string): Promise<boolean> {
 /** Reliability belt: ensure every QR in an album has a resolvable row (called at
  *  checkout, where the user is signed in). INSERT-only (ignoreDuplicates) so it
  *  never clobbers a later relink. Best-effort. */
-export async function ensureMemoriesForFills(fills: (QrFill | null)[]): Promise<void> {
+export async function ensureMemoriesForFills(
+  fills: (QrFill | null)[],
+  /** The INCLUDED hosting term — stamped as expires_at on CLIP rows (links
+   *  never expire: they cost nothing to host). RLS rejects anything longer;
+   *  the paid term is applied by the operator (apply_order_hosting_term) once
+   *  the order is marked paid. Absent = no expiry (legacy). */
+  opts: { hostingYears?: number | null } = {},
+): Promise<boolean> {
   const uid = await currentUserId();
-  if (!uid) return;
+  if (!uid) return false;
+  const expiresAt = opts.hostingYears ? expiryForTerm(opts.hostingYears) : null;
   const rows = fills
     .filter((f): f is QrFill => !!f)
-    .map((f) => ({ code: f.code, user_id: uid, destination: f.destination }));
-  if (!rows.length) return;
+    .map((f) => ({
+      code: f.code,
+      user_id: uid,
+      destination: f.destination,
+      kind: f.kind ?? 'link',
+      expires_at: f.kind === 'clip' ? expiresAt : null,
+    }));
+  if (!rows.length) return true;
   const { error } = await supabase.from('qr_memories').upsert(rows, { onConflict: 'code', ignoreDuplicates: true });
-  if (error) console.error('QR memories ensure failed:', error.message);
+  if (error) { console.error('QR memories ensure failed:', error.message); return false; }
+  return true;
 }

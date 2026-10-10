@@ -7,8 +7,10 @@
    the spine auto-follows the front title, and the BACK is reserved for the
    Megy Prints mark (coverLayout.deriveBrandedBack) — no Back face here.
 
-   • Background — reuses the Step-3 picker in photo-only mode. Setting an
-     Image here IS how you put a photo on the cover.
+   • Background — tapping it opens the file picker (owner, 2026-10-04: no
+     separate "Upload Custom Image" box). The album's own photos are listed
+     under it once there are some. Setting an image here IS how you put a
+     photo on the cover.
    • Text — the cover title, typed inline (+ font / colour).
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -20,9 +22,14 @@ import BackgroundDesigner from './BackgroundDesigner';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
-import { deriveSpine } from './coverLayout';
-import { FONTS, COLORS } from './MobileTextEditor';
-import { DEFAULT_COVER, type AlbumPage, type TextStyle } from './types';
+import { deriveSpine, measureSpineText, SPINE_DARK_INK, type SpineInfo } from './coverLayout';
+import { COLORS } from './MobileTextEditor';
+import { DEFAULT_TITLE_FONT } from './fonts';
+import { FontSelect } from './FontList';
+import { DEFAULT_COVER, type AlbumPage } from './types';
+import { medianSharpness, photoQuality } from '../../lib/photoCheck';
+import { coverTitleFit } from './textFit';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 const SPINE_STRIP_W = 26;
 type CoverTab = 'background' | 'text';
@@ -36,6 +43,8 @@ interface Props {
 
 export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }: Props) {
   const b = useBuilderContext();
+  // As a dialog (not the wizard step): focus in, Tab kept inside, Escape closes (KB-2).
+  const panelRef = useModalDialog<HTMLDivElement>(mode === 'modal', onClose);
   const { setEditScope, coverFront, albumSize, albumPages, uploadedPhotos } = b;
 
   // Own the cover scope for the editor's lifetime; always restore 'interior' on
@@ -47,8 +56,27 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
   const page: AlbumPage = coverFront;
 
+  // The album's photos for the cover: best shots first (Megy's photo check),
+  // left-out ones not offered.
+  const coverPhotos = useMemo(() => {
+    const live = uploadedPhotos.filter((p) => !p.leftOut);
+    const median = medianSharpness(live);
+    return [...live].sort((a, b) => photoQuality(b, median) - photoQuality(a, median));
+  }, [uploadedPhotos]);
+
   const [tab, setTab] = useState<CoverTab>('background');
   const activeTab: CoverTab = tab;
+
+  // The Background button opens the file picker straight away; the chosen
+  // photo becomes the cover background, kept on the device so it is still
+  // there after the app is closed (setCoverPhoto → coverPhoto).
+  const bgFileRef = useRef<HTMLInputElement>(null);
+  const onBgFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // the same photo can be picked again
+    if (!file) return;
+    void b.setCoverPhoto(file);
+  };
 
   // Live preview panel size — kept modest so the inline controls fit below it.
   const [dims, setDims] = useState({ w: 200, h: 200 });
@@ -77,7 +105,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const titleEl = page.textElements?.find((t) => t.boxIndex === 0);
   const title = {
     text: titleEl?.text ?? '',
-    fontFamily: titleEl?.fontFamily ?? FONTS[6].family,
+    fontFamily: titleEl?.fontFamily ?? DEFAULT_TITLE_FONT,
     color: titleEl?.color ?? '#2D2D2D',
     bold: titleEl?.bold ?? true,
     italic: titleEl?.italic ?? false,
@@ -92,6 +120,9 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   // `title` snapshot here would make two edits fired before a re-render clobber
   // each other (last write wins), e.g. Bold then Italic in quick succession.
   const updateTitle = (patch: Partial<typeof title>) => b.setBoxText(0, { text: title.text, ...patch });
+  // The front's title box clips what doesn't fit: say so as it's typed, the
+  // way a page's text box does, with the size that fits.
+  const titleFit = useMemo(() => coverTitleFit(coverFront, albumSize), [coverFront, albumSize]);
 
   // ── Cover photo crop: drag the preview to reposition, slider to zoom. A cover
   //    is one fixed-aspect panel, so a photo can't be ratio-matched to it — the
@@ -168,13 +199,13 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
   const onTextDragEnd = (e: React.PointerEvent) => { e.stopPropagation(); textDragRef.current = null; };
 
   const header = (
-    <div className="flex items-center justify-between px-5 h-14 border-b border-[#EADFD3] shrink-0">
+    <div className="flex items-center justify-between px-5 h-14 border-b border-line shrink-0">
       <div>
-        <h2 className="font-display text-lg font-semibold text-[#2D2D2D]">Design your cover</h2>
-        <p className="text-[11px] text-[#9B8B7A] -mt-0.5">Style the front — the spine follows your title</p>
+        <h2 className="font-display text-lg font-semibold text-dark">Design your cover</h2>
+        <p className="text-[11px] text-stone -mt-0.5">Style the front — the spine follows your title</p>
       </div>
       {mode === 'modal' && (
-        <button onClick={onClose} className="p-2 rounded-full hover:bg-black/5 text-[#6B6B6B]"><X size={20} /></button>
+        <button onClick={onClose} className="p-2 rounded-full hover:bg-black/5 text-medium"><X size={20} /></button>
       )}
     </div>
   );
@@ -235,17 +266,18 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
         return (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => { setTab(t.key); if (t.key === 'background') bgFileRef.current?.click(); }}
             className={`py-2 px-3 rounded-xl border-2 text-sm font-semibold transition-all active:scale-[0.98] ${
               open
-                ? 'bg-[#F4C2A1] text-white border-[#F4C2A1] shadow'
-                : 'bg-white text-[#2D2D2D] border-[#F4C2A1]/40 hover:border-[#F4C2A1] hover:bg-[#F4C2A1]/10'
+                ? 'bg-peach text-white border-peach shadow'
+                : 'bg-white text-dark border-peach/40 hover:border-peach hover:bg-peach/10'
             }`}
           >
             {t.label}
           </button>
         );
       })}
+      <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={onBgFile} />
     </div>
   );
 
@@ -255,9 +287,9 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
         <div className="space-y-3">
           {/* Crop controls — only meaningful once a photo is on the cover. */}
           {bgIsImage && (
-            <div className="rounded-xl border border-[#E4D8C9] bg-white px-3 py-2.5">
+            <div className="rounded-xl border border-line bg-white px-3 py-2.5">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] font-medium text-[#9B8B7A]">Zoom</span>
+                <span className="text-[11px] font-medium text-stone">Zoom</span>
                 <button
                   onClick={() => b.setBackgroundCrop({ focusX: 0.5, focusY: 0.5, zoom: 1 })}
                   className="text-[11px] font-medium text-[#C56B4E] hover:underline"
@@ -272,48 +304,85 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
                 step={0.01}
                 value={bgZoom}
                 onChange={(e) => b.setBackgroundCrop({ zoom: Number(e.target.value) })}
-                className="w-full cursor-pointer accent-[#E8A598]"
+                className="w-full cursor-pointer accent-blush-pink"
               />
               <p className="text-[10px] text-[#B9A992] mt-1">Drag the cover above to reposition the photo.</p>
             </div>
           )}
-          <BackgroundDesigner hidePreview compact imageOnly hideOpacity background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={uploadedPhotos} />
+          {/* The album's own photos, once there are some (the cover reopened
+              from the preview). At the cover step there are none yet. */}
+          {coverPhotos.length > 0 && (
+            <BackgroundDesigner hidePreview compact imageOnly hideOpacity hideUpload background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={coverPhotos} />
+          )}
+          {bgIsImage ? (
+            !(bg as { photoId?: string }).photoId && (
+              <button
+                onClick={() => b.setPageBackground({ type: 'solid', solid: '#FFFBF7' })}
+                className="w-full py-2 rounded-lg text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 transition-all flex items-center justify-center gap-1.5"
+              >
+                <X size={12} /> Remove photo
+              </button>
+            )
+          ) : (
+            <p className="text-center text-[11px] text-[#B9A992]">Tap Background to choose a photo for your cover.</p>
+          )}
         </div>
       )}
 
       {activeTab === 'text' && (
         <div className="space-y-3">
           <label className="block">
-            <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Cover title</span>
+            <span className="block text-[11px] font-medium text-stone mb-1">Cover title</span>
             <input
               value={title.text}
               onChange={(e) => updateTitle({ text: e.target.value })}
               placeholder="e.g. The Cruz Family"
-              className="w-full px-3 py-2.5 rounded-xl border border-[#E4D8C9] bg-white text-[15px] text-[#2D2D2D] outline-none focus:border-[#E8A598]"
+              className="w-full px-3 py-2.5 rounded-xl border border-line bg-white text-[15px] text-dark outline-none focus:border-blush-pink"
               style={{ fontFamily: title.fontFamily }}
             />
+            {titleFit && !titleFit.fits && (
+              <span className="mt-1 flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-2.5 py-2 text-[11px] text-[#8A5A12]" role="status" data-testid="cover-title-too-long">
+                <span className="flex-1 min-w-[10rem]">Too long for the front cover: part of it will be cut off in print. Shorten it{titleFit.fitsAt ? ', or make the text smaller' : ''}.</span>
+                {titleFit.fitsAt && (
+                  <button type="button" onClick={() => updateTitle({ fontSize: titleFit.fitsAt! })} data-testid="cover-title-make-fit"
+                    className="shrink-0 px-2.5 py-1 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
+                    Make it fit (size {titleFit.fitsAt})
+                  </button>
+                )}
+              </span>
+            )}
+            {/* The spine is narrow: say what it prints when it isn't the title as typed. */}
+            {spine.shortened ? (
+              <span className="block mt-1 text-[11px] text-[#8A5A12]" data-testid="spine-too-long">
+                Too long for the spine: it prints as “{spine.text.text}”. A shorter title fits whole.
+              </span>
+            ) : spine.shrunk && (
+              <span className="block mt-1 text-[11px] text-stone" data-testid="spine-smaller">
+                A long title: the spine prints it in smaller letters so it fits.
+              </span>
+            )}
+            {spine.inkChanged && (
+              <span className="block mt-1 text-[11px] text-stone" data-testid="spine-ink-note">
+                Your colour wouldn't show on the spine, so the spine title prints in {spine.text.color === SPINE_DARK_INK ? 'dark' : 'light'} ink.
+              </span>
+            )}
           </label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Font</span>
-              <select
-                value={title.fontFamily}
-                onChange={(e) => updateTitle({ fontFamily: e.target.value })}
-                style={{ fontFamily: title.fontFamily }}
-                className="w-full px-3 py-2.5 rounded-xl border border-[#E4D8C9] bg-white text-[14px] outline-none focus:border-[#E8A598]"
-              >
-                {FONTS.map((f) => <option key={f.name} value={f.family} style={{ fontFamily: f.family }}>{f.name}</option>)}
-              </select>
-            </label>
             <div>
-              <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Colour</span>
+              <span className="block text-[11px] font-medium text-stone mb-1">Font</span>
+              {/* Each font shown in its own face — the page editor's list. A native
+                  dropdown can't: Android draws its list in the system font. */}
+              <FontSelect value={title.fontFamily} onChange={(f) => updateTitle({ fontFamily: f })} />
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-stone mb-1">Colour</span>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {COLORS.map((c) => (
                   <button
                     key={c}
                     onClick={() => updateTitle({ color: c })}
                     className="w-7 h-7 rounded-full border transition-transform hover:scale-110"
-                    style={{ background: c, borderColor: title.color === c ? '#E8A598' : 'rgba(0,0,0,0.15)', boxShadow: title.color === c ? '0 0 0 2px #E8A598' : 'none' }}
+                    style={{ background: c, borderColor: title.color === c ? '#9A4A2C' : 'rgba(0,0,0,0.15)', boxShadow: title.color === c ? '0 0 0 2px #9A4A2C' : 'none' }}
                     aria-label={c}
                   />
                 ))}
@@ -322,8 +391,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
           </div>
           <div className="flex items-end gap-3 flex-wrap">
             <div>
-              <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Alignment</span>
-              <div className="inline-flex rounded-xl border border-[#E4D8C9] bg-white overflow-hidden">
+              <span className="block text-[11px] font-medium text-stone mb-1">Alignment</span>
+              <div className="inline-flex rounded-xl border border-line bg-white overflow-hidden">
                 {(['left', 'center', 'right'] as const).map((a) => {
                   const Icon = a === 'left' ? AlignLeft : a === 'center' ? AlignCenter : AlignRight;
                   return (
@@ -331,7 +400,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
                       key={a}
                       onClick={() => updateTitle({ alignment: a })}
                       title={`Align ${a}`}
-                      className={`px-3 py-2 transition-colors ${title.alignment === a ? 'bg-[#F4C2A1] text-white' : 'text-[#8B7E7A] hover:bg-[#FBF3EA]'}`}
+                      className={`px-3 py-2 transition-colors ${title.alignment === a ? 'bg-peach text-white' : 'text-taupe hover:bg-warm-white'}`}
                     >
                       <Icon size={16} />
                     </button>
@@ -340,8 +409,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               </div>
             </div>
             <div>
-              <span className="block text-[11px] font-medium text-[#9B8B7A] mb-1">Style</span>
-              <div className="inline-flex rounded-xl border border-[#E4D8C9] bg-white overflow-hidden">
+              <span className="block text-[11px] font-medium text-stone mb-1">Style</span>
+              <div className="inline-flex rounded-xl border border-line bg-white overflow-hidden">
                 {/* Bold + italic only: canvas printing goes through drawWordArtText,
                     which has no underline, so an Underline control would preview
                     underlined and print plain. */}
@@ -353,7 +422,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
                     key={key}
                     onClick={() => updateTitle({ [key]: !on } as Partial<typeof title>)}
                     title={label}
-                    className={`px-3 py-2 transition-colors ${on ? 'bg-[#F4C2A1] text-white' : 'text-[#8B7E7A] hover:bg-[#FBF3EA]'}`}
+                    className={`px-3 py-2 transition-colors ${on ? 'bg-peach text-white' : 'text-taupe hover:bg-warm-white'}`}
                   >
                     <Icon size={16} />
                   </button>
@@ -364,7 +433,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
           <label className="block">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-medium text-[#9B8B7A]">Size</span>
+              <span className="text-[11px] font-medium text-stone">Size</span>
               <span className="text-[11px] text-[#B9A992] tabular-nums">{title.fontSize}px</span>
             </div>
             <input
@@ -374,7 +443,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               step={1}
               value={title.fontSize}
               onChange={(e) => updateTitle({ fontSize: Number(e.target.value) })}
-              className="w-full accent-[#E8A598] cursor-pointer"
+              className="w-full accent-blush-pink cursor-pointer"
             />
           </label>
         </div>
@@ -385,15 +454,15 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
   const footer =
     mode === 'step' ? (
-      <div className="shrink-0 border-t border-[#EADFD3] p-3 flex justify-between items-center bg-[#FFF8F0]">
-        <button onClick={onBack} className="px-4 py-2.5 rounded-xl text-[#8B7E7A] font-medium hover:bg-black/5 transition-colors">← Back</button>
-        <button onClick={onNext} className="px-6 py-2.5 rounded-xl bg-[#E8A598] text-white font-semibold hover:brightness-105 active:scale-[0.98] transition-all shadow-sm">
+      <div className="shrink-0 border-t border-line p-3 flex justify-between items-center bg-cream">
+        <button onClick={onBack} className="px-4 py-2.5 rounded-xl text-taupe font-medium hover:bg-black/5 transition-colors">← Back</button>
+        <button onClick={onNext} className="px-6 py-2.5 rounded-xl bg-blush-pink text-white font-semibold hover:brightness-105 active:scale-[0.98] transition-all shadow-sm">
           Continue to photos →
         </button>
       </div>
     ) : (
-      <div className="shrink-0 border-t border-[#EADFD3] p-3 flex justify-end bg-[#FFF8F0]">
-        <button onClick={onClose} className="px-6 py-2.5 rounded-xl bg-[#E8A598] text-white font-semibold hover:brightness-105 active:scale-[0.98] transition-all shadow-sm">
+      <div className="shrink-0 border-t border-line p-3 flex justify-end bg-cream">
+        <button onClick={onClose} className="px-6 py-2.5 rounded-xl bg-blush-pink text-white font-semibold hover:brightness-105 active:scale-[0.98] transition-all shadow-sm">
           Done
         </button>
       </div>
@@ -403,7 +472,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     // Centre the editor in a fixed-width column. Without this it spans the full
     // wizard centre-stage on desktop, which balloons the background swatches.
     return (
-      <div className="h-full bg-[#FFF8F0] relative flex justify-center">
+      <div className="h-full bg-cream relative flex justify-center">
         <div className="w-full max-w-[560px] h-full flex flex-col">
           {header}
           {preview}
@@ -418,7 +487,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-stretch sm:items-center justify-center sm:p-4">
-      <div className="bg-[#FFF8F0] w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden relative">
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Design your cover" tabIndex={-1}
+        className="bg-cream w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden relative">
         {header}
         {preview}
         {reservedNote}
@@ -431,8 +501,13 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 }
 
 /** The spine shown beside the front cover — auto-derived from the front page
- *  (title + colour), read-only. Reads bottom→top like the printed spine. */
-function SpineStrip({ height, spine }: { height: number; spine: { text: TextStyle; bg: string } }) {
+ *  (title + colour), read-only. Reads bottom→top like the printed spine, and
+ *  shows the WHOLE line that prints (shrunk to the strip when it must). */
+function SpineStrip({ height, spine }: { height: number; spine: SpineInfo }) {
+  const line = spine.text.text;
+  const fontSize = line.trim()
+    ? Math.max(2, Math.min(12, Math.floor((12 * (height - 10)) / Math.max(1, measureSpineText(line, spine.text, 12)))))
+    : 12;
   return (
     <div className="flex flex-col items-center shrink-0">
       <div
@@ -443,7 +518,7 @@ function SpineStrip({ height, spine }: { height: number; spine: { text: TextStyl
           <span
             style={{
               transform: 'rotate(-90deg)', whiteSpace: 'nowrap',
-              fontSize: 12, lineHeight: 1, fontFamily: spine.text.fontFamily,
+              fontSize, lineHeight: 1, fontFamily: spine.text.fontFamily,
               color: spine.text.color, fontWeight: spine.text.bold ? 700 : 400,
               fontStyle: spine.text.italic ? 'italic' : 'normal',
             }}

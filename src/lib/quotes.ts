@@ -7,6 +7,21 @@
 // Caching contract: the SAME theme text always yields the SAME quotes, cached
 // per device, so a paid call happens at most once per theme rather than once
 // per page. (The sunset clipart pipeline used the same contract.)
+//
+// POOL SIZING (2026-09-09): the album deals each line AT MOST ONCE (owner's
+// never-repeat rule), so the pool IS the per-album quote ceiling. A fixed
+// 25-line pool ran dry halfway through an 80-page album — the second half of
+// the boxes silently degraded to text/QR invitations. The pool now grows to
+// the album: ensureThemeQuotes(theme, need) tops the cached set up in batches
+// of up to 60 lines per call, each call carrying the lines already held so the
+// model writes NEW ones. Generation asks for one line per caption box.
+//
+// PRE-LOADED FIRST (owner, 2026-10-02): an occasion the bank knows (Wedding,
+// Baptism, Birthday, Baby, Graduation, Family, Vacation — the quick picks, or
+// typed words that map to them) deals from its 100 shipped lines with NO call.
+// The AI only writes the EXTRA lines a bigger album needs, told to avoid the
+// bank. A typed occasion the bank doesn't recognise is still AI-first (lines
+// written for "Company outing" beat generic ones), with the general set behind.
 
 import { THEME_QUOTES } from '../pages/builder/themeQuotes';
 import type { TemplateType } from '../pages/builder/types';
@@ -20,6 +35,19 @@ export interface QuoteSet {
 /** Same ceiling the endpoint enforces — applied again here because the curated
  *  corpus and any future source must obey the printed-caption limit too. */
 export const MAX_QUOTE_CHARS = 46;
+
+/** Lines a first (cold) fetch asks for — the picker's page and the warm-up. */
+export const DEFAULT_QUOTE_COUNT = 25;
+/** Most lines one proxy call returns (mirrors MAX_COUNT server-side). */
+export const QUOTE_BATCH_MAX = 60;
+/** Most lines kept per theme. 240 covers the largest album (≈ 1 box per page,
+ *  200+ pages) plus a "more lines" press or two; beyond it the pool is reset. */
+export const QUOTES_PER_THEME_MAX = 240;
+/** Most top-up calls one ensure() will make before giving up (a model that
+ *  keeps returning duplicates would otherwise loop and spend). */
+const MAX_TOPUP_CALLS = 5;
+/** Newest held lines sent back as "don't repeat these" (server caps at 200). */
+const AVOID_MAX = 200;
 
 /* ── Free text → curated theme ──────────────────────────────────────────────
    The curated corpus is keyed by TemplateType, but the theme a customer types
@@ -41,8 +69,34 @@ const THEME_ALIASES: { match: RegExp; theme: TemplateType }[] = [
 
 /** The curated theme whose lines best fit this free-text theme. */
 export function curatedThemeFor(theme: string): TemplateType {
+  return matchedTheme(theme) ?? 'classic';
+}
+
+/** The bank category this free-text theme names, or null when nothing matched
+ *  (then the album gets lines written for its own words — AI-first). */
+export function matchedTheme(theme: string): TemplateType | null {
   for (const { match, theme: t } of THEME_ALIASES) if (match.test(theme)) return t;
-  return 'classic';
+  return null;
+}
+
+/** The pre-loaded lines that come FIRST for this theme, or null when the
+ *  theme isn't one the bank knows. */
+function bankFor(theme: string): string[] | null {
+  const t = matchedTheme(theme);
+  return t ? withinLimit(THEME_QUOTES[t] ?? []) : null;
+}
+
+/** Bank first, then the extra lines, never the same line twice. */
+function merged(base: string[], extra: string[]): string[] {
+  const seen = new Set(base.map(norm));
+  const out = [...base];
+  for (const l of extra) {
+    const k = norm(l);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(l);
+  }
+  return out;
 }
 
 /** The shipped lines for a free-text theme — the always-available $0 answer. */
@@ -57,7 +111,9 @@ export function curatedQuotesFor(theme: string): string[] {
 const CACHE_KEY = 'megy-theme-quotes';
 const CACHE_MAX = 10;
 const cache = new Map<string, string[]>();
-const inflight = new Map<string, Promise<QuoteSet>>();
+/** One running top-up per theme. `target` is mutable so a later, bigger ask
+ *  raises the running job's goal instead of starting a parallel paid loop. */
+const topups = new Map<string, { target: number; done: Promise<void> }>();
 let hydrated = false;
 
 function hydrate(): void {
@@ -82,8 +138,8 @@ function persist(key: string, quotes: string[]): void {
   } catch { /* storage full/unavailable — memory cache still serves this session */ }
 }
 
-/** Drop a theme's cached lines so the next fetch regenerates (the "more quotes"
- *  action). Curated themes are unaffected — they are a constant. */
+/** Drop a theme's cached lines so the next fetch regenerates. Curated themes
+ *  are unaffected — they are a constant. */
 export function forgetThemeQuotes(theme: string): void {
   const key = theme.trim().toLowerCase();
   cache.delete(key);
@@ -94,58 +150,157 @@ function withinLimit(quotes: string[]): string[] {
   return quotes.map((q) => q.trim()).filter((q) => q && q.length <= MAX_QUOTE_CHARS);
 }
 
+const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/** One proxy call. Returns the NEW lines (already filtered against `avoid`
+ *  server-side, re-checked here), or null on any failure — the caller decides
+ *  whether to retry, and never caches a failure. */
+async function requestLines(theme: string, count: number, avoid: string[]): Promise<string[] | null> {
+  try {
+    const r = await fetch('/api/theme-quotes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ theme, count, avoid: avoid.slice(-AVOID_MAX) }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const raw = Array.isArray(d.quotes) ? d.quotes.filter((q: unknown): q is string => typeof q === 'string') : [];
+    const seen = new Set(avoid.map(norm));
+    const fresh: string[] = [];
+    for (const q of withinLimit(raw)) {
+      const k = norm(q);
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      fresh.push(q);
+    }
+    return fresh;
+  } catch {
+    return null;
+  }
+}
+
+/** Grow the theme's cached pool toward `job.target`, one batch per call.
+ *  `base` = the bank lines already in the album's pool: the model is told to
+ *  avoid them, and they count toward the per-theme cap. */
+async function runTopup(key: string, theme: string, job: { target: number }, base: string[] = []): Promise<void> {
+  for (let calls = 0; calls < MAX_TOPUP_CALLS; calls++) {
+    const have = cache.get(key) ?? [];
+    const short = Math.min(job.target, QUOTES_PER_THEME_MAX - base.length) - have.length;
+    if (short <= 0) return;
+    const fresh = await requestLines(theme, Math.min(QUOTE_BATCH_MAX, short), [...base, ...have]);
+    if (!fresh || fresh.length === 0) return;        // failed or dry — stop spending
+    // Re-read: the cache may have been cleared/replaced while we were away.
+    const now = cache.get(key) ?? [];
+    persist(key, [...now, ...fresh].slice(0, QUOTES_PER_THEME_MAX));
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Make sure the theme's AI pool holds at least `min` lines (up to the
+ *  per-theme cap), topping up in batches as needed, then return the lines
+ *  available NOW: the AI pool if it has any, else the curated corpus.
+ *
+ *  `budgetMs` bounds how long the CALLER waits — the top-up itself keeps
+ *  running in the background and lands in the cache for the next consumer
+ *  (the finish-line sweep, the picker, the next generation). Never throws. */
+export async function ensureThemeQuotes(
+  theme: string,
+  min: number,
+  opts: { budgetMs?: number } = {},
+): Promise<string[]> {
+  const t = theme.trim();
+  if (!t) return withinLimit(curatedQuotesFor(t));
+  hydrate();
+  const key = t.toLowerCase();
+  const bank = bankFor(t) ?? [];
+  // A known occasion's pre-loaded lines count toward the album's need; only
+  // the shortfall is written by the AI (none at all for most albums).
+  const target = Math.max(0, Math.min(QUOTES_PER_THEME_MAX, Math.max(1, Math.floor(min))) - bank.length);
+  if (target > 0 && (cache.get(key)?.length ?? 0) < target) {
+    let job = topups.get(key);
+    if (job) {
+      job.target = Math.max(job.target, target);
+    } else {
+      const j = { target, done: Promise.resolve() };
+      j.done = runTopup(key, t, j, bank).finally(() => { if (topups.get(key) === j) topups.delete(key); });
+      topups.set(key, j);
+      job = j;
+    }
+    const budget = opts.budgetMs ?? Infinity;
+    await (Number.isFinite(budget) ? Promise.race([job.done, sleep(budget)]) : job.done);
+  }
+  return quotesForThemeNow(t);
+}
+
 /** Themed lines for the album's free-text theme. Never rejects: an empty or
- *  unrecognised theme still returns the curated corpus. */
+ *  unrecognised theme still returns the curated corpus. Cached per theme, so
+ *  a paid call happens once; a failure serves curated WITHOUT caching. */
 export async function fetchThemeQuotes(theme: string): Promise<QuoteSet> {
   const t = theme.trim();
   const curated = { quotes: withinLimit(curatedQuotesFor(t)), source: 'curated' as const };
   if (!t) return curated;
+  // A known occasion: the pre-loaded lines ARE the answer — no call.
+  if (bankFor(t)) return { quotes: quotesForThemeNow(t), source: hasExtras(t) ? 'ai' : 'curated' };
+  await ensureThemeQuotes(t, DEFAULT_QUOTE_COUNT);
+  const ai = cache.get(t.toLowerCase());
+  return ai?.length ? { quotes: withinLimit(ai), source: 'ai' } : curated;
+}
 
-  const key = t.toLowerCase();
+/** The picker's "More lines": GROW the pool by another page rather than throw
+ *  the held lines away (the album may already be dealing from them). Only at
+ *  the per-theme cap does it start over. */
+export async function moreThemeQuotes(theme: string): Promise<QuoteSet> {
+  const t = theme.trim();
+  if (!t) return fetchThemeQuotes(t);
   hydrate();
-
-  const cached = cache.get(key);
-  if (cached?.length) return { quotes: cached, source: 'ai' };
-  const pending = inflight.get(key);
-  if (pending) return pending;               // dedupe concurrent asks for one theme
-
-  const p = (async (): Promise<QuoteSet> => {
-    try {
-      const r = await fetch('/api/theme-quotes', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ theme: t }),
-      });
-      if (r.ok) {
-        const d = await r.json();
-        const quotes = Array.isArray(d.quotes) ? withinLimit(d.quotes.filter((q: unknown) => typeof q === 'string')) : [];
-        if (quotes.length) {
-          persist(key, quotes);              // cache the good result → one paid call per theme
-          return { quotes, source: 'ai' };
-        }
-      }
-    } catch { /* fall through to curated */ }
-    return curated;                          // NOT cached, so a later open retries
-  })().finally(() => inflight.delete(key));
-
-  inflight.set(key, p);
-  return p;
+  const bank = bankFor(t);
+  if (bank) {
+    // Past the bank: "More lines" asks the AI for a page of extras the bank
+    // doesn't have (it avoids the bank), and keeps everything already held.
+    const extras = cache.get(t.toLowerCase())?.length ?? 0;
+    if (bank.length + extras >= QUOTES_PER_THEME_MAX) forgetThemeQuotes(t);
+    const held = bank.length + (cache.get(t.toLowerCase())?.length ?? 0);
+    await ensureThemeQuotes(t, held + DEFAULT_QUOTE_COUNT);
+    return { quotes: quotesForThemeNow(t), source: hasExtras(t) ? 'ai' : 'curated' };
+  }
+  const have = cache.get(t.toLowerCase())?.length ?? 0;
+  if (have >= QUOTES_PER_THEME_MAX) forgetThemeQuotes(t);
+  await ensureThemeQuotes(t, have >= QUOTES_PER_THEME_MAX ? DEFAULT_QUOTE_COUNT : have + DEFAULT_QUOTE_COUNT);
+  const ai = cache.get(t.toLowerCase());
+  return ai?.length
+    ? { quotes: withinLimit(ai), source: 'ai' }
+    : { quotes: withinLimit(curatedQuotesFor(t)), source: 'curated' };
 }
 
 /** The lines available RIGHT NOW for a theme, with no network round-trip: a
- *  previously generated AI set from the cache, else the curated corpus. Album
- *  generation is synchronous, so its auto-dealt box quotes draw from this;
- *  callers fire fetchThemeQuotes alongside to warm the AI cache for the NEXT
- *  generation instead of delaying this one. */
+ *  previously generated AI set from the cache, else the curated corpus. */
 export function quotesForThemeNow(theme: string): string[] {
   const t = theme.trim();
   if (t) {
     hydrate();
     const cached = cache.get(t.toLowerCase());
+    const bank = bankFor(t);
+    if (bank) return merged(bank, withinLimit(cached ?? []));
     if (cached?.length) return withinLimit(cached);
   }
   return withinLimit(curatedQuotesFor(t));
 }
 
+/** Has the AI written extra lines for this theme on this device? */
+function hasExtras(theme: string): boolean {
+  hydrate();
+  return (cache.get(theme.trim().toLowerCase())?.length ?? 0) > 0;
+}
+
 /** The album theme the customer typed at setup (BuilderSetup writes this). */
 export function currentAlbumTheme(): string {
   try { return localStorage.getItem('megy-album-theme') || ''; } catch { return ''; }
+}
+
+/** Test-only: drop all module state (cache, hydration flag, running jobs). */
+export function __resetQuotesForTests(): void {
+  cache.clear();
+  topups.clear();
+  hydrated = false;
 }

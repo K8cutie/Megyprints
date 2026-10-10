@@ -1,19 +1,24 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import {
-  Upload,
-  LayoutGrid,
+  Images,
+  QrCode,
   Sparkles,
   Truck,
   ChevronDown,
-  Quote,
-  Star,
+  CalendarHeart,
 } from 'lucide-react';
 import BuilderDemoSection from './BuilderDemoSection';
 import { UserProjectsSection } from '../components/UserProjectsSection';
+import { useAuth } from '../lib/authContext';
+import { startFreshAlbum } from '../lib/albumSession';
+import { readLocalDraftSummary, albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
+import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
+import MegyMascot from '../components/MegyMascot';
+import { HOME_FEATURES, HOW_IT_WORKS, EVENTS_CARD, type HomeFeatureKey } from './homeCopy';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -23,7 +28,7 @@ const gentle = 'cubic-bezier(0.16, 1, 0.3, 1)';
 /* ═══════════════════════════ SECTION 1: HERO ═══════════════════════════
    Megy is the centerpiece — the primary entry point for all users.
    ═══════════════════════════════════════════════════════════════════════ */
-function HeroSection({ megyComponent }: { megyComponent: React.ReactNode }) {
+function HeroSection({ megyComponent, eventsCard }: { megyComponent: React.ReactNode; eventsCard: React.ReactNode }) {
   return (
     <section className="relative min-h-[100dvh] min-h-[700px] flex items-center justify-center overflow-hidden">
       {/* Background Image with Ken Burns */}
@@ -45,7 +50,9 @@ function HeroSection({ megyComponent }: { megyComponent: React.ReactNode }) {
       />
 
       {/* Content — Megy centered as the primary interface */}
-      <div className="relative z-10 w-full max-w-[560px] mx-auto px-6">
+      {/* pt-24: two cards can be taller than a phone screen, and the top one
+          must not slide under the fixed header. */}
+      <div className="relative z-10 w-full max-w-[560px] mx-auto px-6 pt-24 pb-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -53,6 +60,8 @@ function HeroSection({ megyComponent }: { megyComponent: React.ReactNode }) {
         >
           {/* Megy Welcome Card — the star of the show */}
           {megyComponent}
+          {/* Megyprints Events, for big events: a booking, not the builder. */}
+          {eventsCard}
         </motion.div>
 
         {/* Scroll Indicator */}
@@ -95,33 +104,19 @@ function TrustBarSection() {
     return () => ctx.revert();
   }, []);
 
-  const items = [
-    {
-      icon: <Upload size={28} className="text-[#F4C2A1]" />,
-      label: 'Easy Photo Upload',
-      desc: 'Upload 20\u2013100 photos in seconds',
-    },
-    {
-      icon: <LayoutGrid size={28} className="text-[#B8A9D9]" />,
-      label: 'Beautiful Templates',
-      desc: '6 handcrafted themes to choose from',
-    },
-    {
-      icon: <Sparkles size={28} className="text-[#9BCFB8]" />,
-      label: 'Auto-Generated Layouts',
-      desc: 'Your album designed in one click',
-    },
-    {
-      icon: <Truck size={28} className="text-[#8FBFE0]" />,
-      label: 'Professional Printing',
-      desc: 'Premium materials & fast delivery',
-    },
-  ];
+  // The words live in homeCopy.ts (homeCopy.spec.ts keeps them true).
+  const icons: Record<HomeFeatureKey, React.ReactNode> = {
+    printed: <Truck size={28} className="text-peach" />,
+    layout: <Sparkles size={28} className="text-mint" />,
+    memories: <QrCode size={28} className="text-soft-lavender" />,
+    photos: <Images size={28} className="text-sky-blue" />,
+  };
+  const items = HOME_FEATURES.map((f) => ({ ...f, icon: icons[f.key] }));
 
   return (
     <section
       ref={sectionRef}
-      className="bg-[#FFFBF7] py-8 border-b border-[rgba(45,45,45,0.06)]"
+      className="bg-warm-white py-8 border-b border-[rgba(45,45,45,0.06)]"
     >
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
@@ -131,10 +126,10 @@ function TrustBarSection() {
               className="trust-item flex flex-col items-center text-center gap-2"
             >
               {item.icon}
-              <span className="font-body text-[0.875rem] font-semibold text-[#2D2D2D]">
+              <span className="font-body text-[0.875rem] font-semibold text-dark">
                 {item.label}
               </span>
-              <span className="font-body text-[0.75rem] font-normal text-[#6B6B6B]">
+              <span className="font-body text-[0.75rem] font-normal text-medium">
                 {item.desc}
               </span>
             </div>
@@ -170,354 +165,52 @@ function HowItWorksSection() {
     return () => ctx.revert();
   }, []);
 
-  const steps = [
-    {
-      num: '01',
-      numColor: 'text-[#F4C2A1]',
-      img: '/step-upload.jpg',
-      title: 'Upload Your Photos',
-      desc: 'Upload 20 or more of your favorite JPG or PNG photos — add as many as you like, any time. Preview and organize them before building.',
-    },
-    {
-      num: '02',
-      numColor: 'text-[#B8A9D9]',
-      img: '/step-template.jpg',
-      title: 'Pick a Template',
-      desc: "Browse our collection of beautiful themes \u2014 from elegant to playful \u2014 and pick the perfect style.",
-    },
-    {
-      num: '03',
-      numColor: 'text-[#9BCFB8]',
-      img: '/step-edit.jpg',
-      title: 'Generate & Customize',
-      desc: "Click 'Generate Album' and watch your photos arranged beautifully. Then customize layouts, text, and more.",
-    },
-    {
-      num: '04',
-      numColor: 'text-[#8FBFE0]',
-      img: '/step-order.jpg',
-      title: 'Order & Receive',
-      desc: 'Choose your material and size, review your live price estimate, and submit your order. We\'ll handle the rest!',
-    },
-  ];
+  // The wizard's own path, in its order (homeCopy.ts). Seven short steps
+  // read better as a numbered list than as picture cards, and the old
+  // pictures showed themes and "syncing to cloud": neither is true now.
+  // No CSS transition on .hiw-card: GSAP fades it in, and with the old
+  // cards' `transition-all` it stayed at opacity 0 (the live page's four
+  // cards never showed in Chromium at phone width; re-tested 2026-10-09).
+  const last = HOW_IT_WORKS.length - 1;
 
   return (
-    <section ref={sectionRef} className="bg-[#FFF8F0] py-20">
+    <section ref={sectionRef} className="bg-cream py-20">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
         <div className="hiw-heading text-center mb-12">
-          <h2 className="font-display text-[2rem] sm:text-[3rem] font-bold text-[#2D2D2D] leading-[1.15]">
+          <h2 className="font-display text-[2rem] sm:text-[3rem] font-bold text-dark leading-[1.15]">
             How It Works
           </h2>
-          <p className="font-body text-[1rem] font-normal text-[#6B6B6B] mt-3">
-            Create your perfect album in four simple steps
+          <p className="font-body text-[1rem] font-normal text-medium mt-3">
+            Megy walks you through all {HOW_IT_WORKS.length} steps.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {steps.map((step) => (
-            <div
-              key={step.num}
-              className="hiw-card group bg-[#FFFBF7] rounded-2xl shadow-card p-6 text-center hover:-translate-y-1 hover:shadow-card-hover transition-all duration-300"
+        <ol className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 max-w-[960px] mx-auto">
+          {HOW_IT_WORKS.map((step, i) => (
+            <li
+              key={step.title}
+              className={`hiw-card flex items-start gap-4 bg-warm-white rounded-2xl shadow-card p-5 sm:p-6${i === last ? ' md:col-span-2' : ''}`}
             >
-              <span
-                className={`font-display text-[3rem] font-bold ${step.numColor} opacity-30 block mb-2 leading-none`}
-              >
-                {step.num}
+              <span className="font-display text-[2.25rem] font-bold text-peach opacity-30 leading-none w-12 shrink-0">
+                {String(i + 1).padStart(2, '0')}
               </span>
-              <img
-                src={step.img}
-                alt={step.title}
-                className="w-full aspect-[4/3] object-cover rounded-2xl mb-4"
-              />
-              <h4 className="font-display text-[1.25rem] font-semibold text-[#2D2D2D] leading-[1.3] mb-2">
-                {step.title}
-              </h4>
-              <p className="font-body text-[0.875rem] font-normal text-[#6B6B6B] leading-[1.6]">
-                {step.desc}
-              </p>
-            </div>
+              <div className="min-w-0">
+                <h3 className="font-display text-[1.25rem] font-semibold text-dark leading-[1.3] mb-1">
+                  {step.title}
+                </h3>
+                <p className="font-body text-[0.875rem] font-normal text-medium leading-[1.6]">
+                  {step.desc}
+                </p>
+              </div>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   );
 }
 
-/* ═══════════════════════════ SECTION 4: TEMPLATE PREVIEW ═══════════════════════════ */
-function TemplatePreviewSection() {
-  const sectionRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.from('.tp-heading', {
-        scrollTrigger: { trigger: sectionRef.current, start: 'top 85%', once: true },
-        opacity: 0,
-        y: 20,
-        duration: 0.6,
-        ease: gentle,
-      });
-      gsap.from('.tp-card', {
-        scrollTrigger: { trigger: sectionRef.current, start: 'top 75%', once: true },
-        opacity: 0,
-        y: 30,
-        stagger: 0.1,
-        duration: 0.6,
-        ease: gentle,
-      });
-    }, sectionRef);
-    return () => ctx.revert();
-  }, []);
-
-  const templates = [
-    {
-      img: './album-graduation.jpg',
-      badge: 'Graduation',
-      badgeColor: 'bg-[#F4C2A1]',
-      title: 'Graduation',
-      desc: 'Elegant layouts with school colors and formal typography',
-      borderColor: 'hover:ring-[#F4C2A1]',
-    },
-    {
-      img: './album-elegant.jpg',
-      badge: 'Elegant',
-      badgeColor: 'bg-[#B8A9D9]',
-      title: 'Elegant',
-      desc: 'Romantic full-bleed layouts for weddings and special moments',
-      borderColor: 'hover:ring-[#B8A9D9]',
-    },
-    {
-      img: './album-minimalist.jpg',
-      badge: 'Minimalist',
-      badgeColor: 'bg-[#9BCFB8]',
-      title: 'Minimalist',
-      desc: 'Clean, spacious designs that let your photos speak for themselves',
-      borderColor: 'hover:ring-[#9BCFB8]',
-    },
-    {
-      img: './album-kids.jpg',
-      badge: 'Kids Theme',
-      badgeColor: 'bg-[#8FBFE0]',
-      title: 'Kids Theme',
-      desc: 'Playful, colorful layouts full of joy and fun elements',
-      borderColor: 'hover:ring-[#8FBFE0]',
-    },
-    {
-      img: './album-modern.jpg',
-      badge: 'Modern',
-      badgeColor: 'bg-[#F4C2A1]',
-      title: 'Modern',
-      desc: 'Bold editorial layouts with magazine-style sophistication',
-      borderColor: 'hover:ring-[#F4C2A1]',
-    },
-    {
-      img: './album-family.jpg',
-      badge: 'Family Album',
-      badgeColor: 'bg-[#D4B896]',
-      title: 'Family Album',
-      desc: 'Warm, inviting layouts perfect for treasured family memories',
-      borderColor: 'hover:ring-[#D4B896]',
-    },
-  ];
-
-  return (
-    <section ref={sectionRef} className="bg-[#FDE8E4] py-20">
-      <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
-        <div className="tp-heading text-center mb-12">
-          <h2 className="font-display text-[2rem] sm:text-[3rem] font-bold text-[#2D2D2D] leading-[1.15]">
-            Beautiful Templates for Every Occasion
-          </h2>
-          <p className="font-body text-[1rem] font-normal text-[#6B6B6B] mt-3">
-            Each template is carefully designed to make your photos shine
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {templates.map((t) => (
-            <div
-              key={t.title}
-              className={`tp-card group relative overflow-hidden rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 ring-0 ring-offset-0 ${t.borderColor} hover:ring-2`}
-            >
-              {/* Image */}
-              <div className="relative aspect-[3/4] overflow-hidden">
-                <img
-                  src={t.img}
-                  alt={t.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-
-                {/* Badge */}
-                <span
-                  className={`absolute top-3 left-3 ${t.badgeColor} text-white font-body text-[0.75rem] font-semibold px-3 py-1 rounded-lg`}
-                >
-                  {t.badge}
-                </span>
-
-                {/* Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-[rgba(253,232,228,0.95)] via-[rgba(253,232,228,0.3)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
-                  <h4 className="font-display text-[1.25rem] font-semibold text-white leading-[1.3] mb-1"
-                    style={{ textShadow: '0 1px 8px rgba(0,0,0,0.3)' }}>
-                    {t.title}
-                  </h4>
-                  <p className="font-body text-sm text-white/90 leading-[1.5] mb-4"
-                    style={{ textShadow: '0 1px 4px rgba(0,0,0,0.3)' }}>
-                    {t.desc}
-                  </p>
-                  <Link
-                    to="/builder"
-                    className="inline-flex items-center justify-center font-body text-[0.875rem] font-semibold bg-white/20 backdrop-blur-sm text-white px-5 py-2.5 rounded-full border border-white/40 hover:bg-white/30 transition-colors duration-200 w-fit"
-                  >
-                    Use This Template
-                  </Link>
-                </div>
-              </div>
-
-              {/* Title below image (visible when not hovered) */}
-              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[rgba(253,232,228,0.95)] to-transparent group-hover:opacity-0 transition-opacity duration-300">
-                <h4 className="font-display text-[1.15rem] font-semibold text-[#2D2D2D]">
-                  {t.title}
-                </h4>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-10 text-center">
-          <Link
-            to="/templates"
-            className="inline-flex items-center font-body text-[0.875rem] font-semibold text-[#F4C2A1] border-[1.5px] border-[#F4C2A1] px-8 py-3.5 rounded-xl hover:bg-[#F4C2A1] hover:text-white transition-all duration-250"
-          >
-            View All Templates &rarr;
-          </Link>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════ SECTION 5: TESTIMONIALS ═══════════════════════════ */
-function TestimonialsSection() {
-  const sectionRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.from('.tst-heading', {
-        scrollTrigger: { trigger: sectionRef.current, start: 'top 85%', once: true },
-        opacity: 0,
-        y: 20,
-        duration: 0.6,
-        ease: gentle,
-      });
-      gsap.from('.tst-card', {
-        scrollTrigger: { trigger: sectionRef.current, start: 'top 80%', once: true },
-        opacity: 0,
-        y: 30,
-        stagger: 0.12,
-        duration: 0.6,
-        ease: gentle,
-      });
-      gsap.from('.tst-avatar', {
-        scrollTrigger: { trigger: sectionRef.current, start: 'top 80%', once: true },
-        scale: 0.8,
-        opacity: 0,
-        stagger: 0.12,
-        duration: 0.5,
-        ease: gentle,
-        delay: 0.2,
-      });
-    }, sectionRef);
-    return () => ctx.revert();
-  }, []);
-
-  const testimonials = [
-    {
-      img: '/testimonial-1.jpg',
-      borderColor: 'border-[#F4C2A1]',
-      quote:
-        'Megy Prints made creating my wedding album so easy! The templates are gorgeous and the print quality is amazing. I couldn\'t be happier.',
-      name: 'Sarah M.',
-      detail: 'Wedding Album \u2014 Elegant Template',
-    },
-    {
-      img: '/testimonial-2.jpg',
-      borderColor: 'border-[#9BCFB8]',
-      quote:
-        'I needed graduation albums for my entire class. The auto-generate feature saved me hours, and my students loved the results!',
-      name: 'Mr. Dela Cruz',
-      detail: 'Graduation Albums \u2014 Graduation Template',
-    },
-    {
-      img: '/testimonial-3.jpg',
-      borderColor: 'border-[#B8A9D9]',
-      quote:
-        'The kids theme is absolutely adorable! I made albums for both my children\'s birthdays and they turned out perfect.',
-      name: 'Jenny L.',
-      detail: 'Birthday Albums \u2014 Kids Theme',
-    },
-  ];
-
-  return (
-    <section ref={sectionRef} className="bg-[#FFF8F0] py-20">
-      <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
-        <h2 className="tst-heading font-display text-[2rem] sm:text-[3rem] font-bold text-[#2D2D2D] leading-[1.15] text-center mb-12">
-          What Our Customers Say
-        </h2>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {testimonials.map((t) => (
-            <div
-              key={t.name}
-              className="tst-card relative bg-[#FFFBF7] rounded-2xl shadow-card p-8"
-            >
-              {/* Quote icon */}
-              <Quote className="w-6 h-6 text-[#F4C2A1] opacity-30 mb-3" />
-
-              {/* Stars */}
-              <div className="flex gap-1 mb-4">
-                {[...Array(5)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ scale: 0 }}
-                    whileInView={{ scale: 1 }}
-                    viewport={{ once: true }}
-                    transition={{
-                      delay: 0.3 + i * 0.08,
-                      duration: 0.3,
-                      ease: [0.34, 1.56, 0.64, 1] as [number, number, number, number],
-                    }}
-                  >
-                    <Star className="w-4 h-4 text-[#F4C2A1] fill-[#F4C2A1]" />
-                  </motion.div>
-                ))}
-              </div>
-
-              <p className="font-body text-[1rem] font-normal italic text-[#4A4A4A] leading-[1.7] mb-5">
-                &ldquo;{t.quote}&rdquo;
-              </p>
-
-              <div className="flex items-center gap-3">
-                <img
-                  src={t.img}
-                  alt={t.name}
-                  className={`tst-avatar w-14 h-14 rounded-full object-cover border-2 ${t.borderColor}`}
-                />
-                <div>
-                  <h5 className="font-body text-[0.875rem] font-semibold text-[#2D2D2D]">
-                    {t.name}
-                  </h5>
-                  <span className="font-body text-[0.75rem] font-medium text-[#9B9B9B]">
-                    {t.detail}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════ SECTION 6: CTA ═══════════════════════════ */
+/* ═══════════════════════════ SECTION 4: CTA ═══════════════════════════ */
 function CTASection() {
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -540,7 +233,7 @@ function CTASection() {
       ref={sectionRef}
       className="relative py-20 overflow-hidden"
       style={{
-        background: 'linear-gradient(135deg, #F4C2A1 0%, #E8A598 50%, #B8A9D9 100%)',
+        background: 'linear-gradient(135deg, #C87658 0%, #B85C38 50%, #9A4A2C 100%)',
       }}
     >
       {/* Decorative blob shapes */}
@@ -556,26 +249,17 @@ function CTASection() {
           Ready to Create Your Album?
         </h2>
 
+        {/* "No account required" wasn't true: checkout needs a sign-in. */}
         <p className="font-body text-[1.125rem] font-normal text-white/90 leading-[1.7] mt-4">
-          Start building your perfect album today. No account required &mdash; just
-          upload your photos and go!
+          Start your album now. You only need an account when you order.
         </p>
 
         <div className="mt-8">
           <Link
             to="/builder"
-            className="inline-flex items-center font-body text-[0.875rem] font-semibold bg-white text-[#2D2D2D] px-10 py-4 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.15)] hover:scale-[1.03] transition-all duration-200"
+            className="inline-flex items-center font-body text-[0.875rem] font-semibold bg-white text-dark px-10 py-4 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.15)] hover:scale-[1.03] transition-all duration-200"
           >
             Get Started &mdash; It&apos;s Free!
-          </Link>
-        </div>
-
-        <div className="mt-4">
-          <Link
-            to="/templates"
-            className="inline-flex items-center font-body text-[0.875rem] font-medium text-white/80 hover:text-white hover:underline transition-all duration-200"
-          >
-            Or browse templates first &rarr;
           </Link>
         </div>
       </div>
@@ -586,13 +270,25 @@ function CTASection() {
 /* ═══════════════════════════ HOME PAGE ═══════════════════════════ */
 export default function Home() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // "Start Creating" with an album in progress asks first (StartNewAlbumPrompt).
+  const [inProgress, setInProgress] = useState<LocalDraftSummary | null>(null);
+  const startNew = useCallback(() => {
+    setInProgress(null);
+    // A new album — which also answers "resume where you left off?".
+    startFreshAlbum(user?.id);
+    navigate('/builder');
+  }, [navigate, user?.id]);
 
   const handleMegyAction = useCallback((action: string, payload?: any) => {
     switch (action) {
-      case 'go-builder':
-        sessionStorage.setItem('megy-fresh-start', '1');
-        navigate('/builder');
+      case 'go-builder': {
+        const draft = readLocalDraftSummary();
+        if (albumInProgress(draft)) setInProgress(draft);
+        else startNew();
         break;
+      }
       case 'load-album':
         if (payload?.albumId) {
           navigate(`/builder?album=${payload.albumId}`);
@@ -604,36 +300,47 @@ export default function Home() {
       default:
         break;
     }
-  }, [navigate]);
+  }, [navigate, startNew]);
 
   // Hero welcome card — sends visitors into the builder, where the one true
   // Megy (assistant/MegyAssistant) guides them. No separate home wizard.
   const megyComponent = (
     <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 text-center">
-      <img
-        src="/megy-character.png"
-        alt="Megy"
-        className="w-24 h-24 mx-auto object-contain drop-shadow-lg mb-4"
-        draggable={false}
-      />
-      <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#2D2D2D] mb-2">
+      <MegyMascot size={96} className="mx-auto object-contain drop-shadow-lg mb-4" />
+      <h1 className="font-display text-2xl sm:text-3xl font-bold text-dark mb-2">
         Hi, I&apos;m Megy 👋
       </h1>
-      <p className="font-body text-[#6B6B6B] leading-relaxed mb-6">
-        Your personal album designer. Upload your photos and I&apos;ll build a
-        beautiful, print-ready album for you — no design skills needed.
+      <p className="font-body text-medium leading-relaxed mb-6">
+        {/* Says PRINTED and SHIPPED up front: "build a print-ready album" read
+            as an online album to a real visitor. Megy Prints is a physical
+            album creator — digital printing on premium paper (owner,
+            2026-10-08). */}
+        Your personal album designer. Upload your photos and I&apos;ll design
+        the pages. Then we print your physical album with digital printing on
+        premium paper and ship it to your door. No design skills needed.
       </p>
       <button
         onClick={() => handleMegyAction('go-builder')}
-        className="w-full inline-flex items-center justify-center gap-2 bg-[#F4C2A1] hover:bg-[#E8A598] text-white font-semibold px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all text-base"
+        className="w-full inline-flex items-center justify-center gap-2 bg-peach hover:bg-blush-pink text-white font-semibold px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all text-base"
       >
         <Sparkles size={18} /> Start Creating
       </button>
-      <Link
-        to="/templates"
-        className="inline-block mt-3 text-sm font-medium text-[#8B7E7A] hover:text-[#F4C2A1] transition-colors"
-      >
-        Or browse templates first →
+    </div>
+  );
+
+  // Megyprints Events: outlined, so Start Creating stays the one filled button.
+  const eventsCard = (
+    <div className="mt-4 bg-white/95 rounded-3xl shadow-2xl p-6 text-left" data-testid="home-events-card">
+      <p className="flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-peach text-white">New</span>
+        <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#9A4A2C]">{EVENTS_CARD.label}</span>
+      </p>
+      <h2 className="mt-2 font-display text-xl sm:text-2xl font-bold text-dark leading-snug">{EVENTS_CARD.title}</h2>
+      <p className="mt-2 font-body text-medium leading-relaxed">{EVENTS_CARD.body}</p>
+      <p className="mt-1 text-sm text-medium">{EVENTS_CARD.who}</p>
+      <Link to="/events" data-testid="home-events-book"
+        className="mt-4 w-full inline-flex items-center justify-center gap-2 border-2 border-peach text-cocoa font-semibold px-6 py-3 rounded-2xl hover:bg-blush transition-colors">
+        <CalendarHeart size={18} /> {EVENTS_CARD.cta} ›
       </Link>
     </div>
   );
@@ -641,21 +348,29 @@ export default function Home() {
   return (
     <>
       {/* Hero — Megy is the centerpiece */}
-      <HeroSection megyComponent={megyComponent} />
+      <HeroSection megyComponent={megyComponent} eventsCard={eventsCard} />
+      {inProgress && (
+        <StartNewAlbumPrompt draft={inProgress} signedIn={!!user}
+          onContinue={() => { setInProgress(null); navigate('/builder'); }}
+          onStartNew={startNew}
+          onClose={() => setInProgress(null)} />
+      )}
 
       <TrustBarSection />
 
-      {/* User projects — still visible below the fold as fallback */}
-      <div className="bg-[#FFFBF7] py-16">
-        <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
-          <UserProjectsSection />
+      {/* User projects — still visible below the fold as fallback. Signed in
+          only: the section is empty for a guest, and its padding left a
+          blank band under the strip. */}
+      {user && (
+        <div className="bg-warm-white py-16">
+          <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
+            <UserProjectsSection />
+          </div>
         </div>
-      </div>
+      )}
 
       <HowItWorksSection />
-      <TemplatePreviewSection />
       <BuilderDemoSection />
-      <TestimonialsSection />
       <CTASection />
     </>
   );

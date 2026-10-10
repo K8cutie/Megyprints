@@ -1,32 +1,71 @@
 /* ══════════════════════════════════════════════════════════════════════════
    MobileReview — the phone review experience: "Megy does it, you approve."
-   Each page fills the screen; swipe (or arrows) to move freely. "Change layout"
-   opens a picker of the available templates for that page. "Done" appears only on
-   the LAST page → a brief "Loading album preview…" beat → Preview.
+   Each page fills the screen; swipe (or "Next page") to move freely. "Change layout"
+   opens a picker of the available templates for that page. On the LAST page "Next
+   page" becomes "Done" → a brief "Loading album preview…" beat → Preview.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LayoutGrid, Check, Loader2, X, Youtube, ImagePlus } from 'lucide-react';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { LayoutGrid, Loader2, X, ImagePlus, Wand2 } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
+import { dealtBoxRoll } from './types';
+import { StudioSheet, StudioLayer } from './StudioPhone';
+import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
+import { isMaskId, edgeGuardMessage, type MaskId } from './masks';
+import { isLookId, type LookId } from './looks';
+import PageTurnBar from './PageTurnBar';
+import VideoMemoryButton from './VideoMemoryButton';
+
+/** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
+const TOOL = 'h-14 rounded-xl bg-cream text-medium text-[12px] font-semibold flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform';
 
 export default function MobileReview({ actions, onDone }: { actions: BuilderContextValue; onDone: () => void }) {
   const pages = actions.albumPages;
   const idx = actions.currentPageIndex;
   const total = pages.length;
   const page = pages[idx];
-  const isLast = idx >= total - 1;
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
+
+  /* ── STUDIO on the phone (album-wide on the phone) ── */
+  const studio = true; // owner, 2026-09-30: no Simple/Studio switch — every Studio tool is always on
+  const pageDrag = useDragControls();
+  // The selection is tagged with the page it was made on, so turning the page
+  // drops it without a reset effect (the pill would point at nothing).
+  const [studioSel, setStudioSel] = useState<{ pageIdx: number; slot: number | null; sticker: string | null; sheet: 'mask' | 'look' | null }>({ pageIdx: -1, slot: null, sticker: null, sheet: null });
+  const onPage = studioSel.pageIdx === idx;
+  const studioSlot = onPage ? studioSel.slot : null;
+  const studioSticker = onPage ? studioSel.sticker : null;
+  const studioSheet = onPage ? studioSel.sheet : null;
+  const setStudioSlot = (slot: number | null) => setStudioSel((s) => ({ pageIdx: idx, slot, sticker: slot != null ? null : (s.pageIdx === idx ? s.sticker : null), sheet: slot != null ? (s.pageIdx === idx ? s.sheet : null) : null }));
+  const setStudioSticker = (sticker: string | null) => setStudioSel((s) => ({ pageIdx: idx, slot: sticker != null ? null : (s.pageIdx === idx ? s.slot : null), sticker, sheet: null }));
+  const setStudioSheet = (sheet: 'mask' | 'look' | null) => setStudioSel((s) => ({ pageIdx: idx, slot: s.pageIdx === idx ? s.slot : null, sticker: s.pageIdx === idx ? s.sticker : null, sheet }));
+  const [guard, setGuard] = useState<string | null>(null);
+  const guardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sayGuard = (msg: string) => {
+    setGuard(msg);
+    if (guardTimer.current) clearTimeout(guardTimer.current);
+    guardTimer.current = setTimeout(() => setGuard(null), 2600);
+  };
+  const afterGuard = (reasons: GuardReason[]) => { if (reasons.length) sayGuard(GUARD_MESSAGES[reasons[0]]); return reasons; };
+  const pickMask = (id: MaskId | 'none') => {
+    if (studioSlot == null) return;
+    actions.setSlotMask(studioSlot, id === 'none' ? null : id);
+    const warn = edgeGuardMessage(id);
+    if (warn) sayGuard(warn);
+  };
+  const pickLook = (id: LookId | 'none') => { if (studioSlot != null) actions.setSlotLook(studioSlot, id === 'none' ? null : id); };
 
   /* ── Add more photos, from the phone, mid-review ────────────────────────────
      A phone's photo picker caps how many can be selected at once, so running out
@@ -37,18 +76,17 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
 
   const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    const photoFiles = files ? Array.from(files).filter((f) => f.type.startsWith('image/')) : [];
+    const picked = e.target.files ? Array.from(e.target.files) : [];
     // Reset FIRST so picking an overlapping batch again still fires onChange.
     e.target.value = '';
-    if (photoFiles.length === 0) return;
-    const res = await actions.dispatch({ type: 'add_photos', payload: { files: photoFiles }, rawMessage: 'add photos' });
-    setUploadMsg(res.message); // honest count — duplicates are skipped, not added
+    if (picked.length === 0) return;
+    const res = await actions.dispatch({ type: 'add_photos', payload: { files: picked }, rawMessage: 'add photos' });
+    setUploadMsg(res.message); // honest count — duplicates skipped, videos/other files left out with a word
   };
   // Auto-clear the confirmation so it never sticks over the page.
   useEffect(() => {
     if (!uploadMsg) return;
-    const t = setTimeout(() => setUploadMsg(null), 3500);
+    const t = setTimeout(() => setUploadMsg(null), /left out|^Videos/.test(uploadMsg) ? 7000 : 3500);
     return () => clearTimeout(t);
   }, [uploadMsg]);
   const [replaceSlot, setReplaceSlot] = useState<number | null>(null); // tap-to-replace target
@@ -66,13 +104,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const [slotQuoteSlot, setSlotQuoteSlot] = useState<number | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
   const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null); // corner for a NEW badge (null = Auto)
-  // Pulse the button until it's been clicked once (discovery, not a nag).
-  const [memoryDiscovered, setMemoryDiscovered] = useState(() => {
-    try { return localStorage.getItem('megy-memory-discovered') === '1'; } catch { return false; }
-  });
   const openMemory = () => {
-    setMemoryDiscovered(true);
-    try { localStorage.setItem('megy-memory-discovered', '1'); } catch { /* ignore */ }
     setMemoryCorner(null); // fresh badge starts on Auto
     setMemoryOpen(true);
   };
@@ -148,26 +180,41 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
 
   if (finishing) {
     return (
-      <div className="h-full flex flex-col items-center justify-center bg-[#FFF8F0] text-[#6B6B6B] gap-3">
-        <Loader2 className="w-7 h-7 animate-spin text-[#E8A598]" />
+      <div className="h-full flex flex-col items-center justify-center bg-cream text-medium gap-3">
+        <Loader2 className="w-7 h-7 animate-spin text-blush-pink" />
         <span className="text-sm font-medium">Loading album preview…</span>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#F5F5F5] relative">
-      {/* Page counter */}
-      <div className="shrink-0 text-center py-2.5 text-xs font-medium text-[#6B6B6B]">
-        Page {idx + 1} of {total} · tap 🗑 to remove a photo, + to add one
+    <div className="h-full flex flex-col bg-paper relative">
+      <div className="shrink-0 flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-medium">
+        <span data-testid="page-counter">Page {idx + 1} of {total} · tap a photo to style it</span>
       </div>
+      {page?.studio && (
+        <div className="shrink-0 flex flex-wrap items-center justify-center gap-1.5 -mt-1 pb-1 px-3">
+          <span className="text-[11px] font-bold text-blush-pink bg-blush rounded-full px-2.5 py-0.5" data-testid="studio-yours">✎ This page is yours · Regenerate skips it</span>
+          <button type="button" data-testid="studio-fix"
+            onClick={() => { actions.resetStudioPage(); setStudioSlot(null); setStudioSticker(null); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }}
+            className="text-[11px] font-bold text-blush-pink border border-peach rounded-full px-2.5 py-0.5 flex items-center gap-1 whitespace-nowrap active:scale-95 transition-transform">
+            <Wand2 size={11} /> Megy, fix this page
+          </button>
+        </div>
+      )}
 
       {/* Swipeable page */}
       <div className="flex-1 flex items-center justify-center overflow-hidden px-4">
         <AnimatePresence mode="wait">
           <motion.div
             key={idx}
+            // Swipe starts from React's pointerdown, not framer's native
+            // listener (which fires first) — sticker hit areas and the pills
+            // stopPropagation, so dragging a sticker never turns the page.
             drag="x"
+            dragListener={false}
+            dragControls={pageDrag}
+            onPointerDown={(e) => pageDrag.start(e)}
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.2}
             onDragEnd={(_e, info) => {
@@ -183,6 +230,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
           >
             {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx}
               editable
+              onSlotTap={studio ? (slotIndex) => { setStudioSticker(null); setStudioSlot(slotIndex); } : undefined}
               onChooseSlot={(slotIndex) => setChooserSlot(slotIndex)}
               onRemoveFromSlot={(slotIndex) => actions.clearSlot(slotIndex)}
               onSlotTextTap={(slotIndex) => setSlotTextEditSlot(slotIndex)}
@@ -194,9 +242,8 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                 // A DEALT box (textSlotRoll) opens its kind's editor directly;
                 // undealt boxes keep the 3-way chooser. The ⋯ badge below is
                 // the always-available override.
-                const roll = page.textSlotRoll?.[slotIndex] ?? null;
+                const roll = dealtBoxRoll(page, slotIndex);
                 if (roll === 'text') setEditSlot(slotIndex);
-                else if (roll === 'qr') setTextSlotQrEditSlot(slotIndex);
                 else if (roll === 'quote') setBoxQuoteSlot(slotIndex);
                 else setChooserTextSlot(slotIndex);
               }}
@@ -204,50 +251,56 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               onTextSlotPhotoTap={(slotIndex) => setTextReplaceSlot(slotIndex)}
               onTextSlotQrTap={(slot) => setTextSlotQrEditSlot(slot)}
               onTextSlotOrnamentTap={(slot) => setTextSlotOrnamentEditSlot(slot)} />}
+            {studio && page && (
+              <StudioLayer page={page} pageIndex={idx} W={dims.w} H={dims.h} albumSize={actions.albumSize}
+                selectedSlot={studioSlot} onSelectSlot={setStudioSlot}
+                selectedSticker={studioSticker} onSelectSticker={setStudioSticker}
+                onOpenSheet={setStudioSheet}                onStickerGeom={(uid, geom) => afterGuard(actions.updateStickerGeom(uid, geom))}
+                onStickerRemove={(uid) => { actions.removeSticker(uid); setStudioSticker(null); }} />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
 
       {/* Bottom action bar */}
-      <div className="shrink-0 px-4 pb-7 pt-3 bg-white border-t border-[#E8E8E8]">
+      <div className="shrink-0 px-4 pb-7 pt-3 bg-white border-t border-line">
         {/* One hidden input serves both entry points (bar + "Add a photo" sheet). */}
         <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} />
         {uploadMsg && (
-          <p className="mb-2 text-center text-xs font-semibold text-[#2E7D4A]">{uploadMsg}</p>
+          <p className="mb-2 text-center text-xs font-semibold text-success">{uploadMsg}</p>
         )}
-        <div className="flex items-center gap-3">
-          <button onClick={goPrev} disabled={idx === 0}
-            className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] disabled:opacity-30 transition-opacity">
-            <ChevronLeft size={22} />
+        {/* Tools — quiet, so the one loud button on the screen is the way on. */}
+        <div className="grid grid-cols-2 gap-2" data-testid="studio-tray">
+          <button onClick={() => uploadRef.current?.click()} className={TOOL}>
+            <ImagePlus size={18} /> Add photos
           </button>
-          <button onClick={() => uploadRef.current?.click()} title="Add more photos"
-            className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] active:scale-95 transition-transform">
-            <ImagePlus size={20} />
-          </button>
-          <button onClick={() => actions.setLayoutPickerOpen(true)}
-            className="flex-1 h-12 rounded-xl bg-[#F4C2A1] text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+          <button onClick={() => actions.setLayoutPickerOpen(true)} className={TOOL}>
             <LayoutGrid size={18} /> Change layout
-          </button>
-          <button onClick={goNext} disabled={isLast}
-            className="w-12 h-12 rounded-full bg-[#FFF8F0] flex items-center justify-center text-[#6B6B6B] disabled:opacity-30 transition-opacity">
-            <ChevronRight size={22} />
           </button>
         </div>
         {/* Living-memory QR — offered on a single full photo page; turns it into
             a full-bleed photo with a scannable corner badge (face-picked corner). */}
-        {actions.canAddMemoryQr && (
-          <button onClick={openMemory}
-            className={`w-full mt-3 h-11 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform bg-[#E8A598] text-white shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}>
-            <Youtube size={18} /> Add YouTube Memory
-          </button>
-        )}
-        {isLast && (
-          <button onClick={handleDone}
-            className="w-full mt-3 h-12 rounded-xl bg-[#2E7D4A] text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-            <Check size={18} /> Done — Preview my album
-          </button>
-        )}
+        {actions.canAddMemoryQr && <VideoMemoryButton variant="phone" onClick={openMemory} />}
+        {/* Page turn, in words both ways — see PageTurnBar. The last page turns
+            Next into Done, in the same spot. */}
+        <PageTurnBar variant="phone" className="mt-3" index={idx} total={total}
+          onPrev={goPrev} onNext={goNext} onDone={handleDone} />
       </div>
+
+      {/* STUDIO: mask / look sheets, the guardrail line */}
+      {studio && studioSheet && studioSlot != null && page && (
+        <StudioSheet kind={studioSheet}
+          photo={page.slotFills?.[studioSlot] != null ? actions.uploadedPhotos[page.slotFills[studioSlot] as number] : undefined}
+          currentMask={isMaskId(page.slotMasks?.[studioSlot]) ? (page.slotMasks?.[studioSlot] as MaskId) : 'none'}
+          currentLook={isLookId(page.slotLooks?.[studioSlot]) ? (page.slotLooks?.[studioSlot] as LookId) : 'none'}
+          onPickMask={pickMask} onPickLook={pickLook} onClose={() => setStudioSheet(null)} />
+      )}
+      {guard && (
+        <div role="status" aria-live="polite" data-testid="studio-guard"
+          className="absolute left-1/2 -translate-x-1/2 bottom-28 z-[60] max-w-[88%] px-4 py-2.5 rounded-xl bg-dark text-warm-white text-sm font-medium shadow-2xl text-center">
+          {guard}
+        </div>
+      )}
 
       {/* Empty-slot content chooser — Photo / Quote / Your Text (bottom sheet) */}
       {chooserSlot !== null && (
@@ -260,14 +313,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         />
       )}
 
-      {/* Empty combo/caption-box chooser — Quote / Your Text / QR Code.
+      {/* Empty combo/caption-box chooser — Quote / Your Text (QR left the boxes 2026-10-02: video memories live on full-page photos).
           (Clipart was sunset — old-phone drag; placed ones still render.) */}
       {chooserTextSlot !== null && (
         <SlotChooser
           mobile
           onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setEditSlot(chooserTextSlot)}
-          onQr={() => setTextSlotQrEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
       )}
@@ -310,20 +362,20 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
               className="w-full bg-white rounded-t-2xl max-h-[60vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] shrink-0">
-                <span className="text-sm font-semibold text-[#2D2D2D]">Add a photo</span>
-                <button onClick={() => { setReplaceSlot(null); setTextReplaceSlot(null); }} className="text-[#9B9B9B] p-1"><X size={18} /></button>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
+                <span className="text-sm font-semibold text-dark">Add a photo</span>
+                <button onClick={() => { setReplaceSlot(null); setTextReplaceSlot(null); }} className="text-light p-1"><X size={18} /></button>
               </div>
               {/* Running out of photos is discovered HERE, so offer the uploader
                   right where it's noticed rather than only in the action bar. */}
               <div className="px-3 pt-3 shrink-0">
                 <button onClick={() => uploadRef.current?.click()}
-                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#F4C2A1] text-[#E8A598] text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.99] transition-transform">
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-peach text-blush-pink text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.99] transition-transform">
                   <ImagePlus size={16} /> Upload more photos
                 </button>
               </div>
               {actions.uploadedPhotos.length === 0 ? (
-                <p className="p-6 text-center text-sm text-[#9B9B9B]">No photos uploaded yet.</p>
+                <p className="p-6 text-center text-sm text-light">No photos uploaded yet.</p>
               ) : (
                 <div className="overflow-y-auto p-3 grid grid-cols-3 gap-2">
                   {actions.uploadedPhotos.map((p, i) => (
@@ -337,7 +389,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
                       // which older Android/Samsung browsers don't support → cells collapse
                       // and thumbnails overlap). h-0 + pb-[100%] forces height = width on any
                       // browser; the image is absolutely positioned to fill it.
-                      className="relative h-0 pb-[100%] rounded-lg overflow-hidden bg-[#F0F0F0] active:scale-95 transition-transform">
+                      className="relative h-0 pb-[100%] rounded-lg overflow-hidden bg-line-soft active:scale-95 transition-transform">
                       <img src={p.previewUrl} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
                     </button>
                   ))}
@@ -371,6 +423,7 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
       {editSlot !== null && (
         <MobileTextEditor
           initial={buildInitial(editSlot)}
+          box={actions.currentPage ? captionBoxSize(actions.currentPage, editSlot, actions.albumSize, actions.currentPageIndex, { coverMode: actions.editScope === 'coverFront' }) : null}
           onSave={(content) => actions.setBoxText(editSlot, content)}
           onClose={() => setEditSlot(null)}
         />

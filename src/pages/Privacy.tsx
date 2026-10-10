@@ -4,13 +4,13 @@
 
 import type { ReactNode } from 'react';
 
-const UPDATED = 'July 2026';
-const CONTACT = 'megyprints@gmail.com';
+const UPDATED = 'August 2026';
+const CONTACT = 'megyprintsph@gmail.com';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mb-8">
-      <h2 className="font-display text-xl font-semibold text-[#2D2D2D] mb-2">{title}</h2>
+      <h2 className="font-display text-xl font-semibold text-dark mb-2">{title}</h2>
       <div className="text-[15px] leading-relaxed text-[#5B534C] space-y-2">{children}</div>
     </section>
   );
@@ -18,16 +18,16 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 export default function Privacy() {
   return (
-    <div className="min-h-screen bg-[#FFF8F0] pt-24 pb-16 px-6">
+    <div className="min-h-screen bg-cream pt-24 pb-16 px-6">
       <div className="max-w-[760px] mx-auto">
-        <h1 className="font-display text-3xl font-semibold text-[#2D2D2D] mb-1">Privacy Policy</h1>
-        <p className="text-sm text-[#9B8B7A] mb-8">Last updated: {UPDATED}</p>
+        <h1 className="font-display text-3xl font-semibold text-dark mb-1">Privacy Policy</h1>
+        <p className="text-sm text-stone mb-8">Last updated: {UPDATED}</p>
 
         <Section title="Who we are">
           <p>
             Megyprints is a photo-album design and printing service. This policy explains what
             information we collect when you use our app and website, how we use it, and the choices
-            you have. Questions? Email us at <a className="text-[#BF5E3E] underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+            you have. Questions? Email us at <a className="text-rust underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
           </p>
         </Section>
 
@@ -80,11 +80,41 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="Keeping your information &amp; deleting it">
+        <Section title="Deleting your account">
           <p>
-            We keep your account and order information for as long as your account is active or as
-            needed to fulfill and support your orders. You can ask us to delete your account and
-            associated data at any time by emailing <a className="text-[#BF5E3E] underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+            You can delete your account and its data at any time, two ways:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <b>In the app</b> — <b>My Profile → Delete my account</b>. It happens immediately.
+            </li>
+            <li>
+              <b>By asking us</b> — email <a className="text-rust underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>,
+              or use the <a className="text-rust underline" href="/delete-account.html">account deletion page</a>.
+              We complete it within 30 days.
+            </li>
+          </ul>
+          <p>
+            Deleting removes your sign-in and profile, every album and the photos in it, your QR
+            memory links (printed codes stop working) and the videos you uploaded for them, the
+            print files from your past orders, any payment receipt you attached, and the name,
+            phone number and address on those orders.
+          </p>
+          <p>
+            <b>What we keep:</b> if you've ordered before, we keep a receipt-only record of that
+            sale — order number, amount, status and dates, and the album's size, material and page
+            count — because Philippine tax and accounting rules require a business to keep records
+            of its sales. That record carries no name, phone number, address or photos, and is no
+            longer linked to you.
+          </p>
+          <p>
+            One exception: if an order is paid but not yet delivered, we still need your delivery
+            details to finish it, so the account can't be deleted until it arrives — or until you
+            ask us to cancel the order.
+          </p>
+          <p>
+            Otherwise we keep your account and order information for as long as your account is
+            active or as needed to fulfill and support your orders.
           </p>
         </Section>
 
@@ -106,7 +136,7 @@ export default function Privacy() {
 
         <Section title="Contact">
           <p>
-            For any privacy questions or requests, email <a className="text-[#BF5E3E] underline" href={`mailto:${CONTACT}`}>{CONTACT}</a> or reach us via the Contact page.
+            For any privacy questions or requests, email <a className="text-rust underline" href={`mailto:${CONTACT}`}>{CONTACT}</a> or reach us via the Contact page.
           </p>
         </Section>
       </div>

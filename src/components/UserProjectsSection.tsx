@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { BookOpen, Plus, Trash2, Loader2, ChevronRight, Clock, Sparkles } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { useAlbumSync } from '../lib/useAlbumSync';
-import type { AlbumData } from '../lib/useAlbumSync';
+import { useAccountAlbums } from '../lib/useAccountAlbums';
+import { startFreshAlbum } from '../lib/albumSession';
+import { AlbumsLoadFailed } from './AlbumsLoadFailed';
 
 /* ══════════════════════════════════════════════════════════════════════════
    UserProjectsSection — Shows logged-in user's albums on the home page
@@ -12,48 +14,24 @@ import type { AlbumData } from '../lib/useAlbumSync';
 
 export function UserProjectsSection() {
   const { user } = useAuth();
-  const { loadAll, deleteAlbum } = useAlbumSync();
-
-  const [albums, setAlbums] = useState<AlbumData[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch albums on mount / when user changes
-  useEffect(() => {
-    if (!user?.id) {
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function fetchAlbums() {
-      setLoading(true);
-      try {
-        const userAlbums = await loadAll(user!.id);
-        if (!cancelled) {
-          // Sort by most recently updated
-          const sorted = [...userAlbums].sort((a, b) => {
-            const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-            const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-            return bTime - aTime;
-          });
-          setAlbums(sorted);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void fetchAlbums();
-    return () => { cancelled = true; };
-  }, [user?.id, loadAll]);
+  const { deleteAlbum } = useAlbumSync();
+  // The account's albums — and whether they could be loaded: offline this
+  // said "No projects yet" and never asked again (round 3, the Connection Drop).
+  const list = useAccountAlbums(user?.id);
+  const loading = list.loading;
+  const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
+  const albums = useMemo(() => list.albums
+    .filter((a) => !a.id || !gone.has(a.id))
+    // Most recently updated first
+    .sort((a, b) => (b.updatedAt ? new Date(b.updatedAt).getTime() : 0) - (a.updatedAt ? new Date(a.updatedAt).getTime() : 0)),
+  [list.albums, gone]);
 
   const handleDelete = useCallback(
     async (albumId: string) => {
       if (!confirm('Are you sure you want to delete this album?')) return;
       const result = await deleteAlbum(albumId);
       if (result.success) {
-        setAlbums((prev) => prev.filter((a) => a.id !== albumId));
+        setGone((prev) => new Set(prev).add(albumId));
       }
     },
     [deleteAlbum]
@@ -63,7 +41,7 @@ export function UserProjectsSection() {
   if (!user) return null;
 
   return (
-    <section className="bg-[#FFF8F0] py-16 border-b border-[rgba(45,45,45,0.06)]">
+    <section className="bg-cream py-16 border-b border-[rgba(45,45,45,0.06)]">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16">
         {/* Header */}
         <motion.div
@@ -74,18 +52,19 @@ export function UserProjectsSection() {
           className="flex items-center justify-between mb-8"
         >
           <div>
-            <h2 className="font-display text-[1.75rem] sm:text-[2rem] font-bold text-[#2D2D2D]">
+            <h2 className="font-display text-[1.75rem] sm:text-[2rem] font-bold text-dark">
               Your Projects
             </h2>
-            <p className="text-[#6B6B6B] text-sm mt-1">
+            <p className="text-medium text-sm mt-1">
               {albums.length > 0
                 ? `${albums.length} saved ${albums.length === 1 ? 'album' : 'albums'}`
-                : 'Start creating your first album'}
+                : list.failed ? "Couldn't load your albums" : 'Start creating your first album'}
             </p>
           </div>
           <Link
             to="/builder"
-            className="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-[#F4C2A1] text-white text-sm font-semibold rounded-xl hover:brightness-105 transition-all"
+            onClick={() => startFreshAlbum(user?.id)}
+            className="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-peach text-white text-sm font-semibold rounded-xl hover:brightness-105 transition-all"
           >
             <Plus size={16} />
             New Album
@@ -95,28 +74,31 @@ export function UserProjectsSection() {
         {/* Albums Grid */}
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 size={28} className="animate-spin text-[#E8A598]" />
+            <Loader2 size={28} className="animate-spin text-blush-pink" />
           </div>
+        ) : albums.length === 0 && list.failed ? (
+          <AlbumsLoadFailed retrying={list.retrying} onRetry={list.retry} />
         ) : albums.length === 0 ? (
           /* Empty State */
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="bg-white rounded-2xl border border-[#E8D5D0]/50 p-10 text-center"
+            className="bg-white rounded-2xl border border-blush-deep/50 p-10 text-center"
           >
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#FDE8E4] flex items-center justify-center">
-              <BookOpen size={28} className="text-[#E8A598]" />
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blush flex items-center justify-center">
+              <BookOpen size={28} className="text-blush-pink" />
             </div>
-            <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-2">
+            <h3 className="font-display text-lg font-semibold text-dark mb-2">
               No projects yet
             </h3>
-            <p className="text-[#6B6B6B] text-sm mb-6 max-w-sm mx-auto">
+            <p className="text-medium text-sm mb-6 max-w-sm mx-auto">
               Create your first photo album and it will appear here. All your projects are automatically saved to the cloud.
             </p>
             <Link
               to="/builder"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all"
+              onClick={() => startFreshAlbum(user?.id)}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all"
             >
               <Sparkles size={16} />
               Create Your First Album
@@ -131,11 +113,11 @@ export function UserProjectsSection() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: index * 0.08 }}
-                className="group bg-white rounded-2xl border border-[#E8D5D0]/50 overflow-hidden hover:shadow-lg hover:shadow-[#E8A598]/10 hover:border-[#E8A598]/30 transition-all"
+                className="group bg-white rounded-2xl border border-blush-deep/50 overflow-hidden hover:shadow-lg hover:shadow-blush-pink/10 hover:border-blush-pink/30 transition-all"
               >
                 {/* Thumbnail */}
                 <Link to={`/builder?album=${album.id}`} className="block">
-                  <div className="aspect-[4/3] bg-[#F5EDE8] relative overflow-hidden">
+                  <div className="aspect-[4/3] bg-sand relative overflow-hidden">
                     {album.coverPhoto ? (
                       <img
                         src={album.coverPhoto}
@@ -144,7 +126,7 @@ export function UserProjectsSection() {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <BookOpen size={36} className="text-[#E8D5D0]" />
+                        <BookOpen size={36} className="text-blush-deep" />
                       </div>
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -156,19 +138,19 @@ export function UserProjectsSection() {
                   <div className="flex items-start justify-between">
                     <div className="min-w-0 flex-1">
                       <Link to={`/builder?album=${album.id}`} className="block">
-                        <h4 className="font-semibold text-[#2D2D2D] text-sm truncate group-hover:text-[#E8A598] transition-colors">
+                        <h4 className="font-semibold text-dark text-sm truncate group-hover:text-blush-pink transition-colors">
                           {album.title || 'Untitled Album'}
                         </h4>
                       </Link>
                       <div className="flex items-center gap-3 mt-1">
-                        <span className="text-xs text-[#8B7E7A]">
+                        <span className="text-xs text-taupe">
                           {album.sizePreset}
                         </span>
                       </div>
                       {album.updatedAt && (
                         <div className="flex items-center gap-1 mt-1">
-                          <Clock size={10} className="text-[#8B7E7A]/50" />
-                          <span className="text-[0.7rem] text-[#8B7E7A]/60">
+                          <Clock size={10} className="text-taupe/50" />
+                          <span className="text-[0.7rem] text-taupe/60">
                             {formatRelativeTime(new Date(album.updatedAt))}
                           </span>
                         </div>
@@ -179,15 +161,20 @@ export function UserProjectsSection() {
                     <div className="flex items-center gap-1 ml-2">
                       <Link
                         to={`/builder?album=${album.id}`}
-                        className="p-1.5 rounded-lg text-[#8B7E7A] hover:text-[#E8A598] hover:bg-[#FDE8E4] transition-all"
+                        className="p-1.5 rounded-lg text-taupe hover:text-blush-pink hover:bg-blush transition-all"
                         title="Open album"
+                        aria-label={`Open album ${album.title || 'Untitled Album'}`}
                       >
                         <ChevronRight size={16} />
                       </Link>
                       <button
                         onClick={() => album.id && handleDelete(album.id)}
-                        className="p-1.5 rounded-lg text-[#8B7E7A] hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                        // Shown when it has keyboard focus too: it was invisible while
+                        // focused, and Enter deleted an album no one saw (KB-7).
+                        className="p-1.5 rounded-lg text-taupe hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-red-300 transition-all"
                         title="Delete album"
+                        aria-label={`Delete album ${album.title || 'Untitled Album'}`}
+                        data-testid="project-delete"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -206,12 +193,13 @@ export function UserProjectsSection() {
             >
               <Link
                 to="/builder"
-                className="flex flex-col items-center justify-center h-full min-h-[200px] rounded-2xl border-2 border-dashed border-[#E8D5D0] hover:border-[#F4C2A1] hover:bg-[#FDE8E4]/30 transition-all group"
+                onClick={() => startFreshAlbum(user?.id)}
+                className="flex flex-col items-center justify-center h-full min-h-[200px] rounded-2xl border-2 border-dashed border-blush-deep hover:border-peach hover:bg-blush/30 transition-all group"
               >
-                <div className="w-12 h-12 rounded-full bg-[#FDE8E4] flex items-center justify-center mb-3 group-hover:bg-[#F4C2A1] group-hover:text-white transition-all">
-                  <Plus size={20} className="text-[#E8A598] group-hover:text-white" />
+                <div className="w-12 h-12 rounded-full bg-blush flex items-center justify-center mb-3 group-hover:bg-peach group-hover:text-white transition-all">
+                  <Plus size={20} className="text-blush-pink group-hover:text-white" />
                 </div>
-                <span className="text-sm font-medium text-[#8B7E7A] group-hover:text-[#E8A598]">
+                <span className="text-sm font-medium text-taupe group-hover:text-blush-pink">
                   Create New Album
                 </span>
               </Link>
@@ -223,7 +211,8 @@ export function UserProjectsSection() {
         <div className="sm:hidden mt-6">
           <Link
             to="/builder"
-            className="flex items-center justify-center gap-2 w-full py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all"
+            onClick={() => startFreshAlbum(user?.id)}
+            className="flex items-center justify-center gap-2 w-full py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all"
           >
             <Plus size={18} />
             Create New Album
@@ -234,8 +223,8 @@ export function UserProjectsSection() {
   );
 }
 
-/* ── Relative time formatter ── */
-function formatRelativeTime(date: Date): string {
+/* ── Relative time formatter (also the resume prompt's "Last saved …") ── */
+export function formatRelativeTime(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffSec = Math.floor(diffMs / 1000);

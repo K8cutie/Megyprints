@@ -11,6 +11,9 @@ import Privacy from './pages/Privacy';
 import Order from './pages/Order';
 import Profile from './pages/Profile';
 import MyMemories from './pages/MyMemories';
+import MyOrders from './pages/MyOrders';
+import Events from './pages/Events';
+import EventBook from './pages/EventBook';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Code-split the two heavy routes so their weight never lands on Home or the
@@ -21,7 +24,16 @@ import ProtectedRoute from './components/ProtectedRoute';
 // the entry chunk (which is exactly why it wasn't splitting before).
 const BuilderRoute = lazy(() => import('./pages/builder/BuilderRoute'));
 const Admin = lazy(() => import('./pages/Admin'));
+// Megyprints Events, loaded when opened: the guest camera brings the video
+// encoder, and most visitors never need any of it.
+const EventManage = lazy(() => import('./pages/EventManage'));
+const EventCards = lazy(() => import('./pages/EventCards'));
+const EventGuest = lazy(() => import('./pages/EventGuest'));
+const EventScreen = lazy(() => import('./pages/EventScreen'));
+const EventCopy = lazy(() => import('./pages/EventCopy'));
 import InstallPrompt from './components/InstallPrompt';
+import ResumePrompt from './components/ResumePrompt';
+import PaidClipSweep from './components/PaidClipSweep';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
 
@@ -53,9 +65,17 @@ export default function App() {
     <AuthProvider>
       <AuthModalProvider>
       <InstallPrompt />
-      <Suspense fallback={<div className="min-h-screen bg-[#FFF8F0]" aria-busy="true" />}>
+      {/* "Pick up where you left off?" — once per signed-in visit. */}
+      <ResumePrompt />
+      {/* Paid orders free the phone's kept video copies (0042). */}
+      <PaidClipSweep />
+      <Suspense fallback={<div className="min-h-screen bg-cream" aria-busy="true" />}>
       <Routes>
-        <Route element={<Layout><Outlet /></Layout>}>
+        {/* A lazy page inside Layout waits HERE, under the page's fade-in. With
+            only the outer boundary, opening /events/:id fresh (a reload, a
+            bookmark) hid the whole Layout while the page loaded, and the fade-in
+            never came back: a blank page under the menu. */}
+        <Route element={<Layout><Suspense fallback={<div className="min-h-[60vh]" aria-busy="true" />}><Outlet /></Suspense></Layout>}>
           <Route path="/" element={<Home />} />
           <Route path="/templates" element={<Templates />} />
           {/* About page + Navbar/Footer both linked to /about, but the route was
@@ -64,8 +84,13 @@ export default function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/order" element={<Order />} />
+          <Route path="/events" element={<Events />} />
+          <Route path="/events/book" element={<EventBook />} />
+          <Route path="/events/:id" element={<ProtectedRoute><EventManage /></ProtectedRoute>} />
+          <Route path="/e/:code/copy" element={<EventCopy />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />
+          <Route path="/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
         </Route>
         {/* Builder — a full-screen app with its own chrome. Kept OUTSIDE Layout so the
             marketing Lenis smooth-scroll (which hijacks the mouse wheel and scrolls the
@@ -74,6 +99,11 @@ export default function App() {
         <Route path="/builder/*" element={<BuilderRoute />} />
         {/* Operator console — outside the customer Layout (its own chrome) */}
         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+        {/* Megyprints Events, own chrome: the guest camera (from a table QR),
+            the venue screen, and the printable table cards. */}
+        <Route path="/e/:code" element={<EventGuest />} />
+        <Route path="/e/:code/screen" element={<EventScreen />} />
+        <Route path="/events/:id/cards" element={<ProtectedRoute><EventCards /></ProtectedRoute>} />
         {/* Catch-all: an unknown hash previously mounted nothing (blank screen).
             Send it home instead of showing an empty page. */}
         <Route path="*" element={<Navigate to="/" replace />} />

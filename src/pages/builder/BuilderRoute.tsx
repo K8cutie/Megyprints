@@ -1,6 +1,7 @@
 import BuilderErrorBoundary from './BuilderErrorBoundary';
 import { BuilderProvider } from './BuilderContext';
 import Builder from '../Builder';
+import GeneratingOverlay from './GeneratingOverlay';
 
 /**
  * The whole builder route in ONE lazy chunk. Keeping BuilderProvider +
@@ -15,6 +16,7 @@ export default function BuilderRoute() {
     <BuilderErrorBoundary onReset={() => window.location.reload()}>
       <BuilderProvider>
         <Builder />
+        <GeneratingOverlay />
       </BuilderProvider>
     </BuilderErrorBoundary>
   );

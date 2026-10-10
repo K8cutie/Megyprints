@@ -7,12 +7,16 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { resolveSlotBox } from './slotGeometry';
+import { slotPhotoRect } from './slotPhotoFit';
+import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha, type MaskId } from './masks';
+import { applyLookPixels, isLookId, type LookId } from './looks';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { WORDART_SHADOW, TEXT_LINE_HEIGHT, resolveTextSlotAlign } from './wordArt';
+import { WORDART_SHADOW, FABRIC_LINE_HEIGHT, CAPTION_PAD_X, resolveTextSlotAlign } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import type { QrFill, OrnamentFill } from './types';
-import { clampQrGeom } from './types';
+import { clampQrGeom, dealtBoxRoll } from './types';
 import type {
   FabricCanvas,
   FabricObject,
@@ -24,10 +28,12 @@ import type {
 import type { AlbumPage, TextElement, PhotoFilters, UploadedPhoto, AlbumSizePreset, FrameStyle, SlotText } from './types';
 import { DEFAULT_BG_FILTERS, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from './types';
 import { dedupeSlotFills } from './slotUtils';
+import { pagePhotoKey } from './pagePhotoKey';
 import { textureDataUri } from './textures';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById, PAGE_TEMPLATES, adaptTemplateToOrientation } from './pageTemplates';
 import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
+import { loadFontFaces } from './fonts';
 import type { BuilderActions } from './useBuilderState';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
@@ -63,6 +69,13 @@ const SLOT_IMAGE_LOCK = {
 /** Monotonic render ID — increments on every renderScene call.
  *  Used to cancel stale async image callbacks from previous renders. */
 let currentRenderId = 0;
+
+/** Start a render: every callback still waiting on an older one is now stale.
+ *  Exported for the spec (a page turn while a textured edge is loading). */
+export function nextRenderId(): number {
+  currentRenderId += 1;
+  return currentRenderId;
+}
 
 /* ── Snap helpers ──────────────────────────────────────────────────────── */
 
@@ -134,6 +147,10 @@ export interface UseCanvasEngineOptions {
   /** Click on a caption box FILLED with an ornament → re-open the ornament picker. */
   onTextSlotOrnamentClick?: (slotIndex: number) => void;
   onTextSlotOrnamentModified?: (slotIndex: number, geom: import('./types').OrnamentTransform) => void;
+  /** STUDIO stickers: a free graphic was dragged / resized / rotated (the setter clamps). */
+  onStickerModified?: (uid: string, geom: import('./types').OrnamentTransform) => void;
+  /** STUDIO stickers: double-click → swap / remove. */
+  onStickerClick?: (uid: string) => void;
   onTextSlotQrModified?: (slotIndex: number, geom: import('./types').OrnamentTransform) => void;
   actions: BuilderActions;
   /** When true, slot containers become selectable and resizable */
@@ -212,7 +229,10 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   // Ornament fills — so adding/changing/removing an ornament repaints the Fabric
   // editor without a page-nav (same desync class as slotTextData/qrData above).
   const ornamentData = page.ornamentFills ? page.ornamentFills.map((o) => o ? `${o.pack}:${o.id}` : '').join('|') : '';
-  return `${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${slotTransforms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}|${textSlotQrGeomData}`;
+  // STUDIO masks + stickers — so a mask pick or a sticker add/move repaints.
+  const maskData = (page.slotMasks ? page.slotMasks.map((m) => m ?? '').join(',') : '') + '/' + (page.slotLooks ? page.slotLooks.map((m) => m ?? '').join(',') : '');
+  const stickerData = page.stickers ? page.stickers.map((k) => `${k.uid}:${k.pack}:${k.id}:${k.geom.cx.toFixed(3)},${k.geom.cy.toFixed(3)},${k.geom.w.toFixed(3)},${k.geom.h.toFixed(3)},${Math.round(k.geom.rot)}`).join('|') : '';
+  return `${maskData}|${stickerData}|${pageIndex}|${page.textElements.map((t) => t.id).join(',')}|${textData}|${JSON.stringify(page.background)}|${bgTransform}|${page.templateId ?? ''}|${slotFills}|${slotGeoms}|${slotTransforms}|${qrData}|${slotTextData}|${textSlotFillData}|${textSlotQrData}|${ornamentData}|${textSlotOrnamentData}|${textSlotOrnamentGeomData}|${textSlotQrGeomData}`;
 }
 
 /* ═══════════════════════════ HOOK ═══════════════════════════ */
@@ -236,6 +256,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     onTextSlotQrClick,
     onTextSlotOrnamentClick,
     onTextSlotOrnamentModified,
+    onStickerModified,
+    onStickerClick,
     onTextSlotQrModified,
     actions,
     containerMode = false,
@@ -301,6 +323,12 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
   onTextSlotOrnamentClickRef.current = onTextSlotOrnamentClick ?? (() => {});
   const onTextSlotOrnamentModifiedRef = useRef<(slotIndex: number, geom: import('./types').OrnamentTransform) => void>(() => {});
   onTextSlotOrnamentModifiedRef.current = onTextSlotOrnamentModified ?? (() => {});
+  const onStickerModifiedRef = useRef<(uid: string, geom: import('./types').OrnamentTransform) => void>(() => {});
+  const onStickerClickRef = useRef<(uid: string) => void>(() => {});
+  useEffect(() => {
+    onStickerModifiedRef.current = onStickerModified ?? (() => {});
+    onStickerClickRef.current = onStickerClick ?? (() => {});
+  }, [onStickerModified, onStickerClick]);
   const onTextSlotQrModifiedRef = useRef<(slotIndex: number, geom: import('./types').OrnamentTransform) => void>(() => {});
   onTextSlotQrModifiedRef.current = onTextSlotQrModified ?? (() => {});
   const containerModeRef = useRef(containerMode);
@@ -351,7 +379,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       // photos, slots, text or the background. Without this branch the previous
       // selection survives, so pressing Delete destroys THAT object instead —
       // the user selects the QR and loses an unrelated photo.
-      if (typeof obj.slotId === 'string' && (obj.slotId.includes('-textqr-') || obj.slotId.includes('-textornament-'))) {
+      if (typeof obj.slotId === 'string' && (obj.slotId.includes('-textqr-') || obj.slotId.includes('-textornament-') || obj.slotId.includes('-sticker-'))) {
         clearAll();
         savedSelectionRef.current = { type: null, id: null, slotIndex: null };
         return;
@@ -362,6 +390,10 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       } else if (obj.slotIndex !== undefined) {
         clearAll(); setSelectedSlotIndex(obj.slotIndex);
         savedSelectionRef.current = { type: 'slot', id: null, slotIndex: obj.slotIndex as number };
+      } else if ((obj as { studioSlotIndex?: number }).studioSlotIndex !== undefined) {
+        const si = (obj as { studioSlotIndex?: number }).studioSlotIndex as number;
+        clearAll(); setSelectedSlotIndex(si);
+        savedSelectionRef.current = { type: 'slot', id: null, slotIndex: si };
       } else if (obj.textId) {
         clearAll(); setSelectedTextId(obj.textId);
         savedSelectionRef.current = { type: 'text', id: obj.textId as string, slotIndex: null };
@@ -430,7 +462,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     const showSnapGuide = (x1: number, y1: number, x2: number, y2: number) => {
       const line = new fab.Line([x1, y1, x2, y2], {
-        stroke: '#E8A598', strokeWidth: 1, selectable: false, evented: false,
+        stroke: '#9A4A2C', strokeWidth: 1, selectable: false, evented: false,
       });
       snapGuidesRef.current.push(line);
       canvas.add(line);
@@ -555,11 +587,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
             const currentOffsetX = page.slotOffsetsX?.[obj.slotIndex] ?? 0;
             const currentOffsetY = page.slotOffsetsY?.[obj.slotIndex] ?? 0;
             latestActions.setSlotOffset(obj.slotIndex, offsetX - currentOffsetX, offsetY - currentOffsetY);
-            // Save rotation if changed
-            const newAngle = Math.round((obj.angle as number) ?? 0);
-            if (newAngle !== (slot.rotation ?? 0) && latestActions.updateSlotGeometry) {
-              latestActions.updateSlotGeometry(obj.slotIndex, { rotation: newAngle });
-            }
+            // (No rotation save: no renderer prints a rotated frame, so the
+            // editor must not keep one either — print parity.)
           }
         }
       }
@@ -616,7 +645,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
 
     /* ── CRITICAL BUG FIX: render full scene on init, not just background ── */
     lastStructuralRef.current = '';
-    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current);
+    renderScene(fab, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current, onStickerModifiedRef.current, onStickerClickRef.current);
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
 
@@ -734,7 +763,9 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
       return; /* Same page, still editing — skip render */
     }
 
-    const fingerprint = pageFingerprint(actions.currentPageIndex, currentPage) + '|cm:' + (containerModeRef.current ? '1' : '0');
+    // + the URLs of the photos this page draws: after a reload IndexedDB swaps
+    // in live URLs for the same indexes, and the page must repaint to show them.
+    const fingerprint = pageFingerprint(actions.currentPageIndex, currentPage) + '|ph:' + pagePhotoKey(currentPage, uploadedPhotos) + '|cm:' + (containerModeRef.current ? '1' : '0');
     if (lastStructuralRef.current === fingerprint) return;
     lastStructuralRef.current = fingerprint;
 
@@ -755,7 +786,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     }
     const savedSel = savedSelectionRef.current;
 
-    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current);
+    renderScene(fabricModule as any, canvas, currentPage, uploadedPhotos, albumType, CANVAS_W, CANVAS_H, onSlotClickRef.current, containerModeRef.current, albumSize, actions.currentPageIndex, onContainerModifiedRef.current, onTextSlotClickRef.current, onQrSlotClickRef.current, onSlotTextClickRef.current, onTextSlotEmptyClickRef.current, onTextSlotPhotoClickRef.current, onTextSlotQrClickRef.current, onOrnamentSlotClickRef.current, onTextSlotOrnamentClickRef.current, onTextSlotOrnamentModifiedRef.current, onTextSlotQrModifiedRef.current, coverMode, onTextSlotChooserClickRef.current, onStickerModifiedRef.current, onStickerClickRef.current);
 
     // Capture preview snapshot after async images settle
     setTimeout(() => onRenderComplete?.(canvas), 200);
@@ -1098,7 +1129,24 @@ function createBackgroundObject(
  *  Template Slot Renderer
  *  ══════════════════════════════════════════════════════════════════════════ */
 
-function renderTemplateSlots(
+/** Overlays sit above photos and their frame outlines — QR / graphics, then
+ *  text, then caption-box graphics, then stickers on top of everything — as
+ *  the DOM preview and the print draw them. Photos load async and a late one
+ *  lands on top; with Studio always on its frame outline is CLICKABLE, so
+ *  whatever it covered (a QR badge, a caption, a sticker) stopped taking
+ *  clicks. So this runs after the scene renders AND after every photo loads.
+ *  (`-ornament-`/`-qr-` don't match the `-textornament-`/`-textqr-` ids.) */
+function raiseOverlays(canvas: FabricCanvas): void {
+  const objs = [...canvas.getObjects()]; // a snapshot: bringToFront reorders the live list
+  const has = (o: FabricObject, ...ids: string[]) => typeof o.slotId === 'string' && ids.some((id) => (o.slotId as string).includes(id));
+  objs.filter((o) => has(o, '-qr-', '-qrbg-', '-ornament-')).forEach((o) => canvas.bringToFront(o));
+  objs.filter((o) => o.textId).forEach((o) => canvas.bringToFront(o));
+  objs.filter((o) => has(o, '-textornament-', '-textqr-', '-textqrbg-')).forEach((o) => canvas.bringToFront(o));
+  objs.filter((o) => has(o, '-sticker-')).forEach((o) => canvas.bringToFront(o));
+}
+
+/** Exported for the spec (bakedFrame.spec.ts drives it with a stand-in Fabric). */
+export function renderTemplateSlots(
   fab: any,
   canvas: FabricCanvas,
   template: any,
@@ -1127,6 +1175,8 @@ function renderTemplateSlots(
   ornamentFills?: (OrnamentFill | null)[],
   onOrnamentSlotClick: (slotIndex: number) => void = () => {},
   coverMode: boolean = false,
+  slotMasks?: (string | null)[],
+  slotLooks?: (string | null)[],
 ) {
   canvas.getObjects().filter((o: any) => o.slotId?.startsWith(SLOT_ID)).forEach((o: any) => canvas.remove(o));
 
@@ -1141,11 +1191,15 @@ function renderTemplateSlots(
   const safeY = canvasH * m.top;
   const safeW = canvasW * (1 - m.left - m.right);
   const safeH = canvasH * (1 - m.top - m.bottom);
+  // Studio's live proof reads the frames' canvas rects from here (only while
+  // Studio is on; nothing in the product depends on it).
+  const studioRects: { i: number; x: number; y: number; w: number; h: number }[] = [];
 
   adaptedTemplate.slots.forEach((rawSlot: any, i: number) => {
-    // Merge template slot with user geometry overrides
-    const geom = slotGeometries?.[i] ?? {};
-    const slot = { ...rawSlot, ...geom };
+    // STUDIO: a moved frame (same arithmetic as preview + print) and a mask
+    // (same shape module as preview + print).
+    const rawMask = slotMasks?.[i];
+    const slot = applyMask(resolveSlotBox(rawSlot, slotGeometries?.[i]), isMaskId(rawMask) ? (rawMask as MaskId) : null);
     const photoIndex = slotFills[i];
     // Phase 2: map slot proportions (0–1 of safe area) → pixels
     const sx = safeX + slot.x * safeW;
@@ -1153,6 +1207,10 @@ function renderTemplateSlots(
     const sw = slot.width * safeW;
     const sh = slot.height * safeH;
 
+    if (containerMode && typeof window !== 'undefined') {
+      studioRects.push({ i, x: sx, y: sy, w: sw, h: sh });
+      (window as unknown as { __megyStudioRects?: unknown }).__megyStudioRects = { canvasW, canvasH, rects: studioRects };
+    }
     // Content precedence is DRIVEN BY page data (not slot.kind):
     //   qrFills[i] → QR, slotTexts[i] → text, slotFills[i] → photo, else empty "+".
     // QR is handled first so it never falls into the empty-photo branch, and the
@@ -1199,10 +1257,13 @@ function renderTemplateSlots(
     const st = slotTexts?.[i] ?? null;
     if (st) {
       const stText = new fab.Textbox(st.text, {
-        left: sx,
+        // Inside print's margin, at print's line rhythm (see CAPTION_PAD_X,
+        // FABRIC_LINE_HEIGHT): the editor shows the lines paper gets.
+        left: sx + sw * CAPTION_PAD_X,
         top: sy + sh / 2,
         originY: 'center',
-        width: sw,
+        width: sw * (1 - 2 * CAPTION_PAD_X),
+        lineHeight: FABRIC_LINE_HEIGHT,
         fontSize: st.fontSize,
         fontFamily: st.fontFamily,
         fill: st.color,
@@ -1228,35 +1289,33 @@ function renderTemplateSlots(
 
     if (photoIndex !== null && uploadedPhotos[photoIndex]) {
       const photoUrl = uploadedPhotos[photoIndex].previewUrl;
-      fab.Image.fromURL(photoUrl, (img: any) => {
+      // async: a textured edge waits for its texture (see the bake below) and
+      // nothing of this slot is drawn until it lands — photo and frame together.
+      fab.Image.fromURL(photoUrl, async (img: any) => {
         /* Skip if a newer render has started — prevents stale images
            from appearing when switching pages rapidly */
         if (renderId !== currentRenderId) return;
         const imgW = img.width || sw;
         const imgH = img.height || sh;
-        const coverScale = Math.max(sw / imgW, sh / imgH);
-        const userScale = slotScales[i] ?? 1;
-        const finalScale = (userScale !== 1 && userScale > 0) ? userScale : coverScale;
-        const offsetX = slotOffsetsX[i] ?? 0;
-        const offsetY = slotOffsetsY[i] ?? 0;
+        // The ONE fit print + the DOM preview draw with (slotPhotoFit): cover ×
+        // the zoom (a multiplier on cover, as print reads it — this used to
+        // treat any zoom but 1 as a raw image scale), then the pan, held to
+        // the overflow. Fabric works in design px, so the pan goes in as is.
+        const fit = slotPhotoRect({ w: imgW, h: imgH }, { w: sw, h: sh }, slotScales[i], { x: slotOffsetsX[i] ?? 0, y: slotOffsetsY[i] ?? 0 });
 
         img.set({
-          left: sx + sw / 2 + offsetX,
-          top: sy + sh / 2 + offsetY,
+          left: sx + fit.x + fit.w / 2,
+          top: sy + fit.y + fit.h / 2,
           originX: 'center',
           originY: 'center',
-          scaleX: finalScale,
-          scaleY: finalScale,
+          scaleX: fit.w / imgW,
+          scaleY: fit.w / imgW,
           angle: slot.rotation ?? 0,
           /* Megy is the sole orchestrator. The canvas is a RENDERER: a slot
              photo can be selected (to delete/replace via Megy) but never
              manually moved, scaled, or rotated. See SLOT_IMAGE_LOCK. */
           ...SLOT_IMAGE_LOCK,
         });
-        img.slotId = `${SLOT_ID}-photo-${i}`;
-        img.photoIndex = photoIndex;
-        img.slotIndex = i;
-        img.photoId = `slot-photo-${i}`;
 
         // Shape clipPath
         const clipCx = sx + sw / 2;
@@ -1280,13 +1339,82 @@ function renderTemplateSlots(
           const clip = new fab.Path(heartPath, { left: clipCx, top: clipCy, originX: 'center', originY: 'center' });
           clip.absolutePositioned = true;
           img.set('clipPath', clip);
+        } else if (slot.shape === 'arch') {
+          const clip = new fab.Path(archPathCentered(sw, sh), { left: clipCx, top: clipCy, originX: 'center', originY: 'center' });
+          clip.absolutePositioned = true;
+          img.set('clipPath', clip);
+        } else if (slot.shape === 'star') {
+          const clip = new fab.Polygon(starPoints(clipCx, clipCy, Math.min(sw, sh) / 2), {});
+          clip.absolutePositioned = true;
+          img.set('clipPath', clip);
+        } else if (isPathShape(slot.shape)) {
+          const clip = new fab.Path(maskPathD(slot.shape, -sw / 2, -sh / 2, sw, sh), { left: clipCx, top: clipCy, originX: 'center', originY: 'center' });
+          clip.absolutePositioned = true;
+          img.set('clipPath', clip);
         } else {
           const clip = new fab.Rect({ width: sw, height: sh, left: clipCx, top: clipCy, originX: 'center', originY: 'center' });
           clip.absolutePositioned = true;
           img.set('clipPath', clip);
         }
 
-        canvas.add(img);
+        // The image this slot shows: the photo, or its bake. ONLY the image is
+        // swapped — the shadow, the frame Studio moves and resizes, the
+        // decorative frame and the drag followers below are built the same for
+        // both. (The bake used to return before any of them, so a photo with a
+        // look or an edge could be re-styled on desktop but never moved.)
+        let photo = img;
+        const rawLook = slotLooks?.[i];
+        const look: LookId | null = isLookId(rawLook) ? rawLook : null;
+        if (slot.feather || slot.texture || look) {
+          // Bake: Fabric clips have no alpha and its filters are not the CSS
+          // ones, so draw the cover-fitted photo into an offscreen canvas,
+          // apply the look to the pixels (the same matrices the DOM's CSS
+          // filter uses), then the soft or textured edge on the alpha — and
+          // show that instead of the raw image. Exactly what print does.
+          let off: HTMLCanvasElement | null = null;
+          let octx: CanvasRenderingContext2D | null = null;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const el = img.getElement ? img.getElement() : (img as any)._element;
+            off = document.createElement('canvas');
+            off.width = Math.max(1, Math.round(sw));
+            off.height = Math.max(1, Math.round(sh));
+            octx = el ? off.getContext('2d') : null;
+            if (octx) {
+              octx.drawImage(el, fit.x, fit.y, fit.w, fit.h);
+              if (look) applyLookPixels(octx, 0, 0, off.width, off.height, look);
+              if (slot.feather) featherAlpha(octx, 0, 0, off.width, off.height, slot.feather, slot.featherSide);
+            }
+          } catch { octx = null; /* show the plain image */ }
+          if (off && octx) {
+            if (slot.texture) {
+              try {
+                const [tex, overlay] = await Promise.all([loadMaskTexture(slot.texture), loadMaskOverlay(slot.texture)]);
+                applyTextureAlpha(octx, tex, 0, 0, off.width, off.height, overlay);
+              }
+              catch { /* texture missing — the photo without the edge, as print does */ }
+              // the texture loads async: a newer render may have started since
+              if (renderId !== currentRenderId) return;
+            }
+            // Same centre, turn and shape clip as the raw image it replaces (a
+            // look on a circle is still a circle — print clips the bake too).
+            photo = new fab.Image(off, {
+              left: sx + sw / 2,
+              top: sy + sh / 2,
+              originX: 'center',
+              originY: 'center',
+              angle: slot.rotation ?? 0,
+              clipPath: img.clipPath,
+              ...SLOT_IMAGE_LOCK,
+            });
+          }
+        }
+        photo.slotId = `${SLOT_ID}-photo-${i}`;
+        photo.photoIndex = photoIndex;
+        photo.slotIndex = i;
+        photo.photoId = `slot-photo-${i}`;
+
+        canvas.add(photo);
 
         // Fake shadow — dark semi-transparent rect behind photo.
         // NOT using Fabric.js shadow (unreliable with clipPath).
@@ -1301,9 +1429,19 @@ function renderTemplateSlots(
         // both show a clean background hairline. Those two renderers already
         // suppress all framing for fullBleed (BuilderPreview frameCss = {},
         // printPipeline effFrameStyle = 'none'); this keeps Fabric in step.
+        //
+        // NOR on a masked photo: a mask drops the border and the decorative
+        // frame in all three renderers, and this rectangle is framing too — a
+        // grey box behind a circle, or behind a soft edge that should fade into
+        // the page. Neither the preview nor the print draws it.
         const shadowOff = 4;
         const shadowBlur = 8;
-        const fakeShadow = template.fullBleed ? null : new fab.Rect({
+        // Studio: everything drawn around the photo that must follow its frame
+        // while it is dragged (the re-render after the drop snaps it exactly).
+        type Follower = { left?: number; top?: number; set: (p: { left: number; top: number }) => unknown };
+        const followers: { obj: Follower; left: number; top: number }[] = [];
+        const follow = (obj: Follower) => followers.push({ obj, left: obj.left ?? 0, top: obj.top ?? 0 });
+        const fakeShadow = template.fullBleed || slot.masked ? null : new fab.Rect({
           left: sx + shadowOff - shadowBlur / 2,
           top: sy + shadowOff - shadowBlur / 2,
           width: sw + shadowBlur,
@@ -1322,21 +1460,26 @@ function renderTemplateSlots(
           fakeShadow.slotId = `${SLOT_ID}-shadow-${i}`;
           canvas.add(fakeShadow);
           fakeShadow.sendToBack();
+          follow(fakeShadow);
         }
 
-        // Slot border frame — THE CONTAINER. White outline normally,
-        // becomes thick blue+selectable in container mode for resize/move.
-        const borderStroke = containerMode ? '#3B82F6' : (frameColor ?? '#FFFFFF');
-        // Full-bleed (single-photo, no-textbox) pages draw no frame — but keep the
-        // blue container outline in edit mode so the slot is still selectable.
-        const effFrameWidth = adaptedTemplate.fullBleed ? 0 : frameWidth;
-        const borderWidth = containerMode ? 3 : (effFrameWidth ?? 2);
-        // Dashed/dotted border style — only on the real (non-container) outline,
-        // and only when the slot actually draws a border. Mirrors the DOM
-        // (border-style) + print (ctx.setLineDash) renderers.
+        // Slot border frame — THE CONTAINER. Always drawn as the customer's real
+        // border (colour, width, dash). In container mode (Studio — always on
+        // since 2026-09-30) it is also selectable: Fabric's blue handles appear
+        // only on the frame being moved/resized, so the page still looks like
+        // the page. (It used to become a thick blue outline on every photo and
+        // hide the decorative frames — fine for a mode you dip into, wrong for
+        // the only mode there is.)
+        const borderStroke = frameColor ?? '#FFFFFF';
+        // Full-bleed (single-photo, no-textbox) pages draw no frame. A 0-width
+        // outline is still selectable — Fabric hit-tests its box, not its ink.
+        const effFrameWidth = adaptedTemplate.fullBleed || slot.masked ? 0 : frameWidth;
+        const borderWidth = effFrameWidth ?? 2;
+        // Dashed/dotted border style — only when the slot actually draws a
+        // border. Mirrors the DOM (border-style) + print (ctx.setLineDash).
         const effBorderStyle = borderStyle ?? 'solid';
         let borderDashArray: number[] | undefined;
-        if (!containerMode && borderWidth > 0) {
+        if (borderWidth > 0) {
           if (effBorderStyle === 'dashed') borderDashArray = [borderWidth * 2, borderWidth * 2];
           else if (effBorderStyle === 'dotted') borderDashArray = [1, borderWidth * 2];
         }
@@ -1350,10 +1493,11 @@ function renderTemplateSlots(
           evented: containerMode,
           hasControls: containerMode,
           hasBorders: containerMode,
+          borderColor: containerMode ? '#3B82F6' : undefined,
           cornerColor: containerMode ? '#3B82F6' : undefined,
           cornerSize: containerMode ? 10 : undefined,
           transparentCorners: false,
-          lockRotation: false,
+          lockRotation: true, // rotation is not printed by any renderer — never offer it
           hoverCursor: containerMode ? 'move' : 'default',
         };
         let borderObj: any;
@@ -1373,6 +1517,13 @@ function renderTemplateSlots(
           borderObj = new fab.Rect({ left: sx, top: sy, width: sw, height: sh, ...borderBase });
         }
         borderObj.slotId = `${SLOT_ID}-border-${i}`;
+        // lockRotation stops the turn but Fabric still draws the rotate stalk —
+        // a handle that does nothing reads as broken. No renderer prints rotation.
+        borderObj.setControlsVisibility?.({ mtr: false });
+        // Studio: selecting the frame outline selects the slot (mask chips).
+        // A separate field, NOT slotIndex — the generic object:modified handler
+        // treats anything with slotIndex as a pannable photo.
+        borderObj.studioSlotIndex = i;
         canvas.add(borderObj);
         borderObj.bringToFront();
 
@@ -1381,12 +1532,11 @@ function renderTemplateSlots(
         // the Fabric / DOM / print renderers stay in lockstep. Frame objects are
         // tagged `${SLOT_ID}-frame-${i}` so the cleanup pass (filters on
         // SLOT_ID) removes them on every rerender. Suppressed for full-bleed
-        // pages (no border ⇒ no decorative frame) and in container mode (the
-        // blue resize outline owns the slot then).
+        // pages (no border ⇒ no decorative frame).
         const effFrameStyle: FrameStyle = frameStyle ?? 'none';
         if (
-          !containerMode &&
           !adaptedTemplate.fullBleed &&
+          !slot.masked &&
           effFrameStyle !== 'none' &&
           slot.shape !== 'heart'
         ) {
@@ -1417,6 +1567,7 @@ function renderTemplateSlots(
             dbl.slotId = frameTag;
             canvas.add(dbl);
             dbl.bringToFront();
+            follow(dbl);
           } else if (effFrameStyle === 'thin') {
             // Single 1px inset hairline just inside the slot edge.
             const inset = 1;
@@ -1426,6 +1577,7 @@ function renderTemplateSlots(
             hair.slotId = frameTag;
             canvas.add(hair);
             hair.bringToFront();
+            follow(hair);
           } else if (effFrameStyle === 'matte' || effFrameStyle === 'polaroid') {
             // White mat behind the photo. Polaroid is weighted at the bottom and
             // casts a soft drop shadow; matte is an even mount.
@@ -1457,10 +1609,11 @@ function renderTemplateSlots(
                 });
             mat.slotId = frameTag;
             canvas.add(mat);
+            follow(mat);
             // Mat must sit UNDER the photo but ABOVE the page background. The
             // photo + its border were already added, so drop the mat just below
             // them by re-raising the photo and border back to the front.
-            img.bringToFront();
+            photo.bringToFront();
             borderObj.bringToFront();
           }
         }
@@ -1480,43 +1633,57 @@ function renderTemplateSlots(
               newW = (borderObj.width || sw) * (borderObj.scaleX || 1);
               newH = (borderObj.height || sh) * (borderObj.scaleY || 1);
             }
+            // Fabric's scaled size INCLUDES the outline's stroke (the frame was
+            // created with left/top = the slot box and width/height = the box,
+            // stroke on top), so take the stroke back out or every drag grows
+            // the frame by 3 px — measured 0.4% per move before this.
+            newW -= (borderObj.strokeWidth || 0) * (borderObj.scaleX || 1);
+            newH -= (borderObj.strokeWidth || 0) * (borderObj.scaleY || 1);
             // For circle/oval/heart centered objects, adjust left/top
             const isCentered = slot.shape === 'circle' || slot.shape === 'oval' || slot.shape === 'heart';
             const finalLeft = isCentered ? newLeft - newW / 2 : newLeft;
             const finalTop = isCentered ? newTop - newH / 2 : newTop;
+            // FRACTIONS OF THE SAFE AREA — the space template slots live in, so
+            // the preview and the print place this frame with the same maths.
+            // (The old percent-of-canvas write never matched what was read.)
+            // The state setter clamps it (spine, safe area, 2" floor) and the
+            // re-render snaps the frame to where it may actually print.
             onContainerModified(i, {
-              x: Math.round((finalLeft / canvasW) * 100 * 10) / 10,
-              y: Math.round((finalTop / canvasH) * 100 * 10) / 10,
-              width: Math.round((newW / canvasW) * 100 * 10) / 10,
-              height: Math.round((newH / canvasH) * 100 * 10) / 10,
-              rotation: Math.round((borderObj.angle as number) ?? 0),
+              x: (finalLeft - safeX) / safeW,
+              y: (finalTop - safeY) / safeH,
+              width: newW / safeW,
+              height: newH / safeH,
             });
           });
 
-          // Moving: sync photo position to follow container
+          // Moving: the photo, its clip, its shadow and its decorative frame all
+          // follow the container. dx/dy are measured from the frame's OWN start
+          // (circle/oval/heart frames are centre-origin; measuring from the slot's
+          // top-left made a round photo jump half its width on the first move).
+          const frameStart = { left: borderObj.left ?? sx, top: borderObj.top ?? sy };
+          const photoStart = { left: photo.left ?? 0, top: photo.top ?? 0 };
+          const clip = photo.clipPath;
+          const clipStart = clip ? { left: clip.left ?? 0, top: clip.top ?? 0 } : null;
           borderObj.on('moving', () => {
-            const dx = (borderObj.left ?? sx) - sx;
-            const dy = (borderObj.top ?? sy) - sy;
-            // For centered shapes, left/top is center — adjust
-            const isCentered = slot.shape === 'circle' || slot.shape === 'oval' || slot.shape === 'heart';
-            const offsetX = isCentered ? dx : dx;
-            const offsetY = isCentered ? dy : dy;
-            // Move the image to follow the border
-            img.set({
-              left: (sx + sw / 2) + offsetX + (slotOffsetsX[i] ?? 0),
-              top: (sy + sh / 2) + offsetY + (slotOffsetsY[i] ?? 0),
-            });
+            const dx = (borderObj.left ?? frameStart.left) - frameStart.left;
+            const dy = (borderObj.top ?? frameStart.top) - frameStart.top;
+            photo.set({ left: photoStart.left + dx, top: photoStart.top + dy });
+            // an absolutePositioned clip stays put unless moved — the photo
+            // would show only where the old and new boxes overlap
+            if (clip && clipStart) clip.set({ left: clipStart.left + dx, top: clipStart.top + dy });
+            for (const f of followers) f.obj.set({ left: f.left + dx, top: f.top + dy });
             canvas.requestRenderAll();
           });
         }
 
+        raiseOverlays(canvas); // this photo may have loaded after the overlays above it
         canvas.requestRenderAll();
       });
     } else {
       // Empty slot
       const emptySlotStyle = {
         fill: 'rgba(244,194,161,0.08)',
-        stroke: '#F4C2A1',
+        stroke: '#B85C38',
         strokeWidth: 2,
         strokeDashArray: [6, 3],
         selectable: false,
@@ -1560,7 +1727,7 @@ function renderTemplateSlots(
         : new fab.Text('+', {
             left: sx + sw / 2, top: sy + sh / 2, originX: 'center', originY: 'center',
             fontSize: Math.max(24, cell * 0.3),
-            fontFamily: '"DM Sans", sans-serif', fontWeight: 'bold', fill: '#E8A598',
+            fontFamily: '"DM Sans", sans-serif', fontWeight: 'bold', fill: '#9A4A2C',
             selectable: false, evented: false,
           });
       hint.slotId = `${SLOT_ID}-plus-${i}`;
@@ -1603,10 +1770,11 @@ function renderScene(
   // Last + defaulted (like coverMode) so the long positional call sites stay
   // valid: the ⋯ badge on a DEALT box → the full 3-way chooser (override).
   onTextSlotChooserClick: (slotIndex: number) => void = () => {},
+  onStickerModified: (uid: string, geom: import('./types').OrnamentTransform) => void = () => {},
+  onStickerClick: (uid: string) => void = () => {},
 ) {
   // Increment render ID — cancels stale async image callbacks
-  currentRenderId += 1;
-  const thisRenderId = currentRenderId;
+  const thisRenderId = nextRenderId();
 
   // 1. Remove all managed objects
   const toRemove = canvas.getObjects().filter((obj: any) =>
@@ -1627,7 +1795,7 @@ function renderScene(
 
   const geoms = page.slotGeometries;
   if (template) {
-    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick, page.slotTexts, onSlotTextClick, page.ornamentFills, onOrnamentSlotClick, coverMode);
+    renderTemplateSlots(fab, canvas, template, fills, scales, offsetsX, offsetsY, geoms, uploadedPhotos, canvasW, canvasH, onSlotClick, thisRenderId, containerMode, albumSize, pageIndex, onContainerModified, page.photoBorderColor, page.photoBorderWidth, page.photoBorderStyle, page.frameStyle, page.qrFills, onQrSlotClick, page.slotTexts, onSlotTextClick, page.ornamentFills, onOrnamentSlotClick, coverMode, page.slotMasks, page.slotLooks);
   }
 
   // 3b. Decorative theme corners (one set, all four corners), locked + on top.
@@ -1728,8 +1896,8 @@ function renderScene(
         }
         img.set({
           selectable: true, evented: true, hasControls: true, hasBorders: true,
-          cornerColor: '#F4C2A1', cornerSize: 10, transparentCorners: false,
-          borderColor: '#F4C2A1', hoverCursor: 'move',
+          cornerColor: '#B85C38', cornerSize: 10, transparentCorners: false,
+          borderColor: '#B85C38', hoverCursor: 'move',
         });
         // A QR must stay SQUARE to scan. `lockUniScaling` is a fabric 3 property
         // that no longer exists in the pinned fabric 5.3 — setting it does
@@ -1817,8 +1985,8 @@ function renderScene(
         img.set({
           selectable: true, evented: true, hasControls: true, hasBorders: true,
           lockUniScaling: true, // keep the vector proportional on a corner drag
-          cornerColor: '#F4C2A1', cornerSize: 10, transparentCorners: false,
-          borderColor: '#F4C2A1', hoverCursor: 'move',
+          cornerColor: '#B85C38', cornerSize: 10, transparentCorners: false,
+          borderColor: '#B85C38', hoverCursor: 'move',
         });
         img.slotId = `${SLOT_ID}-textornament-${i}`;
         img.on('modified', () => {
@@ -1864,6 +2032,7 @@ function renderScene(
         img.photoId = `text-slot-photo-${i}`;
         img.on('mousedown', () => onTextSlotPhotoClick(i));
         canvas.add(img);
+        raiseOverlays(canvas); // a late photo must not cover a dragged graphic or a sticker
         canvas.renderAll();
       });
     }
@@ -1873,12 +2042,12 @@ function renderScene(
   // Text is collected first, added to canvas, then brought to front.
   // Slot images load async via fab.Image.fromURL — they may be added
   // AFTER text, covering it. We re-bring text to front after a delay.
-  const textObjects: any[] = [];
   page.textElements.forEach((text: TextElement) => {
     const slotRect = text.boxIndex != null ? textSlotRect(text.boxIndex) : null;
     const autoWidth = Math.max(text.text.length * text.fontSize * 0.6, 100);
     const fabricText = new fab.Textbox(text.text, {
-      left: slotRect ? slotRect.left : text.x,
+      // A bound caption wraps inside print's margin (CAPTION_PAD_X).
+      left: slotRect ? slotRect.left + slotRect.width * CAPTION_PAD_X : text.x,
       // Bound captions sit VERTICALLY CENTERED in their box (origin = center),
       // matching the preview + mobile review. Free text keeps top-left origin.
       top: slotRect ? (slotRect.top + slotRect.height / 2) : text.y,
@@ -1890,10 +2059,10 @@ function renderScene(
       fontStyle: text.italic ? 'italic' : 'normal',
       underline: text.underline,
       // ELEMENT-first alignment via the shared resolver (same as DOM + print);
-      // 1.25 line rhythm matching both (Fabric's default was 1.16, so multi-line
-      // captions sat tighter in the editor than on screen and paper).
+      // the 1.25 line rhythm of both, in Fabric's terms (FABRIC_LINE_HEIGHT:
+      // Fabric multiplies by 1.13, so 1.25 itself spaced lines 13% wider).
       textAlign: resolveTextSlotAlign(text, text.boxIndex != null ? template?.textSlots?.[text.boxIndex] : null),
-      lineHeight: TEXT_LINE_HEIGHT,
+      lineHeight: FABRIC_LINE_HEIGHT,
       stroke: text.outlineWidth && text.outlineColor ? text.outlineColor : undefined,
       strokeWidth: text.outlineWidth && text.outlineColor ? text.outlineWidth : 0,
       paintFirst: 'stroke',
@@ -1908,12 +2077,12 @@ function renderScene(
       evented: true,
       editable: slotRect ? false : true,
       hoverCursor: slotRect ? 'pointer' : undefined,
-      editingBorderColor: '#F4C2A1',
-      cornerColor: '#F4C2A1',
+      editingBorderColor: '#B85C38',
+      cornerColor: '#B85C38',
       cornerSize: 8,
       transparentCorners: false,
-      borderColor: '#F4C2A1',
-      width: slotRect ? slotRect.width : (text.width ?? autoWidth),
+      borderColor: '#B85C38',
+      width: slotRect ? slotRect.width * (1 - 2 * CAPTION_PAD_X) : (text.width ?? autoWidth),
       scaleX: text.scaleX ?? 1,
       scaleY: text.scaleY ?? 1,
     });
@@ -1923,8 +2092,46 @@ function renderScene(
       fabricText.on('mousedown', () => onTextSlotClick(bi));
     }
     canvas.add(fabricText);
-    textObjects.push(fabricText);
   });
+
+  // 4a-bis. STUDIO stickers — free graphics: drag to move, corner handles to
+  // resize / rotate (uniform), double-click to swap / remove. Their transform
+  // is the same centre-based page-fraction OrnamentTransform the caption-box
+  // graphics use, so the DOM preview + print place them identically.
+  for (const k of page.stickers ?? []) {
+    const g = k.geom;
+    if (!g) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    fab.Image.fromURL(k.pngDataUrl, (img: any) => {
+      if (thisRenderId !== currentRenderId) return;
+      const iw = img.width || 1;
+      const ih = img.height || 1;
+      img.set({
+        originX: 'center', originY: 'center',
+        left: g.cx * canvasW, top: g.cy * canvasH,
+        scaleX: (g.w * canvasW) / iw, scaleY: (g.h * canvasH) / ih,
+        angle: g.rot || 0,
+        selectable: true, evented: true, hasControls: true, hasBorders: true,
+        lockUniScaling: true,
+        cornerColor: '#B85C38', cornerSize: 10, transparentCorners: false,
+        borderColor: '#B85C38', hoverCursor: 'move',
+      });
+      img.slotId = `${SLOT_ID}-sticker-${k.uid}`;
+      img.on('modified', () => {
+        onStickerModified(k.uid, {
+          cx: img.left / canvasW,
+          cy: img.top / canvasH,
+          w: img.getScaledWidth() / canvasW,
+          h: img.getScaledHeight() / canvasH,
+          rot: img.angle || 0,
+        });
+      });
+      img.on('mousedblclick', () => onStickerClick(k.uid));
+      canvas.add(img);
+      img.bringToFront();
+      canvas.renderAll();
+    });
+  }
 
   // 4b. Empty textbox placeholders — a tappable "Tap to add text" region in-slot,
   // identical to the mobile review + preview. Clicking opens the shared text
@@ -1949,14 +2156,24 @@ function renderScene(
     // keep the generic label + 3-way chooser. Keep these labels in step with
     // the DOM hint (BuilderPreview EmptyChooserBox) — the two are SEPARATE and
     // drift silently.
-    const roll = page.textSlotRoll?.[i] ?? null;
+    // (Read through dealtBoxRoll: a box an older album dealt the retired 'qr'
+    // is an ordinary undealt box now.)
+    const roll = dealtBoxRoll(page, i);
     const labelText =
       roll === 'text' ? 'Your words here' :
-      roll === 'qr' ? 'Add a video link' :
       roll === 'quote' ? 'Add a quote' : 'Tap to add';
-    const label = new fab.Text(labelText, {
+    // WRAP, don't clip. A single-line fab.Text sized by an estimated glyph
+    // width still clipped the longer labels on tall-narrow bands; a Textbox
+    // wraps within its width instead. Font is capped so the longest WORD fits
+    // (0.72em safe bold bound) — mirrors the DOM twin in BuilderPreview's
+    // EmptyChooserBox; keep the two in step.
+    const longestWord = labelText.split(' ').reduce((a, b) => (b.length > a.length ? b : a), '');
+    const boxW = Math.max(24, r.width - 16);
+    const labelFs = Math.max(9, Math.min(24, r.height * 0.14, boxW / (longestWord.length * 0.72)));
+    const label = new fab.Textbox(labelText, {
       left: r.left + r.width / 2, top: r.top + r.height / 2, originX: 'center', originY: 'center',
-      fontSize: Math.max(12, Math.min(24, Math.min(r.width, r.height) * 0.12)),
+      width: boxW,
+      fontSize: labelFs,
       fill: '#A0562F', fontFamily: '"DM Sans", sans-serif', fontWeight: '700', textAlign: 'center',
       selectable: false, evented: false,
     });
@@ -1965,12 +2182,12 @@ function renderScene(
     canvas.add(label);
     box.on('mousedown', () => onTextSlotEmptyClick(i));
     // A dealt box also gets a ⋯ badge → ALWAYS the full chooser, so the roll
-    // stays a default, never a cage (turn a dealt QR box into a quote, etc.).
+    // stays a default, never a cage (turn a dealt text box into a quote, etc.).
     if (roll) {
       const br = Math.max(9, Math.min(14, Math.min(r.width, r.height) * 0.10));
       const moreDot = new fab.Circle({
         left: r.left + r.width - br * 2 - 6, top: r.top + 6, radius: br,
-        fill: '#F4C2A1', selectable: false, evented: true, hoverCursor: 'pointer',
+        fill: '#B85C38', selectable: false, evented: true, hoverCursor: 'pointer',
       });
       moreDot.slotId = `${SLOT_ID}-textbox-more-${i}`;
       const moreGlyph = new fab.Text('⋯', {
@@ -1990,31 +2207,15 @@ function renderScene(
   // ornament and paint over it, hiding it in the editor until the next re-render
   // — which would desync the Fabric editor from the DOM preview + print, where
   // QR/ornament always render on top.)
-  const bringOverlaysToFront = () => {
-    canvas.getObjects().forEach((o: any) => {
-      if (typeof o.slotId === 'string' && (o.slotId.includes('-qr-') || o.slotId.includes('-qrbg-') || o.slotId.includes('-ornament-'))) {
-        canvas.bringToFront(o);
-      }
-    });
-    textObjects.forEach((t) => { if (canvas.contains(t)) canvas.bringToFront(t); });
-    // Free-transform caption-box GRAPHICS sit ON TOP — they can be dragged over a
-    // caption, so they must stay visible. (`-ornament-` above doesn't match the
-    // `-textornament-` id, so bring them last, above the text objects.)
-    canvas.getObjects().forEach((o: any) => {
-      if (typeof o.slotId === 'string' && (o.slotId.includes('-textornament-') || o.slotId.includes('-textqr-') || o.slotId.includes('-textqrbg-'))) {
-        canvas.bringToFront(o);
-      }
-    });
-  };
-  bringOverlaysToFront();
-  setTimeout(bringOverlaysToFront, 50);
-  setTimeout(bringOverlaysToFront, 150);
+  raiseOverlays(canvas);
+  setTimeout(() => raiseOverlays(canvas), 50);
+  setTimeout(() => raiseOverlays(canvas), 150);
 
   // 5. Layflat crease guide
   if (albumType === 'layflat') {
     const midX = canvasW / 2;
     const creaseLine = new fab.Line([midX, 0, midX, canvasH], {
-      stroke: '#F4C2A1', strokeWidth: 1.5, strokeDashArray: [6, 6],
+      stroke: '#B85C38', strokeWidth: 1.5, strokeDashArray: [6, 6],
       selectable: false, evented: false, opacity: 0.5,
     });
     creaseLine.isGuide = true;
@@ -2022,14 +2223,14 @@ function renderScene(
 
     const leftLabel = new fab.Text('Left Page', {
       left: midX - 80, top: 8, fontSize: 10, fontFamily: '"DM Sans", sans-serif',
-      fill: '#F4C2A1', selectable: false, evented: false, opacity: 0.5,
+      fill: '#B85C38', selectable: false, evented: false, opacity: 0.5,
     });
     leftLabel.isGuide = true;
     canvas.add(leftLabel);
 
     const rightLabel = new fab.Text('Right Page', {
       left: midX + 8, top: 8, fontSize: 10, fontFamily: '"DM Sans", sans-serif',
-      fill: '#F4C2A1', selectable: false, evented: false, opacity: 0.5,
+      fill: '#B85C38', selectable: false, evented: false, opacity: 0.5,
     });
     rightLabel.isGuide = true;
     canvas.add(rightLabel);
@@ -2056,7 +2257,7 @@ function renderScene(
     canvas.add(zone);
 
     const bindLine = new fab.Line([lineX, 0, lineX, canvasH], {
-      stroke: '#E8A598', strokeWidth: 1.5, strokeDashArray: [8, 5],
+      stroke: '#9A4A2C', strokeWidth: 1.5, strokeDashArray: [8, 5],
       selectable: false, evented: false, opacity: 0.7,
     });
     bindLine.isGuide = true;
@@ -2064,4 +2265,24 @@ function renderScene(
   }
 
   canvas.renderAll();
+  refitTextWhenFontsArrive(fab, canvas, page, thisRenderId);
+}
+
+/* Fonts download on demand (74 of them — fonts.ts), and a canvas draws text in
+   whatever face the browser has RIGHT NOW: a caption whose font is still on
+   its way shows in the fallback and, worse, Fabric measures and wraps it with
+   the fallback's widths. When this page's fonts land, drop Fabric's cached
+   widths, re-measure every text and redraw — unless a newer render started. */
+type RefittableText = { text?: unknown; initDimensions?: () => void; setCoords?: () => void; dirty?: boolean };
+function refitTextWhenFontsArrive(fab: { util?: { clearFabricFontCache?: () => void } }, canvas: FabricCanvas, page: AlbumPage, renderId: number) {
+  const texts = [...(page.textElements ?? []), ...((page.slotTexts ?? []).filter(Boolean) as SlotText[])];
+  if (!texts.length) return;
+  void loadFontFaces(texts).then(() => {
+    if (renderId !== currentRenderId) return;
+    fab.util?.clearFabricFontCache?.();
+    for (const o of canvas.getObjects() as RefittableText[]) {
+      if (typeof o.initDimensions === 'function' && typeof o.text === 'string') { o.initDimensions(); o.setCoords?.(); o.dirty = true; }
+    }
+    canvas.requestRenderAll();
+  });
 }

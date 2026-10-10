@@ -1,28 +1,21 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { ChevronRight, Sparkles } from 'lucide-react';
 import { ALBUM_SIZES } from './types';
 import type { AlbumSizePreset } from './types';
 import { loadStoreSettings } from '../../lib/storeSettings';
 import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
+import { fetchThemeQuotes } from '../../lib/quotes';
+import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT } from '../../lib/albumTheme';
+import AlbumThemeStep from '../../assistant/AlbumThemeStep';
+import MegyMascot from '../../components/MegyMascot';
+import { isStepOneReady } from '../../assistant/wizard';
+import { noteScreenTap, tooSoonAfterScreenTap } from '../../lib/settleGuard';
 
 /* ═══════════════════════════════════════════════════════════
    MEGY SIZE SETUP — Megy is the star. Sizes are clean.
    ═══════════════════════════════════════════════════════════ */
 
-/** The shop's most-ordered album occasions, offered as one-tap dropdown rows on
- *  the setup step. Each label round-trips through curatedThemeFor's alias map
- *  (lib/quotes.ts), so a pick lands on its curated quote pool with no new
- *  plumbing; anything off-list goes through the "Others…" free-text path, which
- *  behaves exactly like the old always-visible textbox. */
-const COMMON_THEMES = ['Wedding', 'Baptism', 'Birthday', 'Baby', 'Graduation', 'Family', 'Vacation'];
-/** Dropdown sentinel for the "Others…" row — never written to storage. */
-const OTHER_THEME = '__other__';
-
-function MegyFace({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' | 'xl' }) {
-  const sz = { sm: 'w-10 h-10', md: 'w-16 h-16', lg: 'w-24 h-24', xl: 'w-32 h-32' };
-  return <img src="/megy-character.png" alt="Megy" className={`${sz[size]} object-contain drop-shadow-lg`} draggable={false} />;
-}
 
 function TypeText({ text, speed = 28 }: { text: string; speed?: number }) {
   const [d, setD] = useState('');
@@ -35,7 +28,7 @@ function TypeText({ text, speed = 28 }: { text: string; speed?: number }) {
     }, speed);
     return () => clearInterval(t);
   }, [text, speed]);
-  return <span>{d}{d.length < text.length && <span className="inline-block w-0.5 h-4 bg-[#F4C2A1] ml-0.5 animate-pulse align-middle" />}</span>;
+  return <span>{d}{d.length < text.length && <span className="inline-block w-0.5 h-4 bg-peach ml-0.5 animate-pulse align-middle" />}</span>;
 }
 
 /* ── Size card renderer ── */
@@ -51,7 +44,7 @@ function SizeCard({ size, selected, onSelect }: {
       whileTap={{ scale: 0.97 }}
       className="relative p-5 rounded-2xl border-2 text-left transition-all hover:shadow-lg"
       style={{
-        borderColor: selected ? '#F4C2A1' : '#E8E8E8',
+        borderColor: selected ? '#B85C38' : '#E8E8E8',
         backgroundColor: selected ? '#FFF5F0' : '#FFFFFF',
       }}
     >
@@ -59,7 +52,7 @@ function SizeCard({ size, selected, onSelect }: {
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          className="absolute top-3 right-3 w-6 h-6 rounded-full bg-[#F4C2A1] flex items-center justify-center"
+          className="absolute top-3 right-3 w-6 h-6 rounded-full bg-peach flex items-center justify-center"
         >
           <svg width="12" height="10" viewBox="0 0 10 8">
             <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" />
@@ -68,14 +61,14 @@ function SizeCard({ size, selected, onSelect }: {
       )}
       <div className="flex items-center gap-3 mb-2">
         <div
-          className="rounded-lg border border-[#E8E8E8] bg-[#F9F9F9] flex items-center justify-center"
+          className="rounded-lg border border-line bg-[#F9F9F9] flex items-center justify-center"
           style={{
             width: size.category === 'landscape' ? 48 : size.category === 'portrait' ? 32 : 40,
             height: size.category === 'landscape' ? 32 : size.category === 'portrait' ? 48 : 40,
           }}
         >
           <div
-            className="rounded bg-[#FDE8E4]"
+            className="rounded bg-blush"
             style={{
               width: size.category === 'landscape' ? 36 : size.category === 'portrait' ? 20 : 28,
               height: size.category === 'landscape' ? 20 : size.category === 'portrait' ? 36 : 28,
@@ -83,11 +76,11 @@ function SizeCard({ size, selected, onSelect }: {
           />
         </div>
         <div>
-          <p className="font-semibold text-sm text-[#2D2D2D]">{size.name}</p>
-          <p className="text-[10px] text-[#9B9B9B] capitalize">{size.category}</p>
+          <p className="font-semibold text-sm text-dark">{size.name}</p>
+          <p className="text-[10px] text-light capitalize">{size.category}</p>
         </div>
       </div>
-      <p className="text-[11px] text-[#8B7E7A] leading-relaxed">
+      <p className="text-[11px] text-taupe leading-relaxed">
         {size.preset === '6x6' && 'Perfect for small gifts & keepsakes'}
         {size.preset === '8x8' && 'Great for travel & everyday memories'}
         {size.preset === '9x9' && 'Bold statement piece for special occasions'}
@@ -103,29 +96,30 @@ function SizeCard({ size, selected, onSelect }: {
 
 interface BuilderSetupProps {
   selectedSize: AlbumSizePreset;
-  onSizeChange: (size: AlbumSizePreset) => void;
+  /** `reason` 'size_hidden': Setup moved off a size the shop no longer
+   *  offers, with no tap (a made album asks before memories come off). */
+  onSizeChange: (size: AlbumSizePreset, reason?: 'size_hidden') => void;
   onNext: () => void;
+  /** The album's name (wizard step 1, asked with the occasion). */
+  albumTitle: string;
+  onAlbumTitleChange: (title: string) => void;
+  /** An event album (0045): only its deal's size is offered. */
+  onlySize?: AlbumSizePreset | null;
 }
 
-export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: BuilderSetupProps) {
-  // Album theme — feeds the dealt box quotes + the quote picker. Stored
-  // locally; no photos involved, so it stays private. Optional. The dropdown
-  // writes the SAME free-text 'megy-album-theme' value the rest of the app
-  // reads; "Others…" reveals a textbox for off-list themes. A stored theme
-  // that isn't one of the common labels (old drafts, typed themes) restores
-  // as "Others…" + its text — nothing is lost.
-  const [theme, setTheme] = useState(() => { try { return localStorage.getItem('megy-album-theme') || ''; } catch { return ''; } });
-  const [themeChoice, setThemeChoice] = useState(() =>
-    theme === '' ? '' : (COMMON_THEMES.includes(theme) ? theme : OTHER_THEME));
-  const persistTheme = (v: string) => { setTheme(v); try { localStorage.setItem('megy-album-theme', v); } catch { /* ignore */ } };
-  const onChoiceChange = (v: string) => {
-    setThemeChoice(v);
-    // A common pick IS the theme; "No specific theme" clears it. Switching to
-    // "Others…" from a common pick starts the textbox blank (a common label
-    // never doubles as custom text); an existing custom theme is kept.
-    if (v === OTHER_THEME) persistTheme(COMMON_THEMES.includes(theme) ? '' : theme);
-    else persistTheme(v);
-  };
+export default function BuilderSetup({ selectedSize, onSizeChange, onNext, albumTitle, onAlbumTitleChange, onlySize }: BuilderSetupProps) {
+  // The name + occasion are asked by the wizard's Step 1; this is the backstop
+  // for every path that reaches the size page without them (wizard dismissed,
+  // deep link, old draft). Same component, same gate.
+  const [albumTheme, setAlbumThemeState] = useState(readAlbumTheme);
+  const setAlbumTheme = (v: string) => { setAlbumThemeState(v); writeAlbumTheme(v); };
+  // An album opened from the cloud brings its own occasion (N4): show it.
+  useEffect(() => {
+    const onTheme = () => setAlbumThemeState(readAlbumTheme());
+    window.addEventListener(ALBUM_THEME_EVENT, onTheme);
+    return () => window.removeEventListener(ALBUM_THEME_EVENT, onTheme);
+  }, []);
+  const themeReady = isStepOneReady(albumTitle, albumTheme);
   // A size is offered only if the owner hasn't hidden it AND it has layouts to
   // build with (see albumSizeOptions). Re-load the store settings once so a cold
   // direct-load to setup still reflects curation, then filter the grid.
@@ -137,14 +131,14 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
       // If the current selection is no longer offered, move to the first that is.
       if (!isSizeOfferable(selectedSize)) {
         const first = offerableAlbumSizes()[0];
-        if (first) onSizeChange(first.preset);
+        if (first) onSizeChange(first.preset, 'size_hidden');
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const sizes = offerableAlbumSizes();
+  const sizes = offerableAlbumSizes().filter((s) => !onlySize || s.preset === onlySize);
   return (
-    <div className="h-full flex flex-col items-center justify-center bg-[#FFFBF7] overflow-y-auto px-4 py-8">
+    <div className="h-full flex flex-col items-center justify-center bg-warm-white overflow-y-auto px-4 py-8">
       {/* Megy — center attraction */}
       <motion.div
         initial={{ opacity: 0, scale: 0.7 }}
@@ -156,12 +150,12 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
           animate={{ y: [0, -6, 0] }}
           transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
         >
-          <MegyFace size="xl" />
+          <MegyMascot size={128} className="object-contain drop-shadow-lg" />
         </motion.div>
-        <h1 className="font-display text-2xl md:text-3xl text-[#2D2D2D] mt-4 mb-2">
+        <h1 className="font-display text-2xl md:text-3xl text-dark mt-4 mb-2">
           <TypeText text="Let's pick the perfect size for your album!" speed={30} />
         </h1>
-        <p className="text-sm text-[#8B7E7A] max-w-xs">
+        <p className="text-sm text-taupe max-w-xs">
           Choose the size that fits your photos best. You can always change this later!
         </p>
       </motion.div>
@@ -179,41 +173,26 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
               key={size.preset}
               size={size}
               selected={selectedSize === size.preset}
-              onSelect={() => onSizeChange(size.preset)}
+              onSelect={() => {
+                // The tail of a tap that just picked a size on Megy's card
+                // (and moved the screen on) is not a second pick.
+                if (tooSoonAfterScreenTap()) return;
+                noteScreenTap();
+                onSizeChange(size.preset);
+              }}
             />
           ))}
         </div>
 
-        {/* Album theme — optional; feeds the dealt quotes + quote picker */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-[#2D2D2D] mb-1.5 text-center">
-            Is there a specific theme for this album?
-          </label>
-          <div className="relative">
-            <select
-              value={themeChoice}
-              onChange={(e) => onChoiceChange(e.target.value)}
-              className="w-full border border-[#E8E8E8] rounded-xl px-4 py-3 pr-10 text-sm text-center outline-none focus:border-[#F4C2A1] transition-colors bg-white appearance-none cursor-pointer text-[#2D2D2D]"
-            >
-              <option value="">No specific theme</option>
-              {COMMON_THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
-              <option value={OTHER_THEME}>Others…</option>
-            </select>
-            <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9B9B9B] pointer-events-none" />
+        {/* Step 1 backstop — only while the name or occasion is missing. */}
+        {!themeReady && (
+          <div className="mb-6 rounded-2xl border border-peach/40 bg-white p-5 text-left shadow-sm" data-testid="occasion-backstop">
+            <h2 className="font-display text-lg font-semibold text-dark mb-1">First — name your album and tell Megy what it's about</h2>
+            <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme}
+              name={albumTitle} onNameChange={onAlbumTitleChange}
+              onContinue={() => { if (isStepOneReady(albumTitle, albumTheme)) { void fetchThemeQuotes(albumTheme.trim()); onNext(); } }} />
           </div>
-          {themeChoice === OTHER_THEME && (
-            <input
-              value={theme}
-              onChange={(e) => persistTheme(e.target.value)}
-              placeholder="Type your theme — e.g. beach trip, debut, reunion"
-              autoFocus
-              className="w-full border border-[#E8E8E8] rounded-xl px-4 py-3 text-sm text-center outline-none focus:border-[#F4C2A1] transition-colors mt-2"
-            />
-          )}
-          <p className="text-[11px] text-[#9B9B9B] mt-1.5 text-center">
-            We'll write quotes to match — Megy drops them into your pages, and you can swap any of them.
-          </p>
-        </div>
+        )}
 
         {/* Start Creating */}
         <motion.div
@@ -223,8 +202,21 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext }: Bui
           className="text-center"
         >
           <button
-            onClick={onNext}
-            className="inline-flex items-center gap-2 px-10 py-3.5 bg-gradient-to-r from-[#F4C2A1] to-[#E8A598] text-white font-semibold rounded-2xl hover:brightness-105 transition-all shadow-lg shadow-[#F4C2A1]/25 text-base"
+            disabled={!themeReady}
+            title={themeReady ? undefined : 'Name your album and pick the occasion first'}
+            onClick={() => {
+              // Unskippable: no name + occasion, no album. (The button is
+              // disabled too; this guards a stale render.)
+              const theme = readAlbumTheme();
+              if (!isStepOneReady(albumTitle, theme)) return;
+              // Warm the theme's AI quote pool NOW (one cached call) so the
+              // album's first generation deals real themed lines instead of
+              // waiting on the proxy. Generation tops the pool up to the
+              // album's box count from here.
+              void fetchThemeQuotes(theme);
+              onNext();
+            }}
+            className="inline-flex items-center gap-2 px-10 py-3.5 bg-gradient-to-r from-peach to-blush-pink text-white font-semibold rounded-2xl hover:brightness-105 transition-all shadow-lg shadow-peach/25 text-base disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100"
           >
             <Sparkles size={18} />
             Start Creating
