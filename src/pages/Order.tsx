@@ -14,7 +14,7 @@ import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, Albu
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
 import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { PAYEE, checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
@@ -366,6 +366,15 @@ export default function Order() {
     ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount, effectiveYears, hdMemories)
     : { items: [], total: 0 };
   const totalPrice = breakdown.total;
+  // Shipping is built into the price (0041), so it is free here — the value
+  // shown is what the schedule says is inside the price, never an extra charge.
+  const freeShippingValue = schedule ? freeShippingValueOf(schedule) : 0;
+  // The crossed-out "was": this same order at the price we really charged
+  // before the drop (same add-ons). Null when there isn't one or it has ended.
+  const wasPrint = schedule ? compareAtPriceOf(schedule, albumSize, binding, pageCount) : null;
+  const wasTotal = schedule && wasPrint !== null
+    ? wasPrint + (totalPrice - priceOf(schedule, albumSize, binding, pageCount))
+    : null;
   // Loaded AND priceable. `settingsReady` alone only means the load settled — it
   // can settle with no schedule (offline, RPC blocked), and quoting ₱0 then would
   // charge nothing for a real album.
@@ -918,7 +927,14 @@ export default function Order() {
                   <span className="font-medium text-dark text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
                 </div>
               ))}
-              <div className="flex justify-between items-baseline pt-1 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-medium">Shipping</span><span className="font-semibold text-success text-right">Free</span></div>
+              <div className="flex justify-between items-baseline pt-1 border-t border-line-soft">
+                <span className="font-semibold text-dark">Total</span>
+                <span className="text-right">
+                  {wasTotal !== null && <s className="mr-2 text-sm font-medium text-light">₱{wasTotal.toLocaleString('en-PH')}</s>}
+                  <span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span>
+                </span>
+              </div>
             </div>
             </details>
           </div>
@@ -1111,10 +1127,38 @@ export default function Order() {
                       <span className="font-medium text-dark text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{eventLink ? '₱0' : <>{priceReady ? `₱${totalPrice.toLocaleString('en-PH')}` : '—'}</>}</span></div>
+                  <div className="flex justify-between gap-3 text-[13px]">
+                    <span className="text-medium">Shipping</span>
+                    <span className="font-semibold text-success text-right whitespace-nowrap" data-testid="order-shipping">Free</span>
+                  </div>
+                  {/* An event album shows ₱0 and no "was" price: its booking pays for it. */}
+                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft">
+                    <span className="font-semibold text-dark">Total</span>
+                    <span className="text-right">
+                      {!eventLink && priceReady && wasTotal !== null && (
+                        <s className="mr-2 text-sm font-medium text-light" data-testid="order-was">₱{wasTotal.toLocaleString('en-PH')}</s>
+                      )}
+                      <span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{eventLink ? '₱0' : <>{priceReady ? `₱${totalPrice.toLocaleString('en-PH')}` : '—'}</>}</span>
+                    </span>
+                  </div>
+                  {!eventLink && priceReady && wasTotal !== null && (
+                    <p className="text-xs font-semibold text-success text-right" data-testid="order-savings">
+                      New lower price: you save ₱{(wasTotal - totalPrice).toLocaleString('en-PH')}
+                    </p>
+                  )}
                   {coveredByBooking && <p className="text-xs text-success text-right" data-testid="order-covered">Covered by your event booking</p>}
                   {eventLink && !coveredByBooking && <p className="text-xs text-medium text-right" data-testid="order-covered-later">Your booking pays for it. See the note at the top.</p>}
                 </div>
+              </div>
+              <div className="mt-4 rounded-xl border border-line-soft px-3 py-2.5" data-testid="order-included">
+                <p className="text-xs font-semibold text-dark">Included with your album</p>
+                <ul className="mt-1 text-xs text-medium space-y-0.5">
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />Free shipping{freeShippingValue > 0 && <> (₱{freeShippingValue.toLocaleString('en-PH')} value)</>}</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{FREE_QR_MEMORIES} living-memory QRs (₱{(FREE_QR_MEMORIES * EXTRA_QR_RATE).toLocaleString('en-PH')} value)</li>
+                  {includedYears !== null && (
+                    <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{includedYears} years of memory hosting</li>
+                  )}
+                </ul>
               </div>
               <div className="mt-4 flex items-start gap-2 rounded-xl bg-blush border border-peach/60 px-3 py-2.5">
                 <QrCode size={16} className="text-blush-pink shrink-0 mt-0.5" />
