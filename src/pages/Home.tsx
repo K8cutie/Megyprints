@@ -9,7 +9,6 @@ import {
   Sparkles,
   Truck,
   ChevronDown,
-  CalendarHeart,
 } from 'lucide-react';
 import BuilderDemoSection from './BuilderDemoSection';
 import { UserProjectsSection } from '../components/UserProjectsSection';
@@ -17,8 +16,8 @@ import { useAuth } from '../lib/authContext';
 import { startFreshAlbum } from '../lib/albumSession';
 import { readLocalDraftSummary, albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
 import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
-import MegyMascot from '../components/MegyMascot';
-import { HOME_FEATURES, HOW_IT_WORKS, EVENTS_CARD, type HomeFeatureKey } from './homeCopy';
+import { HOME_FEATURES, HOW_IT_WORKS, type HomeFeatureKey } from './homeCopy';
+import { AlbumsCard, EventsCard } from './home/HomeCards';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -26,42 +25,33 @@ gsap.registerPlugin(ScrollTrigger);
 const gentle = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
 /* ═══════════════════════════ SECTION 1: HERO ═══════════════════════════
-   Megy is the centerpiece — the primary entry point for all users.
+   Two cards built the same way, Megyprints Albums and Megyprints Events
+   (the owner's canvas board, HomeCards.tsx): stacked on a phone, side by side
+   from a tablet up. The photo shows through a light veil, as on the board.
    ═══════════════════════════════════════════════════════════════════════ */
-function HeroSection({ megyComponent, eventsCard }: { megyComponent: React.ReactNode; eventsCard: React.ReactNode }) {
+function HeroSection({ onStart }: { onStart: () => void }) {
   return (
-    <section className="relative min-h-[100dvh] min-h-[700px] flex items-center justify-center overflow-hidden">
+    <section className="relative min-h-[max(100dvh,640px)] flex items-center justify-center overflow-hidden">
       {/* Background Image with Ken Burns */}
       <div className="absolute inset-0 w-full h-full animate-ken-burns">
         <img
           src="/hero-albums.jpg"
-          alt="Beautiful photo albums"
+          alt=""
           className="w-full h-full object-cover"
         />
       </div>
+      <div className="absolute inset-0 bg-[rgba(45,40,36,0.22)]" />
 
-      {/* Gradient Overlay */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            'linear-gradient(180deg, rgba(45,45,45,0.6) 0%, rgba(45,45,45,0.4) 50%, rgba(45,45,45,0.7) 100%)',
-        }}
-      />
-
-      {/* Content — Megy centered as the primary interface */}
-      {/* pt-24: two cards can be taller than a phone screen, and the top one
-          must not slide under the fixed header. */}
-      <div className="relative z-10 w-full max-w-[560px] mx-auto px-6 pt-24 pb-10">
+      {/* pt-24: the cards must not slide under the fixed header. */}
+      <div className="relative z-10 w-full max-w-[1040px] mx-auto px-4 sm:px-6 pt-24 pb-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
+          className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6 md:items-stretch max-w-[480px] md:max-w-none mx-auto"
         >
-          {/* Megy Welcome Card — the star of the show */}
-          {megyComponent}
-          {/* Megyprints Events, for big events: a booking, not the builder. */}
-          {eventsCard}
+          <AlbumsCard onStart={onStart} />
+          <EventsCard />
         </motion.div>
 
         {/* Scroll Indicator */}
@@ -69,12 +59,14 @@ function HeroSection({ megyComponent, eventsCard }: { megyComponent: React.React
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1.2, duration: 0.5 }}
-          className="mt-8 flex flex-col items-center gap-2"
+          className="mt-6 flex justify-center"
         >
-          <span className="font-body text-[0.75rem] font-medium uppercase tracking-wider text-white/60">
-            Scroll to explore
+          <span className="inline-flex flex-col items-center gap-1 rounded-full bg-black/30 px-4 py-1.5">
+            <span className="font-body text-[0.75rem] font-medium uppercase tracking-wider text-white/90">
+              Scroll to explore
+            </span>
+            <ChevronDown className="w-4 h-4 text-white/90 animate-bounce-gentle" />
           </span>
-          <ChevronDown className="w-5 h-5 text-white/60 animate-bounce-gentle" />
         </motion.div>
       </div>
     </section>
@@ -302,53 +294,11 @@ export default function Home() {
     }
   }, [navigate, startNew]);
 
-  // Hero welcome card — sends visitors into the builder, where the one true
-  // Megy (assistant/MegyAssistant) guides them. No separate home wizard.
-  const megyComponent = (
-    <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 text-center">
-      <MegyMascot size={96} className="mx-auto object-contain drop-shadow-lg mb-4" />
-      <h1 className="font-display text-2xl sm:text-3xl font-bold text-dark mb-2">
-        Hi, I&apos;m Megy 👋
-      </h1>
-      <p className="font-body text-medium leading-relaxed mb-6">
-        {/* Says PRINTED and SHIPPED up front: "build a print-ready album" read
-            as an online album to a real visitor. Megy Prints is a physical
-            album creator — digital printing on premium paper (owner,
-            2026-10-08). */}
-        Your personal album designer. Upload your photos and I&apos;ll design
-        the pages. Then we print your physical album with digital printing on
-        premium paper and ship it to your door. No design skills needed.
-      </p>
-      <button
-        onClick={() => handleMegyAction('go-builder')}
-        className="w-full inline-flex items-center justify-center gap-2 bg-peach hover:bg-blush-pink text-white font-semibold px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all text-base"
-      >
-        <Sparkles size={18} /> Start Creating
-      </button>
-    </div>
-  );
-
-  // Megyprints Events: outlined, so Start Creating stays the one filled button.
-  const eventsCard = (
-    <div className="mt-4 bg-white/95 rounded-3xl shadow-2xl p-6 text-left" data-testid="home-events-card">
-      <p className="flex items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-peach text-white">New</span>
-        <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#9A4A2C]">{EVENTS_CARD.label}</span>
-      </p>
-      <h2 className="mt-2 font-display text-xl sm:text-2xl font-bold text-dark leading-snug">{EVENTS_CARD.title}</h2>
-      <p className="mt-2 font-body text-medium leading-relaxed">{EVENTS_CARD.body}</p>
-      <p className="mt-1 text-sm text-medium">{EVENTS_CARD.who}</p>
-      <Link to="/events" data-testid="home-events-book"
-        className="mt-4 w-full inline-flex items-center justify-center gap-2 border-2 border-peach text-cocoa font-semibold px-6 py-3 rounded-2xl hover:bg-blush transition-colors">
-        <CalendarHeart size={18} /> {EVENTS_CARD.cta} ›
-      </Link>
-    </div>
-  );
-
   return (
     <>
-      {/* Hero — Megy is the centerpiece */}
-      <HeroSection megyComponent={megyComponent} eventsCard={eventsCard} />
+      {/* Hero: Megyprints Albums and Megyprints Events. "Start Creating" goes
+          into the builder, where Megy (assistant/MegyAssistant) guides them. */}
+      <HeroSection onStart={() => handleMegyAction('go-builder')} />
       {inProgress && (
         <StartNewAlbumPrompt draft={inProgress} signedIn={!!user}
           onContinue={() => { setInProgress(null); navigate('/builder'); }}

@@ -43,6 +43,37 @@
   .memory-shine::after { display: none; }
 }
 
+/* Home's two cards (src/pages/home/HomeCards.tsx): the step slides slide, and
+   their little scenes move a bit (the owner's canvas board). Under
+   prefers-reduced-motion nothing moves: the slides don't play by themselves
+   either (StepCarousel starts paused). */
+.home-slide-track { transition: transform 480ms cubic-bezier(.2, .8, .2, 1); }
+.home-float { animation: homeFloat 3.2s ease-in-out infinite; }
+.home-scan { animation: homeScan 1.4s ease-in-out infinite alternate; }
+.home-twinkle { animation: homeTwinkle 1.8s ease-in-out infinite; }
+.home-fly { animation: homeFly 2.2s ease-in-out infinite; }
+.home-rise { animation: homeRise 1.5s ease-out infinite; }
+.home-pop { animation: homePop 2.6s ease-in-out infinite; }
+.home-drive { animation: homeDrive 1.6s ease-in-out infinite alternate; }
+@keyframes homeFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes homeScan { from { top: 18%; } to { top: 76%; } }
+@keyframes homeTwinkle { 0%, 100% { transform: scale(.7); opacity: .55; } 50% { transform: scale(1.1); opacity: 1; } }
+@keyframes homeFly {
+  0%   { transform: translate(-58px, 22px) scale(.45) rotate(-14deg); opacity: 0; }
+  25%  { opacity: 1; }
+  75%  { transform: translate(0, 0) scale(.75) rotate(6deg); opacity: 1; }
+  100% { transform: translate(0, 0) scale(.75) rotate(6deg); opacity: 0; }
+}
+@keyframes homeRise { 0% { transform: translateY(10px); opacity: 0; } 40% { opacity: 1; } 100% { transform: translateY(-12px); opacity: 0; } }
+@keyframes homePop { 0%, 12% { transform: scale(0); } 26% { transform: scale(1.2); } 36%, 100% { transform: scale(1); } }
+@keyframes homeDrive { from { transform: translateX(-3px); } to { transform: translateX(5px); } }
+@media (prefers-reduced-motion: reduce) {
+  .home-slide-track { transition: none; }
+  .home-float, .home-scan, .home-twinkle, .home-fly, .home-rise, .home-pop, .home-drive { animation: none !important; }
+  .home-fly { opacity: 1; transform: scale(.75) rotate(6deg); }
+  .home-scan { top: 46%; }
+}
+
 /* Rotate-your-phone hint: tilt the phone glyph to landscape and back, to show
    the gesture. Used on the mobile Preview page (portrait). */
 @keyframes megyRotateHint {

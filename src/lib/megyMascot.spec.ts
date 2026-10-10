@@ -81,9 +81,9 @@ describe('every Megy on screen goes through <MegyMascot>', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the home card uses it at 96px', () => {
-    const home = readFileSync(join(ROOT, 'src/pages/Home.tsx'), 'utf8');
-    expect(home).toMatch(/<MegyMascot size=\{96\}/);
+  it('Home\'s Albums card shows her through it, at 64px (step 2, "Megy designs")', () => {
+    const cards = readFileSync(join(ROOT, 'src/pages/home/HomeCards.tsx'), 'utf8');
+    expect(cards).toMatch(/<MegyMascot size=\{64\}/);
   });
 
   it('offers every copy and says how big she is drawn, with a reserved box', () => {
