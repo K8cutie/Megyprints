@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { HOME_FEATURES, HOW_IT_WORKS, DEMO_STEP_DETAILS, DEMO_OCCASIONS } from './homeCopy';
+import { HOME_FEATURES, HOW_IT_WORKS, DEMO_STEP_DETAILS, DEMO_OCCASIONS, EVENTS_CARD } from './homeCopy';
+import { EVENT_MIN_GUESTS } from '../lib/eventBookings';
 import { MIN_ALBUM_PHOTOS } from './builder/albumMinimum';
 import { FREE_QR_MEMORIES } from '../lib/pricing';
 import { FONTS } from './builder/fonts';
@@ -130,5 +131,21 @@ describe('the bottom call to action', () => {
   it('doesn\'t say "No account required" (checkout asks for a sign-in)', () => {
     expect(home).not.toMatch(/No account required/i);
     expect(home).toMatch(/account when you order/i);
+  });
+});
+
+describe('the Megyprints Events card (owner, 2026-10-10: 15+ guests is a booking)', () => {
+  it('shows the owner\'s words and leads to Events, where booking starts', () => {
+    for (const k of ['label', 'title', 'body', 'who', 'cta']) expect(home).toContain(`EVENTS_CARD.${k}`);
+    expect(home).toMatch(/to="\/events" data-testid="home-events-book"/);
+    expect(EVENTS_CARD.title).toBe('Shared Memories, Different Perspectives');
+  });
+  it('says who it is for with the same number the booking form and the database use', () => {
+    expect(EVENTS_CARD.who).toContain(`${EVENT_MIN_GUESTS} or more guests`);
+  });
+  it('is outlined, so Start Creating stays the one filled button on the card stack', () => {
+    const link = /data-testid="home-events-book"\s+className="([^"]+)"/.exec(home)!;
+    expect(link[1]).toContain('border-2 border-peach');
+    expect(link[1]).not.toMatch(/\bbg-(peach|blush-pink)\b/);
   });
 });

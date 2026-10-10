@@ -9,6 +9,7 @@ import {
   Sparkles,
   Truck,
   ChevronDown,
+  CalendarHeart,
 } from 'lucide-react';
 import BuilderDemoSection from './BuilderDemoSection';
 import { UserProjectsSection } from '../components/UserProjectsSection';
@@ -17,7 +18,7 @@ import { startFreshAlbum } from '../lib/albumSession';
 import { readLocalDraftSummary, albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
 import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
 import MegyMascot from '../components/MegyMascot';
-import { HOME_FEATURES, HOW_IT_WORKS, type HomeFeatureKey } from './homeCopy';
+import { HOME_FEATURES, HOW_IT_WORKS, EVENTS_CARD, type HomeFeatureKey } from './homeCopy';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -27,7 +28,7 @@ const gentle = 'cubic-bezier(0.16, 1, 0.3, 1)';
 /* ═══════════════════════════ SECTION 1: HERO ═══════════════════════════
    Megy is the centerpiece — the primary entry point for all users.
    ═══════════════════════════════════════════════════════════════════════ */
-function HeroSection({ megyComponent }: { megyComponent: React.ReactNode }) {
+function HeroSection({ megyComponent, eventsCard }: { megyComponent: React.ReactNode; eventsCard: React.ReactNode }) {
   return (
     <section className="relative min-h-[100dvh] min-h-[700px] flex items-center justify-center overflow-hidden">
       {/* Background Image with Ken Burns */}
@@ -49,7 +50,9 @@ function HeroSection({ megyComponent }: { megyComponent: React.ReactNode }) {
       />
 
       {/* Content — Megy centered as the primary interface */}
-      <div className="relative z-10 w-full max-w-[560px] mx-auto px-6">
+      {/* pt-24: two cards can be taller than a phone screen, and the top one
+          must not slide under the fixed header. */}
+      <div className="relative z-10 w-full max-w-[560px] mx-auto px-6 pt-24 pb-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -57,6 +60,8 @@ function HeroSection({ megyComponent }: { megyComponent: React.ReactNode }) {
         >
           {/* Megy Welcome Card — the star of the show */}
           {megyComponent}
+          {/* Megyprints Events, for big events: a booking, not the builder. */}
+          {eventsCard}
         </motion.div>
 
         {/* Scroll Indicator */}
@@ -323,10 +328,27 @@ export default function Home() {
     </div>
   );
 
+  // Megyprints Events: outlined, so Start Creating stays the one filled button.
+  const eventsCard = (
+    <div className="mt-4 bg-white/95 rounded-3xl shadow-2xl p-6 text-left" data-testid="home-events-card">
+      <p className="flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-peach text-white">New</span>
+        <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#9A4A2C]">{EVENTS_CARD.label}</span>
+      </p>
+      <h2 className="mt-2 font-display text-xl sm:text-2xl font-bold text-dark leading-snug">{EVENTS_CARD.title}</h2>
+      <p className="mt-2 font-body text-medium leading-relaxed">{EVENTS_CARD.body}</p>
+      <p className="mt-1 text-sm text-medium">{EVENTS_CARD.who}</p>
+      <Link to="/events" data-testid="home-events-book"
+        className="mt-4 w-full inline-flex items-center justify-center gap-2 border-2 border-peach text-cocoa font-semibold px-6 py-3 rounded-2xl hover:bg-blush transition-colors">
+        <CalendarHeart size={18} /> {EVENTS_CARD.cta} ›
+      </Link>
+    </div>
+  );
+
   return (
     <>
       {/* Hero — Megy is the centerpiece */}
-      <HeroSection megyComponent={megyComponent} />
+      <HeroSection megyComponent={megyComponent} eventsCard={eventsCard} />
       {inProgress && (
         <StartNewAlbumPrompt draft={inProgress} signedIn={!!user}
           onContinue={() => { setInProgress(null); navigate('/builder'); }}

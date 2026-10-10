@@ -46,7 +46,16 @@ export interface AdminOrder {
   payment_submitted_at?: string | null;
   created_at: string;
   updated_at: string;
+  /** A guest's copy of an event album prints from this order's files (0045). */
+  copy_of_order_id?: string | null;
+  copy_of_order_number?: string | null;
+  /** The event booking that paid for this album (0045). */
+  event_booking_number?: string | null;
 }
+
+/** The order whose print files this order prints from: its own, or for a
+ *  guest's copy of an event album, the hosts' order (0045). */
+export const printFilesOf = (o: Pick<AdminOrder, 'id' | 'copy_of_order_id'>) => o.copy_of_order_id ?? o.id;
 
 /** Default page size for the console. Measured on a 10,000-order database:
  *  returning every order cost 2,018 kB and a full scan + 3.9 MB sort PER LOAD,

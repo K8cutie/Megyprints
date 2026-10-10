@@ -13,6 +13,7 @@ import { photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/buil
 import { albumIsMade, resizeMemoriesLine, resizedMemoriesNote } from './rebuildQuestion';
 import { leftOutNote } from '../lib/pickedFiles';
 import { memoriesOn } from '../pages/builder/generateAlbum';
+import { eventLinkForAlbum } from '../lib/eventAlbum';
 
 /** A video memory only ever sits on a full-page photo (owner, 2026-10-08), so
  *  a page with one keeps its layout — say so instead of "Next layout." */
@@ -152,6 +153,11 @@ export class ActionEngine {
           }
           if (!isSizeOfferable(size)) {
             return { intentType: intent.type, success: false, message: `Sorry, the ${size} size isn't available right now. Try another size.` };
+          }
+          // An event album keeps its deal's size (0045): the booking pays for that one.
+          const deal = eventLinkForAlbum(this.builder.getAlbumId?.());
+          if (deal && size !== deal.size) {
+            return { intentType: intent.type, success: false, message: `This is your event album for booking ${deal.bookingNumber}: its size is ${deal.size.replace('x', '×')}, from your deal.` };
           }
           // A made album is laid out for its size: changing size lays every
           // page out again for the new shape. It used to set the size alone and

@@ -103,9 +103,11 @@ interface BuilderSetupProps {
   /** The album's name (wizard step 1, asked with the occasion). */
   albumTitle: string;
   onAlbumTitleChange: (title: string) => void;
+  /** An event album (0045): only its deal's size is offered. */
+  onlySize?: AlbumSizePreset | null;
 }
 
-export default function BuilderSetup({ selectedSize, onSizeChange, onNext, albumTitle, onAlbumTitleChange }: BuilderSetupProps) {
+export default function BuilderSetup({ selectedSize, onSizeChange, onNext, albumTitle, onAlbumTitleChange, onlySize }: BuilderSetupProps) {
   // The name + occasion are asked by the wizard's Step 1; this is the backstop
   // for every path that reaches the size page without them (wizard dismissed,
   // deep link, old draft). Same component, same gate.
@@ -134,7 +136,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext, album
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const sizes = offerableAlbumSizes();
+  const sizes = offerableAlbumSizes().filter((s) => !onlySize || s.preset === onlySize);
   return (
     <div className="h-full flex flex-col items-center justify-center bg-warm-white overflow-y-auto px-4 py-8">
       {/* Megy — center attraction */}

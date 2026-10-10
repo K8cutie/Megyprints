@@ -13,6 +13,7 @@ const SOCIAL_LINKS: { label: string; href: string; icon: LucideIcon }[] = [
 const quickLinks = [
   { label: 'Home', path: '/' },
   { label: 'Templates', path: '/templates' },
+  { label: 'Events', path: '/events' },
   { label: 'About', path: '/about' },
   { label: 'Contact', path: '/contact' },
 ];

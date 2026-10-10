@@ -16,6 +16,7 @@ import { useModalDialog } from '../lib/useModalDialog';
 import {
   preflightAccountDeletion,
   deleteMyAccount,
+  blockingSentence,
   type DeletionPreflight,
 } from '../lib/accountDeletion';
 
@@ -174,15 +175,15 @@ export default function DeleteAccountSection() {
                     </div>
                   ) : blocked ? (
                     <>
-                      <p className="text-sm text-ink-warm leading-relaxed">
-                        You have an order that&apos;s paid and not delivered yet
+                      <p className="text-sm text-ink-warm leading-relaxed" data-testid="delete-blocked">
+                        {blockingSentence(preflight?.blocking ?? []).lead}
                         {' — '}
-                        <b>{preflight?.blocking.map((o) => o.order_number).join(', ')}</b>.
-                        We need your delivery details to finish it, so we can&apos;t delete the
+                        <b>{blockingSentence(preflight?.blocking ?? []).numbers}</b>.
+                        We need your details to finish it, so we can&apos;t delete the
                         account while it&apos;s in progress.
                       </p>
                       <p className="text-sm text-taupe leading-relaxed mt-3">
-                        Once it arrives you can delete the account here. To cancel the order
+                        Once it&apos;s done you can delete the account here. To cancel it
                         instead, email{' '}
                         <a className="text-rust underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
                       </p>

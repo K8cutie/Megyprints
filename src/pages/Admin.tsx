@@ -1,17 +1,19 @@
 /* ══════════════════════════════════════════════════════════════════════════
    /admin — the OPERATOR CONSOLE. Separate from the customer app; gated by ROLE.
-     • owner       — Overview · Orders (full, incl. price) · Templates · Team
+     • owner       — Overview · Orders (full, incl. price) · Bookings · Templates · Team
      • fulfillment — Orders only, status changes only (no money, no overview)
    Role resolution + the DB functions in migration 0007 are the real guard.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, ClipboardList, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
+import { BarChart3, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
 import { fetchAllOrders, fetchOrdersCount, ORDERS_PAGE_SIZE, type AdminOrder } from '../lib/adminOrders';
+import { fetchOwnerBookings } from '../lib/adminBookings';
+import { needsOwner } from '../lib/eventBookings';
 import { supabase } from '../lib/supabase';
 import OverviewPanel from './admin/OverviewPanel';
 import OrdersPanel from './admin/OrdersPanel';
@@ -19,11 +21,13 @@ import TemplatesPanel from './admin/TemplatesPanel';
 import TeamPanel from './admin/TeamPanel';
 import PricingPanel from './admin/PricingPanel';
 import MessagesPanel from './admin/MessagesPanel';
+import BookingsPanel from './admin/BookingsPanel';
 
-type Tab = 'overview' | 'orders' | 'messages' | 'templates' | 'pricing' | 'team';
+type Tab = 'overview' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'team';
 const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3, ownerOnly: true },
   { id: 'orders', label: 'Orders', icon: ClipboardList, ownerOnly: false },
+  { id: 'bookings', label: 'Bookings', icon: CalendarHeart, ownerOnly: true },
   { id: 'messages', label: 'Messages', icon: Mail, ownerOnly: true },
   { id: 'templates', label: 'Templates', icon: LayoutGrid, ownerOnly: true },
   { id: 'pricing', label: 'Pricing', icon: Calculator, ownerOnly: true },
@@ -117,6 +121,20 @@ export default function Admin() {
 
   useEffect(() => { if (role) void loadOrders(); }, [role, loadOrders]);
 
+  // How many bookings wait on the owner (a request to price, a payment to
+  // match), on the Bookings tab. Re-read on every tab change, so acting in
+  // Bookings and moving on brings it down. Nothing else tells the owner a
+  // request came in: no email or SMS, by cost.
+  const [bookingsWaiting, setBookingsWaiting] = useState(0);
+  useEffect(() => {
+    if (role !== 'owner') return;
+    let alive = true;
+    fetchOwnerBookings()
+      .then((rows) => { if (alive) setBookingsWaiting(rows.filter(needsOwner).length); })
+      .catch(() => { /* the tab itself shows the error */ });
+    return () => { alive = false; };
+  }, [role, tab]);
+
   if (!user) return null; // ProtectedRoute redirects to login
   if (roleLoading) {
     return <div className="min-h-[100dvh] flex items-center justify-center text-light"><Loader2 className="w-6 h-6 animate-spin" /></div>;
@@ -158,6 +176,10 @@ export default function Admin() {
               className="px-3 py-2.5 text-sm font-medium border-b-2 flex items-center gap-1.5 -mb-px transition-colors"
               style={{ borderColor: tab === t.id ? '#B85C38' : 'transparent', color: tab === t.id ? '#2D2D2D' : '#9B9B9B' }}>
               <t.icon size={15} /> {t.label}
+              {t.id === 'bookings' && bookingsWaiting > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-peach text-white" data-testid="bookings-waiting"
+                  title={`${bookingsWaiting} waiting on you: a request to price, or a payment to match`}>{bookingsWaiting}</span>
+              )}
             </button>
           ))}
         </div>
@@ -189,6 +211,7 @@ export default function Admin() {
             )}
           </>
         ))}
+        {tab === 'bookings' && isOwner && <BookingsPanel />}
         {tab === 'messages' && isOwner && <MessagesPanel />}
         {tab === 'templates' && isOwner && <TemplatesPanel />}
         {tab === 'pricing' && isOwner && <PricingPanel />}

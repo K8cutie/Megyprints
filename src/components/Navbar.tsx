@@ -7,6 +7,7 @@ import AuthNav from './AuthNav';
 const navLinks = [
   { label: 'Home', path: '/' },
   { label: 'Templates', path: '/templates' },
+  { label: 'Events', path: '/events' },
   { label: 'About', path: '/about' },
   { label: 'Contact', path: '/contact' },
 ];

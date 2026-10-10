@@ -31,6 +31,8 @@ import { trackOf } from '../lib/orderTracker';
 import { missingPhotos, missingPhotosMessage } from '../lib/photoPresence';
 import { getMyOrder, openOrderForAlbum, lastOrderForAlbum, type MyOrder } from '../lib/myOrders';
 import OrderTracker from '../components/OrderTracker';
+import { eventLinkForAlbum, eventDealState, coverOrderWithBooking, bookingsWaitingForAlbum, linkFromBooking, linkAlbumToBooking, unlinkAlbum } from '../lib/eventAlbum';
+import { getMyBooking, listMyBookings, type EventBooking } from '../lib/eventBookings';
 
 // The front cover at checkout — lazy: it brings the page renderer.
 const CoverThumb = lazy(() => import('./builder/CoverThumb'));
@@ -242,6 +244,59 @@ export default function Order() {
   const allQrFills = (info?.pages ?? []).flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
   const clipCodes = allQrFills.filter((f) => f?.kind === 'clip').map((f) => f!.code);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
+
+  // ── Megyprints Events (0045): an album made from an event booking ──
+  // The event page linked it to its booking on this device. The booking pays
+  // for it (₱0 here) once the balance is in and it matches the deal; the
+  // database checks again (cover_order_with_booking). undefined = still asking.
+  const [, setLinkTick] = useState(0);
+  const [eventBooking, setEventBooking] = useState<EventBooking | null | undefined>(undefined);
+  const eventLink = eventLinkForAlbum(info?.albumId);
+  // The link lives on the device that made the album: on another one, offer
+  // the host's bookings still waiting for their album.
+  const [waitingBookings, setWaitingBookings] = useState<EventBooking[]>([]);
+  useEffect(() => {
+    if (eventLink || !user || !info?.albumId) return;
+    let alive = true;
+    listMyBookings(user.id)
+      .then((all) => { if (alive) setWaitingBookings(bookingsWaitingForAlbum(all)); })
+      .catch(() => { /* no offer: checkout works as a normal album */ });
+    return () => { alive = false; };
+  }, [user, info?.albumId, !!eventLink]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The deal sets the cover; undoing gives back the one they had picked.
+  const coverBeforeLinkRef = useRef<CoverType | null>(null);
+  const linkThisBooking = (b: EventBooking) => {
+    const link = linkFromBooking(b);
+    if (!link || !info?.albumId) return;
+    coverBeforeLinkRef.current = cover;
+    linkAlbumToBooking(info.albumId, link);
+    setEventBooking(undefined);
+    setLinkTick((t) => t + 1);
+  };
+  const notMyEventAlbum = () => {
+    if (!info?.albumId) return;
+    unlinkAlbum(info.albumId);
+    if (coverBeforeLinkRef.current) setCover(coverBeforeLinkRef.current);
+    setEventBooking(undefined);
+    setErrorMsg('');
+    setLinkTick((t) => t + 1);
+  };
+  useEffect(() => {
+    if (!eventLink || !user) return;
+    let alive = true;
+    getMyBooking(user.id, eventLink.bookingId)
+      .then((b) => { if (alive) setEventBooking(b); })
+      .catch(() => { if (alive) setEventBooking(null); });
+    return () => { alive = false; };
+  }, [eventLink?.bookingId, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  const eventDeal = eventLink && eventBooking !== undefined
+    ? eventDealState(eventLink, eventBooking, { size: info?.albumSize ?? '8x8', pages: info?.pages.length ?? MIN_PAGES })
+    : null;
+  const coveredByBooking = eventDeal?.state === 'covered';
+  // The deal fixes the cover.
+  useEffect(() => {
+    if (eventLink) setCover(eventLink.cover === 'soft' ? 'softcover' : 'hardboundLeather');
+  }, [eventLink?.cover]); // eslint-disable-line react-hooks/exhaustive-deps
   // THE 40-PHOTO GATE (builder/albumMinimum): the Preview's Order stops a
   // short album, but /order can be opened directly (an old tab, a bookmark).
   const jobPhotos = info ? albumPhotoCount(info.pages) : null;
@@ -267,7 +322,8 @@ export default function Order() {
   }, [clipKey]);
   const clipTierReady = !clipKey || clipTier?.key === clipKey;
   const albumTier = clipKey && clipTier?.key === clipKey ? clipTier.tier : null;
-  const hdMemories = qrCount > 0 && (albumTier ?? currentClipQuality()) === 'hd';
+  // An event album's memories are part of its deal: standard, the included term.
+  const hdMemories = !eventLink && qrCount > 0 && (albumTier ?? currentClipQuality()) === 'hd';
   const [clipPrep, setClipPrep] = useState<{ phase: ClipUploadPhase | 'ready' | 'failed' | 'missing' | null; done: number; total: number; bytes: number | null; missing: string[] }>({ phase: null, done: 0, total: 0, bytes: null, missing: [] });
   useEffect(() => {
     if (!clipKey) return;
@@ -302,7 +358,7 @@ export default function Order() {
   const schedule = getPriceSchedule(); // re-read each render; non-null once loaded
   const tiers = schedule ? hostingTiersOf(schedule) : [];
   const includedYears = schedule ? includedHostingYears(schedule) : null;
-  const effectiveYears = qrCount > 0 ? (hostingYears ?? includedYears) : null;
+  const effectiveYears = qrCount > 0 ? (eventLink ? includedYears : (hostingYears ?? includedYears)) : null;
   const hdPrice = schedule ? hdMemoriesPriceOf(schedule) : 0;
 
   // Cheap arithmetic — recomputed per render on purpose (schedule is read fresh).
@@ -337,6 +393,11 @@ export default function Order() {
   // ── Form → Payment ──
   const handleProceedToPayment = () => {
     setErrorMsg('');
+    // An event album that its booking can't pay for (yet): say why, place nothing.
+    if (eventLink && eventDeal?.state !== 'covered') {
+      setErrorMsg(eventDeal?.state === 'blocked' ? eventDeal.message : 'Checking your event booking… try again in a moment.');
+      return;
+    }
     const cleanName = normalizeFullName(name);
     const canonicalPhone = normalizePHPhone(phone);
     const addrErrs = validateAddress(address);
@@ -640,6 +701,16 @@ export default function Order() {
       // again from here.
       setPrepMsg('');
 
+      // 5a. An event album: its booking pays (0045), no QR. The files are in.
+      if (eventLink && coveredByBooking) {
+        setPrepMsg('Paying with your event booking…');
+        await coverOrderWithBooking(order.id, eventLink.bookingId);
+        setPrepMsg('');
+        recordOrder('tracking');
+        setStep('tracking');
+        return;
+      }
+
       // 5. Only NOW — with the PDF safely in the bucket — show the payment QR.
       recordOrder('payment');
       setStep('payment');
@@ -713,7 +784,11 @@ export default function Order() {
             {orderNumber && (
               <p className="mt-2 text-sm font-medium text-dark">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
             )}
-            <p className="mt-2 text-xs text-taupe max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-dark">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
+            {eventLink && coveredByBooking ? (
+              <p className="mt-2 text-xs text-taupe max-w-sm mx-auto" data-testid="order-paid-by-booking">Your event booking <span className="font-mono">{eventLink.bookingNumber}</span> paid for this album. We print it and ship it to your door.</p>
+            ) : (
+              <p className="mt-2 text-xs text-taupe max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-dark">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
+            )}
           </div>
 
           {/* Status tracker — the order's real status (orderTracker). */}
@@ -872,6 +947,39 @@ export default function Order() {
           </div>
         )}
 
+        {eventLink && (
+          <div role="status" data-testid="order-event-deal" data-state={eventDeal?.state ?? 'loading'}
+            className={`mb-6 rounded-2xl border px-5 py-4 text-sm ${coveredByBooking ? 'border-[#BFE3C8] bg-[#EEF8F1] text-[#1F5C33]' : 'border-[#F0D9A8] bg-[#FFF6E5] text-[#8A5A12]'}`}>
+            <p className="font-semibold text-dark">Your event album · booking <span className="font-mono">{eventLink.bookingNumber}</span></p>
+            <p className="mt-1">
+              {eventDeal === null ? 'Checking your event booking…'
+                : eventDeal.state === 'covered' ? 'Your booking pays for this album. There’s nothing more to pay.'
+                  : eventDeal.state === 'blocked' ? eventDeal.message : ''}
+            </p>
+            {eventLink.atCheckout && (
+              <button type="button" onClick={notMyEventAlbum} data-testid="order-event-unlink"
+                className="mt-3 rounded-full border border-current px-4 py-1.5 text-xs font-semibold hover:bg-white/60">
+                Not my event album: order it as a normal album
+              </button>
+            )}
+          </div>
+        )}
+
+        {!eventLink && waitingBookings.length > 0 && (
+          <div data-testid="order-event-offer" className="mb-6 rounded-2xl border border-line-soft bg-white px-5 py-4 text-sm">
+            <p className="font-semibold text-dark">Is this your event album?</p>
+            <p className="mt-1 text-medium">Your event booking pays for its printed album. Made this album on another phone or computer? Use your booking for it here.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {waitingBookings.map((b) => (
+                <button key={b.id} type="button" onClick={() => linkThisBooking(b)} data-testid="order-event-use"
+                  className="rounded-full border border-blush-pink px-4 py-1.5 text-xs font-semibold text-blush-pink hover:bg-blush">
+                  Use booking <span className="font-mono">{b.booking_number}</span> for this album
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left: Options */}
           <div className="lg:col-span-2 space-y-6">
@@ -900,6 +1008,12 @@ export default function Order() {
             {/* Cover */}
             <div className="bg-white rounded-2xl p-6 shadow-sm">
               <h3 className="font-display text-lg font-semibold text-dark mb-4 flex items-center gap-2"><HardDrive size={18} /> Cover Type</h3>
+              {eventLink ? (
+                <div className="flex items-center justify-between rounded-xl border-2 border-peach bg-cream px-4 py-3" data-testid="order-cover-locked">
+                  <span className="text-sm text-medium">From your event deal</span>
+                  <span className="text-sm font-semibold text-dark">{COVERS.find((c) => c.type === cover)?.name}</span>
+                </div>
+              ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {COVERS.map((c) => (
                   <button key={c.type} onClick={() => setCover(c.type)}
@@ -910,6 +1024,7 @@ export default function Order() {
                   </button>
                 ))}
               </div>
+              )}
             </div>
 
             {/* Size — locked to the album you built when a design is in progress */}
@@ -983,21 +1098,32 @@ export default function Order() {
                 <div className="flex justify-between items-center gap-3"><span className="text-medium">Cover</span><span className="font-semibold text-blush-pink text-right">{COVERS.find((c) => c.type === cover)?.name}</span></div>
                 <div className="flex justify-between items-center gap-3"><span className="text-medium">Size</span><span className="font-semibold text-blush-pink text-right">{ALBUM_SIZES.find((s) => s.preset === albumSize)?.name}</span></div>
                 <div className="border-t border-line-soft pt-3 mt-3 space-y-2">
-                  {breakdown.items.map((item) => (
+                  {/* An event album is part of its booking's deal: it never shows the
+                      album price, even while checkout waits for the balance. */}
+                  {eventLink ? (
+                    <div className="flex justify-between gap-3 text-[13px]" data-testid="order-event-line">
+                      <span className="text-medium">Album — part of booking <span className="font-mono">{eventLink.bookingNumber}</span></span>
+                      <span className="font-medium text-dark text-right whitespace-nowrap">₱0</span>
+                    </div>
+                  ) : breakdown.items.map((item) => (
                     <div key={item.label} className="flex justify-between gap-3 text-[13px]">
                       <span className="text-medium">{item.label}</span>
                       <span className="font-medium text-dark text-right whitespace-nowrap">₱{item.amount.toLocaleString('en-PH')}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{priceReady ? `₱${totalPrice.toLocaleString('en-PH')}` : '—'}</span></div>
+                  <div className="flex justify-between items-baseline pt-2 border-t border-line-soft"><span className="font-semibold text-dark">Total</span><span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{eventLink ? '₱0' : <>{priceReady ? `₱${totalPrice.toLocaleString('en-PH')}` : '—'}</>}</span></div>
+                  {coveredByBooking && <p className="text-xs text-success text-right" data-testid="order-covered">Covered by your event booking</p>}
+                  {eventLink && !coveredByBooking && <p className="text-xs text-medium text-right" data-testid="order-covered-later">Your booking pays for it. See the note at the top.</p>}
                 </div>
               </div>
               <div className="mt-4 flex items-start gap-2 rounded-xl bg-blush border border-peach/60 px-3 py-2.5">
                 <QrCode size={16} className="text-blush-pink shrink-0 mt-0.5" />
                 <p className="text-xs text-cocoa leading-snug">
-                  <b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
+                  {eventLink
+                    ? <><b className="text-dark">Video memories are part of your event deal</b> — a video plays when anyone scans your printed album.</>
+                    : <><b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.</>}
                   {qrCount > 0 && <> This album has <b className="text-dark">{qrCount}</b>.</>}
-                  {qrCount > 0 && hdPrice > 0 && (
+                  {qrCount > 0 && hdPrice > 0 && !eventLink && (
                     <> Quality: <b className="text-dark">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>
                   )}
                 </p>
@@ -1035,7 +1161,7 @@ export default function Order() {
                   </p>
                 </div>
               )}
-              {qrCount > 0 && tiers.length > 0 && (
+              {qrCount > 0 && tiers.length > 0 && !eventLink && (
                 <div className="mt-3 rounded-xl border border-line-soft bg-white px-3 py-3">
                   <p className="text-xs font-semibold text-dark">How long should your memories stay live?</p>
                   <p className="text-[11px] text-light mb-2">Your videos play from the printed QR for the whole term. Renew anytime after.</p>
@@ -1070,6 +1196,7 @@ export default function Order() {
                 data-testid="order-place"
                 className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                 {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
+                  : eventLink ? <><ShoppingCart size={16} /> Place my event album order</>
                   : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${totalPrice.toLocaleString('en-PH')}`} by bank transfer</>
                     : !settingsReady || albumInfo === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
                       // A tap that answers: try the prices again (they also come back on their own).
