@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { HOME_FEATURES, HOW_IT_WORKS, DEMO_STEP_DETAILS, DEMO_OCCASIONS, EVENTS_CARD } from './homeCopy';
+import { HOME_FEATURES, HOW_IT_WORKS, DEMO_STEP_DETAILS, DEMO_OCCASIONS, EVENTS_CARD, ALBUMS_CARD } from './homeCopy';
 import { EVENT_MIN_GUESTS } from '../lib/eventBookings';
 import { MIN_ALBUM_PHOTOS } from './builder/albumMinimum';
 import { FREE_QR_MEMORIES } from '../lib/pricing';
@@ -134,18 +134,44 @@ describe('the bottom call to action', () => {
   });
 });
 
-describe('the Megyprints Events card (owner, 2026-10-10: 15+ guests is a booking)', () => {
-  it('shows the owner\'s words and leads to Events, where booking starts', () => {
-    for (const k of ['label', 'title', 'body', 'who', 'cta']) expect(home).toContain(`EVENTS_CARD.${k}`);
-    expect(home).toMatch(/to="\/events" data-testid="home-events-book"/);
+describe('the two cards at the top (the owner\'s canvas board, built 2026-10-10)', () => {
+  const cards = code('home/HomeCards.tsx');
+  it('Home shows the Albums and Events cards, not "Hi, I\'m Megy"', () => {
+    expect(home).toMatch(/<AlbumsCard\b/);
+    expect(home).toMatch(/<EventsCard\b/);
+    expect(home).not.toMatch(/Hi, I.m Megy/);
+  });
+  it('the Albums card: the real photo minimum, the gold video memory, printed and shipped', () => {
+    expect(ALBUMS_CARD.hook).toContain(`Upload ${MIN_ALBUM_PHOTOS} or more`);
+    expect(ALBUMS_CARD.steps[0].desc).toContain(`${MIN_ALBUM_PHOTOS} or more`);
+    expect(ALBUMS_CARD.steps.map((s) => s.title)).toEqual(['You upload', 'Megy designs', 'Add a video memory', 'We print & ship']);
+    expect(ALBUMS_CARD.hook).toMatch(/premium paper/);
+    expect(ALBUMS_CARD.hook).toMatch(/\bship/);
+    // The slide shows the builder's own gold button, the one the step names.
+    expect(cards).toMatch(/memory-shine/);
+  });
+  it('the Events card: the owner\'s words, step 1 is booking (15+ is booked)', () => {
+    for (const k of ['label', 'title', 'body', 'how', 'who', 'cta']) expect(cards).toContain(`EVENTS_CARD.${k}`);
     expect(EVENTS_CARD.title).toBe('Shared Memories, Different Perspectives');
+    expect(EVENTS_CARD.steps.map((s) => s.title)).toEqual(['Book your event', 'Guests scan it', 'Everyone’s photos come to you', 'Pick the best. We print it.']);
+    expect(EVENTS_CARD.cta).toBe('Book your event');
+  });
+  it('no "Try it now": there is no demo event (under-15 self-serve isn\'t built)', () => {
+    expect(`${cards}\n${JSON.stringify(EVENTS_CARD)}`).not.toMatch(/Try it now/i);
   });
   it('says who it is for with the same number the booking form and the database use', () => {
     expect(EVENTS_CARD.who).toContain(`${EVENT_MIN_GUESTS} or more guests`);
   });
-  it('is outlined, so Start Creating stays the one filled button on the card stack', () => {
-    const link = /data-testid="home-events-book"\s+className="([^"]+)"/.exec(home)!;
+  it('the Events button goes to booking and is outlined: Start Creating stays the one filled button', () => {
+    expect(cards).toMatch(/to="\/events" data-testid="home-events-book"/);
+    const link = /data-testid="home-events-book"\s+className="([^"]+)"/.exec(cards)!;
     expect(link[1]).toContain('border-2 border-peach');
     expect(link[1]).not.toMatch(/\bbg-(peach|blush-pink)\b/);
+    const start = /data-testid="home-start-creating"\s+className="([^"]+)"/.exec(cards)!;
+    expect(start[1]).toMatch(/\bbg-peach\b/);
+  });
+  it('the cards\' words never offer a theme or a template', () => {
+    const words = [ALBUMS_CARD.hook, ...ALBUMS_CARD.steps.flatMap((s) => [s.title, s.desc]), EVENTS_CARD.body, ...EVENTS_CARD.steps.flatMap((s) => [s.title, s.desc])].join('\n');
+    expect(words).not.toMatch(/\btheme|\btemplate/i);
   });
 });
