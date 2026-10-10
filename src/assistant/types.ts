@@ -27,6 +27,7 @@ export type AssistantIntentType =
   | 'update_text'
   | 'delete_text'
   | 'preview_album'
+  | 'place_order'
   | 'status'
   | 'help'
   | 'undo'
@@ -57,6 +58,8 @@ export interface ExecutedAction {
   intentType: AssistantIntentType;
   success: boolean;
   message: string;
+  /** Not done yet: a question opened on screen (ResizeAlbumAsk) that says it. */
+  asked?: boolean;
 }
 
 export interface QuickSuggestion {

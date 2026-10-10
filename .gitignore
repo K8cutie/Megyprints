@@ -18,3 +18,26 @@ _backups/
 src - Copy/
 src - Copy (2)/
 *.zip
+
+# Android (TWA) signing + build outputs — the keystore and its passwords must
+# never land in git; backup lives in Documents\megyprints-signing
+android/*.keystore
+android/signing.local.txt
+android/.gradle/
+android/build/
+android/app/build/
+android/*.apk
+android/*.aab
+android/*.idsig
+
+# Native Android shell (Capacitor) — build output & copied web assets
+android-native/.gradle/
+android-native/build/
+android-native/app/build/
+android-native/local.properties
+android-native/app/src/main/assets/public/
+android-native/app/src/main/assets/capacitor.config.json
+android-native/app/src/main/assets/capacitor.plugins.json
+android-native/capacitor-cordova-android-plugins/build/
+android-native/keystore.properties
+android-native/release/

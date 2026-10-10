@@ -1,28 +1,34 @@
 /* ══════════════════════════════════════════════════════════════════════════
    /admin — the OPERATOR CONSOLE. Separate from the customer app; gated by ROLE.
-     • owner       — Overview · Orders (full, incl. price) · Templates · Team
+     • owner       — Overview · Orders (full, incl. price) · Bookings · Templates · Team
      • fulfillment — Orders only, status changes only (no money, no overview)
    Role resolution + the DB functions in migration 0007 are the real guard.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, ClipboardList, LayoutGrid, Users, Calculator, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
+import { BarChart3, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
-import { fetchAllOrders, type AdminOrder } from '../lib/adminOrders';
+import { fetchAllOrders, fetchOrdersCount, ORDERS_PAGE_SIZE, type AdminOrder } from '../lib/adminOrders';
+import { fetchOwnerBookings } from '../lib/adminBookings';
+import { needsOwner } from '../lib/eventBookings';
 import { supabase } from '../lib/supabase';
 import OverviewPanel from './admin/OverviewPanel';
 import OrdersPanel from './admin/OrdersPanel';
 import TemplatesPanel from './admin/TemplatesPanel';
 import TeamPanel from './admin/TeamPanel';
 import PricingPanel from './admin/PricingPanel';
+import MessagesPanel from './admin/MessagesPanel';
+import BookingsPanel from './admin/BookingsPanel';
 
-type Tab = 'overview' | 'orders' | 'templates' | 'pricing' | 'team';
+type Tab = 'overview' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'team';
 const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3, ownerOnly: true },
   { id: 'orders', label: 'Orders', icon: ClipboardList, ownerOnly: false },
+  { id: 'bookings', label: 'Bookings', icon: CalendarHeart, ownerOnly: true },
+  { id: 'messages', label: 'Messages', icon: Mail, ownerOnly: true },
   { id: 'templates', label: 'Templates', icon: LayoutGrid, ownerOnly: true },
   { id: 'pricing', label: 'Pricing', icon: Calculator, ownerOnly: true },
   { id: 'team', label: 'Team', icon: Users, ownerOnly: true },
@@ -36,6 +42,23 @@ export default function Admin() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersErr, setOrdersErr] = useState<string | null>(null);
+  /** Total orders on the server — the list shows a page of these. */
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  /** Append the next page. Kept explicit (a button, not infinite scroll) so an
+   *  operator always knows whether they are looking at everything. */
+  const loadMoreOrders = useCallback(async () => {
+    setLoadingMore(true);
+    try {
+      const next = await fetchAllOrders(ORDERS_PAGE_SIZE, orders.length);
+      setOrders((prev) => [...prev, ...next]);
+    } catch (e) {
+      setOrdersErr(e instanceof Error ? e.message : 'Failed to load more orders');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [orders.length]);
   // Order ids that HAVE a "<id>.pdf" in the private print-pdfs bucket. Operators
   // already hold SELECT on that bucket (migration 0008), so we can observe print
   // readiness with zero schema/RLS/RPC change and flag any order missing its file.
@@ -56,7 +79,14 @@ export default function Admin() {
 
   const loadOrders = useCallback(async () => {
     setOrdersErr(null);
-    try { setOrders(await fetchAllOrders()); }
+    try {
+      // ONE PAGE, newest first — not the whole table. Returning every order cost
+      // 2 MB and a full scan per load, per operator (measured at 10k orders).
+      // The total comes back separately so the footer can say what is hidden.
+      const [page, total] = await Promise.all([fetchAllOrders(), fetchOrdersCount()]);
+      setOrders(page);
+      setOrdersTotal(total);
+    }
     catch (e) { setOrdersErr(e instanceof Error ? e.message : 'Failed to load orders'); }
     finally { setOrdersLoading(false); }
 
@@ -64,14 +94,24 @@ export default function Admin() {
     // which orders have their print file. Best-effort: a failure just leaves the
     // set empty (badges show "missing"), never blocks the orders list.
     try {
-      const { data: files } = await supabase.storage.from('print-pdfs').list('', { limit: 1000 });
+      // Page through the bucket — a single list() caps at 1000 objects, so once
+      // the shop passes ~1000 print files the tail would falsely show "print file
+      // missing / do not print". Accumulate every page until a short one.
       const ready = new Set<string>();
-      for (const f of files ?? []) {
-        // The cover wrap is a SIBLING file "<id>-cover.pdf" — not an order-id key.
-        // Skip it so it can't pollute the set (→ bogus "<id>-cover" ids / a
-        // misfired "print file missing" badge). Only the interior "<id>.pdf" keys.
-        if (f.name.endsWith('-cover.pdf')) continue;
-        if (f.name.endsWith('.pdf')) ready.add(f.name.slice(0, -'.pdf'.length));
+      const PAGE = 1000;
+      for (let offset = 0; ; offset += PAGE) {
+        const { data: files, error } = await supabase.storage
+          .from('print-pdfs').list('', { limit: PAGE, offset });
+        if (error) throw error;
+        const batch = files ?? [];
+        for (const f of batch) {
+          // The cover wrap is a SIBLING file "<id>-cover.pdf" — not an order-id key.
+          // Skip it so it can't pollute the set (→ bogus "<id>-cover" ids / a
+          // misfired "print file missing" badge). Only the interior "<id>.pdf" keys.
+          if (f.name.endsWith('-cover.pdf')) continue;
+          if (f.name.endsWith('.pdf')) ready.add(f.name.slice(0, -'.pdf'.length));
+        }
+        if (batch.length < PAGE) break;
       }
       setPrintReadyIds(ready);
     } catch {
@@ -81,19 +121,33 @@ export default function Admin() {
 
   useEffect(() => { if (role) void loadOrders(); }, [role, loadOrders]);
 
+  // How many bookings wait on the owner (a request to price, a payment to
+  // match), on the Bookings tab. Re-read on every tab change, so acting in
+  // Bookings and moving on brings it down. Nothing else tells the owner a
+  // request came in: no email or SMS, by cost.
+  const [bookingsWaiting, setBookingsWaiting] = useState(0);
+  useEffect(() => {
+    if (role !== 'owner') return;
+    let alive = true;
+    fetchOwnerBookings()
+      .then((rows) => { if (alive) setBookingsWaiting(rows.filter(needsOwner).length); })
+      .catch(() => { /* the tab itself shows the error */ });
+    return () => { alive = false; };
+  }, [role, tab]);
+
   if (!user) return null; // ProtectedRoute redirects to login
   if (roleLoading) {
-    return <div className="min-h-[100dvh] flex items-center justify-center text-[#9B9B9B]"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+    return <div className="min-h-[100dvh] flex items-center justify-center text-light"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   }
   if (!role) {
     return (
       <div className="max-w-md mx-auto py-24 px-4 text-center">
-        <p className="text-lg font-semibold text-[#2D2D2D]">Not authorized</p>
-        <p className="text-sm mt-2 text-[#6B6B6B]">This console is for Megy Prints operators only.</p>
-        <p className="text-xs mt-4 text-[#9B9B9B]">
+        <p className="text-lg font-semibold text-dark">Not authorized</p>
+        <p className="text-sm mt-2 text-medium">This console is for Megy Prints operators only.</p>
+        <p className="text-xs mt-4 text-light">
           Signed in as <b>{user.email ?? '(no email)'}</b>. Ask an owner ({ADMIN_EMAILS.join(' / ')}) to add you in Team.
         </p>
-        <Link to="/" className="inline-block mt-5 text-sm text-[#E8A598]">← Back to site</Link>
+        <Link to="/" className="inline-block mt-5 text-sm text-blush-pink">← Back to site</Link>
       </div>
     );
   }
@@ -103,25 +157,29 @@ export default function Admin() {
   const ordersBlocked = ordersErr && /permission|policy|denied|row-level|function/i.test(ordersErr);
 
   return (
-    <div className="min-h-[100dvh] bg-[#FAF8F5]">
-      <header className="bg-white border-b border-[#E8E8E8] sticky top-0 z-10">
+    <div className="min-h-[100dvh] bg-warm-white">
+      <header className="bg-white border-b border-line sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className="font-display italic text-base text-[#2D2D2D]">Megy</span>
-            <span className="text-base text-[#2D2D2D]">Prints</span>
-            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#F4C2A1] text-white ml-1 capitalize">{role}</span>
+            <span className="font-display italic text-base text-dark">Megy</span>
+            <span className="text-base text-dark">Prints</span>
+            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-peach text-white ml-1 capitalize">{role}</span>
           </div>
           <div className="flex items-center gap-1">
-            <Link to="/" className="text-sm text-[#6B6B6B] flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-[#F5F5F5]"><ArrowLeft size={14} /> Site</Link>
-            <button onClick={() => void logout()} className="text-sm text-[#6B6B6B] flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-[#F5F5F5]"><LogOut size={14} /> Sign out</button>
+            <Link to="/" className="text-sm text-medium flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-paper"><ArrowLeft size={14} /> Site</Link>
+            <button onClick={() => void logout()} className="text-sm text-medium flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-paper"><LogOut size={14} /> Sign out</button>
           </div>
         </div>
         <div className="max-w-6xl mx-auto px-4 flex gap-1">
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className="px-3 py-2.5 text-sm font-medium border-b-2 flex items-center gap-1.5 -mb-px transition-colors"
-              style={{ borderColor: tab === t.id ? '#F4C2A1' : 'transparent', color: tab === t.id ? '#2D2D2D' : '#9B9B9B' }}>
+              style={{ borderColor: tab === t.id ? '#B85C38' : 'transparent', color: tab === t.id ? '#2D2D2D' : '#9B9B9B' }}>
               <t.icon size={15} /> {t.label}
+              {t.id === 'bookings' && bookingsWaiting > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-peach text-white" data-testid="bookings-waiting"
+                  title={`${bookingsWaiting} waiting on you: a request to price, or a payment to match`}>{bookingsWaiting}</span>
+              )}
             </button>
           ))}
         </div>
@@ -135,7 +193,26 @@ export default function Admin() {
           </p>
         )}
         {tab === 'overview' && isOwner && (ordersLoading ? <Spinner /> : <OverviewPanel orders={orders} />)}
-        {tab === 'orders' && (ordersLoading ? <Spinner /> : <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} />)}
+        {tab === 'orders' && (ordersLoading ? <Spinner /> : (
+          <>
+            <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} />
+            {/* Never let the list imply it is showing everything. */}
+            {ordersTotal > orders.length && (
+              <div className="mt-4 flex items-center justify-center gap-3 text-sm">
+                <span className="text-light">
+                  Showing {orders.length} of {ordersTotal} orders
+                </span>
+                <button onClick={() => void loadMoreOrders()} disabled={loadingMore}
+                  className="px-4 py-2 rounded-lg font-semibold text-white disabled:opacity-60"
+                  style={{ background: '#BF5E3E' }}>
+                  {loadingMore ? 'Loading…' : `Load ${Math.min(ORDERS_PAGE_SIZE, ordersTotal - orders.length)} more`}
+                </button>
+              </div>
+            )}
+          </>
+        ))}
+        {tab === 'bookings' && isOwner && <BookingsPanel />}
+        {tab === 'messages' && isOwner && <MessagesPanel />}
         {tab === 'templates' && isOwner && <TemplatesPanel />}
         {tab === 'pricing' && isOwner && <PricingPanel />}
         {tab === 'team' && isOwner && <TeamPanel />}
@@ -145,5 +222,5 @@ export default function Admin() {
 }
 
 function Spinner() {
-  return <div className="py-24 flex justify-center text-[#9B9B9B]"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  return <div className="py-24 flex justify-center text-light"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 }

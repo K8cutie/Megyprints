@@ -8,9 +8,9 @@
 // upload of the print-ready PDF would be silently skipped.
 //
 // This rebuilds the SAME job { pages, photos, albumSize } from durable sources:
-//   • the latest saved `albums` row in Supabase (pages + album_size) — the
-//     IDENTICAL album createOrderFromLatestAlbum snapshots, so the PDF and the
-//     order can never diverge; and
+//   • the ordered album's `albums` row in Supabase (pages + album_size), read
+//     by the id the order froze (orderAlbum.selectOrderAlbum, the same reader
+//     createOrderFromAlbum uses), so the PDF and the order can never diverge; and
 //   • the photo BLOBS from the browser's IndexedDB (the same store the builder
 //     rehydrates from on open) — resolved to fresh preview URLs.
 //
@@ -23,24 +23,58 @@
 
 import { supabase } from './supabase';
 import type { PrintJob } from './printQueue';
+import { selectOrderAlbum, AlbumNotSavedError } from './orderAlbum';
+import { DRAFT_STORAGE_KEY } from './localDraft';
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, CoverDesign } from '../pages/builder/types';
 import type { StoredPhoto } from './useIndexedDBPhotos';
-import { normalizeStoredPageFields } from '../pages/builder/pageNormalize';
+import { normalizeStoredPageFields, storedCoverPage } from '../pages/builder/pageNormalize';
+import { withLiveCoverPhoto } from '../pages/builder/coverPhoto';
+import { missingPhotos } from './photoPresence';
 
-// Same key useBuilderState persists the local draft under (STORAGE_KEY there).
-// The draft survives a full reload — unlike the in-memory print job — so it's
-// how we recover the DESIGNED COVER after the same-device OAuth round-trip at
-// checkout. (The cover isn't in the cloud album row; keeping it out of the DB
-// avoids a schema migration that could break album saves if unapplied.)
-const DRAFT_KEY = 'megy-album-v5';
+// The local draft (DRAFT_STORAGE_KEY, written by useBuilderState) survives a
+// full reload — unlike the in-memory print job — so it's the fallback for the
+// DESIGNED COVER of an album row saved before 0036 (which added
+// albums.cover_front, the cover saved with the album itself), recovered after
+// the same-device OAuth round-trip at checkout.
+//
+// The draft is ONE album: the one last open on this device. Its cover is only
+// this order's cover when the draft IS the ordered album — another album's
+// cover must never be printed on this one.
+type DraftCover = { albumId?: string; coverDesign?: CoverDesign; coverFront?: unknown };
 
-function draftCoverDesign(): CoverDesign | undefined {
+function readDraftCover(albumId: string | undefined): DraftCover | null {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return undefined;
-    return (JSON.parse(raw) as { coverDesign?: CoverDesign })?.coverDesign;
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as DraftCover;
+    if (albumId && d?.albumId && d.albumId !== albumId) return null;
+    return d ?? null;
   } catch {
-    return undefined;
+    return null;
+  }
+}
+
+function draftCoverDesign(albumId: string | undefined): CoverDesign | undefined {
+  return readDraftCover(albumId)?.coverDesign;
+}
+
+/** Recover the cover-as-pages FRONT page for an album row saved before 0036
+ *  (no cover_front) from the local draft, after the same-device OAuth
+ *  round-trip — but only when that draft IS this album (readDraftCover): a
+ *  cover's photo slots index its own album's photos, so another album's cover
+ *  would print the wrong ones. (A draft from before album ids were kept can't
+ *  say; it is trusted, as it always was.) It is normalized through the same
+ *  sanitizer the interior pages use (shape + ornament data-URI validation). The
+ *  back cover is NOT recovered — it's the reserved Megy Prints panel, derived
+ *  from the front at wrap time. The cover upload is best-effort, so a missing
+ *  cover photo degrades the cover only — it does NOT fail the interior job. */
+function draftCoverPages(albumId: string, albumSize: AlbumSizePreset): { coverFront?: AlbumPage } {
+  try {
+    const d = readDraftCover(albumId);
+    if (!d) return {};
+    return { coverFront: storedCoverPage(d.coverFront, albumSize) ?? undefined };
+  } catch {
+    return {};
   }
 }
 
@@ -56,29 +90,34 @@ function normalizeStoredPage(p: any): AlbumPage {
 }
 
 /**
- * Rebuild the print job from the user's latest saved album + IndexedDB photos.
- * Returns null when there's no album, no pages, or NONE of the album's photos
- * are present in this browser's IndexedDB (device mismatch / eviction) — every
+ * Rebuild the print job from the ordered album + IndexedDB photos.
+ * Returns null when there's no album, no pages, or a photo a page uses is
+ * missing from this browser's IndexedDB (device mismatch / eviction) — every
  * such case must fail loud at the call site rather than ship a broken PDF.
+ * Throws AlbumNotSavedError when the named album isn't in the account.
  *
- * @param userId  The signed-in customer's id (same one used to place the order).
- * @param idbGet  useIndexedDBPhotos().get — reads a photo blob + fresh URL.
+ * @param userId   The signed-in customer's id (same one used to place the order).
+ * @param idbGet   useIndexedDBPhotos().get — reads a photo blob + fresh URL.
+ * @param albumId  The album the order froze (CreatedOrder.album_id). Without
+ *                 one, the most recently updated album (drafts from before ids).
  */
-export async function rebuildPrintJobFromLatestAlbum(
+export async function rebuildPrintJobFromAlbum(
   userId: string,
   idbGet: (id: string) => Promise<StoredPhoto | null>,
+  albumId: string | undefined,
 ): Promise<PrintJob | null> {
-  // Load the SAME latest album createOrderFromLatestAlbum freezes, so the PDF
-  // is built from the identical pages the order snapshots.
-  const { data: album, error } = await supabase
-    .from('albums')
-    .select('id, album_size, pages, photos')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error || !album) return null;
+  // Load the SAME album createOrderFromAlbum froze, so the PDF is built from
+  // the identical pages the order snapshots. '*' so its cover (cover_front,
+  // 0036) comes along when the database has it — naming the column would fail
+  // the whole read on one that doesn't yet.
+  let album: { id: string; album_size: string | null; pages: unknown; photos: unknown; cover_front?: unknown } | null;
+  try {
+    album = await selectOrderAlbum(supabase, { userId, albumId, columns: '*' });
+  } catch (e) {
+    if (e instanceof AlbumNotSavedError) throw e;
+    return null;
+  }
+  if (!album) return null;
 
   const rawPages = Array.isArray(album.pages) ? album.pages : [];
   if (rawPages.length === 0) return null;
@@ -140,14 +179,15 @@ export async function rebuildPrintJobFromLatestAlbum(
   // photo) is missing locally — that slot would otherwise print BLANK. "Some other
   // photo resolved" is not good enough: every USED index must have a real preview,
   // or this device can't build a correct PDF and checkout must stop and say so.
-  const usedIdx = new Set<number>();
-  for (const pg of pages) {
-    for (const f of pg.slotFills ?? []) if (typeof f === 'number' && f >= 0) usedIdx.add(f);
-    for (const f of pg.textSlotFills ?? []) if (typeof f === 'number' && f >= 0) usedIdx.add(f);
-  }
-  for (const i of usedIdx) {
-    if (!photos[i]?.previewUrl) return null;
-  }
+  if (missingPhotos(pages, photos).count > 0) return null;
 
-  return { pages, photos, albumSize, coverDesign: draftCoverDesign() };
+  // The cover saved with this album — its slots index these same photos.
+  // Without one (saved before 0036), this album's own draft cover.
+  const savedCover: AlbumPage | null = storedCoverPage(album.cover_front, albumSize);
+  const cover = savedCover ? { coverFront: savedCover } : draftCoverPages(album.id, albumSize);
+  // A photo uploaded for the cover itself: its link died with the reload, its
+  // file is in this device's photo store (coverPhoto).
+  if (cover.coverFront) cover.coverFront = await withLiveCoverPhoto(cover.coverFront, idbGet);
+
+  return { pages, photos, albumSize, albumId: album.id, coverDesign: draftCoverDesign(album.id), ...cover };
 }

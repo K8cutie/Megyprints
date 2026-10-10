@@ -3,6 +3,15 @@ import type { ReactNode } from 'react';
 import type { User, Session, Provider } from '@supabase/supabase-js';
 import { AuthError } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from './supabase';
+import { isNativeShell, nativeSignInWithOAuth } from './nativeAuth';
+import { forgetCheckoutOnDevice } from './checkoutSession';
+import { clearPendingPrintJob } from './printQueue';
+
+/** What one account leaves in this tab for checkout: gone when it signs out. */
+function forgetAccountInTab(): void {
+  forgetCheckoutOnDevice();
+  clearPendingPrintJob();
+}
 
 // =============================================================================
 // Types
@@ -79,7 +88,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => {
+      (event, newSession) => {
+        // Signed out any way at all (the menu, an expired session, another
+        // tab): it used to be only the menu, and only once signOut succeeded.
+        if (event === 'SIGNED_OUT') forgetAccountInTab();
         if (mounted) {
           setSession(newSession);
           setUser(newSession?.user ?? null);
@@ -149,6 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // Asked to sign out: the checkout details leave with the account even if
+    // the sign-out itself fails (offline).
+    forgetAccountInTab();
     try {
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) {
@@ -174,6 +189,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // fragments), so on a HashRouter SPA the return lands on a bare path →
       // Home, silently dropping an in-progress builder. App.tsx restores this.
       try { sessionStorage.setItem('megy-auth-return', window.location.hash || '#/'); } catch { /* ignore */ }
+      // Native Android shell: Google blocks OAuth in a WebView — go via a Custom Tab.
+      if (isNativeShell()) { await nativeSignInWithOAuth(provider); return; }
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

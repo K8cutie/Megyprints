@@ -4,18 +4,44 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Attention pulse for the "Add memory video" button — a soft expanding halo
-   (not a harsh blink) that draws the eye to an easy-to-miss feature. It's
-   applied only until the customer has clicked the button once (see the
-   memory-discovered flag), so it never nags in the long run. Honors
-   prefers-reduced-motion. */
-@keyframes megyMemoryPulse {
-  0%   { box-shadow: 0 0 0 0 rgba(232, 165, 152, 0.55); }
-  70%  { box-shadow: 0 0 0 9px rgba(232, 165, 152, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(232, 165, 152, 0); }
+/* "Add a video memory" — the album's crème de la crème, so it shines (owner,
+   2026-10-04): a gold button, unlike every terracotta one, with a soft gold
+   glow that breathes and a light that sweeps across it now and then. The
+   sweep is a transform on ::after (cheap on old phones); the glow is the
+   button's own shadow, which overflow:hidden does not clip. Dark brown words
+   on gold read at 5.4:1 on its darkest corner (7-11:1 in the middle). Under
+   prefers-reduced-motion it keeps the gold and a still glow, and nothing
+   moves. See VideoMemoryButton. */
+.memory-shine {
+  position: relative;
+  overflow: hidden;
+  color: #2E1A08;
+  background: linear-gradient(135deg, #C9962F 0%, #E9C46F 38%, #F7E3A8 52%, #DDAE4C 70%, #C08A2B 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(120, 80, 10, 0.3), 0 2px 10px 0 rgba(214, 160, 50, 0.45);
+  animation: megyMemoryGlow 2.6s ease-in-out infinite;
 }
-.memory-pulse { animation: megyMemoryPulse 1.8s ease-out infinite; }
-@media (prefers-reduced-motion: reduce) { .memory-pulse { animation: none; } }
+.memory-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.8) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: megyMemorySweep 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.memory-shine > * { position: relative; z-index: 1; }
+@keyframes megyMemoryGlow {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(120, 80, 10, 0.3), 0 2px 10px 0 rgba(214, 160, 50, 0.45); }
+  50%      { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(120, 80, 10, 0.3), 0 0 22px 4px rgba(232, 178, 64, 0.75); }
+}
+@keyframes megyMemorySweep {
+  0%        { transform: translateX(-120%); }
+  35%, 100% { transform: translateX(120%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .memory-shine, .memory-shine::after { animation: none; }
+  .memory-shine::after { display: none; }
+}
 
 /* Rotate-your-phone hint: tilt the phone glyph to landscape and back, to show
    the gesture. Used on the mobile Preview page (portrait). */
@@ -29,15 +55,15 @@
 
 @layer base {
   :root {
-    --background: 30 100% 97%;
+    --background: 40 23% 97%;
     --foreground: 0 0% 18%;
-    --card: 30 100% 98.5%;
+    --card: 30 33% 99%;
     --card-foreground: 0 0% 18%;
-    --popover: 30 100% 98.5%;
+    --popover: 30 33% 99%;
     --popover-foreground: 0 0% 18%;
-    --primary: 25 80% 76%;
+    --primary: 17 53% 47%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 75% 94%;
+    --secondary: 21 56% 92%;
     --secondary-foreground: 0 0% 18%;
     --muted: 30 20% 95%;
     --muted-foreground: 0 0% 42%;
@@ -47,23 +73,58 @@
     --destructive-foreground: 0 0% 100%;
     --border: 30 10% 88%;
     --input: 30 10% 88%;
-    --ring: 25 80% 76%;
+    --ring: 17 53% 47%;
     --radius: 0.625rem;
-    --sidebar-background: 30 100% 97%;
+    --sidebar-background: 40 23% 97%;
     --sidebar-foreground: 0 0% 18%;
-    --sidebar-primary: 25 80% 76%;
+    --sidebar-primary: 17 53% 47%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 75% 94%;
+    --sidebar-accent: 21 56% 92%;
     --sidebar-accent-foreground: 0 0% 18%;
     --sidebar-border: 30 10% 88%;
-    --sidebar-ring: 25 80% 76%;
+    --sidebar-ring: 17 53% 47%;
 
-    --cream: #FFF8F0;
-    --warm-white: #FFFBF7;
-    --blush: #FDE8E4;
+    /* ── Theme tokens (RGB triplets; see tailwind.config) ──────────
+       Defaults are the exact colors the UI shipped with. A theme
+       (data-theme on <html>) redefines these — nothing else moves. */
+    --t-peach: 184 92 56; /* #B85C38 terracotta (was #F4C2A1) */
+    --t-blush-pink: 154 74 44; /* #9A4A2C terracotta deep / hover (was #E8A598) */
+    --t-dark: 45 45 45; /* #2D2D2D */
+    --t-medium: 107 107 107; /* #6B6B6B */
+    --t-light: 155 155 155; /* #9B9B9B */
+    --t-taupe: 139 126 122; /* #8B7E7A */
+    --t-ink-warm: 74 66 63; /* #4A423F */
+    --t-ink-mid: 90 90 90; /* #5A5A5A */
+    --t-charcoal: 74 74 74; /* #4A4A4A */
+    --t-cocoa: 139 111 71; /* #8B6F47 */
+    --t-stone: 155 139 122; /* #9B8B7A */
+    --t-cream: 250 249 247; /* #FAF9F7 paper — page ground (was #FFF8F0 cream) */
+    --t-warm-white: 253 252 251; /* #FDFCFB (was #FFFBF7) */
+    --t-blush: 246 231 223; /* #F6E7DF terracotta tint (was #FDE8E4) */
+    --t-blush-deep: 232 213 208; /* #E8D5D0 */
+    --t-sand: 245 237 232; /* #F5EDE8 */
+    --t-sand-deep: 234 227 218; /* #EAE3DA */
+    --t-line: 230 226 221; /* #E6E2DD warm hairline (was #E8E8E8) */
+    --t-line-soft: 241 238 234; /* #F1EEEA (was #F0F0F0) */
+    --t-paper: 240 237 232; /* #F0EDE8 stone — builder workspaces + chips (was #F5F5F5) */
+    --t-success: 46 125 74; /* #2E7D4A */
+    --t-rust: 191 94 62; /* #BF5E3E */
+    --t-rust-deep: 176 80 58; /* #B0503A */
+    --t-coral-soft: 200 118 88; /* #C87658 terracotta mid (was #D8958D) */
+    --t-soft-lavender: 184 169 217; /* #B8A9D9 */
+    --t-mint: 155 207 184; /* #9BCFB8 */
+    --t-sky-blue: 143 191 224; /* #8FBFE0 */
+    --t-cream-gold: 212 184 150; /* #D4B896 */
+    --t-soft-sage: 228 240 224; /* #E4F0E0 */
+    --t-pale-peach: 246 231 223; /* #F6E7DF (was #FBE5D8) */
+    --t-pale-coral: 200 118 88; /* #C87658 (was #E8958C) */
+
+    --cream: #FAF9F7;
+    --warm-white: #FDFCFB;
+    --blush: #F6E7DF;
     --lavender: #E8E0F0;
     --mist: #E0E8F0;
-    --pale-peach: #FBE5D8;
+    --pale-peach: #F6E7DF;
     --soft-sage: #E4F0E0;
     --deep-charcoal: #2D2D2D;
     --charcoal: #4A4A4A;
@@ -71,14 +132,14 @@
     --medium: #6B6B6B;
     --light: #9B9B9B;
     --white: #FFFFFF;
-    --blush-text: #D4A08C;
+    --blush-text: #9A4A2C;
     --lavender-text: #9B8EC4;
-    --peach: #F4C2A1;
-    --blush-pink: #E8A598;
+    --peach: #B85C38;
+    --blush-pink: #9A4A2C;
     --soft-lavender: #B8A9D9;
     --mint: #9BCFB8;
     --sky-blue: #8FBFE0;
-    --pale-coral: #E8958C;
+    --pale-coral: #C87658;
     --cream-gold: #D4B896;
   }
 
@@ -91,7 +152,7 @@
   }
 
   body {
-    @apply bg-[#FFF8F0] text-[#2D2D2D] font-body antialiased;
+    @apply bg-cream text-dark font-body antialiased;
     font-family: "DM Sans", sans-serif;
   }
 
@@ -101,7 +162,7 @@
 
   /* Keyboard focus ring styles for accessibility */
   *:focus-visible {
-    outline: 2px solid #F4C2A1;
+    outline: 2px solid rgb(var(--t-peach));
     outline-offset: 2px;
   }
 
@@ -115,18 +176,18 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(244, 194, 161, 0.4);
+    background-color: rgba(184, 92, 56, 0.4);
     border-radius: 9999px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(244, 194, 161, 0.6);
+    background-color: rgba(184, 92, 56, 0.6);
   }
 
   /* Firefox scrollbar */
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(244, 194, 161, 0.4) transparent;
+    scrollbar-color: rgba(184, 92, 56, 0.4) transparent;
   }
 }
 
@@ -210,11 +271,11 @@
 
 @layer components {
   .shadow-button {
-    box-shadow: 0 4px 14px rgba(244, 194, 161, 0.35);
+    box-shadow: 0 4px 14px rgba(184, 92, 56, 0.35);
   }
 
   .shadow-button-hover {
-    box-shadow: 0 6px 20px rgba(244, 194, 161, 0.45);
+    box-shadow: 0 6px 20px rgba(184, 92, 56, 0.45);
   }
 
   .shadow-card {
@@ -240,4 +301,109 @@
   .animate-float {
     animation: none;
   }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UI THEMES (pass 2). CSS-only layers keyed by data-theme on <html>.
+   They redefine colour tokens and override shadow / radius / surface
+   utilities in place — layout is never touched, so nothing moves.
+   Selected by src/lib/theme.ts (?theme= on the URL, then localStorage).
+
+   soft        — "Soft UI Evolution": warm multi-layer shadows, rounder
+                 corners, warmer hairlines and muted text. Brand peach kept.
+   soft-glass  — soft + frosted-glass panels over a soft ambient backdrop
+                 (backdrop blur on white surfaces). Heavier on GPU; keep an
+                 eye on mid-range phones before making it the default.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared token shifts ─────────────────────────────────────────────────── */
+[data-theme="soft"],
+[data-theme="soft-glass"] {
+  --t-cream: 255 250 245;        /* page ground, a touch lighter */
+  --t-line: 240 231 225;         /* hairlines warm instead of neutral grey */
+  --t-line-soft: 246 240 235;
+  --t-paper: 250 246 242;
+  --t-light: 152 141 136;        /* muted text warmed to match */
+  --t-medium: 98 90 86;
+}
+
+/* ── Shadows: warm, layered, softer than flat, clearer than neumorphism ──── */
+[data-theme="soft"] .shadow-sm,        [data-theme="soft-glass"] .shadow-sm        { --tw-shadow: 0 1px 2px rgb(45 45 45 / .04), 0 6px 16px -6px rgb(232 165 152 / .18); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow,           [data-theme="soft-glass"] .shadow           { --tw-shadow: 0 2px 4px rgb(45 45 45 / .04), 0 10px 24px -8px rgb(232 165 152 / .22); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-md,        [data-theme="soft-glass"] .shadow-md        { --tw-shadow: 0 4px 8px -2px rgb(45 45 45 / .05), 0 16px 32px -12px rgb(232 165 152 / .25); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-lg,        [data-theme="soft-glass"] .shadow-lg        { --tw-shadow: 0 8px 16px -4px rgb(45 45 45 / .06), 0 24px 48px -16px rgb(232 165 152 / .28); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-xl,        [data-theme="soft-glass"] .shadow-xl        { --tw-shadow: 0 12px 24px -6px rgb(45 45 45 / .08), 0 32px 64px -20px rgb(232 165 152 / .32); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-2xl,       [data-theme="soft-glass"] .shadow-2xl       { --tw-shadow: 0 20px 40px -10px rgb(45 45 45 / .12), 0 40px 80px -24px rgb(232 165 152 / .35); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-card,      [data-theme="soft-glass"] .shadow-card      { --tw-shadow: 0 2px 4px rgb(45 45 45 / .03), 0 14px 32px -10px rgb(232 165 152 / .24); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-card-hover,[data-theme="soft-glass"] .shadow-card-hover{ --tw-shadow: 0 6px 12px rgb(45 45 45 / .05), 0 28px 56px -16px rgb(232 165 152 / .32); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-button,    [data-theme="soft-glass"] .shadow-button    { --tw-shadow: 0 2px 6px rgb(232 165 152 / .25), 0 10px 20px -6px rgb(232 165 152 / .35); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-button-hover,[data-theme="soft-glass"] .shadow-button-hover { --tw-shadow: 0 4px 10px rgb(232 165 152 / .3), 0 16px 28px -8px rgb(232 165 152 / .45); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-dropdown,  [data-theme="soft-glass"] .shadow-dropdown  { --tw-shadow: 0 8px 16px -4px rgb(45 45 45 / .06), 0 24px 48px -16px rgb(232 165 152 / .26); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+[data-theme="soft"] .shadow-builder-panel, [data-theme="soft-glass"] .shadow-builder-panel { --tw-shadow: 0 0 0 1px rgb(232 165 152 / .06), 0 12px 40px -12px rgb(232 165 152 / .25); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+
+/* ── Corners: one step rounder across the board ─────────────────────────── */
+[data-theme="soft"] .rounded-lg,  [data-theme="soft-glass"] .rounded-lg  { border-radius: 12px; }
+[data-theme="soft"] .rounded-xl,  [data-theme="soft-glass"] .rounded-xl  { border-radius: 16px; }
+[data-theme="soft"] .rounded-2xl, [data-theme="soft-glass"] .rounded-2xl { border-radius: 20px; }
+[data-theme="soft"] .rounded-3xl, [data-theme="soft-glass"] .rounded-3xl { border-radius: 28px; }
+
+/* ── Soft: a barely-there warm glow on the page ground ──────────────────── */
+[data-theme="soft"] body {
+  background-image:
+    radial-gradient(60% 40% at 15% 0%, rgb(244 194 161 / .18), transparent 70%),
+    radial-gradient(50% 35% at 100% 20%, rgb(232 165 152 / .10), transparent 70%);
+}
+
+/* ── Soft-glass: frosted panels over an ambient backdrop ────────────────── */
+/* The gradient scrolls with the page on purpose: a fixed attachment is
+   ignored or janky on mobile Chrome / Safari. */
+[data-theme="soft-glass"] body {
+  background-image:
+    radial-gradient(45% 35% at 10% 5%, rgb(244 194 161 / .45), transparent 70%),
+    radial-gradient(40% 40% at 90% 15%, rgb(184 169 217 / .30), transparent 70%),
+    radial-gradient(50% 40% at 50% 100%, rgb(155 207 184 / .22), transparent 70%);
+}
+
+/* THE RULE THAT BIT US: a backdrop blur on an element makes it the containing
+   block for every position:fixed descendant. Put it on a page wrapper and the
+   full-screen wizard stage and the sign-in gate collapse into a 48-px strip
+   (blank screen on the phone, 2026-09-12). So the blur never goes on the
+   panel itself — it goes on a ::before pseudo-layer, which is a CHILD and can
+   never be an ancestor of anything. Page-sized wrappers are excluded outright:
+   blurring a whole page is pointless and the heaviest thing a phone can do. */
+[data-theme="soft-glass"] :is(.bg-white, .bg-warm-white, .bg-cream, .bg-paper):not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full) {
+  isolation: isolate;
+}
+[data-theme="soft-glass"] .bg-white:not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full) {
+  background-color: rgb(255 255 255 / .62);
+}
+[data-theme="soft-glass"] :is(.bg-warm-white, .bg-cream, .bg-paper):not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full) {
+  background-color: rgb(255 251 247 / .55);
+}
+/* Statically positioned panels need a positioning box for the pseudo-layer;
+   fixed / absolute / sticky / relative ones already have one - never touch those. */
+[data-theme="soft-glass"] :is(.bg-white, .bg-warm-white, .bg-cream, .bg-paper):not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full):not(.fixed):not(.absolute):not(.sticky):not(.relative) {
+  position: relative;
+}
+[data-theme="soft-glass"] :is(.bg-white, .bg-warm-white, .bg-cream, .bg-paper):not(.min-h-screen):not(.h-screen):not(.inset-0):not(.h-full)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  backdrop-filter: blur(16px) saturate(1.35);
+}
+[data-theme="soft-glass"] .border-line,
+[data-theme="soft-glass"] .border-line-soft { border-color: rgb(255 255 255 / .6); }
+/* Full-screen wizard stage is the page itself, not a card — keep it opaque. */
+[data-theme="soft-glass"] .fixed.inset-0.bg-warm-white,
+[data-theme="soft-glass"] .fixed.inset-0.bg-cream {
+  background-color: rgb(var(--t-cream));
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="soft-glass"] .bg-white { background-color: rgb(255 255 255 / .92); }
+  [data-theme="soft-glass"] :is(.bg-white, .bg-warm-white, .bg-cream, .bg-paper)::before { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }

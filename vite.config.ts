@@ -5,30 +5,40 @@ import { inspectAttr } from 'plugin-inspect-react-code'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   base: './',
   plugins: [
-    inspectAttr(),
+    // Dev-only source inspector. Gated OUT of production builds: it is an
+    // anonymous, low-metadata third-party plugin that executes at build time
+    // (a dependency-confusion / slopsquat surface flagged by Kraken) and it
+    // stamps source-file paths into the DOM — neither belongs in a shipped app.
+    command === 'serve' && inspectAttr(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['megy-character.png'],
+      // The shrunk mascot copies (src/lib/megyMascot.ts), not the 1.5 MB master.
+      includeAssets: ['megy-character-*.png', 'pwa-192.png', 'pwa-512.png', 'pwa-maskable-192.png', 'pwa-maskable-512.png'],
       manifest: {
         id: '/',
         name: 'Megy Prints',
         short_name: 'Megy Prints',
         description: 'AI photo-album builder — Megy designs your album, you just approve.',
         theme_color: '#F4C2A1',
-        background_color: '#FFF8F0',
+        // Splash/backdrop behind the launch icon. Icon-edge orange so the
+        // full-bleed MEGY cube melts into the splash instead of floating as an
+        // orange square on cream (the in-app cream theme takes over on paint).
+        background_color: '#F05239',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '.',
         scope: '/',
         categories: ['photo', 'shopping', 'lifestyle'],
         icons: [
-          { src: 'megy-character.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: 'megy-character.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'pwa-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+          { src: 'pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {
@@ -43,6 +53,11 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         // App shell = network-first: when online, always fetch the latest HTML so
         // new asset hashes load right away; fall back to cache only when offline.
+        // vite-plugin-pwa registers a catch-all NavigationRoute → index.html that
+        // runs BEFORE runtimeCaching below. Without this denylist it served the
+        // app shell for QR links (/m/…), /api, and the static pages, so the
+        // exclusions below never took effect for a browser with the SW installed.
+        navigateFallbackDenylist: [/^\/m\//, /^\/api\//, /^\/\.well-known\//, /^\/delete-account\.html/, /^\/auth-native\./],
         runtimeCaching: [
           {
             // App-shell navigations only. CRUCIAL: exclude server-rendered routes
@@ -66,8 +81,12 @@ export default defineConfig({
   ],
   server: {
     port: Number(process.env.PORT) || 3000,
+    // The native shell's copied web assets must not trigger reloads.
+    watch: { ignored: ['**/android-native/**', '**/android/**'] },
   },
   optimizeDeps: {
+    // Skip the copied android-native web assets when scanning for deps.
+    entries: ['index.html'],
     include: ['fabric'],
   },
   resolve: {
@@ -80,4 +99,4 @@ export default defineConfig({
       transformMixedEsModules: true,
     },
   },
-});
+}));

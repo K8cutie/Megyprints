@@ -1,105 +1,426 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   Pricing — the SINGLE SOURCE cost + price model.
+   Pricing — customer math on a server-issued schedule.
 
-   The RAW COST side (SHEET, SOFT_ consts, SIZES, sheetsFor, costOf, perPageCost) is
-   admin/internal ONLY. It lives here so the operator Pricing panel and the
-   customer checkout agree on one model. Never render these raw figures on a
-   customer-facing surface.
+   The raw cost model (sheet cost, per-size hardbound cost, the size premium)
+   USED to live here as module constants. It shipped in the JS bundle, so the
+   whole cost structure and — combined with the then-public
+   store_settings.price_multiple — the margin were readable with devtools. Both
+   now live in the `pricing_model` table (migration 0024), owner-readable only.
 
-   The CUSTOMER side is `priceBreakdown` — it returns ONLY marked-up peso
-   amounts (cost × the store multiple). Its structure contains no cost, no
-   margin, and no multiplier, so nothing the customer sees can be reversed into
-   the profit.
+   The customer path gets `PriceSchedule` from public_price_schedule(): the
+   PRE-MULTIPLIED rates, which reproduce the exact same totals but cannot be
+   separated back into cost × multiple. Final prices stay public — it's a shop —
+   the structure behind them doesn't.
+
+   There is deliberately NO fallback cost model in this file. If the schedule
+   fails to load, checkout must refuse to price rather than guess: a wrong price
+   on a money path is worse than a blocked one, and any hardcoded fallback would
+   put the costs straight back into the bundle.
+
+   The owner-side helpers (costOf / ownerPriceOf / perPageCost) take the model as
+   an argument. They are only reachable with a model the Pricing panel fetched
+   from owner_pricing_model(), so they carry no secret of their own.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumSizePreset } from '../pages/builder/types';
 
 export type Binding = 'soft' | 'hard';
 
-export const SHEET = 26.5;        // raw cost — admin only (₱2.50 paper + ₱24 print)
-export const SOFT_COVER = 50;     // raw cost — admin only
-export const SOFT_BIND = 100;     // raw cost — admin only
+/** Minimum billable pages. Public by nature — the customer is told "40 pages
+ *  included" — so unlike the cost constants this one is fine in the bundle. The
+ *  schedule carries the authoritative value; this is the render-time default. */
 export const MIN_PAGES = 40;
 
-export interface SizeDef { label: string; pps: number; hb: number }
-export const SIZES: Record<AlbumSizePreset, SizeDef> = {
-  '6x4':    { label: '6×4',    pps: 16, hb: 250 },
-  '6x6':    { label: '6×6',    pps: 12, hb: 280 },
-  '8x8':    { label: '8×8',    pps: 4,  hb: 350 },
-  '9x9':    { label: '9×9',    pps: 4,  hb: 380 },
-  '11.5x8': { label: '11.5×8', pps: 4,  hb: 450 },
-  '8.5x11': { label: '8.5×11', pps: 4,  hb: 500 },
+/** Display names. Purely presentational — the customer reads these off the size
+ *  picker — so these stay client-side; only the cost figures moved to the DB. */
+export const SIZE_LABELS: Record<AlbumSizePreset, string> = {
+  '6x4': '6×4', '8x6': '8×6', '6x8': '6×8', '6x6': '6×6',
+  '8x8': '8×8', '9x9': '9×9', '11.5x8': '11.5×8', '8.5x11': '8.5×11',
 };
 
-// RAW COST — admin/internal only. Never call from customer-facing code paths
-// that render the value.
-export function sheetsFor(size: AlbumSizePreset, pages: number): number {
-  return Math.ceil(Math.max(MIN_PAGES, pages) / SIZES[size].pps);
-}
-export function costOf(size: AlbumSizePreset, binding: Binding, pages: number): number {
-  const interior = sheetsFor(size, pages) * SHEET;
-  return binding === 'hard' ? interior + SIZES[size].hb : interior + SOFT_COVER + SOFT_BIND;
-}
-export function perPageCost(size: AlbumSizePreset): number {
-  return SHEET / SIZES[size].pps;
+/** Owner-only view of the cost model — the shape of owner_pricing_model(). */
+export interface PricingModel {
+  sheet_cost: number;
+  soft_cover_cost: number;
+  soft_bind_cost: number;
+  min_pages: number;
+  price_multiple: number;
+  /** Flat per-album amount buffered into every price to fund ~10 years of
+   *  living-memory video hosting (owner, 2026-09-09; migration 0029). Added
+   *  AFTER the rounded markup like the size premium — never multiplied. */
+  hosting_reserve: number;
+  /** Hosting TERMS sold at checkout (owner, 2026-09-09; migration 0030). The
+   *  first tier is the included term (price 0); longer terms are flat add-ons,
+   *  never multiplied. */
+  hosting_tiers: HostingTier[];
+  /** One-time HD (1080p) memory upgrade, flat (owner, 2026-09-10; migration
+   *  0032). Standard 720p is included; HD is a value tier, not cost recovery. */
+  hd_memories_price: number;
+  sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
+  /** Shipping built into every album price (owner, 2026-10-08; migration
+   *  0041), so checkout can say "Free shipping". Flat, added after the markup
+   *  like the hosting reserve — never multiplied. Absent before 0041 → 0. */
+  shipping_allowance?: number;
+  /** The multiple we really charged before (4×, 25 Jul – 8 Oct 2026), shown as
+   *  the crossed-out "was" price until `compare_until`. Null = no was price. */
+  compare_multiple?: number | null;
+  /** Last day (Asia/Manila, YYYY-MM-DD) the was price shows. */
+  compare_until?: string | null;
 }
 
-/** Value premium (PURE PROFIT) added to the customer price for the larger
- *  formats. They cost the SAME to produce as 8×8 (all pps=4 → identical interior
- *  sheets) but are worth more, so this is a flat peso premium on top of
- *  cost × multiple, applied to BOTH bindings. Admin-tunable here — this is the
- *  single source the checkout and the operator panel both read. */
-export const SIZE_SURCHARGE: Record<AlbumSizePreset, number> = {
-  '6x4': 0, '6x6': 0, '8x8': 0, '9x9': 150, '11.5x8': 300, '8.5x11': 300,
-};
+export interface HostingTier { years: number; price: number }
 
-/** Final customer price = marked-up cost + the size premium. SINGLE SOURCE for
- *  both the checkout (priceBreakdown) and the operator Pricing panel, so the
- *  number a customer pays and the number the operator sees can never diverge. */
+/** The previous real prices, pre-multiplied like the live rates, hosting
+ *  reserve folded in (no shipping — those prices shipped free with nothing
+ *  added). Present only until `until`. */
+export interface CompareAt {
+  until: string;
+  sheet_rate: number;
+  sizes: Record<AlbumSizePreset, { soft_rate: number; hard_rate: number }>;
+}
+
+/** What a fresh store sells before the owner retunes it (mirrors the 0030
+ *  default). Also the client fallback when a schedule predates 0030 — but in
+ *  that case hosted mode is OFF (see hostedMemoriesEnabled), so nothing is
+ *  charged from these. */
+export const DEFAULT_HOSTING_TIERS: HostingTier[] = [
+  { years: 5, price: 0 }, { years: 10, price: 99 }, { years: 15, price: 149 }, { years: 20, price: 199 },
+];
+
+/** Customer-facing schedule — the shape of public_price_schedule(). Carries no
+ *  cost and no multiple, only their product. */
+export interface PriceSchedule {
+  min_pages: number;
+  sheet_rate: number;
+  /** Flat per-album hosting reserve (see PricingModel). Optional so a schedule
+   *  cached by a client older than 0029 still prices — as 0. */
+  hosting_reserve?: number;
+  /** Hosting terms (see PricingModel). Absent on a pre-0030 schedule. */
+  hosting_tiers?: HostingTier[];
+  /** HD memory upgrade price. Absent on a pre-0032 schedule → free/no offer. */
+  hd_memories_price?: number;
+  /** What the free shipping is worth (the allowance already inside the rates),
+   *  for the "Free shipping (₱X value)" line. Absent before 0041 → no value shown. */
+  free_shipping_value?: number;
+  /** The crossed-out "was" prices, while they run (0041). */
+  compare_at?: CompareAt | null;
+  disabled_sizes: AlbumSizePreset[];
+  sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
+}
+
+/** Printed sheets for a page count. Pages are laid up `pps` to a sheet and the
+ *  minimum always bills, so this is the one place the page→sheet step lives. */
+export function sheetsFor(pps: number, minPages: number, pages: number): number {
+  return Math.ceil(Math.max(minPages, pages) / pps);
+}
+
+// ── Customer side ───────────────────────────────────────────────────────────
+
+/** Final customer price from the schedule. Equals the operator's
+ *  ownerPriceOf() exactly — locked by spec, since the two diverging would mean
+ *  charging one number and reporting another. */
 export function priceOf(
+  schedule: PriceSchedule,
   size: AlbumSizePreset,
   binding: Binding,
   pages: number,
-  multiple: number,
 ): number {
-  return Math.round(costOf(size, binding, pages) * multiple) + SIZE_SURCHARGE[size];
+  const s = schedule.sizes[size];
+  const sheets = sheetsFor(s.pps, schedule.min_pages, pages);
+  const coverRate = binding === 'hard' ? s.hard_rate : s.soft_rate;
+  return Math.round(sheets * schedule.sheet_rate + coverRate) + hostingReserveOf(schedule);
+}
+
+/** Valid, ascending hosting tiers from a schedule/model; [] when absent or
+ *  malformed (a broken owner save must never crash checkout). */
+export function hostingTiersOf(src: { hosting_tiers?: unknown }): HostingTier[] {
+  const raw = src.hosting_tiers;
+  if (!Array.isArray(raw)) return [];
+  const tiers = raw
+    .filter((t): t is HostingTier => !!t && typeof t === 'object'
+      && Number.isFinite(Number((t as HostingTier).years)) && Number.isFinite(Number((t as HostingTier).price)))
+    .map((t) => ({ years: Math.round(Number(t.years)), price: Math.max(0, Math.round(Number(t.price))) }))
+    .filter((t) => t.years >= 1);
+  tiers.sort((a, b) => a.years - b.years);
+  return tiers;
+}
+
+/** The included term (the cheapest tier), or null when no tiers are sold. */
+export function includedHostingYears(src: { hosting_tiers?: unknown }): number | null {
+  const tiers = hostingTiersOf(src);
+  return tiers.length ? tiers[0].years : null;
+}
+
+/** Pesos for a chosen term. Unknown/absent term → 0 (never over-charge on a
+ *  stale client). */
+export function hostingTermCharge(src: { hosting_tiers?: unknown }, years: number | null | undefined): number {
+  if (years == null) return 0;
+  const tier = hostingTiersOf(src).find((t) => t.years === years);
+  return tier ? tier.price : 0;
+}
+
+/** The HD upgrade price, tolerant of a pre-0032 schedule (no field → 0, which
+ *  also means the upgrade is not offered). */
+export function hdMemoriesPriceOf(src: { hd_memories_price?: unknown }): number {
+  const n = Number(src.hd_memories_price);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+}
+
+/** Pesos owed for the HD upgrade on this album. Charged only when the album
+ *  actually carries memories — an HD flag with no QR memories bills nothing. */
+export function hdMemoriesCharge(src: { hd_memories_price?: unknown }, hd: boolean, qrMemories: number): number {
+  return hd && qrMemories > 0 ? hdMemoriesPriceOf(src) : 0;
+}
+
+/** The flat reserve, tolerant of a pre-0029 schedule (no field → 0). */
+export function hostingReserveOf(schedule: Pick<PriceSchedule, 'hosting_reserve'>): number {
+  const r = Number(schedule.hosting_reserve);
+  return Number.isFinite(r) && r > 0 ? Math.round(r) : 0;
+}
+
+/** The shipping built into the price, from the owner model (pre-0041 → 0). */
+export function shippingAllowanceOf(model: Pick<PricingModel, 'shipping_allowance'>): number {
+  const r = Number(model.shipping_allowance);
+  return Number.isFinite(r) && r > 0 ? Math.round(r) : 0;
+}
+
+/** What "Free shipping" is worth on a customer schedule (pre-0041 → 0, so no
+ *  value is claimed — the shipping is still free, it just isn't priced in). */
+export function freeShippingValueOf(schedule: Pick<PriceSchedule, 'free_shipping_value'>): number {
+  const r = Number(schedule.free_shipping_value);
+  return Number.isFinite(r) && r > 0 ? Math.round(r) : 0;
+}
+
+/** Today in the Philippines as YYYY-MM-DD — the was price ends on a Manila
+ *  date, not at UTC midnight. */
+export function manilaToday(now: Date = new Date()): string {
+  return new Date(now.getTime() + 8 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** The crossed-out "was" price of the print (album + extra pages) — what this
+ *  exact album cost before the price drop — or null when there is none, it
+ *  has ended, or it isn't higher than today's price. */
+export function compareAtPriceOf(
+  schedule: PriceSchedule,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  today: string = manilaToday(),
+): number | null {
+  const c = schedule.compare_at;
+  const r = c?.sizes?.[size];
+  if (!c || !r || typeof c.until !== 'string' || today > c.until) return null;
+  const rate = binding === 'hard' ? Number(r.hard_rate) : Number(r.soft_rate);
+  const sheetRate = Number(c.sheet_rate);
+  if (!Number.isFinite(rate) || !Number.isFinite(sheetRate)) return null;
+  const sheets = sheetsFor(schedule.sizes[size].pps, schedule.min_pages, pages);
+  const was = Math.round(sheets * sheetRate + rate);
+  return was > priceOf(schedule, size, binding, pages) ? was : null;
+}
+
+/** What the pages past the included minimum add to the price. Pages print
+ *  `pps` to a sheet and the price is per sheet, so 10 more pages on an 8×8
+ *  (4 a sheet) are 3 more sheets: ₱318. The summary used to show
+ *  "10 × ₱27 = ₱270" and hid the other ₱48 in the line still labelled
+ *  "40 pages" (1-star testers round 3, the Indecisive One). */
+export function extraPagesCharge(
+  schedule: PriceSchedule, size: AlbumSizePreset, binding: Binding, pages: number,
+): { pages: number; sheets: number; amount: number } {
+  const min = schedule.min_pages;
+  const pps = schedule.sizes[size].pps;
+  return {
+    pages: Math.max(0, pages - min),
+    sheets: sheetsFor(pps, min, pages) - sheetsFor(pps, min, min),
+    amount: priceOf(schedule, size, binding, pages) - priceOf(schedule, size, binding, min),
+  };
 }
 
 export interface PriceLine { label: string; amount: number }
 export interface PriceBreakdown { items: PriceLine[]; total: number }
 
-// CUSTOMER-FACING. Returns marked-up amounts ONLY — no cost, no margin, no
-// multiplier in the structure. Line amounts are reconciled so items sum exactly
-// to total (base line = total − extra line), so nothing hints at the model.
+// ── Living-memory QR add-on (owner-set 2026-09-09) ──────────────────────────
+// Every album includes FREE_QR_MEMORIES QR memories; each one past that adds
+// EXTRA_QR_RATE to the order. Counted per QR code (hosted clip or pasted link
+// alike). Public by nature — the customer is told "7 included" — so these sit
+// in the bundle like MIN_PAGES; move them to the schedule if they ever need to
+// be owner-tunable without a deploy.
+export const FREE_QR_MEMORIES = 7;
+export const EXTRA_QR_RATE = 20;
+
+/** Pesos owed for `count` QR memories on one album. */
+export function qrMemoryCharge(count: number): number {
+  return Math.max(0, Math.floor(count) - FREE_QR_MEMORIES) * EXTRA_QR_RATE;
+}
+
+/** Structural view of a page for counting — both QR homes: a QR slot on a
+ *  photo layout (`qrFills`) and a QR in a combo/caption box (`textSlotQr`). */
+export interface QrCountablePage {
+  qrFills?: (unknown | null)[] | null;
+  textSlotQr?: (unknown | null)[] | null;
+}
+
+/** QR memories an album carries — what the add-on line bills. */
+export function countQrMemories(pages: readonly QrCountablePage[]): number {
+  let n = 0;
+  for (const p of pages) {
+    for (const f of p.qrFills ?? []) if (f) n++;
+    for (const f of p.textSlotQr ?? []) if (f) n++;
+  }
+  return n;
+}
+
+/** CUSTOMER-FACING. Marked-up amounts only. The album line is always the
+ *  price of the included pages, whatever the page count, and the extra-pages
+ *  line is everything the pages past them add, so items sum exactly to the
+ *  total. */
 export function priceBreakdown(
+  schedule: PriceSchedule,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  /** QR memories on the album (see FREE_QR_MEMORIES). Omitted = none. */
+  qrMemories = 0,
+  /** Chosen hosting term in years (see hosting_tiers). Omitted = included term. */
+  hostingYears: number | null = null,
+  /** HD (1080p) memories chosen for this album. Omitted = standard 720p. */
+  hdMemories = false,
+): PriceBreakdown {
+  const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
+  const sizeLabel = SIZE_LABELS[size];
+  const minPages = schedule.min_pages;
+  const printTotal = priceOf(schedule, size, binding, pages);
+  const qrCharge = qrMemoryCharge(qrMemories);
+  const termCharge = hostingTermCharge(schedule, hostingYears);
+  const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
+  const total = printTotal + qrCharge + termCharge + hdCharge;
+
+  const extra = Math.max(0, pages - minPages);
+  const items: PriceLine[] = [];
+
+  if (extra > 0) {
+    const more = extraPagesCharge(schedule, size, binding, pages);
+    const pps = schedule.sizes[size].pps;
+    items.push({
+      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} QR memories included`,
+      amount: printTotal - more.amount,
+    });
+    items.push({
+      label: `Extra pages · ${extra} (pages print ${pps} to a sheet: ${more.sheets} more ${more.sheets === 1 ? 'sheet' : 'sheets'})`,
+      amount: more.amount,
+    });
+  } else {
+    items.push({
+      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} QR memories included`,
+      amount: printTotal,
+    });
+  }
+
+  if (qrCharge > 0) {
+    const extraQr = qrMemories - FREE_QR_MEMORIES;
+    items.push({
+      label: `Living-memory QR · ${FREE_QR_MEMORIES} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`,
+      amount: qrCharge,
+    });
+  }
+
+  if (termCharge > 0 && hostingYears != null) {
+    const included = includedHostingYears(schedule);
+    items.push({
+      label: `Memories stay live · ${hostingYears} years${included ? ` (${included} included)` : ''}`,
+      amount: termCharge,
+    });
+  }
+
+  if (hdCharge > 0) {
+    items.push({ label: 'HD memories · 1080p, one time', amount: hdCharge });
+  }
+
+  return { items, total };
+}
+
+// ── Owner side (model supplied by owner_pricing_model()) ────────────────────
+
+/** RAW COST. Owner-only — never render on a customer surface. */
+export function costOf(
+  model: PricingModel,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+): number {
+  const s = model.sizes[size];
+  const interior = sheetsFor(s.pps, model.min_pages, pages) * model.sheet_cost;
+  return binding === 'hard'
+    ? interior + s.hb
+    : interior + model.soft_cover_cost + model.soft_bind_cost;
+}
+
+/** RAW per-page cost. Owner-only. */
+export function perPageCost(model: PricingModel, size: AlbumSizePreset): number {
+  return model.sheet_cost / model.sizes[size].pps;
+}
+
+/** The operator's view of the customer price, computed from the raw model at an
+ *  arbitrary multiple (the Pricing panel's what-if slider). At the store's own
+ *  multiple this must equal priceOf() on the schedule — see the spec. */
+export function ownerPriceOf(
+  model: PricingModel,
   size: AlbumSizePreset,
   binding: Binding,
   pages: number,
   multiple: number,
-): PriceBreakdown {
-  const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
-  // Includes the size premium — it folds into the base album line below (the
-  // base is reconciled as total − extra), so it never surfaces as its own line.
-  const total = priceOf(size, binding, pages, multiple);
+): number {
+  return Math.round(costOf(model, size, binding, pages) * multiple)
+    + model.sizes[size].surcharge
+    + hostingReserveOf(model)
+    + shippingAllowanceOf(model);
+}
 
-  const extra = Math.max(0, pages - MIN_PAGES);
-  const items: PriceLine[] = [];
-
-  if (extra > 0) {
-    const perPage = Math.round(perPageCost(size) * multiple);
-    const extraAmount = extra * perPage;
-    // Reconcile the base line so the displayed lines are exactly additive.
-    items.push({
-      label: `Album — ${SIZES[size].label} ${bindingLabel} · ${MIN_PAGES} pages included`,
-      amount: total - extraAmount,
-    });
-    items.push({ label: `Extra pages · ${extra} × ₱${perPage}`, amount: extraAmount });
-  } else {
-    items.push({
-      label: `Album — ${SIZES[size].label} ${bindingLabel} · ${MIN_PAGES} pages included`,
-      amount: total,
-    });
+/** Pure mirror of public_price_schedule()'s arithmetic. Lives here so the spec
+ *  can prove the schedule and the raw model agree without standing up a
+ *  database; the SQL is the runtime source of truth.
+ *
+ *  The shipping allowance rides INSIDE the cover rates (flat, never
+ *  multiplied), so every client — old app versions included — charges it with
+ *  no change. `today` is the Manila date the SQL compares the was price's end
+ *  date to; omit it to keep any was price that is set. */
+export function scheduleFrom(
+  model: PricingModel,
+  multiple: number,
+  disabledSizes: AlbumSizePreset[] = [],
+  today?: string,
+): PriceSchedule {
+  const ship = shippingAllowanceOf(model);
+  const reserve = hostingReserveOf(model);
+  const cm = Number(model.compare_multiple);
+  const until = model.compare_until;
+  const showCompare = Number.isFinite(cm) && cm > multiple && typeof until === 'string'
+    && (today === undefined || today <= until);
+  const sizes = {} as PriceSchedule['sizes'];
+  const compareSizes = {} as CompareAt['sizes'];
+  for (const key of Object.keys(model.sizes) as AlbumSizePreset[]) {
+    const s = model.sizes[key];
+    const soft = model.soft_cover_cost + model.soft_bind_cost;
+    sizes[key] = {
+      pps: s.pps,
+      soft_rate: soft * multiple + s.surcharge + ship,
+      hard_rate: s.hb * multiple + s.surcharge + ship,
+    };
+    if (showCompare) {
+      compareSizes[key] = {
+        soft_rate: soft * cm + s.surcharge + reserve,
+        hard_rate: s.hb * cm + s.surcharge + reserve,
+      };
+    }
   }
-
-  return { items, total };
+  return {
+    min_pages: model.min_pages,
+    sheet_rate: model.sheet_cost * multiple,
+    hosting_reserve: model.hosting_reserve,
+    hosting_tiers: model.hosting_tiers,
+    hd_memories_price: model.hd_memories_price,
+    free_shipping_value: ship,
+    ...(showCompare ? { compare_at: { until: until as string, sheet_rate: model.sheet_cost * cm, sizes: compareSizes } } : {}),
+    disabled_sizes: disabledSizes,
+    sizes,
+  };
 }

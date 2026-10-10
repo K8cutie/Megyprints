@@ -13,9 +13,15 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { PageTemplate, TemplateSlot, TextSlot, PhotoRatio, AlbumSizePreset, TemplateMargin } from './types';
+import { PHOTO_GUTTER_MM } from './templateKit';
 
 const MIN_FRAME_INCHES = 2;
-const GAP_MM = 5; // physical gutter between adjacent frames, for visual distinction
+// House rule: adjacent photos are separated by the shared printed gutter — the
+// same one the per-size authored sets use, so every size looks consistent.
+// (Was a local 5mm; it now tracks PHOTO_GUTTER_MM. WIDENING it shrinks frames,
+// so the 2" print floor is re-checked below and any recipe that misses is
+// dropped, exactly as before.)
+const GAP_MM = PHOTO_GUTTER_MM;
 const MARGIN: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
 const ZERO_MARGIN: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 
@@ -33,6 +39,8 @@ function inset(x: number, y: number, w: number, h: number, gx: number, gy: numbe
 /** Physical album dimensions (inches). */
 const INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x4':    { w: 6,    h: 4  },
+  '8x6':    { w: 8,    h: 6  },
+  '6x8':    { w: 6,    h: 8  },
   '6x6':    { w: 6,    h: 6  },
   '8x8':    { w: 8,    h: 8  },
   '9x9':    { w: 9,    h: 9  },
@@ -40,6 +48,10 @@ const INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '8.5x11': { w: 8.5,  h: 11 },
 };
 
+/** Square albums this generator serves. Per-size-authored sizes (6x6/8x8/9x9)
+ *  are STILL generated here so an album saved before the size was cleared keeps
+ *  resolving its old `tile-…-<size>` ids; withoutOwnedSizes then strips the
+ *  owned size so they are resolvable but never selected. */
 const SQUARE_SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9'];
 
 /** A photo region inside a recipe — 0–1 of the safe area, tagged with its ratio.
@@ -271,6 +283,9 @@ const GRID_SPECS: GridSpec[] = [
   { size: '6x4', rows: 1, cols: 1, name: 'Full landscape' },
   { size: '6x4', rows: 1, cols: 2, name: 'Two portraits' },
   { size: '6x4', rows: 2, cols: 2, name: 'Four frames' },
+  // (8×6 and 6×8 are PER_SIZE_AUTHORED — their layouts live in templates8x6.ts /
+  //  templates6x8.ts and are being authored from scratch. Deliberately NO grid
+  //  recipes here: mirroring the 11.5×8 / 8.5×11 families was rejected.)
   // 11.5×8 landscape (A = 1.44)
   { size: '11.5x8', rows: 1, cols: 1, name: 'Full landscape' },
   { size: '11.5x8', rows: 1, cols: 2, name: 'Two portraits' },

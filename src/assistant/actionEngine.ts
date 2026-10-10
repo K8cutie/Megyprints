@@ -6,8 +6,55 @@
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AssistantIntent, ExecutedAction } from './types';
 import type { AlbumBackground, AlbumSizePreset, TemplateType, TextElement, FrameStyle } from '../pages/builder/types';
-import { getDisabledSizes } from '../lib/storeSettings';
+import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
+import { memoriesAcrossSize } from '../pages/builder/generateAlbum';
 import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '../pages/builder/types';
+import { photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
+import { albumIsMade, resizeMemoriesLine, resizedMemoriesNote } from './rebuildQuestion';
+import { leftOutNote } from '../lib/pickedFiles';
+import { memoriesOn } from '../pages/builder/generateAlbum';
+import { eventLinkForAlbum } from '../lib/eventAlbum';
+
+/** A video memory only ever sits on a full-page photo (owner, 2026-10-08), so
+ *  a page with one keeps its layout — say so instead of "Next layout." */
+function memoryKeepsPage(builder: BuilderActions, type: AssistantIntent['type']): ExecutedAction | null {
+  // The album page the layout actions change — not currentPage, which is the
+  // cover while the cover is being edited.
+  const page = builder.albumPages?.[builder.currentPageIndex];
+  return page && memoriesOn(page).length
+    ? { intentType: type, success: false, message: MEMORY_PAGE_STAYS }
+    : null;
+}
+export const MEMORY_PAGE_STAYS = 'This page has a video memory, so it stays one full photo with the QR in the corner. To change its layout, tap the QR and remove the video first.';
+
+/** THE 40-PHOTO GATE (see albumMinimum): no album is made with fewer photos
+ *  going in than pages. Returns Megy's answer when short, null when enough. */
+function tooFewPhotos(builder: BuilderActions, type: AssistantIntent['type']): ExecutedAction | null {
+  const have = photosGoingIn(builder.uploadedPhotos ?? []);
+  return photosShortBy(have) > 0 ? { intentType: type, success: false, message: tooFewToMakeMessage(have) } : null;
+}
+
+/** A size change would take video memories off: nothing changes, the
+ *  question opens (ResizeAlbumAsk), and Megy says it in words too. */
+function askResize(
+  builder: BuilderActions, type: AssistantIntent['type'], size: AlbumSizePreset,
+  plan: ReturnType<typeof memoriesAcrossSize>, reason?: 'size_hidden',
+): ExecutedAction {
+  const memories = plan.carried.length + plan.lost.length;
+  const lost = plan.lost.length;
+  builder.setResizeAsk?.({ size, memories, lost, lostCodes: plan.lost.map((q) => q.code), ...(reason ? { reason } : {}) });
+  const label = (s: string) => s.replace('x', '×');
+  return {
+    intentType: type, success: false, asked: true,
+    message: `${resizeMemoriesLine(memories, lost, size)} Keep ${label(builder.albumSize)}, or change to ${label(size)} without ${lost === 1 ? 'it' : 'them'}.`,
+  };
+}
+
+/** STUDIO pages are kept through a reshuffle — say so. */
+function studioNote(builder: BuilderActions): string {
+  const n = (builder.albumPages ?? []).filter((p) => p.studio).length;
+  return n ? ` (Your ${n} Studio page${n > 1 ? 's' : ''} stayed as you left ${n > 1 ? 'them' : 'it'}.)` : '';
+}
 
 export class ActionEngine {
   builder: BuilderActions;
@@ -18,25 +65,43 @@ export class ActionEngine {
   async execute(intent: AssistantIntent): Promise<ExecutedAction> {
     try {
       switch (intent.type) {
-        case 'generate_album':
+        case 'generate_album': {
+          const short = tooFewPhotos(this.builder, intent.type);
+          if (short) return short;
           // Carry the user's chosen background into every generated page, so a
           // background picked before generating (incl. a custom upload) survives.
-          this.builder.generateAlbum(this.builder.currentPage?.background);
-          return { intentType: intent.type, success: true, message: 'Album generated! Your photos have been arranged across all pages.' };
+          // Awaited so the reply (and the callers' toasts) land AFTER the album
+          // exists — the "making your album" screen covers the wait.
+          await this.builder.generateAlbum(this.builder.currentPage?.background);
+          return { intentType: intent.type, success: true, message: `Album generated! Your photos have been arranged across all pages.${studioNote(this.builder)}` };
+        }
 
-        case 'shuffle_layout':
+        case 'shuffle_layout': {
+          const stays = memoryKeepsPage(this.builder, intent.type);
+          if (stays) return stays;
           // Cycle through the available templates IN ORDER (exhaust every option
           // before repeating), not a random pick — matches the mobile "Change".
           this.builder.cycleLayout();
           return { intentType: intent.type, success: true, message: 'Next layout.' };
+        }
 
-        case 'regenerate_page':
+        case 'regenerate_page': {
+          const stays = memoryKeepsPage(this.builder, intent.type);
+          if (stays) return stays;
+          if (this.builder.currentPage?.studio) {
+            return { intentType: intent.type, success: false, message: 'This page is yours — I won’t rearrange it. Use “Megy, fix this page” if you want it back the way I had it.' };
+          }
           this.builder.regeneratePage();
           return { intentType: intent.type, success: true, message: 'This page has been regenerated with a fresh layout.' };
+        }
 
-        case 'auto_fill':
-          this.builder.autoFillSlots();
-          return { intentType: intent.type, success: true, message: 'Photos have been auto-placed into the available slots.' };
+        case 'auto_fill': {
+          // This page's empty frames only, with photos not yet in the album.
+          const { filled, empty } = this.builder.autoFillSlots();
+          if (filled > 0) return { intentType: intent.type, success: true, message: `Filled ${filled} empty frame${filled === 1 ? '' : 's'} on this page with photos that aren't in your album yet.` };
+          if (empty === 0) return { intentType: intent.type, success: false, message: 'This page has no empty photo frames.' };
+          return { intentType: intent.type, success: false, message: "Every photo is already in your album, so I left these frames empty rather than print a photo twice. Add more photos to fill them." };
+        }
 
         case 'clear_slots':
           this.builder.clearAllSlots();
@@ -60,6 +125,10 @@ export class ActionEngine {
           if (target === undefined) {
             return { intentType: intent.type, success: false, message: 'Which page number would you like to go to?' };
           }
+          // A page the album doesn't have is said, not swapped for the last one.
+          if (target >= this.builder.albumPages.length) {
+            return { intentType: intent.type, success: false, message: `There's no page ${target + 1}: your album has ${this.builder.albumPages.length} pages.` };
+          }
           const clamped = Math.max(0, Math.min(target, this.builder.albumPages.length - 1));
           this.builder.goToPage(clamped);
           return { intentType: intent.type, success: true, message: `Now on page ${clamped + 1} of ${this.builder.albumPages.length}.` };
@@ -82,8 +151,38 @@ export class ActionEngine {
           if (!size) {
             return { intentType: intent.type, success: false, message: 'Which size? Say something like "8x8" or "11.5x8".' };
           }
-          if (getDisabledSizes().includes(size)) {
+          if (!isSizeOfferable(size)) {
             return { intentType: intent.type, success: false, message: `Sorry, the ${size} size isn't available right now. Try another size.` };
+          }
+          // An event album keeps its deal's size (0045): the booking pays for that one.
+          const deal = eventLinkForAlbum(this.builder.getAlbumId?.());
+          if (deal && size !== deal.size) {
+            return { intentType: intent.type, success: false, message: `This is your event album for booking ${deal.bookingNumber}: its size is ${deal.size.replace('x', '×')}, from your deal.` };
+          }
+          // A made album is laid out for its size: changing size lays every
+          // page out again for the new shape. It used to set the size alone and
+          // leave the old layout squashed onto it (1-star testers, 2026-10-04).
+          // EVERY size tap lands here (Setup's grid, the wizard's size step,
+          // "Switch to …", "Best fit", typing it), so this is where the video
+          // memories are kept: they come along, each a badge on its photo. One
+          // that can't never comes off without a yes — ask, on screen, with
+          // how many (it dropped them all without a word, 2026-10-08). A yes
+          // (`confirmedLost`) names the memories it agreed to lose; one it
+          // didn't (added since the question, say) is asked about again.
+          if (albumIsMade(this.builder.albumPages ?? []) && size !== this.builder.albumSize) {
+            const short = tooFewPhotos(this.builder, intent.type);
+            if (short) return short;
+            const agreed = Array.isArray(intent.payload?.confirmedLost) ? (intent.payload.confirmedLost as string[]) : [];
+            const plan = memoriesAcrossSize(this.builder.albumPages, this.builder.uploadedPhotos ?? [], this.builder.albumSize, size);
+            const reason = intent.payload?.reason === 'size_hidden' ? 'size_hidden' as const : undefined;
+            if (plan.lost.some((q) => !agreed.includes(q.code))) return askResize(this.builder, intent.type, size, plan, reason);
+            const made = await this.builder.generateAlbum(this.builder.currentPage?.background, { size, ...(agreed.length ? { confirmedLost: agreed } : {}) });
+            // The builder measured the photos again and its plan says more:
+            // ask with ITS numbers.
+            if (made?.made === false) return askResize(this.builder, intent.type, size, made.memories, reason);
+            if (this.builder.resizeAsk) this.builder.setResizeAsk(null); // answered (a typed yes, say)
+            const done = made?.memories ?? plan;
+            return { intentType: intent.type, success: true, message: `Album size changed to ${size.replace('x', '×')}. Every page is laid out again for the new shape.${resizedMemoriesNote(done.carried.length, done.lost.length)}` };
           }
           this.builder.setAlbumSize(size);
           return { intentType: intent.type, success: true, message: `Album size changed to ${size}.` };
@@ -94,6 +193,8 @@ export class ActionEngine {
           if (!templateId) {
             return { intentType: intent.type, success: false, message: 'Which template?' };
           }
+          const stays = memoryKeepsPage(this.builder, intent.type);
+          if (stays) return stays;
           this.builder.setPageTemplate(templateId);
           return { intentType: intent.type, success: true, message: 'Page template changed.' };
         }
@@ -179,8 +280,25 @@ export class ActionEngine {
           if (!files || count === 0) {
             return { intentType: intent.type, success: false, message: 'No photos to add.' };
           }
-          this.builder.addPhotos(files);
-          return { intentType: intent.type, success: true, message: `${count} photo${count > 1 ? 's' : ''} added.` };
+          // Report what was ACTUALLY added. addPhotos skips files already in the
+          // album (same name + size), which is exactly what happens when a phone
+          // picker caps a batch and the customer re-picks an overlapping set —
+          // saying "100 uploaded" there would be a lie.
+          const { added, skipped, videos = 0, others = 0, restored = 0, otherCopies = 0 } = this.builder.addPhotos(files);
+          const parts: string[] = [];
+          // Photos this album was missing on this device, put back in their places.
+          if (restored > 0) parts.push(`${restored} photo${restored > 1 ? 's' : ''} put back in ${restored > 1 ? 'their places' : 'its place'}${otherCopies > 0 ? ` (${otherCopies} from a different copy — check ${otherCopies > 1 ? 'them' : 'it'}, ${otherCopies > 1 ? 'they' : 'it'} may print softer)` : ''}`);
+          if (added > 0) parts.push(`${added} photo${added > 1 ? 's' : ''} added`);
+          if (skipped > 0) parts.push(`${skipped} already in your album`);
+          // A video or another file is never dropped without a word.
+          const leftOut = leftOutNote(videos, others, added + skipped + restored > 0);
+          if (leftOut) parts.push(leftOut);
+          return {
+            intentType: intent.type,
+            // an all-duplicates pick is a no-op, not a failure; nothing but left-outs is
+            success: added + skipped + restored > 0 || !leftOut,
+            message: parts.length ? `${parts.join(' · ')}.` : 'No photos to add.',
+          };
         }
 
         case 'set_photos_per_page': {
@@ -191,14 +309,16 @@ export class ActionEngine {
 
         case 'add_text': {
           const text = intent.payload?.text as string | undefined;
-          const centerX = 1200 / 2; // approximate canvas center
-          const centerY = 800 / 2;
-          this.builder.addTextElement(centerX, centerY, text);
+          // Centred on the page and made to fit (addTextElement).
+          const r = this.builder.addTextElement(undefined, undefined, text);
+          if (r.tooLong) {
+            return { intentType: intent.type, success: false, message: "That's too long to fit on the page, even in small letters. Try a shorter line." };
+          }
           return {
             intentType: intent.type,
             success: true,
             message: text
-              ? `Text added: "${text}".`
+              ? `Text added: "${text}"${r.shrunk ? `, in smaller letters (size ${r.fontSize}) so it all fits` : ''}.`
               : 'Text added. Double-click it on the canvas to edit.',
           };
         }
@@ -261,18 +381,20 @@ export class ActionEngine {
           if (this.builder.uploadedPhotos.length === 0) {
             return { intentType: intent.type, success: false, message: "Upload a few photos first — then I'll shuffle the layouts for you." };
           }
+          const short = tooFewPhotos(this.builder, intent.type);
+          if (short) return short;
           // Surprise Me changes ONLY the page templates (frame count + positions).
           // The chosen theme owns the look, so the current background is preserved
           // as-is. randomize=true keeps the photo sequence but repackages it into
           // random templates + slot counts, so layouts differ on every click.
           const keepBg = this.builder.currentPage.background;
-          this.builder.generateAlbum(keepBg, { randomize: true });
+          await this.builder.generateAlbum(keepBg, { randomize: true });
 
-          return { intentType: intent.type, success: true, message: `Fresh layout! Every page rearranged — click again for another look.` };
+          return { intentType: intent.type, success: true, message: `Fresh layout! Every page rearranged — click again for another look.${studioNote(this.builder)}` };
         }
 
         case 'help':
-          return { intentType: intent.type, success: true, message: getHelpText() };
+          return { intentType: intent.type, success: true, message: intent.payload?.topic === 'text' ? TEXT_HELP : getHelpText() };
 
         case 'unknown':
         default:
@@ -328,6 +450,9 @@ function guessColor(hint: string): string {
   };
   return map[hint.toLowerCase()] ?? '#FFFBF7';
 }
+
+/** "How do I edit the text box?" — an answer, not a new text box (PI-5). */
+export const TEXT_HELP = "To edit a text box, tap it on the page (double-click on a computer). You can type your own words there, and change the font, size and colour. If it's too long for its box, the editor says so and offers a size that fits.";
 
 function getHelpText(): string {
   return `Here's what I can help you with:

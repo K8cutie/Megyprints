@@ -14,25 +14,33 @@ import { Link } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, ChevronRight, Sparkles,
-  Wand2, Upload, Home, PanelLeftOpen, Youtube,
+  ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles,
+  Wand2, Upload, Home, PanelLeftOpen,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
+import { dealtBoxRoll } from './types';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
-import AiClipartModal from './AiClipartModal';
+import QuotePickerModal from './QuotePickerModal';
+import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
+import PageTurnBar from './PageTurnBar';
+import VideoMemoryButton from './VideoMemoryButton';
 import { CloudSaveStatus } from '../../components/CloudSaveStatus';
 import { useAuth } from '../../lib/authContext';
+import { GUARD_MESSAGES, SOFT_MESSAGE, printSharpness, resolveSlotBox } from './slotGeometry';
+import StudioStrip from './StudioStrip';
 /* PropertiesPanel is now rendered inside UnifiedPanel */
 import { getCanvasDimensions } from './layouts';
 import { PAGE_TEMPLATES, hasQrSlot } from './pageTemplates';
 import { templateTracker } from './varietyTracker';
+import { useModalDialog } from '../../lib/useModalDialog';
 import fabric from './fabric-loader';
 
 /* ── Local helper types for in-place filter effects ─────────────────────── */
@@ -75,7 +83,23 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
-  const [containerMode, setContainerMode] = useState(false);
+  const [containerMode, setContainerMode] = useState(true);
+
+  /* ── STUDIO (owner, 2026-09-13): the page with the training wheels off.
+     Studio = Fabric's container mode (frames selectable, movable, resizable)
+     + the guardrails at the state setter + the page marked as the customer's.
+     Owner, 2026-09-30: no Simple/Studio switch — every Studio tool is always on. ── */
+  const studio = true;
+  const [guardMsg, setGuardMsg] = useState<string | null>(null);
+  const guardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sayGuard = useCallback((msg: string) => {
+    setGuardMsg(msg);
+    if (guardTimer.current) clearTimeout(guardTimer.current);
+    guardTimer.current = setTimeout(() => setGuardMsg(null), 2600);
+  }, []);
+  /* Stickers were retired (owner, 2026-10-01): placed ones still show, print and
+     move; a double-click offers the one thing left to do — take it off. */
+  const [stickerToRemove, setStickerToRemove] = useState<string | null>(null);
 
   /* ── Sidebar hidden by default — Megy Assistant is the primary control ── */
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -145,27 +169,45 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       // Empty slot → open the 3-way content chooser (photo / text / QR).
       setChooserSlot(slotIndex);
     }, [containerMode]),
+    /* TEXT boxes open their editor even in Studio. Studio's container mode
+       (always on since 2026-09-30, `useState(true)` above) makes PHOTO frames
+       selectable so they can be moved — a click there selects, by design. A
+       text box is never a movable frame, but these handlers bailed out on
+       containerMode too, so on desktop clicking a caption, a quote, an empty
+       "Your words here" box or its ⋯ did NOTHING, and no font or colour could
+       be reached (found walking the 74 fonts, 2026-10-08). */
     onTextSlotClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
       setTextEditSlot(slotIndex);
-    }, [containerMode]),
+    }, []),
+    /* A video memory's QR opens its editor (change the video, move the
+       corner, remove it) in Studio too: the chip is never a movable frame,
+       and "tap the QR and remove the video" is how a memory page gets other
+       layouts (LayoutPicker). It bailed out on containerMode, so on desktop
+       clicking the QR did nothing. */
     onQrSlotClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
       setQrEditSlot(slotIndex);
-    }, [containerMode]),
+    }, []),
     onOrnamentSlotClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
       setOrnamentEditSlot(slotIndex);
     }, [containerMode]),
     onSlotTextClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
-      setSlotTextEditSlot(slotIndex);
-    }, [containerMode]),
+      setSlotTextEditSlot(slotIndex); // a text box: opens in Studio too (see onTextSlotClick)
+    }, []),
     onTextSlotEmptyClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
-      // Empty combo/caption box → chooser: Text or an AI-matched Graphic.
-      setChooserTextSlot(slotIndex);
-    }, [containerMode]),
+      // A text box: opens in Studio too (see onTextSlotClick).
+      // A DEALT box (textSlotRoll) opens its kind's editor directly — the roll
+      // already answered "which kind?". Undealt boxes (old drafts, boxes a
+      // template swap added) keep the 3-way chooser; the box's ⋯ badge
+      // (onTextSlotChooserClick below) is the always-available override.
+      const roll = actions.currentPage ? dealtBoxRoll(actions.currentPage, slotIndex) : null;
+      if (roll === 'text') setTextEditSlot(slotIndex);
+      else if (roll === 'quote') setBoxQuoteSlot(slotIndex);
+      else setChooserTextSlot(slotIndex);
+    }, [actions.currentPage]),
+    onTextSlotChooserClick: useCallback((slotIndex: number) => {
+      setChooserTextSlot(slotIndex); // a text box's ⋯: opens in Studio too (see onTextSlotClick)
+    }, []),
     onTextSlotPhotoClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
       // Filled-with-photo caption box → re-open the photo picker for it.
@@ -173,10 +215,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       setSelectedSlotForPicker(slotIndex);
       setShowPhotoPicker(true);
     }, [containerMode]),
+    // A memory in a box (old albums): double-click opens its editor in Studio
+    // too — a single click/drag still moves it (see onQrSlotClick).
     onTextSlotQrClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
       setTextSlotQrEditSlot(slotIndex);
-    }, [containerMode]),
+    }, []),
     onTextSlotOrnamentClick: useCallback((slotIndex: number) => {
       if (containerMode) return;
       setTextSlotOrnamentEditSlot(slotIndex);
@@ -185,11 +228,30 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     onTextSlotOrnamentModified: useCallback((slotIndex: number, geom: import('./types').OrnamentTransform) => {
       actions.setTextSlotOrnamentGeom(slotIndex, geom);
     }, [actions]),
+    onTextSlotQrModified: useCallback((slotIndex: number, geom: import('./types').OrnamentTransform) => {
+      actions.setTextSlotQrGeom(slotIndex, geom);
+    }, [actions]),
+    onStickerModified: useCallback((uid: string, geom: import('./types').OrnamentTransform) => {
+      const reasons = actions.updateStickerGeom(uid, geom);
+      if (reasons.length) sayGuard(GUARD_MESSAGES[reasons[0]]);
+    }, [actions, sayGuard]),
+    onStickerClick: useCallback((uid: string) => setStickerToRemove(uid), []),
     actions,
     containerMode,
     onContainerModified: useCallback((slotIndex: number, geometry: any) => {
-      actions.updateSlotGeometry(slotIndex, geometry);
-    }, [actions]),
+      // The setter clamps; the reasons become the page's one-line answer.
+      const reasons = actions.updateSlotGeometry(slotIndex, geometry);
+      if (reasons.length) { sayGuard(GUARD_MESSAGES[reasons[0]]); return; }
+      const page = actions.currentPage;
+      const tpl = page?.templateId ? getTemplateById(page.templateId) : null;
+      const raw = tpl?.slots[slotIndex];
+      const photoIdx = page?.slotFills?.[slotIndex];
+      if (raw && photoIdx != null) {
+        const box = resolveSlotBox(raw, geometry);
+        const ctx = { albumSize: actions.albumSize, pageIndex: actions.currentPageIndex, template: tpl, coverMode: actions.phase === 'cover' };
+        if (printSharpness(actions.uploadedPhotos[photoIdx], box, ctx) === 'soft') sayGuard(SOFT_MESSAGE);
+      }
+    }, [actions, sayGuard]),
     onRenderComplete: useCallback((canvas: any) => {
       try {
         // Small JPEG thumbnail — the snapshot is only used for the project
@@ -216,22 +278,19 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   // adding new ones is retired). Set by tapping a placed ornament.
   const [ornamentEditSlot, setOrnamentEditSlot] = useState<number | null>(null);
   const [textSlotQrEditSlot, setTextSlotQrEditSlot] = useState<number | null>(null);
-  // Combo/caption-box ornament picker target (chooser "Add Ornament" or tapping a placed one).
+  // Caption-box ornament target — only reachable by tapping a graphic placed
+  // before graphics were retired; offers removal, not replacement.
   const [textSlotOrnamentEditSlot, setTextSlotOrnamentEditSlot] = useState<number | null>(null);
-  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser (Text / Graphic)
+  const [chooserTextSlot, setChooserTextSlot] = useState<number | null>(null); // empty caption-box chooser (Quote / Your Text)
+  // Themed-quote picker targets: a caption box (setBoxText) and a photo slot (setSlotText).
+  const [boxQuoteSlot, setBoxQuoteSlot] = useState<number | null>(null);
+  const [slotQuoteSlot, setSlotQuoteSlot] = useState<number | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false); // "Add memory video" (full-bleed corner QR badge)
   // Corner the user picks for a NEW memory badge (null = Auto, face-aware).
   const [memoryCorner, setMemoryCorner] = useState<QrCorner | null>(null);
-  // Pulse the button until the customer has clicked it once (feature discovery,
-  // not a nag). Persisted so it stays discovered across sessions/devices-local.
-  const [memoryDiscovered, setMemoryDiscovered] = useState(() => {
-    try { return localStorage.getItem('megy-memory-discovered') === '1'; } catch { return false; }
-  });
-  const markMemoryDiscovered = () => {
-    setMemoryDiscovered(true);
-    try { localStorage.setItem('megy-memory-discovered', '1'); } catch { /* ignore */ }
-  };
   const [pickerIsTextSlot, setPickerIsTextSlot] = useState(false);
+  // The photo picker as a keyboard can use it (KB-2): focus in, Tab kept inside, Escape closes.
+  const pickerRef = useModalDialog<HTMLDivElement>(showPhotoPicker && selectedSlotForPicker !== null, () => { setShowPhotoPicker(false); setPickerIsTextSlot(false); });
   const buildSlotTextInitial = useCallback((slot: number): BoxTextContent => {
     const existing = actions.currentPage?.slotTexts?.[slot];
     if (existing) return { ...existing };
@@ -616,13 +675,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   /* ── Fabric not loaded — show error ── */
   if (!fabricValid) {
     return (
-      <div className="flex h-full bg-[#F5F5F5] items-center justify-center">
+      <div className="flex h-full bg-paper items-center justify-center">
         <div className="text-center">
-          <p className="text-[#E8A598] font-medium mb-2">Editor engine failed to load</p>
-          <p className="text-sm text-[#6B6B6B]">Please refresh the page and try again.</p>
+          <p className="text-blush-pink font-medium mb-2">Editor engine failed to load</p>
+          <p className="text-sm text-medium">Please refresh the page and try again.</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 px-6 py-2 bg-[#F4C2A1] text-white rounded-lg font-medium hover:brightness-105"
+            className="mt-4 px-6 py-2 bg-peach text-white rounded-lg font-medium hover:brightness-105"
           >
             Refresh Page
           </button>
@@ -650,27 +709,28 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              ref={pickerRef} role="dialog" aria-modal="true" aria-labelledby="photo-picker-title" tabIndex={-1}
               className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="font-display text-lg font-semibold text-[#2D2D2D] mb-4">
+              <h3 id="photo-picker-title" className="font-display text-lg font-semibold text-dark mb-4">
                 Choose a photo for slot {selectedSlotForPicker + 1}
               </h3>
               {actions.uploadedPhotos.length === 0 ? (
-                <p className="text-sm text-[#9B9B9B] text-center py-8">
+                <p className="text-sm text-light text-center py-8">
                   No photos uploaded yet. Go to the Photos tab to upload.
                 </p>
               ) : availablePhotos.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-sm text-[#6B6B6B] font-medium mb-1">
+                  <p className="text-sm text-medium font-medium mb-1">
                     All your photos are already in the album.
                   </p>
-                  <p className="text-xs text-[#9B9B9B] mb-4">
+                  <p className="text-xs text-light mb-4">
                     Add more photos to swap in something new.
                   </p>
                   <button
                     onClick={() => { setShowPhotoPicker(false); _onAction?.('trigger-upload'); }}
-                    className="px-5 py-2 bg-[#F4C2A1] text-white text-sm font-semibold rounded-lg hover:brightness-105 inline-flex items-center gap-2"
+                    className="px-5 py-2 bg-peach text-white text-sm font-semibold rounded-lg hover:brightness-105 inline-flex items-center gap-2"
                   >
                     <Upload size={14} /> Add Photos
                   </button>
@@ -686,7 +746,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                         setShowPhotoPicker(false);
                         setPickerIsTextSlot(false);
                       }}
-                      className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-[#F4C2A1] transition-all"
+                      className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-peach transition-all"
                     >
                       <img
                         src={photo.previewUrl}
@@ -701,7 +761,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => { setShowPhotoPicker(false); setPickerIsTextSlot(false); }}
-                  className="px-4 py-2 text-sm text-[#6B6B6B] hover:text-[#2D2D2D]"
+                  className="px-4 py-2 text-sm text-medium hover:text-dark"
                 >
                   Cancel
                 </button>
@@ -711,12 +771,26 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         )}
       </AnimatePresence>
 
+      {/* STUDIO: the guardrail's one-line answer, and the once-per-session sign-in nudge */}
+      {guardMsg && (
+        <div role="status" aria-live="polite" data-testid="studio-guard"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[115] max-w-[90vw] px-4 py-2.5 rounded-xl bg-dark text-warm-white text-sm font-medium shadow-2xl text-center">
+          {guardMsg}
+        </div>
+      )}
+      {stickerToRemove && (
+        <RemoveGraphicModal kind="sticker"
+          onRemove={() => { actions.removeSticker(stickerToRemove); setStickerToRemove(null); }}
+          onClose={() => setStickerToRemove(null)}
+        />
+      )}
       {/* Caption editor — same component the mobile review + preview use, so the
           desktop canvas textbox edits identically. Click the box → type → it
           binds to the slot and renders fixed + centered. */}
       {textEditSlot !== null && (
         <MobileTextEditor
           initial={buildBoxInitial(textEditSlot)}
+          box={actions.currentPage ? captionBoxSize(actions.currentPage, textEditSlot, actions.albumSize, actions.currentPageIndex, { coverMode: actions.editScope === 'coverFront' }) : null}
           onSave={(content) => { actions.setBoxText(textEditSlot, content); setTextEditSlot(null); }}
           onClose={() => setTextEditSlot(null)}
         />
@@ -747,30 +821,53 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* Empty-slot content chooser — Photo / Text / Ornament (desktop modal) */}
+      {/* Empty-slot content chooser — Photo / Quote / Your Text (desktop modal) */}
       {chooserSlot !== null && (
         <SlotChooser
           onPhoto={() => { setSelectedSlotForPicker(chooserSlot); setShowPhotoPicker(true); }}
+          onQuote={() => setSlotQuoteSlot(chooserSlot)}
           onText={() => setSlotTextEditSlot(chooserSlot)}
-          onGraphic={() => setOrnamentEditSlot(chooserSlot)}
           onClose={() => setChooserSlot(null)}
         />
       )}
 
-      {/* Empty combo/caption-box chooser — Text or an AI-matched Graphic. */}
+      {/* Empty combo/caption-box chooser — Quote / Your Text (QR left the boxes 2026-10-02: video memories live on full-page photos).
+          (Clipart was sunset: fetching + rasterizing icon packs dragged on old
+          phones. Placed cliparts still render — see textSlotOrnament below.) */}
       {chooserTextSlot !== null && (
         <SlotChooser
+          onQuote={() => setBoxQuoteSlot(chooserTextSlot)}
           onText={() => setTextEditSlot(chooserTextSlot)}
-          onGraphic={() => setTextSlotOrnamentEditSlot(chooserTextSlot)}
           onClose={() => setChooserTextSlot(null)}
         />
       )}
 
-      {/* Graphic picker (chooser "Add Graphic", or tapping a placed graphic). */}
+      {/* Themed quote → a CAPTION BOX. setBoxText binds it to the box (so it
+          inherits the template's rect, no free-text print drift) and evicts any
+          photo/QR/graphic sitting there — one box, one thing. */}
+      {boxQuoteSlot !== null && (
+        <QuotePickerModal
+          initial={actions.currentPage?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
+          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true }); setBoxQuoteSlot(null); }}
+          onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }); setBoxQuoteSlot(null); }}
+          onClose={() => setBoxQuoteSlot(null)}
+        />
+      )}
+
+      {/* Themed quote → a PHOTO slot (setSlotText evicts the photo/QR there). */}
+      {slotQuoteSlot !== null && (
+        <QuotePickerModal
+          initial={actions.currentPage?.slotTexts?.[slotQuoteSlot]?.text ?? null}
+          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true }); setSlotQuoteSlot(null); }}
+          onRemove={() => { actions.setSlotText(slotQuoteSlot, null); setSlotQuoteSlot(null); }}
+          onClose={() => setSlotQuoteSlot(null)}
+        />
+      )}
+
+      {/* A graphic already placed in a saved album — removable, not replaceable
+          (adding graphics was retired in favour of themed quotes). */}
       {ornamentEditSlot !== null && (
-        <AiClipartModal
-          initial={actions.currentPage?.ornamentFills?.[ornamentEditSlot] ?? null}
-          onSave={(fill) => { actions.setOrnamentFill(ornamentEditSlot, fill); setOrnamentEditSlot(null); }}
+        <RemoveGraphicModal
           onRemove={() => { actions.setOrnamentFill(ornamentEditSlot, null); setOrnamentEditSlot(null); }}
           onClose={() => setOrnamentEditSlot(null)}
         />
@@ -795,17 +892,17 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         />
       )}
 
-      {/* Combo/caption-box ornament picker */}
+      {/* A caption-box clipart already placed in a saved album — removable, not
+          replaceable (the clipart picker was sunset; placed ones keep rendering
+          from their stored PNG). Same pattern as the photo-slot graphics above. */}
       {textSlotOrnamentEditSlot !== null && (
-        <AiClipartModal
-          initial={actions.currentPage?.textSlotOrnament?.[textSlotOrnamentEditSlot] ?? null}
-          onSave={(fill) => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, fill); setTextSlotOrnamentEditSlot(null); }}
+        <RemoveGraphicModal
           onRemove={() => { actions.setTextSlotOrnament(textSlotOrnamentEditSlot, null); setTextSlotOrnamentEditSlot(null); }}
           onClose={() => setTextSlotOrnamentEditSlot(null)}
         />
       )}
 
-      <div className="flex h-full bg-[#F5F5F5]">
+      <div className="flex h-full bg-paper">
         {/* ── Unified Panel (LEFT side) — hidden by default ── */}
         {sidebarVisible && (
           <UnifiedPanel
@@ -862,7 +959,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {!ORCHESTRATOR_MODE && !sidebarVisible && (
             <button
               onClick={() => setSidebarVisible(true)}
-              className="absolute top-3 left-3 z-40 flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl shadow-md border border-[#E8E8E8] text-xs font-medium text-[#6B6B6B] hover:text-[#F4C2A1] hover:border-[#F4C2A1]/30 transition-all"
+              className="absolute top-3 left-3 z-40 flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl shadow-md border border-line text-xs font-medium text-medium hover:text-peach hover:border-peach/30 transition-all"
               title="Show sidebar (Ctrl+Shift+S)"
             >
               <PanelLeftOpen size={14} />
@@ -871,12 +968,12 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           )}
 
           {/* Toolbar */}
-          <div className="h-10 bg-white border-b border-[#E8E8E8] flex items-center justify-between px-3 shrink-0">
+          <div className="h-10 bg-white border-b border-line flex items-center justify-between px-3 shrink-0">
             <div className="flex items-center gap-1">
               {/* Home → Homepage */}
               <Link
                 to="/"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[#6B6B6B] hover:bg-[#F0F0F0] hover:text-[#F4C2A1] transition-all mr-1"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-medium hover:bg-line-soft hover:text-peach transition-all mr-1"
                 title="Go to homepage"
               >
                 <Home size={16} />
@@ -885,36 +982,36 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
               {!ORCHESTRATOR_MODE && (
               <>
-              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
+              <div className="w-px h-5 bg-line mx-1" />
 
               <button
                 onClick={() => actions.setPhase('setup')}
-                className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]"
+                className="p-1.5 rounded-md hover:bg-line-soft text-medium"
                 title="Back to template"
               >
                 <ChevronLeft size={16} />
               </button>
 
-              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
+              <div className="w-px h-5 bg-line mx-1" />
 
               {/* Zoom */}
-              <button onClick={() => handleZoom(-0.1)} className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]" title="Zoom out">
+              <button onClick={() => handleZoom(-0.1)} className="p-1.5 rounded-md hover:bg-line-soft text-medium" title="Zoom out">
                 <ZoomOut size={14} />
               </button>
-              <span className="text-xs text-[#6B6B6B] w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
-              <button onClick={() => handleZoom(0.1)} className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]" title="Zoom in">
+              <span className="text-xs text-medium w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+              <button onClick={() => handleZoom(0.1)} className="p-1.5 rounded-md hover:bg-line-soft text-medium" title="Zoom in">
                 <ZoomIn size={14} />
               </button>
-              <button onClick={resetZoom} className="p-1.5 rounded-md hover:bg-[#F0F0F0] text-[#6B6B6B]" title="Reset zoom">
+              <button onClick={resetZoom} className="p-1.5 rounded-md hover:bg-line-soft text-medium" title="Reset zoom">
                 <RotateCcw size={12} />
               </button>
 
-              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
+              <div className="w-px h-5 bg-line mx-1" />
 
               {/* Grid */}
               <button
                 onClick={() => setShowGrid((v: boolean) => !v)}
-                className={`p-1.5 rounded-md text-[#6B6B6B] transition-colors ${showGrid ? 'bg-[#FDE8E4] text-[#E8A598]' : 'hover:bg-[#F0F0F0]'}`}
+                className={`p-1.5 rounded-md text-medium transition-colors ${showGrid ? 'bg-blush text-blush-pink' : 'hover:bg-line-soft'}`}
                 title="Toggle grid"
               >
                 <Grid3X3 size={14} />
@@ -923,7 +1020,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               {/* Snap */}
               <button
                 onClick={() => setSnapEnabled((v: boolean) => !v)}
-                className={`p-1.5 rounded-md text-[#6B6B6B] transition-colors ${snapEnabled ? 'bg-[#FDE8E4] text-[#E8A598]' : 'hover:bg-[#F0F0F0]'}`}
+                className={`p-1.5 rounded-md text-medium transition-colors ${snapEnabled ? 'bg-blush text-blush-pink' : 'hover:bg-line-soft'}`}
                 title="Toggle snap to grid"
               >
                 <Magnet size={14} />
@@ -934,14 +1031,23 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
             </div>
 
             <div className="flex items-center gap-2">
+              {actions.currentPage?.studio && (
+                <>
+                  <span className="text-[11px] font-bold text-blush-pink bg-blush rounded-full px-2.5 py-1" data-testid="studio-yours">✎ This page is yours · Regenerate skips it</span>
+                  <button type="button" onClick={() => { actions.resetStudioPage(); sayGuard('Back to Megy’s layout. Your photos stayed where they are in the album.'); }}
+                    className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-peach text-blush-pink hover:bg-blush flex items-center gap-1" data-testid="studio-fix">
+                    <Sparkles size={11} /> Megy, fix this page
+                  </button>
+                </>
+              )}
               <CloudSaveStatus
                 status={actions.cloudSaveStatus}
                 lastSavedAt={actions.lastSavedAt}
                 isLoggedIn={!!user}
                 onManualSave={actions.manualSave}
               />
-              <div className="w-px h-5 bg-[#E8E8E8] mx-1" />
-              <span className="text-xs text-[#9B9B9B]">
+              <div className="w-px h-5 bg-line mx-1" />
+              <span className="text-xs text-light">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
 
@@ -952,7 +1058,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     <button
                       onClick={onGenerate}
                       title="Generate layout for this page"
-                      className="px-3 py-1.5 bg-[#B8A9D9] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1 transition-all"
+                      className="px-3 py-1.5 bg-soft-lavender text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1 transition-all"
                     >
                       <Wand2 size={12} /> Generate
                     </button>
@@ -961,7 +1067,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     <button
                       onClick={onGenerateAll}
                       title="Generate all pages from uploaded photos"
-                      className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                      className="px-3 py-1.5 bg-white border border-soft-lavender text-soft-lavender text-xs font-semibold rounded-lg hover:bg-soft-lavender hover:text-white flex items-center gap-1 transition-all"
                     >
                       <Sparkles size={12} /> Generate All
                     </button>
@@ -973,7 +1079,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     <button
                       onClick={onRegenerate}
                       title="Regenerate album with new random layouts"
-                      className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                      className="px-3 py-1.5 bg-white border border-soft-lavender text-soft-lavender text-xs font-semibold rounded-lg hover:bg-soft-lavender hover:text-white flex items-center gap-1 transition-all"
                     >
                       <Sparkles size={12} /> Regenerate
                     </button>
@@ -982,7 +1088,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     <button
                       onClick={onGenerateAll}
                       title="Generate all pages from uploaded photos"
-                      className="px-3 py-1.5 bg-white border border-[#B8A9D9] text-[#B8A9D9] text-xs font-semibold rounded-lg hover:bg-[#B8A9D9] hover:text-white flex items-center gap-1 transition-all"
+                      className="px-3 py-1.5 bg-white border border-soft-lavender text-soft-lavender text-xs font-semibold rounded-lg hover:bg-soft-lavender hover:text-white flex items-center gap-1 transition-all"
                     >
                       <Sparkles size={12} /> Generate All
                     </button>
@@ -992,17 +1098,16 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
 
               {/* Living-memory QR — offered on a single full-photo page; turns it
                   into a full-bleed photo with a scannable corner badge. */}
-              {actions.canAddMemoryQr && (
-                <button
-                  onClick={() => { markMemoryDiscovered(); setMemoryOpen(true); }}
-                  title="Add a YouTube video that plays when this page's QR is scanned"
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all bg-[#E8A598] text-white hover:brightness-105 shadow-sm ${memoryDiscovered ? '' : 'memory-pulse'}`}
-                >
-                  <Youtube size={13} /> Add YouTube Memory
-                </button>
-              )}
+              {actions.canAddMemoryQr && <VideoMemoryButton variant="desktop" onClick={() => setMemoryOpen(true)} />}
             </div>
           </div>
+
+          {/* STUDIO strip — masks + looks for the selected photo */}
+          {studio && (
+            <StudioStrip page={actions.currentPage} selectedSlotIndex={selectedSlotIndex}
+              onMask={(i, m) => actions.setSlotMask(i, m)} onLook={(i, l) => actions.setSlotLook(i, l)}
+              onGuard={sayGuard} />
+          )}
 
           {/* Canvas */}
           <div
@@ -1016,7 +1121,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 negative space (the canvas gets clipped top & bottom). */}
             <div className="flex flex-col items-center gap-2 my-auto shrink-0">
               {/* Page number above the page */}
-              <span className="text-xs font-medium text-[#6B6B6B] tabular-nums">
+              <span className="text-xs font-medium text-medium tabular-nums">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
             <motion.div
@@ -1041,13 +1146,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                     className="absolute inset-0 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm rounded-sm z-10"
                   >
                     <div className="text-center px-6">
-                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-[#FDE8E4] flex items-center justify-center">
-                        <Wand2 size={24} className="text-[#E8A598]" />
+                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-blush flex items-center justify-center">
+                        <Wand2 size={24} className="text-blush-pink" />
                       </div>
-                      <h3 className="font-display text-base font-semibold text-[#2D2D2D] mb-2">
+                      <h3 className="font-display text-base font-semibold text-dark mb-2">
                         This page is empty
                       </h3>
-                      <p className="text-sm text-[#9B9B9B] mb-6 max-w-[260px] mx-auto">
+                      <p className="text-sm text-light mb-6 max-w-[260px] mx-auto">
                         {actions.uploadedPhotos.length === 0
                           ? 'Upload photos to get started with your album.'
                           : hasTemplateButEmpty
@@ -1058,7 +1163,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                         {actions.uploadedPhotos.length > 0 && onGenerate && (
                           <button
                             onClick={onGenerate}
-                            className="px-5 py-2 bg-[#B8A9D9] text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
+                            className="px-5 py-2 bg-soft-lavender text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
                           >
                             <Wand2 size={14} /> Generate Layout
                           </button>
@@ -1066,7 +1171,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                         {actions.uploadedPhotos.length === 0 && (
                           <button
                             onClick={() => _onAction?.('trigger-upload')}
-                            className="px-5 py-2 bg-[#F4C2A1] text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
+                            className="px-5 py-2 bg-peach text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-2 transition-all"
                           >
                             <Upload size={14} /> Upload Photos
                           </button>
@@ -1078,29 +1183,17 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               </AnimatePresence>
             </motion.div>
 
-              {/* Page navigation — prev / next arrows below the page */}
-              {actions.albumPages.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => actions.goToPage(actions.currentPageIndex - 1)}
-                    disabled={actions.currentPageIndex === 0}
-                    title="Previous page"
-                    aria-label="Previous page"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-[#E8E8E8] text-[#6B6B6B] hover:bg-[#FDE8E4] hover:text-[#E8A598] hover:border-[#F4C2A1] disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  <div className="w-px h-5 bg-[#E8E8E8]" />
-                  <button
-                    onClick={() => actions.goToPage(actions.currentPageIndex + 1)}
-                    disabled={actions.currentPageIndex >= actions.albumPages.length - 1}
-                    title="Next page"
-                    aria-label="Next page"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-[#E8E8E8] text-[#6B6B6B] hover:bg-[#FDE8E4] hover:text-[#E8A598] hover:border-[#F4C2A1] disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
+              {/* Page turn below the page, in words both ways — the same bar as
+                  the phone (PageTurnBar). The last page offers Done → Preview.
+                  STICKY: the page fits the WIDTH, so on a 1366×768 or 1440×900
+                  laptop it runs past the window and the row sat ~170 px below
+                  the fold. It now rides the bottom edge until you scroll down
+                  to it, then rests under the page. */}
+              {actions.albumPages.length > 0 && (
+                <PageTurnBar variant="desktop" className="sticky bottom-4 z-20 mb-4" index={actions.currentPageIndex} total={actions.albumPages.length}
+                  onPrev={() => actions.goToPage(actions.currentPageIndex - 1)}
+                  onNext={() => actions.goToPage(actions.currentPageIndex + 1)}
+                  onDone={() => { void dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }} />
               )}
             </div>
           </div>

@@ -6,9 +6,34 @@
 // hosts get a brief branded page then auto-forward; anything else gets a
 // manual-click interstitial — never an auto-redirect off the allowlist.
 import { createClient } from '@supabase/supabase-js';
+import { guard } from './_guard.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY;
+
+// Hosted CLIPS (0030): a memory whose destination is one of OUR bucket objects
+// plays on the branded page in a <video>. Recognised by exact origin + prefix +
+// a code-shaped object name, so nothing else on the Supabase origin (another
+// bucket, the REST API) is ever treated as a clip.
+const CLIP_PREFIX = (() => {
+  try { return SUPABASE_URL ? new URL(SUPABASE_URL).origin + '/storage/v1/object/public/memory-clips/' : null; }
+  catch { return null; }
+})();
+const CLIP_NAME = /^[a-z2-9]{4,32}\.(mp4|mov|webm|m4v)$/;
+// A replaced clip is the same object name with a version: "?v=<digits>". The
+// clip is cached for a year under its URL, so a replace that kept the URL kept
+// showing the OLD video to anyone who had played it (1-star testers round 2).
+// Nothing else after the name: no other query, no fragment.
+const CLIP_VERSION = /^(\?v=\d{1,13})?$/;
+export function isHostedClip(u) {
+  if (!CLIP_PREFIX || !u.href.startsWith(CLIP_PREFIX)) return false;
+  const name = u.pathname.slice(u.pathname.lastIndexOf('/') + 1);
+  return CLIP_NAME.test(name) && CLIP_VERSION.test(u.search) && !u.hash;
+}
+const fmtMonth = (iso) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+};
 
 // Canonical embed hosts only. Deliberately NO shorteners/redirectors (goo.gl,
 // fb.watch, etc.) — those would defeat the allowlist.
@@ -78,7 +103,7 @@ a.btn{display:inline-block;margin-top:16px;background:#F4C2A1;color:#fff;text-de
 <p class="spin">Opens an external site — tap only if you trust it.</p>`);
 };
 
-const send = (res, status, html, frameSrc) => {
+const send = (res, status, html, frameSrc, mediaSrc) => {
   res.statusCode = status;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -89,6 +114,7 @@ const send = (res, status, html, frameSrc) => {
   res.setHeader('Content-Security-Policy',
     "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; "
     + (frameSrc ? `frame-src ${frameSrc}; ` : '')
+    + (mediaSrc ? `media-src ${mediaSrc}; ` : '')
     + "frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
   res.end(html);
 };
@@ -160,24 +186,95 @@ const embedPage = (emb, watchHref, title) => {
 </body></html>`;
 };
 
+// Hosted clip: plays right here, no third party. Autoplay muted (mobile rule),
+// tap for sound. States the term so the promise is visible on the page itself.
+const clipPage = (src, title, expiresAt) => {
+  const heading = title ? esc(title) : 'Your memory';
+  const until = expiresAt ? fmtMonth(expiresAt) : '';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Megy Prints — Memory</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:#1b1613;color:#FFFBF7;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:14px}
+  .brand{font-size:19px;font-weight:700}.brand span{color:#F4C2A1}
+  .brand .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#F4C2A1;margin-left:2px;vertical-align:middle}
+  .ttl{font-size:15px;color:#E7D8CC;text-align:center;max-width:760px;line-height:1.4}
+  video{width:100%;max-width:760px;max-height:78vh;border-radius:16px;background:#000;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+  .hint{font-size:13px;color:#E0CDBE;opacity:.9}
+  .term{font-size:12px;color:#B4A79F}
+  .foot{font-size:12px;color:#8a7d74;margin-top:2px}
+</style></head><body>
+  <div class="brand">Megy<span>Prints</span><span class="dot"></span></div>
+  <div class="ttl">${heading}</div>
+  <video src="${esc(src)}" controls autoplay muted playsinline preload="metadata"></video>
+  <div class="hint">🔇 Playing on mute — tap the video for sound</div>
+  ${until ? `<div class="term">This memory stays live until ${esc(until)}</div>` : ''}
+  <div class="foot">✨ An enhanced memory, made with Megyprints</div>
+</body></html>`;
+};
+
+// Term ended: never a dead link. A branded page that says what happened and
+// how to bring it back (renewal is handled by the store; the clip is kept).
+const expiredPage = (code, expiresAt, appBase) => SHELL(`<h1>This memory's hosting term has ended</h1>
+<p>The video behind this QR was live until <b>${esc(fmtMonth(expiresAt) || 'recently')}</b>. It is safely kept — renew the term and this same printed QR plays it again.</p>
+<a class="btn" href="${esc(appBase)}/#/memories?renew=${esc(code)}">Renew this memory</a>
+<p class="spin">Memory code: ${esc(code)}</p>`);
+
 export default async function handler(req, res) {
+  // Per-IP rate limit: resolve_memory bumps scan_count and is a code-enumeration
+  // oracle, so cap scripted hammering here (the sole legit auto-forward path).
+  // A human scanning printed QRs is nowhere near the limit; distinct scanners
+  // are distinct IPs. On throttle, show the branded "unavailable" page.
+  // checkOrigin:false — a scan is a top-level navigation with no Origin/Referer;
+  // the allow-list would (and did) 403 every real customer. See _guard.mjs.
+  const g = guard(req, { checkOrigin: false });
+  if (g) {
+    if (g.retryAfter) res.setHeader('Retry-After', String(g.retryAfter));
+    return send(res, g.status === 429 ? 429 : g.status, unavailable());
+  }
   const code = String((req.query && req.query.code) || '').slice(0, 32);
   if (!/^[a-z2-9]{4,32}$/.test(code)) return send(res, 400, notFound());
-  if (!SUPABASE_URL || !SUPABASE_ANON) return send(res, 500, unavailable());
+  if (!SUPABASE_URL || !SUPABASE_ANON) {
+    // Log code only — NEVER the destination URL (a printed QR points at a private
+    // family memory). A scanned QR landing on the branded unavailable page is
+    // otherwise invisible; this is the only signal an env/DB fault ever happened.
+    console.error(JSON.stringify({ fn: 'm', event: 'missing_env', code }));
+    return send(res, 500, unavailable());
+  }
 
   let row;
   try {
     const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
     const { data, error } = await sb.rpc('resolve_memory', { p_code: code });
-    if (error) return send(res, 502, unavailable());
+    if (error) {
+      console.error(JSON.stringify({ fn: 'm', event: 'resolve_memory_error', code, msg: error.message }));
+      return send(res, 502, unavailable());
+    }
     row = data && data[0];
-  } catch {
+  } catch (e) {
+    console.error(JSON.stringify({ fn: 'm', event: 'resolve_exception', code, msg: e instanceof Error ? e.message : String(e) }));
     return send(res, 502, unavailable());
   }
   if (!row) return send(res, 404, notFound());
 
+  // Paid hosting term over → renewal page (still counts the scan; no redirect).
+  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+    // Fixed origin (env-overridable), never the Host header — a renewal link
+    // must always land on OUR memories page.
+    const appBase = String(process.env.APP_BASE || 'https://megyprints.vercel.app').replace(/\/+$/, '');
+    return send(res, 200, expiredPage(code, row.expires_at, appBase));
+  }
+
   let u;
   try { u = new URL(row.destination); } catch { return send(res, 200, memoryPage('', 'an unknown site', row.title, false)); }
+  // Our own hosted clip → plays here; the ONLY thing on the Supabase origin we
+  // ever render (media-src scoped to that origin, nothing framed).
+  if (u.protocol === 'https:' && isHostedClip(u)) {
+    return send(res, 200, clipPage(u.href, row.title, row.expires_at), undefined, new URL(CLIP_PREFIX).origin);
+  }
   const trusted = u.protocol === 'https:' && allowed(u.hostname.toLowerCase().replace(/^www\./, ''));
   // Video platforms (YouTube/Vimeo) PLAY on the branded page; other trusted
   // hosts (Spotify, Drive, socials) still forward; untrusted → manual click.

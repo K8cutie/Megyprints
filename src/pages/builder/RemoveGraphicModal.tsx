@@ -1,0 +1,67 @@
+import { X, Trash2 } from 'lucide-react';
+import { useModalDialog } from '../../lib/useModalDialog';
+
+/* Adding AI graphics was retired — themed quotes took their place in the slot
+   chooser. Graphics already placed in saved albums still render and print
+   (removing the render path would blank real content), so tapping one offers
+   the only action that still makes sense: take it out.
+
+   When the last placed graphic is gone from every saved album, this component
+   and the ornament render/persistence path can be swept together.
+
+   Stickers (Studio) were retired the same way (owner, 2026-10-01): placed ones
+   still render and print, can still be moved, and this is how one comes off. */
+const COPY = {
+  graphic: {
+    title: 'Graphic',
+    body: 'Graphics have been replaced by themed quotes. This one still prints, but it can’t be swapped for another — remove it and the box is free for a quote, your own text, or a photo.',
+  },
+  sticker: {
+    title: 'Sticker',
+    body: 'Stickers are no longer offered. This one still prints where it is, but it can’t be swapped for another — remove it if you’d rather the page without it.',
+  },
+} as const;
+
+export default function RemoveGraphicModal({ onRemove, onClose, mobile, kind = 'graphic' }: {
+  onRemove: () => void;
+  onClose: () => void;
+  mobile?: boolean;
+  kind?: keyof typeof COPY;
+}) {
+  // Keyboard (KB-2): focus on "Keep it", Tab kept inside, Escape keeps it.
+  const panelRef = useModalDialog<HTMLDivElement>(true, onClose);
+  const Card = (
+    <div
+      ref={panelRef} role="dialog" aria-modal="true" aria-label={COPY[kind].title} tabIndex={-1}
+      className={`bg-white shadow-2xl flex flex-col ${mobile ? 'w-full rounded-t-2xl' : 'w-full max-w-xs rounded-2xl'}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+        <span className="text-sm font-semibold text-dark">{COPY[kind].title}</span>
+        <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
+      </div>
+      <div className="px-5 py-4">
+        <p className="text-xs text-stone leading-relaxed">{COPY[kind].body}</p>
+      </div>
+      <div className="px-5 pb-4 flex gap-2">
+        <button onClick={onClose} data-autofocus
+          className="flex-1 h-10 rounded-xl border border-line-soft text-sm font-medium text-[#6B5842] hover:bg-cream">
+          Keep it
+        </button>
+        <button onClick={onRemove}
+          className="flex-1 h-10 rounded-xl bg-red-500 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition">
+          <Trash2 size={15} /> Remove
+        </button>
+      </div>
+    </div>
+  );
+
+  if (mobile) {
+    return (
+      <div className="absolute inset-0 z-[120] bg-black/40 flex items-end" onClick={onClose}>{Card}</div>
+    );
+  }
+  return (
+    <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-6" onClick={onClose}>{Card}</div>
+  );
+}

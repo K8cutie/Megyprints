@@ -17,10 +17,18 @@ export interface PrintJob {
   pages: AlbumPage[];
   photos: UploadedPhoto[];
   albumSize: AlbumSizePreset;
-  /** Designed front·spine·back cover artwork. Optional for back-compat with
-   *  jobs minted before covers existed; checkout falls back to DEFAULT_COVER_DESIGN.
+  /** The album being ordered — its row id in the cloud (useBuilderState's
+   *  albumIdRef). Checkout freezes THIS row, not the latest saved album: a
+   *  customer with several albums would otherwise pay for the wrong one. */
+  albumId?: string;
+  /** LEGACY designed front·spine·back cover artwork (old drafts). Optional for
+   *  back-compat; the wrap falls back to this when cover PAGES are absent.
    *  The cover MATERIAL (soft/hard) is chosen at checkout, not stored here. */
   coverDesign?: CoverDesign;
+  /** Cover-as-pages: the FRONT cover PAGE. When present, the checkout cover
+   *  wrap composites this actual page render + a derived spine + the reserved
+   *  Megy Prints back panel (the back is not customer artwork). */
+  coverFront?: AlbumPage;
 }
 
 let pending: PrintJob | null = null;
@@ -31,4 +39,57 @@ export function setPendingPrintJob(job: PrintJob): void {
 
 export function getPendingPrintJob(): PrintJob | null {
   return pending;
+}
+
+/** Signing out drops the album handed to checkout (and the note about it):
+ *  the next account in this tab must not check out the last one's album. */
+export function clearPendingPrintJob(): void {
+  pending = null;
+  try { sessionStorage.removeItem(HANDOFF_KEY); } catch { /* private mode */ }
+}
+
+// ── The hand-off note ──
+// Whether the album went to checkout SAVED to the customer's account. The
+// builder saves it on the way (Builder.handleOrder) — but only a signed-in
+// customer can be saved, and a guest signs in at checkout, where the builder
+// isn't running to save anything. Then the account holds no copy of the album,
+// or an older one, and the order would freeze that instead of what is on screen.
+//
+// Kept in sessionStorage, not with the job above: the Google sign-in round-trip
+// at checkout reloads the page, which wipes the job but not this (same tab).
+
+const HANDOFF_KEY = 'megy-order-handoff';
+
+export interface OrderHandoff {
+  albumId: string;
+  /** The cloud row holds the album exactly as it left the builder. */
+  saved: boolean;
+  /** Just handed over by the builder's Order door (not read since): a NEW
+   *  checkout, never the last one's thank-you. A reload of checkout reads
+   *  the handoff again without it, and comes back where it was. */
+  fresh?: boolean;
+}
+
+export function noteOrderHandoff(handoff: OrderHandoff): void {
+  try { sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(handoff)); } catch { /* private mode */ }
+}
+
+export function readOrderHandoff(): OrderHandoff | null {
+  try {
+    const raw = sessionStorage.getItem(HANDOFF_KEY);
+    if (!raw) return null;
+    const h = JSON.parse(raw) as Partial<OrderHandoff>;
+    return typeof h?.albumId === 'string' ? { albumId: h.albumId, saved: h.saved === true, ...(h.fresh ? { fresh: true } : {}) } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether checkout was just opened by the builder's Order door — once: the
+ *  mark comes off, so a reload is a reload. */
+export function takeFreshHandoff(): boolean {
+  const h = readOrderHandoff();
+  if (!h?.fresh) return false;
+  noteOrderHandoff({ albumId: h.albumId, saved: h.saved });
+  return true;
 }

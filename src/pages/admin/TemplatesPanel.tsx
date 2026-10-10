@@ -6,11 +6,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { Eye, EyeOff, Trash2, RotateCcw, Loader2 } from 'lucide-react';
 import { supabaseConfigured } from '../../lib/supabase';
 import { loadTemplateSettings, getAllStates, setTemplateState, type TemplateState } from '../../lib/templateSettings';
+import { loadStoreSettings, getDisabledSizes, setDisabledSizes } from '../../lib/storeSettings';
 import { PAGE_TEMPLATES } from '../builder/pageTemplates';
 import type { AlbumSizePreset } from '../builder/types';
 import TemplateThumb from '../builder/TemplateThumb';
 
-const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '11.5x8', '8.5x11'];
+const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
 
 export default function TemplatesPanel() {
   const [states, setStates] = useState<Map<string, TemplateState>>(new Map());
@@ -20,9 +21,19 @@ export default function TemplatesPanel() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Album-size availability (same store_settings.disabled_sizes the Pricing tab
+  // manages — mirrored here so a size can be turned off right where its layouts
+  // are, since this tab is organized by size).
+  const [disabled, setDisabled] = useState<AlbumSizePreset[]>([]);
+  const [savingSize, setSavingSize] = useState(false);
+  const [sizeMsg, setSizeMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    void loadTemplateSettings().then(() => { setStates(getAllStates()); setLoading(false); });
+    void Promise.all([loadTemplateSettings(), loadStoreSettings()]).then(() => {
+      setStates(getAllStates());
+      setDisabled(getDisabledSizes());
+      setLoading(false);
+    });
   }, []);
 
   const update = async (id: string, patch: Partial<TemplateState>) => {
@@ -31,6 +42,29 @@ export default function TemplatesPanel() {
     if (e && !e.startsWith('Supabase not configured')) setErr(e);
     setStates(new Map(getAllStates()));
     setSavingId(null);
+  };
+
+  const selectedDisabled = disabled.includes(size);
+
+  // Turn the CURRENTLY SELECTED album size on/off for customers. Guarded so the
+  // store can never end up with zero sizes offered (mirrors the Pricing panel).
+  const toggleSelectedSize = async () => {
+    const enabledCount = SIZES.length - disabled.length;
+    if (!selectedDisabled && enabledCount <= 1) {
+      setSizeMsg('Keep at least one size on for customers.');
+      return;
+    }
+    const next = selectedDisabled ? disabled.filter((x) => x !== size) : [...disabled, size];
+    setSavingSize(true); setSizeMsg(null);
+    const e = await setDisabledSizes(next);
+    if (e && !e.startsWith('Supabase not configured')) {
+      setSizeMsg(`Save failed: ${e}`);
+    } else {
+      setDisabled(next);
+      setSizeMsg(selectedDisabled ? `✓ ${size} is now ON — customers can start new ${size} albums.`
+                                   : `✓ ${size} is now OFF — hidden from the customer size picker.`);
+    }
+    setSavingSize(false);
   };
 
   const list = useMemo(() => {
@@ -50,7 +84,7 @@ export default function TemplatesPanel() {
 
   return (
     <div>
-      <p className="text-sm text-[#6B6B6B] mb-4">
+      <p className="text-sm text-medium mb-4">
         Turn layouts on/off or delete them. Album generation only uses <b>active</b> templates.
       </p>
       {!supabaseConfigured && (
@@ -58,30 +92,61 @@ export default function TemplatesPanel() {
       )}
       {err && <p className="text-xs text-red-600 mb-3">Save failed: {err}</p>}
 
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {SIZES.map((s) => (
-          <button key={s} onClick={() => setSize(s)}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-            style={{ background: size === s ? '#F4C2A1' : '#F5F5F5', color: size === s ? '#fff' : '#6B6B6B' }}>
-            {s}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {SIZES.map((s) => {
+          const sOff = disabled.includes(s);
+          return (
+            <button key={s} onClick={() => { setSize(s); setSizeMsg(null); }}
+              title={sOff ? `${s} is OFF for customers` : `${s} is offered to customers`}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+              style={{ background: size === s ? '#B85C38' : '#F5F5F5', color: size === s ? '#fff' : '#6B6B6B' }}>
+              {s}
+              {sOff && (
+                <span className="text-[9px] font-bold uppercase tracking-wide px-1 py-px rounded"
+                  style={size === s ? { background: 'rgba(255,255,255,0.32)', color: '#fff' } : { background: '#EAE0D6', color: '#B4A99A' }}>
+                  off
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Album-size availability for the SELECTED size (mirrors Pricing → "Album sizes offered"). */}
+      <div className="mb-5 rounded-xl border border-line bg-warm-white px-4 py-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-dark">
+              Offer <span className="text-rust">{size}</span> to customers
+            </div>
+            <div className="text-xs text-medium mt-0.5 max-w-xl">
+              Off hides <b>{size}</b> from the customer size picker — no new albums at this size. Existing
+              albums &amp; orders still print &amp; fulfill. Same setting as Pricing → “Album sizes offered”.
+            </div>
+          </div>
+          <button onClick={toggleSelectedSize} disabled={savingSize || !supabaseConfigured} aria-pressed={!selectedDisabled}
+            className="ml-auto shrink-0 py-2 px-4 rounded-lg text-xs font-bold uppercase tracking-wide transition-colors disabled:opacity-60"
+            style={!selectedDisabled ? { background: '#E6F4EA', color: '#2E7D4A' } : { background: '#F1EDE7', color: '#B4A99A' }}>
+            {savingSize ? <Loader2 size={13} className="animate-spin inline" /> : selectedDisabled ? 'Off' : 'On'}
           </button>
-        ))}
+        </div>
+        {sizeMsg && <p className="text-xs mt-2 text-success font-medium">{sizeMsg}</p>}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or id…"
-          className="h-9 px-3 rounded-lg border border-[#E8E8E8] text-sm outline-none focus:border-[#F4C2A1] w-56" />
-        <label className="flex items-center gap-1.5 text-sm text-[#6B6B6B] cursor-pointer">
+          className="h-9 px-3 rounded-lg border border-line text-sm outline-none focus:border-peach w-56" />
+        <label className="flex items-center gap-1.5 text-sm text-medium cursor-pointer">
           <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
           Show deleted
         </label>
-        <div className="text-xs text-[#9B9B9B] ml-auto">
-          {counts.total} total · <span className="text-[#2E7D4A]">{counts.active} active</span> · {counts.hidden} hidden · {counts.deleted} deleted
+        <div className="text-xs text-light ml-auto">
+          {counts.total} total · <span className="text-success">{counts.active} active</span> · {counts.hidden} hidden · {counts.deleted} deleted
         </div>
       </div>
 
       {loading ? (
-        <div className="py-24 flex justify-center text-[#9B9B9B]"><Loader2 className="w-6 h-6 animate-spin" /></div>
+        <div className="py-24 flex justify-center text-light"><Loader2 className="w-6 h-6 animate-spin" /></div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {list.map((t) => {
@@ -90,13 +155,13 @@ export default function TemplatesPanel() {
             const busy = savingId === t.id;
             return (
               <div key={t.id}
-                className={`rounded-xl border p-3 ${s.deleted ? 'border-red-200 bg-red-50/40' : 'border-[#E8E8E8] bg-white'}`}>
+                className={`rounded-xl border p-3 ${s.deleted ? 'border-red-200 bg-red-50/40' : 'border-line bg-white'}`}>
                 <div className="flex justify-center" style={{ opacity: off ? 0.45 : 1 }}>
                   <TemplateThumb template={t} size={size} w={150} />
                 </div>
                 <div className="mt-2">
-                  <div className="text-sm font-medium text-[#2D2D2D] truncate">{t.name}</div>
-                  <div className="text-xs text-[#9B9B9B] truncate">
+                  <div className="text-sm font-medium text-dark truncate">{t.name}</div>
+                  <div className="text-xs text-light truncate">
                     {t.slotCount} photo{t.slotCount !== 1 ? 's' : ''}
                     {t.textSlots?.length ? ` · ${t.textSlots.length} text` : ''} · {t.id}
                   </div>
@@ -112,7 +177,7 @@ export default function TemplatesPanel() {
                   )}
                   {s.deleted ? (
                     <button onClick={() => update(t.id, { deleted: false })} disabled={busy}
-                      className="flex-1 h-8 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 bg-[#F5F5F5] text-[#6B6B6B] disabled:opacity-50">
+                      className="flex-1 h-8 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 bg-paper text-medium disabled:opacity-50">
                       <RotateCcw size={13} /> Restore
                     </button>
                   ) : (
@@ -126,7 +191,7 @@ export default function TemplatesPanel() {
             );
           })}
           {list.length === 0 && (
-            <p className="col-span-full py-16 text-center text-sm text-[#9B9B9B]">No templates match.</p>
+            <p className="col-span-full py-16 text-center text-sm text-light">No templates match.</p>
           )}
         </div>
       )}

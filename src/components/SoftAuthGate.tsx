@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { LogIn, UserPlus, Sparkles } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from './AuthModalProvider';
+import { useModalDialog } from '../lib/useModalDialog';
 
 /* Soft sign-in nudge — a friendly, DISMISSIBLE prompt shown once per session when
    a signed-out user enters the builder. "Continue without an account" is always
@@ -28,33 +29,37 @@ export default function SoftAuthGate() {
     setShow(false);
   };
 
+  // Keyboard (KB-2): focus in, Tab kept inside, Escape = "Continue without an account".
+  const panelRef = useModalDialog<HTMLDivElement>(show && !user, dismiss);
+
   if (!show || user) return null;
 
   return (
     <div className="fixed inset-0 z-[130] bg-black/40 flex items-center justify-center p-4" onClick={dismiss}>
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center" onClick={(e) => e.stopPropagation()}>
-        <div className="w-12 h-12 rounded-full bg-[#FDE8E4] flex items-center justify-center mx-auto mb-3">
-          <Sparkles size={22} className="text-[#E8A598]" />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="soft-auth-title" tabIndex={-1}
+        className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center" onClick={(e) => e.stopPropagation()}>
+        <div className="w-12 h-12 rounded-full bg-blush flex items-center justify-center mx-auto mb-3">
+          <Sparkles size={22} className="text-blush-pink" />
         </div>
-        <h2 className="font-display text-lg font-semibold text-[#2D2D2D]">Have an account?</h2>
-        <p className="text-sm text-[#6B6B6B] mt-1.5 mb-5">
+        <h2 id="soft-auth-title" className="font-display text-lg font-semibold text-dark">Have an account?</h2>
+        <p className="text-sm text-medium mt-1.5 mb-5">
           Sign in to use all the features — save your album, add QR memories, and order prints.
         </p>
         <div className="space-y-2">
           <button
             onClick={() => { dismiss(); openLogin(); }}
-            className="w-full py-2.5 rounded-lg bg-[#E8A598] text-white text-sm font-semibold hover:brightness-105 transition-all flex items-center justify-center gap-2"
+            className="w-full py-2.5 rounded-lg bg-blush-pink text-white text-sm font-semibold hover:brightness-105 transition-all flex items-center justify-center gap-2"
           >
             <LogIn size={16} /> Log In
           </button>
           <button
             onClick={() => { dismiss(); openSignup(); }}
-            className="w-full py-2.5 rounded-lg border border-[#F4C2A1] text-[#E8A598] text-sm font-semibold hover:bg-[#FDE8E4] transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 rounded-lg border border-peach text-blush-pink text-sm font-semibold hover:bg-blush transition-colors flex items-center justify-center gap-2"
           >
             <UserPlus size={16} /> Create an account
           </button>
         </div>
-        <button onClick={dismiss} className="mt-3 text-xs text-[#9B9B9B] hover:text-[#6B6B6B]">
+        <button onClick={dismiss} className="mt-3 text-xs text-light hover:text-medium">
           Continue without an account
         </button>
       </div>

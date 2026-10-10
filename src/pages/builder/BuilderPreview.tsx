@@ -1,10 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ShoppingCart, Plus, Trash2, RotateCw } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo, type CSSProperties } from 'react';
+import { ChevronLeft, ShoppingCart, Plus, Trash2, Sparkles, X, Loader2, Pencil, BookOpen, FileText } from 'lucide-react';
+import SpreadTurnButton, { SPREAD_TURN_W } from './SpreadTurnButton';
+import PreviewTurnBar from './PreviewTurnBar';
+import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, swipeTurn, turnBack, turnForward, type PreviewPosition, type PreviewView, type Turn } from './previewPaging';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
-import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform } from './types';
-import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss } from './types';
+import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
+import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss, dealtBoxRoll } from './types';
 import { dedupeSlotFills } from './slotUtils';
 import { setPendingPrintJob } from '../../lib/printQueue';
+import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from './albumMinimum';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { slotShapeStyle } from './slotShapeStyle';
@@ -12,16 +16,33 @@ import { PREVIEW_DIMS } from './PreviewSizeConstants';
 import { bindingMarginFraction, bindingEdge, marginForTemplate } from './binding';
 import { useBuilderContext } from './BuilderContext';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
+import { captionBoxSize, overflowingCaptions, longTextsMessage, coverTitleFit, COVER_TITLE_TOO_LONG_MESSAGE } from './textFit';
 import AddQrModal from './AddQrModal';
-import CoverStep from './CoverStep';
+import EndOfAlbumPrompt from './EndOfAlbumPrompt';
+import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
+import { checkOrderReadiness, readinessMessage, coverIsBlank, BLANK_COVER_MESSAGE } from './orderReadiness';
+import { missingPhotos, missingPhotosMessage, copyNotesMessage } from '../../lib/photoPresence';
+import { fillableBoxCount } from './generateAlbum';
+import { BOOK } from './bookFeel';
+import PageTurnLayer from './PageTurnLayer';
+import { planTurn, type TurnFace, type TurnPlan } from './pageTurn';
+import { resolveSlotBox } from './slotGeometry';
+import { slotPhotoDomBox } from './slotPhotoFit';
+import { applyMask, isMaskId, textureOverlayCss } from './masks';
+import { lookCss, isLookId } from './looks';
+import CoverEditor from './CoverEditor';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
+import { chooserListSizes, CHOOSER_TITLE } from './chooserFit';
+import { trashSpot, TRASH_SIZE, type Box } from './trashSpot';
 import { ornamentFit } from './ornaments';
-import { wordArtDomStyle } from './wordArt';
+import { wordArtDomStyle, resolveTextSlotAlign, freeTextBoxWidth, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
+import { normalizeGradient, gradientToCss } from './gradient';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ══════════════════════════════════════════════════════════════════════════
-   BuilderPreview — Spread-only view with side arrows
+   BuilderPreview — the book: the open book (two pages) with a turn on each
+   side; on an upright phone one page at a time with the turn under it.
    ══════════════════════════════════════════════════════════════════════════ */
 
 interface BuilderPreviewProps {
@@ -33,30 +54,35 @@ interface BuilderPreviewProps {
   onGoToPage: (index: number) => void;
   onBack: () => void;
   onOrder: () => void;
+  /** The album is being saved to the account on its way to checkout. */
+  orderSaving?: boolean;
+  /** Why the album could not go to checkout (the save failed). */
+  orderError?: string | null;
+  onDismissOrderError?: () => void;
+  /** Megy's "Place Order →" asked to order (Builder.requestOrder). */
+  orderRequested?: boolean;
+  /** The preview took the request: it runs once, through handleOrder. */
+  onOrderRequestTaken?: () => void;
+  /** Turn pages with the page-turn animation (pageTurn). Off in unit tests,
+   *  where pages change at once as they always did; and off for anyone whose
+   *  device asks for reduced motion. */
+  turnAnimation?: boolean;
 }
 
-function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProperties {
+/** The device asks for less motion: pages change without the turn. */
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+
+function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = false, displayScale = 1): React.CSSProperties {
   if (!bg) return {};
   switch (bg.type) {
     case 'solid': return { backgroundColor: bg.solid || '#FFFBF7' };
     case 'gradient': {
-      const g = bg.gradient;
-      if (!g) return { backgroundColor: '#FFFBF7' };
-      // Handle both formats:
-      // Sidebar: { colors: [{ color, position }], direction: 'radial' | 'to bottom' }
-      // Wizard:  { type: 'linear', angle: 135, stops: [{ offset, color }] }
-      if (g.stops) {
-        // Wizard format — honor radial vs linear
-        const stops = g.stops.map((s: any) => `${s.color} ${(s.offset ?? 0) * 100}%`).join(', ');
-        return { background: g.type === 'radial' ? `radial-gradient(circle, ${stops})` : `linear-gradient(${g.angle ?? 135}deg, ${stops})` };
-      }
-      if (g.colors) {
-        // Sidebar format
-        const dir = g.direction === 'radial' ? 'circle' : g.direction || 'to bottom';
-        const stops = g.colors.map((c: any) => `${c.color} ${c.position}%`).join(', ');
-        return { background: g.direction === 'radial' ? `radial-gradient(${stops})` : `linear-gradient(${dir}, ${stops})` };
-      }
-      return { backgroundColor: '#FFFBF7' };
+      // Shared resolver (gradient.ts) — the ONE place both stored gradient
+      // formats are understood; Fabric + print build from the same normalized
+      // shape, so the wash can't render differently across the three renderers.
+      const g = normalizeGradient(bg.gradient);
+      return g ? { background: gradientToCss(g) } : { backgroundColor: '#FFFBF7' };
     }
     case 'image': {
       // BackgroundDesigner stores the value in `bg.image` (a blob URL for
@@ -64,17 +90,38 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
       // user photo, a `photoId` we re-resolve to a live URL from the photos.
       const img = resolveBgImageSrc(bg, photos);
       if (!img) return { backgroundColor: '#FFFBF7' };
-      return String(img).includes('gradient(')
-        ? { background: img }
-        : { backgroundImage: `url("${img}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
+      if (String(img).includes('gradient(')) return { background: img };
+      // COVER panels honour the focal point + zoom (a cover can't be ratio-matched
+      // the way interior slots are, so the user picks what shows). `cover` +
+      // `background-position: fx% fy%` is exactly bgCoverFit's math, and the zoom
+      // scale is taken about the same focal point so print matches. Interior pages
+      // keep the original centred crop, untouched.
+      if (coverMode) {
+        const fx = Math.max(0, Math.min(1, bg.focusX ?? 0.5));
+        const fy = Math.max(0, Math.min(1, bg.focusY ?? 0.5));
+        const z = Math.max(1, bg.zoom ?? 1);
+        return {
+          backgroundImage: `url("${img}")`,
+          backgroundSize: 'cover',
+          backgroundPosition: `${fx * 100}% ${fy * 100}%`,
+          backgroundRepeat: 'no-repeat',
+          ...(z > 1 ? { transform: `scale(${z})`, transformOrigin: `${fx * 100}% ${fy * 100}%` } : {}),
+        };
+      }
+      return { backgroundImage: `url("${img}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
     }
     case 'texture': {
       // Material texture — a procedural, tileable SVG data URI (leather, linen,
       // …). Opacity is applied by the wrapping layer div (see PageView) so we do
-      // NOT bake it in here → screen/print parity. Tiled at the shared px size.
+      // NOT bake it in here → screen/print parity. TEXTURE_TILE_PX is a DESIGN-px
+      // size (the 750-wide editor space), so the on-screen tile scales by the
+      // page's display scale — the same factor fontSize/pan use. (Unscaled, the
+      // preview tiled at raw CSS px and showed a coarser material than the
+      // editor and the print, which each scale the tile to their own space.)
+      const tile = TEXTURE_TILE_PX * displayScale;
       return {
         backgroundImage: `url("${textureDataUri(bg.texture, bg.textureColor)}")`,
-        backgroundSize: `${TEXTURE_TILE_PX}px ${TEXTURE_TILE_PX}px`,
+        backgroundSize: `${tile}px ${tile}px`,
         backgroundRepeat: 'repeat',
       };
     }
@@ -83,16 +130,32 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = []): React.CSSProper
 }
 
 /** Empty-slot "content chooser" affordance — the tappable dashed box that
- *  either spells out "Click to add: Photo/Text/QR" (when the 3-way chooser is
- *  wired and the cell is big enough) or falls back to a bare "+" bubble.
+ *  either spells out what the box takes (photo slots: Photo/Quote/Text; combo
+ *  boxes: Quote/Text/QR — the `options` prop, which MUST match the SlotChooser
+ *  wiring for that slot kind) or falls back to a bare "+" bubble.
  *  ONE definition shared by photo slots AND caption boxes so the two never
  *  drift (previously copy-pasted, which the duplication gate flagged). */
-function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex }: {
+/** One-line invitation per DEALT box kind (textSlotRoll). Keep these in step
+ *  with the Fabric labels in useCanvasEngine's empty-textbox block — the two
+ *  are SEPARATE and drift silently. */
+const ROLL_LABELS: Record<Exclude<BoxRoll, 'qr'>, string> = {
+  quote: 'Add a quote',
+  text: 'Your words here',
+};
+
+function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, options, onTap, zIndex, roll, onMore }: {
   rectKey: string; left: number; top: number; width: number; height: number;
   sx: number; showList: boolean; options: string[]; onTap: () => void; zIndex: number;
+  /** Megy's dealt kind for this box — replaces the option list with a single
+   *  invitation (the tap routes straight to that kind's editor upstream).
+   *  Read through dealtBoxRoll, so never the retired 'qr'. */
+  roll?: Exclude<BoxRoll, 'qr'> | null;
+  /** The dealt box's ⋯ badge → the full chooser (override the roll). */
+  onMore?: () => void;
 }) {
   const cell = Math.min(width, height);
   const fs = Math.max(12, Math.min(28, cell * 0.15));
+  const list = showList ? chooserListSizes(width, height, options) : null;
   return (
     <div key={rectKey} className="absolute flex flex-col items-center justify-center text-center"
       onClick={(e) => { e.stopPropagation(); onTap(); }}
@@ -102,21 +165,67 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
         background: 'rgba(253,232,228,0.5)', cursor: 'pointer', boxSizing: 'border-box',
         color: '#A0562F', padding: 6, gap: `${5 * sx}px`, overflow: 'hidden',
       }}>
-      {showList ? (
+      {roll ? (() => {
+        // WRAP, don't force one line. Forcing the invitation onto a single
+        // nowrap line (sized by an estimated glyph width) clipped it to
+        // "dd a video li" on tall-narrow portrait bands — twice. Instead: let
+        // the label wrap to as many lines as it needs, and cap the font only so
+        // the LONGEST WORD fits the width (0.72em is a safe bold upper bound).
+        // Wrapping can't clip mid-word, and break-word is a final backstop; then
+        // fall back to the "+" bubble only when even two wrapped lines won't fit.
+        const label = ROLL_LABELS[roll];
+        const innerW = width - 24;  // padding + dashed border
+        const innerH = height - 24;
+        const longestWord = label.split(' ').reduce((a, b) => (b.length > a.length ? b : a), '');
+        const fontSize = Math.min(fs, innerW / (longestWord.length * 0.72));
+        if (fontSize >= 10 && innerH >= fontSize * 2.2) {
+          return (
+            <span style={{
+              fontWeight: 800, fontSize, lineHeight: 1.2, letterSpacing: '0.01em',
+              wordBreak: 'break-word', maxWidth: '100%',
+            }}>
+              {label}
+            </span>
+          );
+        }
+        return (
+          <div style={{
+            width: 44, height: 44, borderRadius: '50%', background: '#B85C38',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
+          }}>
+            <Plus size={26} color="white" />
+          </div>
+        );
+      })() : list ? (
         <>
-          <span style={{ fontWeight: 800, fontSize: fs * 1.15, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>Click to add:</span>
-          <div style={{ fontSize: fs, fontWeight: 700, lineHeight: 1.5, textAlign: 'left' }}>
+          <span data-testid="chooser-title" style={{ fontWeight: 800, fontSize: list.titleFs, whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>{CHOOSER_TITLE}</span>
+          <div style={{ fontSize: list.listFs, fontWeight: 700, lineHeight: 1.5, textAlign: 'left' }}>
             {options.map((o) => <div key={o}>•&nbsp; {o}</div>)}
           </div>
         </>
       ) : (
         <div style={{
-          width: 44, height: 44, borderRadius: '50%', background: '#F4C2A1',
+          width: 44, height: 44, borderRadius: '50%', background: '#B85C38',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 2px 8px rgba(232,165,152,0.55)',
         }}>
           <Plus size={26} color="white" />
         </div>
+      )}
+      {roll && onMore && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onMore(); }}
+          aria-label="More options for this box"
+          style={{
+            position: 'absolute', top: 4, right: 4, width: 22, height: 22,
+            borderRadius: '50%', background: '#B85C38', color: '#FFFFFF', border: 'none',
+            cursor: 'pointer', fontWeight: 900, fontSize: 14, lineHeight: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 1px 4px rgba(232,165,152,0.6)',
+          }}>
+          ⋯
+        </button>
       )}
     </div>
   );
@@ -124,10 +233,30 @@ function EmptyChooserBox({ rectKey, left, top, width, height, sx, showList, opti
 
 /** QR living-memory square — white backing + the QR png, sized/positioned via
  *  qrRect() inside a cell. Shared by photo slots AND caption boxes. */
-function QrSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zIndex }: {
+function QrSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onTap, zIndex, transform, pageW, pageH }: {
   rectKey: string; cellLeft: number; cellTop: number; cellW: number; cellH: number;
   dataUrl: string; onTap?: () => void; zIndex: number;
+  /** Free-transform for a dragged/resized/rotated caption-box QR (center-based
+   *  page fractions, already clamped square + scannable by clampQrGeom). When
+   *  present it overrides the in-box fit; needs pageW/pageH. */
+  transform?: OrnamentTransform | null; pageW?: number; pageH?: number;
 }) {
+  // The white backing IS the quiet zone — it travels with the code at every size.
+  if (transform && pageW && pageH) {
+    const w = transform.w * pageW;
+    const h = transform.h * pageH;
+    return (
+      <div key={rectKey} className="absolute"
+        onClick={onTap ? (e) => { e.stopPropagation(); onTap(); } : undefined}
+        style={{
+          zIndex, left: transform.cx * pageW - w / 2, top: transform.cy * pageH - h / 2, width: w, height: h,
+          transform: transform.rot ? `rotate(${transform.rot}deg)` : undefined, transformOrigin: 'center center',
+          background: '#fff', cursor: onTap ? 'pointer' : undefined,
+        }}>
+        <img src={dataUrl} alt="QR memory" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      </div>
+    );
+  }
   const { dx, dy, side } = qrRect(cellLeft, cellTop, cellW, cellH);
   return (
     <div key={rectKey} className="absolute"
@@ -178,7 +307,7 @@ function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onT
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode, asPrinted }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -198,14 +327,26 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   editable?: boolean;
   onAddToSlot?: (slotIndex: number) => void;
   onRemoveFromSlot?: (slotIndex: number) => void;
-  /** Tap an EMPTY caption box → open the content chooser (photo / text / QR). */
+  /** Tap an EMPTY caption box → open the content chooser (photo / text / QR).
+   *  For a DEALT box (textSlotRoll) the surface's handler routes the tap
+   *  straight to the dealt kind's editor instead. */
   onChooseTextSlot?: (slotIndex: number) => void;
+  /** Tap a dealt box's ⋯ badge → ALWAYS the full chooser (override the roll). */
+  onChooseTextSlotMenu?: (slotIndex: number) => void;
   /** Tap a caption box FILLED with a photo → re-open the photo picker. */
   onTextSlotPhotoTap?: (slotIndex: number) => void;
   /** Tap a caption box FILLED with a QR → re-open the QR editor. */
   onTextSlotQrTap?: (slotIndex: number) => void;
   /** Tap a caption box FILLED with an ornament → re-open the ornament picker. */
   onTextSlotOrnamentTap?: (slotIndex: number) => void;
+  /** COVER panel: no interior binding gutter (its inner edge is the spine) and no
+   *  pink keep-out guide — see the cover-as-pages rework. */
+  coverMode?: boolean;
+  /** The preview that checkout calls "printed as they look": an empty caption
+   *  box is open space there, as it prints — still tappable, its outline and
+   *  "Tap to add text" showing only on hover or keyboard focus. It showed a
+   *  pink "Tap to add" panel on 18 of 20 spreads (1-star testers round 2, PPR2-1). */
+  asPrinted?: boolean;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -213,17 +354,38 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   const template = page.templateId ? getTemplateById(page.templateId) : null;
   const baseMargin = template?.margin ?? { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
   // Reserve the binding keep-out on the inner edge so slots match the editor.
-  const margin = marginForTemplate(template, baseMargin, page.size, pageIndex);
+  // A cover panel skips it (noBinding) — its inner edge is the spine, not a gutter.
+  const margin = marginForTemplate(template, baseMargin, page.size, pageIndex, { noBinding: coverMode });
   const safeX = margin.left * singleW;
   const safeY = margin.top * H;
   const safeW = singleW * (1 - margin.left - margin.right);
   const safeH = H * (1 - margin.top - margin.bottom);
+  // Where this page's QR codes sit (page px): a photo's trash button keeps
+  // clear of them (trashSpot) — a tap meant for the QR must never delete it.
+  const qrBoxes: Box[] = [];
+  template?.slots.forEach((raw, i) => {
+    if (!raw || !page.qrFills?.[i]) return;
+    const s = resolveSlotBox(raw, page.slotGeometries?.[i]);
+    const { dx, dy, side } = qrRect(safeX + s.x * safeW, safeY + s.y * safeH, s.width * safeW, s.height * safeH);
+    qrBoxes.push({ x: dx, y: dy, w: side, h: side });
+  });
+  template?.textSlots?.forEach((ts, i) => {
+    if (!page.textSlotQr?.[i]) return;
+    const g = page.textSlotQrGeom?.[i];
+    if (g) { qrBoxes.push({ x: (g.cx - g.w / 2) * singleW, y: (g.cy - g.h / 2) * H, w: g.w * singleW, h: g.h * H }); return; }
+    const { dx, dy, side } = qrRect(safeX + ts.x * safeW, safeY + ts.y * safeH, ts.width * safeW, ts.height * safeH);
+    qrBoxes.push({ x: dx, y: dy, w: side, h: side });
+  });
 
   return (
     <>
-      <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
-      {template && template.slots.map((slot, idx) => {
-        if (!slot) return null;
+      <div className="absolute inset-0" style={{ ...backgroundToCss(page.background, photos, coverMode, sx), opacity: ((page.background as any)?.opacity ?? 100) / 100 }} />
+      {template && template.slots.map((rawSlot, idx) => {
+        if (!rawSlot) return null;
+        // STUDIO: a moved frame (same arithmetic as the editor + print) and a
+        // mask (same shape module as the editor + print).
+        const rawMask = page.slotMasks?.[idx];
+        const slot = applyMask(resolveSlotBox(rawSlot, page.slotGeometries?.[idx]), isMaskId(rawMask) ? rawMask : null);
         // Content precedence is DRIVEN BY page data, not slot.kind:
         //   qrFills[i] → QR (drawn by the qrFills map below) → skip here.
         //   slotTexts[i] → text rendered in this slot's rect.
@@ -249,11 +411,12 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
               }}>
               <span style={{
-                width: '100%', textAlign: align as any,
+                // Wrapped inside print's margin (CAPTION_PAD_X), so it breaks where print does.
+                width: '100%', boxSizing: 'border-box', paddingLeft: slotW * CAPTION_PAD_X, paddingRight: slotW * CAPTION_PAD_X, textAlign: align as any,
                 fontFamily: st.fontFamily || 'serif', fontSize: (st.fontSize || 24) * sx,
                 fontWeight: st.bold ? 'bold' : 'normal', fontStyle: st.italic ? 'italic' : 'normal',
                 textDecoration: st.underline ? 'underline' : 'none', color: st.color || '#2D2D2D',
-                lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 ...wordArtDomStyle(st, sx),
               }}>{st.text}</span>
             </div>
@@ -268,46 +431,53 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         // legacy add-photo picker (onAddToSlot).
         if (!uploaded) {
           const onEmptyTap = onChooseSlot ?? onAddToSlot;
-          if (!editable || !onEmptyTap) return null;
-          // Where the 3-way chooser is wired (onChooseSlot) and the slot is big
-          // enough, spell out what the box can hold ("Click to add: Photo/Text/QR")
+          // Cover panels don't show the empty-slot chooser box (the cover is
+          // edited via the Step-3-style tabs instead).
+          if (!editable || !onEmptyTap || coverMode) return null;
+          // Where the chooser is wired (onChooseSlot) and the slot is big
+          // enough, spell out what the box can hold ("Click to add:
+          // Photo/Quote/Text" — the photo-slot chooser's real options)
           // instead of a bare "+"; otherwise fall back to the "+" bubble.
           const cell = Math.min(slotW, slotH);
           return (
             <EmptyChooserBox key={`slot-${idx}`} rectKey={`slot-${idx}`}
               left={slotLeft} top={slotTop} width={slotW} height={slotH} sx={sx} zIndex={1}
-              showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Text', 'Graphic']}
+              showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Quote', 'Text']}
               onTap={() => onEmptyTap(idx)} />
           );
         }
 
         const { style: shapeStyle, width, height, leftOffset, topOffset } =
-          slotShapeStyle(slot, slot.width * safeW, slot.height * safeH);
-        const left = safeX + slot.x * safeW + leftOffset;
-        const top = safeY + slot.y * safeH + topOffset;
-        const slotScale = page.slotScales?.[idx] ?? 1;
-        const slotOffsetX = page.slotOffsetsX?.[idx] ?? 0;
-        const slotOffsetY = page.slotOffsetsY?.[idx] ?? 0;
-        const imgW = width * slotScale;
-        const imgH = height * slotScale;
-        const imgLeft = (width - imgW) / 2 + slotOffsetX * sx;
-        const imgTop = (height - imgH) / 2 + slotOffsetY * sy;
+          slotShapeStyle(slot, slotW, slotH);
+        const left = slotLeft + leftOffset;
+        const top = slotTop + topOffset;
+        // The ONE fit print + the editor draw with (slotPhotoFit): cover-fitted
+        // to the FULL slot rect, zoomed about its centre, panned INSIDE the
+        // overflow (object-position) — never by moving the photo box, which at
+        // zoom 1 slid the whole photo and left an empty strip. A circle/heart/
+        // star wrapper is the centred square, so the rect sits at −offset in it.
+        // maxWidth 'none': the base `img { max-width: 100% }` rule would hold a
+        // zoomed box to the frame's width and open a strip on the right.
+        const photoBox = slotPhotoDomBox({ w: slotW, h: slotH }, page.slotScales?.[idx],
+          { x: (page.slotOffsetsX?.[idx] ?? 0) * sx, y: (page.slotOffsetsY?.[idx] ?? 0) * sy });
         // Theme-baked frame overrides the per-slot template border when present.
         // Full-bleed (single-photo, no-textbox) pages get no frame at all.
-        const frameWidth = template.fullBleed ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
+        const frameWidth = template.fullBleed || slot.masked ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
         const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
         // Per-page border line-style (solid by default for back-compat).
         const borderLineStyle = page.photoBorderStyle ?? 'solid';
         // Decorative frame (single source of truth in types.ts). 'none'/absent → {}.
-        const frameCss = template.fullBleed
+        const frameCss = template.fullBleed || slot.masked
           ? {}
           : frameStyleToCss(page.frameStyle, frameColor);
         // Outer drop shadows (polaroid / shadowbox) need overflow visible to show;
-        // any other frame keeps the photo clipped to the slot/shape.
-        const frameClips = !(page.frameStyle === 'polaroid' || page.frameStyle === 'shadowbox');
+        // any other frame keeps the photo clipped to the slot/shape. A masked or
+        // full-bleed slot draws no frame, so it always clips — otherwise a
+        // circle mask on a polaroid page showed the photo's whole box.
+        const frameClips = template.fullBleed || slot.masked || !(page.frameStyle === 'polaroid' || page.frameStyle === 'shadowbox');
 
         return (
-          <div key={`slot-${idx}`} className="absolute"
+          <div key={`slot-${idx}`} className="absolute" data-slot={idx}
             onClick={onSlotTap ? (e) => { e.stopPropagation(); onSlotTap(idx); } : undefined}
             style={{
             zIndex: 1, left, top, width, height,
@@ -319,11 +489,17 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           }}>
             <img src={uploaded.previewUrl} alt="" draggable={false}
               className="absolute object-cover"
-              style={{ left: imgLeft, top: imgTop, width: imgW, height: imgH, ...frameCss.inner }} />
+              style={{ left: photoBox.left - leftOffset, top: photoBox.top - topOffset, width: photoBox.width, height: photoBox.height,
+                maxWidth: 'none', objectPosition: photoBox.objectPosition, ...frameCss.inner,
+                // STUDIO look — the same filter functions the editor + print apply to pixels.
+                ...(isLookId(page.slotLooks?.[idx]) ? { filter: lookCss(page.slotLooks?.[idx] as never) } : {}) }} />
+            {/* An edge that paints (torn paper's white rim): over the photo, under
+                the frame's own mask — after the look, as the editor + print draw it. */}
+            {slot.texture && textureOverlayCss(slot.texture) && <div aria-hidden style={textureOverlayCss(slot.texture)!} />}
             {editable && onRemoveFromSlot && (
               <button onClick={(e) => { e.stopPropagation(); onRemoveFromSlot(idx); }} aria-label="Remove photo"
                 style={{
-                  position: 'absolute', top: 6, right: 6, zIndex: 6, width: 30, height: 30,
+                  position: 'absolute', ...trashSpot({ x: left, y: top, w: width, h: height }, qrBoxes), zIndex: 6, width: TRASH_SIZE, height: TRASH_SIZE,
                   borderRadius: '50%', background: 'rgba(45,45,45,0.65)', border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
@@ -336,9 +512,10 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
       {/* QR living-memory content — content-driven by page.qrFills on ANY slot.
           Empty QR slots are no longer auto-shown; the chooser "+" owns the empty
           state. The QR is drawn on top (white backing) so it stays scannable. */}
-      {template?.slots.map((slot, idx) => {
+      {template?.slots.map((rawSlot, idx) => {
         const qr = page.qrFills?.[idx] ?? null;
         if (!qr) return null;
+        const slot = resolveSlotBox(rawSlot, page.slotGeometries?.[idx]);
         return (
           <QrSquare key={`qr-${idx}`} rectKey={`qr-${idx}`} zIndex={2}
             cellLeft={safeX + slot.x * safeW} cellTop={safeY + slot.y * safeH}
@@ -348,9 +525,10 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         );
       })}
       {/* Ornament content — content-driven by page.ornamentFills on ANY slot. */}
-      {template?.slots.map((slot, idx) => {
+      {template?.slots.map((rawSlot, idx) => {
         const ornament = page.ornamentFills?.[idx] ?? null;
         if (!ornament) return null;
+        const slot = resolveSlotBox(rawSlot, page.slotGeometries?.[idx]);
         return (
           <OrnamentSquare key={`ornament-${idx}`} rectKey={`ornament-${idx}`} zIndex={2}
             cellLeft={safeX + slot.x * safeW} cellTop={safeY + slot.y * safeH}
@@ -365,11 +543,14 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           onClick={onTextTap ? (e) => { e.stopPropagation(); onTextTap(t.id); } : undefined}
           style={{
           zIndex: 3, left: t.x * sx, top: t.y * sy,
-          width: (t.width || t.text.length * (t.fontSize || 24) * 0.6) * sx,
+          width: freeTextBoxWidth(t) * sx,
           transform: `rotate(${t.rotation || 0}deg) scale(${t.scaleX ?? 1}, ${t.scaleY ?? 1})`,
           transformOrigin: 'top left', fontFamily: t.fontFamily || 'serif',
           fontSize: (t.fontSize || 24) * sx, fontWeight: t.bold ? 'bold' : 'normal',
           fontStyle: t.italic ? 'italic' : 'normal', color: t.color || '#2D2D2D',
+          // Underline + 1.25 line rhythm, matching the Fabric editor and print —
+          // free text was the one kind whose underline showed only in the editor.
+          textDecoration: t.underline ? 'underline' : 'none', lineHeight: TEXT_LINE_HEIGHT,
           display: 'flex', alignItems: 'center', justifyContent: t.alignment || 'center',
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
           ...wordArtDomStyle(t, sx),
@@ -391,6 +572,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             <QrSquare key={`tslot-${i}`} rectKey={`tslot-${i}`} zIndex={5}
               cellLeft={boxLeft} cellTop={boxTop} cellW={boxW} cellH={boxH}
               dataUrl={tqr.qrPngDataUrl}
+              transform={page.textSlotQrGeom?.[i] ?? undefined} pageW={singleW} pageH={H}
               onTap={onTextSlotQrTap ? () => onTextSlotQrTap(i) : undefined} />
           );
         }
@@ -408,24 +590,30 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         }
 
         const boxed = page.textElements?.find((t) => t.boxIndex === i);
-        const align = boxed?.alignment ?? ts.align ?? 'center';
+        const align = resolveTextSlotAlign(boxed, ts);
 
-        // (2) TEXT — a bound caption (unchanged rendering).
+        // (2) TEXT — a bound caption. On a COVER the caption can be nudged off its
+        // template slot (offsetX/offsetY, fractions of the panel) so the title can
+        // be placed anywhere; the print applies the same fractions. Interior pages
+        // ignore the offset.
         if (boxed) {
+          const offL = coverMode ? (boxed.offsetX ?? 0) * singleW : 0;
+          const offT = coverMode ? (boxed.offsetY ?? 0) * H : 0;
           return (
             <div key={`tslot-${i}`} className="absolute flex items-center"
               onClick={onTextSlotTap ? (e) => { e.stopPropagation(); onTextSlotTap(i); } : undefined}
               style={{
-                zIndex: 5, left: boxLeft, top: boxTop, width: boxW, height: boxH, overflow: 'hidden',
+                zIndex: 5, left: boxLeft + offL, top: boxTop + offT, width: boxW, height: boxH, overflow: 'hidden',
                 justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
                 cursor: onTextSlotTap ? 'pointer' : undefined,
               }}>
               <span style={{
-                width: '100%', textAlign: align as any,
+                // Wrapped inside print's margin (CAPTION_PAD_X), so it breaks where print does.
+                width: '100%', boxSizing: 'border-box', paddingLeft: boxW * CAPTION_PAD_X, paddingRight: boxW * CAPTION_PAD_X, textAlign: align as any,
                 fontFamily: boxed.fontFamily || 'serif', fontSize: (boxed.fontSize || 24) * sx,
                 fontWeight: boxed.bold ? 'bold' : 'normal', fontStyle: boxed.italic ? 'italic' : 'normal',
                 textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
-                lineHeight: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 ...wordArtDomStyle(boxed, sx),
               }}>{boxed.text}</span>
             </div>
@@ -451,19 +639,26 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
         // (4) EMPTY — tapping adds text/content.
         //
-        // The full 3-way chooser ("Click to add: Photo/Text/QR") is an EDIT-mode
-        // affordance and is gated on `editable && onChooseTextSlot`.
+        // The full chooser ("Click to add: Quote/Text/QR" — a combo box takes
+        // words or a QR, not a photo) is an EDIT-mode affordance and is gated
+        // on `editable && onChooseTextSlot`.
         //
         // But a plain tap-to-add-caption (onTextSlotTap) must NOT be gated on
         // `editable`: the BuilderPreview spread wires onTextSlotTap (to open the
         // MobileTextEditor) WITHOUT passing `editable`. Gating the tap on
         // `editable` made empty caption boxes dead on that surface — a regression.
         // So: chooser needs editable; the legacy tap-to-add only needs onTextSlotTap.
+        // Cover panels are a DISPLAY preview (edited via the Step-3-style tabs), so
+        // an empty caption box shows nothing at all — no chooser, no faint hint.
+        if (coverMode) return null;
         if (editable && onChooseTextSlot) {
           return (
             <EmptyChooserBox key={`tslot-${i}`} rectKey={`tslot-${i}`}
               left={boxLeft} top={boxTop} width={boxW} height={boxH} sx={sx} zIndex={5}
-              showList={false} options={['Text']}
+              showList={!!onChooseTextSlot && Math.min(boxW, boxH) >= 84}
+              options={['Quote', 'Text']}
+              roll={dealtBoxRoll(page, i)}
+              onMore={onChooseTextSlotMenu ? () => onChooseTextSlotMenu(i) : undefined}
               onTap={() => onChooseTextSlot(i)} />
           );
         }
@@ -472,6 +667,27 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
         // onTextSlotTap on surfaces like the BuilderPreview spread); otherwise
         // read-only.
         const onEmptyTap = onChooseTextSlot ?? (onTextSlotTap ? () => onTextSlotTap(i) : undefined);
+        if (asPrinted) {
+          if (!onEmptyTap) return null;
+          return (
+            <button key={`tslot-${i}`} type="button" data-testid="preview-empty-box"
+              aria-label={ts.placeholder || 'Tap to add text'} title={ts.placeholder || 'Tap to add text'}
+              onClick={(e) => { e.stopPropagation(); onEmptyTap(i); }}
+              className="absolute group p-0 m-0 bg-transparent border-0 outline-none"
+              style={{ zIndex: 5, left: boxLeft, top: boxTop, width: boxW, height: boxH, cursor: 'pointer' }}>
+              <span aria-hidden="true"
+                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity"
+                style={{
+                  gap: `${4 * sx}px`, borderRadius: `${6 * sx}px`,
+                  border: `${Math.max(1, 1.25 * sx)}px dashed rgba(232,165,152,0.85)`,
+                  color: 'rgba(139,111,71,0.9)', fontSize: `${11 * sx}px`, fontWeight: 500,
+                }}>
+                <span style={{ fontSize: `${12 * sx}px` }}>✎</span>
+                {ts.placeholder || 'Tap to add text'}
+              </span>
+            </button>
+          );
+        }
         return (
           <div key={`tslot-${i}`} className="absolute flex items-center"
             onClick={onEmptyTap ? (e) => { e.stopPropagation(); onEmptyTap(i); } : undefined}
@@ -492,6 +708,13 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           </div>
         );
       })}
+      {/* STUDIO stickers — free graphics, drawn at their centre-based page-fraction
+          transform exactly like a dragged caption-box graphic (and like print). */}
+      {page.stickers?.map((k) => (
+        <OrnamentSquare key={`sticker-${k.uid}`} rectKey={`sticker-${k.uid}`} zIndex={6}
+          cellLeft={0} cellTop={0} cellW={0} cellH={0}
+          dataUrl={k.pngDataUrl} transform={k.geom} pageW={singleW} pageH={H} />
+      ))}
       {/* Theme decorative corners — one set, all four corners, on top of photos */}
       {page.cornerBase && CORNER_POSITIONS.map((pos) => {
         const size = Math.min(singleW, H) * 0.25;
@@ -506,8 +729,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             }} />
         );
       })}
-      {/* Binding (gutter) keep-out guide — 0.5" reserve on the inner edge */}
-      {(() => {
+      {/* Binding (gutter) keep-out guide — 0.5" reserve on the inner edge.
+          Hidden on cover panels (they have no interior gutter). */}
+      {!coverMode && (() => {
         const frac = bindingMarginFraction(page.size);
         const onLeft = bindingEdge(pageIndex) === 'left';
         return (
@@ -516,8 +740,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             left: onLeft ? 0 : singleW * (1 - frac),
             width: singleW * frac,
             background: 'rgba(232,165,152,0.10)',
-            borderRight: onLeft ? '1.5px dashed #E8A598' : undefined,
-            borderLeft: onLeft ? undefined : '1.5px dashed #E8A598',
+            borderRight: onLeft ? '1.5px dashed #9A4A2C' : undefined,
+            borderLeft: onLeft ? undefined : '1.5px dashed #9A4A2C',
           }} />
         );
       })()}
@@ -525,26 +749,69 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   );
 }
 
-export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder }: BuilderPreviewProps) {
+export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError, orderRequested = false, onOrderRequestTaken, turnAnimation = import.meta.env.MODE !== 'test' }: BuilderPreviewProps) {
   const total = pages.length;
-  const { setBoxText, updateTextElement, setQrFill, coverDesign } = useBuilderContext();
+  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId } = useBuilderContext();
 
-  // The preview is a TWO-PAGE spread — wider than a phone screen, so it shrinks to
-  // a stamp in portrait. Rather than ask the user to rotate (useless if their phone
-  // rotation is locked), we AUTO-ROTATE the whole preview 90° in mobile-portrait:
-  // the spread is laid out landscape and sized to the phone's LONG axis, so holding
-  // the phone sideways shows the album upright + full-size — no rotation-unlock
-  // needed. If the screen genuinely IS landscape (auto-rotate on), isPortrait is
-  // false and we render normally. Desktop never rotates.
+  // "Megy finishes it" — count the caption boxes still sitting empty (unfilled
+  // invitations, deleted quotes, legacy empties). The chooser CTA in the
+  // toolbar offers a one-tap sweep; the fill is loud + visible + editable,
+  // never a silent checkout-time change (this is a paid, unrecallable print).
+  const readiness = useMemo(() => checkOrderReadiness(pages), [pages]);
+  // Boxes "let Megy finish" CAN fill — not the ones the cadence holds back.
+  const waitingBoxes = useMemo(() => fillableBoxCount(pages), [pages]);
+  const [sweepNote, setSweepNote] = useState<string | null>(null);
+  const [sweeping, setSweeping] = useState(false);
+  const handleMegyFinish = async () => {
+    if (sweeping) return;
+    setSweeping(true);
+    // The sweep may first ask the proxy for more lines (a big album needs one
+    // per box) — say so, so a few seconds of nothing isn't a dead button.
+    setSweepNote('Megy is writing lines for your theme…');
+    try {
+      const { filled, noLine } = await finishBoxesWithQuotes();
+      setSweepNote(
+        filled === 0 && noLine > 0
+          ? 'No unused quotes left for this theme. Tap a box to write your own.'
+          : filled === 0
+            ? 'Every box Megy fills has a quote. The rest stay open, so quotes don\'t crowd every page.'
+            : noLine > 0
+              ? `Megy filled ${filled} ✓ ${noLine} more need lines Megy doesn't have; tap one to write your own.`
+              : `Megy filled ${filled} ${filled === 1 ? 'box' : 'boxes'} ✓`,
+      );
+    } finally {
+      setSweeping(false);
+      window.setTimeout(() => setSweepNote(null), 4000);
+    }
+  };
+
+  // AN UPRIGHT PHONE SHOWS ONE PAGE AT A TIME (owner, 2026-10-05). The open
+  // book is two pages wide, so on an upright phone the preview used to turn
+  // itself 90° in code and ask the customer to turn the phone: "Preview forces
+  // the phone sideways" (6 of 16 testers, round 2), with the status bar, the
+  // keyboard and the back gesture still upright, and a jump when auto-rotate
+  // kicked in. Now: one page, as wide as the phone, turned under it (or with
+  // a swipe). The open book shows when the phone is really turned (a real
+  // landscape screen is not upright) or on "See it as an open book", fitted to
+  // the width. Desktop and tablets in landscape show the open book as before.
   const isMobile = useIsMobile();
   const isPortrait = useIsPortrait();
-  const landscapeRotate = isMobile && isPortrait;
+  const upright = isMobile && isPortrait;
+  const [openBook, setOpenBook] = useState(false);
+  const view: PreviewView = upright && !openBook ? 'page' : 'spread';
 
   // Tap a textbox in the preview → open the formatting editor for THAT page.
   // `slot` = a template caption box; `textId` = a free element (e.g. the theme title).
   const [edit, setEdit] = useState<{ pageIndex: number; slot?: number; textId?: string } | null>(null);
   const [qrEdit, setQrEdit] = useState<{ pageIndex: number; slot: number } | null>(null);
   const [coverOpen, setCoverOpen] = useState(false);
+  // THE COVER FIRST (1-star testers, 2026-10-04: "I paid without ever seeing
+  // the finished front of the book"). The preview opens on the closed book's
+  // front cover, like picking it up; "Next" opens pages 1–2 and "Previous"
+  // from there comes back to it. `coverAt` is the page the cover was opened
+  // over, so any other page turn (Megy's "go to page 5") leaves the cover.
+  const [coverAt, setCoverAt] = useState<number | null>(() => (coverFront && currentIndex === 0 ? 0 : null));
+  const onCover = !!coverFront && coverAt === currentIndex;
   const buildTextInitial = (pageIndex: number, textId: string): BoxTextContent => {
     const el = pages[pageIndex]?.textElements?.find((t) => t.id === textId);
     return {
@@ -590,9 +857,19 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     const el = stageRef.current;
     if (!el) return;
     const compute = () => {
+      if (upright) {
+        // Upright phone: the turn sits UNDER the book, so the page (or the
+        // open book) gets the whole width. Room is kept for the stage padding,
+        // the cover's lip, the caption and the open-book button.
+        const availW = el.clientWidth - 32 - 24;
+        const availH = el.clientHeight - 32 - 24 - 72;
+        const fit = Math.min(availW / (base.w * (view === 'page' ? 1 : 2)), availH / base.h);
+        setFitScale(Math.max(0.15, Math.min(1, fit)));
+        return;
+      }
       // The builder root already reserves the Megy panel's width, so the stage
       // measures only the space available beside it.
-      const chromeW = 2 * 56 + 48 + 48;            // nav arrows + gaps + horizontal padding
+      const chromeW = 2 * SPREAD_TURN_W + 48 + 48; // page-turn buttons + gaps + horizontal padding
       const chromeH = 48 + 34;                     // vertical padding + page-number labels
       const availW = el.clientWidth - chromeW;
       const availH = el.clientHeight - chromeH;
@@ -604,90 +881,341 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     ro.observe(el);
     window.addEventListener('resize', compute);
     return () => { ro.disconnect(); window.removeEventListener('resize', compute); };
-  }, [base.w, base.h]);
+  }, [base.w, base.h, upright, view]);
   const singleW = Math.round(base.w * fitScale);
   const H = Math.round(base.h * fitScale);
 
-  // Navigate by 2 pages (one spread) at a time
-  const navPrev = () => onGoToPage(Math.max(0, currentIndex - 2));
-  const navNext = () => onGoToPage(Math.min(total - 1, currentIndex + 2));
-
-  const hasPrev = spreadLeftIndex > 0;
-  const hasNext = spreadLeftIndex + 2 < total;
-
-  // Forced order CTA — auto-shows once they reach the last spread of the preview.
-  const [showOrderCta, setShowOrderCta] = useState(false);
+  // Turn one page (upright) or one open book (2 pages) at a time; the cover
+  // sits before page 1 (previewPaging).
+  const pos: PreviewPosition = { view, index: currentIndex, total, onCover, hasCover: !!coverFront };
+  // THE PAGE TURN (owner, 2026-10-09: "I don't feel the page turning action").
+  // The preview changes page at once, as it always did; the turn plays as a
+  // layer over the new page for a moment (pageTurn, PageTurnLayer). A tap
+  // during a turn starts the next turn from where the book already is.
+  const [turnAnim, setTurnAnim] = useState<{ plan: TurnPlan; go: boolean; n: number } | null>(null);
+  const turnSeq = useRef(0);
+  const animateTurns = useMemo(() => turnAnimation && !prefersReducedMotion(), [turnAnimation]);
+  const go = (t: Turn | null) => {
+    if (!t) return;
+    const plan = animateTurns ? planTurn(pos, t) : null;
+    if (t.cover) setCoverAt(currentIndex);
+    else {
+      setCoverAt(null);
+      if (t.index !== currentIndex) onGoToPage(t.index);
+    }
+    setTurnAnim(plan ? { plan, go: false, n: ++turnSeq.current } : null);
+  };
   useEffect(() => {
-    if (!hasNext && total > 0) setShowOrderCta(true);
-  }, [hasNext, total]);
+    if (!turnAnim) return;
+    const { n } = turnAnim;
+    if (!turnAnim.go) {
+      // The leaf lies at its start for one frame, then turns.
+      let id = requestAnimationFrame(() => {
+        id = requestAnimationFrame(() => setTurnAnim((a) => (a && a.n === n ? { ...a, go: true } : a)));
+      });
+      return () => cancelAnimationFrame(id);
+    }
+    const id = window.setTimeout(() => setTurnAnim((a) => (a && a.n === n ? null : a)), turnAnim.plan.ms + 80);
+    return () => window.clearTimeout(id);
+  }, [turnAnim]);
+  const navPrev = () => go(turnBack(pos));
+  const navNext = () => go(turnForward(pos));
+  // A swipe across the page turns it too (upright).
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeHandlers = upright ? {
+    onPointerDown: (e: React.PointerEvent) => { swipeRef.current = { x: e.clientX, y: e.clientY }; },
+    onPointerUp: (e: React.PointerEvent) => {
+      const from = swipeRef.current;
+      swipeRef.current = null;
+      if (!from) return;
+      const t = swipeTurn(e.clientX - from.x, e.clientY - from.y);
+      if (t === 'forward') navNext();
+      else if (t === 'back') navPrev();
+    },
+    onPointerCancel: () => { swipeRef.current = null; },
+  } : {};
+
+  // SINGLE order entry point. Checkout (Order.tsx) reads the pending print job to
+  // price the album and build the cover PDF; if we call onOrder() WITHOUT stashing
+  // it first, checkout falls back to a stale/other job → wrong size, wrong price,
+  // and a cover PDF that doesn't match the album. The toolbar button and the
+  // end-of-album CTA must BOTH go through here so they can never drift apart.
+  // The album id tells checkout WHICH saved album this is (lib/orderAlbum).
+  // THE 40-PHOTO GATE (albumMinimum): an album with fewer than 40 photos on
+  // its pages can't be ordered (an old draft, or photos deleted after
+  // generating). The tap answers with why and the way back to the pages.
+  const [tooFew, setTooFew] = useState<number | null>(null);
+  // BEFORE YOU ORDER (orderReadiness): empty frames, empty boxes, placeholder
+  // text and blank pages print exactly as they look — say so once; "Order
+  // anyway" goes on, "Show me" goes to the first one.
+  const [notReady, setNotReady] = useState<string | null>(null);
+  const longFirstPageRef = useRef<number | null>(null);
+  // PHOTOS NOT ON THIS DEVICE (photoPresence): the album would print blank
+  // frames. No "Order anyway" — a paid, unrecallable print of empty pages.
+  const [notHere, setNotHere] = useState<string | null>(null);
+  const handleOrder = (anyway = false) => {
+    if (orderSaving) return;
+    const have = albumPhotoCount(pages);
+    if (photosShortBy(have) > 0) { setTooFew(have); return; }
+    setTooFew(null);
+    const gone = missingPhotos(pages, photos, coverFront);
+    if (gone.count > 0) { setNotHere(missingPhotosMessage(gone)); return; }
+    setNotHere(null);
+    // Photos put back from other copies are said here too (never blocking).
+    const copies = copyNotesMessage(pages, photos, coverFront);
+    // A blank front cover is said first (it is what everyone sees first).
+    // Text too long for its box is clipped in print (PERF2-2) — said here too.
+    const long = overflowingCaptions(pages, albumSize);
+    longFirstPageRef.current = long[0]?.pageIndex ?? null;
+    // The cover title clipped on the front is said with the cover (round 3).
+    const titleCut = coverTitleFit(coverFront, albumSize)?.fits === false;
+    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', titleCut ? COVER_TITLE_TOO_LONG_MESSAGE : '', readinessMessage(readiness), longTextsMessage(long.length), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
+    if (warning && !anyway) { setNotReady(warning); return; }
+    setNotReady(null);
+    setPendingPrintJob({ pages, photos, albumSize, albumId: getAlbumId(), coverDesign, coverFront });
+    onOrder();
+  };
+  const notReadyBanner = notReady != null && (
+    <div role="alert" data-testid="order-not-ready"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12] text-left">
+      <span className="flex-1 min-w-[12rem]">{notReady}</span>
+      <button onClick={() => {
+          setNotReady(null);
+          // The cover first: "Show me" opens the cover editor.
+          if (coverIsBlank(coverFront) || coverTitleFit(coverFront, albumSize)?.fits === false) { setCoverOpen(true); return; }
+          const first = [readiness.firstPage, longFirstPageRef.current].filter((n): n is number => n != null);
+          if (first.length) onGoToPage(Math.min(...first)); onBack();
+        }} data-testid="order-not-ready-show"
+        className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
+        Show me
+      </button>
+      <button onClick={() => handleOrder(true)} data-testid="order-not-ready-anyway"
+        className="shrink-0 px-3 py-1.5 rounded-lg font-semibold text-[#8A5A12] underline underline-offset-2 hover:no-underline">
+        Order anyway
+      </button>
+    </div>
+  );
+  const tooFewBanner = tooFew != null && (
+    <div role="alert" data-testid="order-too-few-photos"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12] text-left">
+      <span className="flex-1 min-w-[12rem]">{tooFewToOrderMessage(tooFew)}</span>
+      <button onClick={onBack} data-testid="order-too-few-edit"
+        className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
+        Back to my pages
+      </button>
+    </div>
+  );
+  const notHereBanner = notHere != null && missingPhotos(pages, photos, coverFront).count > 0 && (
+    <div role="alert" data-testid="order-photos-not-here"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12] text-left">
+      <span className="flex-1 min-w-[12rem]">{missingPhotosMessage(missingPhotos(pages, photos, coverFront))}</span>
+    </div>
+  );
+  const orderErrorBanner = orderError && (
+    <div role="alert" data-testid="order-save-error"
+      className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 text-left">
+      <span className="flex-1">{orderError}</span>
+      {onDismissOrderError && (
+        <button onClick={onDismissOrderError} aria-label="Dismiss" className="shrink-0 text-red-400 hover:text-red-700"><X size={14} /></button>
+      )}
+    </div>
+  );
+
+  const hasPrev = canTurnBack(pos);
+  const hasNext = canTurnForward(pos);
+
+  // End-of-album prompt — opens EVERY time they arrive at the last page (or
+  // the last open book) (useEndOfAlbumPrompt). It can be dismissed (keep
+  // browsing) and it offers a real way back to the pages (owner, 2026-09-13:
+  // "there doesn't seem to be a way to go back").
+  // It waits for the last page turn to land.
+  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim);
+  const currentPage = pages[currentIndex];
+
+  // Megy's "Place Order →" (Step 7) lands here and orders exactly like the
+  // Order button above: through handleOrder, the one way to order. It was a
+  // filled button that did nothing. Taken first, so a re-render or a later
+  // visit to the preview never orders again.
+  useEffect(() => {
+    if (!orderRequested) return;
+    onOrderRequestTaken?.();
+    handleOrder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderRequested]);
+
+  const megyFinish = sweepNote ? (
+    <span className="text-xs font-medium text-cocoa">{sweepNote}</span>
+  ) : waitingBoxes > 0 ? (
+    <button
+      onClick={handleMegyFinish}
+      title="Fill every empty box with a quote written for your theme — you can still edit or remove any of them"
+      className={`px-3 py-2 bg-blush text-[#A0562F] text-xs font-semibold rounded-lg hover:bg-peach/40 flex items-center gap-1.5 ${upright ? 'w-full justify-center' : ''}`}
+    >
+      <Sparkles size={13} /> {waitingBoxes} {waitingBoxes === 1 ? 'box' : 'boxes'} waiting — let Megy finish
+    </button>
+  ) : null;
+
+  // Upright: the open book on request, fitted to the width — for the one
+  // thing one page can't show, how facing pages look together.
+  const openBookToggle = upright && !onCover && (
+    <div className="flex flex-col items-center gap-1">
+      <button type="button" onClick={() => setOpenBook((v) => !v)} data-testid="preview-open-book"
+        className="px-3 py-1.5 rounded-lg border border-line bg-white text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors">
+        {openBook ? <><FileText size={13} /> One page at a time</> : <><BookOpen size={13} /> See it as an open book</>}
+      </button>
+      {!openBook && <span className="text-[11px] text-taupe">or turn your phone sideways</span>}
+    </div>
+  );
+
+  // What a turning leaf shows: a page as it prints, the front cover, or a blank page.
+  const turnFace = (f: TurnFace) => {
+    if (f.kind === 'page' && pages[f.index]) {
+      return (
+        <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
+          <PageView page={pages[f.index]} photos={photos} singleW={singleW} H={H} pageIndex={f.index} asPrinted />
+        </div>
+      );
+    }
+    if (f.kind === 'cover' && coverFront) {
+      return (
+        <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
+          <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
+          <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
+          <div aria-hidden="true" style={BOOK.hinge} />
+        </div>
+      );
+    }
+    return null;
+  };
+  // The turn draws over the book that is showing (it changes view if the phone turns mid-turn: then no turn).
+  const layoutNow: TurnPlan['layout'] = onCover && coverFront ? 'closed' : view === 'page' && currentPage ? 'page' : 'spread';
+  const turnNow = turnAnim && turnAnim.plan.layout === layoutNow ? turnAnim : null;
+  const lip = BOOK.lip(fitScale);
+  // Opening or closing slides the book so a closed book sits in the middle.
+  const bookSlide: CSSProperties = turnNow && (turnNow.plan.shift[0] !== 0 || turnNow.plan.shift[1] !== 0)
+    ? { transform: `translateX(${(turnNow.go ? turnNow.plan.shift[1] : turnNow.plan.shift[0]) * singleW}px)`, transition: turnNow.go ? `transform ${turnNow.plan.ms}ms cubic-bezier(.45,.05,.25,1)` : 'none' }
+    : {};
+  const turnLayer = (spineX: number, width: number, offset: number) => turnNow && (
+    <div style={{ position: 'absolute', left: offset, top: offset, width, height: H, pointerEvents: 'none' }}>
+      <PageTurnLayer plan={turnNow.plan} go={turnNow.go} W={singleW} H={H} spineX={spineX} face={turnFace} />
+    </div>
+  );
 
   return (
-    <div style={landscapeRotate
-      ? { position: 'fixed', top: 0, left: 0, width: '100vh', height: '100vw', transformOrigin: 'top left', transform: 'translateX(100vw) rotate(90deg)', zIndex: 70, overflow: 'hidden' }
-      : { height: '100%' }}>
-    <div className="flex flex-col h-full bg-[#F5F5F5] relative">
-      {landscapeRotate && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-1.5 text-[11px] font-medium text-[#8B6F47] bg-white/85 rounded-full px-3 py-1 shadow-sm pointer-events-none">
-          <RotateCw size={12} /> Hold your phone sideways to view
-        </div>
-      )}
+    <div style={{ height: '100%' }}>
+    <div className="flex flex-col h-full bg-paper relative">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-5 py-2.5 border-b border-[#E8E4E0] bg-white">
-        <span className="text-xs text-[#6B6B6B] font-medium tabular-nums">
-          {spreadLeftIndex + 1}-{Math.min(spreadLeftIndex + 2, total)} / {total}
-        </span>
-        <div className="flex items-center gap-2">
+      <div className={`border-b border-[#E8E4E0] bg-white ${upright ? 'px-3 py-2' : 'px-5 py-2.5'}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={onBack} data-testid="preview-edit-pages"
+            className="shrink-0 px-3 py-1.5 rounded-lg border border-line text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors">
+            <ChevronLeft size={14} /> Edit pages
+          </button>
+          <span className="text-xs text-medium font-medium tabular-nums whitespace-nowrap" data-testid="preview-counter">
+            {previewCounter(pos)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* "Megy finishes it" — visible only while empty caption boxes remain.
+              Fills them with unused theme quotes; every fill stays editable.
+              An upright phone has no room beside Order: it gets its own row. */}
+          {!upright && megyFinish}
           {/* "Print PDF" intentionally NOT exposed to customers — the print-ready
               PDF is generated by Megyprints only AFTER an order is paid, so the
               album can't be downloaded and printed elsewhere. */}
           <button
-            onClick={onOrder}
-            className="px-4 py-2 bg-[#E8A598] text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5"
+            onClick={() => handleOrder()}
+            disabled={orderSaving}
+            data-testid="preview-order"
+            className="px-4 py-2 bg-blush-pink text-white text-xs font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5 disabled:opacity-70 disabled:cursor-wait"
           >
-            <ShoppingCart size={14} /> Order
+            {orderSaving
+              ? <><Loader2 size={14} className="animate-spin" /> Saving your album…</>
+              : <><ShoppingCart size={14} /> Order</>}
           </button>
         </div>
       </div>
+      {upright && (sweepNote || waitingBoxes > 0) && <div className="pt-2 flex" data-testid="preview-megy-row">{megyFinish}</div>}
+      </div>
+      {(tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner) && <div className="px-5 pt-2 bg-paper">{tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner}</div>}
 
-      {/* Page display with side arrows */}
-      <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 overflow-auto">
+      {/* Page display with the page turn on each side — small labelled
+          buttons, not bare ‹ › arrows (SpreadTurnButton). */}
+      <div ref={stageRef} className={`flex-1 flex items-center justify-center overflow-auto ${upright ? 'p-4' : 'p-6'}`}
+        style={upright ? { ...BOOK.table, touchAction: 'pan-y' } : BOOK.table} {...swipeHandlers} data-testid="preview-stage">
         <div className="flex items-center gap-6">
-          {/* Prev Arrow — left side */}
-          <button
-            onClick={navPrev}
-            disabled={!hasPrev}
-            className="flex items-center justify-center rounded-full hover:bg-[#E8A598]/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-            style={{ width: 56, height: 56 }}
-          >
-            <ChevronLeft size={40} className="text-[#E8A598]" />
-          </button>
+          {!upright && <SpreadTurnButton dir="prev" show={hasPrev} onClick={navPrev} />}
 
-          {/* Pages */}
-          <div className="flex flex-col items-center gap-2">
-            {/* Page number labels */}
-            <div className="flex items-center" style={{ width: singleW * 2 }}>
-              <span className="text-xs font-medium text-[#6B6B6B]" style={{ width: singleW, textAlign: 'center' }}>
-                Page {spreadLeftIndex + 1}
-              </span>
-              {spreadRightPage && (
-                <span className="text-xs font-medium text-[#6B6B6B]" style={{ width: singleW, textAlign: 'center' }}>
-                  Page {spreadLeftIndex + 2}
-                </span>
-              )}
+          {/* The closed book: the front cover, as it prints. */}
+          {onCover && coverFront ? (
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative" style={bookSlide}>
+              <div style={BOOK.closed(singleW, H, fitScale)} data-testid="preview-cover">
+                <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
+                <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
+                <div aria-hidden="true" style={BOOK.hinge} />
+              </div>
+              {turnLayer(0, singleW, 0)}
             </div>
-
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-medium" data-testid="preview-caption">Front cover</span>
+              <button onClick={() => setCoverOpen(true)} data-testid="preview-edit-cover"
+                className="px-3 py-1.5 rounded-lg border border-line bg-white text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors">
+                <Pencil size={13} /> Edit cover
+              </button>
+            </div>
+          </div>
+          ) : view === 'page' && currentPage ? (
+          /* One page out of the open book (an upright phone): its own side of
+             the gutter shows which side it is bound on. */
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative" style={bookSlide}>
+            <div style={BOOK.cover(singleW, H, fitScale)} data-testid="preview-book">
+              <div aria-hidden="true" style={BOOK.edges(singleW, H, fitScale)} />
+              <div className="relative bg-white" style={{ width: singleW, height: H, isolation: 'isolate' }} data-testid="preview-single-page">
+                <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
+                  <PageView key={currentPage.id} page={currentPage} photos={photos} singleW={singleW} H={H} pageIndex={currentIndex} asPrinted
+                    onTextSlotTap={(slot) => setEdit({ pageIndex: currentIndex, slot })}
+                    onTextTap={(textId) => setEdit({ pageIndex: currentIndex, textId })}
+                    onQrSlotTap={(slot) => setQrEdit({ pageIndex: currentIndex, slot })} />
+                </div>
+                <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
+                <div aria-hidden="true" style={BOOK.grain} />
+                <div aria-hidden="true" style={BOOK.spine(bindingEdge(currentIndex))} data-testid="preview-spine" data-spine={bindingEdge(currentIndex)} />
+              </div>
+            </div>
+            {turnLayer(0, singleW, lip)}
+            </div>
+            <span className="text-xs font-medium text-medium tabular-nums" data-testid="preview-caption">{previewCaption(pos)}</span>
+            {openBookToggle}
+          </div>
+          ) : (
+          /* Pages */
+          <div className="flex flex-col items-center gap-3">
+            {/* THE BOOK (owner, 2026-09-13: "it looks so flat"). The spread sits
+                inside a cover that peeks out around it, over a stack of page
+                edges, with a gutter dipping into the spine, paper grain and a
+                soft vignette over the pages, on a lit table. Every layer is
+                CSS on top of the untouched pages — nothing in the layout moves,
+                and the overlays never take a tap (pointer-events: none). */}
+            <div className="relative" style={bookSlide}>
+            {/* Opening the cover: the left side is still empty table until the cover lands there. */}
+            <div style={turnNow?.plan.hideLeft ? { ...BOOK.cover(singleW * 2, H, fitScale), clipPath: 'inset(-200px -200px -200px 50%)' } : BOOK.cover(singleW * 2, H, fitScale)} data-testid="preview-book">
+              {/* page-block edges under the spread */}
+              <div aria-hidden="true" style={BOOK.edges(singleW * 2, H, fitScale)} />
             {/* Spread container */}
             <div
-              className="relative bg-white shadow-xl"
+              className="relative bg-white"
               style={{
                 width: singleW * 2,
                 height: H,
-                boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+                isolation: 'isolate',
               }}
             >
               {/* Left Page */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex}
+                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted
                   onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
                   onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
                   onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
@@ -697,54 +1225,56 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                   the dashed binding guides already mark the gutter). */}
               {spreadRightPage && (
                 <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
-                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1}
+                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex + 1, slot })} />
                 </div>
               )}
-            </div>
-          </div>
 
-          {/* Next Arrow — right side */}
-          <button
-            onClick={navNext}
-            disabled={!hasNext}
-            className="flex items-center justify-center rounded-full hover:bg-[#E8A598]/15 disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
-            style={{ width: 56, height: 56 }}
-          >
-            <ChevronRight size={40} className="text-[#E8A598]" />
-          </button>
+              {/* book layers over the pages: vignette, grain, gutter */}
+              <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
+              <div aria-hidden="true" style={BOOK.grain} />
+              {spreadRightPage
+                ? <div aria-hidden="true" style={BOOK.gutter} data-testid="preview-gutter" />
+                : <div aria-hidden="true" style={BOOK.edgeShade('right')} />}
+            </div>
+            </div>
+            {turnLayer(singleW, singleW * 2, lip)}
+            </div>
+
+            {/* One caption under the book, like a page number in the corner */}
+            <span className="text-xs font-medium text-medium tabular-nums" data-testid="preview-caption">
+              {previewCaption(pos)}
+            </span>
+            {upright && openBookToggle}
+          </div>
+          )}
+
+          {/* While the cover swings shut, the open book is still drawn where this
+              button now sits beside the closed cover: it fades in once it has shut. */}
+          {!upright && (
+            <div style={{ opacity: turnNow?.plan.layout === 'closed' ? 0 : 1, transition: turnNow?.plan.layout === 'closed' ? 'none' : 'opacity 200ms' }}>
+              <SpreadTurnButton dir="next" show={hasNext} onClick={navNext} />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Forced order CTA — auto-shows on the last spread; no dismiss (must choose). */}
-      {showOrderCta && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 text-center">
-            <div className="text-4xl mb-2">📦</div>
-            <h3 className="font-display text-2xl font-semibold text-[#2D2D2D] mb-1">You've reached the end</h3>
-            <p className="text-sm text-[#6B6B6B] mb-5">Your album looks beautiful. Give it a cover, then make it real.</p>
-            <button
-              onClick={() => setCoverOpen(true)}
-              className="w-full py-3 mb-3 bg-white border-2 border-[#E8A598] text-[#C56B4E] text-base font-semibold rounded-xl hover:bg-[#FDF3EF] active:scale-[0.98] transition-all"
-            >
-              🎨 Design your cover
-            </button>
-            <button
-              onClick={() => { setPendingPrintJob({ pages, photos, albumSize, coverDesign }); onOrder(); }}
-              className="w-full py-4 bg-[#E8A598] text-white text-lg font-bold tracking-wide rounded-xl hover:brightness-105 active:scale-[0.98] transition-all shadow-md"
-            >
-              ORDER ALBUM
-            </button>
-            <button
-              onClick={onBack}
-              className="mt-4 text-xs text-[#9B9B9B] hover:text-[#6B6B6B] transition-colors"
-            >
-              …or do you want to change anything?
-            </button>
-          </div>
+      {/* Upright phone: the turn under the book, in the thumb zone. */}
+      {upright && (
+        <div className="px-4 pt-2 bg-paper border-t border-[#E8E4E0]" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+          <PreviewTurnBar view={view} settleKey={onCover ? 'cover' : `${view}-${currentIndex}`}
+            canBack={hasPrev} canForward={hasNext} onBack={navPrev} onForward={navNext}
+            onOrder={() => handleOrder()} ordering={orderSaving} />
         </div>
+      )}
+
+      {/* End-of-album prompt — on every arrival at the last spread. Tap outside
+          or ✕ to keep browsing; "Continue editing" is a real button. */}
+      {endPrompt.open && (
+        <EndOfAlbumPrompt onClose={endPrompt.close} onCheckCover={() => setCoverOpen(true)} onOrder={() => handleOrder()} onContinueEditing={onBack}
+          saving={orderSaving} error={tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner || null} />
       )}
 
       {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too).
@@ -753,6 +1283,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       {edit && (
         <MobileTextEditor
           initial={edit.textId != null ? buildTextInitial(edit.pageIndex, edit.textId) : buildBoxInitial(edit.pageIndex, edit.slot!)}
+          box={edit.textId == null && pages[edit.pageIndex] ? captionBoxSize(pages[edit.pageIndex], edit.slot!, albumSize, edit.pageIndex) : null}
           onSave={(content) => {
             if (edit.textId != null) updateTextElement(edit.textId, content);
             else setBoxText(edit.slot!, content, edit.pageIndex);
@@ -768,7 +1299,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           onClose={() => setQrEdit(null)}
         />
       )}
-      {coverOpen && <CoverStep onClose={() => setCoverOpen(false)} />}
+      {coverOpen && <CoverEditor mode="modal" onClose={() => setCoverOpen(false)} />}
     </div>
     </div>
   );

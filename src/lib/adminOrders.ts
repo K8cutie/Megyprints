@@ -32,21 +32,56 @@ export interface AdminOrder {
   material: string | null;
   cover: string | null;
   page_count: number;
+  /** Memory-hosting term the customer bought (0030); null on older orders. */
+  hosting_years?: number | null;
+  /** HD (1080p) memory upgrade bought (0032). */
+  hd_memories?: boolean | null;
   ship_name: string | null;
   ship_phone: string | null;
   ship_address: string | null;
   tracking: string | null;
+  /** Manual transfer (0033): what the customer attached after paying. */
+  payment_reference?: string | null;
+  payment_proof_path?: string | null;
+  payment_submitted_at?: string | null;
   created_at: string;
   updated_at: string;
+  /** A guest's copy of an event album prints from this order's files (0045). */
+  copy_of_order_id?: string | null;
+  copy_of_order_number?: string | null;
+  /** The event booking that paid for this album (0045). */
+  event_booking_number?: string | null;
 }
 
-/** Every order the caller may see, newest first. Goes through the role-aware
- *  operator_orders() function — owners get the peso amount, fulfillment gets it
- *  NULLed. Fulfillment has no direct orders access; this is their only read. */
-export async function fetchAllOrders(): Promise<AdminOrder[]> {
-  const { data, error } = await supabase.rpc('operator_orders');
+/** The order whose print files this order prints from: its own, or for a
+ *  guest's copy of an event album, the hosts' order (0045). */
+export const printFilesOf = (o: Pick<AdminOrder, 'id' | 'copy_of_order_id'>) => o.copy_of_order_id ?? o.id;
+
+/** Default page size for the console. Measured on a 10,000-order database:
+ *  returning every order cost 2,018 kB and a full scan + 3.9 MB sort PER LOAD,
+ *  per operator. A page costs 20 kB off an index. */
+export const ORDERS_PAGE_SIZE = 100;
+
+/** One PAGE of the orders the caller may see, newest first. Goes through the
+ *  role-aware operator_orders() function — owners get the peso amount,
+ *  fulfillment gets it NULLed. Fulfillment has no direct orders access; this is
+ *  their only read. The function clamps the limit server-side, so a caller
+ *  cannot ask for the whole table back. */
+export async function fetchAllOrders(
+  limit: number = ORDERS_PAGE_SIZE,
+  offset = 0,
+): Promise<AdminOrder[]> {
+  const { data, error } = await supabase.rpc('operator_orders', { p_limit: limit, p_offset: offset });
   if (error) throw new Error(error.message);
   return (data ?? []) as AdminOrder[];
+}
+
+/** How many orders exist in total, so the console can say what it is NOT
+ *  showing. A paginated list that hides the total is its own bug. */
+export async function fetchOrdersCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('operator_orders_count');
+  if (error) throw new Error(error.message);
+  return Number(data ?? 0);
 }
 
 /** Advance status (owner OR fulfillment) via the status-only DB function — the
@@ -62,5 +97,17 @@ export type OrderPatch = Partial<Pick<AdminOrder, 'status' | 'amount' | 'payment
  *  on failure, or null on success. */
 export async function updateOrder(id: string, patch: OrderPatch): Promise<string | null> {
   const { error } = await supabase.from('orders').update(patch).eq('id', id);
-  return error ? error.message : null;
+  if (error) return error.message;
+  // Paid → the customer's chosen memory-hosting term takes effect (0030). The
+  // client could only stamp the included term; this extends each clip on the
+  // order's album to hosting_years. Owner-gated in SQL; best-effort here so a
+  // hiccup never un-marks a paid order (the panel shows the failure).
+  if (patch.payment_status === 'paid') {
+    const { error: termErr } = await supabase.rpc('apply_order_hosting_term', { p_order_id: id });
+    if (termErr) {
+      console.error('apply_order_hosting_term failed:', termErr.message);
+      return `Marked paid, but the memory hosting term could not be applied (${termErr.message}). Re-run Mark paid or apply it in SQL.`;
+    }
+  }
+  return null;
 }

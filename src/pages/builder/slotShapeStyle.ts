@@ -1,10 +1,11 @@
 import type { TemplateSlot } from './types';
+import { archPath, starPolygonCss, featherEdgeCss, isPathShape, maskPathD, textureMaskCss, type FeatherSide, type TextureMask } from './masks';
 
 /** Compute shape-corrected sizing and CSS style for a template slot.
  *  Returns the style object plus adjusted width/height and offsets so
  *  circles stay circular and special shapes are centered properly. */
 export function slotShapeStyle(
-  slot: TemplateSlot,
+  slot: TemplateSlot & { feather?: number; featherSide?: FeatherSide; texture?: TextureMask },
   rawWidth: number,
   rawHeight: number,
 ): {
@@ -16,6 +17,14 @@ export function slotShapeStyle(
 } {
   const shape = slot.shape;
   const borderRadius = slot.borderRadius;
+
+  // Path shapes come from the ONE generator every renderer uses.
+  if (isPathShape(shape)) {
+    return {
+      style: { clipPath: `path("${maskPathD(shape, 0, 0, rawWidth, rawHeight)}")` },
+      width: rawWidth, height: rawHeight, leftOffset: 0, topOffset: 0,
+    };
+  }
 
   switch (shape) {
     case 'circle': {
@@ -61,11 +70,22 @@ export function slotShapeStyle(
       };
     }
 
+    case 'arch': {
+      return {
+        style: { clipPath: `path("${archPath(rawWidth, rawHeight)}")` },
+        width: rawWidth,
+        height: rawHeight,
+        leftOffset: 0,
+        topOffset: 0,
+      };
+    }
+
     case 'star': {
       const size = Math.min(rawWidth, rawHeight);
       return {
         style: {
-          clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)',
+          // The SAME star as the print + Fabric renderers (masks.ts).
+          clipPath: starPolygonCss(),
         },
         width: size,
         height: size,
@@ -88,11 +108,13 @@ export function slotShapeStyle(
     }
 
     default: {
-      // Rectangle — no shape adjustment
+      // Rectangle — no shape adjustment. A soft-edge mask feathers it.
       return {
         style: {
           borderRadius: borderRadius ? `${borderRadius}px` : undefined,
           clipPath: undefined,
+          ...(slot.feather ? featherEdgeCss(slot.feather, rawWidth, rawHeight, slot.featherSide) : {}),
+          ...(slot.texture ? textureMaskCss(slot.texture) : {}),
         },
         width: rawWidth,
         height: rawHeight,

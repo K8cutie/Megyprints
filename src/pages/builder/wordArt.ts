@@ -49,6 +49,134 @@ export function wordArtDomStyle(s: WordArtStyle, scale: number): CSSProperties {
   return css;
 }
 
+/** Line spacing used by every renderer. The DOM preview hardcodes 1.25, so the
+ *  print path must wrap at the same rhythm or a two-line caption sits at a
+ *  different height on paper than it does on screen. */
+export const TEXT_LINE_HEIGHT = 1.25;
+
+/** The margin a caption (a bound text box, or text in a photo slot) wraps
+ *  inside, on each side, as a share of the box's width. Print draws it; the
+ *  preview and the editor used the box's full width, so a line close to the
+ *  box width sat on one line on screen and broke in two on paper ("Beach days
+ *  are the best" / "days": 1-star testers round 3, the Print Inspector). Every
+ *  renderer and the fit check read this one number. */
+export const CAPTION_PAD_X = 0.04;
+
+/** Fabric 5 draws each line fontSize × lineHeight × 1.13 tall (its
+ *  _fontSizeMult), so its lineHeight for TEXT_LINE_HEIGHT on the canvas is
+ *  this. With 1.25 itself the editor spaced lines 13% wider than the preview
+ *  and print: a caption "Make it fit" had fitted still overflowed the box in
+ *  the editor (1-star testers round 3, the Perfectionist). */
+export const FABRIC_FONT_SIZE_MULT = 1.13;
+export const FABRIC_LINE_HEIGHT = TEXT_LINE_HEIGHT / FABRIC_FONT_SIZE_MULT;
+
+/** Caption alignment resolution — the ELEMENT's own choice wins over the
+ *  template slot's default, in ALL THREE renderers. (Print used to resolve
+ *  template-first on interior pages, so a left-aligned caption printed centered
+ *  on any template that declares ts.align.) */
+export function resolveTextSlotAlign(
+  element: { alignment?: 'left' | 'center' | 'right' } | null | undefined,
+  slot: { align?: 'left' | 'center' | 'right' } | null | undefined,
+): 'left' | 'center' | 'right' {
+  return element?.alignment ?? slot?.align ?? 'center';
+}
+
+/** Free-text wrap width in DESIGN px — the DOM preview's box model, shared with
+ *  print so both wrap a title/quote at the same width. (The Fabric editor keeps
+ *  a 100px usability floor so a short text stays grabbable — that floor only
+ *  differs for texts too short to wrap anyway.) */
+export function freeTextBoxWidth(t: { width?: number; text: string; fontSize?: number }): number {
+  return t.width || t.text.length * (t.fontSize || 24) * 0.6;
+}
+
+/** Underline the lines drawWrappedWordArtText just drew (canvas has no native
+ *  underline). `cy` = the line block's vertical CENTER, mirroring that
+ *  function's layout; ctx.font must still be set so measureText is accurate. */
+export function underlineTextLines(
+  ctx: CanvasRenderingContext2D,
+  lines: string[],
+  cx: number,
+  cy: number,
+  fontSize: number,
+  align: 'left' | 'center' | 'right',
+  color: string,
+): void {
+  const step = fontSize * TEXT_LINE_HEIGHT;
+  const top = cy - ((lines.length - 1) * step) / 2;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, fontSize * 0.05);
+  lines.forEach((line, i) => {
+    const textW = ctx.measureText(line).width;
+    const ux = align === 'left' ? cx : align === 'right' ? cx - textW : cx - textW / 2;
+    const uy = top + i * step + fontSize * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(ux, uy);
+    ctx.lineTo(ux + textW, uy);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+/** Break `text` into lines that each fit `maxWidth` with the ctx's CURRENT font.
+ *  Greedy word wrap; a single word wider than the box is split by character,
+ *  matching the DOM's `word-break: break-word`. */
+export function wrapTextLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  const paragraphs = String(text ?? '').split('\n');
+  const lines: string[] = [];
+  const fits = (s: string) => ctx.measureText(s).width <= maxWidth;
+
+  for (const para of paragraphs) {
+    const words = para.split(/\s+/).filter(Boolean);
+    if (!words.length) { lines.push(''); continue; }
+    let line = '';
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (fits(candidate) || !line) {
+        // A lone word too wide for the box → split it by character.
+        if (!fits(candidate) && !line && !fits(word)) {
+          let chunk = '';
+          for (const ch of word) {
+            if (chunk && !fits(chunk + ch)) { lines.push(chunk); chunk = ch; } else { chunk += ch; }
+          }
+          line = chunk;
+          continue;
+        }
+        line = candidate;
+      } else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return lines.length ? lines : [''];
+}
+
+/** Draw WordArt text WRAPPED inside a box, vertically centred on `cy`. Returns
+ *  the drawn lines so a caller can underline them. ctx.font/fillStyle/textAlign
+ *  must already be set; `fontSize` is the already-scaled pixel size. */
+export function drawWrappedWordArtText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  cx: number,
+  cy: number,
+  maxWidth: number,
+  fontSize: number,
+  s: WordArtStyle,
+  scale: number,
+): string[] {
+  const lines = wrapTextLines(ctx, text, maxWidth);
+  const step = fontSize * TEXT_LINE_HEIGHT;
+  const top = cy - ((lines.length - 1) * step) / 2;
+  lines.forEach((line, i) => drawWordArtText(ctx, line, cx, top + i * step, s, scale));
+  return lines;
+}
+
 /** Draw one line of WordArt text onto a 2D canvas at (x, y) with the current
  *  ctx.font/textAlign already set. `scale` = the factor fontSize was scaled by.
  *  Fill color must be preset on ctx.fillStyle. Handles outline + shadow order so

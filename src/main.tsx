@@ -5,9 +5,14 @@ import App from './App.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { initSentry } from './lib/sentry'
 import { reportError } from './lib/report'
+import { bootTheme } from './lib/theme'
+import { installNativeAuth } from './lib/nativeAuth'
 
 // Initialize Sentry before anything renders. No-op unless VITE_SENTRY_DSN is set.
 initSentry()
+
+// Apply the UI theme (data-theme on <html>) before the first render — no flash.
+bootTheme()
 
 // Global safety nets — route uncaught errors + unhandled promise rejections
 // through the single reportError sink (console + optional endpoint + Sentry).
@@ -17,6 +22,8 @@ window.addEventListener('unhandledrejection', (e) => {
 window.addEventListener('error', (e) => {
   reportError(e.error ?? e.message, { kind: 'error' })
 })
+
+installNativeAuth()
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>

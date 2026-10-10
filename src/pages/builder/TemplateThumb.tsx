@@ -25,7 +25,7 @@ export default function TemplateThumb({ template, size, w = 140 }: {
           position: 'absolute',
           left: pct(safeX + s.x * safeW), top: pct(safeY + s.y * safeH),
           width: pct(s.width * safeW), height: pct(s.height * safeH),
-          background: '#F4C2A1', border: '1px solid #fff', boxSizing: 'border-box',
+          background: '#E8C9BB', border: '1px solid #fff', boxSizing: 'border-box',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 9, color: 'rgba(90,60,40,0.7)', overflow: 'hidden',
         }}>{s.ratio ?? template.targetRatio}</div>

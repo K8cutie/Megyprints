@@ -9,7 +9,9 @@
      get(id)            → returns { blob, url } from IndexedDB
      getMany(ids)       → batch get for album loading
      delete(id)         → removes from IndexedDB
-     clear()            → wipes all stored photos
+     deleteMany(ids)    → removes just those photos (there is deliberately no
+                          "wipe everything": other saved albums on this device
+                          use the same store — see lib/photoKeeping)
      list()             → returns metadata for all stored photos
 
    IndexedDB schema:
@@ -41,7 +43,7 @@ export interface UseIndexedDBPhotosReturn {
   get: (id: string) => Promise<StoredPhoto | null>;
   getMany: (ids: string[]) => Promise<Map<string, StoredPhoto>>;
   deletePhoto: (id: string) => Promise<void>;
-  clear: () => Promise<void>;
+  deleteMany: (ids: string[]) => Promise<void>;
   list: () => Promise<LocalPhoto[]>;
   loading: boolean;
   error: string | null;
@@ -70,6 +72,10 @@ async function openDB(): Promise<IDBDatabase> {
   });
 }
 
+/** Run one request and settle only when its transaction COMMITS. A request can
+ *  succeed and the commit still fail — a full disk shows up as a
+ *  QuotaExceededError abort — and settling on the request reported those
+ *  photos as saved when they were never written. */
 async function withStore<T>(
   mode: IDBTransactionMode,
   fn: (store: IDBObjectStore) => IDBRequest<T>,
@@ -77,17 +83,45 @@ async function withStore<T>(
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, mode);
-    const store = tx.objectStore(STORE_NAME);
-    const req = fn(store);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-    tx.oncomplete = () => db.close();
+    const req = fn(tx.objectStore(STORE_NAME));
+    tx.oncomplete = () => { db.close(); resolve(req.result); };
+    tx.onerror = tx.onabort = () => {
+      db.close();
+      reject(tx.error ?? req.error ?? new Error('Photo storage transaction failed'));
+    };
   });
 }
 
 /* ── Image dimension helper ────────────────────────────────────────────── */
 
-function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+/** Measure a photo AS IT WILL BE SEEN — with any EXIF rotation already applied.
+ *
+ *  This is load-bearing, not a detail. A phone portrait shot is very often
+ *  stored as a LANDSCAPE bitmap plus an EXIF "rotate 90°" tag. If we record the
+ *  raw bitmap size, the album classifies that photo as landscape, hands it a
+ *  landscape frame, and then the browser draws it upright inside that frame —
+ *  object-cover crops the top and bottom off, which is how portraits came out
+ *  beheaded. Every downstream guarantee (orientation-strict placement, exact
+ *  ratios, the print floor) is applied faithfully to whatever we report here,
+ *  so a wrong measurement silently defeats all of them.
+ *
+ *  createImageBitmap(..., { imageOrientation: 'from-image' }) is the only way to
+ *  ask for the ORIENTED size explicitly, so it is the primary path. */
+export async function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const { width, height } = bmp;
+      bmp.close?.();
+      if (width > 0 && height > 0) return { width, height };
+    } catch {
+      // Older Safari rejects the options bag — fall through to the <img> path.
+    }
+  }
+  // Fallback: an <img>'s intrinsic size. Deliberately NOT swapped by hand from
+  // the EXIF tag: `image-orientation: from-image` is the CSS initial value, so
+  // current engines already report the oriented size here, and swapping again
+  // would double-correct — worse than not correcting at all.
   return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -216,18 +250,27 @@ export function useIndexedDBPhotos(): UseIndexedDBPhotosReturn {
     }
   }, []);
 
-  /** Wipe ALL photos from IndexedDB. */
-  const clear = useCallback(async (): Promise<void> => {
-    setLoading(true);
+  /** Delete just these photos, in one transaction. */
+  const deleteMany = useCallback(async (ids: string[]): Promise<void> => {
+    if (ids.length === 0) return;
     try {
-      // Revoke all cached URLs
-      urlCache.current.forEach((url) => URL.revokeObjectURL(url));
-      urlCache.current.clear();
-      await withStore('readwrite', (s) => s.clear());
+      for (const id of ids) {
+        const cachedUrl = urlCache.current.get(id);
+        if (cachedUrl) {
+          URL.revokeObjectURL(cachedUrl);
+          urlCache.current.delete(id);
+        }
+      }
+      const db = await openDB();
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        for (const id of ids) store.delete(id);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = tx.onabort = () => { db.close(); reject(tx.error); };
+      });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to clear photos');
-    } finally {
-      setLoading(false);
+      setError(err instanceof Error ? err.message : 'Failed to delete photos');
     }
   }, []);
 
@@ -249,5 +292,5 @@ export function useIndexedDBPhotos(): UseIndexedDBPhotosReturn {
     }
   }, []);
 
-  return { store, get, getMany, deletePhoto, clear, list, loading, error, clearError };
+  return { store, get, getMany, deletePhoto, deleteMany, list, loading, error, clearError };
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { useModalDialog } from '../../lib/useModalDialog';
 
 /* ══════════════════════════════════════════════════════════════════════════
  *  BuilderBackGuard — stop the mobile Back button from nuking a draft
@@ -93,6 +94,9 @@ export default function BuilderBackGuard({ flush, phase, onStepBack }: BuilderBa
     navigate('/');
   }, [navigate]);
 
+  // Keyboard (KB-2): focus on "Keep editing", Tab kept inside, Escape stays.
+  const panelRef = useModalDialog<HTMLDivElement>(confirmOpen, stay);
+
   if (!confirmOpen) return null;
 
   return createPortal(
@@ -104,17 +108,19 @@ export default function BuilderBackGuard({ flush, phase, onStepBack }: BuilderBa
       onClick={stay}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden"
       >
         <div className="px-7 pt-7 pb-6 text-center">
-          <div className="mx-auto mb-4 w-14 h-14 rounded-full bg-[#FDE8E4] flex items-center justify-center">
-            <ArrowLeft size={24} className="text-[#E8A598]" />
+          <div className="mx-auto mb-4 w-14 h-14 rounded-full bg-blush flex items-center justify-center">
+            <ArrowLeft size={24} className="text-blush-pink" />
           </div>
-          <h2 id="mp-backguard-title" className="font-display text-xl font-bold text-[#2D2D2D] mb-1.5">
+          <h2 id="mp-backguard-title" className="font-display text-xl font-bold text-dark mb-1.5">
             Leave the builder?
           </h2>
-          <p className="text-[#6B6B6B] text-sm leading-relaxed mb-6">
+          <p className="text-medium text-sm leading-relaxed mb-6">
             Your progress is saved — you can pick up right where you left off. Leave now,
             or keep working on your album?
           </p>
@@ -122,13 +128,14 @@ export default function BuilderBackGuard({ flush, phase, onStepBack }: BuilderBa
           <div className="flex flex-col gap-2.5">
             <button
               onClick={stay}
-              className="w-full py-3 bg-[#F4C2A1] text-white font-semibold rounded-xl hover:brightness-105 transition-all"
+              data-autofocus
+              className="w-full py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all"
             >
               Keep editing
             </button>
             <button
               onClick={leave}
-              className="w-full py-3 bg-white border-2 border-[#EAEAEA] text-[#6B6B6B] font-semibold rounded-xl hover:bg-[#F7F7F7] transition-all"
+              className="w-full py-3 bg-white border-2 border-[#EAEAEA] text-medium font-semibold rounded-xl hover:bg-[#F7F7F7] transition-all"
             >
               Leave
             </button>

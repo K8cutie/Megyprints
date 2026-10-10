@@ -6,15 +6,24 @@ import { useBuilderContext, type BuilderContextValue } from './builder/BuilderCo
 import BuilderSetup from './builder/BuilderSetup';
 import BuilderEdit from './builder/BuilderEdit';
 import BuilderPreview from './builder/BuilderPreview';
-import CoverStep from './builder/CoverStep';
+import RemakeAlbumAsk from '../assistant/RemakeAlbumAsk';
+import { albumIsMade, placedMemories } from '../assistant/rebuildQuestion';
+import CoverEditor from './builder/CoverEditor';
 import MobileReview from './builder/MobileReview';
+import MissingPhotosBar from './builder/MissingPhotosBar';
+import AlbumConflictBar from './builder/AlbumConflictBar';
+import OrderedAlbumNote from './builder/OrderedAlbumNote';
 import LayoutPicker from './builder/LayoutPicker';
 import BuilderBackGuard from './builder/BuilderBackGuard';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
 import MegyAssistant from '../assistant/MegyAssistant';
 import SoftAuthGate from '../components/SoftAuthGate';
 import { useIsMobile } from '../hooks/use-mobile';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { cleanAlbumName } from '../lib/albumName';
+import { noteOrderHandoff } from '../lib/printQueue';
+import { takePendingEventImport, linkAlbumToBooking, eventLinkForAlbum } from '../lib/eventAlbum';
+import { writeAlbumTheme } from '../lib/albumTheme';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 const phases = [
   { id: 'setup' as const, label: 'Setup', icon: Settings },
@@ -26,10 +35,13 @@ const SetupPhase = memo(function SetupPhase({ actions }: { actions: BuilderConte
   return (
     <BuilderSetup
       selectedSize={actions.albumSize}
-      onSizeChange={(size) => { void actions.dispatch({ type: 'change_size', payload: { size }, rawMessage: `change size to ${size}` }); }}
+      onSizeChange={(size, reason) => { void actions.dispatch({ type: 'change_size', payload: { size, reason }, rawMessage: `change size to ${size}` }); }}
       /* Option A: "Start Creating" advances Megy's wizard past the size step to
          the cover step; the center screen (phase) follows the wizard. */
       onNext={() => { actions.setWizardStep('design_cover'); actions.setPhase('cover'); }}
+      albumTitle={actions.albumTitle}
+      onAlbumTitleChange={actions.setAlbumTitle}
+      onlySize={eventLinkForAlbum(actions.getAlbumId())?.size ?? null}
     />
   );
 });
@@ -63,7 +75,15 @@ const EditPhase = memo(function EditPhase({
   );
 });
 
-const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions: BuilderContextValue; onOrder: () => void }) {
+const PreviewPhase = memo(function PreviewPhase({ actions, onOrder, orderSaving, orderError, onDismissOrderError, orderRequested, onOrderRequestTaken }: {
+  actions: BuilderContextValue;
+  onOrder: () => void;
+  orderSaving: boolean;
+  orderError: string | null;
+  onDismissOrderError: () => void;
+  orderRequested: boolean;
+  onOrderRequestTaken: () => void;
+}) {
   return (
     <BuilderPreview
       pages={actions.albumPages}
@@ -71,8 +91,13 @@ const PreviewPhase = memo(function PreviewPhase({ actions, onOrder }: { actions:
       photos={actions.uploadedPhotos}
       albumSize={actions.albumSize}
       onGoToPage={actions.goToPage}
-      onBack={() => actions.setPhase('edit')}
+      onBack={() => { actions.setWizardStep('review_pages'); actions.setPhase('edit'); }}
       onOrder={onOrder}
+      orderSaving={orderSaving}
+      orderError={orderError}
+      onDismissOrderError={onDismissOrderError}
+      orderRequested={orderRequested}
+      onOrderRequestTaken={onOrderRequestTaken}
       getPageSnapshot={actions.getPageSnapshot}
     />
   );
@@ -82,7 +107,7 @@ export default function Builder() {
   const actions = useBuilderContext();
   const navigate = useNavigate();
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [errorKey, setErrorKey] = useState(0);
 
   /* Refs */
@@ -107,6 +132,32 @@ export default function Builder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ── Megyprints Events: the host's picked photos (event page → "Make my
+     album"). After the fresh start above, the new album gets the event's
+     name and occasion and the deal's size, the photos go in through the same
+     door as an upload, and the album is linked to its booking on this device
+     so checkout knows the booking pays for it (0045). Taken once: a second
+     run of this effect (StrictMode) finds nothing. */
+  useEffect(() => {
+    const imp = takePendingEventImport();
+    if (!imp) return;
+    window.setTimeout(() => {
+      actions.setAlbumTitle(imp.title);
+      writeAlbumTheme(imp.occasion);
+      void actions.dispatch({ type: 'change_size', payload: { size: imp.size }, rawMessage: `change size to ${imp.size}` })
+        .then(() => actions.dispatch({ type: 'add_photos', payload: { files: imp.files }, rawMessage: 'add photos' }))
+        .then(() => {
+          const albumId = actions.getAlbumId();
+          if (albumId) {
+            linkAlbumToBooking(albumId, {
+              bookingId: imp.bookingId, bookingNumber: imp.bookingNumber, size: imp.size, cover: imp.cover, pages: imp.pages, videos: imp.videos,
+            });
+          }
+        });
+    }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleGenerate = useCallback(() => {
     // Generate layout for the CURRENT page (random template + photos)
     void actions.dispatch({ type: 'regenerate_page', rawMessage: 'regenerate page' });
@@ -116,18 +167,73 @@ export default function Builder() {
     void actions.dispatch({ type: 'regenerate_page', rawMessage: 'regenerate page' });
   }, [actions]);
 
-  const handleGenerateAll = useCallback(() => {
+  // "Generate All" on a made album lays every page out again: it asks first
+  // (RemakeAlbumAsk), the way Megy's Step 4 does.
+  const [remakeAsk, setRemakeAsk] = useState(false);
+  const generateAll = useCallback(() => {
     void actions.dispatch({ type: 'generate_album', rawMessage: 'generate album' });
   }, [actions]);
+  const handleGenerateAll = useCallback(() => {
+    if (albumIsMade(actions.albumPages)) { setRemakeAsk(true); return; }
+    generateAll();
+  }, [actions.albumPages, generateAll]);
 
   const handleReset = useCallback(() => {
     actions.reset();
     setErrorKey((k) => k + 1);
   }, [actions]);
 
-  const handleOrder = useCallback(() => {
+  // Checkout freezes this album's row in the account (lib/orderAlbum), and the
+  // builder only saves it to the cloud every 10 min or on leaving. So Order
+  // saves it NOW and waits: checkout must read the album as it is on screen.
+  // A failed save stops here, loud — the order would freeze an older copy.
+  const [orderSaving, setOrderSaving] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const orderSavingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  const handleOrder = useCallback(async () => {
+    if (orderSavingRef.current) return;
+    const albumId = actions.getAlbumId();
+    if (!actions.user) {
+      // A guest can't be saved to an account. Checkout asks them to sign in,
+      // and the note tells it this album never reached the account.
+      if (albumId) noteOrderHandoff({ albumId, saved: false, fresh: true });
+      navigate('/order');
+      return;
+    }
+    orderSavingRef.current = true;
+    setOrderSaving(true);
+    setOrderError(null);
+    const saved = await actions.manualSave().catch(() => false);
+    orderSavingRef.current = false;
+    if (!mountedRef.current) return; // left the builder while it saved
+    setOrderSaving(false);
+    if (!saved) {
+      setOrderError(actions.getCloudConflict()
+        // Changed on another device too: the bar at the top asks which to keep.
+        ? 'This album was also changed on another device. Choose which version to keep (the note at the top), then tap Order again.'
+        : "We couldn't save your album to your account, so it can't be ordered yet. Check your connection and tap Order again.");
+      return;
+    }
+    if (albumId) noteOrderHandoff({ albumId, saved: true, fresh: true });
     navigate('/order');
-  }, [navigate]);
+  }, [actions, navigate]);
+  const dismissOrderError = useCallback(() => setOrderError(null), []);
+
+  // Megy's "Place Order →" (Step 7) orders through the SAME door as the
+  // preview's own Order button: it asks the preview to run its handleOrder
+  // (the 40-photo check, the album's print job, then the save + checkout
+  // above). Going to /order straight from Megy would skip the check and let
+  // checkout read a stale or missing print job.
+  // The preview takes the request once (onOrderRequestTaken), so coming back
+  // to it never orders again.
+  const [orderRequested, setOrderRequested] = useState(false);
+  const requestOrder = useCallback(() => {
+    setOrderRequested(true);
+    if (actions.phase !== 'preview') actions.setPhase('preview');
+  }, [actions]);
+  const takeOrderRequest = useCallback(() => setOrderRequested(false), []);
 
   /* Minimal action handler for BuilderEdit internal triggers */
   const handleAction = useCallback((actionId: string, _payload?: Record<string, unknown>) => {
@@ -140,13 +246,18 @@ export default function Builder() {
   const hasLoadedRef = useRef<string | null>(null);
   const userId = actions.user?.id;
   const loadAlbum = actions.loadAlbum;
+  // "Order this album again" (Your orders) adds &order=again: once the album
+  // is in, it goes through the Order door (requestOrder) to checkout. The
+  // flag comes off the address first, so a reload doesn't order again.
   useEffect(() => {
     const albumId = searchParams.get('album');
     if (!albumId || !userId) return;
     if (hasLoadedRef.current === albumId) return;
     hasLoadedRef.current = albumId;
-    loadAlbum(albumId);
-  }, [searchParams, userId, loadAlbum]);
+    const again = searchParams.get('order') === 'again';
+    if (again) setSearchParams((p) => { p.delete('order'); return p; }, { replace: true });
+    void loadAlbum(albumId).then(() => { if (again) requestOrder(); });
+  }, [searchParams, setSearchParams, userId, loadAlbum, requestOrder]);
 
   const phaseIndex = phases.findIndex((p) => p.id === actions.phase);
   // Desktop: reserve the Megy panel's width so the toolbar + canvas sit BESIDE
@@ -165,16 +276,29 @@ export default function Builder() {
       <BuilderBackGuard
         flush={actions.saveDraftNow}
         phase={actions.phase}
-        onStepBack={() => actions.setPhase('edit')}
+        /* Same as the preview's own Back: the wizard step moves with the
+           screen. The step is saved, so a stale 'finalize' would reopen
+           Preview on the next reload. */
+        onStepBack={() => { actions.setWizardStep('review_pages'); actions.setPhase('edit'); }}
       />
       <div className={`fixed inset-0 z-[60] bg-white flex flex-col transition-[padding] duration-300 ${panelCollapsed ? 'lg:pl-[60px]' : 'lg:pl-[340px]'}`}>
         {/* Step Indicator */}
-        <div className="h-12 bg-white border-b border-[#E8E8E8] flex items-center px-4 gap-1 shrink-0">
-          <div className="flex items-center gap-1 mr-4">
-            <span className="font-display text-base italic text-[#2D2D2D]">Megy</span>
-            <span className="font-body text-base text-[#2D2D2D]">Prints</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-[#F4C2A1] ml-0.5" />
-          </div>
+        <div className="h-12 bg-white border-b border-line flex items-center px-4 gap-1 shrink-0">
+          {/* The wordmark is the way home from EVERY builder screen (setup, cover,
+              pages, preview, phone). The draft is saved on the way out. */}
+          <Link to="/" onClick={() => { try { actions.saveDraftNow(); } catch { /* ignore */ } }}
+            title="Back to the homepage" aria-label="Megy Prints — homepage" data-testid="home-link"
+            className="flex items-center gap-1 mr-4 rounded-md px-1 -mx-1 hover:bg-line-soft transition-colors">
+            <span className="font-display text-base italic text-dark">Megy</span>
+            <span className="font-body text-base text-dark">Prints</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-peach ml-0.5" />
+          </Link>
+          {/* The album's own name (wizard step 1) — which album this is. */}
+          {cleanAlbumName(actions.albumTitle) && (
+            <span className="min-w-0 truncate text-sm font-medium text-medium" data-testid="album-name-header">
+              {cleanAlbumName(actions.albumTitle)}
+            </span>
+          )}
 
           {SHOW_PHASE_CHIPS && phases.map((phase, i) => {
             const isActive = i === phaseIndex;
@@ -187,8 +311,8 @@ export default function Builder() {
                   onClick={() => { if (i <= phaseIndex || (phase.id === 'preview' && phaseIndex >= 1)) actions.setPhase(phase.id); }}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
                   style={{
-                    backgroundColor: isActive ? '#FDE8E4' : 'transparent',
-                    color: isActive ? '#E8A598' : isPast || (phase.id === 'preview' && phaseIndex >= 1) ? '#6B6B6B' : '#C4C4C4',
+                    backgroundColor: isActive ? '#F6E7DF' : 'transparent',
+                    color: isActive ? '#9A4A2C' : isPast || (phase.id === 'preview' && phaseIndex >= 1) ? '#6B6B6B' : '#C4C4C4',
                   }}
                 >
                   <Icon size={13} /> {phase.label}
@@ -199,6 +323,13 @@ export default function Builder() {
 
           <div className="flex-1" />
         </div>
+
+        {/* Changed on two devices: which version to keep is asked, never picked. */}
+        <AlbumConflictBar actions={actions} />
+        {/* Already ordered: that order prints the album as it was then. */}
+        {(actions.phase === 'edit' || actions.phase === 'preview') && <OrderedAlbumNote actions={actions} />}
+        {/* An album opened without its photos says so, with the way on. */}
+        {(actions.phase === 'edit' || actions.phase === 'preview') && <MissingPhotosBar actions={actions} />}
 
         {/* Phase Content */}
         <div className="flex-1 overflow-auto min-h-0 relative">
@@ -231,28 +362,36 @@ export default function Builder() {
             {actions.phase === 'preview' && (
               <motion.div key="preview" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="h-full">
-                <PreviewPhase actions={actions} onOrder={handleOrder} />
+                <PreviewPhase actions={actions} onOrder={handleOrder} orderSaving={orderSaving} orderError={orderError} onDismissOrderError={dismissOrderError}
+                  orderRequested={orderRequested} onOrderRequestTaken={takeOrderRequest} />
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Cover step — rendered OUTSIDE AnimatePresence. A CoverStep motion
+          {/* Cover editor — rendered OUTSIDE AnimatePresence. A cover-phase motion
               child failed to complete its exit animation, deadlocking mode="wait"
               for every subsequent phase change; a plain absolute-fill conditional
               mounts/unmounts cleanly and can't stall the other transitions. */}
           {actions.phase === 'cover' && (
-            <div className="absolute inset-0 bg-[#FFF8F0]">
-              <CoverStep
+            <div className="absolute inset-0 bg-cream">
+              <CoverEditor
                 mode="step"
-                onNext={() => { actions.setWizardStep('pick_background'); actions.setPhase('edit'); }}
+                onNext={() => { actions.setWizardStep('upload_photos'); actions.setPhase('edit'); }}
                 onBack={() => { actions.setWizardStep('pick_size'); actions.setPhase('setup'); }}
               />
             </div>
           )}
         </div>
 
+        {remakeAsk && (
+          <RemakeAlbumAsk memories={placedMemories(actions.albumPages)}
+            onClose={() => setRemakeAsk(false)} onKeep={() => setRemakeAsk(false)}
+            onRemake={() => { setRemakeAsk(false); generateAll(); }} />
+        )}
+
         {/* ── Megy Assistant ── */}
-        <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'cover' || actions.phase === 'preview')} />
+        <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'cover' || actions.phase === 'preview')}
+          onPlaceOrder={requestOrder} />
 
         {/* "Change layout" picker — shared by mobile review + desktop panel */}
         <LayoutPicker actions={actions} />
@@ -263,6 +402,10 @@ export default function Builder() {
           type="file"
           accept="image/*"
           multiple
+          // Opened by the Add photos buttons, never by Tab: it was an unnamed,
+          // invisible Tab stop on every builder step (1-star testers round 2, KB-6).
+          tabIndex={-1}
+          aria-hidden="true"
           style={{ opacity: 0, position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }}
           onChange={(e) => {
             if (e.target.files) {

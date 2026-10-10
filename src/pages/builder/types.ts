@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import type { PhotoCheck } from '../../lib/photoCheck';
 
 export type BuilderPhase = 'setup' | 'upload' | 'template' | 'edit' | 'cover' | 'preview';
 
@@ -11,7 +12,9 @@ export type LayoutStyle =
   | 'heroSupporting' | 'portraitSingle' | 'collage' | 'collage3'
   | 'trio' | 'asymDuo' | 'panorama' | 'freeform';
 
-export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star';
+export type SlotShape = 'rectangle' | 'rounded' | 'circle' | 'oval' | 'heart' | 'star' | 'arch'
+  | 'leaf' | 'scallop' | 'hexagon' | 'octagon' | 'diamond' | 'ticket' | 'cloud'
+  | 'pinking' | 'stamp' | 'wavy' | 'halftone';
 
 /** Slot purpose. Absent/'photo' = normal photo slot (default; back-compat).
  *  'qr' = QR living-memory slot — filled by page.qrFills[idx], not slotFills.
@@ -91,6 +94,10 @@ export interface PageTemplate {
   /** True full-bleed: the photo runs to ALL four page edges — no safe margin and
    *  no binding gutter. Use only for single-photo full-page layouts. */
   fullBleed?: boolean;
+  /** Auto-generation deals this layout only when the customer CHOSE at least
+   *  this many photos per page. Absent → dealt at every density, AUTO included.
+   *  The layout picker and manual swaps ignore it. */
+  minDensity?: number;
 }
 
 export interface FilledSlot {
@@ -101,7 +108,7 @@ export interface FilledSlot {
 export type BackgroundType = 'solid' | 'gradient' | 'texture' | 'image';
 
 export type AlbumSizePreset =
-  | '6x6' | '8x8' | '9x9' | '6x4' | '11.5x8' | '8.5x11';
+  | '6x6' | '8x8' | '9x9' | '6x4' | '8x6' | '6x8' | '11.5x8' | '8.5x11';
 
 export type MaterialType = 'matte' | 'glossy' | 'semigloss' | 'pearl' | 'linen';
 export type CoverType = 'softcover' | 'hardboundLeather' | 'hardboundLinen' | 'premiumVelvet' | 'acrylicLayflat';
@@ -155,6 +162,11 @@ export interface AlbumBackground {
    *  revoked / dies after a reload), but the id re-resolves to a fresh URL from
    *  IndexedDB — so a photo-background survives a reload. */
   photoId?: string;
+  /** A photo the customer uploaded for the COVER itself (not one of the album
+   *  photos). Its bytes are kept in the same IndexedDB photo store under this
+   *  id, so `image` (a blob: URL that dies with the tab) can be pointed at a
+   *  fresh URL after the app was closed (coverPhoto.withLiveCoverPhoto). */
+  localPhotoId?: string;
   x?: number;
   y?: number;
   width?: number;
@@ -162,6 +174,41 @@ export interface AlbumBackground {
   rotation?: number;
   filters?: PhotoFilters;
   opacity?: number;
+  /** COVER-ONLY crop controls for an image background. A cover is one fixed-aspect
+   *  panel, so a photo can't be ratio-matched to it the way interior slots are —
+   *  these let the user choose which part shows.
+   *  focusX/focusY: 0–1 (0.5 = centred) — same semantics as CSS
+   *  `background-position: X% Y%`. zoom: 1 = exactly cover-fit, >1 zooms in.
+   *  Applied ONLY when a renderer is in coverMode; interior pages ignore them. */
+  focusX?: number;
+  focusY?: number;
+  zoom?: number;
+}
+
+/** Cover-fit an image into a panel with a focal point + zoom — the ONE place this
+ *  math lives, so the cover preview and the cover print agree exactly.
+ *
+ *  Returns the image's draw rect in panel px. This is deliberately equivalent to
+ *  CSS `background-size: cover` + `background-position: fx*100% fy*100%`, which
+ *  offsets by `(panel - drawn) * fraction` — so the DOM preview (which uses the
+ *  CSS form, since it can't know the intrinsic size) and the canvas print (which
+ *  uses this) produce identical crops. */
+export function bgCoverFit(
+  imgW: number,
+  imgH: number,
+  W: number,
+  H: number,
+  zoom = 1,
+  focusX = 0.5,
+  focusY = 0.5,
+): { x: number; y: number; width: number; height: number } {
+  const iw = imgW || 1;
+  const ih = imgH || 1;
+  const scale = Math.max(W / iw, H / ih) * Math.max(1, zoom || 1);
+  const width = iw * scale;
+  const height = ih * scale;
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0.5));
+  return { x: (W - width) * clamp01(focusX), y: (H - height) * clamp01(focusY), width, height };
 }
 
 export const DEFAULT_BACKGROUND: AlbumBackground = {
@@ -258,11 +305,29 @@ export interface TextElement extends TextStyle {
   scaleY?: number;
   /** If set, this text fills template.textSlots[boxIndex] instead of free x/y. */
   boxIndex?: number;
+  /** COVER-ONLY: nudge a BOX-BOUND caption off its template slot, as a fraction
+   *  of the panel (0.1 = 10% of the width / height, positive = right / down).
+   *  Deliberately FRACTIONAL rather than reusing the free-text x/y: free text is
+   *  authored in the 750px design space but printed against a 576px one, so it
+   *  drifts ~1.3x, whereas fractions are applied identically by the DOM cover
+   *  preview and the cover print. Ignored on interior pages (coverMode only). */
+  offsetX?: number;
+  offsetY?: number;
+  /** COVER-ONLY: this title is the album's name, put there by Megy — it follows
+   *  a rename until the customer types a title of their own. */
+  fromAlbumName?: boolean;
+  /** A quote Megy dealt for this occasion: it follows an occasion change
+   *  (useBuilderState.requoteForOccasion) until the customer writes or picks
+   *  a line of their own for the box. */
+  fromOccasion?: string;
 }
 
-/** Per-slot geometry overrides for container editing mode.
- *  Each index corresponds to template.slots[index].
- *  Only stores modified values — undefined = use template default. */
+/** STUDIO: a customer-moved photo frame. Each index corresponds to
+ *  template.slots[index]; the four box fields are FRACTIONS OF THE SAFE AREA
+ *  (the space template slots are authored in), so all three renderers place
+ *  the frame with the same arithmetic — see slotGeometry.ts, which also owns
+ *  the guardrails every write passes through. Absent = template default.
+ *  `rotation` is legacy and never printed; the setter drops it. */
 export interface SlotGeometryOverride {
   x?: number;
   y?: number;
@@ -285,6 +350,88 @@ export interface OrnamentTransform {
   rot: number;
 }
 
+/** Smallest side we will PRINT a QR at. The corner-badge flow uses 1.2" as
+ *  "comfortably scannable at arm's length" (see QR_BADGE_IN); 0.8" is the floor
+ *  below which a phone camera starts to struggle on paper. A free-transformed
+ *  QR is clamped to this — an unscannable code on a printed album is a defect
+ *  the customer only discovers after paying. */
+export const QR_MIN_PRINT_IN = 0.8;
+
+/** Normalise a free-transformed QR: keep it SQUARE on the printed page, keep it
+ *  scannable, and keep it on the page.
+ *
+ *  `w`/`h` are fractions of page WIDTH and HEIGHT respectively, so on a
+ *  non-square album equal fractions are NOT a square — the printed side is
+ *  w·pageWidthInches by h·pageHeightInches. We take the larger printed side
+ *  (never shrink what the user just dragged), floor it at QR_MIN_PRINT_IN, and
+ *  convert back to per-axis fractions. */
+export function clampQrGeom(g: OrnamentTransform, albumSize: AlbumSizePreset): OrnamentTransform {
+  const cfg = ALBUM_SIZES.find((s) => s.preset === albumSize);
+  // 300 DPI px → inches. Fall back to a square page rather than throwing.
+  const inW = (cfg?.width ?? 2400) / 300;
+  const inH = (cfg?.height ?? 2400) / 300;
+
+  // ONE printed side, derived once and bounded at BOTH ends before it is split
+  // into per-axis fractions. Capping w and h independently at 1 would silently
+  // break squareness: on a 6×4, a 5" code gives w=min(1,5/6)=0.833 (5.0") but
+  // h=min(1,5/4)=1 (4.0") — a stored 5×4" RECTANGLE that no scanner will read.
+  const wantedIn = Math.max(Number.isFinite(g.w) ? g.w * inW : 0, Number.isFinite(g.h) ? g.h * inH : 0);
+  const sideIn = Math.min(Math.max(QR_MIN_PRINT_IN, wantedIn), inW, inH);
+  const w = sideIn / inW;
+  const h = sideIn / inH;
+
+  // Keep the whole CODE on the page, not just its centre — a QR sliced by the
+  // trim loses a finder pattern and stops decoding entirely. Half-extents are
+  // the ROTATED bounding box, so a tilted code is bounded by what actually
+  // prints. If the code is wider than the page on an axis, centre it there.
+  const rot = Number.isFinite(g.rot) ? g.rot : 0;
+  const rad = (rot * Math.PI) / 180;
+  const c = Math.abs(Math.cos(rad));
+  const s = Math.abs(Math.sin(rad));
+  const hx = (w * c + h * s) / 2;
+  const hy = (w * s + h * c) / 2;
+  const bound = (v: number, half: number) => {
+    if (!Number.isFinite(v)) return 0.5;
+    if (half >= 0.5) return 0.5;
+    return Math.max(half, Math.min(1 - half, v));
+  };
+
+  return { cx: bound(g.cx, hx), cy: bound(g.cy, hy), w, h, rot };
+}
+
+/** The default transform for a QR newly placed in a caption box: a scannable
+ *  square centred on the box.
+ *
+ *  Every caption-box QR gets one at placement time, which buys three things:
+ *  the code is never smaller than QR_MIN_PRINT_IN (the untransformed in-box fit
+ *  could print well under it on a short caption band), all three renderers take
+ *  the SAME transformed path so there is no fit-mode divergence to keep in
+ *  sync, and a box that previously held a dragged QR cannot leak its old
+ *  transform onto a new one. */
+export function defaultQrGeom(
+  albumSize: AlbumSizePreset,
+  box: { x: number; y: number; width: number; height: number },
+  margin: TemplateMargin,
+): OrnamentTransform {
+  // Box fractions are of the SAFE area; the transform is of the WHOLE page.
+  const safeX = margin.left, safeY = margin.top;
+  const safeW = 1 - margin.left - margin.right;
+  const safeH = 1 - margin.top - margin.bottom;
+  const cx = safeX + (box.x + box.width / 2) * safeW;
+  const cy = safeY + (box.y + box.height / 2) * safeH;
+
+  // FIT INSIDE the box: the code is square, so it is bounded by the box's
+  // SHORTER printed side — a caption band is wide and shallow, and sizing off
+  // the wide side would put a page-tall QR on the page. Pass the already-square
+  // size through as equal printed sides so clampQrGeom's max() is a no-op and
+  // only its floor / page-fit rules apply.
+  const cfg = ALBUM_SIZES.find((s) => s.preset === albumSize);
+  const inW = (cfg?.width ?? 2400) / 300;
+  const inH = (cfg?.height ?? 2400) / 300;
+  const sideIn = Math.min(box.width * safeW * inW, box.height * safeH * inH) * 0.82;
+  return clampQrGeom({ cx, cy, w: sideIn / inW, h: sideIn / inH, rot: 0 }, albumSize);
+}
+
 /** Fill data for a QR ('kind: qr') slot. Positional: qrFills[i] pairs with
  *  template.slots[i] exactly like slotFills[i]. Null = empty QR slot.
  *  The printed QR ALWAYS encodes `${MEMORY_BASE}/m/${code}` — never the raw
@@ -302,6 +449,11 @@ export interface QrFill {
    *  change can't desync the management thumbnail from the physical print. */
   memoryUrl: string;
   createdAt: number;
+  /** 'clip' = a video the customer picked in the app, staged locally and
+   *  uploaded at checkout to `memory-clips/<code>.<clipExt>` (destination is
+   *  that object's public URL). Absent/'link' = legacy pasted link. */
+  kind?: 'link' | 'clip';
+  clipExt?: 'mp4' | 'mov' | 'webm' | 'm4v';
 }
 
 /** Fill data for an ORNAMENT slot — a themed vector SVG placed into a combo-box
@@ -370,6 +522,21 @@ export const DEFAULT_COVER_DESIGN: CoverDesign = {
   back: { background: '#FFFBF7', brandMark: false },
 };
 
+/** What a combo/caption box was dealt at generation — the three SlotChooser
+ *  kinds. (A box can also hold a photo via textSlotFills, but Megy never deals
+ *  photos into caption boxes — that stays a manual choice.) */
+export type BoxRoll = 'quote' | 'text' | 'qr';
+
+/** What box j's invitation offers. 'qr' was retired from combo boxes (owner,
+ *  2026-10-02: "remove templates with add a QR" — video memories live on
+ *  full-page photos now), so a box an older album dealt 'qr' is an ordinary
+ *  undealt box: the plain hint, and the tap opens the quote / text chooser.
+ *  Every surface that reads a roll reads it through here. */
+export function dealtBoxRoll(page: { textSlotRoll?: (BoxRoll | null)[] }, j: number): Exclude<BoxRoll, 'qr'> | null {
+  const r = page.textSlotRoll?.[j] ?? null;
+  return r === 'qr' ? null : r;
+}
+
 export interface AlbumPage {
   id: string;
   layout: LayoutStyle;
@@ -380,6 +547,19 @@ export interface AlbumPage {
   slotOffsetsY?: number[];
   /** User-modified slot container geometries */
   slotGeometries?: SlotGeometryOverride[];
+  /** STUDIO: the customer moved or resized a frame on this page, so the page
+   *  is theirs — Regenerate and Surprise Me keep it exactly as it is (its
+   *  photos are held back from the reshuffle). "Megy, fix this page" clears
+   *  it along with the overrides. */
+  studio?: boolean;
+  /** STUDIO masks: a shape / soft edge per PHOTO slot (masks.ts MaskId),
+   *  positional like slotFills. Null/absent = the template's own shape. */
+  slotMasks?: (string | null)[];
+  /** STUDIO looks: a colour treatment per PHOTO slot (looks.ts LookId). */
+  slotLooks?: (string | null)[];
+  /** STUDIO stickers: free graphics on the page (stickers.ts Sticker — the
+   *  ornament fill plus a centre-based page-fraction transform). */
+  stickers?: import('./stickers').Sticker[];
   /** QR living-memory fills. Positional, parallel to template.slots — index i
    *  is used only when slots[i].kind === 'qr'. Serializes as-is (local, cloud,
    *  order snapshot). */
@@ -414,6 +594,25 @@ export interface AlbumPage {
    *  dragged/resized/rotated freely. Only applied when textSlotOrnament[j] exists
    *  (a stale entry is ignored). Positional, parallel to template.textSlots[j]. */
   textSlotOrnamentGeom?: (OrnamentTransform | null)[];
+  /** Free-transform override for a caption-box QR (textSlotQr[j]) — the exact
+   *  mirror of textSlotOrnamentGeom, so a placed code can be dragged/resized/
+   *  rotated instead of sitting fixed in its box. Two differences from a
+   *  graphic, both because a QR is a SCANNABLE artifact rather than decoration:
+   *  it is kept SQUARE on the printed page, and it cannot be shrunk below
+   *  QR_MIN_PRINT_IN. Both are enforced by clampQrGeom at the state setter, so
+   *  every writer gets them. Rotation is free — QR finder patterns make the code
+   *  rotation-invariant. Positional, parallel to template.textSlots[j]. */
+  textSlotQrGeom?: (OrnamentTransform | null)[];
+  /** The content kind Megy DEALT to each combo/caption box at generation time
+   *  (weighted roll — see BOX_ROLL_WEIGHTS in generateAlbum). Positional,
+   *  parallel to template.textSlots[j]. 'quote' is materialized immediately as
+   *  a bound caption; 'text'/'qr' render as tap-to-fill invitations in the
+   *  editors (never printed) and route the tap STRAIGHT to that kind's editor,
+   *  skipping the 3-way chooser. Null/absent (pre-feature drafts, extra boxes
+   *  after a template swap) = the legacy empty box + chooser. Editor-only
+   *  routing state, but serialized as-is with its siblings so a reopened draft
+   *  keeps its deal. */
+  textSlotRoll?: (BoxRoll | null)[];
   background: AlbumBackground;
   photos: CanvasPhoto[];
   textElements: TextElement[];
@@ -437,6 +636,13 @@ export interface AlbumPage {
   cornerBase?: string;
 }
 
+/* The FRONT cover is a normal AlbumPage edited with the SAME per-page editor as
+   interior pages (see the cover-as-pages rework), held in dedicated state
+   (coverFront) OUTSIDE albumPages so page-count pricing, spine thickness, and
+   spread pairing stay driven purely by interior pages. The spine is DERIVED
+   from it (coverLayout.deriveSpine), and the BACK cover is the reserved
+   Megy Prints panel (coverLayout.deriveBrandedBack) — neither is ever edited. */
+
 /** UploadedPhoto — photo stored locally in IndexedDB.  Only metadata
     travels to Supabase.  The actual File bytes stay in the browser. */
 export interface UploadedPhoto {
@@ -448,6 +654,17 @@ export interface UploadedPhoto {
   width: number;
   height: number;
   capturedAt?: number | null; // EXIF DateTimeOriginal (ms) — drives moment grouping
+  /** Megy's free photo check (blur, fingerprint, closed eyes) — lib/photoCheck. */
+  check?: PhotoCheck;
+  /** The customer said keep it: never suggested out again. */
+  kept?: boolean;
+  /** Left out of the album (the customer accepted Megy's suggestion). Stays in
+   *  the list, so indexes don't move and it can be brought back. */
+  leftOut?: boolean;
+  /** Put back from a re-added file on this device (photoRelink): 'differentCopy'
+   *  = same name, another size; 'smaller' = fewer pixels than the original (may
+   *  print softer); 'mismatch' = another shape (probably not the same picture). */
+  copyNote?: 'differentCopy' | 'smaller' | 'mismatch';
 }
 
 export interface ThemeConfig {
@@ -498,6 +715,8 @@ export const ALBUM_SIZES: AlbumSizeConfig[] = [
   { preset: '8x8', name: '8×8" Square', width: 2400, height: 2400, category: 'square' },
   { preset: '9x9', name: '9×9" Square', width: 2700, height: 2700, category: 'square' },
   { preset: '6x4', name: '6×4" Landscape', width: 1800, height: 1200, category: 'landscape' },
+  { preset: '8x6', name: '8×6" Landscape', width: 2400, height: 1800, category: 'landscape' },
+  { preset: '6x8', name: '6×8" Portrait', width: 1800, height: 2400, category: 'portrait' },
   { preset: '11.5x8', name: '11.5×8" Landscape', width: 3450, height: 2400, category: 'landscape' },
   { preset: '8.5x11', name: '8.5×11" Portrait', width: 2550, height: 3300, category: 'portrait' },
 ];
