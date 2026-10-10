@@ -3,7 +3,7 @@ import {
   priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, extraPagesCharge,
   qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE,
   hostingTiersOf, hostingTermCharge, includedHostingYears, DEFAULT_HOSTING_TIERS,
-  hdMemoriesPriceOf, hdMemoriesCharge,
+  hdMemoriesPriceOf, hdMemoriesCharge, shippingAllowanceOf, freeShippingValueOf, compareAtPriceOf, manilaToday,
   MIN_PAGES, SIZE_LABELS,
   type Binding, type PricingModel,
 } from './pricing';
@@ -354,5 +354,101 @@ describe('pricing invariants', () => {
     expect(album.amount).toBe(priceOf(schedule, '8x8', 'soft', 40));
     expect(extra).toEqual({ label: 'Extra pages · 10 (pages print 4 to a sheet: 3 more sheets)', amount: 318 });
     expect(extraPagesCharge(schedule, '8x8', 'soft', 40)).toEqual({ pages: 0, sheets: 0, amount: 0 });
+  });
+});
+
+// ── Free shipping built into the price + a real "was" price (owner, 2026-10-08; 0041) ──
+// The owner matched Photobook PH's everyday sale at 2.5× and built ₱200 of
+// shipping into every album, so checkout says "Free shipping". The crossed-out
+// "was" price is the price we really charged (4×, 25 Jul – 8 Oct 2026, shipping
+// free then too), and it switches off by itself on its end date.
+const LIVE: PricingModel = { ...MODEL, price_multiple: 2.5, shipping_allowance: 200, compare_multiple: 4, compare_until: '2026-12-31' };
+const BEFORE: PricingModel = { ...MODEL, price_multiple: 4 };
+
+describe('shipping built into the price (0041)', () => {
+  it('is FLAT: exactly ₱allowance more than a zero-allowance model, for every size/binding/pages/multiple', () => {
+    const none: PricingModel = { ...LIVE, shipping_allowance: 0 };
+    for (const multiple of MULTIPLES)
+      for (const size of SIZE_KEYS)
+        for (const binding of BINDINGS)
+          for (const pages of PAGE_COUNTS) {
+            expect(priceOf(scheduleFrom(LIVE, multiple), size, binding, pages) - priceOf(scheduleFrom(none, multiple), size, binding, pages)).toBe(200);
+            expect(ownerPriceOf(LIVE, size, binding, pages, multiple) - ownerPriceOf(none, size, binding, pages, multiple)).toBe(200);
+          }
+  });
+
+  it('schedule ↔ model agreement still holds with the allowance (customer charge = operator report)', () => {
+    for (const multiple of MULTIPLES) {
+      const schedule = scheduleFrom(LIVE, multiple);
+      for (const size of SIZE_KEYS)
+        for (const binding of BINDINGS)
+          for (const pages of PAGE_COUNTS)
+            expect(priceOf(schedule, size, binding, pages)).toBe(ownerPriceOf(LIVE, size, binding, pages, multiple));
+    }
+  });
+
+  it('never touches the extra pages: they cost exactly what they did', () => {
+    const none: PricingModel = { ...LIVE, shipping_allowance: 0 };
+    for (const size of SIZE_KEYS)
+      for (const binding of BINDINGS)
+        for (const pages of PAGE_COUNTS)
+          expect(extraPagesCharge(scheduleFrom(LIVE, 2.5), size, binding, pages)).toEqual(extraPagesCharge(scheduleFrom(none, 2.5), size, binding, pages));
+  });
+
+  it('the schedule tells checkout what the free shipping is worth, and carries no allowance/cost field', () => {
+    const schedule = scheduleFrom(LIVE, 2.5);
+    expect(freeShippingValueOf(schedule)).toBe(200);
+    expect(shippingAllowanceOf(LIVE)).toBe(200);
+    const json = JSON.stringify(schedule);
+    for (const leak of ['shipping_allowance', 'compare_multiple', 'price_multiple', 'sheet_cost', 'hb', 'surcharge']) expect(json).not.toContain(leak);
+  });
+
+  it('a pre-0041 schedule or model prices exactly as before and claims no shipping value', () => {
+    const legacy = scheduleFrom(MODEL, 3);
+    delete (legacy as Partial<typeof legacy>).free_shipping_value;
+    delete (legacy as Partial<typeof legacy>).compare_at;
+    expect(freeShippingValueOf(legacy)).toBe(0);
+    expect(shippingAllowanceOf(MODEL)).toBe(0);
+    expect(compareAtPriceOf(legacy, '8x8', 'hard', 40, '2026-10-08')).toBeNull();
+    for (const size of SIZE_KEYS) expect(priceOf(legacy, size, 'hard', 60)).toBe(ownerPriceOf(MODEL, size, 'hard', 60, 3));
+  });
+});
+
+describe('the crossed-out "was" price (0041)', () => {
+  it('is exactly the price we charged before, at every size, cover and page count', () => {
+    const schedule = scheduleFrom(LIVE, 2.5, [], '2026-10-08');
+    const before = scheduleFrom(BEFORE, 4);
+    for (const size of SIZE_KEYS)
+      for (const binding of BINDINGS)
+        for (const pages of PAGE_COUNTS)
+          expect(compareAtPriceOf(schedule, size, binding, pages, '2026-10-08')).toBe(priceOf(before, size, binding, pages));
+  });
+
+  it('switches itself off after its end date — on the server (no compare_at) and on a stale client', () => {
+    expect(scheduleFrom(LIVE, 2.5, [], '2027-01-01').compare_at).toBeUndefined();
+    const schedule = scheduleFrom(LIVE, 2.5, [], '2026-12-31');
+    expect(compareAtPriceOf(schedule, '8x8', 'hard', 40, '2026-12-31')).toBe(2510);
+    expect(compareAtPriceOf(schedule, '8x8', 'hard', 40, '2027-01-01')).toBeNull();
+  });
+
+  it('is never shown when it is not higher than today\'s price', () => {
+    const notLower = scheduleFrom({ ...LIVE, compare_multiple: 2.5, shipping_allowance: 0 }, 2.5, [], '2026-10-08');
+    for (const size of SIZE_KEYS) expect(compareAtPriceOf(notLower, size, 'hard', 40, '2026-10-08')).toBeNull();
+    expect(scheduleFrom({ ...LIVE, compare_multiple: 2 }, 2.5, [], '2026-10-08').compare_at).toBeUndefined();
+  });
+
+  it('the owner\'s 2026-10-08 list: 8×8 hardbound ₱2,510 → ₱1,788, 9×9 ₱2,780 → ₱2,013, 8×8 softcover ₱1,710 → ₱1,288', () => {
+    const live = { ...MODEL, sheet_cost: 26.5, hosting_reserve: 50 };
+    const schedule = scheduleFrom({ ...live, shipping_allowance: 200, compare_multiple: 4, compare_until: '2026-12-31' }, 2.5, [], '2026-10-08');
+    const cases: [AlbumSizePreset, Binding, number, number][] = [['8x8', 'hard', 2510, 1788], ['9x9', 'hard', 2780, 2013], ['8x8', 'soft', 1710, 1288], ['6x6', 'hard', 1594, 1215]];
+    for (const [size, binding, was, now] of cases) {
+      expect(priceOf(schedule, size, binding, 40), `${size} ${binding} now`).toBe(now);
+      expect(compareAtPriceOf(schedule, size, binding, 40, '2026-10-08'), `${size} ${binding} was`).toBe(was);
+    }
+  });
+
+  it('manilaToday is a YYYY-MM-DD date in Philippine time', () => {
+    expect(manilaToday(new Date('2026-12-31T16:30:00Z'))).toBe('2027-01-01');
+    expect(manilaToday(new Date('2026-12-31T15:30:00Z'))).toBe('2026-12-31');
   });
 });

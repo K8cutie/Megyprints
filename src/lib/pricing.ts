@@ -57,9 +57,27 @@ export interface PricingModel {
    *  0032). Standard 720p is included; HD is a value tier, not cost recovery. */
   hd_memories_price: number;
   sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
+  /** Shipping built into every album price (owner, 2026-10-08; migration
+   *  0041), so checkout can say "Free shipping". Flat, added after the markup
+   *  like the hosting reserve — never multiplied. Absent before 0041 → 0. */
+  shipping_allowance?: number;
+  /** The multiple we really charged before (4×, 25 Jul – 8 Oct 2026), shown as
+   *  the crossed-out "was" price until `compare_until`. Null = no was price. */
+  compare_multiple?: number | null;
+  /** Last day (Asia/Manila, YYYY-MM-DD) the was price shows. */
+  compare_until?: string | null;
 }
 
 export interface HostingTier { years: number; price: number }
+
+/** The previous real prices, pre-multiplied like the live rates, hosting
+ *  reserve folded in (no shipping — those prices shipped free with nothing
+ *  added). Present only until `until`. */
+export interface CompareAt {
+  until: string;
+  sheet_rate: number;
+  sizes: Record<AlbumSizePreset, { soft_rate: number; hard_rate: number }>;
+}
 
 /** What a fresh store sells before the owner retunes it (mirrors the 0030
  *  default). Also the client fallback when a schedule predates 0030 — but in
@@ -81,6 +99,11 @@ export interface PriceSchedule {
   hosting_tiers?: HostingTier[];
   /** HD memory upgrade price. Absent on a pre-0032 schedule → free/no offer. */
   hd_memories_price?: number;
+  /** What the free shipping is worth (the allowance already inside the rates),
+   *  for the "Free shipping (₱X value)" line. Absent before 0041 → no value shown. */
+  free_shipping_value?: number;
+  /** The crossed-out "was" prices, while they run (0041). */
+  compare_at?: CompareAt | null;
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
 }
@@ -153,6 +176,46 @@ export function hdMemoriesCharge(src: { hd_memories_price?: unknown }, hd: boole
 export function hostingReserveOf(schedule: Pick<PriceSchedule, 'hosting_reserve'>): number {
   const r = Number(schedule.hosting_reserve);
   return Number.isFinite(r) && r > 0 ? Math.round(r) : 0;
+}
+
+/** The shipping built into the price, from the owner model (pre-0041 → 0). */
+export function shippingAllowanceOf(model: Pick<PricingModel, 'shipping_allowance'>): number {
+  const r = Number(model.shipping_allowance);
+  return Number.isFinite(r) && r > 0 ? Math.round(r) : 0;
+}
+
+/** What "Free shipping" is worth on a customer schedule (pre-0041 → 0, so no
+ *  value is claimed — the shipping is still free, it just isn't priced in). */
+export function freeShippingValueOf(schedule: Pick<PriceSchedule, 'free_shipping_value'>): number {
+  const r = Number(schedule.free_shipping_value);
+  return Number.isFinite(r) && r > 0 ? Math.round(r) : 0;
+}
+
+/** Today in the Philippines as YYYY-MM-DD — the was price ends on a Manila
+ *  date, not at UTC midnight. */
+export function manilaToday(now: Date = new Date()): string {
+  return new Date(now.getTime() + 8 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** The crossed-out "was" price of the print (album + extra pages) — what this
+ *  exact album cost before the price drop — or null when there is none, it
+ *  has ended, or it isn't higher than today's price. */
+export function compareAtPriceOf(
+  schedule: PriceSchedule,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  today: string = manilaToday(),
+): number | null {
+  const c = schedule.compare_at;
+  const r = c?.sizes?.[size];
+  if (!c || !r || typeof c.until !== 'string' || today > c.until) return null;
+  const rate = binding === 'hard' ? Number(r.hard_rate) : Number(r.soft_rate);
+  const sheetRate = Number(c.sheet_rate);
+  if (!Number.isFinite(rate) || !Number.isFinite(sheetRate)) return null;
+  const sheets = sheetsFor(schedule.sizes[size].pps, schedule.min_pages, pages);
+  const was = Math.round(sheets * sheetRate + rate);
+  return was > priceOf(schedule, size, binding, pages) ? was : null;
 }
 
 /** What the pages past the included minimum add to the price. Pages print
@@ -308,25 +371,46 @@ export function ownerPriceOf(
 ): number {
   return Math.round(costOf(model, size, binding, pages) * multiple)
     + model.sizes[size].surcharge
-    + hostingReserveOf(model);
+    + hostingReserveOf(model)
+    + shippingAllowanceOf(model);
 }
 
 /** Pure mirror of public_price_schedule()'s arithmetic. Lives here so the spec
  *  can prove the schedule and the raw model agree without standing up a
- *  database; the SQL is the runtime source of truth. */
+ *  database; the SQL is the runtime source of truth.
+ *
+ *  The shipping allowance rides INSIDE the cover rates (flat, never
+ *  multiplied), so every client — old app versions included — charges it with
+ *  no change. `today` is the Manila date the SQL compares the was price's end
+ *  date to; omit it to keep any was price that is set. */
 export function scheduleFrom(
   model: PricingModel,
   multiple: number,
   disabledSizes: AlbumSizePreset[] = [],
+  today?: string,
 ): PriceSchedule {
+  const ship = shippingAllowanceOf(model);
+  const reserve = hostingReserveOf(model);
+  const cm = Number(model.compare_multiple);
+  const until = model.compare_until;
+  const showCompare = Number.isFinite(cm) && cm > multiple && typeof until === 'string'
+    && (today === undefined || today <= until);
   const sizes = {} as PriceSchedule['sizes'];
+  const compareSizes = {} as CompareAt['sizes'];
   for (const key of Object.keys(model.sizes) as AlbumSizePreset[]) {
     const s = model.sizes[key];
+    const soft = model.soft_cover_cost + model.soft_bind_cost;
     sizes[key] = {
       pps: s.pps,
-      soft_rate: (model.soft_cover_cost + model.soft_bind_cost) * multiple + s.surcharge,
-      hard_rate: s.hb * multiple + s.surcharge,
+      soft_rate: soft * multiple + s.surcharge + ship,
+      hard_rate: s.hb * multiple + s.surcharge + ship,
     };
+    if (showCompare) {
+      compareSizes[key] = {
+        soft_rate: soft * cm + s.surcharge + reserve,
+        hard_rate: s.hb * cm + s.surcharge + reserve,
+      };
+    }
   }
   return {
     min_pages: model.min_pages,
@@ -334,6 +418,8 @@ export function scheduleFrom(
     hosting_reserve: model.hosting_reserve,
     hosting_tiers: model.hosting_tiers,
     hd_memories_price: model.hd_memories_price,
+    free_shipping_value: ship,
+    ...(showCompare ? { compare_at: { until: until as string, sheet_rate: model.sheet_cost * cm, sizes: compareSizes } } : {}),
     disabled_sizes: disabledSizes,
     sizes,
   };
