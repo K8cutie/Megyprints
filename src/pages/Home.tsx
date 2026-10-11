@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -263,6 +263,9 @@ function CTASection() {
 export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  // Came from "Welcome back" by choosing "Start a new album" (ResumePrompt):
+  // they already said new, so Start Creating doesn't ask again.
+  const choseNew = !!(useLocation().state as { choseNew?: boolean } | null)?.choseNew;
 
   // "Start Creating" with an album in progress asks first (StartNewAlbumPrompt).
   const [inProgress, setInProgress] = useState<LocalDraftSummary | null>(null);
@@ -277,7 +280,7 @@ export default function Home() {
     switch (action) {
       case 'go-builder': {
         const draft = readLocalDraftSummary();
-        if (albumInProgress(draft)) setInProgress(draft);
+        if (albumInProgress(draft) && !choseNew) setInProgress(draft);
         else startNew();
         break;
       }
@@ -292,7 +295,7 @@ export default function Home() {
       default:
         break;
     }
-  }, [navigate, startNew]);
+  }, [navigate, startNew, choseNew]);
 
   return (
     <>

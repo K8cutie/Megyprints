@@ -63,7 +63,9 @@ describe('StartNewAlbumPrompt', () => {
 describe('wired in (source guards)', () => {
   it('Home\'s Start Creating asks when an album is in progress, else starts fresh', () => {
     const home = readFileSync(resolve(__dirname, '../pages/Home.tsx'), 'utf8');
-    expect(home).toMatch(/case 'go-builder': \{\s*const draft = readLocalDraftSummary\(\);\s*if \(albumInProgress\(draft\)\) setInProgress\(draft\);\s*else startNew\(\);/);
+    // Except right after "Start a new album" in Welcome back (they already
+    // said new; pages/homeChoseNew.spec.ts walks both ways).
+    expect(home).toMatch(/case 'go-builder': \{\s*const draft = readLocalDraftSummary\(\);\s*if \(albumInProgress\(draft\) && !choseNew\) setInProgress\(draft\);\s*else startNew\(\);/);
   });
   it('the thank-you screen\'s Create Another starts a new album', () => {
     const order = readFileSync(resolve(__dirname, '../pages/Order.tsx'), 'utf8');
