@@ -44,6 +44,9 @@ export default defineConfig(({ command }) => ({
       workbox: {
         // Main bundle is ~3MB; raise the precache limit so it works offline.
         globPatterns: ['**/*.{js,css,html,png,svg,woff,woff2}'],
+        // The console's press-sheet tool (pdf-lib, ~430 KB) is for the shop
+        // only: it loads on the operator's first click, not on every phone.
+        globIgnores: ['**/printSheetPdf-*.js'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Apply a shipped build on the NEXT load instead of waiting for every tab
         // to close — the new service worker activates immediately and claims open

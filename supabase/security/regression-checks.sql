@@ -244,5 +244,24 @@ begin
   raise notice 'PASS: the guest camera is limited, its files private or unlistable, and a booking pays for one album';
 end $$;
 
+-- ── GUARD: covers the press can't print stay refused (0046) ─────────────────
+-- The shop's 12.5 × 19 in sheet can't hold a 9x9 hardbound cover (≈20.2 in),
+-- an 8.5x11 hardbound one or any 11.5x8 one; a direct REST insert must not get
+-- past checkout's check. The pages-per-sheet must stay what the press fits.
+do $$
+declare s jsonb;
+begin
+  if not exists (select 1 from pg_trigger where tgname = 'orders_press_fit_trg')
+     or not exists (select 1 from pg_trigger where tgname = 'event_bookings_press_fit_trg')
+     or not public.press_cover_never_fits('9x9', 'hard') then
+    raise exception 'REGRESSION (press sheet): a 9x9 hardbound order or deal is no longer refused';
+  end if;
+  select sizes into s from public.pricing_model where id = 1;
+  if (s->'6x6'->>'pps')::int <> 6 or (s->'6x4'->>'pps')::int <> 12 or (s->'8x6'->>'pps')::int <> 6 or (s->'6x8'->>'pps')::int <> 6 then
+    raise exception 'REGRESSION (press sheet): pages per sheet no longer match the press (printSheet.ts): %', s;
+  end if;
+  raise notice 'PASS: covers the press can''t print are refused, and pages per sheet match the press';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;
