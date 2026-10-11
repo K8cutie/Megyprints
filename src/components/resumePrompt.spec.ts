@@ -47,7 +47,7 @@ const click = async (el: Element) => { await act(async () => { (el as HTMLElemen
 
 function Where() {
   const l = useLocation();
-  return createElement('output', { 'data-testid': 'where' }, `${l.pathname}${l.search}`);
+  return createElement('output', { 'data-testid': 'where', 'data-state': JSON.stringify(l.state ?? null) }, `${l.pathname}${l.search}`);
 }
 const mount = async (path = '/') => {
   await act(async () => {
@@ -227,11 +227,16 @@ describe('choosing among the last 3', () => {
     expect(listAccountAlbums).toHaveBeenCalledTimes(1);
   });
 
-  it('"Start a new album" opens a new one', async () => {
+  it('"Start a new album" goes to the homepage, to pick a new album or an event (owner, 2026-10-11)', async () => {
     await show([album('a', 1)]);
+    expect($('resume-new')!.textContent).toContain('Start a new album');
     await click($('resume-new')!);
-    expect($('where')!.textContent).toBe('/builder');
-    expect(sessionStorage.getItem('megy-fresh-start')).toBe('1');
+    expect($('resume-prompt')).toBeNull();
+    expect($('where')!.textContent).toBe('/');
+    // Home is told they chose new (its Start Creating won't ask again)…
+    expect($('where')!.getAttribute('data-state')).toBe('{"choseNew":true}');
+    // …and nothing is started yet: they may pick an event instead.
+    expect(sessionStorage.getItem('megy-fresh-start')).toBeNull();
   });
 
   it('shown from this device\'s memory, then brought up to date from the account, keeping the choice', async () => {

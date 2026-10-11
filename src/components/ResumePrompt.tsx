@@ -8,7 +8,7 @@ import { readLocalDraftSummary } from '../lib/localDraft';
 import { chooseResumeOffers, type ResumeOffer, type SavedAlbumSummary } from '../lib/resumeOffer';
 import { readResumeCache, writeResumeCache, hasStoredSession, rememberedNoAlbums } from '../lib/resumeCache';
 import {
-  wasResumeAsked, wasResumeAskedThisVisit, markResumeAsked, clearResumeAsked, startFreshAlbum,
+  wasResumeAsked, wasResumeAskedThisVisit, markResumeAsked, clearResumeAsked,
 } from '../lib/albumSession';
 import { formatRelativeTime } from './UserProjectsSection';
 import { useModalDialog } from '../lib/useModalDialog';
@@ -26,7 +26,8 @@ import MegyMascot from './MegyMascot';
    with Home's moving cards behind it: "It becomes confusing." Now it is the
    FIRST screen a customer with albums sees, on a plain background, and it
    lists their last 3 albums (the newest one chosen; "Yes, resume" opens the
-   chosen one). Home only shows after "Not now". While the app checks for
+   chosen one). "Start a new album" goes to the homepage, to pick a new album
+   or an event. Home only shows after a choice. While the app checks for
    albums it holds a plain screen instead of flashing Home; albums this
    device remembers (lib/resumeCache) show at once. If the check takes too
    long, Home shows and nothing pops up later.
@@ -188,10 +189,12 @@ export function ResumePrompt() {
     close();
     navigate(choice.kind === 'saved' ? `/builder?album=${choice.albumId}` : '/builder');
   };
+  // Owner (2026-10-11): "Start a new album goes to homepage", where they pick
+  // a new album (Start Creating) or an event (Book your event). They already
+  // said new, so Home's Start Creating won't ask about the album in progress.
   const startNew = () => {
     close();
-    startFreshAlbum(user.id);
-    navigate('/builder');
+    navigate('/', { state: { choseNew: true } });
   };
   const firstName = firstNameOf(user);
 
