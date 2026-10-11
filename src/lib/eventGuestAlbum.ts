@@ -72,8 +72,16 @@ export async function myGuestAlbums(): Promise<GuestAlbumEvent[]> {
   return Array.isArray(data) ? (data as GuestAlbumEvent[]) : [];
 }
 
-export async function guestAlbumPool(guestId: string): Promise<GuestAlbumItem[]> {
-  const { data, error } = await supabase.rpc('guest_album_media', { p_guest_id: guestId });
+/** One page of the pool, newest first (a big event has more than one call can return). */
+export async function guestAlbumPool(guestId: string, offset = 0, limit = 120): Promise<GuestAlbumItem[]> {
+  const { data, error } = await supabase.rpc('guest_album_media', { p_guest_id: guestId, p_offset: offset, p_limit: limit });
+  if (error) throw new Error(guestAlbumErrorMessage(error));
+  return Array.isArray(data) ? (data as GuestAlbumItem[]) : [];
+}
+
+/** Exactly what the guest picked (whatever page they scrolled to). */
+export async function guestAlbumPicks(guestId: string): Promise<GuestAlbumItem[]> {
+  const { data, error } = await supabase.rpc('guest_album_picks', { p_guest_id: guestId });
   if (error) throw new Error(guestAlbumErrorMessage(error));
   return Array.isArray(data) ? (data as GuestAlbumItem[]) : [];
 }
@@ -94,7 +102,7 @@ export async function downloadPickedOriginal(bookingId: string, mediaId: string)
 /** The host: guests can (or can't) make their own album. */
 export async function setGuestAlbums(bookingId: string, on: boolean): Promise<void> {
   const { error } = await supabase.rpc('set_guest_albums', { p_booking_id: bookingId, p_on: on });
-  if (error) throw new Error(error.message || 'Could not save. Try again.');
+  if (error) throw new Error(error.code === '42501' ? 'This event isn’t yours, or it isn’t booked yet.' : 'Couldn’t save. Try again.');
 }
 
 /** Which event this account can make an album from, for an event code. */

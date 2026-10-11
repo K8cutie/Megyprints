@@ -318,6 +318,7 @@ describe('a guest’s own album (/e/:code/album, 0047): the school trip, the bri
     h.rpc.link_event_guest = () => ({ data: { guest_id: 'g1' }, error: null });
     h.rpc.my_guest_albums = () => ({ data: [EVENT], error: null });
     h.rpc.guest_album_media = () => ({ data: [item(1), item(2, { mine: true })], error: null });
+    h.rpc.guest_album_picks = () => ({ data: [], error: null });
     h.rpc.set_guest_pick = () => ({ data: true, error: null });
   });
   const joined = () => localStorage.setItem('megy-event-guest:abc12345', JSON.stringify({ token: 'tok-1', guestId: 'g1', name: 'Parent A', table: null }));
@@ -380,7 +381,7 @@ describe('a guest’s own album (/e/:code/album, 0047): the school trip, the bri
 
   it('short of 40 photos: says how many more; nothing downloads', async () => {
     joined();
-    h.rpc.guest_album_media = () => ({ data: Array.from({ length: 39 }, (_, i) => item(i, { picked: true })), error: null });
+    h.rpc.guest_album_picks = () => ({ data: Array.from({ length: 39 }, (_, i) => item(i, { picked: true })), error: null });
     await render('/e/abc12345/album');
     await click($('guest-album-make-button'));
     expect($('guest-album-short')?.textContent).toBe('An album needs at least 40 photos. Pick 1 more (tap “Pick” on a photo).');
@@ -389,14 +390,13 @@ describe('a guest’s own album (/e/:code/album, 0047): the school trip, the bri
 
   it('Make my album: only the picked photos’ print masters, the picked video, NOT linked to the booking (normal price)', async () => {
     joined();
-    h.rpc.guest_album_media = () => ({
-      data: [
-        ...Array.from({ length: 40 }, (_, i) => item(i, { picked: true })),
-        item(50),
-        item(52, { picked: true, kind: 'video', ext: 'mp4', guest_name: 'Bea', duration_s: 4 }),
-      ],
-      error: null,
-    });
+    const picked = [
+      ...Array.from({ length: 40 }, (_, i) => item(i, { picked: true })),
+      item(52, { picked: true, kind: 'video', ext: 'mp4', guest_name: 'Bea', duration_s: 4 }),
+    ];
+    // The page on screen shows only the newest few; the picks come whole.
+    h.rpc.guest_album_media = () => ({ data: [item(50), ...picked.slice(0, 3)], error: null });
+    h.rpc.guest_album_picks = () => ({ data: picked, error: null });
     await render('/e/abc12345/album');
     expect($('guest-album-count')?.textContent).toBe('40 photos picked and 1 video (they become video memories).');
     await click($('guest-album-make-button'));
@@ -407,6 +407,40 @@ describe('a guest’s own album (/e/:code/album, 0047): the school trip, the bri
     expect(imp.videos).toEqual([{ id: 'm52', url: 'https://x/event-videos/b1/m52.mp4', ext: 'mp4', by: 'Bea', durationS: 4 }]);
     expect(h.fresh).toHaveBeenCalledWith('parent-1');
     expect($('where')?.textContent).toBe('/builder');
+  });
+
+  it('a limit (200 at once, so many a day) is said in words and the tap is undone', async () => {
+    joined();
+    h.rpc.set_guest_pick = () => ({ data: null, error: { code: 'EV054', message: 'You can pick up to 200 photos and videos. Unpick some first.' } });
+    await render('/e/abc12345/album');
+    await click($$('guest-album-pick')[0]);
+    expect($('guest-album-error')?.textContent).toBe('You can pick up to 200 photos and videos. Unpick some first.');
+    expect($$('guest-album-pick')[0].textContent).toBe('Pick');
+  });
+
+  it('a big event loads a page at a time: "Show more photos" asks for the next page', async () => {
+    joined();
+    h.rpc.guest_album_media = (a) => ({ data: Array.from({ length: a.p_offset ? 5 : 120 }, (_, i) => item(Number(a.p_offset) + i)), error: null });
+    await render('/e/abc12345/album');
+    expect($$('guest-album-item')).toHaveLength(120);
+    await click($('guest-album-more'));
+    expect(h.calls.filter(([n]) => n === 'guest_album_media').map(([, a]) => a)).toEqual([
+      { p_guest_id: 'g1', p_offset: 0, p_limit: 120 }, { p_guest_id: 'g1', p_offset: 120, p_limit: 120 },
+    ]);
+    expect($$('guest-album-item')).toHaveLength(125);
+    expect($('guest-album-more')).toBeNull();
+  });
+
+  it('joining says other guests can use your photos in their own album', async () => {
+    await render('/e/abc12345');
+    expect($('guest-consent')?.textContent).toContain('Other guests can also pick your photos and videos for their own printed album.');
+  });
+
+  it('closed, and no pass on this phone: a quieter way in for a guest who joined on another phone', async () => {
+    h.rpc.event_public = () => ({ data: { ...EV, open: false, opens_on: '2026-10-09', closes_on: '2026-10-11', albums_on: true }, error: null });
+    await render('/e/abc12345');
+    expect($('guest-album-link')).toBeNull();
+    expect($('guest-album-other-phone')?.textContent).toBe('Joined from another phone? Make your own album');
   });
 });
 

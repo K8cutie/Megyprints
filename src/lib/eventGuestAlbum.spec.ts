@@ -60,7 +60,7 @@ describe('small helpers', () => {
 });
 
 describe('0047 grants (source guard)', () => {
-  const PUBLIC_FNS = ['set_guest_albums(uuid, boolean)', 'link_event_guest(text, text)', 'my_guest_albums()', 'guest_album_media(uuid)',
+  const PUBLIC_FNS = ['set_guest_albums(uuid, boolean)', 'link_event_guest(text, text)', 'my_guest_albums()', 'guest_album_media(uuid, integer, integer)', 'guest_album_picks(uuid)',
     'set_guest_pick(uuid, uuid, boolean)', 'event_guest_album_reads_path(text)', 'my_event(uuid)'];
   const HELPERS = ['event_guest_albums_live(public.event_bookings)', 'event_album_guest(uuid)', 'event_album_media_ok(public.event_media)'];
 
@@ -78,6 +78,8 @@ describe('0047 grants (source guard)', () => {
   it('the picks table has RLS on and no direct access', () => {
     expect(SQL).toContain('alter table public.event_guest_picks enable row level security;');
     expect(SQL).toContain('revoke all on table public.event_guest_picks from anon, authenticated;');
+    expect(SQL).toContain('alter table public.event_guest_pick_log enable row level security;');
+    expect(SQL).toContain('revoke all on table public.event_guest_pick_log from anon, authenticated;');
   });
 
   it('print masters: a SELECT-only policy on event-originals, by the guest\'s picks', () => {

@@ -259,7 +259,8 @@ begin
      or has_table_privilege('anon', 'public.event_guest_picks', 'SELECT') then
     raise exception 'REGRESSION (guest albums): the guests'' picks can be read directly';
   end if;
-  foreach f in array array['public.link_event_guest(text, text)', 'public.guest_album_media(uuid)', 'public.set_guest_pick(uuid, uuid, boolean)',
+  foreach f in array array['public.link_event_guest(text, text)', 'public.guest_album_media(uuid, integer, integer)', 'public.guest_album_picks(uuid)',
+                           'public.set_guest_pick(uuid, uuid, boolean)',
                            'public.my_guest_albums()', 'public.set_guest_albums(uuid, boolean)', 'public.event_guest_album_reads_path(text)'] loop
     if has_function_privilege('anon', f, 'EXECUTE') then
       raise exception 'REGRESSION (guest albums): anon can run %', f;

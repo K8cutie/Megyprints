@@ -109,8 +109,8 @@ $$;
 do $proof$
 declare
   H uuid; OWN uuid; P1 uuid; P2 uuid; X uuid;
-  ev uuid; ev2 uuid; cd text; cd2 text; tokA text; tokB text; tokC text; tokD text;
-  gA uuid; gC uuid;
+  ev uuid; ev2 uuid; cd text; cd2 text; tokA text; tokB text; tokC text; tokD text; tokE text; tokF text;
+  gA uuid; gB uuid; gC uuid; mx uuid; mB3 uuid; mE1 uuid;
   mA1 uuid; mB1 uuid; mB2 uuid; mC1 uuid; mV uuid; mOther uuid;
   r text := '';
   fails int; total int;
@@ -191,6 +191,60 @@ begin
     r := r || pg_temp.line('G22', 'anon can''t switch it or list albums', 'REFUSED 42501|REFUSED 42501',
            left(pg_temp.do_as(null, 'anon', format('select public.set_guest_albums(%L, false)', ev)), 13) || '|' ||
            left(pg_temp.do_as(null, 'anon', 'select count(*) from public.my_guest_albums()'), 13));
+
+    -- ── After the review (second commit) ──
+    gB := (select id from public.event_guests where token_hash = public.event_token_hash(tokB));
+    perform pg_temp.do_as(P2, 'authenticated', format('select public.link_event_guest(%L, %L)', cd, tokB));
+    tokE := pg_temp.join(cd, 'Parent B tablet');
+    -- Guest A was removed above, and their photos went with them: new ones.
+    mB3 := pg_temp.share(cd, tokB); mE1 := pg_temp.share(cd, tokE);
+    r := r || pg_temp.line('G23', 'one place per account per event: a second phone''s pass gives back the first', gB::text || '|1',
+           pg_temp.do_as(P2, 'authenticated', format($q$select public.link_event_guest(%L, %L) ->> 'guest_id'$q$, cd, tokE), 'value') || '|' ||
+           pg_temp.do_as(P2, 'authenticated', 'select count(*)::text from public.my_guest_albums()', 'value'));
+    r := r || pg_temp.line('G24', 'a removed pass is told so', 'REFUSED EV053',
+           pg_temp.do_as(X, 'authenticated', format('select public.link_event_guest(%L, %L)', cd, tokA)));
+    tokF := pg_temp.join(cd, 'Parent A again');
+    r := r || pg_temp.line('G25', 'the removed account can''t come back through a new pass', 'REFUSED EV053',
+           pg_temp.do_as(P1, 'authenticated', format('select public.link_event_guest(%L, %L)', cd, tokF)));
+    r := r || pg_temp.line('G26', 'the pool comes a page at a time', '1|1|3',
+           pg_temp.do_as(P2, 'authenticated', format('select count(*)::text from public.guest_album_media(%L, 0, 1)', gB), 'value') || '|' ||
+           pg_temp.do_as(P2, 'authenticated', format('select count(*)::text from public.guest_album_media(%L, 1, 1)', gB), 'value') || '|' ||
+           pg_temp.do_as(P2, 'authenticated', format('select count(*)::text from public.guest_album_media(%L)', gB), 'value'));
+    -- Small limits for the proof (the transaction is rolled back).
+    create or replace function public.event_guest_album_max_picks() returns integer language sql immutable set search_path = '' as $f$ select 1 $f$;
+    r := r || pg_temp.line('G27', 'at most N picked at once', 'true|REFUSED EV054',
+           pg_temp.do_as(P2, 'authenticated', format('select public.set_guest_pick(%L, %L, true)::text', gB, mB1), 'value') || '|' ||
+           left(pg_temp.do_as(P2, 'authenticated', format('select public.set_guest_pick(%L, %L, true)', gB, mB3)), 13));
+    create or replace function public.event_guest_album_max_picks() returns integer language sql immutable set search_path = '' as $f$ select 200 $f$;
+    create or replace function public.event_guest_album_daily_picks() returns integer language sql immutable set search_path = '' as $f$ select 2 $f$;
+    r := r || pg_temp.line('G28', 'unpicking doesn''t reset the day: a third new item is refused, an old one is fine', 'true|true|REFUSED EV055|true',
+           pg_temp.do_as(P2, 'authenticated', format('select public.set_guest_pick(%L, %L, false)::text', gB, mB1), 'value') || '|' ||
+           pg_temp.do_as(P2, 'authenticated', format('select public.set_guest_pick(%L, %L, true)::text', gB, mB3), 'value') || '|' ||
+           left(pg_temp.do_as(P2, 'authenticated', format('select public.set_guest_pick(%L, %L, true)', gB, mE1)), 13) || '|' ||
+           pg_temp.do_as(P2, 'authenticated', format('select public.set_guest_pick(%L, %L, true)::text', gB, mB1), 'value'));
+    r := r || pg_temp.line('G29', 'the picks list is exact', '2',
+           pg_temp.do_as(P2, 'authenticated', format('select count(*)::text from public.guest_album_picks(%L)', gB), 'value'));
+    -- A copied print master published as a view copy: refused.
+    tokD := pg_temp.join(cd2, 'Copier');
+    mx := pg_temp.do_as(null, 'anon', format($q$select (public.event_media_begin(%L, %L, 'photo', 'jpg', 1000, 4000, 3000, null) ->> 'media_id')$q$, cd2, tokD), 'value')::uuid;
+    perform pg_temp.do_as(null, 'anon', format($q$insert into storage.objects (bucket_id, name, metadata) values ('event-originals', %L, '{"size": 3000000}'), ('event-media', %L, '{"size": 9000000}'), ('event-media', %L, '{"size": 50000}')$q$,
+             ev2::text || '/' || mx::text || '.jpg', ev2::text || '/' || mx::text || '-v.jpg', ev2::text || '/' || mx::text || '-t.jpg'));
+    r := r || pg_temp.line('G30', 'a public view copy over 4 MB isn''t taken', 'REFUSED EV026',
+           pg_temp.do_as(null, 'anon', format('select public.event_media_ready(%L, %L, %L)', cd2, tokD, mx)));
+    -- The keep date passes.
+    alter table public.event_bookings disable trigger event_bookings_guard_trg;
+    update public.event_bookings set event_date = event_date - (public.event_keep_days() + 10) where id = ev;
+    alter table public.event_bookings enable trigger event_bookings_guard_trg;
+    r := r || pg_temp.line('G31', 'past the keep date: the page, the list, the pool and new links all close', 'false|0|0|REFUSED EV051',
+           pg_temp.do_as(null, 'anon', format($q$select public.event_public(%L) ->> 'albums_on'$q$, cd), 'value') || '|' ||
+           pg_temp.do_as(P2, 'authenticated', 'select count(*)::text from public.my_guest_albums()', 'value') || '|' ||
+           pg_temp.do_as(P2, 'authenticated', format('select count(*)::text from public.guest_album_media(%L)', gB), 'value') || '|' ||
+           left(pg_temp.do_as(X, 'authenticated', format('select public.link_event_guest(%L, %L)', cd, tokF)), 13));
+    perform pg_temp.do_as(null, 'service_role', 'select public.event_retention_sweep()', 'value');
+    r := r || pg_temp.line('G32', 'the sweep forgets who attended: links, picks and the pick log', '0|0|0',
+           (select count(*)::text from public.event_guests where booking_id = ev and (user_id is not null or linked_at is not null)) || '|' ||
+           (select count(*)::text from public.event_guest_picks p join public.event_guests g on g.id = p.guest_id where g.booking_id = ev) || '|' ||
+           (select count(*)::text from public.event_guest_pick_log l join public.event_guests g on g.id = l.guest_id where g.booking_id = ev));
     raise exception using errcode = 'MPOK0';
   exception when sqlstate 'MPOK0' then null;
   end;

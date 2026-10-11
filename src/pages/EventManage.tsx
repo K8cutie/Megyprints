@@ -277,7 +277,7 @@ function SettingsCard({ ev, onSaved }: { ev: MyEvent; onSaved: () => Promise<voi
         <label className="flex items-start gap-2">
           <input type="checkbox" checked={guestAlbums} onChange={(e) => setGuestAlbumsOn(e.target.checked)} className="mt-1" data-testid="manage-guest-albums" />
           <span>
-            <b className="text-dark">Guests can make their own album</b> from everyone’s photos and videos, at the normal price. They pick their own; they can’t download the photos.
+            <b className="text-dark">Guests can make their own album</b> from everyone’s photos and videos, at the normal price. They pick their own, and get the full-size copy only of the photos they pick for their album.
             {!!ev.guest_albums && <span className="block text-xs text-medium mt-0.5" data-testid="manage-guest-albums-count">{ev.guest_albums} guest{ev.guest_albums === 1 ? ' has' : 's have'} started their own album.</span>}
           </span>
         </label>

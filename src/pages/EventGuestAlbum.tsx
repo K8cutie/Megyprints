@@ -6,7 +6,7 @@ import { useAuthModal } from '../components/AuthModalProvider';
 import { eventPublic, eventMediaUrl, readPass, shortDate, type EventPublic } from '../lib/eventCamera';
 import { eventTypeLabel } from '../lib/eventBookings';
 import {
-  downloadPickedOriginal, eventForCode, guestAlbumPool, linkEventGuest, myGuestAlbums, setGuestPick,
+  downloadPickedOriginal, eventForCode, guestAlbumPicks, guestAlbumPool, linkEventGuest, myGuestAlbums, setGuestPick,
   type GuestAlbumEvent, type GuestAlbumItem,
 } from '../lib/eventGuestAlbum';
 import { setPendingEventImport } from '../lib/eventAlbum';
@@ -118,9 +118,16 @@ export default function EventGuestAlbum() {
   return <Wrap>{header}<Picker event={found.event} userId={user.id} /></Wrap>;
 }
 
+/** Items load a page at a time (a big event has thousands); the picks load
+ *  whole (at most 200), so the count and "Make my album" are always exact. */
+const PAGE = 120;
+
 function Picker({ event, userId }: { event: GuestAlbumEvent; userId: string }) {
   const navigate = useNavigate();
-  const [pool, setPool] = useState<GuestAlbumItem[] | null>(null);
+  const [items, setItems] = useState<GuestAlbumItem[] | null>(null);
+  const [more, setMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [picks, setPicks] = useState<GuestAlbumItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'picked' | 'mine'>('all');
   const [open, setOpen] = useState<GuestAlbumItem | null>(null);
   const [err, setErr] = useState('');
@@ -133,27 +140,56 @@ function Picker({ event, userId }: { event: GuestAlbumEvent; userId: string }) {
   );
 
   const load = useCallback(async () => {
-    try { setPool(await guestAlbumPool(event.guest_id)); } catch (e) { setErr(e instanceof Error ? e.message : 'We couldn’t load the photos.'); }
+    try {
+      const [first, mine] = await Promise.all([guestAlbumPool(event.guest_id, 0, PAGE), guestAlbumPicks(event.guest_id)]);
+      setItems(first);
+      setMore(first.length === PAGE);
+      setPicks(mine);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'We couldn’t load the photos.');
+    }
   }, [event.guest_id]);
   useEffect(() => { void load(); }, [load]);
 
-  if (!pool) return err ? <p className="text-sm text-red-600">{err}</p> : <Spinner />;
+  if (!items) return err ? <p className="text-sm text-red-600">{err}</p> : <Spinner />;
 
-  const toggle = async (p: GuestAlbumItem) => {
-    const next = !p.picked;
-    setPool((all) => all && all.map((x) => (x.id === p.id ? { ...x, picked: next } : x)));
-    const ok = await setGuestPick(event.guest_id, p.id, next).catch(() => false);
-    if (!ok) {
-      setErr('That one couldn’t be picked. It may have been removed. Showing the latest photos.');
-      await load();
+  const pickedIds = new Set(picks.map((p) => p.id));
+  const withPick = (p: GuestAlbumItem) => ({ ...p, picked: pickedIds.has(p.id) });
+
+  const showMore = async () => {
+    setLoadingMore(true);
+    try {
+      const next = await guestAlbumPool(event.guest_id, items.length, PAGE);
+      setItems((all) => [...(all ?? []), ...next.filter((n) => !(all ?? []).some((a) => a.id === n.id))]);
+      setMore(next.length === PAGE);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'We couldn’t load more photos.');
+    } finally {
+      setLoadingMore(false);
     }
   };
 
-  const picked = pool.filter((p) => p.picked);
-  const photos = picked.filter((p) => p.kind === 'photo');
-  const videos = picked.filter((p) => p.kind === 'video');
+  const toggle = async (p: GuestAlbumItem) => {
+    const next = !pickedIds.has(p.id);
+    setErr('');
+    setPicks((all) => (next ? [...all, { ...p, picked: true }] : all.filter((x) => x.id !== p.id)));
+    try {
+      const ok = await setGuestPick(event.guest_id, p.id, next);
+      if (!ok) {
+        setErr('That one can’t be picked any more. It may have been removed. Showing the latest photos.');
+        await load();
+      }
+    } catch (e) {
+      // A limit (how many at once, how many today): say it, undo the tap.
+      setPicks((all) => (next ? all.filter((x) => x.id !== p.id) : [...all, { ...p, picked: true }]));
+      setErr(e instanceof Error ? e.message : 'That didn’t save. Try again.');
+    }
+  };
+
+  const photos = picks.filter((p) => p.kind === 'photo');
+  const videos = picks.filter((p) => p.kind === 'video');
   const short = MIN_ALBUM_PHOTOS - photos.length;
-  const shown = pool.filter((p) => (filter === 'picked' ? p.picked : filter === 'mine' ? p.mine : true));
+  const shown = (filter === 'picked' ? picks : items.filter((p) => (filter === 'mine' ? p.mine : true))).map(withPick);
 
   const make = async () => {
     setTried(true);
@@ -201,12 +237,12 @@ function Picker({ event, userId }: { event: GuestAlbumEvent; userId: string }) {
           {(['all', 'picked', 'mine'] as const).map((f) => (
             <button key={f} type="button" onClick={() => setFilter(f)} aria-pressed={filter === f} data-testid={`guest-album-filter-${f}`}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold ${filter === f ? 'bg-blush-pink text-white' : 'bg-paper text-medium'}`}>
-              {f === 'all' ? `All (${pool.length})` : f === 'picked' ? `Picked (${picked.length})` : 'Shared by me'}
+              {f === 'all' ? 'All' : f === 'picked' ? `Picked (${picks.length})` : 'Shared by me'}
             </button>
           ))}
         </div>
         {shown.length === 0 ? (
-          <p className="text-sm text-medium py-6 text-center">{pool.length ? 'Nothing here.' : 'Nothing shared yet. Photos show here as guests share them.'}</p>
+          <p className="text-sm text-medium py-6 text-center">{items.length ? 'Nothing here.' : 'Nothing shared yet. Photos show here as guests share them.'}</p>
         ) : (
           <div className="grid grid-cols-3 gap-2">
             {shown.map((p) => (
@@ -226,6 +262,12 @@ function Picker({ event, userId }: { event: GuestAlbumEvent; userId: string }) {
               </div>
             ))}
           </div>
+        )}
+        {filter !== 'picked' && more && (
+          <button type="button" onClick={() => void showMore()} disabled={loadingMore} data-testid="guest-album-more"
+            className="mt-3 w-full py-2.5 rounded-xl border-2 border-peach text-cocoa text-sm font-semibold hover:bg-blush disabled:opacity-60">
+            {loadingMore ? 'Loading…' : 'Show more photos'}
+          </button>
         )}
       </div>
 
@@ -248,7 +290,7 @@ function Picker({ event, userId }: { event: GuestAlbumEvent; userId: string }) {
             An album needs at least {MIN_ALBUM_PHOTOS} photos. Pick {short} more (tap “Pick” on a photo).
           </p>
         )}
-        {err && <p className="mt-2 text-xs text-red-600" role="alert">{err}</p>}
+        {err && <p className="mt-2 text-xs text-red-600" role="alert" data-testid="guest-album-error">{err}</p>}
       </div>
 
       {open && (
@@ -259,9 +301,9 @@ function Picker({ event, userId }: { event: GuestAlbumEvent; userId: string }) {
               : <img src={eventMediaUrl(open.booking_id, open.id, 'view')} alt="" className="w-full max-h-[75vh] object-contain rounded-lg" />}
             <p className="mt-2 text-center text-sm text-white">{open.mine ? 'You' : (open.guest_name ?? 'A guest')}</p>
             <div className="mt-3 flex justify-center gap-2">
-              <button type="button" onClick={() => { void toggle(open); setOpen({ ...open, picked: !open.picked }); }}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold ${open.picked ? 'bg-[#D4A017] text-white' : 'bg-white text-dark'}`}>
-                {open.picked ? 'Picked' : 'Pick'}
+              <button type="button" onClick={() => { void toggle(open); setOpen({ ...open, picked: !pickedIds.has(open.id) }); }}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold ${pickedIds.has(open.id) ? 'bg-[#D4A017] text-white' : 'bg-white text-dark'}`}>
+                {pickedIds.has(open.id) ? 'Picked' : 'Pick'}
               </button>
               <button type="button" onClick={() => setOpen(null)} className="px-4 py-2 rounded-lg bg-white text-dark text-sm font-semibold">Close</button>
             </div>
