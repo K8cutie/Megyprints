@@ -10,8 +10,9 @@
 export type PickedKind = 'photo' | 'video' | 'other';
 
 // When the picker gives no type (some phones), go by the name — only formats
-// a browser can show.
-const PHOTO_NAME = /\.(jpe?g|png|webp)$/i;
+// a browser can show, and HEIC (iPhone photos; Windows without the HEIC codec
+// gives no type), which lib/heicPhoto turns into a JPEG as it comes in.
+const PHOTO_NAME = /\.(jpe?g|png|webp|heic|heif)$/i;
 const VIDEO_NAME = /\.(mp4|mov|m4v|webm|3gp|mkv|avi)$/i;
 
 export function kindOfPick(f: { type: string; name: string }): PickedKind {
@@ -31,6 +32,6 @@ export function leftOutNote(videos: number, others: number, photosAdded: boolean
       ? `${videos} video${videos > 1 ? 's' : ''} left out: add ${videos > 1 ? 'those' : 'it'} with “Add a video memory” on a photo page`
       : `Videos can't go on a page. Open a photo page and tap “Add a video memory”: it plays when someone scans the printed QR`);
   }
-  if (others > 0) parts.push(`${others} file${others > 1 ? 's' : ''} left out: not a photo (JPG or PNG)`);
+  if (others > 0) parts.push(`${others} file${others > 1 ? 's' : ''} left out: not a photo (JPG, PNG or HEIC)`);
   return parts.join(' · ');
 }
