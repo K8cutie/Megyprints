@@ -6,11 +6,14 @@ import { supabase, supabaseConfigured } from './supabase';
 import { isNativeShell, nativeSignInWithOAuth } from './nativeAuth';
 import { forgetCheckoutOnDevice } from './checkoutSession';
 import { clearPendingPrintJob } from './printQueue';
+import { forgetResumeCache } from './resumeCache';
 
-/** What one account leaves in this tab for checkout: gone when it signs out. */
+/** What one account leaves in this tab for checkout, and the album names
+ *  "Welcome back" remembers: gone when it signs out. */
 function forgetAccountInTab(): void {
   forgetCheckoutOnDevice();
   clearPendingPrintJob();
+  forgetResumeCache();
 }
 
 // =============================================================================

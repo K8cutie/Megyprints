@@ -21,6 +21,11 @@ export function wasResumeAsked(userId: string): boolean {
   try { return sessionStorage.getItem(RESUME_ASKED_KEY) === userId; } catch { return true; }
 }
 
+/** Was anyone asked yet this visit? Read before the session is known. */
+export function wasResumeAskedThisVisit(): boolean {
+  try { return !!sessionStorage.getItem(RESUME_ASKED_KEY); } catch { return true; }
+}
+
 export function markResumeAsked(userId: string): void {
   try { sessionStorage.setItem(RESUME_ASKED_KEY, userId); } catch { /* private mode */ }
 }
