@@ -1193,7 +1193,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 <PageTurnBar variant="desktop" className="sticky bottom-4 z-20 mb-4" index={actions.currentPageIndex} total={actions.albumPages.length}
                   onPrev={() => actions.goToPage(actions.currentPageIndex - 1)}
                   onNext={() => actions.goToPage(actions.currentPageIndex + 1)}
-                  onDone={() => { void dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }} />
+                  onDone={() => { void dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }}
+                  onBackToPreview={actions.previewSeen ? () => { void dispatch({ type: 'preview_album', payload: { stay: true }, rawMessage: 'back to preview' }); } : undefined} />
               )}
             </div>
           </div>

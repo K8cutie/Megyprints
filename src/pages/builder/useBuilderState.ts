@@ -881,6 +881,10 @@ export interface BuilderActions {
   // Phase
   phase: string;
   setPhase: (phase: string) => void;
+  /** This album has been opened in the Preview this visit: the editor then
+   *  offers "Back to preview" on every page (PageTurnBar), not only Done on
+   *  the last one. */
+  previewSeen: boolean;
 
   // Wizard
   wizardStep: WizardStep;
@@ -1090,6 +1094,10 @@ export function useBuilderState(): BuilderActions {
       return generated ? 'edit' : 'setup';
     } catch { return 'setup'; }
   });
+  // Owner (2026-10-11): editing from the Preview, the way back was only on the
+  // last page. Once the album has been previewed, every page offers it.
+  const [previewSeen, setPreviewSeen] = useState(false);
+  useEffect(() => { if (phase === 'preview') setPreviewSeen(true); }, [phase]);
   // ── Layout picker (the "Change layout" sheet/modal) — shared so the mobile
   //    review and the desktop panel both open the same picker ──
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
@@ -3486,6 +3494,7 @@ export function useBuilderState(): BuilderActions {
     setUploadedPhotos([]);
     setAlbumPages(Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, '8x8')));
     setCurrentPageIndex(0);
+    setPreviewSeen(false); // a new album hasn't been previewed
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
     // A new album is a new occasion (Step 1 asks it again).
@@ -3829,6 +3838,7 @@ export function useBuilderState(): BuilderActions {
     getPageSnapshot,
     phase,
     setPhase,
+    previewSeen,
     wizardStep,
     setWizardStep,
     undo,
