@@ -11,8 +11,9 @@
 --     one more row (owner chose layout "B"). What really fits:
 --        6x4 16 → 12   6x6 12 → 6   8x6 4 → 6   6x8 4 → 6   (others stay 4)
 --     The old 6x4/6x6 counts assumed pages with no trim edge running into the
---     printer's white edge, so those albums were billed for paper they don't
---     get. Prices follow automatically (sheets × sheet rate).
+--     printer's white edge, so those albums were billed for LESS paper than
+--     they use; 8x6/6x8 were billed for more. Prices follow automatically
+--     (sheets × sheet rate).
 --
 --  2. COVERS THAT CAN'T PRINT. The flat cover (back + spine + front + edges)
 --     must fit the paper. These never fit at any page count, so an order or
@@ -39,13 +40,16 @@ update public.pricing_model
 
 -- ── 2. Covers that can't print ─────────────────────────────────────────────
 -- p_binding: 'soft' | 'hard' (an order's cover: softcover = soft, else hard).
+-- p_size: the album size as stored; any spelling of a size counts as that size.
 create or replace function public.press_cover_never_fits(p_size text, p_binding text)
 returns boolean
 language sql
 immutable
 set search_path = ''
 as $$
-  select (p_size, p_binding) in (
+  -- albums.album_size is free text a customer can PATCH on their own album,
+  -- so compare a normalised size: '9X9', ' 9x9 ', '9×9' and '9x9"' are 9x9.
+  select (regexp_replace(lower(translate(coalesce(p_size, ''), '×', 'x')), '[^0-9.x]', '', 'g'), p_binding) in (
     ('9x9', 'hard'),
     ('8.5x11', 'hard'),
     ('11.5x8', 'soft'),

@@ -33,7 +33,7 @@ vi.mock('../lib/storeSettings', () => {
 });
 
 import Order from './Order';
-import { saveCheckoutForm } from '../lib/checkoutSession';
+import { saveCheckoutForm, saveCheckoutOrder } from '../lib/checkoutSession';
 import { noteOrderHandoff, clearPendingPrintJob } from '../lib/printQueue';
 import { EMPTY_ADDRESS } from '../lib/contact';
 
@@ -77,6 +77,16 @@ describe('checkout covers and the press sheet', () => {
     expect(picked('Softcover')).toBe(true);
     expect(host.querySelector('[data-testid="order-cover-note"]')?.textContent)
       .toBe('Hardbound is not available for 9×9 albums. The cover is too big for our printer.');
+  });
+
+  it('an order placed before 0046 as 9×9 hardbound keeps its cover on screen (the order row says hardbound)', async () => {
+    saveCheckoutOrder({
+      albumId: 'album-9x9', orderId: 'order-old', orderNumber: 'MP-2026-OLD9X9', material: 'matte', cover: 'hardboundLeather',
+      albumSize: '9x9', amount: 2079, stage: 'placed', albumEditedAt: Date.now() + 1e9, userId: 'user-1',
+    });
+    await open('9x9');
+    expect(host.textContent).toContain('Album — 9×9 Hardbound');
+    expect(picked('Softcover')).toBe(false);
   });
 
   it('an 8×8 album keeps both covers and the Hardbound it had picked', async () => {

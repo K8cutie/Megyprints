@@ -304,10 +304,14 @@ export default function Order() {
   const coverChoices = COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount));
   const coverFits = coverFitsSheet(albumSize, cover, pageCount);
   const coverNote = coverChoiceNote(albumSize, pageCount, coverChoices.map((c) => c.type));
+  // Only a new order changes cover. One already placed (before 0046) keeps the
+  // cover it was placed with, so the screen and the order row agree.
   useEffect(() => {
-    if (eventLink || coverFits || !coverChoices.length) return;
+    if (eventLink || coverFits || !coverChoices.length || step !== 'form' || createdOrderRef.current) return;
     setCover(coverChoices[0].type);
-  }, [albumSize, pageCount, cover, !!eventLink]); // eslint-disable-line react-hooks/exhaustive-deps
+    // "Same paper and cover as your last order" is no longer true.
+    setPrefilled((p) => (p?.finishFrom ? { ...p, finishFrom: null } : p));
+  }, [albumSize, pageCount, cover, !!eventLink, step]); // eslint-disable-line react-hooks/exhaustive-deps
   // THE 40-PHOTO GATE (builder/albumMinimum): the Preview's Order stops a
   // short album, but /order can be opened directly (an old tab, a bookmark).
   const jobPhotos = info ? albumPhotoCount(info.pages) : null;
@@ -419,7 +423,8 @@ export default function Order() {
       return;
     }
     // A cover the printer can't make (an old event deal, a very thick album).
-    if (!coverFits) {
+    // An order already placed keeps its cover: this checks new orders only.
+    if (!coverFits && !createdOrderRef.current) {
       setErrorMsg(coverNote ?? 'This cover is too big for our printer. Choose another cover.');
       return;
     }

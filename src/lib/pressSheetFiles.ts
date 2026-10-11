@@ -25,6 +25,16 @@ function sizeOf(o: PrintOrder): AlbumSizePreset {
   return size;
 }
 
+/** The press-sheet tool, loaded on first use. After a deploy the old file is
+ *  gone from the server: say so in words instead of a module error. */
+async function pressTools() {
+  try {
+    return await import('../pages/builder/printSheetPdf');
+  } catch {
+    throw new Error('The console was updated. Reload this page and try again.');
+  }
+}
+
 /** Give the browser a file to save. */
 export function saveFile(bytes: Uint8Array, filename: string): void {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }));
@@ -42,7 +52,7 @@ export function saveFile(bytes: Uint8Array, filename: string): void {
 export async function downloadAlbumSheets(o: PrintOrder): Promise<string> {
   const size = sizeOf(o);
   const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
-  const { imposeAlbumSheets } = await import('../pages/builder/printSheetPdf');
+  const { imposeAlbumSheets } = await pressTools();
   const { bytes, plan } = await imposeAlbumSheets(src, size, o.order_number);
   saveFile(bytes, `megyprints-${o.order_number}-sheets.pdf`);
   const piles = plan.layout.leavesPerSheet;
@@ -58,7 +68,7 @@ export async function downloadCoverSheet(o: PrintOrder): Promise<string> {
   // Any cover but softcover binds as a hardcover (coverGeometry.isHardcover).
   const cover = (o.cover || 'softcover') as CoverType;
   const src = await readPrintFile(`${printFilesOf(o)}-cover.pdf`, 'cover file');
-  const { imposeCoverSheet } = await import('../pages/builder/printSheetPdf');
+  const { imposeCoverSheet } = await pressTools();
   const { bytes } = await imposeCoverSheet(src, size, cover, o.page_count, o.order_number);
   saveFile(bytes, `megyprints-${o.order_number}-cover-sheet.pdf`);
   return 'Cover sheet: print one side only';
@@ -66,6 +76,6 @@ export async function downloadCoverSheet(o: PrintOrder): Promise<string> {
 
 /** Download the one-sheet printer check. */
 export async function downloadPressTestSheet(): Promise<void> {
-  const { pressTestSheet } = await import('../pages/builder/printSheetPdf');
+  const { pressTestSheet } = await pressTools();
   saveFile(await pressTestSheet(), 'megyprints-press-test-sheet.pdf');
 }

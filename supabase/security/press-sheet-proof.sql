@@ -66,6 +66,14 @@ begin
     insert into proof_log(line) values ('PASS a 9x9 album claiming 8x8 is refused too');
   end;
   begin
+    -- album_size is free text: another spelling of 9x9 is still 9x9.
+    insert into public.orders (user_id, album_snapshot, album_size, cover, page_count, material, ship_name, ship_phone, ship_address, ship_zip, ship_region, ship_province, ship_city, ship_barangay, ship_street)
+    values (v_user, '{"album_size":" 9X9"}', ' 9X9', 'hardboundLeather', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
+    insert into proof_log(line) values ('FAIL another spelling of 9x9 (" 9X9") hardbound was accepted');
+  exception when sqlstate 'MP005' then
+    insert into proof_log(line) values ('PASS another spelling of 9x9 is refused too');
+  end;
+  begin
     insert into public.orders (user_id, album_snapshot, album_size, cover, page_count, material, ship_name, ship_phone, ship_address, ship_zip, ship_region, ship_province, ship_city, ship_barangay, ship_street)
     values (v_user, '{"album_size":"9x9"}', '9x9', 'softcover', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
     insert into proof_log(line) values ('PASS 9x9 softcover accepted');

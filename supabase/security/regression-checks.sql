@@ -251,9 +251,10 @@ end $$;
 do $$
 declare s jsonb;
 begin
-  if not exists (select 1 from pg_trigger where tgname = 'orders_press_fit_trg')
-     or not exists (select 1 from pg_trigger where tgname = 'event_bookings_press_fit_trg')
-     or not public.press_cover_never_fits('9x9', 'hard') then
+  if not exists (select 1 from pg_trigger where tgname = 'orders_press_fit_trg' and tgrelid = 'public.orders'::regclass and tgenabled <> 'D')
+     or not exists (select 1 from pg_trigger where tgname = 'event_bookings_press_fit_trg' and tgrelid = 'public.event_bookings'::regclass and tgenabled <> 'D')
+     or not public.press_cover_never_fits('9x9', 'hard')
+     or not public.press_cover_never_fits(' 9X9"', 'hard') then
     raise exception 'REGRESSION (press sheet): a 9x9 hardbound order or deal is no longer refused';
   end if;
   select sizes into s from public.pricing_model where id = 1;

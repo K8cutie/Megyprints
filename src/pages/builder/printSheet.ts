@@ -16,7 +16,10 @@
        slot and turn, in cut-and-stack order.
      • coverOnSheet(size, cover, pages) — whether the flat cover fits a sheet.
    Pricing's pages-per-sheet must equal sheetLayout().pagesPerSheet; a spec
-   holds the two together so the price and the press can't disagree again.
+   holds the two together. Pricing still counts sheets from the page count
+   alone, without the blank first side (printSides), so a book whose page
+   count is a multiple of pps prints one sheet more than it is billed — the
+   owner's call whether to charge it (open, 2026-10-11).
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { ALBUM_SIZES, COVERS, type AlbumSizePreset, type CoverType } from './types';

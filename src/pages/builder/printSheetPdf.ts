@@ -13,10 +13,10 @@
    placed before it existed, and a fix here reaches every order.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, PDFName, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { AlbumSizePreset, CoverType } from './types';
 import {
-  PRESS_SHEET, sheetPlan, trimInches, coverOnSheet, type SheetPlan, type SheetSlot, type Sides, type Turn,
+  PRESS_SHEET, sheetPlan, trimInches, coverOnSheet, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
 } from './printSheet';
 import { isHardcover } from './coverGeometry';
 
@@ -66,6 +66,30 @@ export interface ImposeResult {
   sourceBleedIn: number;
 }
 
+/** No print file gets near this (a 50-page album is ~15 MB). */
+export const MAX_PRINT_FILE_BYTES = 200 * 1024 * 1024;
+
+/**
+ * Open a print file the customer's device uploaded. It is untrusted: refuse
+ * what our checkout never makes (too big, turned pages, a shifted page box)
+ * and strip what a page can carry besides its picture (links, actions,
+ * thumbnails) so none of it is copied onto the sheets.
+ */
+async function loadCustomerPdf(src: ArrayBuffer | Uint8Array, what: string): Promise<PDFPage[]> {
+  if (src.byteLength > MAX_PRINT_FILE_BYTES) throw new Error(`This ${what} is ${Math.round(src.byteLength / 1048576)} MB — bigger than any album. Ask the customer to order again.`);
+  const doc = await PDFDocument.load(src);
+  const pages = doc.getPages();
+  if (!pages.length) throw new Error(`This ${what} has no pages.`);
+  for (const pg of pages) {
+    const box = pg.getMediaBox();
+    if (pg.getRotation().angle % 360 !== 0 || Math.abs(box.x) > 0.5 || Math.abs(box.y) > 0.5) {
+      throw new Error(`This ${what} wasn't made by our checkout (its pages are turned or shifted). Ask the customer to order again.`);
+    }
+    for (const key of ['Annots', 'AA', 'Thumb', 'PieceInfo']) pg.node.delete(PDFName.of(key));
+  }
+  return pages;
+}
+
 /** How much trim edge the print file's pages carry, from their size. */
 function sourceBleed(wPt: number, hPt: number, size: AlbumSizePreset): number {
   const { trimW, trimH } = trimInches(size);
@@ -84,41 +108,53 @@ function sourceBleed(wPt: number, hPt: number, size: AlbumSizePreset): number {
  * the album size.
  */
 export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string): Promise<ImposeResult> {
-  const doc = await PDFDocument.load(src);
-  const pages = doc.getPages();
-  if (!pages.length) throw new Error('This print file has no pages.');
-  // The file comes from the customer's device: a page count no album has is a
-  // bad file, not a job to lay out (and would only lock up this tab).
+  const pages = await loadCustomerPdf(src, 'print file');
+  // A page count no album has is a bad file, not a job to lay out (and would
+  // only lock up this tab).
   if (pages.length > MAX_PRINT_PAGES) throw new Error(`This print file has ${pages.length} pages — more than any album. Ask the customer to order again.`);
   const first = pages[0].getSize();
   const srcBleed = sourceBleed(first.width, first.height, size);
   const { trimW, trimH } = trimInches(size);
   const plan = sheetPlan(size, pages.length);
+  pages.forEach((pg, i) => {
+    const s = pg.getSize();
+    if (Math.abs(s.width - first.width) > 1 || Math.abs(s.height - first.height) > 1) {
+      throw new Error(`Page ${i + 1} of the print file is a different size from page 1.`);
+    }
+  });
 
   const out = await PDFDocument.create();
   out.setTitle(`${orderLabel} — press sheets`);
   const font = await out.embedFont(StandardFonts.Helvetica);
 
-  for (const side of plan.sides) {
-    const sheet = out.addPage([SHEET_W, SHEET_H]);
-    for (const p of side.placements) {
-      if (p.page === null) continue;
-      const srcPage = pages[p.page];
-      const s = srcPage.getSize();
-      if (Math.abs(s.width - first.width) > 1 || Math.abs(s.height - first.height) > 1) {
-        throw new Error(`Page ${p.page + 1} of the print file is a different size from page 1.`);
-      }
-      // Keep only the trim edge this spot has room for (the file has 0.125).
-      const keep: Sides = {
-        top: Math.min(p.pageBleed.top, srcBleed), right: Math.min(p.pageBleed.right, srcBleed),
-        bottom: Math.min(p.pageBleed.bottom, srcBleed), left: Math.min(p.pageBleed.left, srcBleed),
-      };
-      const embedded = await out.embedPage(srcPage, {
+  // Keep only the trim edge each spot has room for (the file has 0.125).
+  const keepOf = (p: SheetPlacement): Sides => ({
+    top: Math.min(p.pageBleed.top, srcBleed), right: Math.min(p.pageBleed.right, srcBleed),
+    bottom: Math.min(p.pageBleed.bottom, srcBleed), left: Math.min(p.pageBleed.left, srcBleed),
+  });
+  // Every page is used once. Embed them in ONE call: separate calls copy
+  // anything the pages share (a hostile file's one big image) once per page.
+  const placed = plan.sides.flatMap((side) => side.placements.filter((p) => p.page !== null));
+  const embeddedList = await out.embedPages(
+    placed.map((p) => pages[p.page!]),
+    placed.map((p) => {
+      const keep = keepOf(p);
+      return {
         left: (srcBleed - keep.left) * PT,
         right: (srcBleed + trimW + keep.right) * PT,
         bottom: (srcBleed - keep.bottom) * PT,
         top: (srcBleed + trimH + keep.top) * PT,
-      });
+      };
+    }),
+  );
+  const embeddedOf = new Map(placed.map((p, i) => [p, embeddedList[i]]));
+
+  for (const side of plan.sides) {
+    const sheet = out.addPage([SHEET_W, SHEET_H]);
+    for (const p of side.placements) {
+      const embedded = embeddedOf.get(p);
+      if (!embedded) continue;
+      const keep = keepOf(p);
       const ew = (trimW + keep.left + keep.right) * PT;
       const eh = (trimH + keep.top + keep.bottom) * PT;
       const ks = sheetSidesFromPage(keep, p.turn);
@@ -213,9 +249,7 @@ export interface CoverSheetResult { bytes: Uint8Array; wrapWIn: number; wrapHIn:
 export async function imposeCoverSheet(
   src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, cover: CoverType, pageCount: number, orderLabel: string,
 ): Promise<CoverSheetResult> {
-  const doc = await PDFDocument.load(src);
-  const [srcPage] = doc.getPages();
-  if (!srcPage) throw new Error('This cover file has no pages.');
+  const [srcPage] = await loadCustomerPdf(src, 'cover file');
   const fit = coverOnSheet(size, cover, pageCount);
   if (!fit.fits) throw new Error(`This cover can't go on one ${PRESS_SHEET.wIn} × ${PRESS_SHEET.hIn} sheet. ${fit.reason}`);
   const s = srcPage.getSize();
@@ -247,11 +281,19 @@ export async function imposeCoverSheet(
   };
   // White room past the cover's left/right edges and past its top/bottom.
   const u = PRESS_SHEET.unprintableIn;
-  const roomX = ((fit.rotated ? PRESS_SHEET.hIn : PRESS_SHEET.wIn) - wrapW) / 2 - u - MARK_GAP;
-  const roomY = ((fit.rotated ? PRESS_SHEET.wIn : PRESS_SHEET.hIn) - wrapH) / 2 - u - MARK_GAP;
+  const spanX = (fit.rotated ? PRESS_SHEET.hIn : PRESS_SHEET.wIn) - wrapW;
+  const spanY = (fit.rotated ? PRESS_SHEET.wIn : PRESS_SHEET.hIn) - wrapH;
+  const roomX = spanX / 2 - u - MARK_GAP;
+  const roomY = spanY / 2 - u - MARK_GAP;
+  // How far the printer's white edge reaches INTO the cover at its ends.
+  const hiddenX = Math.max(0, u - spanX / 2);
+  const hiddenY = Math.max(0, u - spanY / 2);
   const inset = fit.cutInsetIn;
-  // Cut marks at the four trim corners. A softcover's trim edge is cut off, so
-  // with no white room its marks go over that strip instead.
+  /** With no white room, a mark goes over the strip past the cut instead: a
+   *  softcover's trim edge (cut off) or a hardcover's fold-over (glued inside
+   *  the board). It starts where the printer can print. */
+  const insideEnd = (hidden: number) => (inset > 0 ? inset - 1 / 32 : hidden + 0.15);
+  // Cut marks at the four trim corners.
   const corners: [number, number, number, number][] = [
     [inset, inset, -1, -1], [wrapW - inset, inset, 1, -1],
     [inset, wrapH - inset, -1, 1], [wrapW - inset, wrapH - inset, 1, 1],
@@ -261,10 +303,10 @@ export async function imposeCoverSheet(
     const ey = dy < 0 ? 0 : wrapH;
     const lx = Math.min(MARK_LEN, roomX);
     if (lx > 0.05) seg(ex + dx * MARK_GAP, cy, ex + dx * (MARK_GAP + lx), cy, false);
-    else if (inset > 0) seg(ex, cy, ex - dx * (inset - 1 / 32), cy, true);
+    else if (insideEnd(hiddenX) - hiddenX > 0.02) seg(ex - dx * hiddenX, cy, ex - dx * insideEnd(hiddenX), cy, true);
     const ly = Math.min(MARK_LEN, roomY);
     if (ly > 0.05) seg(cx, ey + dy * MARK_GAP, cx, ey + dy * (MARK_GAP + ly), false);
-    else if (inset > 0) seg(cx, ey, cx, ey - dy * (inset - 1 / 32), true);
+    else if (insideEnd(hiddenY) - hiddenY > 0.02) seg(cx, ey - dy * hiddenY, cx, ey - dy * insideEnd(hiddenY), true);
   }
   // Fold marks: dashed ticks at the spine edges, past both long edges.
   const foldLen = Math.min(0.3, roomY);
@@ -279,8 +321,13 @@ export async function imposeCoverSheet(
   }
   const kind = isHardcover(cover) ? 'hardbound' : 'softcover';
   const txt = `${orderLabel} · cover · ${size} ${kind} · ${pageCount} pages · print ONE side · dashed = spine edges`;
-  if (fit.rotated) label(sheet, font, txt, u + 0.15, PRESS_SHEET.hIn - u - 0.3, 7, true);
-  else label(sheet, font, txt, u + 0.3, u + 0.15, 7);
+  // Along the paper's printable edge, clear of the marks: above the cover when
+  // that band holds a mark and the text, else down the left side, a quarter of
+  // the way along (the corners and the spine have marks).
+  const cap = 0.1;
+  const len = font.widthOfTextAtSize(txt, 7) / PT;
+  if (fit.y - u >= MARK_GAP + MARK_LEN + cap + 0.1) label(sheet, font, txt, u + 0.3, u + cap + 0.02, 7);
+  else label(sheet, font, txt, u + cap + 0.02, fit.y + fit.h / 4 + len / 2, 7, true);
   return { bytes: await out.save(), wrapWIn: wrapW, wrapHIn: wrapH };
 }
 

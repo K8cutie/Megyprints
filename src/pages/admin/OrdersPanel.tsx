@@ -46,7 +46,7 @@ function PressHowTo() {
         <li><b>Print sheets</b>: print both sides, flip on the long edge, at actual size (100%). Don't use "fit to page".</li>
         <li>Keep sheet 1 on top, front side up. Cut the whole stack on the marks.</li>
         <li>Each spot on the sheet makes a pile (the sheet says which). Put pile 1 on top of pile 2, pile 2 on top of pile 3, and so on. The pages are now in order.</li>
-        <li>The first and the last side are blank on purpose: they face the inside of the cover.</li>
+        <li>The first side is blank on purpose: it faces the inside of the front cover. When the album has an even number of pages, the last side is blank too.</li>
         <li><b>Cover sheet</b>: print one side only. Cut on the marks; the dashed marks are the spine edges.</li>
       </ol>
       <button onClick={testSheet} disabled={busy}
