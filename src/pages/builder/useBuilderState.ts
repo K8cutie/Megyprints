@@ -51,6 +51,7 @@ import { templateTracker, shuffleArray } from './varietyTracker';
 import { captionBoxSize, captionFits } from './textFit';
 import { TEXT_LINE_HEIGHT } from './wordArt';
 import { readCaptureTime } from './exif';
+import { looksHeic, toAlbumPhoto, HEIC_CONVERTING_PREVIEW } from '../../lib/heicPhoto';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { DEFAULT_TITLE_FONT } from './fonts';
@@ -665,6 +666,19 @@ export interface AddedText {
   tooLong: boolean;
 }
 
+/** What addPhotos did. `heic` settles once this batch's iPhone photos
+ *  (HEIC) are JPEGs (lib/heicPhoto): how many, and the names of any that
+ *  couldn't be opened (they leave the album). Absent when there were none. */
+export interface AddPhotosResult {
+  added: number;
+  skipped: number;
+  videos: number;
+  others: number;
+  restored: number;
+  otherCopies: number;
+  heic?: Promise<{ converted: number; unreadable: string[]; unreadableNew: number }>;
+}
+
 export interface BuilderActions {
   // Album config
   albumType: AlbumType;
@@ -705,7 +719,7 @@ export interface BuilderActions {
    *  reporting the selected count lies whenever a re-picked batch is deduped. */
   /** `videos`/`others`: picked files left out — only photos go on pages
    *  (lib/pickedFiles); the confirmation says so. */
-  addPhotos: (files: FileList | File[]) => { added: number; skipped: number; videos: number; others: number; restored: number; otherCopies: number };
+  addPhotos: (files: FileList | File[]) => AddPhotosResult;
   removePhoto: (id: string) => void;
   /** Megy's free photo check (lib/photoCheck): runs on the phone in the
    *  background. `ready` = every photo checked for blur and repeats. */
@@ -1728,12 +1742,17 @@ export function useBuilderState(): BuilderActions {
   }, [updateCurrentPage]);
 
   /* ── Photo handling (IndexedDB — zero cloud I/O) ── */
-  const addPhotos = useCallback((files: FileList | File[]): { added: number; skipped: number; videos: number; others: number; restored: number; otherCopies: number } => {
+  const addPhotos = useCallback((files: FileList | File[]): AddPhotosResult => {
     // Only photos go on pages; videos and other files are counted, not added.
     const picked = Array.from(files);
     const fileArray = picked.filter((f) => kindOfPick(f) === 'photo');
     const videos = picked.filter((f) => kindOfPick(f) === 'video').length;
     const others = picked.length - fileArray.length - videos;
+    // iPhone photos (HEIC) become JPEGs as they come in (lib/heicPhoto), in the
+    // same bounded tasks that measure each photo; until then they show a
+    // "converting" square. Each settles to 'ok' or, if it couldn't be opened,
+    // its name: add_photos says so once the batch is done.
+    const heicTasks: Promise<'ok' | { unreadable: string; fresh: boolean }>[] = [];
 
     // ── The same photo is never added twice (same name + size, or a repeat in
     // this pick), and a photo this album is MISSING on this device goes back
@@ -1743,26 +1762,43 @@ export function useBuilderState(): BuilderActions {
     if (plan.relink.length > 0) {
       const back = new Map(plan.relink.map((r) => [uploadedPhotosRef.current[r.photo].id, { file: fileArray[r.file], sameCopy: r.sameCopy }]));
       const recorded = new Map(uploadedPhotosRef.current.filter((p) => back.has(p.id)).map((p) => [p.id, { width: p.width, height: p.height }]));
+      const before = new Map(uploadedPhotosRef.current.filter((p) => back.has(p.id)).map((p) => [p.id, p]));
       const refill = (p: UploadedPhoto): UploadedPhoto => {
         const b = back.get(p.id);
         if (!b) return p;
         // A fresh file: any note about an earlier copy no longer applies.
-        return { ...p, copyNote: b.sameCopy ? undefined : 'differentCopy', previewUrl: URL.createObjectURL(b.file), type: b.file.type, size: b.file.size };
+        return { ...p, copyNote: b.sameCopy ? undefined : 'differentCopy', previewUrl: looksHeic(b.file) ? HEIC_CONVERTING_PREVIEW : URL.createObjectURL(b.file), type: b.file.type, size: b.file.size };
       };
       uploadedPhotosRef.current = uploadedPhotosRef.current.map(refill);
       setUploadedPhotos((prev) => prev.map(refill));
       for (const [id, { file }] of back) {
         // Stored under the photo's OWN id, so the next reload finds it here.
         const task = measureLimit(async () => {
-          const stored = await idbPhotos.store(file, id);
-          const dims = stored ?? await getImageDimensions(file);
-          const capturedAt = await readCaptureTime(file);
+          let usable: File;
+          try {
+            usable = await toAlbumPhoto(file);
+          } catch {
+            // Couldn't open it: the photo stays missing, as it was.
+            const was = before.get(id);
+            if (was) {
+              uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === id ? was : p));
+              setUploadedPhotos((prev) => prev.map((p) => (p.id === id ? was : p)));
+            }
+            return { unreadable: file.name, fresh: false };
+          }
+          const stored = await idbPhotos.store(usable, id);
+          const dims = stored ?? await getImageDimensions(usable);
+          const capturedAt = await readCaptureTime(file); // the original: a JPEG copy has no EXIF
           if (dims.width > 0 && dims.height > 0) measuredRef.current.set(id, { width: dims.width, height: dims.height });
           const note = copyQuality(recorded.get(id) ?? { width: 0, height: 0 }, dims);
+          const shown = usable !== file ? { previewUrl: URL.createObjectURL(usable), type: usable.type } : {};
+          uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === id ? { ...p, ...shown } : p));
           setUploadedPhotos((prev) => prev.map((p) => (p.id === id
-            ? { ...p, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(note ? { copyNote: note } : {}) }
+            ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(note ? { copyNote: note } : {}) }
             : p)));
+          return 'ok' as const;
         });
+        if (looksHeic(file)) heicTasks.push(task.catch(() => ({ unreadable: file.name, fresh: false })));
         pendingMeasureRef.current.add(task);
         void task.catch(() => { /* a failed measure must not block generation */ })
           .finally(() => pendingMeasureRef.current.delete(task));
@@ -1770,13 +1806,20 @@ export function useBuilderState(): BuilderActions {
     }
     const restored = plan.relink.length;
     const otherCopies = plan.relink.filter((r) => !r.sameCopy).length;
-    if (freshFiles.length === 0) return { added: 0, skipped: plan.duplicate.length, videos, others, restored, otherCopies };
+    const heicDone = (): AddPhotosResult['heic'] => (heicTasks.length === 0 ? undefined
+      : Promise.all(heicTasks).then((rs) => ({
+        converted: rs.filter((r) => r === 'ok').length,
+        unreadable: rs.flatMap((r) => (r === 'ok' ? [] : [r.unreadable])),
+        unreadableNew: rs.filter((r) => r !== 'ok' && r.fresh).length,
+      })));
+    if (freshFiles.length === 0) return { added: 0, skipped: plan.duplicate.length, videos, others, restored, otherCopies, heic: heicDone() };
 
-    // Create placeholder metadata with preview URLs
+    // Create placeholder metadata with preview URLs (a HEIC can't be shown
+    // until it is a JPEG: a "converting" square until then).
     const newPhotos: UploadedPhoto[] = freshFiles.map((file) => ({
       id: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       name: file.name,
-      previewUrl: URL.createObjectURL(file),
+      previewUrl: looksHeic(file) ? HEIC_CONVERTING_PREVIEW : URL.createObjectURL(file),
       type: file.type,
       size: file.size,
       width: 0, // filled in after IndexedDB store
@@ -1796,29 +1839,46 @@ export function useBuilderState(): BuilderActions {
       // Bounded: each task fully decodes the photo (createImageBitmap) — all at
       // once, a 250-photo pick decoded ~12 GB and the phone killed the app.
       const task = measureLimit(async () => {
-        const stored = await idbPhotos.store(file, photo.id);
+        // A HEIC becomes a JPEG first (everything after reads the JPEG).
+        let usable: File;
+        try {
+          usable = await toAlbumPhoto(file);
+        } catch {
+          // Couldn't open it: it leaves the album, and add_photos names it.
+          uploadedPhotosRef.current = uploadedPhotosRef.current.filter((p) => p.id !== photo.id);
+          setUploadedPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+          return { unreadable: file.name, fresh: true };
+        }
+        const stored = await idbPhotos.store(usable, photo.id);
         // A failed write (e.g. a full disk) returns null — still measure, or the
         // photo stays 0×0 and gets classified by guesswork.
-        const dims = stored ?? await getImageDimensions(file);
-        const capturedAt = await readCaptureTime(file);
+        const dims = stored ?? await getImageDimensions(usable);
+        const capturedAt = await readCaptureTime(file); // the original: a JPEG copy has no EXIF
         // Record the size SYNCHRONOUSLY here — see measuredRef.
         if (dims.width > 0 && dims.height > 0) {
           measuredRef.current.set(photo.id, { width: dims.width, height: dims.height });
         }
+        // The name and size stay the ORIGINAL's: picking the same HEIC again is
+        // then "already in your album", and on another device it goes back in
+        // its place (photoRelink matches by name + size).
+        const shown = usable !== file ? { previewUrl: URL.createObjectURL(usable), type: usable.type } : {};
+        if (usable !== file) uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === photo.id ? { ...p, ...shown } : p));
         setUploadedPhotos((prev) =>
           prev.map((p) =>
             p.id === photo.id
-              ? { ...p, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), capturedAt }
+              ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), capturedAt }
               : p,
           ),
         );
+        return 'ok' as const;
       });
+      if (looksHeic(file)) heicTasks.push(task.catch(() => ({ unreadable: file.name, fresh: true })));
       pendingMeasureRef.current.add(task);
       void task.catch(() => { /* a failed measure must not block generation */ })
         .finally(() => pendingMeasureRef.current.delete(task));
     }
 
-    return { added: freshFiles.length, skipped: plan.duplicate.length, videos, others, restored, otherCopies };
+    return { added: freshFiles.length, skipped: plan.duplicate.length, videos, others, restored, otherCopies, heic: heicDone() };
   }, [idbPhotos]);
 
   /* ── Megy's free photo check (lib/photoCheck) ──
@@ -1892,23 +1952,27 @@ export function useBuilderState(): BuilderActions {
 
   const replacePhoto = useCallback((id: string, file: File) => {
     pushSnapshot();
-    setUploadedPhotos((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, name: file.name, previewUrl: URL.createObjectURL(file), type: file.type, size: file.size }
-          : p
-      )
-    );
-    // Store replacement in IndexedDB (local — zero cloud I/O)
-    idbPhotos.store(file, id).then((stored) => {
-      if (stored) {
-        setUploadedPhotos((prev) =>
-          prev.map((p) =>
-            p.id === id ? { ...p, width: stored.width, height: stored.height } : p
-          )
-        );
-      }
-    });
+    // An iPhone photo (HEIC) becomes a JPEG first; one that can't be opened
+    // leaves the old photo where it is.
+    void toAlbumPhoto(file).then((usable) => {
+      setUploadedPhotos((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, name: file.name, previewUrl: URL.createObjectURL(usable), type: usable.type, size: file.size }
+            : p
+        )
+      );
+      // Store replacement in IndexedDB (local — zero cloud I/O)
+      return idbPhotos.store(usable, id).then((stored) => {
+        if (stored) {
+          setUploadedPhotos((prev) =>
+            prev.map((p) =>
+              p.id === id ? { ...p, width: stored.width, height: stored.height } : p
+            )
+          );
+        }
+      });
+    }).catch(() => { /* couldn't open it: nothing changes */ });
   }, [idbPhotos]);
 
   /* ── Page navigation ── */
@@ -3201,7 +3265,11 @@ export function useBuilderState(): BuilderActions {
     updateCurrentPage((page) => ({ ...page, background: bg }));
   }, [updateCurrentPage]);
 
-  const setCoverPhoto = useCallback(async (file: File) => {
+  const setCoverPhoto = useCallback(async (picked: File) => {
+    // An iPhone photo (HEIC) becomes a JPEG first (Chrome can't show a HEIC);
+    // one that can't be opened leaves the cover as it is.
+    const file = await toAlbumPhoto(picked).catch(() => null);
+    if (!file) return;
     const id = newCoverPhotoId(albumIdRef.current ?? 'draft');
     // Keep the file on the device first. If that fails (storage blocked), the
     // photo still goes on the cover for this visit, as it always did.
