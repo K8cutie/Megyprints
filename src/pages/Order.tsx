@@ -27,6 +27,7 @@ import AddressPicker from '../components/AddressPicker';
 import { scrollPageToTop } from '../lib/pageScroll';
 import { startFreshAlbum } from '../lib/albumSession';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
+import { coverFitsSheet, coverChoiceNote } from './builder/printSheet';
 import { trackOf } from '../lib/orderTracker';
 import { missingPhotos, missingPhotosMessage } from '../lib/photoPresence';
 import { getMyOrder, openOrderForAlbum, lastOrderForAlbum, type MyOrder } from '../lib/myOrders';
@@ -297,6 +298,20 @@ export default function Order() {
   useEffect(() => {
     if (eventLink) setCover(eventLink.cover === 'soft' ? 'softcover' : 'hardboundLeather');
   }, [eventLink?.cover]); // eslint-disable-line react-hooks/exhaustive-deps
+  // THE PRESS (builder/printSheet): a cover too big for the shop's 12.5 × 19
+  // sheet isn't offered — 9×9 hardbound (owner, 2026-10-11), and any cover on
+  // an album too thick for the paper. The database refuses them too (0046).
+  const coverChoices = COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount));
+  const coverFits = coverFitsSheet(albumSize, cover, pageCount);
+  const coverNote = coverChoiceNote(albumSize, pageCount, coverChoices.map((c) => c.type));
+  // Only a new order changes cover. One already placed (before 0046) keeps the
+  // cover it was placed with, so the screen and the order row agree.
+  useEffect(() => {
+    if (eventLink || coverFits || !coverChoices.length || step !== 'form' || createdOrderRef.current) return;
+    setCover(coverChoices[0].type);
+    // "Same paper and cover as your last order" is no longer true.
+    setPrefilled((p) => (p?.finishFrom ? { ...p, finishFrom: null } : p));
+  }, [albumSize, pageCount, cover, !!eventLink, step]); // eslint-disable-line react-hooks/exhaustive-deps
   // THE 40-PHOTO GATE (builder/albumMinimum): the Preview's Order stops a
   // short album, but /order can be opened directly (an old tab, a bookmark).
   const jobPhotos = info ? albumPhotoCount(info.pages) : null;
@@ -405,6 +420,12 @@ export default function Order() {
     // An event album that its booking can't pay for (yet): say why, place nothing.
     if (eventLink && eventDeal?.state !== 'covered') {
       setErrorMsg(eventDeal?.state === 'blocked' ? eventDeal.message : 'Checking your event booking… try again in a moment.');
+      return;
+    }
+    // A cover the printer can't make (an old event deal, a very thick album).
+    // An order already placed keeps its cover: this checks new orders only.
+    if (!coverFits && !createdOrderRef.current) {
+      setErrorMsg(coverNote ?? 'This cover is too big for our printer. Choose another cover.');
       return;
     }
     const cleanName = normalizeFullName(name);
@@ -1031,7 +1052,7 @@ export default function Order() {
                 </div>
               ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {COVERS.map((c) => (
+                {coverChoices.map((c) => (
                   <button key={c.type} onClick={() => setCover(c.type)}
                     className="p-3 rounded-xl border-2 text-left transition-all"
                     style={{ borderColor: cover === c.type ? '#B85C38' : '#E8E8E8', backgroundColor: cover === c.type ? '#F6E7DF' : '#fff' }}>
@@ -1040,6 +1061,9 @@ export default function Order() {
                   </button>
                 ))}
               </div>
+              )}
+              {info && coverNote && (eventLink ? !coverFits : true) && (
+                <p className="mt-3 text-sm text-medium" data-testid="order-cover-note">{coverNote}</p>
               )}
             </div>
 
