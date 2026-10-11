@@ -80,6 +80,16 @@ export function ResumePrompt() {
   const where = useRef({ pathname, search });
   where.current = { pathname, search };
 
+  // The wait for the session itself has the same limit: a sign-in check that
+  // hangs (an outage, a Wi-Fi that swallows the request) must not leave a
+  // blank screen. Home shows, and nothing pops up over it when it ends.
+  const tooLate = useRef(false);
+  useEffect(() => {
+    if (!loading || !holding) return;
+    const t = window.setTimeout(() => { tooLate.current = true; setHolding(false); }, RESUME_HOLD_MS);
+    return () => window.clearTimeout(t);
+  }, [loading, holding]);
+
   // Signing out (or into another account) ends the visit: ask again next time.
   const lastUserRef = useRef<string | null>(null);
   useEffect(() => {
@@ -99,6 +109,7 @@ export function ResumePrompt() {
     if (loading) return;
     if (!accountId) { setHolding(false); return; }
     const userId = accountId;
+    if (tooLate.current) { markResumeAsked(userId); setHolding(false); return; }
     const { pathname: p, search: s } = where.current;
     if (wasResumeAsked(userId) || notHere(p, s)) { setHolding(false); return; }
 

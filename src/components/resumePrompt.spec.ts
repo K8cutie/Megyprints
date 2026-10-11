@@ -145,6 +145,21 @@ describe('the first screen for a customer with albums', () => {
     expect($('resume-prompt')).toBeNull(); // the old confusing pop-up over Home
   });
 
+  it('the sign-in check itself hangs: Home after a few seconds, and nothing pops up when it ends', async () => {
+    keepSession();
+    writeResumeCache('u1', [{ id: 'a', title: 'Debut Album', updatedAt: day(5), photoCount: 40 }]);
+    listAccountAlbums.mockResolvedValue([album('a', 5)]);
+    await mount(); // AUTH.loading stays true: the check hangs
+    expect($('resume-holding')).not.toBeNull();
+    await act(async () => { vi.advanceTimersByTime(RESUME_HOLD_MS); });
+    expect($('resume-holding')).toBeNull(); // Home, not a blank screen
+    AUTH.user = ME; AUTH.loading = false; // ...it ends, much later
+    await rerender();
+    await flush();
+    expect($('resume-prompt')).toBeNull();
+    expect($('resume-holding')).toBeNull();
+  });
+
   it('an account with no albums: Home, and next time no plain screen at all', async () => {
     keepSession();
     listAccountAlbums.mockResolvedValue([]);
