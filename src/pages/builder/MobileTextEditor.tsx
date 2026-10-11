@@ -16,13 +16,12 @@ import { DEFAULT_TEXT_FONT, fontName } from './fonts';
 import { FontList } from './FontList';
 import { contrastOutline, WORDART_OUTLINE_WIDTH, WORDART_SHADOW } from './wordArt';
 import { captionFits, type Box } from './textFit';
+import TextColorPicker from './TextColorPicker';
 
 export type BoxTextContent = Pick<
   TextElement,
   'text' | 'fontSize' | 'fontFamily' | 'color' | 'bold' | 'italic' | 'underline' | 'alignment' | 'outlineColor' | 'outlineWidth' | 'shadow'
 >;
-
-export const COLORS = ['#2D2D2D', '#FFFFFF', '#E8A598', '#C9A24B', '#2E7D4A', '#3A6EA5', '#9B5DE5'];
 
 export default function MobileTextEditor({ initial, onSave, onClose, box }: {
   initial: BoxTextContent;
@@ -77,6 +76,8 @@ export default function MobileTextEditor({ initial, onSave, onClose, box }: {
   };
 
   const [fontOpen, setFontOpen] = useState(false);
+  // The colours (28 + Any color) open like the fonts: too many for the bar.
+  const [colorOpen, setColorOpen] = useState(false);
 
   return (
     <div className="fixed left-0 right-0 z-[120] bg-white flex flex-col"
@@ -134,13 +135,22 @@ export default function MobileTextEditor({ initial, onSave, onClose, box }: {
             </div>
           </>
         )}
+        {colorOpen && (
+          <>
+            <div className="fixed inset-0 z-[1]" onClick={() => setColorOpen(false)} />
+            <div data-testid="text-color-panel"
+              className="absolute bottom-full left-0 right-0 z-[2] max-h-80 overflow-y-auto bg-white border-t border-line px-4 pt-3 pb-2 shadow-[0_-10px_30px_rgba(0,0,0,0.14)]">
+              <TextColorPicker value={color} onChange={setColor} onPicked={() => setColorOpen(false)} />
+            </div>
+          </>
+        )}
         <div className="overflow-x-auto">
         <div className="flex items-center gap-1 px-3 py-2 whitespace-nowrap" style={{ minWidth: 'max-content' }}>
           <ToolBtn active={bold} onClick={() => setBold((v) => !v)}><Bold size={18} /></ToolBtn>
           <ToolBtn active={italic} onClick={() => setItalic((v) => !v)}><Italic size={18} /></ToolBtn>
           <ToolBtn active={underline} onClick={() => setUnderline((v) => !v)}><Underline size={18} /></ToolBtn>
           <Divider />
-          <button onClick={() => setFontOpen((v) => !v)}
+          <button onClick={() => { setFontOpen((v) => !v); setColorOpen(false); }}
             className="px-3 h-9 rounded-lg text-sm text-dark bg-paper active:scale-95 transition-transform shrink-0 flex items-center gap-1.5"
             style={{ fontFamily }}>{fontName(fontFamily)} <ChevronDown size={14} className="text-light" /></button>
           <Divider />
@@ -148,15 +158,12 @@ export default function MobileTextEditor({ initial, onSave, onClose, box }: {
           <span className="text-sm text-medium w-7 text-center tabular-nums">{fontSize}</span>
           <ToolBtn onClick={() => setFontSize((s) => Math.min(80, s + 2))}><Plus size={16} /></ToolBtn>
           <Divider />
-          {COLORS.map((c) => (
-            <button key={c} onClick={() => setColor(c)}
-              className="w-7 h-7 rounded-full shrink-0"
-              style={{
-                background: c,
-                border: color === c ? '2px solid #9A4A2C' : '1px solid rgba(0,0,0,0.12)',
-                boxShadow: color === c ? '0 0 0 2px #F6E7DF' : undefined,
-              }} />
-          ))}
+          <button onClick={() => { setColorOpen((v) => !v); setFontOpen(false); }} data-testid="text-color-open"
+            aria-expanded={colorOpen}
+            className="px-3 h-9 rounded-lg text-sm text-dark bg-paper active:scale-95 transition-transform shrink-0 flex items-center gap-1.5">
+            <span className="w-5 h-5 rounded-full" style={{ background: color, border: '1px solid rgba(0,0,0,0.15)' }} aria-hidden="true" />
+            Color <ChevronDown size={14} className="text-light" />
+          </button>
           <Divider />
           <button onClick={() => setOutline((v) => !v)}
             className="px-3 h-9 rounded-lg text-sm shrink-0 active:scale-95 transition-transform"
