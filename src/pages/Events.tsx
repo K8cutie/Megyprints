@@ -9,6 +9,7 @@ import {
   submitBookingPayment, uploadBookingProof, type EventBooking, type PaymentKind,
 } from '../lib/eventBookings';
 import { ALBUM_SIZES } from './builder/types';
+import { EVENTS_CARD } from './homeCopy';
 
 /* ══════════════════════════════════════════════════════════════════════════
    /events — Megyprints Events for 15 or more guests: what it is, how booking
@@ -50,9 +51,8 @@ export default function Events() {
     <div className="bg-cream min-h-screen">
       <section className="max-w-3xl mx-auto px-4 pt-28 pb-10 text-center">
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#9A4A2C]">Megyprints Events</p>
-        <h1 className="mt-2 font-display text-3xl sm:text-4xl font-bold text-dark leading-tight">Shared Memories, Different Perspectives</h1>
-        <p className="mt-4 text-lg text-dark font-semibold">Every photo from every phone, finally in one album.</p>
-        <p className="mt-2 text-medium leading-relaxed">
+        <h1 className="mt-2 font-display text-3xl sm:text-4xl font-bold text-dark leading-tight" data-testid="events-title">{EVENTS_CARD.title}</h1>
+        <p className="mt-4 text-medium leading-relaxed">
           Your guests scan the QR on their table and share what they shoot. You pick your favorites,
           and we print your album and ship it to your door.
         </p>
