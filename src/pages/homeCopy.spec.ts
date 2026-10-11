@@ -165,6 +165,14 @@ describe('the two cards at the top (the owner\'s canvas board, built 2026-10-10)
     expect(EVENTS_CARD.title).toMatch(/guests/);
     expect(EVENTS_CARD.title).toMatch(/printed album/);
   });
+  it('no line that repeats the headline or says more than is meant (owner, 2026-10-11)', () => {
+    const events = code('Events.tsx');
+    for (const src of [cards, events, JSON.stringify(EVENTS_CARD)]) {
+      expect(src).not.toMatch(/every photo from every phone/i);
+      expect(src).not.toMatch(/finally in one album/i);
+    }
+    expect(EVENTS_CARD.body).toBe('Your guests just scan your QR.');
+  });
   it('no "Try it now": there is no demo event (under-15 self-serve isn\'t built)', () => {
     expect(`${cards}\n${JSON.stringify(EVENTS_CARD)}`).not.toMatch(/Try it now/i);
   });

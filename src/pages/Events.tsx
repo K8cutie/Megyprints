@@ -52,8 +52,7 @@ export default function Events() {
       <section className="max-w-3xl mx-auto px-4 pt-28 pb-10 text-center">
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#9A4A2C]">Megyprints Events</p>
         <h1 className="mt-2 font-display text-3xl sm:text-4xl font-bold text-dark leading-tight" data-testid="events-title">{EVENTS_CARD.title}</h1>
-        <p className="mt-4 text-lg text-dark font-semibold">Every photo from every phone, finally in one album.</p>
-        <p className="mt-2 text-medium leading-relaxed">
+        <p className="mt-4 text-medium leading-relaxed">
           Your guests scan the QR on their table and share what they shoot. You pick your favorites,
           and we print your album and ship it to your door.
         </p>

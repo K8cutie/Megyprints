@@ -51,7 +51,9 @@ export const EVENTS_CARD = {
   // 2026-10-11: the old "Shared Memories, Different Perspectives" sounded good
   // but didn't say what you get). No Tagalog. Also the /events page's headline.
   title: 'All the photos your guests took, in one printed album',
-  body: 'Every photo from every phone, finally in one album. Your guests just scan your QR.',
+  // Owner, 2026-10-11: cut "Every photo from every phone, finally in one
+  // album" (it repeated the headline and said more than is meant).
+  body: 'Your guests just scan your QR.',
   how: 'Want to know how?',
   steps: [
     { title: 'Book your event', desc: 'You get a QR code made just for it.' },
