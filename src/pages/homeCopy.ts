@@ -47,7 +47,10 @@ export const ALBUMS_CARD = {
  *  (they'd add cost), so: "Book your event", and step 1 is booking. */
 export const EVENTS_CARD = {
   label: 'Megyprints Events',
-  title: 'Shared Memories, Different Perspectives',
+  // Plain English for a market that reads English as a second language (owner,
+  // 2026-10-11: the old "Shared Memories, Different Perspectives" sounded good
+  // but didn't say what you get). No Tagalog. Also the /events page's headline.
+  title: 'All the photos your guests took, in one printed album',
   body: 'Every photo from every phone, finally in one album. Your guests just scan your QR.',
   how: 'Want to know how?',
   steps: [

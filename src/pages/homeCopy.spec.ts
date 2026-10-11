@@ -152,9 +152,18 @@ describe('the two cards at the top (the owner\'s canvas board, built 2026-10-10)
   });
   it('the Events card: the owner\'s words, step 1 is booking (15+ is booked)', () => {
     for (const k of ['label', 'title', 'body', 'how', 'who', 'cta']) expect(cards).toContain(`EVENTS_CARD.${k}`);
-    expect(EVENTS_CARD.title).toBe('Shared Memories, Different Perspectives');
+    expect(EVENTS_CARD.title).toBe('All the photos your guests took, in one printed album');
     expect(EVENTS_CARD.steps.map((s) => s.title)).toEqual(['Book your event', 'Guests scan it', 'Everyone’s photos come to you', 'Pick the best. We print it.']);
     expect(EVENTS_CARD.cta).toBe('Book your event');
+  });
+  it('one Events headline in plain English, on Home and on /events (owner, 2026-10-11)', () => {
+    // "Shared Memories, Different Perspectives" sounded good but didn't say
+    // what you get, for people who read English as a second language.
+    const events = code('Events.tsx');
+    expect(events).toMatch(/<h1\b[^>]*>\{EVENTS_CARD\.title\}<\/h1>/);
+    for (const src of [cards, events, JSON.stringify(EVENTS_CARD)]) expect(src).not.toMatch(/Different Perspectives/i);
+    expect(EVENTS_CARD.title).toMatch(/guests/);
+    expect(EVENTS_CARD.title).toMatch(/printed album/);
   });
   it('no "Try it now": there is no demo event (under-15 self-serve isn\'t built)', () => {
     expect(`${cards}\n${JSON.stringify(EVENTS_CARD)}`).not.toMatch(/Try it now/i);
