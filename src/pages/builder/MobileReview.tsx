@@ -30,7 +30,7 @@ import VideoMemoryButton from './VideoMemoryButton';
 /** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
 const TOOL = 'h-14 rounded-xl bg-cream text-medium text-[12px] font-semibold flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform';
 
-export default function MobileReview({ actions, onDone }: { actions: BuilderContextValue; onDone: () => void }) {
+export default function MobileReview({ actions, onDone, onBackToPreview }: { actions: BuilderContextValue; onDone: () => void; onBackToPreview?: () => void }) {
   const pages = actions.albumPages;
   const idx = actions.currentPageIndex;
   const total = pages.length;
@@ -172,6 +172,13 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
   const goPrev = () => { if (idx > 0) actions.goToPage(idx - 1); };
   const goNext = () => { if (idx < total - 1) actions.goToPage(idx + 1); };
 
+  // Back to the Preview from this page: the same "Loading album preview…" beat.
+  const handleBack = () => {
+    if (!onBackToPreview) return;
+    setFinishing(true);
+    setTimeout(onBackToPreview, 900);
+  };
+
   const handleDone = () => {
     setFinishing(true);
     // "Loading album preview…" beat, then into Preview.
@@ -284,7 +291,8 @@ export default function MobileReview({ actions, onDone }: { actions: BuilderCont
         {/* Page turn, in words both ways — see PageTurnBar. The last page turns
             Next into Done, in the same spot. */}
         <PageTurnBar variant="phone" className="mt-3" index={idx} total={total}
-          onPrev={goPrev} onNext={goNext} onDone={handleDone} />
+          onPrev={goPrev} onNext={goNext} onDone={handleDone}
+          onBackToPreview={actions.previewSeen && onBackToPreview ? handleBack : undefined} />
       </div>
 
       {/* STUDIO: mask / look sheets, the guardrail line */}

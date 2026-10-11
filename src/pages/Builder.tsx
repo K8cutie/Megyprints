@@ -345,7 +345,8 @@ export default function Builder() {
               <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="h-full">
                 {isMobile ? (
-                  <MobileReview actions={actions} onDone={() => { void actions.dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }} />
+                  <MobileReview actions={actions} onDone={() => { void actions.dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }}
+                    onBackToPreview={() => { void actions.dispatch({ type: 'preview_album', payload: { stay: true }, rawMessage: 'back to preview' }); }} />
                 ) : (
                   <EditPhase
                     actions={actions}

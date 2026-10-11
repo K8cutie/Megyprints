@@ -82,3 +82,61 @@ describe('both builders turn pages with PageTurnBar — no icon-only ‹ › lef
     expect(s).not.toMatch(/aria-label="(Previous|Next) page"/);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BACK TO PREVIEW FROM ANY PAGE (owner, 2026-10-11: "editing in preview then
+   closing to go back in preview"). From the Preview, "Edit pages" opened the
+   editor and the only way back was Done on the LAST page: fix page 12, page
+   through to 40. Once the album has been previewed, every other page offers
+   "Back to preview", which opens the Preview on that same page.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+describe.each(['phone', 'desktop'] as const)('Back to preview (%s)', (variant) => {
+  const withBack = (index: number, total: number) => {
+    const onBackToPreview = vi.fn();
+    act(() => root.render(createElement(PageTurnBar, { variant, index, total, onPrev: () => {}, onNext: () => {}, onDone: () => {}, onBackToPreview })));
+    const btn = (id: string) => host.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`);
+    const words = [...host.querySelectorAll('button')].map((b) => (b.textContent ?? '').replace(/\s+/g, ' ').trim());
+    return { onBackToPreview, btn, words };
+  };
+
+  it('a middle page offers it, in words; Next page stays the filled button', () => {
+    const { btn, words, onBackToPreview } = withBack(11, 40);
+    expect(words).toEqual(['Previous page', 'Next page', 'Back to preview']);
+    expect(btn('back-to-preview')!.className).not.toMatch(/\bbg-(peach|success)\b/);
+    expect(btn('next-page')!.className).toMatch(/\bbg-peach\b/);
+    act(() => btn('back-to-preview')!.click());
+    expect(onBackToPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('page 1 offers it too', () => {
+    expect(withBack(0, 40).words).toEqual(['Next page', 'Back to preview']);
+  });
+
+  it('the last page: no second way, Done already goes to the Preview', () => {
+    const { btn, words } = withBack(39, 40);
+    expect(btn('back-to-preview')).toBeNull();
+    expect(words).toEqual(['Previous page', 'Done — Preview my album']);
+  });
+
+  it('before the album has been previewed (no handler): not shown', () => {
+    expect(render(variant, 11, 40).btn('back-to-preview')).toBeNull();
+  });
+});
+
+describe('Back to preview, wired (source guards)', () => {
+  const src = (f: string) => readFileSync(resolve(__dirname, f), 'utf8');
+  it('both editors offer it only once the album has been previewed, and it keeps the page', () => {
+    expect(src('BuilderEdit.tsx')).toMatch(/onBackToPreview=\{actions\.previewSeen \? \(\) => \{ void dispatch\(\{ type: 'preview_album', payload: \{ stay: true \}/);
+    expect(src('MobileReview.tsx')).toMatch(/onBackToPreview=\{actions\.previewSeen && onBackToPreview \? handleBack : undefined\}/);
+    expect(src('../Builder.tsx')).toMatch(/onBackToPreview=\{\(\) => \{ void actions\.dispatch\(\{ type: 'preview_album', payload: \{ stay: true \}/);
+  });
+  it('the Preview opens on page 1 from Done, on the same page from Back to preview', () => {
+    expect(src('../../assistant/actionEngine.ts')).toMatch(/if \(!intent\.payload\?\.stay\) this\.builder\.goToPage\(0\);/);
+  });
+  it('"previewed" is set by opening the Preview, and a new album clears it', () => {
+    const s = src('useBuilderState.ts');
+    expect(s).toMatch(/useEffect\(\(\) => \{ if \(phase === 'preview'\) setPreviewSeen\(true\); \}, \[phase\]\);/);
+    expect(s).toMatch(/setPreviewSeen\(false\); \/\/ a new album hasn't been previewed/);
+  });
+});
