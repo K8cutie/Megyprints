@@ -273,7 +273,8 @@ function Picker({ event, userId }: { event: GuestAlbumEvent; userId: string }) {
 }
 
 function Wrap({ children }: { children: React.ReactNode }) {
-  return <div className="min-h-[100dvh] bg-cream"><div className="max-w-lg mx-auto px-4 pt-8 pb-16">{children}</div></div>;
+  // pt-24 clears the site's fixed top bar (this page is inside the Layout, like /e/:code/copy).
+  return <div className="min-h-[100dvh] bg-cream"><div className="max-w-lg mx-auto px-4 pt-24 pb-16">{children}</div></div>;
 }
 
 function Spinner() {
