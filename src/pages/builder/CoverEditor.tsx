@@ -23,7 +23,7 @@ import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
 import { deriveSpine, measureSpineText, SPINE_DARK_INK, type SpineInfo } from './coverLayout';
-import { COLORS } from './MobileTextEditor';
+import TextColorPicker from './TextColorPicker';
 import { DEFAULT_TITLE_FONT } from './fonts';
 import { FontSelect } from './FontList';
 import { DEFAULT_COVER, type AlbumPage } from './types';
@@ -367,27 +367,17 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               </span>
             )}
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <span className="block text-[11px] font-medium text-stone mb-1">Font</span>
-              {/* Each font shown in its own face — the page editor's list. A native
-                  dropdown can't: Android draws its list in the system font. */}
-              <FontSelect value={title.fontFamily} onChange={(f) => updateTitle({ fontFamily: f })} />
-            </div>
-            <div>
-              <span className="block text-[11px] font-medium text-stone mb-1">Colour</span>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => updateTitle({ color: c })}
-                    className="w-7 h-7 rounded-full border transition-transform hover:scale-110"
-                    style={{ background: c, borderColor: title.color === c ? '#9A4A2C' : 'rgba(0,0,0,0.15)', boxShadow: title.color === c ? '0 0 0 2px #9A4A2C' : 'none' }}
-                    aria-label={c}
-                  />
-                ))}
-              </div>
-            </div>
+          <div>
+            <span className="block text-[11px] font-medium text-stone mb-1">Font</span>
+            {/* Each font shown in its own face — the page editor's list. A native
+                dropdown can't: Android draws its list in the system font. */}
+            <FontSelect value={title.fontFamily} onChange={(f) => updateTitle({ fontFamily: f })} />
+          </div>
+          {/* Owner (2026-10-11): the cover's colours were "very limited" (7).
+              The full width now: the 28 text colours + Any color. */}
+          <div data-testid="cover-title-colors">
+            <span className="block text-[11px] font-medium text-stone mb-1.5">Colour</span>
+            <TextColorPicker value={title.color} onChange={(c) => updateTitle({ color: c })} />
           </div>
           <div className="flex items-end gap-3 flex-wrap">
             <div>
