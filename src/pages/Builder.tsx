@@ -21,7 +21,7 @@ import SoftAuthGate from '../components/SoftAuthGate';
 import { useIsMobile } from '../hooks/use-mobile';
 import { cleanAlbumName } from '../lib/albumName';
 import { noteOrderHandoff } from '../lib/printQueue';
-import { takePendingEventImport, linkAlbumToBooking, eventLinkForAlbum } from '../lib/eventAlbum';
+import { takePendingEventImport, linkAlbumToBooking, eventLinkForAlbum, keepGuestAlbumVideos } from '../lib/eventAlbum';
 import { writeAlbumTheme } from '../lib/albumTheme';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -148,11 +148,13 @@ export default function Builder() {
         .then(() => actions.dispatch({ type: 'add_photos', payload: { files: imp.files }, rawMessage: 'add photos' }))
         .then(() => {
           const albumId = actions.getAlbumId();
-          if (albumId) {
-            linkAlbumToBooking(albumId, {
-              bookingId: imp.bookingId, bookingNumber: imp.bookingNumber, size: imp.size, cover: imp.cover, pages: imp.pages, videos: imp.videos,
-            });
-          }
+          if (!albumId) return;
+          // A guest's own album (0047) is an ordinary album: no booking link,
+          // only its videos for "Add a video memory".
+          if (imp.guestAlbum) { keepGuestAlbumVideos(albumId, imp.videos); return; }
+          linkAlbumToBooking(albumId, {
+            bookingId: imp.bookingId, bookingNumber: imp.bookingNumber, size: imp.size, cover: imp.cover, pages: imp.pages, videos: imp.videos,
+          });
         });
     }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps

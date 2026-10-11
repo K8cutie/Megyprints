@@ -12,6 +12,8 @@ export interface MyEvent {
   kids_on: boolean;
   tables: number | null;
   copies_on: boolean;
+  /** Guests can make their own album (0047). Absent before 0047. */
+  guest_albums_on?: boolean;
   guest_code: string | null;
   screen_key: string | null;
   screen_paused: boolean;
@@ -23,6 +25,8 @@ export interface MyEvent {
   photos: number;
   videos: number;
   picked: number;
+  /** Guests who started their own album (linked an account, 0047). */
+  guest_albums?: number;
 }
 
 export interface PoolItem {

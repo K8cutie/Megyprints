@@ -80,6 +80,7 @@ export default function EventGuest() {
           <p className="text-base font-semibold text-dark">
             {early ? `Photos open on ${shortDate(ev.opens_on)}, the day before the event.` : `This event closed for photos on ${shortDate(ev.closes_on)}. Thank you for sharing!`}
           </p>
+          {!early && ev.albums_on && <AlbumLink code={code} />}
           {copyOffer && <CopyLink code={code} />}
         </div>
         <PlanYourOwn />
@@ -101,6 +102,7 @@ export default function EventGuest() {
     <Shell>
       {header}
       <Camera_ ev={ev} code={code} pass={pass} me={me} onChanged={refreshMe} />
+      {ev.albums_on && <div className="mt-4 text-center"><AlbumLink code={code} /></div>}
       {copyOffer && <div className="mt-4 text-center"><CopyLink code={code} /></div>}
       <PlanYourOwn />
     </Shell>
@@ -120,6 +122,19 @@ function PlanYourOwn() {
     <p className="mt-8 text-center text-xs text-medium" data-testid="guest-plan-own">
       Planning your own event? <Link to="/events" className="underline font-semibold text-cocoa">Megyprints Events</Link> collects every guest’s photos into one printed album.
     </p>
+  );
+}
+
+/** 0047: pick from everyone's photos and make an album of your own. */
+function AlbumLink({ code }: { code: string }) {
+  return (
+    <div className="mt-4">
+      <Link to={`/e/${code}/album`} data-testid="guest-album-link"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blush-pink text-white font-semibold hover:brightness-105">
+        <BookOpen size={16} /> Make your own album
+      </Link>
+      <p className="mt-1 text-xs text-medium">Pick from everyone’s photos and videos. You pay for your album like any order.</p>
+    </div>
   );
 }
 
