@@ -20,13 +20,42 @@ import { FONTS } from './builder/fonts';
 import { COMMON_THEMES } from '../lib/albumTheme';
 import { EVENT_MIN_GUESTS } from '../lib/eventBookings';
 
-/** The Megyprints Events card under Megy's welcome card. Events for 15 or
- *  more guests are BOOKED (owner, 2026-10-10), so the card says who it's for
- *  and leads to booking. The words are the owner's own. */
+/** One step on a Home card's slides. */
+export interface HomeStep { title: string; desc: string }
+
+/** The two cards at the top of Home, side by side (the owner's canvas board
+ *  "Home with Albums and Events", 2026-10-09; built 2026-10-10). Megy's
+ *  "Hi, I'm Megy" card is gone: each card says what it is, its middle plays
+ *  the steps by itself, and its button stays put. The words are the owner's. */
+export const ALBUMS_CARD = {
+  label: 'Megyprints Albums',
+  title: 'Turn your photos into a printed album',
+  hook: `Already have the photos? Upload ${MIN_ALBUM_PHOTOS} or more. Megy designs the pages. We print on premium paper and ship it to your door.`,
+  how: 'Here’s how',
+  steps: [
+    { title: 'You upload', desc: `Pick ${MIN_ALBUM_PHOTOS} or more photos from your phone.` },
+    { title: 'Megy designs', desc: 'Every page laid out for you. Change anything you like.' },
+    { title: 'Add a video memory', desc: 'Tap the gold button. Scan the QR and the video plays.' },
+    { title: 'We print & ship', desc: 'Premium paper, delivered to your door.' },
+  ] as readonly HomeStep[],
+  cta: 'Start Creating',
+} as const;
+
+/** Events for 15 or more guests are BOOKED (owner, 2026-10-10), so the
+ *  card says who it's for and its button books. The board's "Try it now" was
+ *  the instant demo of the under-15 self-serve events, which aren't built
+ *  (they'd add cost), so: "Book your event", and step 1 is booking. */
 export const EVENTS_CARD = {
   label: 'Megyprints Events',
   title: 'Shared Memories, Different Perspectives',
   body: 'Every photo from every phone, finally in one album. Your guests just scan your QR.',
+  how: 'Want to know how?',
+  steps: [
+    { title: 'Book your event', desc: 'You get a QR code made just for it.' },
+    { title: 'Guests scan it', desc: 'With their phone camera. Nothing to download.' },
+    { title: 'Everyone’s photos come to you', desc: 'All in one place, in your account.' },
+    { title: 'Pick the best. We print it.', desc: 'Your album, shipped to your door.' },
+  ] as readonly HomeStep[],
   who: `For weddings, debuts and celebrations with ${EVENT_MIN_GUESTS} or more guests.`,
   cta: 'Book your event',
 } as const;
