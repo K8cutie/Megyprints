@@ -284,12 +284,24 @@ export class ActionEngine {
           // album (same name + size), which is exactly what happens when a phone
           // picker caps a batch and the customer re-picks an overlapping set —
           // saying "100 uploaded" there would be a lie.
-          const { added, skipped, videos = 0, others = 0, restored = 0, otherCopies = 0 } = this.builder.addPhotos(files);
+          const { added: picked, skipped, videos = 0, others = 0, restored: relinked = 0, otherCopies = 0, heic } = this.builder.addPhotos(files);
+          // iPhone photos (HEIC) are turned into JPEGs as they come in: wait for
+          // this batch, so the count is what really went in and a photo that
+          // couldn't be opened is named (it left the album).
+          const heicResult = heic ? await heic : null;
+          const unreadable = heicResult?.unreadable ?? [];
+          const unreadableNew = heicResult?.unreadableNew ?? 0;
+          const added = Math.max(0, picked - unreadableNew);
+          const restored = Math.max(0, relinked - (unreadable.length - unreadableNew));
           const parts: string[] = [];
           // Photos this album was missing on this device, put back in their places.
           if (restored > 0) parts.push(`${restored} photo${restored > 1 ? 's' : ''} put back in ${restored > 1 ? 'their places' : 'its place'}${otherCopies > 0 ? ` (${otherCopies} from a different copy — check ${otherCopies > 1 ? 'them' : 'it'}, ${otherCopies > 1 ? 'they' : 'it'} may print softer)` : ''}`);
           if (added > 0) parts.push(`${added} photo${added > 1 ? 's' : ''} added`);
           if (skipped > 0) parts.push(`${skipped} already in your album`);
+          if (unreadable.length > 0) {
+            const names = unreadable.slice(0, 3).join(', ') + (unreadable.length > 3 ? ` and ${unreadable.length - 3} more` : '');
+            parts.push(`${unreadable.length} iPhone photo${unreadable.length > 1 ? 's' : ''} couldn't be opened (${names}): try saving ${unreadable.length > 1 ? 'them' : 'it'} as JPG`);
+          }
           // A video or another file is never dropped without a word.
           const leftOut = leftOutNote(videos, others, added + skipped + restored > 0);
           if (leftOut) parts.push(leftOut);

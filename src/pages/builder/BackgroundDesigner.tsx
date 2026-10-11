@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { AlbumPage, UploadedPhoto } from './types';
 import { resolveBgImageSrc } from './types';
+import { toAlbumPhoto } from '../../lib/heicPhoto';
 import { TEXTURE_NAMES, TEXTURE_COLORS, DEFAULT_TEXTURE_COLORS, textureDataUri, TEXTURE_TILE_PX } from './textures';
 
 /* ─── Modes ───
@@ -78,11 +79,14 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setCustomImageUrl(url);
-    onChange({ type: 'image', image: url });
     e.target.value = '';
+    if (!file) return;
+    // An iPhone photo (HEIC) becomes a JPEG first: Chrome can't show a HEIC.
+    void toAlbumPhoto(file).then((usable) => {
+      const url = URL.createObjectURL(usable);
+      setCustomImageUrl(url);
+      onChange({ type: 'image', image: url });
+    }).catch(() => { /* a photo that can't be opened changes nothing */ });
   }, [onChange]);
 
   return (

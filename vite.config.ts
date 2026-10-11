@@ -44,6 +44,9 @@ export default defineConfig(({ command }) => ({
       workbox: {
         // Main bundle is ~3MB; raise the precache limit so it works offline.
         globPatterns: ['**/*.{js,css,html,png,svg,woff,woff2}'],
+        // The iPhone-photo (HEIC) converter (~3 MB, lib/heicPhoto) loads only
+        // when a HEIC arrives; precached, every install would download it.
+        globIgnores: ['**/heic-to-*.js'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Apply a shipped build on the NEXT load instead of waiting for every tab
         // to close — the new service worker activates immediately and claims open
