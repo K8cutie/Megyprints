@@ -51,7 +51,7 @@ import { templateTracker, shuffleArray } from './varietyTracker';
 import { captionBoxSize, captionFits } from './textFit';
 import { TEXT_LINE_HEIGHT } from './wordArt';
 import { readCaptureTime } from './exif';
-import { looksHeic, toAlbumPhoto, HEIC_CONVERTING_PREVIEW } from '../../lib/heicPhoto';
+import { looksHeic, toAlbumPhoto, HEIC_CONVERTING_PREVIEW, HEIC_READY_SHOWN_MS } from '../../lib/heicPhoto';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { DEFAULT_TITLE_FONT } from './fonts';
@@ -720,6 +720,8 @@ export interface BuilderActions {
   /** `videos`/`others`: picked files left out — only photos go on pages
    *  (lib/pickedFiles); the confirmation says so. */
   addPhotos: (files: FileList | File[]) => AddPhotosResult;
+  /** iPhone photos (HEIC) being made ready: "12 of 44" (HeicProgress). Null when none. */
+  heicProgress: { done: number; total: number } | null;
   removePhoto: (id: string) => void;
   /** Megy's free photo check (lib/photoCheck): runs on the phone in the
    *  background. `ready` = every photo checked for blur and repeats. */
@@ -1750,6 +1752,15 @@ export function useBuilderState(): BuilderActions {
   }, [updateCurrentPage]);
 
   /* ── Photo handling (IndexedDB — zero cloud I/O) ── */
+  // iPhone photos (HEIC) being made ready, across batches: null when none.
+  // Kept for a moment once all are done, so "ready" can be said.
+  const [heicProgress, setHeicProgress] = useState<{ done: number; total: number } | null>(null);
+  useEffect(() => {
+    if (!heicProgress || heicProgress.done < heicProgress.total) return;
+    const t = window.setTimeout(() => setHeicProgress(null), HEIC_READY_SHOWN_MS);
+    return () => window.clearTimeout(t);
+  }, [heicProgress]);
+
   const addPhotos = useCallback((files: FileList | File[]): AddPhotosResult => {
     // Only photos go on pages; videos and other files are counted, not added.
     const picked = Array.from(files);
@@ -1761,6 +1772,14 @@ export function useBuilderState(): BuilderActions {
     // "converting" square. Each settles to 'ok' or, if it couldn't be opened,
     // its name: add_photos says so once the batch is done.
     const heicTasks: Promise<'ok' | { unreadable: string; fresh: boolean }>[] = [];
+    // Each one counts toward "Getting your iPhone photos ready: 12 of 44"
+    // (HeicProgress): on a phone a batch takes tens of seconds, and grey
+    // squares with no word read as a hang (owner, 2026-10-12).
+    const trackHeic = (t: Promise<'ok' | { unreadable: string; fresh: boolean }>) => {
+      heicTasks.push(t);
+      setHeicProgress((p) => ({ done: p?.done ?? 0, total: (p?.total ?? 0) + 1 }));
+      void t.then(() => setHeicProgress((p) => (p ? { ...p, done: p.done + 1 } : p)));
+    };
 
     // ── The same photo is never added twice (same name + size, or a repeat in
     // this pick), and a photo this album is MISSING on this device goes back
@@ -1806,7 +1825,7 @@ export function useBuilderState(): BuilderActions {
             : p)));
           return 'ok' as const;
         });
-        if (looksHeic(file)) heicTasks.push(task.catch(() => ({ unreadable: file.name, fresh: false })));
+        if (looksHeic(file)) trackHeic(task.catch(() => ({ unreadable: file.name, fresh: false })));
         pendingMeasureRef.current.add(task);
         void task.catch(() => { /* a failed measure must not block generation */ })
           .finally(() => pendingMeasureRef.current.delete(task));
@@ -1880,7 +1899,7 @@ export function useBuilderState(): BuilderActions {
         );
         return 'ok' as const;
       });
-      if (looksHeic(file)) heicTasks.push(task.catch(() => ({ unreadable: file.name, fresh: true })));
+      if (looksHeic(file)) trackHeic(task.catch(() => ({ unreadable: file.name, fresh: true })));
       pendingMeasureRef.current.add(task);
       void task.catch(() => { /* a failed measure must not block generation */ })
         .finally(() => pendingMeasureRef.current.delete(task));
@@ -1928,11 +1947,16 @@ export function useBuilderState(): BuilderActions {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadedPhotos]);
 
+  // Not "checked" while iPhone photos are still being made ready: they can't be
+  // checked yet, and checkIsReady only counts photos already measured, so it
+  // said "all sharp, no repeats" about the few done (owner's phone walk,
+  // 2026-10-12: 10 of 44 converted).
+  const heicPending = !!heicProgress && heicProgress.done < heicProgress.total;
   const photoCheck = useMemo(() => ({
-    ready: checkIsReady(uploadedPhotos),
+    ready: !heicPending && checkIsReady(uploadedPhotos),
     progress: checkProgress(uploadedPhotos),
     suggestion: suggestLeaveOut(uploadedPhotos),
-  }), [uploadedPhotos]);
+  }), [uploadedPhotos, heicPending]);
 
   const leaveOutPhotos = useCallback((ids: string[]) => {
     const out = new Set(ids);
@@ -3815,6 +3839,7 @@ export function useBuilderState(): BuilderActions {
     setAlbumTitle: renameAlbum,
     uploadedPhotos,
     addPhotos,
+    heicProgress,
     removePhoto,
     photoCheck,
     leaveOutPhotos,
