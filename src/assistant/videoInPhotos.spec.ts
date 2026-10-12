@@ -115,6 +115,27 @@ describe('the builder: addPhotos keeps only the photos', () => {
     native.mockRestore(); lib.mockRestore();
   });
 
+  it('counts iPhone photos as they become ready ("12 of 44"), then clears', async () => {
+    const { heicConverters, HEIC_READY_SHOWN_MS } = await import('../lib/heicPhoto');
+    const native = vi.spyOn(heicConverters, 'native').mockResolvedValue(null);
+    const releases: (() => void)[] = [];
+    const lib = vi.spyOn(heicConverters, 'libheif').mockImplementation(() =>
+      new Promise((res) => { releases.push(() => res(new Blob(['jpeg'], { type: 'image/jpeg' }))); }));
+    let r!: ReturnType<BuilderActions['addPhotos']>;
+    await act(async () => { r = b.addPhotos([file('A.HEIC', 'image/heic'), file('B.HEIC', 'image/heic'), file('C.jpg', 'image/jpeg')]); });
+    expect(b.heicProgress).toEqual({ done: 0, total: 2 }); // the JPEG isn't counted
+    // Megy's photo check isn't "done" while they're converting (it would say
+    // "all sharp, no repeats" about only the photos already ready).
+    expect(b.photoCheck.ready).toBe(false);
+    await act(async () => { for (let i = 0; i < 5 && releases.length < 1; i++) await Promise.resolve(); releases.shift()?.(); await new Promise((res) => setTimeout(res, 0)); });
+    expect(b.heicProgress).toEqual({ done: 1, total: 2 });
+    await act(async () => { for (let i = 0; i < 5 && releases.length < 1; i++) await new Promise((res) => setTimeout(res, 0)); releases.shift()?.(); await r.heic; await new Promise((res) => setTimeout(res, 0)); });
+    expect(b.heicProgress).toEqual({ done: 2, total: 2 }); // "ready", for a moment
+    await act(async () => { await new Promise((res) => setTimeout(res, HEIC_READY_SHOWN_MS + 50)); });
+    expect(b.heicProgress).toBeNull();
+    native.mockRestore(); lib.mockRestore();
+  });
+
   it('a photo, a video and a PDF → 1 photo in, the video and the PDF counted', async () => {
     let r!: ReturnType<BuilderActions['addPhotos']>;
     await act(async () => { r = b.addPhotos([file('IMG_1.jpg', 'image/jpeg'), file('hk-clip-12s.mp4', 'video/mp4'), file('notes.pdf', 'application/pdf')]); });

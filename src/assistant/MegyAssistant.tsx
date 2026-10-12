@@ -658,7 +658,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 {/* Eye-catching photo count — the photos that go in (left-out ones don't). */}
                 <div className="flex items-baseline gap-2 mb-3">
                   <span className="font-display text-5xl font-bold text-blush-pink leading-none" data-testid="photos-ready">{livePhotos.length}</span>
-                  <span className="text-base text-ink-mid">photos ready 🎉</span>
+                  {/* iPhone photos still being made ready (HeicProgress): added, not ready yet. */}
+                  <span className="text-base text-ink-mid" data-testid="photos-ready-word">
+                    {builder.heicProgress && builder.heicProgress.done < builder.heicProgress.total ? 'photos added' : 'photos ready 🎉'}
+                  </span>
                 </div>
                 {/* Megy's free photo check: blurry + repeat shots, suggested out (one tap). */}
                 <PhotoCheckCard photos={builder.uploadedPhotos} check={builder.photoCheck}

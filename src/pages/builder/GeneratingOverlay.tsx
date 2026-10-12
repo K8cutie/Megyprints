@@ -18,8 +18,12 @@ export const GENERATING_COPY: Record<GeneratingPhase, string> = {
  * nothing is nested under this one.
  */
 export default function GeneratingOverlay() {
-  const { generating } = useBuilderContext();
+  const { generating, heicProgress } = useBuilderContext();
   if (!generating) return null;
+  // Tapped Generate while iPhone photos are still being made ready: the album
+  // waits for them, so say that, with the count (owner, 2026-10-12: a long
+  // wait with no word looks like a hang). Not "a few seconds".
+  const heicWait = generating === 'measuring' && heicProgress && heicProgress.done < heicProgress.total ? heicProgress : null;
   return (
     <div
       className="fixed inset-0 z-[140] bg-warm-white/85 backdrop-blur-sm flex items-center justify-center p-6"
@@ -35,9 +39,19 @@ export default function GeneratingOverlay() {
         </div>
         <div>
           <p className="text-lg font-semibold text-dark">Making your album</p>
-          <p className="mt-1 text-sm text-light">{GENERATING_COPY[generating]}</p>
+          <p className="mt-1 text-sm text-light" data-testid="generating-stage">
+            {heicWait ? `Getting your iPhone photos ready: ${heicWait.done} of ${heicWait.total}` : GENERATING_COPY[generating]}
+          </p>
+          {heicWait && (
+            <div className="mx-auto mt-2 h-1.5 w-48 overflow-hidden rounded-full bg-blush" aria-hidden="true">
+              <div className="h-full rounded-full bg-peach transition-[width] duration-300"
+                style={{ width: `${Math.round((heicWait.done / heicWait.total) * 100)}%` }} />
+            </div>
+          )}
         </div>
-        <p className="text-xs text-light/80">Please stand by while Megy does the magic. This takes a few seconds.</p>
+        <p className="text-xs text-light/80">
+          {heicWait ? 'This can take a minute on a phone. Keep this page open.' : 'Please stand by while Megy does the magic. This takes a few seconds.'}
+        </p>
       </div>
     </div>
   );

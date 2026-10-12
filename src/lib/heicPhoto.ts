@@ -14,6 +14,9 @@
    the JPEG copy carries none.
    ══════════════════════════════════════════════════════════════════════════ */
 
+/** How long "Your iPhone photos are ready" stays up once a batch is done. */
+export const HEIC_READY_SHOWN_MS = 2000;
+
 /** JPEG quality for the converted copy: the print reads this file. */
 export const HEIC_JPEG_QUALITY = 0.92;
 
