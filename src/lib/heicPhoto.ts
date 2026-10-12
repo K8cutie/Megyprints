@@ -8,8 +8,12 @@
    picker, was left out as "not a photo". Each HEIC is now turned into a JPEG
    as it comes in, and the rest of the album never sees a HEIC:
      • Safari (iPhone, Mac) opens HEIC itself: drawn and saved as a JPEG;
-     • anywhere else, heic-to (libheif, LGPL-3.0, loaded only when a HEIC
-       arrives, ~3 MB) decodes it.
+     • anywhere else, libheif-js (the WebAssembly build of libheif, LGPL-3.0,
+       ~2 MB, loaded only when a HEIC arrives) decodes it in background
+       workers (lib/heicWorker), so the screen never freezes. It replaced
+       heic-to (plain-JavaScript libheif): 2.9× faster, 44 photos in 3.7 s
+       instead of 11.0 s, the same pictures (owner, 2026-10-12: a long wait
+       "may think it hanged").
    The capture date is read from the original (lib/heifExif, exif.ts), since
    the JPEG copy carries none.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -86,11 +90,91 @@ async function nativeToJpeg(file: Blob): Promise<Blob | null> {
   }
 }
 
-/** libheif, for every browser that can't open HEIC (Chrome). The CSP build:
- *  no eval, a blob worker (allowed by vercel.json's worker-src). */
+/** How many photos are decoded at once. Each one is a full 12 MP picture in a
+ *  worker's memory, so a phone with little memory gets fewer (Chrome reports
+ *  `navigator.deviceMemory` in GB); never more than addPhotos runs at once. */
+export function heicWorkerCount(deviceMemoryGB?: number, cores?: number): number {
+  const byMemory = deviceMemoryGB === undefined ? 3 : deviceMemoryGB <= 2 ? 1 : deviceMemoryGB <= 4 ? 2 : 3;
+  const byCores = cores ? Math.max(1, cores - 1) : 3;
+  return Math.max(1, Math.min(3, byMemory, byCores));
+}
+
+/** Workers are closed after this long with nothing to do (their memory goes). */
+export const HEIC_WORKER_IDLE_MS = 15_000;
+
+type WorkerReply = { id: number; blob?: Blob; pixels?: { width: number; height: number; data: ArrayBuffer }; error?: string };
+interface Job { id: number; buffer: ArrayBuffer; resolve: (b: Blob) => void; reject: (e: Error) => void }
+
+const pool: { workers: { w: Worker; job: Job | null }[]; queue: Job[]; seq: number; idle?: number } = { workers: [], queue: [], seq: 0 };
+
+/** The page makes the JPEG when the worker had no OffscreenCanvas. */
+async function pixelsToJpeg(p: { width: number; height: number; data: ArrayBuffer }): Promise<Blob> {
+  const canvas = document.createElement('canvas');
+  canvas.width = p.width;
+  canvas.height = p.height;
+  canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(p.data), p.width, p.height), 0, 0);
+  const out = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', HEIC_JPEG_QUALITY));
+  canvas.width = 0;
+  if (!out) throw new Error('Could not make the JPEG');
+  return out;
+}
+
+function closeIdleWorkersLater() {
+  window.clearTimeout(pool.idle);
+  pool.idle = window.setTimeout(() => {
+    if (pool.queue.length || pool.workers.some((x) => x.job)) return;
+    for (const x of pool.workers) x.w.terminate();
+    pool.workers = [];
+  }, HEIC_WORKER_IDLE_MS);
+}
+
+function pump() {
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const max = heicWorkerCount(nav.deviceMemory, nav.hardwareConcurrency);
+  while (pool.queue.length) {
+    let slot = pool.workers.find((x) => !x.job);
+    if (!slot && pool.workers.length < max) {
+      const w = new Worker(new URL('./heicWorker.ts', import.meta.url), { type: 'module' });
+      slot = { w, job: null };
+      const me = slot;
+      w.onmessage = (e: MessageEvent<WorkerReply>) => {
+        const job = me.job;
+        me.job = null;
+        if (job && job.id === e.data.id) {
+          if (e.data.blob) job.resolve(e.data.blob);
+          else if (e.data.pixels) pixelsToJpeg(e.data.pixels).then(job.resolve, job.reject);
+          else job.reject(new Error(e.data.error || 'HEIF processing error'));
+        }
+        pump();
+      };
+      w.onerror = (ev) => {
+        ev.preventDefault();
+        const job = me.job;
+        me.job = null;
+        pool.workers = pool.workers.filter((x) => x !== me);
+        w.terminate();
+        job?.reject(new Error('The photo converter stopped'));
+        pump();
+      };
+      pool.workers.push(slot);
+    }
+    if (!slot) break;
+    const job = pool.queue.shift()!;
+    slot.job = job;
+    slot.w.postMessage({ id: job.id, buffer: job.buffer, quality: HEIC_JPEG_QUALITY }, [job.buffer]);
+  }
+  if (!pool.queue.length && !pool.workers.some((x) => x.job)) closeIdleWorkersLater();
+}
+
+/** libheif (WebAssembly), for every browser that can't open HEIC (Chrome), in
+ *  background workers (lib/heicWorker). */
 async function libheifToJpeg(file: Blob): Promise<Blob> {
-  const { heicTo } = await import('heic-to/csp');
-  return heicTo({ blob: file, type: 'image/jpeg', quality: HEIC_JPEG_QUALITY });
+  const buffer = await file.arrayBuffer();
+  return new Promise<Blob>((resolve, reject) => {
+    pool.queue.push({ id: ++pool.seq, buffer, resolve, reject });
+    window.clearTimeout(pool.idle);
+    pump();
+  });
 }
 
 /** Overridable for tests (jsdom has no decoder). */
