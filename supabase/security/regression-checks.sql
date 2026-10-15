@@ -244,5 +244,37 @@ begin
   raise notice 'PASS: the guest camera is limited, its files private or unlistable, and a booking pays for one album';
 end $$;
 
+-- ── GUARD: a guest's own album reads only what the guest picked (0047) ──────
+-- Guests who joined with the QR pick from the pool and make their own album.
+-- They must read ONLY the print masters they picked, never through anon, and
+-- nobody reads the picks directly.
+do $$
+declare f text;
+begin
+  if to_regclass('public.event_guest_picks') is null then
+    raise exception 'REGRESSION (guest albums): event_guest_picks is missing: 0047 was never applied here';
+  end if;
+  if not (select relrowsecurity from pg_class where oid = 'public.event_guest_picks'::regclass)
+     or has_table_privilege('authenticated', 'public.event_guest_picks', 'SELECT')
+     or has_table_privilege('anon', 'public.event_guest_picks', 'SELECT') then
+    raise exception 'REGRESSION (guest albums): the guests'' picks can be read directly';
+  end if;
+  foreach f in array array['public.link_event_guest(text, text)', 'public.guest_album_media(uuid, integer, integer)', 'public.guest_album_picks(uuid)',
+                           'public.set_guest_pick(uuid, uuid, boolean)',
+                           'public.my_guest_albums()', 'public.set_guest_albums(uuid, boolean)', 'public.event_guest_album_reads_path(text)'] loop
+    if has_function_privilege('anon', f, 'EXECUTE') then
+      raise exception 'REGRESSION (guest albums): anon can run %', f;
+    end if;
+  end loop;
+  if has_function_privilege('authenticated', 'public.event_album_guest(uuid)', 'EXECUTE') then
+    raise exception 'REGRESSION (guest albums): a customer can run the access helper directly';
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'storage' and policyname = 'event_originals_guest_album_reads' and cmd = 'SELECT')
+     or pg_get_functiondef('public.event_guest_album_reads_path(text)'::regprocedure) not like '%event_guest_picks%' then
+    raise exception 'REGRESSION (guest albums): print masters are no longer limited to the guest''s picks';
+  end if;
+  raise notice 'PASS: a guest''s own album reads only the print masters they picked';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;

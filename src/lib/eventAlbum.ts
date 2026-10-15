@@ -28,6 +28,9 @@ export interface EventAlbumImport {
   pages: number;
   files: File[];
   videos: EventVideoChoice[];
+  /** A guest's own album (0047): NOT linked to the booking — it's an
+   *  ordinary album at the normal price. Only its videos are kept. */
+  guestAlbum?: boolean;
 }
 
 export interface EventAlbumLink {
@@ -76,8 +79,33 @@ export function eventLinkForAlbum(albumId: string | null | undefined): EventAlbu
   return l && typeof l.bookingId === 'string' ? l : null;
 }
 
-export const eventVideosForAlbum = (albumId: string | null | undefined): EventVideoChoice[] =>
-  eventLinkForAlbum(albumId)?.videos ?? [];
+// A guest's own album has no booking link, so its picked videos are kept
+// apart: "Add a video memory" offers them, checkout never sees a booking.
+const GUEST_VIDEOS_KEY = 'megy-guest-album-videos';
+
+function readGuestVideos(): Record<string, EventVideoChoice[]> {
+  try {
+    const v = JSON.parse(localStorage.getItem(GUEST_VIDEOS_KEY) || '{}');
+    return v && typeof v === 'object' ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+export function keepGuestAlbumVideos(albumId: string, videos: EventVideoChoice[]) {
+  try {
+    const all = readGuestVideos();
+    all[albumId] = videos;
+    localStorage.setItem(GUEST_VIDEOS_KEY, JSON.stringify(all));
+  } catch { /* storage full or private: the videos just aren't offered */ }
+}
+
+export const eventVideosForAlbum = (albumId: string | null | undefined): EventVideoChoice[] => {
+  const linked = eventLinkForAlbum(albumId)?.videos;
+  if (linked?.length) return linked;
+  const kept = albumId ? readGuestVideos()[albumId] : undefined;
+  return Array.isArray(kept) ? kept : [];
+};
 
 export function unlinkAlbum(albumId: string) {
   try {

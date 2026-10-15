@@ -179,7 +179,7 @@ describe('a booking, step by step', () => {
     await type($('pay-reference'), 'lol nope');
     await click($('pay-sent'));
     expect($('pay-reference-error')).not.toBeNull();
-    expect(h.calls.some((c) => c[0] === 'rpc')).toBe(false);
+    expect(h.calls.some((c) => c[0] === 'rpc' && c[1] !== 'my_guest_albums')).toBe(false); // (reading the guest albums list is not sending)
   });
 
   it('deposit sent: "we\'re confirming", nothing to pay, and no cancel (money may be on its way)', async () => {

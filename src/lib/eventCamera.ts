@@ -36,6 +36,9 @@ export interface EventPublic {
   photos_per_guest: number;
   videos_per_guest: number;
   tables: number | null;
+  /** Guests can make their own album from the pool (0047). */
+  albums_on?: boolean;
+  kept_until?: string;
 }
 
 export interface GuestPass { token: string; guestId: string; name: string; table: number | null }

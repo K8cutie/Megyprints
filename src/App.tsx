@@ -31,6 +31,7 @@ const EventCards = lazy(() => import('./pages/EventCards'));
 const EventGuest = lazy(() => import('./pages/EventGuest'));
 const EventScreen = lazy(() => import('./pages/EventScreen'));
 const EventCopy = lazy(() => import('./pages/EventCopy'));
+const EventGuestAlbum = lazy(() => import('./pages/EventGuestAlbum'));
 import InstallPrompt from './components/InstallPrompt';
 import ResumePrompt from './components/ResumePrompt';
 import PaidClipSweep from './components/PaidClipSweep';
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="/events/book" element={<EventBook />} />
           <Route path="/events/:id" element={<ProtectedRoute><EventManage /></ProtectedRoute>} />
           <Route path="/e/:code/copy" element={<EventCopy />} />
+          <Route path="/e/:code/album" element={<EventGuestAlbum />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />

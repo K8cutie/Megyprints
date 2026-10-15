@@ -22,7 +22,8 @@ const h = vi.hoisted(() => ({
   // When set, the next photo waits here (an upload still going).
   hold: null as Promise<void> | null,
   // One object, as the real auth context gives: a new one each render loops the page's effects.
-  auth: { user: { id: 'host-1', email: 'host@example.test' }, loading: false },
+  auth: { user: { id: 'host-1', email: 'host@example.test' }, loading: false } as { user: { id: string; email: string } | null; loading: boolean },
+  openLogin: vi.fn(),
 }));
 vi.mock('../lib/supabase', () => {
   const q = {
@@ -59,9 +60,11 @@ vi.mock('../lib/videoTranscode', () => ({ transcodeSupported: () => false, trans
 vi.mock('../lib/qrMemory', () => ({ generateQrPngDataUrl: async () => 'data:image/png;base64,AA==' }));
 vi.mock('../lib/authContext', () => ({ useAuth: () => h.auth }));
 vi.mock('../lib/albumSession', () => ({ startFreshAlbum: (id: string) => h.fresh(id) }));
+vi.mock('../components/AuthModalProvider', () => ({ useAuthModal: () => ({ openLogin: () => h.openLogin() }) }));
 
 import EventGuest from './EventGuest';
 import EventManage from './EventManage';
+import EventGuestAlbum from './EventGuestAlbum';
 import { takePendingEventImport } from '../lib/eventAlbum';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -79,7 +82,8 @@ const feedItem = (id: string, over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
   localStorage.clear();
-  h.calls = []; h.uploads = []; h.downloads = []; h.fresh.mockReset();
+  h.calls = []; h.uploads = []; h.downloads = []; h.fresh.mockReset(); h.openLogin.mockReset();
+  h.auth = { user: { id: 'host-1', email: 'host@example.test' }, loading: false };
   h.rpc = {
     event_public: () => ({ data: EV, error: null }),
     event_copy_offer: () => ({ data: false, error: null }),
@@ -99,6 +103,7 @@ const render = async (at: string) => {
     root.render(createElement(MemoryRouter, { initialEntries: [at] },
       createElement(Routes, null,
         createElement(Route, { path: '/e/:code', element: createElement(EventGuest) }),
+        createElement(Route, { path: '/e/:code/album', element: createElement(EventGuestAlbum) }),
         createElement(Route, { path: '/events/:id', element: createElement(EventManage) }),
         createElement(Route, { path: '*', element: createElement(Where) }),
       )));
@@ -295,5 +300,162 @@ describe('the host’s event page (/events/:id)', () => {
     await render('/events/b1');
     expect($('manage-album-ordered')?.textContent).toContain('Your album is ordered.');
     expect($('manage-make-album')).toBeNull();
+  });
+});
+
+describe('a guest’s own album (/e/:code/album, 0047): the school trip, the bride’s mother', () => {
+  const EVENT = {
+    guest_id: 'g1', booking_id: 'b1', guest_code: 'abc12345', title: 'Grade 4 Field Trip', event_type: 'other', event_date: '2026-10-10',
+    kept_until: '2027-02-07', album_size: '8x8', picked: 0,
+  };
+  const item = (i: number, over: Record<string, unknown> = {}) => ({
+    id: `m${i}`, booking_id: 'b1', kind: 'photo', ext: 'jpg', guest_name: 'Migo', ready_at: `2026-10-10T10:${String(i).padStart(2, '0')}:00Z`,
+    width: 1, height: 1, duration_s: null, mine: false, picked: false, ...over,
+  });
+  beforeEach(() => {
+    h.auth = { user: { id: 'parent-1', email: 'parent@example.test' }, loading: false };
+    h.rpc.event_public = () => ({ data: { ...EV, title: 'Grade 4 Field Trip', albums_on: true, kept_until: '2027-02-07' }, error: null });
+    h.rpc.link_event_guest = () => ({ data: { guest_id: 'g1' }, error: null });
+    h.rpc.my_guest_albums = () => ({ data: [EVENT], error: null });
+    h.rpc.guest_album_media = () => ({ data: [item(1), item(2, { mine: true })], error: null });
+    h.rpc.guest_album_picks = () => ({ data: [], error: null });
+    h.rpc.set_guest_pick = () => ({ data: true, error: null });
+  });
+  const joined = () => localStorage.setItem('megy-event-guest:abc12345', JSON.stringify({ token: 'tok-1', guestId: 'g1', name: 'Parent A', table: null }));
+
+  it('the guest page offers it while photos are open, and after they close', async () => {
+    joined();
+    await render('/e/abc12345');
+    expect($('guest-album-link')?.textContent?.trim()).toBe('Make your own album');
+    h.rpc.event_public = () => ({ data: { ...EV, open: false, opens_on: '2026-10-09', closes_on: '2026-10-11', albums_on: true }, error: null });
+    act(() => root.unmount()); root = createRoot(host); // the page reads the event once, on opening
+    await render('/e/abc12345');
+    expect($('guest-closed')).not.toBeNull();
+    expect($('guest-album-link')).not.toBeNull();
+  });
+
+  it('switched off by the hosts: no offer on the guest page, and the album page says so', async () => {
+    joined();
+    h.rpc.event_public = () => ({ data: { ...EV, albums_on: false }, error: null });
+    await render('/e/abc12345');
+    expect($('guest-album-link')).toBeNull();
+    // A new address needs a new router (MemoryRouter reads initialEntries once).
+    act(() => root.unmount()); root = createRoot(host);
+    await render('/e/abc12345/album');
+    expect($('guest-album-off')?.textContent).toContain('Making your own album isn’t open for this event.');
+  });
+
+  it('signed out: asks to sign in, nothing is linked', async () => {
+    joined();
+    h.auth = { user: null, loading: false };
+    await render('/e/abc12345/album');
+    expect($('guest-album-signin')).not.toBeNull();
+    await click($('guest-album-signin-button'));
+    expect(h.openLogin).toHaveBeenCalled();
+    expect(h.calls.some(([n]) => n === 'link_event_guest')).toBe(false);
+  });
+
+  it('signed in on the phone that joined: links the pass, then picks are the guest’s own', async () => {
+    joined();
+    await render('/e/abc12345/album');
+    expect(h.calls.find(([n]) => n === 'link_event_guest')?.[1]).toEqual({ p_code: 'abc12345', p_token: 'tok-1' });
+    expect($$('guest-album-item')).toHaveLength(2);
+    await click($$('guest-album-pick')[0]);
+    expect(h.calls.find(([n]) => n === 'set_guest_pick')?.[1]).toEqual({ p_guest_id: 'g1', p_media_id: 'm1', p_picked: true });
+    expect($$('guest-album-pick')[0].textContent).toBe('Picked');
+    // The hosts' own picks are never touched.
+    expect(h.calls.some(([n]) => n === 'set_event_media')).toBe(false);
+  });
+
+  it('another device, no pass on it: the account finds the event it linked before', async () => {
+    await render('/e/abc12345/album');
+    expect(h.calls.some(([n]) => n === 'link_event_guest')).toBe(false);
+    expect($$('guest-album-item')).toHaveLength(2);
+  });
+
+  it('never joined and no pass: says how, in words', async () => {
+    h.rpc.my_guest_albums = () => ({ data: [], error: null });
+    await render('/e/abc12345/album');
+    expect($('guest-album-none')?.textContent).toContain('Open this on the phone you joined the event with.');
+  });
+
+  it('short of 40 photos: says how many more; nothing downloads', async () => {
+    joined();
+    h.rpc.guest_album_picks = () => ({ data: Array.from({ length: 39 }, (_, i) => item(i, { picked: true })), error: null });
+    await render('/e/abc12345/album');
+    await click($('guest-album-make-button'));
+    expect($('guest-album-short')?.textContent).toBe('An album needs at least 40 photos. Pick 1 more (tap “Pick” on a photo).');
+    expect(h.downloads).toEqual([]);
+  });
+
+  it('Make my album: only the picked photos’ print masters, the picked video, NOT linked to the booking (normal price)', async () => {
+    joined();
+    const picked = [
+      ...Array.from({ length: 40 }, (_, i) => item(i, { picked: true })),
+      item(52, { picked: true, kind: 'video', ext: 'mp4', guest_name: 'Bea', duration_s: 4 }),
+    ];
+    // The page on screen shows only the newest few; the picks come whole.
+    h.rpc.guest_album_media = () => ({ data: [item(50), ...picked.slice(0, 3)], error: null });
+    h.rpc.guest_album_picks = () => ({ data: picked, error: null });
+    await render('/e/abc12345/album');
+    expect($('guest-album-count')?.textContent).toBe('40 photos picked and 1 video (they become video memories).');
+    await click($('guest-album-make-button'));
+    expect(h.downloads).toEqual(Array.from({ length: 40 }, (_, i) => `event-originals/b1/m${i}.jpg`));
+    const imp = takePendingEventImport()!;
+    expect(imp).toMatchObject({ guestAlbum: true, bookingId: 'b1', title: 'Grade 4 Field Trip', size: '8x8' });
+    expect(imp.files).toHaveLength(40);
+    expect(imp.videos).toEqual([{ id: 'm52', url: 'https://x/event-videos/b1/m52.mp4', ext: 'mp4', by: 'Bea', durationS: 4 }]);
+    expect(h.fresh).toHaveBeenCalledWith('parent-1');
+    expect($('where')?.textContent).toBe('/builder');
+  });
+
+  it('a limit (200 at once, so many a day) is said in words and the tap is undone', async () => {
+    joined();
+    h.rpc.set_guest_pick = () => ({ data: null, error: { code: 'EV054', message: 'You can pick up to 200 photos and videos. Unpick some first.' } });
+    await render('/e/abc12345/album');
+    await click($$('guest-album-pick')[0]);
+    expect($('guest-album-error')?.textContent).toBe('You can pick up to 200 photos and videos. Unpick some first.');
+    expect($$('guest-album-pick')[0].textContent).toBe('Pick');
+  });
+
+  it('a big event loads a page at a time: "Show more photos" asks for the next page', async () => {
+    joined();
+    h.rpc.guest_album_media = (a) => ({ data: Array.from({ length: a.p_offset ? 5 : 120 }, (_, i) => item(Number(a.p_offset) + i)), error: null });
+    await render('/e/abc12345/album');
+    expect($$('guest-album-item')).toHaveLength(120);
+    await click($('guest-album-more'));
+    expect(h.calls.filter(([n]) => n === 'guest_album_media').map(([, a]) => a)).toEqual([
+      { p_guest_id: 'g1', p_offset: 0, p_limit: 120 }, { p_guest_id: 'g1', p_offset: 120, p_limit: 120 },
+    ]);
+    expect($$('guest-album-item')).toHaveLength(125);
+    expect($('guest-album-more')).toBeNull();
+  });
+
+  it('joining says other guests can use your photos in their own album', async () => {
+    await render('/e/abc12345');
+    expect($('guest-consent')?.textContent).toContain('Other guests can also pick your photos and videos for their own printed album.');
+  });
+
+  it('closed, and no pass on this phone: a quieter way in for a guest who joined on another phone', async () => {
+    h.rpc.event_public = () => ({ data: { ...EV, open: false, opens_on: '2026-10-09', closes_on: '2026-10-11', albums_on: true }, error: null });
+    await render('/e/abc12345');
+    expect($('guest-album-link')).toBeNull();
+    expect($('guest-album-other-phone')?.textContent).toBe('Joined from another phone? Make your own album');
+  });
+});
+
+describe('the host’s switch (0047)', () => {
+  it('on by default; switching it off saves it', async () => {
+    h.booking = { id: 'b1', booking_number: 'EV-1', user_id: 'host-1', status: 'paid', event_type: 'other', event_date: '2026-10-10', deal_total: 1, deal_deposit: 1, deal_album_size: '8x8', deal_cover: 'soft', deal_pages: 40, album_order_id: null };
+    h.rpc.my_event = () => ({ data: { booking_id: 'b1', title: 'Trip', kids_on: true, tables: null, copies_on: false, guest_albums_on: true, guest_albums: 3, guest_code: 'abc12345', screen_key: 'k', screen_paused: false, open: true, opens_on: '2026-10-09', closes_on: '2026-10-17', kept_until: '2027-02-07', guests: 9, photos: 0, videos: 0, picked: 0 }, error: null });
+    h.rpc.my_event_media = () => ({ data: [], error: null });
+    h.rpc.my_event_guests = () => ({ data: [], error: null });
+    await render('/events/b1');
+    const box = $('manage-guest-albums') as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect($('manage-guest-albums-count')?.textContent).toBe('3 guests have started their own album.');
+    await click(box);
+    await click($('manage-save'));
+    expect(h.calls.find(([n]) => n === 'set_guest_albums')?.[1]).toEqual({ p_booking_id: 'b1', p_on: false });
   });
 });

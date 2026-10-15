@@ -9,6 +9,7 @@ import {
   type EventGuest, type MyEvent, type PoolItem,
 } from '../lib/eventHost';
 import { setPendingEventImport } from '../lib/eventAlbum';
+import { setGuestAlbums } from '../lib/eventGuestAlbum';
 import { startFreshAlbum } from '../lib/albumSession';
 import { generateQrPngDataUrl } from '../lib/qrMemory';
 import { createLimiter } from '../lib/limit';
@@ -236,12 +237,14 @@ function SettingsCard({ ev, onSaved }: { ev: MyEvent; onSaved: () => Promise<voi
   const [kids, setKids] = useState(ev.kids_on);
   const [tables, setTables] = useState(ev.tables ? String(ev.tables) : '');
   const [copies, setCopies] = useState(ev.copies_on);
+  const [guestAlbums, setGuestAlbumsOn] = useState(ev.guest_albums_on ?? true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const save = async () => {
     setBusy(true); setMsg('');
     try {
       await saveMyEvent(ev.booking_id, { title, kidsOn: kids, tables: tables ? Number(tables) : null, copiesOn: copies });
+      if (guestAlbums !== (ev.guest_albums_on ?? true)) await setGuestAlbums(ev.booking_id, guestAlbums);
       await onSaved();
       setMsg('Saved.');
     } catch (e) {
@@ -270,6 +273,13 @@ function SettingsCard({ ev, onSaved }: { ev: MyEvent; onSaved: () => Promise<voi
         <label className="flex items-start gap-2">
           <input type="checkbox" checked={copies} onChange={(e) => setCopies(e.target.checked)} className="mt-1" data-testid="manage-copies" />
           <span><b className="text-dark">Guests can order their own copy</b> of your album, at the normal price, once yours is ordered.</span>
+        </label>
+        <label className="flex items-start gap-2">
+          <input type="checkbox" checked={guestAlbums} onChange={(e) => setGuestAlbumsOn(e.target.checked)} className="mt-1" data-testid="manage-guest-albums" />
+          <span>
+            <b className="text-dark">Guests can make their own album</b> from everyone’s photos and videos, at the normal price. They pick their own, and get the full-size copy only of the photos they pick for their album.
+            {!!ev.guest_albums && <span className="block text-xs text-medium mt-0.5" data-testid="manage-guest-albums-count">{ev.guest_albums} guest{ev.guest_albums === 1 ? ' has' : 's have'} started their own album.</span>}
+          </span>
         </label>
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => void save()} disabled={busy} data-testid="manage-save"

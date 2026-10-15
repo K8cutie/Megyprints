@@ -8,6 +8,8 @@ import {
   BOOKING_STEPS, EVENT_MIN_GUESTS, bookingView, balanceOf, cancelMyBooking, eventTypeLabel, listMyBookings, peso,
   submitBookingPayment, uploadBookingProof, type EventBooking, type PaymentKind,
 } from '../lib/eventBookings';
+import { myGuestAlbums, type GuestAlbumEvent } from '../lib/eventGuestAlbum';
+import { shortDate } from '../lib/eventCamera';
 import { ALBUM_SIZES } from './builder/types';
 import { EVENTS_CARD } from './homeCopy';
 
@@ -104,7 +106,39 @@ export default function Events() {
           ))}
         </div>
       </section>
+      {user && <GuestAlbumsSection />}
     </div>
+  );
+}
+
+/** 0047: events this account joined as a guest and can make its own album from. */
+function GuestAlbumsSection() {
+  const [list, setList] = useState<GuestAlbumEvent[]>([]);
+  useEffect(() => {
+    let alive = true;
+    myGuestAlbums().then((r) => { if (alive) setList(r); }).catch(() => { /* nothing to show */ });
+    return () => { alive = false; };
+  }, []);
+  if (!list.length) return null;
+  return (
+    <section className="max-w-3xl mx-auto px-4 pb-16" data-testid="events-guest-albums">
+      <h2 className="font-display text-xl font-semibold text-dark mb-3">Albums you can make</h2>
+      <p className="text-sm text-medium mb-3">Events you joined as a guest. Pick from everyone’s photos and make your own album.</p>
+      <div className="space-y-3">
+        {list.map((e) => (
+          <div key={e.guest_id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+            <div className="text-sm">
+              <p className="font-semibold text-dark">{e.title || `${eventTypeLabel(e.event_type)} album`}</p>
+              <p className="text-medium">{eventTypeLabel(e.event_type)} · {shortDate(e.event_date)} · {e.picked} picked · photos kept until {shortDate(e.kept_until)}</p>
+            </div>
+            <Link to={`/e/${e.guest_code}/album`} data-testid="events-guest-album-open"
+              className="shrink-0 px-4 py-2 rounded-lg bg-blush-pink text-white text-sm font-semibold hover:brightness-105">
+              Pick photos
+            </Link>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

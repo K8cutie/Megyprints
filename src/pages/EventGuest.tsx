@@ -80,6 +80,11 @@ export default function EventGuest() {
           <p className="text-base font-semibold text-dark">
             {early ? `Photos open on ${shortDate(ev.opens_on)}, the day before the event.` : `This event closed for photos on ${shortDate(ev.closes_on)}. Thank you for sharing!`}
           </p>
+          {!early && ev.albums_on && (pass ? <AlbumLink code={code} /> : (
+            <Link to={`/e/${code}/album`} data-testid="guest-album-other-phone" className="mt-4 inline-block text-sm underline font-semibold text-cocoa">
+              Joined from another phone? Make your own album
+            </Link>
+          ))}
           {copyOffer && <CopyLink code={code} />}
         </div>
         <PlanYourOwn />
@@ -101,6 +106,7 @@ export default function EventGuest() {
     <Shell>
       {header}
       <Camera_ ev={ev} code={code} pass={pass} me={me} onChanged={refreshMe} />
+      {ev.albums_on && <div className="mt-4 text-center"><AlbumLink code={code} /></div>}
       {copyOffer && <div className="mt-4 text-center"><CopyLink code={code} /></div>}
       <PlanYourOwn />
     </Shell>
@@ -120,6 +126,19 @@ function PlanYourOwn() {
     <p className="mt-8 text-center text-xs text-medium" data-testid="guest-plan-own">
       Planning your own event? <Link to="/events" className="underline font-semibold text-cocoa">Megyprints Events</Link> collects every guest’s photos into one printed album.
     </p>
+  );
+}
+
+/** 0047: pick from everyone's photos and make an album of your own. */
+function AlbumLink({ code }: { code: string }) {
+  return (
+    <div className="mt-4">
+      <Link to={`/e/${code}/album`} data-testid="guest-album-link"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blush-pink text-white font-semibold hover:brightness-105">
+        <BookOpen size={16} /> Make your own album
+      </Link>
+      <p className="mt-1 text-xs text-medium">Pick from everyone’s photos and videos. You pay for your album like any order.</p>
+    </div>
   );
 }
 
@@ -184,8 +203,10 @@ function JoinCard({ ev, code, tableFromQr, onJoined }: { ev: EventPublic; code: 
           <span>Kids are at this event. I’m okay with that, including photos of my own kids.</span>
         </label>
       )}
-      <p className="text-xs text-medium">
-        The hosts and the other guests can see what you share, and photos may play on the venue screen. The hosts will take down any photo you ask them to.
+      <p className="text-xs text-medium" data-testid="guest-consent">
+        The hosts and the other guests can see what you share, and photos may play on the venue screen.
+        {ev.albums_on && ' Other guests can also pick your photos and videos for their own printed album.'}
+        {' '}The hosts will take down any photo you ask them to.
       </p>
       <button type="button" onClick={() => void join()} disabled={busy} data-testid="guest-join-btn"
         className="w-full py-3.5 bg-blush-pink text-white text-base font-bold rounded-xl hover:brightness-105 disabled:opacity-60 flex items-center justify-center gap-2">
