@@ -7,6 +7,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
   base: './',
+  // lib/heicWorker is a module worker (it imports the libheif WebAssembly build).
+  worker: { format: 'es' },
   plugins: [
     // Dev-only source inspector. Gated OUT of production builds: it is an
     // anonymous, low-metadata third-party plugin that executes at build time
@@ -44,9 +46,10 @@ export default defineConfig(({ command }) => ({
       workbox: {
         // Main bundle is ~3MB; raise the precache limit so it works offline.
         globPatterns: ['**/*.{js,css,html,png,svg,woff,woff2}'],
-        // The iPhone-photo (HEIC) converter (~3 MB, lib/heicPhoto) loads only
-        // when a HEIC arrives; precached, every install would download it.
-        globIgnores: ['**/heic-to-*.js'],
+        // The iPhone-photo (HEIC) converter (lib/heicWorker + libheif WebAssembly,
+        // ~2 MB) loads only when a HEIC arrives; precached, every install would
+        // download it.
+        globIgnores: ['**/heicWorker-*.js'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Apply a shipped build on the NEXT load instead of waiting for every tab
         // to close — the new service worker activates immediately and claims open
