@@ -1,4 +1,5 @@
 import type { WizardStep } from '../../assistant/wizard';
+import type { StampStyle } from '../../assistant/dateStamp';
 import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import type {
   AlbumSizePreset,
@@ -842,8 +843,10 @@ export interface BuilderActions {
 
   // Text
   /** New text centred on (x, y) (default: the page's centre), made smaller
-   *  to fit; nothing is added when it can't fit at all. */
-  addTextElement: (x?: number, y?: number, text?: string) => AddedText;
+   *  to fit; nothing is added when it can't fit at all. `placed` puts it
+   *  exactly there, as free text in that style (Megy's date stamp in a photo
+   *  corner, assistant/dateStamp.ts), never in an empty caption box. */
+  addTextElement: (x?: number, y?: number, text?: string, placed?: StampStyle | null) => AddedText;
   /** Place a themed quote in the current page's free space; returns the quote, or null if no room. */
   addThemedQuote: () => string | null;
   updateTextElement: (id: string, updates: Partial<TextElement>) => void;
@@ -3087,7 +3090,7 @@ export function useBuilderState(): BuilderActions {
    *  the bottom (1-star testers round 3, the Rule-Breaker; its canvas centre
    *  was 1200 × 800 on a 750 × 750 page). Too long even at the smallest size:
    *  nothing is added, and the caller says so. */
-  const addTextElement = useCallback((x?: number, y?: number, text?: string): AddedText => {
+  const addTextElement = useCallback((x?: number, y?: number, text?: string, placed?: StampStyle | null): AddedText => {
     const { width: cw, height: ch } = getCanvasDimensions(albumSize);
     const cx = x ?? cw / 2;
     const cy = y ?? ch / 2;
@@ -3095,6 +3098,21 @@ export function useBuilderState(): BuilderActions {
     // occasion. The user can still restyle any text element afterward.
     const theme = THEMES[selectedTemplate];
     const trimmed = text && text.trim() ? text.trim() : '';
+    // Placed text (the date stamp): exactly where and how it was asked for.
+    if (placed && trimmed) {
+      pushSnapshot();
+      updateCurrentPage((page) => ({
+        ...page,
+        textElements: [...page.textElements, {
+          id: `text-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          text: trimmed,
+          fontFamily: theme.fontFamily,
+          bold: false, italic: false, underline: false, rotation: 0, opacity: 100,
+          ...placed,
+        }],
+      }));
+      return { added: true, fontSize: placed.fontSize, shrunk: false, tooLong: false };
+    }
     // A page's TEXTBOX owns its caption. If the page has a textbox region with no
     // caption yet, the new text belongs INSIDE it (bound → fixed + centered),
     // never as a free-floating element that strands at the top-left. Only fall

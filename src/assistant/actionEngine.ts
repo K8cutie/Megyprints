@@ -5,6 +5,7 @@
 
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import type { AssistantIntent, ExecutedAction } from './types';
+import type { StampStyle } from './dateStamp';
 import type { AlbumBackground, AlbumSizePreset, TemplateType, TextElement, FrameStyle } from '../pages/builder/types';
 import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
 import { memoriesAcrossSize } from '../pages/builder/generateAlbum';
@@ -321,8 +322,10 @@ export class ActionEngine {
 
         case 'add_text': {
           const text = intent.payload?.text as string | undefined;
-          // Centred on the page and made to fit (addTextElement).
-          const r = this.builder.addTextElement(undefined, undefined, text);
+          // Centred on the page and made to fit (addTextElement), unless the
+          // caller placed it (the date stamp's photo corner).
+          const placed = intent.payload?.placed as StampStyle | null | undefined;
+          const r = this.builder.addTextElement(undefined, undefined, text, placed);
           if (r.tooLong) {
             return { intentType: intent.type, success: false, message: "That's too long to fit on the page, even in small letters. Try a shorter line." };
           }
