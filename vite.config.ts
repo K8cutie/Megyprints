@@ -44,9 +44,10 @@ export default defineConfig(({ command }) => ({
       workbox: {
         // Main bundle is ~3MB; raise the precache limit so it works offline.
         globPatterns: ['**/*.{js,css,html,png,svg,woff,woff2}'],
-        // The iPhone-photo (HEIC) converter (~3 MB, lib/heicPhoto) loads only
-        // when a HEIC arrives; precached, every install would download it.
-        globIgnores: ['**/heic-to-*.js'],
+        // Loaded only when needed, so not precached (else every install downloads them):
+        // the console's press-sheet tool (pdf-lib, ~430 KB, the shop's first click)
+        // and the iPhone-photo (HEIC) converter (~3 MB, lib/heicPhoto, when a HEIC arrives).
+        globIgnores: ['**/printSheetPdf-*.js', '**/heic-to-*.js'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Apply a shipped build on the NEXT load instead of waiting for every tab
         // to close — the new service worker activates immediately and claims open
