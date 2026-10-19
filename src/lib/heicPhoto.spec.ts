@@ -134,7 +134,7 @@ describe('the JPEG the album keeps', () => {
     expect(pkg).toMatch(/"libheif-js"/);
     // …and the offline cache doesn't download its ~2 MB for every visitor.
     const vite = readFileSync(resolve(__dirname, '../../vite.config.ts'), 'utf8');
-    expect(vite).toMatch(/globIgnores: \['\*\*\/heicWorker-\*\.js'\]/);
+    expect(vite).toMatch(/globIgnores:\s*\[[^\]]*'\*\*\/heicWorker-\*\.js'/);
     expect(vite).toMatch(/worker: \{ format: 'es' \}/);
   });
 

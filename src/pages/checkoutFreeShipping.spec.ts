@@ -52,7 +52,7 @@ const compareAt = (until: string) => ({
   until, sheet_rate: 106,
   sizes: Object.fromEntries(SIZES.map((s) => [s, { soft_rate: 650, hard_rate: 1720 }])) as NonNullable<PriceSchedule['compare_at']>['sizes'],
 });
-const page = (i: number) => ({ id: `p${i}`, layout: 'single', size: '9x9', templateId: 't99-solo', slotFills: [i], photos: [], textElements: [], background: { type: 'solid', solid: '#fff' } });
+const page = (i: number) => ({ id: `p${i}`, layout: 'single', size: '8x8', templateId: 't88-solo-square', slotFills: [i], photos: [], textElements: [], background: { type: 'solid', solid: '#fff' } });
 const photos = Array.from({ length: 41 }, (_, i) => ({ id: `ph${i}`, name: `${i}.jpg`, previewUrl: '', type: 'image/jpeg', size: 1, width: 1200, height: 1200 }));
 
 let host: HTMLDivElement;
@@ -61,7 +61,7 @@ beforeEach(() => {
   sessionStorage.clear(); localStorage.clear();
   window.scrollTo = (() => {}) as typeof window.scrollTo;
   h.auth = { user: { id: 'user-1' }, loading: false };
-  h.job = { albumId: 'album-1', albumSize: '9x9', pages: Array.from({ length: 41 }, (_, i) => page(i)), photos, coverFront: { ...page(99), id: 'cover' } };
+  h.job = { albumId: 'album-1', albumSize: '8x8', pages: Array.from({ length: 41 }, (_, i) => page(i)), photos, coverFront: { ...page(99), id: 'cover' } };
   noteOrderHandoff({ albumId: 'album-1', saved: true });
   saveCheckoutForm({ albumId: 'album-1', name: 'Fe Freeship', phone: '0917 555 0133', address: EMPTY_ADDRESS, material: 'glossy', cover: 'hardboundLeather', userId: 'user-1' });
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
@@ -89,9 +89,9 @@ describe('free shipping and the real was price at checkout', () => {
     await render(); await settle();
     const now = peso('[data-testid="order-total"]');
     const was = peso('[data-testid="order-was"]');
-    // 41 pages of 9×9 hardbound, no add-ons: the print price IS the total.
-    expect(now).toBe(priceOf(s, '9x9', 'hard', 41));
-    expect(was).toBe(compareAtPriceOf(s, '9x9', 'hard', 41, '2026-10-08'));
+    // 41 pages of 8×8 hardbound, no add-ons: the print price IS the total. (Not 9×9: its hardbound cover can't print, 0046.)
+    expect(now).toBe(priceOf(s, '8x8', 'hard', 41));
+    expect(was).toBe(compareAtPriceOf(s, '8x8', 'hard', 41, '2026-10-08'));
     expect(was).toBeGreaterThan(now);
     expect(host.querySelector('[data-testid="order-was"]')?.tagName).toBe('S');
     expect(peso('[data-testid="order-savings"]')).toBe(was - now);
@@ -102,7 +102,7 @@ describe('free shipping and the real was price at checkout', () => {
     await render(); await settle();
     expect(host.querySelector('[data-testid="order-was"]')).toBeNull();
     expect(host.querySelector('[data-testid="order-savings"]')).toBeNull();
-    expect(peso('[data-testid="order-total"]')).toBe(priceOf(h.schedule as PriceSchedule, '9x9', 'hard', 41));
+    expect(peso('[data-testid="order-total"]')).toBe(priceOf(h.schedule as PriceSchedule, '8x8', 'hard', 41));
     expect(host.querySelector('[data-testid="order-shipping"]')?.textContent).toBe('Free');
   });
 
