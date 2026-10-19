@@ -221,7 +221,7 @@ describe('choosing among the last 3', () => {
     await show([album('a', 1)]);
     await click($('resume-not-now')!);
     expect($('resume-prompt')).toBeNull();
-    await rerender('/templates');
+    await rerender('/about');
     await flush();
     expect($('resume-prompt')).toBeNull();
     expect(listAccountAlbums).toHaveBeenCalledTimes(1);
