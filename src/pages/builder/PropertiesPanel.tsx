@@ -11,16 +11,15 @@ import type { CanvasPhoto, TextElement, PhotoFilters, AlbumBackground, UploadedP
 import { FILTER_PRESETS, DEFAULT_FILTERS, DEFAULT_BG_FILTERS } from './types';
 import BackgroundDesigner from './BackgroundDesigner';
 import { FontList } from './FontList';
+import { TEXT_COLOR_HEXES } from './textColors';
 
 /* ── Constants ── */
 
 const FONT_SIZE_PRESETS = [12, 16, 20, 24, 32, 48, 64, 96, 120];
 
-const COLOR_PRESETS = [
-  '#2D2D2D', '#FFFFFF', '#F4C2A1', '#E8A598', '#B8A9D9',
-  '#9BCFB8', '#8FBFE0', '#E8958C', '#D4B896', '#9B9B9B',
-  '#C4A882', '#6B6B6B', '#FF6B6B', '#4ECDC4', '#45B7D1',
-];
+// The one text-colour list (textColors.ts): the same swatches as the phone
+// and the cover. Desktop also keeps its full colour picker and hex field.
+const COLOR_PRESETS = TEXT_COLOR_HEXES;
 
 /* ── Filter Slider ── */
 function FilterSlider({

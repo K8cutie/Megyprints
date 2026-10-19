@@ -10,6 +10,8 @@
    A video gets a poster thumbnail (a frame near its start) and its duration.
    ══════════════════════════════════════════════════════════════════════════ */
 
+import { toAlbumPhoto } from './heicPhoto';
+
 export const PRINT_MAX = 3600;
 export const VIEW_MAX = 1200;
 export const THUMB_MAX = 400;
@@ -64,7 +66,10 @@ async function decodeImage(file: Blob): Promise<ImageBitmap | HTMLImageElement> 
 export interface PhotoCopies { original: Blob; view: Blob; thumb: Blob; width: number; height: number }
 
 export async function makePhotoCopies(file: Blob): Promise<PhotoCopies> {
-  const img = await decodeImage(file);
+  // An iPhone photo (HEIC) from a guest's gallery: a JPEG first, since Chrome
+  // can't open a HEIC (lib/heicPhoto). Safari hands most over as JPEG already.
+  const source = file instanceof File ? await toAlbumPhoto(file) : file;
+  const img = await decodeImage(source);
   try {
     const original = await jpegOf(img, PRINT_MAX, 0.9);
     const view = await jpegOf(img, VIEW_MAX, 0.8);

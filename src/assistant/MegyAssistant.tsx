@@ -32,6 +32,7 @@ import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
 import { FontList } from '../pages/builder/FontList';
+import { TEXT_COLOR_HEXES } from '../pages/builder/textColors';
 import {
   Images, LayoutGrid, Palette, Type, ChevronUp, ChevronDown,
   PanelLeft, Box, Shuffle, Plus, Minus, ArrowLeft, ArrowRight, Upload,
@@ -72,11 +73,9 @@ function BoldText({ text }: { text: string }) {
 
 const FONT_SIZE_PRESETS = [12, 16, 20, 24, 32, 48, 64, 96, 120];
 
-const COLOR_PRESETS = [
-  '#2D2D2D', '#FFFFFF', '#F4C2A1', '#E8A598', '#B8A9D9',
-  '#9BCFB8', '#8FBFE0', '#E8958C', '#D4B896', '#9B9B9B',
-  '#C4A882', '#6B6B6B', '#FF6B6B', '#4ECDC4', '#45B7D1',
-];
+// The one text-colour list (textColors.ts): the same swatches as the phone
+// and the cover. Desktop also keeps its full colour picker and hex field.
+const COLOR_PRESETS = TEXT_COLOR_HEXES;
 
 const THEMES: { id: TemplateType; label: string; color: string }[] = [
   { id: 'wedding', label: 'Wedding', color: '#F4C2A1' },
@@ -659,7 +658,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 {/* Eye-catching photo count — the photos that go in (left-out ones don't). */}
                 <div className="flex items-baseline gap-2 mb-3">
                   <span className="font-display text-5xl font-bold text-blush-pink leading-none" data-testid="photos-ready">{livePhotos.length}</span>
-                  <span className="text-base text-ink-mid">photos ready 🎉</span>
+                  {/* iPhone photos still being made ready (HeicProgress): added, not ready yet. */}
+                  <span className="text-base text-ink-mid" data-testid="photos-ready-word">
+                    {builder.heicProgress && builder.heicProgress.done < builder.heicProgress.total ? 'photos added' : 'photos ready 🎉'}
+                  </span>
                 </div>
                 {/* Megy's free photo check: blurry + repeat shots, suggested out (one tap). */}
                 <PhotoCheckCard photos={builder.uploadedPhotos} check={builder.photoCheck}

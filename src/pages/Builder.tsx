@@ -17,6 +17,7 @@ import LayoutPicker from './builder/LayoutPicker';
 import BuilderBackGuard from './builder/BuilderBackGuard';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
 import MegyAssistant from '../assistant/MegyAssistant';
+import HeicProgress from './builder/HeicProgress';
 import SoftAuthGate from '../components/SoftAuthGate';
 import { useIsMobile } from '../hooks/use-mobile';
 import { cleanAlbumName } from '../lib/albumName';
@@ -345,7 +346,8 @@ export default function Builder() {
               <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="h-full">
                 {isMobile ? (
-                  <MobileReview actions={actions} onDone={() => { void actions.dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }} />
+                  <MobileReview actions={actions} onDone={() => { void actions.dispatch({ type: 'preview_album', rawMessage: 'preview album' }); }}
+                    onBackToPreview={() => { void actions.dispatch({ type: 'preview_album', payload: { stay: true }, rawMessage: 'back to preview' }); }} />
                 ) : (
                   <EditPhase
                     actions={actions}
@@ -392,6 +394,10 @@ export default function Builder() {
         {/* ── Megy Assistant ── */}
         <MegyAssistant collapsed={panelCollapsed} onToggleCollapsed={setPanelCollapsed} mobilePulldown={isMobile && (actions.phase === 'edit' || actions.phase === 'cover' || actions.phase === 'preview')}
           onPlaceOrder={requestOrder} />
+
+        {/* iPhone photos being made ready: "12 of 44", over every screen. While
+            "Making your album" is up, that screen says it instead (one message). */}
+        <HeicProgress progress={actions.generating ? null : actions.heicProgress} />
 
         {/* "Change layout" picker — shared by mobile review + desktop panel */}
         <LayoutPicker actions={actions} />
