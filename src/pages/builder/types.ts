@@ -653,7 +653,11 @@ export interface UploadedPhoto {
   size: number;
   width: number;
   height: number;
-  capturedAt?: number | null; // EXIF DateTimeOriginal (ms) — drives moment grouping
+  capturedAt?: number | null; // when it was taken (ms) — drives moment grouping
+  /** Where capturedAt came from (exif.ts): 'exif' = the camera's time; 'file'
+   *  = the file's modified date, a photo saved from Messenger's only date.
+   *  Absent when there is no time. The repeat check trusts only 'exif'. */
+  timeSource?: 'exif' | 'file';
   /** Megy's free photo check (blur, fingerprint, closed eyes) — lib/photoCheck. */
   check?: PhotoCheck;
   /** The customer said keep it: never suggested out again. */

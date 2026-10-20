@@ -68,22 +68,35 @@ const MOMENT_GAP_MS = 3 * 60 * 60 * 1000; // 3 hours
  *  robin), so a 3-hour party (one moment) came out in shape order. */
 export const TIME_ORDER_REACH = 12;
 
-/** Split photos into chronological "moments" by EXIF capture time, so photos
- *  taken close together land on the same page(s). Photos without EXIF time keep
- *  their upload order in a trailing group. Returns arrays of photo indices. */
-function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
-  const timed: { i: number; t: number }[] = [];
-  const untimed: number[] = [];
-  photos.forEach((p, i) => {
-    if (typeof p.capturedAt === 'number') timed.push({ i, t: p.capturedAt });
-    else untimed.push(i);
+/** Split photos into chronological "moments" by capture time (EXIF, else the
+ *  file's date — exif.ts), so photos taken close together land on the same
+ *  page(s). A photo with NO time at all (a screenshot; a Messenger save whose
+ *  file date was no use) keeps its UPLOAD position: it goes right after the
+ *  timed photo picked before it, in that photo's moment — or before the first
+ *  timed photo, if it was picked first. (They used to be parked in a trailing
+ *  group after every timed photo.) Returns arrays of photo indices. */
+export function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
+  const timeOf = (p: UploadedPhoto | undefined): number | null => (typeof p?.capturedAt === 'number' ? p.capturedAt : null);
+  const firstTimed = photos.findIndex((p) => timeOf(p) !== null);
+  // Nothing had a capture time → one group in upload order (old behaviour).
+  if (firstTimed < 0) return [photos.map((_, i) => i)];
+
+  // Every photo's sort key: its own time, else the time of the nearest timed
+  // photo picked before it (the first timed one, for those picked before it).
+  // Ties break by upload position, so an untimed photo sits right after its
+  // anchor and a run of them stays in the order they were picked.
+  let anchor = timeOf(photos[firstTimed])!;
+  const keyed = photos.map((p, i) => {
+    const own = timeOf(p);
+    if (own !== null) anchor = own;
+    return { i, t: own ?? anchor };
   });
-  timed.sort((a, b) => a.t - b.t);
+  keyed.sort((a, b) => a.t - b.t || a.i - b.i);
 
   const groups: number[][] = [];
   let current: number[] = [];
   let lastT: number | null = null;
-  for (const { i, t } of timed) {
+  for (const { i, t } of keyed) {
     if (lastT !== null && t - lastT > MOMENT_GAP_MS) {
       if (current.length) groups.push(current);
       current = [];
@@ -92,10 +105,7 @@ function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
     lastT = t;
   }
   if (current.length) groups.push(current);
-  if (untimed.length) groups.push(untimed); // no-EXIF photos → trailing group
-
-  // Nothing had a capture time → one group in upload order (old behaviour).
-  return groups.length ? groups : [photos.map((_, i) => i)];
+  return groups;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

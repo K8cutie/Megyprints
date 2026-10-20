@@ -183,6 +183,17 @@ describe('repeats', () => {
     const ps = [photo('a', check(1, H0)), photo('b', check(1, away(5))), photo('c', check(1, c9))];
     expect(findRepeats(ps)).toEqual([['a', 'b']]);
   });
+
+  it("a time that came from the FILE's date (a Messenger save) is no capture time: the no-time rule applies", () => {
+    // Messenger saves a whole batch within seconds: with the file date read as
+    // a capture time, two different shots would pass the looser 10-bit rule.
+    const batch = [photo('a', check(1, H0), { capturedAt: 0, timeSource: 'file' }), photo('b', check(1, away(8)), { capturedAt: 1000, timeSource: 'file' })];
+    expect(findRepeats(batch)).toEqual([]);
+    expect(findRepeats(batch.map((p) => ({ ...p, timeSource: 'exif' as const })))).toEqual([['a', 'b']]);
+    // ...and a file date far apart never rules a real repeat out.
+    const apart = [photo('a', check(1, H0), { capturedAt: 0, timeSource: 'file' }), photo('b', check(1, away(5)), { capturedAt: 600_000, timeSource: 'file' })];
+    expect(findRepeats(apart)).toEqual([['a', 'b']]);
+  });
 });
 
 describe('suggestLeaveOut', () => {
