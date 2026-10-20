@@ -21,6 +21,7 @@ import type {
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
 import { recolorPage } from './pageColors';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
+import { placePhoto } from './slotSwap';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
@@ -2472,36 +2473,20 @@ export function useBuilderState(): BuilderActions {
   }, [uploadedPhotos, currentPageIndex, updateCurrentPage, albumSize]);
 
   /* ── Slot management ── */
+  /* ONE PHOTO, ONE PLACE (owner, 2026-10-20): a photo picked for this frame
+     comes here from wherever it is — another page's frame swaps with this one
+     (an empty frame here = a move, and that page's frame goes empty), a frame
+     on this page swaps as before. See slotSwap.ts. The cover is its own page
+     and never trades with the interior. */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
     pushSnapshot();
-    updateCurrentPage((page) => {
-      const fills = [...(page.slotFills ?? [])];
-      // Mutual exclusivity: a photo claims this slot → clear any QR/text/ornament there.
-      const qrFills = [...(page.qrFills ?? [])];
-      const slotTexts = [...(page.slotTexts ?? [])];
-      const ornamentFills = [...(page.ornamentFills ?? [])];
-      qrFills[slotIndex] = null;
-      slotTexts[slotIndex] = null;
-      ornamentFills[slotIndex] = null;
-      const other = fills.indexOf(photoIndex);
-      if (other !== -1 && other !== slotIndex) {
-        // This photo is already on the page → SWAP the two slots (taking their
-        // framing along) so we never end up with the same picture twice.
-        const scales = [...(page.slotScales ?? [])];
-        const offsetsX = [...(page.slotOffsetsX ?? [])];
-        const offsetsY = [...(page.slotOffsetsY ?? [])];
-        fills[other] = fills[slotIndex] ?? null;
-        fills[slotIndex] = photoIndex;
-        [scales[other], scales[slotIndex]] = [scales[slotIndex], scales[other]];
-        [offsetsX[other], offsetsX[slotIndex]] = [offsetsX[slotIndex], offsetsX[other]];
-        [offsetsY[other], offsetsY[slotIndex]] = [offsetsY[slotIndex], offsetsY[other]];
-        return { ...page, slotFills: fills, slotScales: scales, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY, qrFills, slotTexts, ornamentFills };
-      }
-      fills[slotIndex] = photoIndex;
-      return { ...page, slotFills: fills, qrFills, slotTexts, ornamentFills };
-    });
+    if (editScopeRef.current === 'coverFront') {
+      setCoverFrontPage((p) => placePhoto([p], 0, slotIndex, photoIndex).pages[0]);
+    } else {
+      setAlbumPages((prev) => (prev[currentPageIndex] ? placePhoto(prev, currentPageIndex, slotIndex, photoIndex).pages : prev));
+    }
     centreOnFace(slotIndex, photoIndex);
-  }, [updateCurrentPage, centreOnFace, pushSnapshot]);
+  }, [currentPageIndex, centreOnFace, pushSnapshot]);
 
   const clearSlot = useCallback((slotIndex: number) => {
     pushSnapshot();
