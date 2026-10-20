@@ -99,7 +99,10 @@ async function loadCustomerPdf(src: ArrayBuffer | Uint8Array, what: string): Pro
  *  right), and must go on the sheets that way. The mark only picks between
  *  the two layouts, so a forged one can't do more than a wrong order would. */
 export function printFilePageOne(doc: PDFDocument): PageOneSide {
-  return (doc.getKeywords() ?? '').split(/[\s,;]+/).includes(PAGE_ONE_RIGHT_MARK) ? 'right' : 'left';
+  let keywords = '';
+  // pdf-lib throws on Keywords that aren't text: not a file our checkout made.
+  try { keywords = doc.getKeywords() ?? ''; } catch { /* treated as unmarked */ }
+  return keywords.split(/[\s,;]+/).includes(PAGE_ONE_RIGHT_MARK) ? 'right' : 'left';
 }
 
 /** How much trim edge the print file's pages carry, from their size. */

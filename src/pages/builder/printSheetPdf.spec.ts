@@ -67,6 +67,11 @@ describe('press sheet PDFs', () => {
     expect(printFilePageOne(await PDFDocument.load(made.output('arraybuffer')))).toBe('right');
     const plain = new jsPDF({ unit: 'in', format: [8.25, 8.25] });
     expect(printFilePageOne(await PDFDocument.load(plain.output('arraybuffer')))).toBe('left');
+    // Keywords that aren't text (no file of ours) read as unmarked, not a crash.
+    const odd = await PDFDocument.create();
+    odd.addPage([8.25 * 72, 8.25 * 72]);
+    odd.context.lookup(odd.context.trailerInfo.Info, PDFDict).set(PDFName.of('Keywords'), odd.context.obj(42));
+    expect(printFilePageOne(odd)).toBe('left');
     // …and the checkout's print file really writes it, before any page goes in.
     const src = readFileSync(resolve(__dirname, 'generateAlbumPdf.ts'), 'utf8');
     const album = src.slice(src.indexOf('export async function generateAlbumPdf('), src.indexOf('export async function generateCoverWrapPdf('));
