@@ -13,7 +13,7 @@ import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPath
 import { applyLookPixels, isLookId, type LookId } from './looks';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { WORDART_SHADOW, FABRIC_LINE_HEIGHT, CAPTION_PAD_X, resolveTextSlotAlign } from './wordArt';
+import { wordArtShadow, FABRIC_LINE_HEIGHT, CAPTION_PAD_X, resolveTextSlotAlign, type WordArtStyle } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import type { QrFill, OrnamentFill } from './types';
 import { clampQrGeom, dealtBoxRoll } from './types';
@@ -196,7 +196,7 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const textData = page.textElements.map((t) =>
     `${t.id}:${t.text.slice(0,20)}:${t.fontSize}:${Math.round(t.x)}:${Math.round(t.y)}:${t.rotation}` +
     `:${t.fontFamily ?? ''}:${t.color ?? ''}:${t.bold ? 1 : 0}:${t.italic ? 1 : 0}:${t.underline ? 1 : 0}:${t.alignment ?? ''}:${t.opacity ?? 100}:${t.backgroundColor ?? ''}` +
-    `:${t.width ?? ''}:${t.scaleX ?? ''}:${t.scaleY ?? ''}:${t.outlineColor ?? ''}:${t.outlineWidth ?? ''}:${t.shadow ? 1 : 0}`
+    `:${t.width ?? ''}:${t.scaleX ?? ''}:${t.scaleY ?? ''}:${t.outlineColor ?? ''}:${t.outlineWidth ?? ''}:${t.shadow === undefined ? '' : t.shadow ? 1 : 0}`
   ).join('|');
   const slotGeoms = page.slotGeometries ? page.slotGeometries.map((g) => `${g?.x ?? ''}:${g?.y ?? ''}:${g?.width ?? ''}:${g?.height ?? ''}`).join('|') : '';
   // Per-slot photo TRANSFORMS (zoom + pan) — PropertiesPanel writes slotScales/
@@ -212,7 +212,7 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   // and the editor desynced from PageView/print until a page-nav.
   const slotTextData = page.slotTexts
     ? page.slotTexts.map((s) => s
-        ? `${s.text.slice(0,20)}:${s.fontSize}:${s.fontFamily ?? ''}:${s.color ?? ''}:${s.bold ? 1 : 0}:${s.italic ? 1 : 0}:${s.underline ? 1 : 0}:${s.alignment ?? ''}:${s.outlineColor ?? ''}:${s.outlineWidth ?? ''}:${s.shadow ? 1 : 0}`
+        ? `${s.text.slice(0,20)}:${s.fontSize}:${s.fontFamily ?? ''}:${s.color ?? ''}:${s.bold ? 1 : 0}:${s.italic ? 1 : 0}:${s.underline ? 1 : 0}:${s.alignment ?? ''}:${s.outlineColor ?? ''}:${s.outlineWidth ?? ''}:${s.shadow === undefined ? '' : s.shadow ? 1 : 0}`
         : '').join('|')
     : '';
   // Caption-box photo/QR content (page.textSlotFills / textSlotQr) — so placing
@@ -1274,7 +1274,7 @@ export function renderTemplateSlots(
         stroke: st.outlineWidth && st.outlineColor ? st.outlineColor : undefined,
         strokeWidth: st.outlineWidth && st.outlineColor ? st.outlineWidth : 0,
         paintFirst: 'stroke',
-        shadow: st.shadow ? new fab.Shadow({ color: WORDART_SHADOW.color, blur: WORDART_SHADOW.blur, offsetX: WORDART_SHADOW.offsetX, offsetY: WORDART_SHADOW.offsetY }) : undefined,
+        shadow: fabricShadow(fab, st, coverMode),
         selectable: false,
         evented: true,
         editable: false,
@@ -1743,6 +1743,14 @@ export function renderTemplateSlots(
  *  Scene Renderer
  *  ══════════════════════════════════════════════════════════════════════════ */
 
+/** The canvas shadow for a text: the cover's floating shadow or the small
+ *  caption shadow (wordArtShadow, the one rule all three renderers share), in
+ *  design px like the text's fontSize. */
+function fabricShadow(fab: any, s: WordArtStyle, coverMode: boolean) {
+  const sh = wordArtShadow(s, coverMode);
+  return sh ? new fab.Shadow({ color: sh.color, blur: sh.blur, offsetX: sh.offsetX, offsetY: sh.offsetY }) : undefined;
+}
+
 function renderScene(
   fab: any,
   canvas: FabricCanvas,
@@ -2066,7 +2074,7 @@ function renderScene(
       stroke: text.outlineWidth && text.outlineColor ? text.outlineColor : undefined,
       strokeWidth: text.outlineWidth && text.outlineColor ? text.outlineWidth : 0,
       paintFirst: 'stroke',
-      shadow: text.shadow ? new fab.Shadow({ color: WORDART_SHADOW.color, blur: WORDART_SHADOW.blur, offsetX: WORDART_SHADOW.offsetX, offsetY: WORDART_SHADOW.offsetY }) : undefined,
+      shadow: fabricShadow(fab, text, coverMode),
       angle: text.rotation,
       opacity: text.opacity / 100,
       /* Free text (a title/quote) stays fully movable + inline-editable. A caption

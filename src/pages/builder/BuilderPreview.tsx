@@ -417,7 +417,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontWeight: st.bold ? 'bold' : 'normal', fontStyle: st.italic ? 'italic' : 'normal',
                 textDecoration: st.underline ? 'underline' : 'none', color: st.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                ...wordArtDomStyle(st, sx),
+                ...wordArtDomStyle(st, sx, coverMode),
               }}>{st.text}</span>
             </div>
           );
@@ -553,7 +553,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           textDecoration: t.underline ? 'underline' : 'none', lineHeight: TEXT_LINE_HEIGHT,
           display: 'flex', alignItems: 'center', justifyContent: t.alignment || 'center',
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
-          ...wordArtDomStyle(t, sx),
+          ...wordArtDomStyle(t, sx, coverMode),
         }}>{t.text}</div>
       ))}
       {/* Template text boxes. Filled → formatted text clipped to the box; empty →
@@ -614,7 +614,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontWeight: boxed.bold ? 'bold' : 'normal', fontStyle: boxed.italic ? 'italic' : 'normal',
                 textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                ...wordArtDomStyle(boxed, sx),
+                ...wordArtDomStyle(boxed, sx, coverMode),
               }}>{boxed.text}</span>
             </div>
           );
