@@ -300,7 +300,7 @@ export class ActionEngine {
           if (skipped > 0) parts.push(`${skipped} already in your album`);
           if (unreadable.length > 0) {
             const names = unreadable.slice(0, 3).join(', ') + (unreadable.length > 3 ? ` and ${unreadable.length - 3} more` : '');
-            parts.push(`${unreadable.length} iPhone photo${unreadable.length > 1 ? 's' : ''} couldn't be opened (${names}): try saving ${unreadable.length > 1 ? 'them' : 'it'} as JPG`);
+            parts.push(`${unreadable.length} photo${unreadable.length > 1 ? 's' : ''} couldn't be opened (${names}): try saving ${unreadable.length > 1 ? 'them' : 'it'} as JPG`);
           }
           // A video or another file is never dropped without a word.
           const leftOut = leftOutNote(videos, others, added + skipped + restored > 0);

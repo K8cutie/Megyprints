@@ -1780,7 +1780,7 @@ export function useBuilderState(): BuilderActions {
     // "converting" square. Each settles to 'ok' or, if it couldn't be opened,
     // its name: add_photos says so once the batch is done.
     const heicTasks: Promise<'ok' | { unreadable: string; fresh: boolean }>[] = [];
-    // Each one counts toward "Getting your iPhone photos ready: 12 of 44"
+    // Each one counts toward "Getting your photos ready: 12 of 44"
     // (HeicProgress): on a phone a batch takes tens of seconds, and grey
     // squares with no word read as a hang (owner, 2026-10-12).
     const trackHeic = (t: Promise<'ok' | { unreadable: string; fresh: boolean }>) => {
