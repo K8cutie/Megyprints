@@ -76,11 +76,4 @@ export const BOOK = {
     position: 'absolute', inset: 0, zIndex: 42, pointerEvents: 'none',
     background: `linear-gradient(to ${side}, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 76%, rgba(0,0,0,0.04) 86%, rgba(0,0,0,0.13) 95%, rgba(0,0,0,0.30) 99.5%, rgba(0,0,0,0.34) 100%)`,
   }),
-  /** A single page (the album's last, odd page): shade its free edge instead of a gutter. */
-  edgeShade: (side: 'left' | 'right'): CSSProperties => ({
-    position: 'absolute', inset: 0, zIndex: 42, pointerEvents: 'none',
-    background: side === 'right'
-      ? 'linear-gradient(to left, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0) 6%)'
-      : 'linear-gradient(to right, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0) 6%)',
-  }),
 };

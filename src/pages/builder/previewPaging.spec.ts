@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, spreadStart, swipeTurn, turnBack, turnForward, type PreviewPosition } from './previewPaging';
+import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, spreadPages, spreadStart, swipeTurn, turnBack, turnForward, type PreviewPosition } from './previewPaging';
 
 /* ══════════════════════════════════════════════════════════════════════════
    Where the book preview's page turns go: one page at a time (an upright
@@ -37,21 +37,42 @@ describe('one page at a time (an upright phone)', () => {
   });
 });
 
-describe('the open book (as before: two pages a turn)', () => {
+describe('the open book: page 1 across from the inside of the cover (owner, 2026-10-21)', () => {
   const book = (over: Partial<PreviewPosition>) => at({ view: 'spread', ...over });
-  it('pages pair 1–2, 3–4, …', () => {
-    expect([0, 1, 2, 3, 38, 39].map(spreadStart)).toEqual([0, 0, 2, 2, 38, 38]);
-    expect(previewCaption(book({ index: 3 }))).toBe('Pages 3–4 of 40');
-    expect(previewCounter(book({ index: 3 }))).toBe('3-4 / 40');
+  it('opens on page 1 alone on the right, then pairs 2–3, 4–5, …', () => {
+    // -1 = the inside of the front cover, on the left of page 1.
+    expect([0, 1, 2, 3, 4, 37, 38, 39].map(spreadStart)).toEqual([-1, 1, 1, 3, 3, 37, 37, 39]);
+    expect(spreadPages(0, 40)).toEqual([0]);
+    expect(spreadPages(2, 40)).toEqual([1, 2]);
+    expect(previewCaption(book({ index: 0 }))).toBe('Page 1 of 40');
+    expect(previewCounter(book({ index: 0 }))).toBe('1 / 40');
+    expect(previewCaption(book({ index: 3 }))).toBe('Pages 4–5 of 40');
+    expect(previewCounter(book({ index: 3 }))).toBe('4-5 / 40');
   });
-  it('two pages a turn, the cover before pages 1–2', () => {
-    expect(turnForward(book({ index: 0 }))).toEqual({ cover: false, index: 2 });
+  it('two pages a turn; the cover is one turn back from page 1', () => {
+    expect(turnForward(book({ onCover: true }))).toEqual({ cover: false, index: 0 });
+    expect(turnForward(book({ index: 0 }))).toEqual({ cover: false, index: 1 });
+    expect(turnForward(book({ index: 2 }))).toEqual({ cover: false, index: 3 });
+    expect(turnBack(book({ index: 3 }))).toEqual({ cover: false, index: 1 });
     expect(turnBack(book({ index: 2 }))).toEqual({ cover: false, index: 0 });
-    expect(turnBack(book({ index: 1 }))).toEqual({ cover: true });
+    expect(turnBack(book({ index: 0 }))).toEqual({ cover: true });
+    expect(canTurnBack(book({ index: 0, hasCover: false }))).toBe(false);
   });
-  it('an odd last page stands alone', () => {
-    expect(previewCaption(book({ index: 40, total: 41 }))).toBe('Page 41 of 41');
-    expect(atAlbumEnd(book({ index: 38 }))).toBe(true);
+  it('an even album ends on its last page alone on the left, across from the inside of the back cover', () => {
+    expect(spreadPages(39, 40)).toEqual([39]);
+    expect(previewCaption(book({ index: 39 }))).toBe('Page 40 of 40');
+    expect(atAlbumEnd(book({ index: 39 }))).toBe(true);
+    expect(atAlbumEnd(book({ index: 37 }))).toBe(false);
+    expect(turnForward(book({ index: 38 }))).toEqual({ cover: false, index: 39 });
+  });
+  it('an odd album ends on a full open book', () => {
+    expect(spreadPages(40, 41)).toEqual([39, 40]);
+    expect(previewCaption(book({ index: 40, total: 41 }))).toBe('Pages 40–41 of 41');
+    expect(atAlbumEnd(book({ index: 39, total: 41 }))).toBe(true);
+  });
+  it('a two-page album still turns from page 1 to page 2', () => {
+    expect(canTurnForward(book({ index: 0, total: 2 }))).toBe(true);
+    expect(turnForward(book({ index: 0, total: 2 }))).toEqual({ cover: false, index: 1 });
   });
 });
 

@@ -11,8 +11,10 @@ import { resolve } from 'node:path';
    but the preview opened on Pages 1–2 with no cover, no Previous and no cover
    button, and checkout never showed it either — "I paid without ever seeing
    the finished front of the book"). It now opens on the closed book's front
-   cover, "Next" opens pages 1–2, "Previous" from there comes back, and "Edit
-   cover" opens the cover editor.
+   cover, "Next" opens it on page 1 (owner, 2026-10-21: "Cover then as you
+   flip the cover its Page 1 at once"), with the inside of the cover across
+   from it, "Previous" from there comes back, and "Edit cover" opens the cover
+   editor.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const h = vi.hoisted(() => ({ ctx: null as unknown }));
@@ -60,7 +62,7 @@ const tap = (id: string) => act(() => { (q(id) as HTMLButtonElement).click(); })
 const caption = () => q('preview-caption')?.textContent;
 
 describe('the preview opens on the cover', () => {
-  it('cover first; Next → pages 1–2; Previous → the cover again', () => {
+  it('cover first; Next → page 1 at once, across from the inside of the cover; Previous → the cover again', () => {
     h.ctx = context(coverFront);
     act(() => root.render(createElement(Preview, { start: 0 })));
     expect(q('preview-cover')).not.toBeNull();
@@ -70,7 +72,15 @@ describe('the preview opens on the cover', () => {
 
     tap('spread-next');
     expect(q('preview-cover')).toBeNull();
-    expect(caption()).toBe('Pages 1–2 of 40');
+    expect(caption()).toBe('Page 1 of 40');
+    expect(q('preview-inside-front')).not.toBeNull();
+    expect(q('preview-inside-front')?.textContent).toBe('Inside of the front cover');
+
+    tap('spread-next');
+    expect(caption()).toBe('Pages 2–3 of 40');
+    expect(q('preview-inside-front')).toBeNull();
+    tap('spread-prev');
+    expect(caption()).toBe('Page 1 of 40');
 
     tap('spread-prev');
     expect(q('preview-cover')).not.toBeNull();
@@ -85,22 +95,22 @@ describe('the preview opens on the cover', () => {
     expect(q('cover-editor-open')).not.toBeNull();
   });
 
-  it('opened on a later page, it shows that page (and the cover is still one Previous away from 1–2)', () => {
+  it('opened on a later page, it shows that page (and the cover is still one Previous away from page 1)', () => {
     h.ctx = context(coverFront);
     act(() => root.render(createElement(Preview, { start: 10 })));
     expect(q('preview-cover')).toBeNull();
-    expect(caption()).toBe('Pages 11–12 of 40');
+    expect(caption()).toBe('Pages 10–11 of 40');
     for (let i = 0; i < 5; i++) tap('spread-prev');
-    expect(caption()).toBe('Pages 1–2 of 40');
+    expect(caption()).toBe('Page 1 of 40');
     tap('spread-prev');
     expect(caption()).toBe('Front cover');
   });
 
-  it('an old draft with no cover page opens on pages 1–2 with no Previous, as before', () => {
+  it('an old draft with no cover page opens on page 1 with no Previous', () => {
     h.ctx = context(undefined);
     act(() => root.render(createElement(Preview, { start: 0 })));
     expect(q('preview-cover')).toBeNull();
-    expect(caption()).toBe('Pages 1–2 of 40');
+    expect(caption()).toBe('Page 1 of 40');
     expect(q('spread-prev')).toBeNull();
   });
 });

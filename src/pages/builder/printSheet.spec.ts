@@ -69,13 +69,33 @@ describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white ed
 });
 
 describe('book order on glued single leaves', () => {
-  it('matches the builder: page 1 is a LEFT page, so it backs a blank first side', () => {
-    expect(printSides(40)).toHaveLength(42);
-    expect(printSides(40)[0]).toBeNull();
-    expect(printSides(40)[41]).toBeNull();
+  it('matches the builder: page 1 is a RIGHT page, so it is the first leaf\'s front, with no blank before it (owner, 2026-10-21)', () => {
+    expect(printSides(40)).toHaveLength(40);
+    expect(printSides(40).slice(0, 3)).toEqual([0, 1, 2]);
+    expect(printSides(40)).not.toContain(null);
+    expect(leavesFor(40)).toBe(20);
+    // An odd count leaves the last leaf's back blank, and nothing else.
     expect(printSides(41)).toHaveLength(42);
-    expect(printSides(41)[41]).toBe(40);
-    expect(leavesFor(40)).toBe(21);
+    expect(printSides(41)[40]).toBe(40);
+    expect(printSides(41)[41]).toBeNull();
+  });
+
+  it('a print file made before the change (page 1 drawn as a LEFT page) still backs a blank first side', () => {
+    expect(printSides(40, 'left')).toHaveLength(42);
+    expect(printSides(40, 'left')[0]).toBeNull();
+    expect(printSides(40, 'left')[1]).toBe(0);
+    expect(printSides(40, 'left')[41]).toBeNull();
+    expect(leavesFor(40, 'left')).toBe(21);
+    expect(sheetPlan('8x8', 40, 'left').sides[0].placements[0].page).toBeNull();
+  });
+
+  it('prints exactly the sheets pricing bills: no blank first side to pay for', () => {
+    for (const size of SIZES) {
+      const pps = sheetLayout(size).pagesPerSheet;
+      for (let pages = 20; pages <= 120; pages++) {
+        expect(sheetPlan(size, pages).sheets, `${size} ${pages} pages`).toBe(Math.ceil(pages / pps));
+      }
+    }
   });
 
   it('puts every front on a page that binds on its LEFT and every back on one that binds on its RIGHT', () => {

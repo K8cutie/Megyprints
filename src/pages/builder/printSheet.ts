@@ -16,15 +16,17 @@
        slot and turn, in cut-and-stack order.
      • coverOnSheet(size, cover, pages) — whether the flat cover fits a sheet.
    Pricing's pages-per-sheet must equal sheetLayout().pagesPerSheet; a spec
-   holds the two together. Pricing still counts sheets from the page count
-   alone, without the blank first side (printSides), so a book whose page
-   count is a multiple of pps prints one sheet more than it is billed — the
-   owner's call whether to charge it (open, 2026-10-11).
+   holds the two together. Pricing counts sheets from the page count alone,
+   which is exactly what prints now that page 1 is the FRONT of the first
+   leaf (2026-10-21). Print files from before that start with a blank side
+   (printSides 'left'), so those still print one sheet more than billed when
+   the page count is a multiple of pps.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { ALBUM_SIZES, COVERS, type AlbumSizePreset, type CoverType } from './types';
 import { PRINTER_SPEC, coverWrapGeometry, isHardcover } from './coverGeometry';
 import { MIN_PAGES, SIZE_LABELS } from '../../lib/pricing';
+import type { PageOneSide } from './binding';
 
 /** The shop's press (owner, 2026-10-11). Inches; the sheet is PORTRAIT. */
 export const PRESS_SHEET = {
@@ -159,21 +161,26 @@ export function pagesPerSheetBySize(): Record<AlbumSizePreset, number> {
   return Object.fromEntries(ALBUM_SIZES.map((s) => [s.preset, sheetLayout(s.preset).pagesPerSheet])) as Record<AlbumSizePreset, number>;
 }
 
-/** The album's printed sides, in book order. The builder treats page 1 as a
- *  LEFT page (it opens on the spread page 1 | page 2, and page 1's spine margin
- *  is on its right — binding.ts). On glued single leaves a left page is the
- *  BACK of a leaf, so the first leaf's front is blank, and so is the last
- *  leaf's back when the page count is even. `null` = blank side. */
-export function printSides(pageCount: number): (number | null)[] {
-  const sides: (number | null)[] = [null];
+/** The album's printed sides, in book order. `null` = blank side.
+ *
+ *  Page 1 is a RIGHT-hand page (binding.ts): open the cover and it is the
+ *  first page, so on glued single leaves it is the FRONT of the first leaf,
+ *  page 2 its back, and so on. Only an odd page count leaves a blank: the
+ *  last leaf's back.
+ *
+ *  'left' is for print files made before 2026-10-21, which put page 1 on the
+ *  left (spine margin on its right): a left page is the BACK of a leaf, so
+ *  those start with a blank side, and end with one when the count is even. */
+export function printSides(pageCount: number, pageOne: PageOneSide = 'right'): (number | null)[] {
+  const sides: (number | null)[] = pageOne === 'left' ? [null] : [];
   for (let i = 0; i < pageCount; i++) sides.push(i);
   if (sides.length % 2) sides.push(null);
   return sides;
 }
 
-/** Leaves the album needs (both blank sides included). */
-export function leavesFor(pageCount: number): number {
-  return printSides(pageCount).length / 2;
+/** Leaves the album needs (blank sides included). */
+export function leavesFor(pageCount: number, pageOne: PageOneSide = 'right'): number {
+  return printSides(pageCount, pageOne).length / 2;
 }
 
 /** The page side that faces each sheet side after turning it `turn`° clockwise.
@@ -235,9 +242,9 @@ export function backOf(slot: SheetSlot): SheetSlot {
  * A turned page faces the sheet's right edge on the front; on the back the
  * same physical edge is on the LEFT, so the back page turns the other way.
  */
-export function sheetPlan(size: AlbumSizePreset, pageCount: number): SheetPlan {
+export function sheetPlan(size: AlbumSizePreset, pageCount: number, pageOne: PageOneSide = 'right'): SheetPlan {
   const layout = sheetLayout(size);
-  const sides = printSides(pageCount);
+  const sides = printSides(pageCount, pageOne);
   const leaves = sides.length / 2;
   const k = layout.leavesPerSheet;
   const sheets = Math.ceil(leaves / k);

@@ -12,6 +12,7 @@ import { ALBUM_SIZES } from './types';
 import { renderAlbumForPrint, renderCoverWrapForPrint, type CoverPrintInput } from './printPipeline';
 import { coverWrapGeometry } from './coverGeometry';
 import { pageSizeWithBleedIn } from './printBleed';
+import { PAGE_ONE_RIGHT_MARK } from './binding';
 
 function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -43,6 +44,9 @@ export async function generateAlbumPdf(
   if (!rendered.length) throw new Error('Album has no pages to export.');
 
   const doc = new jsPDF({ orientation, unit: 'in', format: [wIn, hIn], compress: true });
+  // Page 1 is drawn as a right-hand page (spine margin on its left). The
+  // console's press-sheet layout reads this to put it on the first leaf's front.
+  doc.setProperties({ keywords: PAGE_ONE_RIGHT_MARK });
 
   for (let i = 0; i < rendered.length; i++) {
     if (i > 0) doc.addPage([wIn, hIn], orientation);

@@ -1,14 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument, PDFDict, PDFName, PDFString, degrees, rgb } from 'pdf-lib';
+import jsPDF from 'jspdf';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { AlbumSizePreset, CoverType } from './types';
 import { trimInches, sheetPlan } from './printSheet';
 import { coverWrapGeometry } from './coverGeometry';
-import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES } from './printSheetPdf';
+import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, printFilePageOne, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES } from './printSheetPdf';
+import { PAGE_ONE_RIGHT_MARK } from './binding';
 
-/** A stand-in for the checkout's print file: `n` pages of trim + `bleed`. */
-async function albumPdf(size: AlbumSizePreset, n: number, bleed = 0.125): Promise<Uint8Array> {
+/** A stand-in for the checkout's print file: `n` pages of trim + `bleed`.
+ *  `marked` = made since page 1 became a right-hand page (the checkout's mark). */
+async function albumPdf(size: AlbumSizePreset, n: number, bleed = 0.125, marked = false): Promise<Uint8Array> {
   const { trimW, trimH } = trimInches(size);
   const doc = await PDFDocument.create();
+  if (marked) doc.setKeywords([PAGE_ONE_RIGHT_MARK]);
   for (let i = 0; i < n; i++) {
     const p = doc.addPage([(trimW + 2 * bleed) * 72, (trimH + 2 * bleed) * 72]);
     p.drawRectangle({ x: 0, y: 0, width: p.getWidth(), height: p.getHeight(), color: rgb((i % 7) / 7, 0.5, 0.5) });
@@ -40,7 +46,33 @@ describe('press sheet PDFs', () => {
   it('takes an older print file with no trim edge', async () => {
     const { sourceBleedIn, plan } = await imposeAlbumSheets(await albumPdf('8x8', 40, 0), '8x8', 'MP-OLD');
     expect(sourceBleedIn).toBe(0);
-    expect(plan).toEqual(sheetPlan('8x8', 40));
+    expect(plan).toEqual(sheetPlan('8x8', 40, 'left'));
+  });
+
+  it('a file the checkout marked puts page 1 on the first leaf\'s front; an unmarked (older) file keeps its blank first side', async () => {
+    const marked = await imposeAlbumSheets(await albumPdf('8x8', 40, 0.125, true), '8x8', 'MP-NEW');
+    expect(marked.pageOne).toBe('right');
+    expect(marked.plan).toEqual(sheetPlan('8x8', 40, 'right'));
+    expect(marked.plan.sides[0].placements[0].page).toBe(0);
+    expect(marked.plan.sheets).toBe(10);
+    const old = await imposeAlbumSheets(await albumPdf('8x8', 40), '8x8', 'MP-OLD');
+    expect(old.pageOne).toBe('left');
+    expect(old.plan.sides[0].placements[0].page).toBeNull();
+    expect(old.plan.sheets).toBe(11);
+  });
+
+  it('the mark the checkout writes (jsPDF keywords) is the mark the console reads', async () => {
+    const made = new jsPDF({ unit: 'in', format: [8.25, 8.25] });
+    made.setProperties({ keywords: PAGE_ONE_RIGHT_MARK });
+    expect(printFilePageOne(await PDFDocument.load(made.output('arraybuffer')))).toBe('right');
+    const plain = new jsPDF({ unit: 'in', format: [8.25, 8.25] });
+    expect(printFilePageOne(await PDFDocument.load(plain.output('arraybuffer')))).toBe('left');
+    // …and the checkout's print file really writes it, before any page goes in.
+    const src = readFileSync(resolve(__dirname, 'generateAlbumPdf.ts'), 'utf8');
+    const album = src.slice(src.indexOf('export async function generateAlbumPdf('), src.indexOf('export async function generateCoverWrapPdf('));
+    const mark = album.indexOf('doc.setProperties({ keywords: PAGE_ONE_RIGHT_MARK });');
+    expect(mark).toBeGreaterThan(album.indexOf('new jsPDF('));
+    expect(mark).toBeLessThan(album.indexOf('doc.addImage('));
   });
 
   it('turns pages for the sizes that fit more sideways (6x4: 12 a sheet)', async () => {
