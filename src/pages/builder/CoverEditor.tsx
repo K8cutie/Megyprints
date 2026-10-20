@@ -115,6 +115,8 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     fontSize: titleEl?.fontSize ?? 32,
     offsetX: titleEl?.offsetX ?? 0,
     offsetY: titleEl?.offsetY ?? 0,
+    // The floating shadow (wordArt.wordArtShadow): on unless switched off.
+    shadow: titleEl?.shadow !== false,
   };
   // setBoxText MERGES into the existing caption, so send only the patch (plus the
   // current text, which it needs — empty text clears the box). Spreading the whole
@@ -425,6 +427,19 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
                     <Icon size={16} />
                   </button>
                 ))}
+                {/* The cover's words float on a soft shadow (owner, 2026-10-21:
+                    "a floating effect so there is a distinction"). On by default;
+                    off is stored as false, on as no setting, so every cover —
+                    old ones too — floats until someone switches it off. */}
+                <button
+                  onClick={() => updateTitle({ shadow: title.shadow ? false : undefined })}
+                  title="Shadow under the words"
+                  aria-pressed={title.shadow}
+                  data-testid="cover-title-shadow"
+                  className={`px-3 py-2 text-xs font-semibold transition-colors ${title.shadow ? 'bg-peach text-white' : 'text-taupe hover:bg-warm-white'}`}
+                >
+                  Shadow
+                </button>
               </div>
             </div>
           </div>

@@ -157,7 +157,7 @@ async function renderPageManually(
       const st = page.slotTexts?.[i] ?? null;
       if (st) {
         await loadFontFaces([st]); // a quote/text box's own font, never the fallback
-        renderSlotText(ctx, st, sx, sy, sw, sh, W, uiW);
+        renderSlotText(ctx, st, sx, sy, sw, sh, W, uiW, coverMode);
         continue;
       }
 
@@ -230,7 +230,7 @@ async function renderPageManually(
         slot = { x: sX + ts.x * sW + offX, y: sY + ts.y * sH + offY, w: ts.width * sW, h: ts.height * sH, align };
       }
     }
-    renderTextElement(ctx, text, W, H, slot, uiW);
+    renderTextElement(ctx, text, W, H, slot, uiW, coverMode);
   }
 
   // ── Caption-box CONTENT (photo / QR) ──
@@ -804,6 +804,7 @@ function renderTextElement(
   _H: number,
   slot: { x: number; y: number; w: number; h: number; align?: 'left' | 'center' | 'right' } | null,
   uiW: number,
+  coverMode = false,
 ) {
   const fontSize = (text.fontSize || 24) * (W / uiW); // scale from the authoring width to print px
   const fontFamily = text.fontFamily || 'serif';
@@ -833,7 +834,7 @@ function renderTextElement(
     ctx.beginPath();
     ctx.rect(slot.x, slot.y, slot.w, slot.h);
     ctx.clip();
-    const lines = drawWrappedWordArtText(ctx, text.text, cx, cy, slot.w - pad * 2, fontSize, text, W / uiW);
+    const lines = drawWrappedWordArtText(ctx, text.text, cx, cy, slot.w - pad * 2, fontSize, text, W / uiW, coverMode);
     // Underline prints too — DOM + Fabric both render it; captions were the one
     // text kind whose underline silently vanished on paper (renderSlotText
     // already hand-draws it for per-slot text via the same shared helper).
@@ -854,7 +855,7 @@ function renderTextElement(
     const cx = align === 'left' ? 0 : align === 'right' ? bw : bw / 2;
     const step = fontSize * TEXT_LINE_HEIGHT;
     const lines = wrapTextLines(ctx, text.text, bw);
-    lines.forEach((line, i) => drawWordArtText(ctx, line, cx, step / 2 + i * step, text, eff));
+    lines.forEach((line, i) => drawWordArtText(ctx, line, cx, step / 2 + i * step, text, eff, coverMode));
     if (text.underline) {
       const blockCenter = step / 2 + ((lines.length - 1) * step) / 2;
       underlineTextLines(ctx, lines, cx, blockCenter, fontSize, align as any, text.color || '#2D2D2D');
@@ -878,6 +879,7 @@ function renderSlotText(
   h: number,
   W: number,
   uiW: number,
+  coverMode = false,
 ) {
   const fontSize = (st.fontSize || 24) * (W / uiW);
   const fontFamily = st.fontFamily || 'serif';
@@ -902,7 +904,7 @@ function renderSlotText(
   ctx.beginPath();
   ctx.rect(x, y, w, h);
   ctx.clip();
-  const lines = drawWrappedWordArtText(ctx, st.text, cx, cy, w - pad * 2, fontSize, st, W / uiW);
+  const lines = drawWrappedWordArtText(ctx, st.text, cx, cy, w - pad * 2, fontSize, st, W / uiW, coverMode);
   if (st.underline) underlineTextLines(ctx, lines, cx, cy, fontSize, align as any, st.color || '#2D2D2D');
   ctx.restore();
 
