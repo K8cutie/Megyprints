@@ -1,6 +1,7 @@
 import { MASKS, edgeGuardMessage, type MaskId } from './masks';
 import { LOOKS, type LookId } from './looks';
 import type { AlbumPage } from './types';
+import PageColorPicker from './PageColorPicker';
 
 /* The STUDIO strip under the desktop toolbar: masks + filters (looks.ts) for
    the selected photo. (It also offered "Add sticker" until stickers were
@@ -8,12 +9,15 @@ import type { AlbumPage } from './types';
    sat here, until owner, 2026-10-07.) A real component (not an inline
    function in BuilderEdit's render) so the hooks linter can see it never
    touches refs during render. */
-export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, onGuard }: {
+export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, onGuard, onPageColor, onPageColorAll }: {
   page: AlbumPage | undefined;
   selectedSlotIndex: number | null;
   onMask: (slotIndex: number, mask: MaskId | null) => void;
   onLook: (slotIndex: number, look: LookId | null) => void;
   onGuard: (msg: string) => void;
+  /** The page colours (pageColors.ts) — this page, and every page. Owner, 2026-10-20. */
+  onPageColor?: (hex: string) => void;
+  onPageColorAll?: (hex: string) => void;
 }) {
   const slotIdx = selectedSlotIndex;
   const hasPhoto = slotIdx != null && page?.slotFills?.[slotIdx] != null;
@@ -49,6 +53,12 @@ export default function StudioStrip({ page, selectedSlotIndex, onMask, onLook, o
           <span className="text-[11px] text-medium">Filter</span>
           {chip(currentLook === 'none', 'Original', () => onLook(slotIdx as number, null), 'look-none')}
           {LOOKS.map((l) => chip(currentLook === l.id, l.label, () => onLook(slotIdx as number, l.id as LookId), `look-${l.id}`))}        </div>
+      )}
+      {onPageColor && (
+        <div className="h-9 flex items-center gap-2 px-3 overflow-x-auto border-t border-line-soft" data-testid="page-color-row">
+          <span className="text-[11px] text-medium whitespace-nowrap">Page colour</span>
+          <PageColorPicker variant="strip" background={page?.background} onPick={onPageColor} onPickAll={onPageColorAll} />
+        </div>
       )}
     </div>
   );
