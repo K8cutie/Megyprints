@@ -164,11 +164,16 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     uploadedPhotos: actions.uploadedPhotos,
     albumType: actions.albumType,
     albumSize: actions.albumSize,
+    /* An EMPTY photo slot opens the chooser (Photo / Quote / Text) in Studio
+       too. The engine wires onSlotClick ONLY to the empty slot's dashed box,
+       never to a placed photo (a photo frame still selects, to move it), so
+       there is nothing to protect here. It bailed out on containerMode
+       (always on since 2026-09-30), so on desktop clicking "Click to add:"
+       did NOTHING: the owner cleared a photo to change it and could not put
+       one back (2026-10-20). */
     onSlotClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
-      // Empty slot → open the 3-way content chooser (photo / text / QR).
       setChooserSlot(slotIndex);
-    }, [containerMode]),
+    }, []),
     /* TEXT boxes open their editor even in Studio. Studio's container mode
        (always on since 2026-09-30, `useState(true)` above) makes PHOTO frames
        selectable so they can be moved — a click there selects, by design. A
