@@ -355,7 +355,7 @@ export interface OrnamentTransform {
   rot: number;
 }
 
-/** Smallest side we will PRINT a QR at. The corner-badge flow uses 1.2" as
+/** Smallest side we will PRINT a QR at. The corner-badge flow uses 1.2" (0.9" on 6x4) as
  *  "comfortably scannable at arm's length" (see QR_BADGE_IN); 0.8" is the floor
  *  below which a phone camera starts to struggle on paper. A free-transformed
  *  QR is clamped to this — an unscannable code on a printed album is a defect

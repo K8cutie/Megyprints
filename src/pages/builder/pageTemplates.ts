@@ -10,6 +10,7 @@ import { TEMPLATES_9X9 } from './templates9x9';
 import { TEMPLATES_6X4 } from './templates6x4';
 import { TEMPLATES_8X6 } from './templates8x6';
 import { TEMPLATES_6X8 } from './templates6x8';
+import { BINDING_INCHES } from './binding';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  87 SMART TEMPLATES — Ratio-locked, album-size-aware, phone-first
@@ -1360,12 +1361,19 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
      • the QR renders through the SAME shared qrRect() path (white quiet-zone
        chip + centered code) in all three renderers — zero renderer changes.
    Four corner variants per size = the "same photo, different corner" assortment.
-   The chip is sized to a fixed PRINTED inch, so it stays scannable on every
-   album size (qrRect squares it to the smaller dimension). */
+   The chip is sized in PRINTED inches, so it stays scannable on every album
+   size (qrRect squares it to the smaller dimension). */
 export const QR_CORNERS = ['tl', 'tr', 'bl', 'br'] as const;
 export type QrCorner = typeof QR_CORNERS[number];
 const QR_BADGE_IN = 1.2;   // printed QR side — comfortably scannable at arm's length
 const QR_PAD_IN = 0.35;    // inset from the trimmed page edge
+/** Sizes whose chip prints at an EXACT side, measured inside what a full-bleed
+ *  page keeps once the spine reserve is off (binding.ts). 6×4 (owner,
+ *  2026-10-21: "0.9 lets go with that"): its page is only 4" tall, and the
+ *  chip took over a quarter of it. Every other size keeps the chip it has
+ *  printed all along: 1.2" of the PAGE width, which the 0.5" spine reserve
+ *  trims to 1.10–1.15" (qrBadgeSize.spec). Never under QR_MIN_PRINT_IN. */
+const QR_BADGE_EXACT_IN: Partial<Record<string, number>> = { '6x4': 0.9 };
 const ZERO_MARGIN_PT: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 // FULL album inches (NOT the 0.92 safe area): these templates are fullBleed with
 // a zero margin, so their slot fractions are of the WHOLE page — dividing by the
@@ -1376,9 +1384,14 @@ const QR_FULL_IN: Record<string, [number, number]> = {
 const QR_BADGE_TEMPLATES: PageTemplate[] = [];
 for (const { size, orientation } of SIZE_ORIENTATION) {
   const [sw, sh] = QR_FULL_IN[size];
-  // A square chip: set both fractions so slotW·sw == slotH·sh == QR_BADGE_IN.
-  const w = QR_BADGE_IN / sw, h = QR_BADGE_IN / sh;
-  const px = QR_PAD_IN / sw, py = QR_PAD_IN / sh;
+  // A square chip: set both fractions so slotW·across == slotH·sh == side. A
+  // full-bleed page still stops at the spine, so its x / width fractions are
+  // of the width LESS the reserve: an exact size measures against that.
+  const exact = QR_BADGE_EXACT_IN[size];
+  const across = exact ? sw - BINDING_INCHES : sw;
+  const side = exact ?? QR_BADGE_IN;
+  const w = side / across, h = side / sh;
+  const px = QR_PAD_IN / across, py = QR_PAD_IN / sh;
   for (const corner of QR_CORNERS) {
     const x = corner === 'tl' || corner === 'bl' ? px : 1 - px - w;
     const y = corner === 'tl' || corner === 'tr' ? py : 1 - py - h;
