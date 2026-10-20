@@ -3279,6 +3279,7 @@ export function useBuilderState(): BuilderActions {
         outlineColor: content.outlineColor,
         outlineWidth: content.outlineWidth,
         shadow: content.shadow,
+        quote: content.quote,
         rotation: 0,
         opacity: 100,
         boxIndex: slotIndex,
