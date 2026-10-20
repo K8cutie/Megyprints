@@ -19,7 +19,7 @@ import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import type { QrFill } from './types';
-import { dealtBoxRoll } from './types';
+import { dealtBoxRoll, isPoolQuote } from './types';
 import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, edgeGuardMessage, type MaskId } from './masks';
@@ -243,8 +243,14 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
               onSlotTap={studio ? (slotIndex) => { setStudioSticker(null); setStudioSlot(slotIndex); } : undefined}
               onChooseSlot={(slotIndex) => setChooserSlot(slotIndex)}
               onRemoveFromSlot={(slotIndex) => actions.clearSlot(slotIndex)}
-              onSlotTextTap={(slotIndex) => setSlotTextEditSlot(slotIndex)}
-              onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)}
+              // A line from the quote pool re-opens the pool (owner, 2026-10-20);
+              // the pool's "Edit the words" leads to the typing editor.
+              onSlotTextTap={(slotIndex) => { if (isPoolQuote(page.slotTexts?.[slotIndex])) setSlotQuoteSlot(slotIndex); else setSlotTextEditSlot(slotIndex); }}
+              onTextSlotTap={(slotIndex) => {
+                const line = page.textElements?.find((t) => t.boxIndex === slotIndex);
+                if (isPoolQuote(line, dealtBoxRoll(page, slotIndex))) setBoxQuoteSlot(slotIndex);
+                else setEditSlot(slotIndex);
+              }}
               onTextTap={(textId) => setEditTextId(textId)}
               onQrSlotTap={(slot) => setQrEditSlot(slot)}
               onOrnamentSlotTap={(slot) => setOrnamentEditSlot(slot)}
@@ -357,8 +363,9 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
         <QuotePickerModal
           mobile
           initial={page?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
-          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true }, idx); setBoxQuoteSlot(null); }}
+          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }, idx); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }, idx); setBoxQuoteSlot(null); }}
+          onEdit={() => { const s = boxQuoteSlot; setBoxQuoteSlot(null); setEditSlot(s); }}
           onClose={() => setBoxQuoteSlot(null)}
         />
       )}
@@ -368,8 +375,9 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
         <QuotePickerModal
           mobile
           initial={page?.slotTexts?.[slotQuoteSlot]?.text ?? null}
-          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true }, idx); setSlotQuoteSlot(null); }}
+          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true, quote: true }, idx); setSlotQuoteSlot(null); }}
           onRemove={() => { actions.setSlotText(slotQuoteSlot, null, idx); setSlotQuoteSlot(null); }}
+          onEdit={() => { const s = slotQuoteSlot; setSlotQuoteSlot(null); setSlotTextEditSlot(s); }}
           onClose={() => setSlotQuoteSlot(null)}
         />
       )}
@@ -460,7 +468,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
       {slotTextEditSlot !== null && (
         <MobileTextEditor
           initial={buildSlotTextInitial(slotTextEditSlot)}
-          onSave={(content) => actions.setSlotText(slotTextEditSlot, content.text.trim() ? content : null, idx)}
+          onSave={(content) => actions.setSlotText(slotTextEditSlot, content.text.trim() ? { ...content, quote: page?.slotTexts?.[slotTextEditSlot]?.quote } : null, idx)}
           onClose={() => setSlotTextEditSlot(null)}
         />
       )}
