@@ -20,7 +20,7 @@ import {
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
-import { dealtBoxRoll } from './types';
+import { dealtBoxRoll, isPoolQuote } from './types';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
@@ -183,8 +183,15 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
        "Your words here" box or its ⋯ did NOTHING, and no font or colour could
        be reached (found walking the 74 fonts, 2026-10-08). */
     onTextSlotClick: useCallback((slotIndex: number) => {
-      setTextEditSlot(slotIndex);
-    }, []),
+      // A line from the quote pool re-opens the pool (owner, 2026-10-20:
+      // tapping a quote was opening the typing editor, and nothing led back
+      // to the pool once a box was filled). The pool's "Edit the words"
+      // button is the way into the typing editor for that line.
+      const page = actions.currentPage;
+      const line = page?.textElements?.find((t) => t.boxIndex === slotIndex);
+      if (isPoolQuote(line, page ? dealtBoxRoll(page, slotIndex) : null)) setBoxQuoteSlot(slotIndex);
+      else setTextEditSlot(slotIndex);
+    }, [actions.currentPage]),
     /* A video memory's QR opens its editor (change the video, move the
        corner, remove it) in Studio too: the chip is never a movable frame,
        and "tap the QR and remove the video" is how a memory page gets other
@@ -198,8 +205,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       setOrnamentEditSlot(slotIndex);
     }, [containerMode]),
     onSlotTextClick: useCallback((slotIndex: number) => {
-      setSlotTextEditSlot(slotIndex); // a text box: opens in Studio too (see onTextSlotClick)
-    }, []),
+      // A text box: opens in Studio too (see onTextSlotClick). A pool quote
+      // in a photo slot re-opens the pool, like one in a caption box.
+      if (isPoolQuote(actions.currentPage?.slotTexts?.[slotIndex])) setSlotQuoteSlot(slotIndex);
+      else setSlotTextEditSlot(slotIndex);
+    }, [actions.currentPage]),
     onTextSlotEmptyClick: useCallback((slotIndex: number) => {
       // A text box: opens in Studio too (see onTextSlotClick).
       // A DEALT box (textSlotRoll) opens its kind's editor directly — the roll
@@ -859,8 +869,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {boxQuoteSlot !== null && (
         <QuotePickerModal
           initial={actions.currentPage?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
-          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true }); setBoxQuoteSlot(null); }}
+          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }); setBoxQuoteSlot(null); }}
+          onEdit={() => { const s = boxQuoteSlot; setBoxQuoteSlot(null); setTextEditSlot(s); }}
           onClose={() => setBoxQuoteSlot(null)}
         />
       )}
@@ -869,8 +880,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {slotQuoteSlot !== null && (
         <QuotePickerModal
           initial={actions.currentPage?.slotTexts?.[slotQuoteSlot]?.text ?? null}
-          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true }); setSlotQuoteSlot(null); }}
+          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true, quote: true }); setSlotQuoteSlot(null); }}
           onRemove={() => { actions.setSlotText(slotQuoteSlot, null); setSlotQuoteSlot(null); }}
+          onEdit={() => { const s = slotQuoteSlot; setSlotQuoteSlot(null); setSlotTextEditSlot(s); }}
           onClose={() => setSlotQuoteSlot(null)}
         />
       )}
@@ -888,7 +900,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {slotTextEditSlot !== null && (
         <MobileTextEditor
           initial={buildSlotTextInitial(slotTextEditSlot)}
-          onSave={(content) => { actions.setSlotText(slotTextEditSlot, content.text.trim() ? content : null); setSlotTextEditSlot(null); }}
+          onSave={(content) => { actions.setSlotText(slotTextEditSlot, content.text.trim() ? { ...content, quote: actions.currentPage?.slotTexts?.[slotTextEditSlot]?.quote } : null); setSlotTextEditSlot(null); }}
           onClose={() => setSlotTextEditSlot(null)}
         />
       )}
