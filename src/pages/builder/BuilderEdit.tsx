@@ -27,6 +27,7 @@ import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
+import { placedPhotoPages, swapNotice } from './slotSwap';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
@@ -323,20 +324,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     };
   }, [actions.currentPage]);
 
-  /* ── Photo picker only offers UNUSED photos, so the same photo is never
-     placed twice. When everything's used, the picker asks for more. ── */
-  const usedPhotoIndices = useMemo(() => {
-    const used = new Set<number>();
-    actions.albumPages.forEach((p) => (p.slotFills ?? []).forEach((f) => { if (f != null) used.add(f); }));
-    return used;
-  }, [actions.albumPages]);
-
-  const availablePhotos = useMemo(
-    () => actions.uploadedPhotos
-      .map((photo, idx) => ({ photo, idx }))
-      .filter(({ idx }) => !usedPhotoIndices.has(idx)),
-    [actions.uploadedPhotos, usedPhotoIndices],
-  );
+  /* ── The photo picker offers EVERY photo. A placed one is tagged with its
+     page and picking it brings it here (its old frame swaps with this one —
+     see slotSwap.ts), so the same photo is still never printed twice. It
+     used to hide placed photos: with every photo placed the picker said
+     "All your photos are already in the album" and the owner, who had just
+     cleared a frame to change it, could not put anything in (2026-10-20). ── */
+  const placedOn = useMemo(() => placedPhotoPages(actions.albumPages), [actions.albumPages]);
 
   /* ── Report selection changes upward to Builder.tsx ── */
   useEffect(() => {
@@ -725,43 +719,55 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 <p className="text-sm text-light text-center py-8">
                   No photos uploaded yet. Go to the Photos tab to upload.
                 </p>
-              ) : availablePhotos.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-medium font-medium mb-1">
-                    All your photos are already in the album.
-                  </p>
-                  <p className="text-xs text-light mb-4">
-                    Add more photos to swap in something new.
+              ) : (
+                <>
+                  <p className="text-xs text-light mb-3">
+                    A photo that is already on a page comes here when you pick it, and its old frame swaps with this one.
                   </p>
                   <button
                     onClick={() => { setShowPhotoPicker(false); _onAction?.('trigger-upload'); }}
-                    className="px-5 py-2 bg-peach text-white text-sm font-semibold rounded-lg hover:brightness-105 inline-flex items-center gap-2"
+                    className="mb-3 px-4 py-2 border-2 border-dashed border-peach text-blush-pink text-sm font-semibold rounded-lg inline-flex items-center gap-2 hover:bg-blush"
                   >
                     <Upload size={14} /> Add Photos
                   </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                  {availablePhotos.map(({ photo, idx }) => (
-                    <button
-                      key={photo.id}
-                      onClick={() => {
-                        if (pickerIsTextSlot) actions.setTextSlotPhoto(selectedSlotForPicker, idx);
-                        else actions.fillSlot(selectedSlotForPicker, idx);
-                        setShowPhotoPicker(false);
-                        setPickerIsTextSlot(false);
-                      }}
-                      className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-peach transition-all"
-                    >
-                      <img
-                        src={photo.previewUrl}
-                        alt={photo.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    </button>
-                  ))}
-                </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+                    {actions.uploadedPhotos.map((photo, idx) => {
+                      const onPage = placedOn.get(idx);
+                      const tag = onPage === undefined ? null : onPage === actions.currentPageIndex ? 'This page' : `Page ${onPage + 1}`;
+                      return (
+                        <button
+                          key={photo.id}
+                          data-testid="picker-photo"
+                          data-placed-on={onPage === undefined ? undefined : onPage + 1}
+                          onClick={() => {
+                            if (pickerIsTextSlot) actions.setTextSlotPhoto(selectedSlotForPicker, idx);
+                            else {
+                              const wasEmpty = (actions.currentPage.slotFills?.[selectedSlotForPicker] ?? null) === null;
+                              const notice = swapNotice(onPage === undefined ? null : { pageIndex: onPage, slotIndex: -1 }, actions.currentPageIndex, wasEmpty);
+                              actions.fillSlot(selectedSlotForPicker, idx);
+                              if (notice) sayGuard(notice);
+                            }
+                            setShowPhotoPicker(false);
+                            setPickerIsTextSlot(false);
+                          }}
+                          className="relative aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-peach transition-all"
+                        >
+                          <img
+                            src={photo.previewUrl}
+                            alt={photo.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                          {tag && (
+                            <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded bg-dark/75 text-warm-white text-[10px] font-semibold leading-tight">
+                              {tag}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
               )}
               <div className="mt-4 flex justify-end">
                 <button

@@ -18,6 +18,7 @@ import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
+import { placedPhotoPages, swapNotice } from './slotSwap';
 import type { QrFill } from './types';
 import { dealtBoxRoll } from './types';
 import { StudioSheet, StudioLayer } from './StudioPhone';
@@ -40,6 +41,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
   const [colorSheet, setColorSheet] = useState(false); // the page-colour sheet (pageColors.ts)
+  const placedOn = placedPhotoPages(pages); // photo → page, for the picker's "Page 3" tag
 
   /* ── STUDIO on the phone (album-wide on the phone) ── */
   const studio = true; // owner, 2026-09-30: no Simple/Studio switch — every Studio tool is always on
@@ -405,10 +407,24 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
                 <p className="p-6 text-center text-sm text-light">No photos uploaded yet.</p>
               ) : (
                 <div className="overflow-y-auto p-3 grid grid-cols-3 gap-2">
-                  {actions.uploadedPhotos.map((p, i) => (
+                  {/* ONE PHOTO, ONE PLACE (owner, 2026-10-20): a placed photo is
+                      tagged with its page; picking it brings it HERE and its old
+                      frame swaps with this one (slotSwap.ts). It used to be
+                      copied — the same photo on two pages, printed twice. */}
+                  {actions.uploadedPhotos.map((p, i) => {
+                    const onPage = placedOn.get(i);
+                    const tag = onPage === undefined ? null : onPage === idx ? 'This page' : `Page ${onPage + 1}`;
+                    return (
                     <button key={i}
+                      data-testid="picker-photo"
+                      data-placed-on={onPage === undefined ? undefined : onPage + 1}
                       onClick={() => {
-                        if (replaceSlot !== null) actions.fillSlot(replaceSlot, i);
+                        if (replaceSlot !== null) {
+                          const wasEmpty = (page?.slotFills?.[replaceSlot] ?? null) === null;
+                          const notice = swapNotice(onPage === undefined ? null : { pageIndex: onPage, slotIndex: -1 }, idx, wasEmpty);
+                          actions.fillSlot(replaceSlot, i);
+                          if (notice) sayGuard(notice);
+                        }
                         else if (textReplaceSlot !== null) actions.setTextSlotPhoto(textReplaceSlot, i, idx);
                         setReplaceSlot(null); setTextReplaceSlot(null);
                       }}
@@ -418,8 +434,14 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
                       // browser; the image is absolutely positioned to fill it.
                       className="relative h-0 pb-[100%] rounded-lg overflow-hidden bg-line-soft active:scale-95 transition-transform">
                       <img src={p.previewUrl} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+                      {tag && (
+                        <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded bg-dark/75 text-warm-white text-[10px] font-semibold leading-tight">
+                          {tag}
+                        </span>
+                      )}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </motion.div>
