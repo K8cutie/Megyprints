@@ -1,0 +1,42 @@
+page  1: 01
+page  2: 07 19
+page  3: 08
+page  4: 27
+page  5: 20
+page  6: 02
+page  7: 03
+page  8: 04 05
+page  9: 31
+page 10: 34
+page 11: 06
+page 12: 43
+page 13: 09 11
+page 14: 10
+page 15: 46
+page 16: 12
+page 17: 13
+page 18: 14 16
+page 19: 15
+page 20: 17
+page 21: 18
+page 22: 21 23
+page 23: 22
+page 24: 24
+page 25: 25
+page 26: 26 28
+page 27: 29
+page 28: 30
+page 29: 32
+page 30: 33 35
+page 31: 36
+page 32: 37
+page 33: 38
+page 34: 39
+page 35: 40
+page 36: 41 42
+page 37: 44
+page 38: 45
+page 39: 47
+page 40: 48
+
+forward: page 8 starts at 4 after a page that started at 7
