@@ -870,7 +870,7 @@ export interface BuilderActions {
    *  with words that wouldn't show on it switched to an ink that does. Under
    *  the cover scope it colours the cover. */
   setPageColor: (hex: string) => void;
-  /** Every interior page in that colour (the cover keeps its own). */
+  /** Every page in that colour — the cover too. */
   applyPageColorToAllPages: (hex: string) => void;
   /** COVER: put a photo the customer picked on the cover. The file is kept in
    *  the device's photo store, so the cover still has it after the app is
@@ -3312,6 +3312,7 @@ export function useBuilderState(): BuilderActions {
   const applyPageColorToAllPages = useCallback((hex: string) => {
     pushSnapshot();
     setAlbumPages((prev) => prev.map((p) => recolorPage(p, hex)));
+    setCoverFrontPage((p) => recolorPage(p, hex));
   }, []);
 
   const setCoverPhoto = useCallback(async (picked: File) => {

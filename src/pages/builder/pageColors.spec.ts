@@ -123,7 +123,7 @@ describe('where it lives', () => {
 
   it('the cover editor offers the colours and still opens the photo browser', () => {
     const s = src('CoverEditor.tsx');
-    expect(s).toMatch(/<PageColorPicker[^>]*onPick=\{\(hex\) => b\.setPageColor\(hex\)\}/);
+    expect(s).toMatch(/<PageColorPicker[^>]*onPick=\{\(hex\) => b\.setPageColor\(hex\)\}[^>]*onPickAll=\{\(hex\) => b\.applyPageColorToAllPages\(hex\)\}/);
     expect(s).toMatch(/Pick a colour above, or tap Background to choose a photo/);
   });
 
@@ -142,6 +142,6 @@ describe('where it lives', () => {
   it('the state owns both actions, cover-scope aware, with undo', () => {
     const s = src('useBuilderState.ts');
     expect(s).toMatch(/const setPageColor = useCallback\(\(hex: string\) => \{\s*pushSnapshot\(\);\s*updateCurrentPage\(\(page\) => recolorPage\(page, hex\)\)/);
-    expect(s).toMatch(/const applyPageColorToAllPages = useCallback\(\(hex: string\) => \{\s*pushSnapshot\(\);\s*setAlbumPages\(\(prev\) => prev\.map\(\(p\) => recolorPage\(p, hex\)\)\)/);
+    expect(s).toMatch(/const applyPageColorToAllPages = useCallback\(\(hex: string\) => \{\s*pushSnapshot\(\);\s*setAlbumPages\(\(prev\) => prev\.map\(\(p\) => recolorPage\(p, hex\)\)\);\s*setCoverFrontPage\(\(p\) => recolorPage\(p, hex\)\)/);
   });
 });

@@ -291,7 +291,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               wouldn't show on a dark colour switches to an ink that does. */}
           <div data-testid="cover-colors">
             <span className="block text-[11px] font-medium text-stone mb-1.5">Colour</span>
-            <PageColorPicker background={page.background} onPick={(hex) => b.setPageColor(hex)} />
+            <PageColorPicker background={page.background} onPick={(hex) => b.setPageColor(hex)} onPickAll={(hex) => b.applyPageColorToAllPages(hex)} />
           </div>
           {/* Crop controls — only meaningful once a photo is on the cover. */}
           {bgIsImage && (
