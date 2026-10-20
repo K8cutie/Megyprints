@@ -198,9 +198,11 @@ describe('every editor picks from the one list, and every renderer loads the fon
       expect(at, name).toBeGreaterThan(-1);
       return s.slice(at, s.indexOf('}, [', at));
     };
-    for (const h of ['onTextSlotClick', 'onSlotTextClick', 'onTextSlotEmptyClick', 'onTextSlotChooserClick']) expect(body(h), h).not.toMatch(/containerMode/);
-    // a PHOTO frame still selects (to move it) in Studio — by design
-    expect(body('onSlotClick')).toMatch(/if \(containerMode\) return/);
+    // onSlotClick too: the engine wires it ONLY to an EMPTY slot's dashed box
+    // (a placed photo frame selects on its own), so its bail-out made
+    // "Click to add:" a dead tap on desktop — the owner cleared a photo to
+    // change it and could not put one back (2026-10-20).
+    for (const h of ['onTextSlotClick', 'onSlotTextClick', 'onTextSlotEmptyClick', 'onTextSlotChooserClick', 'onSlotClick']) expect(body(h), h).not.toMatch(/containerMode/);
   });
   it('print loads the fonts of page text, text/quote boxes and the cover before drawing; the editor refits when they land', () => {
     const print = src('printPipeline.ts');
