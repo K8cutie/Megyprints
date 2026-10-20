@@ -77,6 +77,27 @@ export function nextRenderId(): number {
   return currentRenderId;
 }
 
+/** Size the canvas ON SCREEN (CSS only), then draw it again.
+ *
+ *  Fabric 5.3's setDimensions re-applies its retina scaling even with
+ *  cssOnly. On a screen set above 100% (devicePixelRatio > 1: most Windows
+ *  laptops run at 125% or 150%) that re-sets the canvas's width and height,
+ *  which wipes everything drawn on it, and cssOnly skips the repaint. Every
+ *  zoom, window resize or panel change left the page blank — photos and all —
+ *  until a page turn drew it again (owner, 2026-10-21: "photos sometimes dont
+ *  appear on a page or disappears", "i zoomed out the rendered album
+ *  disappears"). */
+export function setCanvasCssSize(
+  c: { setDimensions(size: { width: string; height: string }, options: { cssOnly: boolean }): unknown; renderAll(): unknown },
+  width: number,
+  height: number,
+): void {
+  // fabric 5.x setDimensions(cssOnly) does NOT append units, so the CSS
+  // values MUST be passed as 'px' strings or the browser ignores them.
+  c.setDimensions({ width: width + 'px', height: height + 'px' }, { cssOnly: true });
+  c.renderAll();
+}
+
 /* ── Snap helpers ──────────────────────────────────────────────────────── */
 
 function snapToGrid(value: number, gridSize: number): number {
@@ -696,12 +717,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     if (availW <= 0) return;
     const baseFit = Math.max(0.2, Math.min(1, availW / CANVAS_W));
     const scale = baseFit * zoomRef.current;
-    // NOTE: fabric 5.x setDimensions(cssOnly) does NOT append units, so the CSS
-    // values MUST be passed as 'px' strings or the browser ignores them.
-    c.setDimensions(
-      { width: Math.round(CANVAS_W * scale) + 'px', height: Math.round(CANVAS_H * scale) + 'px' },
-      { cssOnly: true },
-    );
+    setCanvasCssSize(c, Math.round(CANVAS_W * scale), Math.round(CANVAS_H * scale));
   }, [CANVAS_W, CANVAS_H]);
 
   /* ═══════ Resize canvas when album size changes ═══════ */
