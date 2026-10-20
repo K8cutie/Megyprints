@@ -65,14 +65,15 @@ describe('Megy says what was left out', () => {
     const heic = Promise.resolve({ converted: 42, unreadable: ['IMG_4107.HEIC', 'IMG_4111.HEIC'], unreadableNew: 2 });
     const e = new ActionEngine({ addPhotos: () => ({ added: 44, skipped: 0, videos: 0, others: 0, restored: 0, otherCopies: 0, heic }) } as unknown as BuilderActions);
     const r = await run(e);
-    expect(r).toMatchObject({ success: true, message: "42 photos added · 2 iPhone photos couldn't be opened (IMG_4107.HEIC, IMG_4111.HEIC): try saving them as JPG." });
+    // "photos", not "iPhone photos": a Samsung saves HEIC too (owner, 2026-10-21).
+    expect(r).toMatchObject({ success: true, message: "42 photos added · 2 photos couldn't be opened (IMG_4107.HEIC, IMG_4111.HEIC): try saving them as JPG." });
     const all = new ActionEngine({ addPhotos: () => ({ added: 44, skipped: 0, videos: 0, others: 0, restored: 0, otherCopies: 0, heic: Promise.resolve({ converted: 44, unreadable: [], unreadableNew: 0 }) }) } as unknown as BuilderActions);
     expect((await run(all)).message).toBe('44 photos added.');
   });
   it('a HEIC that fails while going back in its place comes off "put back", not "added"', async () => {
     const heic = Promise.resolve({ converted: 0, unreadable: ['IMG_1.HEIC'], unreadableNew: 0 });
     const e = new ActionEngine({ addPhotos: () => ({ added: 3, skipped: 0, videos: 0, others: 0, restored: 2, otherCopies: 0, heic }) } as unknown as BuilderActions);
-    expect((await run(e)).message).toBe("1 photo put back in its place · 3 photos added · 1 iPhone photo couldn't be opened (IMG_1.HEIC): try saving it as JPG.");
+    expect((await run(e)).message).toBe("1 photo put back in its place · 3 photos added · 1 photo couldn't be opened (IMG_1.HEIC): try saving it as JPG.");
   });
   it('nothing left out: as before', async () => {
     expect((await run(engine({ added: 3, skipped: 0, videos: 0, others: 0 }))).message).toBe('3 photos added.');

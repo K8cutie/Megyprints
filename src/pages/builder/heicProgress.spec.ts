@@ -30,7 +30,7 @@ describe('HeicProgress', () => {
 
   it('says what is happening and how far: "12 of 44", with a bar and a word about the wait', () => {
     show({ done: 12, total: 44 });
-    expect($('heic-progress-text')!.textContent).toBe('Getting your iPhone photos ready: 12 of 44');
+    expect($('heic-progress-text')!.textContent).toBe('Getting your photos ready: 12 of 44');
     expect($('heic-progress-bar')!.style.width).toBe('27%');
     expect(host.textContent).toContain('This can take a minute on a phone. Keep this page open.');
     expect(host.querySelector('[role="status"]')!.getAttribute('aria-live')).toBe('polite');
@@ -38,10 +38,17 @@ describe('HeicProgress', () => {
 
   it('then says they are ready (one or many)', () => {
     show({ done: 44, total: 44 });
-    expect($('heic-progress-text')!.textContent).toBe('Your iPhone photos are ready');
+    expect($('heic-progress-text')!.textContent).toBe('Your photos are ready');
     expect($('heic-progress-bar')).toBeNull();
     show({ done: 1, total: 1 });
-    expect($('heic-progress-text')!.textContent).toBe('Your iPhone photo is ready');
+    expect($('heic-progress-text')!.textContent).toBe('Your photo is ready');
+  });
+
+  it('never says "iPhone": a Samsung saves HEIC too, and its owner was confused (owner, 2026-10-21)', () => {
+    for (const progress of [{ done: 3, total: 9 }, { done: 9, total: 9 }]) {
+      show(progress);
+      expect(host.textContent).not.toMatch(/iphone/i);
+    }
   });
 
   it('Megy\'s upload card says "photos added", not "ready", while they convert', () => {
@@ -69,9 +76,10 @@ describe('"Making your album" waiting for iPhone photos', () => {
     Object.assign(ctx, { generating: 'measuring', heicProgress: { done: 10, total: 44 } });
     const O = await overlay();
     act(() => root.render(createElement(O)));
-    expect($('generating-stage')!.textContent).toBe('Getting your iPhone photos ready: 10 of 44');
+    expect($('generating-stage')!.textContent).toBe('Getting your photos ready: 10 of 44');
     expect(host.textContent).toContain('This can take a minute on a phone. Keep this page open.');
     expect(host.textContent).not.toContain('This takes a few seconds');
+    expect(host.textContent).not.toMatch(/iphone/i); // a Samsung saves HEIC too
   });
   it('once they are ready (or with none): its own stages, as before', async () => {
     Object.assign(ctx, { generating: 'measuring', heicProgress: { done: 44, total: 44 } });

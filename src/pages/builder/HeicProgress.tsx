@@ -1,12 +1,14 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   HeicProgress — "Getting your iPhone photos ready: 12 of 44".
+   HeicProgress — "Getting your photos ready: 12 of 44".
 
    iPhone photos (HEIC) are turned into JPEGs as they come in (lib/heicPhoto).
    On an Android phone a batch takes tens of seconds; with nothing but grey
    squares the customer would think the app had hung (owner, 2026-10-12).
    This says what is happening and how far along it is, over every builder
    screen (the "Making your album" screen too: it waits for these), then
-   "Your iPhone photos are ready" for a moment.
+   "Your photos are ready" for a moment.
+   Not "iPhone photos": a Samsung saves HEIC too ("High efficiency pictures"),
+   and a Samsung customer was confused by it (owner, 2026-10-21).
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { Check } from 'lucide-react';
@@ -30,8 +32,8 @@ export default function HeicProgress({ progress }: { progress: { done: number; t
           )}
           <p className="text-sm font-semibold text-dark" data-testid="heic-progress-text">
             {ready
-              ? `Your iPhone photo${total === 1 ? ' is' : 's are'} ready`
-              : `Getting your iPhone photos ready: ${done} of ${total}`}
+              ? `Your photo${total === 1 ? ' is' : 's are'} ready`
+              : `Getting your photos ready: ${done} of ${total}`}
           </p>
         </div>
         {!ready && (
