@@ -60,22 +60,43 @@ function createEmptyPage(
 /** A new "moment" starts when consecutive shots are more than this apart. */
 const MOMENT_GAP_MS = 3 * 60 * 60 * 1000; // 3 hours
 
-/** Split photos into chronological "moments" by EXIF capture time, so photos
- *  taken close together land on the same page(s). Photos without EXIF time keep
- *  their upload order in a trailing group. Returns arrays of photo indices. */
-function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
-  const timed: { i: number; t: number }[] = [];
-  const untimed: number[] = [];
-  photos.forEach((p, i) => {
-    if (typeof p.capturedAt === 'number') timed.push({ i, t: p.capturedAt });
-    else untimed.push(i);
+/** PHOTOS IN THE ORDER THEY WERE TAKEN (owner's brother, 2026-10-20). Every
+ *  page starts with the earliest photo not yet placed, and — outside a chosen
+ *  photos-per-page, whose page count was promised before Generate — fills its
+ *  other frames only from the next this-many photos. A moment used to be dealt
+ *  shape by shape (every landscape page, then every portrait page, round-
+ *  robin), so a 3-hour party (one moment) came out in shape order. */
+export const TIME_ORDER_REACH = 12;
+
+/** Split photos into chronological "moments" by capture time (EXIF, else the
+ *  file's date — exif.ts), so photos taken close together land on the same
+ *  page(s). A photo with NO time at all (a screenshot; a Messenger save whose
+ *  file date was no use) keeps its UPLOAD position: it goes right after the
+ *  timed photo picked before it, in that photo's moment — or before the first
+ *  timed photo, if it was picked first. (They used to be parked in a trailing
+ *  group after every timed photo.) Returns arrays of photo indices. */
+export function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
+  const timeOf = (p: UploadedPhoto | undefined): number | null => (typeof p?.capturedAt === 'number' ? p.capturedAt : null);
+  const firstTimed = photos.findIndex((p) => timeOf(p) !== null);
+  // Nothing had a capture time → one group in upload order (old behaviour).
+  if (firstTimed < 0) return [photos.map((_, i) => i)];
+
+  // Every photo's sort key: its own time, else the time of the nearest timed
+  // photo picked before it (the first timed one, for those picked before it).
+  // Ties break by upload position, so an untimed photo sits right after its
+  // anchor and a run of them stays in the order they were picked.
+  let anchor = timeOf(photos[firstTimed])!;
+  const keyed = photos.map((p, i) => {
+    const own = timeOf(p);
+    if (own !== null) anchor = own;
+    return { i, t: own ?? anchor };
   });
-  timed.sort((a, b) => a.t - b.t);
+  keyed.sort((a, b) => a.t - b.t || a.i - b.i);
 
   const groups: number[][] = [];
   let current: number[] = [];
   let lastT: number | null = null;
-  for (const { i, t } of timed) {
+  for (const { i, t } of keyed) {
     if (lastT !== null && t - lastT > MOMENT_GAP_MS) {
       if (current.length) groups.push(current);
       current = [];
@@ -84,10 +105,7 @@ function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
     lastT = t;
   }
   if (current.length) groups.push(current);
-  if (untimed.length) groups.push(untimed); // no-EXIF photos → trailing group
-
-  // Nothing had a capture time → one group in upload order (old behaviour).
-  return groups.length ? groups : [photos.map((_, i) => i)];
+  return groups;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1496,79 +1514,98 @@ function layoutAlbum(
   }
 
   for (const [moment, group] of momentGroups.entries()) {
-    let remaining = [...group];
+    // ── 3. The moment's photos, oldest first. EVERY page starts with the
+    //       earliest photo not yet placed (TIME_ORDER_REACH), so the pages read
+    //       forward through the day. A page's other frames come from the photos
+    //       right after it: the next TIME_ORDER_REACH, or — at a chosen
+    //       photos-per-page, whose page count the upload step promised — from
+    //       anywhere in the moment, so each shape's planned pages still come
+    //       out full. ──
+    const remaining = [...group];
+    const ahead = () => remaining.slice(0, TIME_ORDER_REACH);
+    const ratioIn = (i: number): PhotoRatio => ratioOf[i] ?? dominantRatio;
+    /** Photos of `ratio` a page may take right now: the whole moment's at a
+     *  chosen photos-per-page, else only those within reach. */
+    const availableOf = (ratio: PhotoRatio): number =>
+      (exactPlan ? remaining : ahead()).filter((i) => ratioIn(i) === ratio).length;
+    /** Pull the next `n` photos of `ratio` (oldest first) out of the moment. */
+    const takeOf = (ratio: PhotoRatio, n: number): number[] => {
+      const out: number[] = [];
+      for (let k = 0; k < remaining.length && out.length < n; ) {
+        if (ratioIn(remaining[k]) === ratio) out.push(...remaining.splice(k, 1));
+        else k++;
+      }
+      return out;
+    };
+    const removeAll = (idxs: number[]) => {
+      const used = new Set(idxs);
+      for (let k = remaining.length - 1; k >= 0; k--) if (used.has(remaining[k])) remaining.splice(k, 1);
+    };
 
-    // ── 3a. Place mixed-ratio templates the pool can satisfy — but with VARIETY,
-    //       not always the first match (that made every mixed-ratio moment land
-    //       on the SAME template). If only one mixed template fits and it was used
-    //       recently, stop forcing mixed here and let the more-varied
-    //       ratio-by-ratio path take these photos instead. ──
+    // ── 3a. A mixed-ratio page (e.g. 3:2 + 1:1 + 2:3) when the photos just
+    //       ahead supply every shape it needs AND the earliest one is among
+    //       them — but with VARIETY, not always the first match (that made
+    //       every mixed-ratio moment land on the SAME template). If only one
+    //       mixed template fits and it was used recently, let the more-varied
+    //       ratio path take this page instead. ──
     // "1 · Big & bold" is ONE photo a page, like the ratio path below (multi =
     // [] at 1/page): mixed pages are 2+ photos, and dealing them there put a
     // 3-4-photo page in a 1-per-page album and left its last pages BLANK at 40
     // photos (2026-10-04, found by the 40-photo minimum's every-size sweep).
-    if (mixedTemplates.length > 0 && !fillMode && !exactPlan && !(effPerPage === 1 && !randomize)) {
-      const mixedBag = bagFor('mixed', mixedTemplates.map((t) => t.id));
-      let placed = true;
-      while (placed) {
-        placed = false;
-        // Every mixed template fillable from the remaining pool right now.
-        const fillable = mixedTemplates
-          .map((t) => ({ t, fills: tryMixedFill(t, remaining) }))
-          .filter((x): x is { t: PageTemplate; fills: number[] } => x.fills !== null);
-        if (fillable.length === 0) break;
+    const mixedAllowed = mixedTemplates.length > 0 && !fillMode && !exactPlan && !(effPerPage === 1 && !randomize);
+    const mixedBag = mixedAllowed ? bagFor('mixed', mixedTemplates.map((t) => t.id)) : null;
+    const tryMixedPage = (): boolean => {
+      if (!mixedBag) return false;
+      const head = remaining[0];
+      const pool = ahead();
+      // Every mixed template fillable from the photos ahead, starting here.
+      const fillable = mixedTemplates
+        .map((t) => ({ t, fills: tryMixedFill(t, pool) }))
+        .filter((x): x is { t: PageTemplate; fills: number[] } => x.fills !== null && x.fills.includes(head));
+      if (fillable.length === 0) return false;
 
-        // Single mixed option that we just placed → break the monotony: let 3b
-        // handle these photos with its larger, varied homogeneous pool.
-        if (!randomize && fillable.length === 1 && fillable[0].t.id === lastTemplateId) break;
+      // Single mixed option that we just placed → break the monotony: let 3b
+      // handle this page with its larger, varied homogeneous pool.
+      if (!randomize && fillable.length === 1 && fillable[0].t.id === lastTemplateId) return false;
 
-        // Deal from the mixed bag, restricted to what's fillable right now AND
-        // (while on cooldown) to box-free layouts, so the caption cadence holds
-        // on mixed pages too.
-        const eligiblePool = boxAware(fillable.map((x) => x.t));
-        const okIds = new Set(eligiblePool.map((t) => t.id));
-        // Same rhythm rule as the ratio path: prefer a page whose PHOTO COUNT
-        // is not one of the last two, so mixed pages break the run instead of
-        // extending it. Falls back to any eligible layout when the pool has
-        // nothing of a different count.
-        const countOf = new Map(fillable.map((x) => [x.t.id, x.t.slotCount]));
-        // If EVERY mixed option would repeat a photo-count we just used, stop
-        // placing mixed pages and hand these photos to the ratio-by-ratio path,
-        // which can deal a different count. Without this the loop drains photos
-        // into mixed pages back to back: on 8×6 every 3-photo layout is
-        // mixed-ratio, so the album came out as 45 consecutive 3-photo pages —
-        // varied frames, one flat rhythm. Breaking here is safe: the photos are
-        // simply laid out by 3b instead, and after a couple of pages of another
-        // count the mixed layouts become eligible again.
-        if (fillable.every((x) => countRecentlyUsed(x.t.slotCount))) break;
-        const id =
-          mixedBag.draw((x) => okIds.has(x) && !countRecentlyUsed(countOf.get(x) ?? -1)) ??
-          mixedBag.draw((x) => okIds.has(x));
-        const chosen = fillable.find((x) => x.t.id === id)
-          ?? fillable[Math.floor(Math.random() * fillable.length)];
-        pushPage(chosen.t, chosen.fills);
-        const usedSet = new Set(chosen.fills);
-        remaining = remaining.filter((i) => !usedSet.has(i));
-        placed = true;
-      }
-    }
+      // Deal from the mixed bag, restricted to what's fillable right now AND
+      // (while on cooldown) to box-free layouts, so the caption cadence holds
+      // on mixed pages too.
+      const eligiblePool = boxAware(fillable.map((x) => x.t));
+      const okIds = new Set(eligiblePool.map((t) => t.id));
+      // Same rhythm rule as the ratio path: prefer a page whose PHOTO COUNT
+      // is not one of the last two, so mixed pages break the run instead of
+      // extending it. Falls back to any eligible layout when the pool has
+      // nothing of a different count.
+      const countOf = new Map(fillable.map((x) => [x.t.id, x.t.slotCount]));
+      // If EVERY mixed option would repeat a photo-count we just used, hand
+      // this page to the ratio path, which can deal a different count. Without
+      // this, mixed pages dealt back to back: on 8×6 every 3-photo layout is
+      // mixed-ratio, so the album came out as 45 consecutive 3-photo pages —
+      // varied frames, one flat rhythm. After a couple of pages of another
+      // count the mixed layouts become eligible again.
+      if (fillable.every((x) => countRecentlyUsed(x.t.slotCount))) return false;
+      const id =
+        mixedBag.draw((x) => okIds.has(x) && !countRecentlyUsed(countOf.get(x) ?? -1)) ??
+        mixedBag.draw((x) => okIds.has(x));
+      const chosen = fillable.find((x) => x.t.id === id)
+        ?? fillable[Math.floor(Math.random() * fillable.length)];
+      pushPage(chosen.t, chosen.fills);
+      removeAll(chosen.fills);
+      return true;
+    };
 
-    // ── 3b. Remaining photos → ratio by ratio, but INTERLEAVED. ──
+    // ── 3b. Otherwise a page of the earliest photo's shape. ──
     const byRatio: Partial<Record<PhotoRatio, number[]>> = {};
-    for (const i of remaining) {
-      const r = ratioOf[i] ?? dominantRatio;
-      (byRatio[r] ??= []).push(i);
-    }
+    for (const i of remaining) (byRatio[ratioIn(i)] ??= []).push(i);
 
-    // Precompute each ratio's queue + its multi/onePhoto/full candidate sets once,
-    // then ROUND-ROBIN: emit ONE page per non-empty ratio per pass and cycle until
-    // every queue is drained. Draining one ratio fully (the old behaviour) parked
-    // all same-ratio → same-thin-pool pages consecutively, which is exactly the
-    // visible "grouping". Interleaving pulls a DIFFERENT pool page-to-page so the
-    // thin-pool repeats are spread apart instead of clustered.
+    // Precompute each ratio's multi/onePhoto/full candidate sets once. Which
+    // ratio deals the next page is decided by the earliest unplaced photo, so
+    // a moment of mostly upright phone shots is mostly upright pages in a row:
+    // that is the day's order, and the hero sprinkle and the geometry guard
+    // keep those pages from reading as one flat stretch.
     interface RatioState {
-      key: string;
-      queue: number[];
+      key: PhotoRatio;
       ratioTemplates: PageTemplate[];
       onePhoto: PageTemplate[];
       /** Single-photo pool with crop-unsafe full-bleeds filtered out (falls
@@ -1583,7 +1620,6 @@ function layoutAlbum(
       carry: number;
     }
     const states: RatioState[] = (Object.keys(byRatio) as PhotoRatio[]).map((ratio) => {
-      const queue = byRatio[ratio]!;
       const ratioTemplates = templatesForRatio(ratio);
       const onePhoto = ratioTemplates.filter((t) => t.slotCount === 1);
       const safeSingles = onePhoto.filter(cropSafe);
@@ -1620,13 +1656,14 @@ function layoutAlbum(
       } else {
         multi = allMulti;
       }
-      return { key: ratio, queue, ratioTemplates, onePhoto, singles, multi, plan: own, planAt: 0, carry: 0 };
+      return { key: ratio, ratioTemplates, onePhoto, singles, multi, plan: own, planAt: 0, carry: 0 };
     });
 
     // Emit exactly one page from a ratio's queue (drains 1..slotCount photos).
     const emitOnePage = (st: RatioState) => {
-      const { key, queue, ratioTemplates, singles, multi } = st;
-      const fits = multi.filter((t) => t.slotCount <= queue.length);
+      const { key, ratioTemplates, singles, multi } = st;
+      const avail = availableOf(key);
+      const fits = multi.filter((t) => t.slotCount <= avail);
 
       // ── Planned fill ── deal this page at its planned count (plus any
       // carry the earlier pages could not place), choosing a layout that
@@ -1683,14 +1720,14 @@ function layoutAlbum(
         if (!template) {
           template = singles.length > 0
             ? dealSingle(key, singles, boxAware(singles))
-            : (ratioTemplates.filter((t) => t.slotCount <= queue.length)[0] ?? ratioTemplates[0]);
+            : (ratioTemplates.filter((t) => t.slotCount <= avail)[0] ?? ratioTemplates[0]);
         }
-        const take = Math.min(template.slots.length, queue.length);
+        const take = Math.min(template.slots.length, avail);
         // What this page did not take is owed to the next one. (Never negative
         // now — no page takes more than it wants — so the album can only run
         // out of plan, never out of photos: no blank pages at the end.)
         if (st.plan) st.carry = want - take; else planCarry = want - take;
-        pushPage(template, queue.splice(0, take));
+        pushPage(template, takeOf(key, take));
         return;
       }
 
@@ -1708,7 +1745,7 @@ function layoutAlbum(
         ((photosPerPage == null && !fillMode) || multi.length < 3);
       if (heroAllowed && fits.length > 0 && nextHeroIn <= 0) {
         const hero = dealSingle(key, singles, heroPool);
-        pushPage(hero, queue.splice(0, 1));
+        pushPage(hero, takeOf(key, 1));
         // ADAPTIVE cadence (set AFTER pushPage — its natural-single reset would
         // otherwise max() this away): a THIN multi pool (2 layouts) can only
         // alternate A/B between heroes, so heroes must come often (every 2–4
@@ -1775,27 +1812,24 @@ function layoutAlbum(
         // chosen to not repeat the previous page's look.
         template = dealSingle(key, singles, boxAware(singles));
       } else {
-        const rest = ratioTemplates.filter((t) => t.slotCount <= queue.length);
+        const rest = ratioTemplates.filter((t) => t.slotCount <= avail);
         const pool = rest.length ? rest : ratioTemplates;
         template = pool[Math.floor(Math.random() * pool.length)];
       }
-      const take = Math.min(template.slots.length, queue.length);
-      pushPage(template, queue.splice(0, take));
+      const take = Math.min(template.slots.length, avail);
+      pushPage(template, takeOf(key, take));
     };
 
-    // Round-robin until every queue is empty — never exits early, so no photo is
-    // ever left unplaced (blanks regression guard). The per-pass order is
-    // SHUFFLED: a fixed order makes two ratios strictly alternate, which is
-    // itself a visible macro-pattern.
-    let anyLeft = states.some((s) => s.queue.length > 0);
-    while (anyLeft) {
-      anyLeft = false;
-      for (const st of shuffleArray(states)) {
-        if (st.queue.length > 0) {
-          emitOnePage(st);
-          if (st.queue.length > 0) anyLeft = true;
-        }
-      }
+    // Page after page until the moment is placed — never exits early, so no
+    // photo is ever left unplaced (blanks regression guard). Each page starts
+    // with the earliest photo left: a mixed page holding it when one fits,
+    // else a page of its shape (every emit takes at least that photo).
+    const stateOf = new Map(states.map((s) => [s.key, s]));
+    while (remaining.length > 0) {
+      if (tryMixedPage()) continue;
+      const before = remaining.length;
+      emitOnePage(stateOf.get(ratioIn(remaining[0]))!);
+      if (remaining.length === before) throw new Error('generateAlbum: a page took no photo');
     }
   }
 

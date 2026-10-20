@@ -51,7 +51,7 @@ import { createLimiter } from '../../lib/limit';
 import { templateTracker, shuffleArray } from './varietyTracker';
 import { captionBoxSize, captionFits } from './textFit';
 import { TEXT_LINE_HEIGHT } from './wordArt';
-import { readCaptureTime } from './exif';
+import { readPhotoTime } from './exif';
 import { looksHeic, toAlbumPhoto, HEIC_CONVERTING_PREVIEW, HEIC_READY_SHOWN_MS } from '../../lib/heicPhoto';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
@@ -1238,7 +1238,7 @@ export function useBuilderState(): BuilderActions {
         // Size, pixels, capture time: how another device knows this photo again.
         ...(p.size ? { size: p.size } : {}),
         ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
-        ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
+        ...(p.capturedAt ? { capturedAt: p.capturedAt, ...(p.timeSource ? { timeSource: p.timeSource } : {}) } : {}),
         // No cloudUrl, no storagePath — all local-only now.
         ...(p.check ? { check: p.check } : {}),
         ...(p.kept ? { kept: true } : {}),
@@ -1604,7 +1604,7 @@ export function useBuilderState(): BuilderActions {
                   size: stored?.size ?? p.size ?? 0,
                   width: stored?.width ?? p.width ?? 0,
                   height: stored?.height ?? p.height ?? 0,
-                  ...(p.capturedAt != null ? { capturedAt: p.capturedAt } : {}),
+                  ...(p.capturedAt != null ? { capturedAt: p.capturedAt, ...(p.timeSource ? { timeSource: p.timeSource } : {}) } : {}),
                   // Megy's photo check + the customer's keep / leave-out choice.
                   ...(p.check ? { check: p.check } : {}),
                   ...(p.kept ? { kept: true } : {}),
@@ -1822,13 +1822,13 @@ export function useBuilderState(): BuilderActions {
           }
           const stored = await idbPhotos.store(usable, id);
           const dims = stored ?? await getImageDimensions(usable);
-          const capturedAt = await readCaptureTime(file); // the original: a JPEG copy has no EXIF
+          const time = await readPhotoTime(file); // the original: a JPEG copy has no EXIF
           if (dims.width > 0 && dims.height > 0) measuredRef.current.set(id, { width: dims.width, height: dims.height });
           const note = copyQuality(recorded.get(id) ?? { width: 0, height: 0 }, dims);
           const shown = usable !== file ? { previewUrl: URL.createObjectURL(usable), type: usable.type } : {};
           uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === id ? { ...p, ...shown } : p));
           setUploadedPhotos((prev) => prev.map((p) => (p.id === id
-            ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(note ? { copyNote: note } : {}) }
+            ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(time.capturedAt != null ? time : {}), ...(note ? { copyNote: note } : {}) }
             : p)));
           return 'ok' as const;
         });
@@ -1887,7 +1887,7 @@ export function useBuilderState(): BuilderActions {
         // A failed write (e.g. a full disk) returns null — still measure, or the
         // photo stays 0×0 and gets classified by guesswork.
         const dims = stored ?? await getImageDimensions(usable);
-        const capturedAt = await readCaptureTime(file); // the original: a JPEG copy has no EXIF
+        const time = await readPhotoTime(file); // the original: a JPEG copy has no EXIF
         // Record the size SYNCHRONOUSLY here — see measuredRef.
         if (dims.width > 0 && dims.height > 0) {
           measuredRef.current.set(photo.id, { width: dims.width, height: dims.height });
@@ -1900,7 +1900,7 @@ export function useBuilderState(): BuilderActions {
         setUploadedPhotos((prev) =>
           prev.map((p) =>
             p.id === photo.id
-              ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), capturedAt }
+              ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...time }
               : p,
           ),
         );
@@ -3713,7 +3713,7 @@ export function useBuilderState(): BuilderActions {
                 size: stored?.size ?? p.size ?? 0,
                 width: stored?.width ?? p.width ?? 0,
                 height: stored?.height ?? p.height ?? 0,
-                ...(p.capturedAt != null ? { capturedAt: p.capturedAt } : {}),
+                ...(p.capturedAt != null ? { capturedAt: p.capturedAt, ...(p.timeSource ? { timeSource: p.timeSource } : {}) } : {}),
                 // Megy's photo check + the customer's keep / leave-out choice.
                 ...(p.check ? { check: p.check } : {}),
                 ...(p.kept ? { kept: true } : {}),

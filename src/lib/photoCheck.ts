@@ -142,6 +142,9 @@ export interface CheckablePhoto {
   width: number;
   height: number;
   capturedAt?: number | null;
+  /** 'file' = capturedAt is the file's modified date (builder/exif.ts), not
+   *  when the shot was taken: the repeat rule treats that as no time. */
+  timeSource?: 'exif' | 'file';
   check?: PhotoCheck;
   /** The customer said keep it: never suggested again. */
   kept?: boolean;
@@ -166,11 +169,18 @@ export const photoOrientation = (p: { width: number; height: number }) =>
   p.width === 0 || p.height === 0 ? 'unknown' : p.width > p.height * 1.05 ? 'land' : p.height > p.width * 1.05 ? 'port' : 'sq';
 const orientationOf = photoOrientation;
 
+/** When the shot was taken, for the repeat rule: a file date (a Messenger
+ *  save) is no capture time — a batch saved within seconds would pass the
+ *  looser timed rule, and one saved later would never pair with its original. */
+const shotAt = (p: CheckablePhoto): number | null =>
+  typeof p.capturedAt === 'number' && p.timeSource !== 'file' ? p.capturedAt : null;
+
 /** Are these two shots of the same moment (the repeat rule, pairwise)? */
 export function areRepeats(a: CheckablePhoto, b: CheckablePhoto): boolean {
   if (!a.check?.hash || !b.check?.hash || orientationOf(a) !== orientationOf(b)) return false;
-  const timed = typeof a.capturedAt === 'number' && typeof b.capturedAt === 'number';
-  if (timed && Math.abs((a.capturedAt as number) - (b.capturedAt as number)) > REPEAT_WINDOW_MS) return false;
+  const ta = shotAt(a), tb = shotAt(b);
+  const timed = ta !== null && tb !== null;
+  if (timed && Math.abs(ta - tb) > REPEAT_WINDOW_MS) return false;
   return hamming(a.check.hash, b.check.hash) <= (timed ? REPEAT_BITS : REPEAT_BITS_NO_TIME);
 }
 
