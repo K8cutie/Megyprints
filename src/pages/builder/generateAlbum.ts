@@ -1615,6 +1615,10 @@ function layoutAlbum(
       const ratioTemplates = templatesForRatio(ratio);
       const onePhoto = ratioTemplates.filter((t) => t.slotCount === 1);
       const safeSingles = onePhoto.filter(cropSafe);
+      // This fallback is how every portrait on 11.5×8 went over the whole
+      // landscape page: its only singles were full pages. So every size must
+      // offer each photo shape a single that keeps that shape (pageTemplates
+      // OFF_SHAPE_SINGLES; wholePageShape.spec holds every size to it).
       const singles = safeSingles.length > 0 ? safeSingles : onePhoto;
       const allMulti = ratioTemplates.filter((t) => t.slotCount > 1);
       // Fill mode at 1/page → single-photo full-page templates (multi stays
