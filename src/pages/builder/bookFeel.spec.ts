@@ -6,7 +6,7 @@ import { BOOK } from './bookFeel';
    cover lip scales with the spread, and the gutter is centred on the spine. */
 describe('preview book layers', () => {
   it('overlays never take a tap', () => {
-    for (const st of [BOOK.vignette(1), BOOK.grain, BOOK.gutter, BOOK.edgeShade('right'), BOOK.edges(1000, 625, 1)]) {
+    for (const st of [BOOK.vignette(1), BOOK.grain, BOOK.gutter, BOOK.edges(1000, 625, 1)]) {
       expect(st.pointerEvents).toBe('none');
     }
   });

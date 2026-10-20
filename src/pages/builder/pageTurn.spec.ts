@@ -11,44 +11,44 @@ const at = (view: 'spread' | 'page', index: number, onCover = false): PreviewPos
 
 describe('the open book (desktop, a phone turned sideways)', () => {
   it('Next: the right page lifts and lands on the left, showing the next left page; the old left page stays until it lands', () => {
-    const p = at('spread', 2); // pages 3–4
+    const p = at('spread', 3); // pages 4–5
     const plan = planTurn(p, turnForward(p)!)!;
     expect(plan.layout).toBe('spread');
-    expect(plan.leaf).toEqual({ front: { kind: 'page', index: 3 }, back: { kind: 'page', index: 4 }, from: 0, to: -180 });
-    expect(plan.patch).toEqual({ side: 'left', face: { kind: 'page', index: 2 } });
+    expect(plan.leaf).toEqual({ front: { kind: 'page', index: 4 }, back: { kind: 'page', index: 5 }, from: 0, to: -180 });
+    expect(plan.patch).toEqual({ side: 'left', face: { kind: 'page', index: 3 } });
     expect(plan.cast).toBe('right');
   });
 
   it('Previous: the left page lifts and lands on the right, showing the previous right page', () => {
-    const p = at('spread', 4); // pages 5–6
+    const p = at('spread', 5); // pages 6–7
     const plan = planTurn(p, turnBack(p)!)!;
-    expect(plan.leaf).toEqual({ front: { kind: 'page', index: 3 }, back: { kind: 'page', index: 4 }, from: -180, to: 0 });
-    expect(plan.patch).toEqual({ side: 'right', face: { kind: 'page', index: 5 } });
+    expect(plan.leaf).toEqual({ front: { kind: 'page', index: 4 }, back: { kind: 'page', index: 5 }, from: -180, to: 0 });
+    expect(plan.patch).toEqual({ side: 'right', face: { kind: 'page', index: 6 } });
     expect(plan.cast).toBe('left');
   });
 
-  it('opening the cover swings it to the left over an empty table, and the book slides from closed-in-the-middle to open', () => {
+  it('opening the cover swings it to the left, its inside up across from page 1, and the book slides from closed-in-the-middle to open', () => {
     const p = at('spread', 0, true);
     const plan = planTurn(p, turnForward(p)!)!;
-    expect(plan).toMatchObject({ layout: 'spread', hideLeft: true, shift: [-0.5, 0], leaf: { front: { kind: 'cover' }, back: { kind: 'page', index: 0 }, from: 0, to: -180 } });
+    expect(plan).toMatchObject({ layout: 'spread', hideLeft: true, shift: [-0.5, 0], leaf: { front: { kind: 'cover' }, back: { kind: 'inside', cover: 'front' }, from: 0, to: -180 } });
   });
 
-  it('closing it swings the cover back over pages 1–2 and slides the closed book to the middle', () => {
+  it('closing it swings the cover back over page 1 and slides the closed book to the middle', () => {
     const p = at('spread', 0);
     const plan = planTurn(p, turnBack(p)!)!;
-    expect(plan).toMatchObject({ layout: 'closed', shift: [0.5, 0], leaf: { front: { kind: 'cover' }, back: { kind: 'page', index: 0 }, from: -180, to: 0 }, patch: { side: 'right', face: { kind: 'page', index: 1 } } });
+    expect(plan).toMatchObject({ layout: 'closed', shift: [0.5, 0], leaf: { front: { kind: 'cover' }, back: { kind: 'inside', cover: 'front' }, from: -180, to: 0 }, patch: { side: 'right', face: { kind: 'page', index: 0 } } });
   });
 
-  it('a last page on its own: the empty right side turns as a blank leaf', () => {
-    const odd: PreviewPosition = { view: 'spread', index: 38, total: 41, onCover: false, hasCover: true };
-    const plan = planTurn(odd, turnForward(odd)!)!;
-    expect(plan.leaf.back).toEqual({ kind: 'page', index: 40 });
-    const back = planTurn({ ...odd, index: 40 }, turnBack({ ...odd, index: 40 })!)!;
-    expect(back.patch).toEqual({ side: 'right', face: { kind: 'blank' } });
+  it('the last page on its own (an even album): across from it is the inside of the back cover', () => {
+    const p = at('spread', 37); // pages 38–39
+    const plan = planTurn(p, turnForward(p)!)!;
+    expect(plan.leaf).toMatchObject({ front: { kind: 'page', index: 38 }, back: { kind: 'page', index: 39 } });
+    const back = planTurn(at('spread', 39), turnBack(at('spread', 39))!)!;
+    expect(back.patch).toEqual({ side: 'right', face: { kind: 'inside', cover: 'back' } });
   });
 
   it('nothing turns within the same open book', () => {
-    expect(planTurn(at('spread', 2), { cover: false, index: 3 })).toBeNull();
+    expect(planTurn(at('spread', 1), { cover: false, index: 2 })).toBeNull();
   });
 });
 
