@@ -12,6 +12,7 @@ import { PAGE_TEMPLATES, TEMPLATE_CATEGORIES, hasQrSlot, photoSlotCount } from '
 import PropertiesPanel from './PropertiesPanel';
 import { getPersistedSidebarTab, setPersistedSidebarTab } from './sidebarTabStore';
 import { TEXTURE_NAMES, TEXTURE_COLORS, DEFAULT_TEXTURE_COLORS, textureDataUri, TEXTURE_TILE_PX } from './textures';
+import { PAGE_COLORS } from './pageColors';
 
 /* ══════════════════════════════════════════════════════════════════════════
    UnifiedPanel — Vertical icon sidebar on the LEFT with collapsible content
@@ -387,8 +388,8 @@ const UnifiedPanel = memo(function UnifiedPanel(props: UnifiedPanelProps) {
                         <div>
                           <p className="text-[10px] text-light mb-1.5 uppercase tracking-wider font-medium">Color</p>
                           <div className="flex flex-wrap gap-1.5">
-                            {['#FFFBF7', '#F8F3ED', '#E8F0E8', '#FFF3D8', '#E0E0E8', '#F0F0F0', '#E8D8B8', '#2D2D2D', '#FFFFFF', '#FDE8E4', '#E8A598', '#B8A9D9'].map((c) => (
-                              <button key={c} onClick={() => onUpdateBackground?.({ ...background, type: 'solid', solid: c })}
+                            {PAGE_COLORS.map(({ name, hex: c }) => (
+                              <button key={c} title={name} onClick={() => onUpdateBackground?.({ ...background, type: 'solid', solid: c })}
                                 className="w-7 h-7 rounded-full border border-line transition-transform hover:scale-110"
                                 style={{ backgroundColor: c, boxShadow: background.solid === c ? '0 0 0 2px #B85C38' : 'none' }} />
                             ))}

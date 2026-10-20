@@ -19,6 +19,7 @@ import type {
   TextStyle,
 } from './types';
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
+import { recolorPage } from './pageColors';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
@@ -865,6 +866,12 @@ export interface BuilderActions {
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
+  /** The page in one of the page colours (pageColors.ts): a solid background,
+   *  with words that wouldn't show on it switched to an ink that does. Under
+   *  the cover scope it colours the cover. */
+  setPageColor: (hex: string) => void;
+  /** Every interior page in that colour (the cover keeps its own). */
+  applyPageColorToAllPages: (hex: string) => void;
   /** COVER: put a photo the customer picked on the cover. The file is kept in
    *  the device's photo store, so the cover still has it after the app is
    *  closed (coverPhoto). Resolves once it is on the cover. */
@@ -3297,6 +3304,16 @@ export function useBuilderState(): BuilderActions {
     updateCurrentPage((page) => ({ ...page, background: bg }));
   }, [updateCurrentPage]);
 
+  const setPageColor = useCallback((hex: string) => {
+    pushSnapshot();
+    updateCurrentPage((page) => recolorPage(page, hex));
+  }, [updateCurrentPage]);
+
+  const applyPageColorToAllPages = useCallback((hex: string) => {
+    pushSnapshot();
+    setAlbumPages((prev) => prev.map((p) => recolorPage(p, hex)));
+  }, []);
+
   const setCoverPhoto = useCallback(async (picked: File) => {
     // An iPhone photo (HEIC) becomes a JPEG first (Chrome can't show a HEIC);
     // one that can't be opened leaves the cover as it is.
@@ -3903,6 +3920,8 @@ export function useBuilderState(): BuilderActions {
     finishBoxesWithQuotes,
     requoteForOccasion,
     setPageBackground,
+    setPageColor,
+    applyPageColorToAllPages,
     setCoverPhoto,
     setBackgroundCrop,
     setBoxTextOffset,

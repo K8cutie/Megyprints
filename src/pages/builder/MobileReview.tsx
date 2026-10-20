@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
-import { LayoutGrid, Loader2, X, ImagePlus, Wand2 } from 'lucide-react';
+import { LayoutGrid, Loader2, X, ImagePlus, Wand2, Palette } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -25,6 +25,8 @@ import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, edgeGuardMessage, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
 import PageTurnBar from './PageTurnBar';
+import { PageColorSheet } from './PageColorPicker';
+import { pageColorOf } from './pageColors';
 import VideoMemoryButton from './VideoMemoryButton';
 
 /** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
@@ -37,6 +39,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
   const page = pages[idx];
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
+  const [colorSheet, setColorSheet] = useState(false); // the page-colour sheet (pageColors.ts)
 
   /* ── STUDIO on the phone (album-wide on the phone) ── */
   const studio = true; // owner, 2026-09-30: no Simple/Studio switch — every Studio tool is always on
@@ -277,12 +280,16 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
           <p className="mb-2 text-center text-xs font-semibold text-success">{uploadMsg}</p>
         )}
         {/* Tools — quiet, so the one loud button on the screen is the way on. */}
-        <div className="grid grid-cols-2 gap-2" data-testid="studio-tray">
+        <div className="grid grid-cols-3 gap-2" data-testid="studio-tray">
           <button onClick={() => uploadRef.current?.click()} className={TOOL}>
             <ImagePlus size={18} /> Add photos
           </button>
           <button onClick={() => actions.setLayoutPickerOpen(true)} className={TOOL}>
             <LayoutGrid size={18} /> Change layout
+          </button>
+          {/* Owner, 2026-10-20: the page colours (pageColors.ts) on every page. */}
+          <button onClick={() => setColorSheet(true)} className={TOOL} data-testid="page-color-tool">
+            <Palette size={18} /> Page colour
           </button>
         </div>
         {/* Living-memory QR — offered on a single full photo page; turns it into
@@ -294,6 +301,18 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
           onPrev={goPrev} onNext={goNext} onDone={handleDone}
           onBackToPreview={actions.previewSeen && onBackToPreview ? handleBack : undefined} />
       </div>
+
+      {/* The page-colour sheet: this page, or every page. */}
+      {colorSheet && page && (
+        <PageColorSheet background={page.background}
+          onPick={(hex) => actions.setPageColor(hex)}
+          onPickAll={(hex) => {
+            actions.applyPageColorToAllPages(hex);
+            setColorSheet(false);
+            sayGuard(`Every page is ${pageColorOf({ type: 'solid', solid: hex })?.name.toLowerCase() ?? 'that colour'} now.`);
+          }}
+          onClose={() => setColorSheet(false)} />
+      )}
 
       {/* STUDIO: mask / look sheets, the guardrail line */}
       {studio && studioSheet && studioSlot != null && page && (
