@@ -1106,7 +1106,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {studio && (
             <StudioStrip page={actions.currentPage} selectedSlotIndex={selectedSlotIndex}
               onMask={(i, m) => actions.setSlotMask(i, m)} onLook={(i, l) => actions.setSlotLook(i, l)}
-              onGuard={sayGuard} />
+              onGuard={sayGuard}
+              onPageColor={(hex) => actions.setPageColor(hex)}
+              onPageColorAll={(hex) => { actions.applyPageColorToAllPages(hex); sayGuard('Every page is that colour now.'); }} />
           )}
 
           {/* Canvas */}

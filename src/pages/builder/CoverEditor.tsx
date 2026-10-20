@@ -24,6 +24,7 @@ import { getTemplateById } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
 import { deriveSpine, measureSpineText, SPINE_DARK_INK, type SpineInfo } from './coverLayout';
 import TextColorPicker from './TextColorPicker';
+import PageColorPicker from './PageColorPicker';
 import { DEFAULT_TITLE_FONT } from './fonts';
 import { FontSelect } from './FontList';
 import { DEFAULT_COVER, type AlbumPage } from './types';
@@ -285,6 +286,13 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     <div className="flex-1 overflow-auto min-h-0 px-4 pt-3 pb-4">
       {activeTab === 'background' && (
         <div className="space-y-3">
+          {/* Owner, 2026-10-20: a cover isn't only a photo — the page colours
+              (pageColors.ts). Picking one replaces a photo; a title that
+              wouldn't show on a dark colour switches to an ink that does. */}
+          <div data-testid="cover-colors">
+            <span className="block text-[11px] font-medium text-stone mb-1.5">Colour</span>
+            <PageColorPicker background={page.background} onPick={(hex) => b.setPageColor(hex)} onPickAll={(hex) => b.applyPageColorToAllPages(hex)} />
+          </div>
           {/* Crop controls — only meaningful once a photo is on the cover. */}
           {bgIsImage && (
             <div className="rounded-xl border border-line bg-white px-3 py-2.5">
@@ -324,7 +332,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               </button>
             )
           ) : (
-            <p className="text-center text-[11px] text-[#B9A992]">Tap Background to choose a photo for your cover.</p>
+            <p className="text-center text-[11px] text-[#B9A992]">Pick a colour above, or tap Background to choose a photo for your cover.</p>
           )}
         </div>
       )}
