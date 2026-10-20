@@ -126,6 +126,6 @@ describe('the JPEG the album keeps', () => {
     expect(src).not.toMatch(/^import .*heic-to/m);
     // …and the offline cache doesn't download its ~3 MB for every visitor.
     const vite = readFileSync(resolve(__dirname, '../../vite.config.ts'), 'utf8');
-    expect(vite).toMatch(/globIgnores: \['\*\*\/heic-to-\*\.js'\]/);
+    expect(vite).toMatch(/globIgnores:\s*\[[^\]]*'\*\*\/heic-to-\*\.js'/);
   });
 });

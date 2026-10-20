@@ -3,11 +3,12 @@
    render when canSeeFinancials (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
-import { Loader2, Check, Download, AlertTriangle, Receipt } from 'lucide-react';
+import { Loader2, Check, Download, AlertTriangle, Receipt, Printer } from 'lucide-react';
 import {
   type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, printFilesOf,
 } from '../../lib/adminOrders';
 import { supabase } from '../../lib/supabase';
+import { downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet } from '../../lib/pressSheetFiles';
 
 export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds }: {
   orders: AdminOrder[];
@@ -22,8 +23,38 @@ export default function OrdersPanel({ orders, onChanged, canSeeFinancials, print
   }
   return (
     <div className="space-y-3">
+      <PressHowTo />
       {orders.map((o) => <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReadyIds.has(printFilesOf(o))} />)}
     </div>
+  );
+}
+
+/** How to print on the shop's 12.5 × 19 sheets, and the one-sheet printer check. */
+function PressHowTo() {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const testSheet = async () => {
+    setBusy(true); setErr(null);
+    try { await downloadPressTestSheet(); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not make the test sheet.'); }
+    setBusy(false);
+  };
+  return (
+    <details className="rounded-xl border border-line bg-white p-4" data-testid="press-how-to">
+      <summary className="cursor-pointer text-sm font-semibold text-dark">How to print on 12.5 × 19 sheets</summary>
+      <ol className="mt-3 space-y-1.5 text-sm text-medium list-decimal pl-5">
+        <li>Print the test sheet once first. It checks the size, the edge and the flip.</li>
+        <li><b>Print sheets</b>: print both sides, flip on the long edge, at actual size (100%). Don't use "fit to page".</li>
+        <li>Keep sheet 1 on top, front side up. Cut the whole stack on the marks.</li>
+        <li>Each spot on the sheet makes a pile (the sheet says which). Put pile 1 on top of pile 2, pile 2 on top of pile 3, and so on. The pages are now in order.</li>
+        <li>The first side is blank on purpose: it faces the inside of the front cover. When the album has an even number of pages, the last side is blank too.</li>
+        <li><b>Cover sheet</b>: print one side only. Cut on the marks; the dashed marks are the spine edges.</li>
+      </ol>
+      <button onClick={testSheet} disabled={busy}
+        className="mt-3 h-9 px-4 rounded-lg bg-paper text-sm font-medium text-dark flex items-center gap-2 disabled:opacity-50">
+        {busy ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Download printer test sheet
+      </button>
+      {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
+    </details>
   );
 }
 
@@ -33,6 +64,14 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
   const [saving, setSaving] = useState(false);
   const [price, setPrice] = useState(o.amount != null ? String(o.amount) : '');
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  // The print files laid out on the shop's 12.5 × 19 sheet (pressSheetFiles).
+  const pressFile = async (make: () => Promise<string>) => {
+    setSaving(true); setErr(null); setNote(null);
+    try { setNote(await make()); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not make the sheet file.'); }
+    setSaving(false);
+  };
 
   const run = async (fn: () => Promise<string | null>) => {
     setSaving(true); setErr(null);
@@ -165,6 +204,20 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
             </button>
           )}
           {paid && (
+            <button onClick={() => pressFile(() => downloadAlbumSheets(o))} disabled={saving} data-testid="order-print-sheets"
+              title="The album pages laid out on 12.5 × 19 sheets, both sides, with cut marks."
+              className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
+              <Printer size={13} /> Print sheets
+            </button>
+          )}
+          {paid && (
+            <button onClick={() => pressFile(() => downloadCoverSheet(o))} disabled={saving} data-testid="order-cover-sheet"
+              title="The cover on one 12.5 × 19 sheet, with cut and spine marks."
+              className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
+              <Printer size={13} /> Cover sheet
+            </button>
+          )}
+          {paid && (
             <button onClick={downloadPrintPdf} disabled={saving}
               className="h-8 px-3 rounded-lg bg-blush text-xs font-medium text-[#C98A5E] flex items-center gap-1 disabled:opacity-50">
               <Download size={13} /> Print PDF
@@ -184,6 +237,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
         </div>
       </div>
       {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
+      {note && !err && <p className="text-xs text-success mt-2" data-testid="order-press-note">✓ {note}</p>}
     </div>
   );
 }
