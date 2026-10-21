@@ -23,6 +23,7 @@ import { coverWrapGeometry, insetRect } from './coverGeometry';
 import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedText } from './coverLayout';
 import { withBleed, bleedPx, drawMirroredEdges } from './printBleed';
 import { loadFontFaces } from './fonts';
+import { rgbaToPng } from '../../lib/rgbaPng';
 
 /** Print resolution in DPI (dots per inch) */
 export const PRINT_DPI = 300;
@@ -52,6 +53,136 @@ export function getPrintDimensions(albumSize: AlbumSizePreset) {
   return { width: config.width, height: config.height };
 }
 
+/* ── SHARP WORDS (owner, 2026-10-21: "the cover page and the text — its print
+   out looks low resolution") ──
+   A page goes in the print file as one JPEG, shrunk to fit the upload cap
+   (MAX_SIDE below): fine for photos, but the words came out soft — drawn at
+   300 DPI, shrunk (to ~218 DPI on an 8×8), then JPEG-smudged round every
+   letter. So the words go in on their own: the page is drawn twice, with and
+   without its words, and every pixel the words change goes over the picture
+   as a see-through, lossless 300 DPI picture (WordPatch). Only pixels that
+   differ are kept, so whatever covers the words on the page (a photo or QR in
+   a box) still covers them on paper. The cover does the same for its title,
+   spine and back. */
+
+/** A page's (or the cover's) words as a see-through picture laid over its
+ *  picture. x/y/w/h are fractions of the picture, its bleed included. */
+export interface WordPatch { png: Uint8Array; x: number; y: number; w: number; h: number }
+
+/** What goes in the PDF for one page or the cover: the picture, then its words on top. */
+export interface PrintLayers { image: Blob; words: WordPatch[] }
+
+/** A WordPatch in canvas pixels, before it is placed. */
+interface PxPatch { png: Uint8Array; x: number; y: number; w: number; h: number }
+
+interface PixelArea { x: number; y: number; w: number; h: number }
+interface PixelSource { getImageData(x: number, y: number, w: number, h: number): ImageData }
+
+/** Rows this close together make one patch (0.15 in at 300 DPI): a caption's
+ *  lines go in one picture, a title and a caption far apart in two. */
+const PATCH_GAP_PX = 45;
+const DIFF_STRIP_ROWS = 256;
+
+/** The pixels of `area` where `withWords` differs from `without`, as patches:
+ *  opaque where they differ (the page's true colour there), see-through
+ *  elsewhere — with the page's colour kept under the see-through pixels, so a
+ *  printer that smooths the picture blends into the right colour (rgbaPng). */
+export function wordPatches(withWords: PixelSource, without: PixelSource, area: PixelArea): PxPatch[] {
+  const rowMin = new Int32Array(area.h).fill(-1);
+  const rowMax = new Int32Array(area.h).fill(-1);
+  // A strip at a time: two whole 8×8 pages of pixels would be ~50 MB on a phone.
+  for (let y0 = 0; y0 < area.h; y0 += DIFF_STRIP_ROWS) {
+    const h = Math.min(DIFF_STRIP_ROWS, area.h - y0);
+    const a = new Uint32Array(withWords.getImageData(area.x, area.y + y0, area.w, h).data.buffer);
+    const b = new Uint32Array(without.getImageData(area.x, area.y + y0, area.w, h).data.buffer);
+    for (let r = 0; r < h; r++) {
+      const base = r * area.w;
+      let lo = -1;
+      let hi = -1;
+      for (let x = 0; x < area.w; x++) {
+        if (a[base + x] !== b[base + x]) { if (lo < 0) lo = x; hi = x; }
+      }
+      rowMin[y0 + r] = lo;
+      rowMax[y0 + r] = hi;
+    }
+  }
+  const patches: PxPatch[] = [];
+  let y = 0;
+  while (y < area.h) {
+    if (rowMin[y] < 0) { y++; continue; }
+    let end = y;
+    let x0 = rowMin[y];
+    let x1 = rowMax[y];
+    for (let k = y + 1; k < area.h && k - end <= PATCH_GAP_PX; k++) {
+      if (rowMin[k] < 0) continue;
+      end = k;
+      x0 = Math.min(x0, rowMin[k]);
+      x1 = Math.max(x1, rowMax[k]);
+    }
+    const w = x1 - x0 + 1;
+    const h = end - y + 1;
+    const a = withWords.getImageData(area.x + x0, area.y + y, w, h).data;
+    const b = new Uint32Array(without.getImageData(area.x + x0, area.y + y, w, h).data.buffer);
+    const a32 = new Uint32Array(a.buffer, a.byteOffset, a.length / 4);
+    const on = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) on[i] = a32[i] !== b[i] ? 1 : 0;
+    // The page's colour is only needed right next to a word (smoothing reaches a
+    // pixel or two); further out a see-through pixel is left blank, so a title
+    // over a photo doesn't carry the photo along (it doesn't pack small).
+    const near = ringAround(on, w, h, 2);
+    const rgba = new Uint8Array(a.length);
+    for (let i = 0; i < b.length; i++) {
+      if (!near[i]) continue;
+      rgba[i * 4] = a[i * 4]; rgba[i * 4 + 1] = a[i * 4 + 1]; rgba[i * 4 + 2] = a[i * 4 + 2];
+      rgba[i * 4 + 3] = on[i] ? 255 : 0;
+    }
+    patches.push({ png: rgbaToPng(rgba, w, h), x: area.x + x0, y: area.y + y, w, h });
+    y = end + 1;
+  }
+  return patches;
+}
+
+/** `on` grown by `r` pixels every way (a square reach): 1 where a set pixel is that close. */
+function ringAround(on: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const across = new Uint8Array(on.length);
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      if (!on[row + x]) continue;
+      for (let k = Math.max(0, x - r); k <= Math.min(w - 1, x + r); k++) across[row + k] = 1;
+    }
+  }
+  const out = new Uint8Array(on.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!across[y * w + x]) continue;
+      for (let k = Math.max(0, y - r); k <= Math.min(h - 1, y + r); k++) out[k * w + x] = 1;
+    }
+  }
+  return out;
+}
+
+/** A page's words matter to print: any text it holds. */
+function pageHasWords(page: AlbumPage): boolean {
+  return (page.textElements ?? []).some((t) => !!t.text?.trim())
+    || (page.slotTexts ?? []).some((st) => !!st?.text?.trim());
+}
+
+/** The page at print size (W × H, no bleed) WITHOUT its words, and its words
+ *  as patches in that canvas's pixels. */
+async function renderPageLayers(
+  page: AlbumPage, photos: UploadedPhoto[], albumSize: AlbumSizePreset, pageIndex: number, coverMode: boolean,
+): Promise<{ canvas: HTMLCanvasElement; words: PxPatch[] }> {
+  if (!pageHasWords(page)) return { canvas: await drawPrintPage(page, photos, albumSize, pageIndex, coverMode, true), words: [] };
+  return withImageMemo(async () => {
+    const bare = await drawPrintPage(page, photos, albumSize, pageIndex, coverMode, false);
+    const full = await drawPrintPage(page, photos, albumSize, pageIndex, coverMode, true);
+    const words = wordPatches(full.getContext('2d')!, bare.getContext('2d')!, { x: 0, y: 0, w: full.width, h: full.height });
+    full.width = 0; full.height = 0; // let the second page go now
+    return { canvas: bare, words };
+  });
+}
+
 /** Generate a print-ready page image at 300 DPI.
  *  Uses the Fabric.js canvas from the design phase, scaled up.
  *  Falls back to manual canvas compositing if Fabric is not available. */
@@ -64,9 +195,11 @@ export async function renderPageForPrint(
     pageIndex?: number;
     /** Optional: Fabric.js canvas instance — if provided, uses it for high-quality export */
     fabricCanvas?: any;
+    /** Words drawn into the page picture (no WordPatch): the smaller file. */
+    bakeWords?: boolean;
   },
-): Promise<Blob> {
-  const { page, photos, albumSize, pageIndex = 0, fabricCanvas } = options;
+): Promise<PrintLayers> {
+  const { page, photos, albumSize, pageIndex = 0, fabricCanvas, bakeWords = false } = options;
 
   // ── Method 1: Fabric.js canvas export (highest quality) ──
   if (fabricCanvas) {
@@ -76,23 +209,69 @@ export async function renderPageForPrint(
       quality: 1,
       multiplier,
     });
-    return dataURLToBlob(dataUrl);
+    return { image: dataURLToBlob(dataUrl), words: [] };
   }
 
   // ── Method 2: Manual canvas compositing (fallback) ──
-  return renderPageManually(page, photos, albumSize, pageIndex);
+  return renderPageManually(page, photos, albumSize, pageIndex, bakeWords);
 }
 
-/** Manual canvas compositing — loads original photos at full resolution
- *  and composites them onto a high-res canvas. */
+/** An interior page for the print file: the picture with its bleed, shrunk to
+ *  the upload cap and JPEG'd, and its words on top at full 300 DPI — or, with
+ *  `bakeWords`, drawn into the picture (the file as it was before sharp words). */
 async function renderPageManually(
   page: AlbumPage,
   photos: UploadedPhoto[],
   albumSize: AlbumSizePreset,
   pageIndex: number,
-  opts: { coverMode?: boolean; maxSide?: number } = {},
-): Promise<Blob> {
-  const coverMode = opts.coverMode ?? false;
+  bakeWords = false,
+): Promise<PrintLayers> {
+  const { canvas, words } = bakeWords
+    ? { canvas: await drawPrintPage(page, photos, albumSize, pageIndex, false, true), words: [] }
+    : await renderPageLayers(page, photos, albumSize, pageIndex, false);
+
+  // Fit Supabase Storage's upload cap. We composite at full 300 DPI above (crisp
+  // text / QR / edges), then downscale + JPEG-compress the ENCODED image so a
+  // whole album PDF stays well under the limit. Lossless PNG was 10–50 MB/PAGE
+  // (→ hundreds of MB / rejected). ~1800 px longest side ≈ 225 DPI at 8–9" —
+  // solid photo-book quality — keeps a ~50-page album under ~40 MB. Raise
+  // MAX_SIDE / quality once the storage plan allows bigger uploads. The words
+  // are not in this picture: they go on top at 300 DPI (WordPatch).
+  // An interior page goes out with its 0.125" bleed on every edge (PI-2): the
+  // page as approved, its edge mirrored outward (printBleed).
+  const bleed = bleedPx(PRINT_DPI);
+  const page300: HTMLCanvasElement = withBleed(canvas, bleed);
+  const MAX_SIDE = 1800;
+  const scale = Math.min(1, MAX_SIDE / Math.max(page300.width, page300.height));
+  let out: HTMLCanvasElement = page300;
+  if (scale < 1) {
+    out = document.createElement('canvas');
+    out.width = Math.round(page300.width * scale);
+    out.height = Math.round(page300.height * scale);
+    const octx = out.getContext('2d')!;
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = 'high';
+    octx.drawImage(page300, 0, 0, out.width, out.height);
+  }
+  const image = await new Promise<Blob>((resolve) => {
+    out.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.82);
+  });
+  const PW = page300.width;
+  const PH = page300.height;
+  return { image, words: words.map((p) => ({ png: p.png, x: (p.x + bleed) / PW, y: (p.y + bleed) / PH, w: p.w / PW, h: p.h / PH })) };
+}
+
+/** Draw one page at print size (W × H, no bleed), loading original photos at
+ *  full resolution. `words: false` leaves out every word the page holds (a
+ *  text in a photo frame, a caption, a free text) — the rest is drawn the same. */
+async function drawPrintPage(
+  page: AlbumPage,
+  photos: UploadedPhoto[],
+  albumSize: AlbumSizePreset,
+  pageIndex: number,
+  coverMode: boolean,
+  words: boolean,
+): Promise<HTMLCanvasElement> {
   const { width: W, height: H } = getPrintDimensions(albumSize);
   // Authoring width — text (fontSize + free x/y) is authored by the Fabric editor
   // in getCanvasDimensions() space (longest side → 750px; ~580 for 8.5×11), NOT
@@ -156,8 +335,10 @@ async function renderPageManually(
       }
       const st = page.slotTexts?.[i] ?? null;
       if (st) {
-        await loadFontFaces([st]); // a quote/text box's own font, never the fallback
-        renderSlotText(ctx, st, sx, sy, sw, sh, W, uiW, coverMode);
+        if (words) {
+          await loadFontFaces([st]); // a quote/text box's own font, never the fallback
+          renderSlotText(ctx, st, sx, sy, sw, sh, W, uiW, coverMode);
+        }
         continue;
       }
 
@@ -211,8 +392,8 @@ async function renderPageManually(
   const tm = textTpl ? marginForTemplate(textTpl, textTpl.margin, albumSize, pageIndex, { noBinding: coverMode }) : null;
   // Every face this page's text uses, loaded up front (any stored family string
   // — the old double-quote-only match skipped 'Great Vibes, cursive').
-  await loadFontFaces(page.textElements || []);
-  for (const text of page.textElements || []) {
+  if (words) await loadFontFaces(page.textElements || []);
+  for (const text of words ? page.textElements || [] : []) {
     let slot: { x: number; y: number; w: number; h: number; align?: 'left' | 'center' | 'right' } | null = null;
     if (text.boxIndex != null && textTpl && tm) {
       const ts = textTpl.textSlots?.[text.boxIndex];
@@ -323,34 +504,7 @@ async function renderPageManually(
     }
   }
 
-  // Fit Supabase Storage's upload cap. We composite at full 300 DPI above (crisp
-  // text / QR / edges), then downscale + JPEG-compress the ENCODED image so a
-  // whole album PDF stays well under the limit. Lossless PNG was 10–50 MB/PAGE
-  // (→ hundreds of MB / rejected). ~1800 px longest side ≈ 225 DPI at 8–9" —
-  // solid photo-book quality — keeps a ~50-page album under ~40 MB. Raise
-  // MAX_SIDE / quality once the storage plan allows bigger uploads.
-  // Interior pages downscale to fit the storage cap; a cover PANEL passes
-  // maxSide=Infinity (no downscale) so it stays crisp when composited into the
-  // wrap, which applies its own MAX_COVER_SIDE cap at the end.
-  // An interior page goes out with its 0.125" bleed on every edge (PI-2): the
-  // page as approved, its edge mirrored outward (printBleed). A cover PANEL is
-  // composited into the wrap, which runs it into the turn-in itself.
-  const page300: HTMLCanvasElement = coverMode ? canvas : withBleed(canvas, bleedPx(PRINT_DPI));
-  const MAX_SIDE = opts.maxSide ?? 1800;
-  const scale = Math.min(1, MAX_SIDE / Math.max(page300.width, page300.height));
-  let out: HTMLCanvasElement = page300;
-  if (scale < 1) {
-    out = document.createElement('canvas');
-    out.width = Math.round(page300.width * scale);
-    out.height = Math.round(page300.height * scale);
-    const octx = out.getContext('2d')!;
-    octx.imageSmoothingEnabled = true;
-    octx.imageSmoothingQuality = 'high';
-    octx.drawImage(page300, 0, 0, out.width, out.height);
-  }
-  return new Promise((resolve) => {
-    out.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.82);
-  });
+  return canvas;
 }
 
 /** Render background at print resolution.
@@ -924,8 +1078,31 @@ function dataURLToBlob(dataUrl: string): Blob {
   return new Blob([u8arr], { type: mime });
 }
 
+/** While a page is drawn twice (with and without its words), each picture is
+ *  opened once for both. */
+let imageMemo: Map<string, Promise<HTMLImageElement>> | null = null;
+
+async function withImageMemo<T>(run: () => Promise<T>): Promise<T> {
+  const outer = imageMemo;
+  imageMemo = outer ?? new Map();
+  try {
+    return await run();
+  } finally {
+    imageMemo = outer;
+  }
+}
+
 /** Load image from URL */
 function loadImage(src: string): Promise<HTMLImageElement> {
+  if (imageMemo) {
+    let img = imageMemo.get(src);
+    if (!img) { img = openImage(src); imageMemo.set(src, img); }
+    return img;
+  }
+  return openImage(src);
+}
+
+function openImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -942,19 +1119,22 @@ export async function renderAlbumForPrint(
   photos: UploadedPhoto[],
   albumSize: AlbumSizePreset,
   onProgress?: (completed: number, total: number) => void,
-): Promise<Array<{ pageIndex: number; blob: Blob; filename: string }>> {
-  const results: Array<{ pageIndex: number; blob: Blob; filename: string }> = [];
+  opts: { bakeWords?: boolean } = {},
+): Promise<Array<{ pageIndex: number; image: Blob; words: WordPatch[]; filename: string }>> {
+  const results: Array<{ pageIndex: number; image: Blob; words: WordPatch[]; filename: string }> = [];
 
   for (let i = 0; i < pages.length; i++) {
-    const blob = await renderPageForPrint({
+    const { image, words } = await renderPageForPrint({
       page: pages[i],
       photos,
       albumSize,
       pageIndex: i,
+      bakeWords: opts.bakeWords,
     });
     results.push({
       pageIndex: i,
-      blob,
+      image,
+      words,
       filename: `megyprints-page-${String(i + 1).padStart(2, '0')}.jpg`,
     });
     onProgress?.(i + 1, pages.length);
@@ -991,21 +1171,36 @@ export interface CoverPrintInput {
   coverFront?: AlbumPage;
 }
 
-/** Render ONE cover panel PAGE (front/back) to an Image via the SAME per-page
- *  renderer as interior pages (coverMode → no binding gutter, no downscale), so
- *  the wrap composites exactly what the cover editor shows. */
-async function renderCoverPanelImage(page: AlbumPage, photos: UploadedPhoto[], albumSize: AlbumSizePreset): Promise<HTMLImageElement> {
-  const blob = await renderPageManually(page, photos, albumSize, 0, { coverMode: true, maxSide: Infinity });
-  const url = URL.createObjectURL(blob);
-  try {
-    return await loadImage(url);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+/** Draw words onto the wrap, then take them back off as patches: the wrap keeps
+ *  what is under them (it goes out as a JPEG) and the patches go on top. `near`
+ *  is where the words go; the margin round it takes in an outline, a shadow or
+ *  a line that runs over (anything past it simply stays in the wrap). */
+function liftWords(ctx: CanvasRenderingContext2D, near: { x: number; y: number; width: number; height: number }, draw: () => void): PxPatch[] {
+  const m = Math.max(150, Math.round(Math.max(near.width, near.height) * 0.25));
+  const x = Math.max(0, Math.floor(near.x - m));
+  const y = Math.max(0, Math.floor(near.y - m));
+  const area = { x, y, w: Math.min(ctx.canvas.width, Math.ceil(near.x + near.width + m)) - x, h: Math.min(ctx.canvas.height, Math.ceil(near.y + near.height + m)) - y };
+  if (area.w <= 0 || area.h <= 0) { draw(); return []; }
+  const before = ctx.getImageData(area.x, area.y, area.w, area.h);
+  draw();
+  const under: PixelSource = {
+    getImageData(sx, sy, sw, sh) {
+      const out = new ImageData(sw, sh);
+      for (let r = 0; r < sh; r++) {
+        const from = ((sy - area.y + r) * area.w + (sx - area.x)) * 4;
+        out.data.set(before.data.subarray(from, from + sw * 4), r * sw * 4);
+      }
+      return out;
+    },
+  };
+  const patches = wordPatches(ctx, under, area);
+  ctx.putImageData(before, area.x, area.y);
+  return patches;
 }
 
-/** Render the flat cover wrap to a full-resolution JPEG Blob. */
-export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<Blob> {
+/** Render the flat cover wrap at full resolution: a JPEG, and its words (the
+ *  front's title, the spine, the back's mark) on top at 300 DPI. */
+export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<PrintLayers> {
   const { albumSize, pageCount, cover, coverDesign, photos, coverFront } = input;
   const geom = coverWrapGeometry(albumSize, pageCount, cover);
   const W = geom.wrap.wPx;
@@ -1015,6 +1210,7 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
+  const words: PxPatch[] = [];
 
   if (coverFront) {
     // ── COVER-AS-PAGES: composite the ACTUAL front page render + a spine
@@ -1033,24 +1229,32 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
     // The spine repeats the front title in its font; the back has the brand mark.
     await loadFontFaces([...branded.texts.map((t) => t.style), spine.text]);
     // Reserved back panel: the brand lockup only — no customer artwork.
-    for (const t of branded.texts) drawCoverText(ctx, t);
-    // Front panel page render, drawn edge-to-edge into its trim rect.
-    const frontImg = await renderCoverPanelImage(coverFront, photos, albumSize);
+    for (const t of branded.texts) words.push(...liftWords(ctx, t.rect, () => drawCoverText(ctx, t)));
+    // Front panel page render — the SAME per-page renderer as interior pages
+    // (coverMode → no binding gutter, never shrunk), so the wrap composites
+    // exactly what the cover editor shows — drawn edge-to-edge into its trim
+    // rect. Its words come as patches, moved onto the wrap.
+    const frontPage = await renderPageLayers(coverFront, photos, albumSize, 0, true);
+    const frontImg = frontPage.canvas;
     const { front, spine: spineRect } = geom.panels;
     ctx.drawImage(frontImg, front.x, front.y, front.width, front.height);
+    const fx = front.width / frontImg.width;
+    const fy = front.height / frontImg.height;
+    words.push(...frontPage.words.map((p) => ({ png: p.png, x: front.x + p.x * fx, y: front.y + p.y * fy, w: p.w * fx, h: p.h * fy })));
     // The front carries on past its trim — top, bottom and the outer edge —
     // through the turn-in (hardcover, 0.625") or the bleed (softcover, 0.125"),
     // mirrored: a photo cover stopped at the 8×8 panel and the paper that wraps
     // round the board was cream (PI-3). The hinge side keeps the cover colour.
-    drawMirroredEdges(ctx, frontImg, frontImg.naturalWidth || frontImg.width, frontImg.naturalHeight || frontImg.height,
+    drawMirroredEdges(ctx, frontImg, frontImg.width, frontImg.height,
       { x: front.x, y: front.y, w: front.width, h: front.height },
       { top: front.y, bottom: H - (front.y + front.height), right: W - (front.x + front.width), left: 0 });
+    frontImg.width = 0; frontImg.height = 0; // let it go now
     // Spine: fill + the derived front-page text, rotated up the spine.
     ctx.fillStyle = spine.bg;
     ctx.fillRect(spineRect.x, spineRect.y, spineRect.width, spineRect.height);
     if (spine.text.text.trim()) {
       const spineSafe = insetRect(spineRect, geom.safeInsetPx);
-      drawCoverText(ctx, { style: spine.text, rect: spineSafe, rotateDeg: -90, valign: 'middle' });
+      words.push(...liftWords(ctx, spineSafe, () => drawCoverText(ctx, { style: spine.text, rect: spineSafe, rotateDeg: -90, valign: 'middle' })));
     }
   } else {
     // ── LEGACY fallback: the old CoverDesign form output (back-compat for drafts
@@ -1086,15 +1290,18 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
           } catch { /* photo failed — the panel bg shows through */ }
         }
       }
-      for (const t of p.texts) drawCoverText(ctx, t);
-      if (p.brandMark) {
-        ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.55)';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.font = `600 ${Math.round(p.brandMark.height * 0.62)}px Cinzel, Georgia, serif`;
-        ctx.fillText('Megy Prints', p.brandMark.x + p.brandMark.width / 2, p.brandMark.y + p.brandMark.height / 2);
-        ctx.restore();
+      for (const t of p.texts) words.push(...liftWords(ctx, t.rect, () => drawCoverText(ctx, t)));
+      const mark = p.brandMark;
+      if (mark) {
+        words.push(...liftWords(ctx, mark, () => {
+          ctx.save();
+          ctx.fillStyle = 'rgba(0,0,0,0.55)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = `600 ${Math.round(mark.height * 0.62)}px Cinzel, Georgia, serif`;
+          ctx.fillText('Megy Prints', mark.x + mark.width / 2, mark.y + mark.height / 2);
+          ctx.restore();
+        }));
       }
     }
   }
@@ -1110,7 +1317,8 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<B
     octx.imageSmoothingQuality = 'high';
     octx.drawImage(canvas, 0, 0, out.width, out.height);
   }
-  return new Promise((resolve) => out.toBlob((b) => resolve(b!), 'image/jpeg', 0.9));
+  const image = await new Promise<Blob>((resolve) => out.toBlob((b) => resolve(b!), 'image/jpeg', 0.9));
+  return { image, words: words.map((p) => ({ png: p.png, x: p.x / W, y: p.y / H, w: p.w / W, h: p.h / H })) };
 }
 
 /** Simple greedy word-wrap to a pixel width (ctx.font must be preset). */
