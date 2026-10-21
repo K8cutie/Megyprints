@@ -2183,9 +2183,11 @@ function renderScene(
     // (Read through dealtBoxRoll: a box an older album dealt the retired 'qr'
     // is an ordinary undealt box now.)
     const roll = dealtBoxRoll(page, i);
+    // An empty quote box invites a line written from the page's photos (owner,
+    // 2026-10-21: bank quotes are no longer dealt into boxes).
     const labelText =
       roll === 'text' ? 'Your words here' :
-      roll === 'quote' ? 'Add a quote' : 'Tap to add';
+      roll === 'quote' ? 'Let AI write a quote' : 'Tap to add';
     // WRAP, don't clip. A single-line fab.Text sized by an estimated glyph
     // width still clipped the longer labels on tall-narrow bands; a Textbox
     // wraps within its width instead. Font is capped so the longest WORD fits

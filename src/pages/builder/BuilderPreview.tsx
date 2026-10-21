@@ -23,7 +23,7 @@ import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
 import { checkOrderReadiness, readinessMessage, coverIsBlank, BLANK_COVER_MESSAGE } from './orderReadiness';
 import { blankPagePlan, deleteBlankLabel, deletedBlankNote } from './blankPages';
 import { missingPhotos, missingPhotosMessage, copyNotesMessage } from '../../lib/photoPresence';
-import { fillableBoxCount } from './generateAlbum';
+import { fillableBoxCount, DEAL_BANK_QUOTES } from './generateAlbum';
 import { BOOK } from './bookFeel';
 import PageTurnLayer from './PageTurnLayer';
 import { planTurn, type TurnFace, type TurnPlan } from './pageTurn';
@@ -140,7 +140,10 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
  *  with the Fabric labels in useCanvasEngine's empty-textbox block — the two
  *  are SEPARATE and drift silently. */
 const ROLL_LABELS: Record<Exclude<BoxRoll, 'qr'>, string> = {
-  quote: 'Add a quote',
+  // An empty quote box invites a line written from the page's photos (owner,
+  // 2026-10-21: bank quotes are no longer dealt into boxes); the tap opens the
+  // picker already writing.
+  quote: 'Let AI write a quote',
   text: 'Your words here',
 };
 
@@ -760,7 +763,9 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // never a silent checkout-time change (this is a paid, unrecallable print).
   const readiness = useMemo(() => checkOrderReadiness(pages), [pages]);
   // Boxes "let Megy finish" CAN fill — not the ones the cadence holds back.
-  const waitingBoxes = useMemo(() => fillableBoxCount(pages), [pages]);
+  // Bank quotes are off (DEAL_BANK_QUOTES): no "boxes waiting — let Megy
+  // finish" button, since it would fill them with bank lines.
+  const waitingBoxes = useMemo(() => (DEAL_BANK_QUOTES ? fillableBoxCount(pages) : 0), [pages]);
   const [sweepNote, setSweepNote] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const handleMegyFinish = async () => {

@@ -367,6 +367,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
           mobile
           photoUrls={pagePhotoUrls(page, actions.uploadedPhotos)}
           quoteBox={quoteBoxFor(page, boxQuoteSlot, actions.albumSize, idx)}
+          autoWrite={!page?.textElements?.some((t) => t.boxIndex === boxQuoteSlot)}
           initial={page?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
           onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }, idx); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }, idx); setBoxQuoteSlot(null); }}
