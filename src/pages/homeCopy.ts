@@ -108,7 +108,7 @@ export const HOW_IT_WORKS: { title: string; desc: string }[] = [
   },
   {
     title: 'Photos',
-    desc: `Add ${MIN_ALBUM_PHOTOS} or more and Megy lays them out into pages. Your photos stay on your device until you order.`,
+    desc: `Add ${MIN_ALBUM_PHOTOS} or more and Megy lays them out into pages. Your photos stay on your device until you order. If you ask Megy to write a line for a photo, a small copy is sent to do it.`,
   },
   {
     title: 'Review',
@@ -146,7 +146,7 @@ export const DEMO_STEP_DETAILS: Record<DemoStepKey, { title: string; desc: strin
     features: [
       'Pick them all at once',
       'Megy points out blurry and repeat shots',
-      'Your photos stay on your device until you order',
+      'Photos stay on your device; a line from Megy sends a small copy',
     ],
   },
   design: {

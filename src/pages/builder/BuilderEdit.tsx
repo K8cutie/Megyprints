@@ -25,6 +25,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
+import { pagePhotoUrls } from '../../lib/photoQuotes';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import { placedPhotoPages, swapNotice } from './slotSwap';
@@ -868,6 +869,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           photo/QR/graphic sitting there — one box, one thing. */}
       {boxQuoteSlot !== null && (
         <QuotePickerModal
+          photoUrls={pagePhotoUrls(actions.currentPage, actions.uploadedPhotos)}
           initial={actions.currentPage?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
           onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }); setBoxQuoteSlot(null); }}
@@ -879,6 +881,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {/* Themed quote → a PHOTO slot (setSlotText evicts the photo/QR there). */}
       {slotQuoteSlot !== null && (
         <QuotePickerModal
+          photoUrls={pagePhotoUrls(actions.currentPage, actions.uploadedPhotos)}
           initial={actions.currentPage?.slotTexts?.[slotQuoteSlot]?.text ?? null}
           onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true, quote: true }); setSlotQuoteSlot(null); }}
           onRemove={() => { actions.setSlotText(slotQuoteSlot, null); setSlotQuoteSlot(null); }}

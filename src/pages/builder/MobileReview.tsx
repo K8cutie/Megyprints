@@ -16,6 +16,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
+import { pagePhotoUrls } from '../../lib/photoQuotes';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import { placedPhotoPages, swapNotice } from './slotSwap';
@@ -364,6 +365,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
       {boxQuoteSlot !== null && (
         <QuotePickerModal
           mobile
+          photoUrls={pagePhotoUrls(page, actions.uploadedPhotos)}
           initial={page?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
           onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }, idx); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }, idx); setBoxQuoteSlot(null); }}
@@ -376,6 +378,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
       {slotQuoteSlot !== null && (
         <QuotePickerModal
           mobile
+          photoUrls={pagePhotoUrls(page, actions.uploadedPhotos)}
           initial={page?.slotTexts?.[slotQuoteSlot]?.text ?? null}
           onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true, quote: true }, idx); setSlotQuoteSlot(null); }}
           onRemove={() => { actions.setSlotText(slotQuoteSlot, null, idx); setSlotQuoteSlot(null); }}

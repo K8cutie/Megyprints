@@ -447,7 +447,7 @@ export class WizardEngine {
             title: "All Pages Reviewed 🎉",
             body: `You've been through all **${pageCount}** pages — this album looks wonderful. Let's take a look at the finished album! (Or keep tweaking — your call.)`,
             actions: ["Change layout", "Preview the album →", "Review from the start"],
-            tips: ["You can keep editing any page before ordering", "Your photos stay on your device until you order"],
+            tips: ["You can keep editing any page before ordering", "Photos stay on your device; a line from Megy sends a small copy"],
           };
         }
         return {

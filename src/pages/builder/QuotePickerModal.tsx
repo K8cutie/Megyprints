@@ -1,8 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
-import { X, Quote, Loader2, RefreshCw, Trash2, Pencil } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { X, Quote, Loader2, RefreshCw, Trash2, Pencil, Sparkles } from 'lucide-react';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { fetchThemeQuotes, moreThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
 import { readAlbumTheme, writeAlbumTheme, cleanAlbumTheme, MAX_THEME_LENGTH } from '../../lib/albumTheme';
+import { writeLinesForPhotos } from '../../lib/photoQuotes';
+import { useAuth } from '../../lib/authContext';
+import { useAuthModal } from '../../components/AuthModalProvider';
+
+/** What the picker says when "Write a line for this photo" can't give lines.
+ *  Every way it ends gets words, and the lines below always stay. */
+export const PHOTO_QUOTE_MESSAGES: Record<'limit_user' | 'limit_all' | 'refused' | 'failed', string> = {
+  limit_user: 'You have used today’s lines for photos. Try again tomorrow, or pick a line below.',
+  limit_all: 'Lines for photos are busy today. Try again tomorrow, or pick a line below.',
+  refused: 'Megy couldn’t write lines for this photo. Pick a line below.',
+  failed: 'Couldn’t write lines just now. Tap to try again.',
+};
 
 /* Themed quote picker for a caption box. Reads the album's free-text theme
    (asked at setup, stored locally), asks the /api/theme-quotes proxy for short
@@ -11,9 +23,12 @@ import { readAlbumTheme, writeAlbumTheme, cleanAlbumTheme, MAX_THEME_LENGTH } fr
 
    The chosen line is written through the caller's setBoxText/setSlotText, which
    already evicts whatever else occupies the box: one box, one thing. */
-export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, onClose, mobile }: {
+export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, onClose, mobile, photoUrls = [] }: {
   /** The line currently in this box, if any — enables Change/Remove wording. */
   initial?: string | null;
+  /** The photos on this box's page (photoQuotes.pagePhotoUrls). With any,
+   *  "Write a line for this photo" offers lines written for them. */
+  photoUrls?: string[];
   onPick: (quote: string) => void;
   onRemove?: () => void;
   /** Tapping a quote that is already on the page opens THIS pool (owner,
@@ -61,8 +76,85 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── "Write a line for this photo" ── Signed in only (it costs per tap); a
+  // signed-out tap is answered with the sign-in step, never a greyed button,
+  // and carries on by itself once they're in.
+  const { user } = useAuth();
+  const { openLogin } = useAuthModal();
+  const [photoLines, setPhotoLines] = useState<string[]>([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
+  const [needSignIn, setNeedSignIn] = useState(false);
+  /** A signed-out tap, waiting for the sign-in to finish: carry on ONCE. */
+  const resumeRef = useRef(false);
+  const many = photoUrls.length > 1;
+
+  const writeForPhoto = useCallback(async () => {
+    if (!user) { resumeRef.current = true; setNeedSignIn(true); return; }
+    setNeedSignIn(false);
+    setPhotoNote(null);
+    setPhotoBusy(true);
+    const r = await writeLinesForPhotos(photoUrls, cleanAlbumTheme(theme), photoLines);
+    setPhotoBusy(false);
+    if ('lines' in r) { setPhotoLines(r.lines); return; }
+    // Signed in here but the session ran out on the server: sign in again.
+    if (r.error === 'sign_in') { setNeedSignIn(true); return; }
+    setPhotoNote(PHOTO_QUOTE_MESSAGES[r.error]);
+  }, [user, photoUrls, theme, photoLines]);
+
+  useEffect(() => {
+    if (!resumeRef.current || !user) return;
+    resumeRef.current = false;
+    void Promise.resolve().then(writeForPhoto);
+  }, [user, writeForPhoto]);
+
+  const PhotoSection = photoUrls.length === 0 ? null : (
+    <div className="px-4 pt-3 shrink-0" data-testid="photo-quote">
+      {photoBusy ? (
+        <div className="py-4 flex items-center justify-center gap-2 text-light">
+          <Loader2 size={18} className="animate-spin text-blush-pink" />
+          <span className="text-xs">Looking at the photo{many ? 's' : ''}…</span>
+        </div>
+      ) : photoLines.length > 0 ? (
+        <>
+          <p className="text-[11px] text-stone mb-1">Written for this photo{many ? 's' : ''}</p>
+          <div className="flex flex-col gap-2">
+            {photoLines.map((q) => (
+              <button key={q} data-testid="photo-quote-line" onClick={() => { onPick(q); onClose(); }}
+                className="text-left px-3.5 py-3 rounded-xl border border-peach bg-blush hover:bg-cream transition active:scale-[0.99]">
+                <span className="text-sm text-dark font-serif italic leading-snug">{q}</span>
+              </button>
+            ))}
+          </div>
+          <button onClick={() => void writeForPhoto()} data-testid="photo-quote-more"
+            className="mt-2 text-xs font-semibold text-blush-pink flex items-center gap-1 px-1 py-1">
+            <Sparkles size={13} /> Write 3 more
+          </button>
+        </>
+      ) : (
+        <>
+          <button onClick={() => void writeForPhoto()} data-testid="photo-quote-write"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-peach text-blush-pink text-sm font-semibold active:scale-[0.99] transition">
+            <Sparkles size={16} /> Write a line for {many ? 'these photos' : 'this photo'}
+          </button>
+          <p className="text-[10px] text-[#B5A99B] mt-1 text-center">
+            A small copy of {many ? 'each photo' : 'the photo'} on this page goes to Claude AI (Anthropic) to write 3 lines. We don’t keep it.
+          </p>
+        </>
+      )}
+      {needSignIn && (
+        <div className="mt-2 text-[11px] leading-snug text-cocoa bg-blush border border-peach/60 rounded-lg px-3 py-2 flex items-center justify-between gap-2" data-testid="photo-quote-sign-in">
+          <span><span className="font-semibold">Sign in first.</span> Lines written for your photo are part of your Megyprints account.</span>
+          <button onClick={openLogin} className="shrink-0 px-3 py-1.5 rounded-lg bg-peach text-white text-xs font-semibold">Sign in</button>
+        </div>
+      )}
+      {photoNote && <p className="mt-2 text-[11px] text-cocoa" data-testid="photo-quote-note">{photoNote}</p>}
+    </div>
+  );
+
   const Body = (
     <>
+      {PhotoSection}
       <div className="px-4 pt-3 pb-2 shrink-0">
         <label className="text-[11px] text-stone mb-1 block">Lines written for your album’s theme</label>
         <div className="flex gap-2">

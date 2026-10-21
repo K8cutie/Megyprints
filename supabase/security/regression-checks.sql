@@ -264,5 +264,28 @@ begin
   raise notice 'PASS: covers the press can''t print are refused, and pages per sheet match the press';
 end $$;
 
+-- ── GUARD 9: photo-quote limits are server-only (0049) ──────────────────────
+-- "Write a line for this photo" spends money per tap; its daily limits are the
+-- bill's ceiling. Only the server (service_role) may take a tap, and nobody
+-- else may read or change the counts (red team 2026-10-21).
+do $$
+begin
+  if to_regprocedure('public.take_photo_quote(uuid, text, integer, integer, integer)') is null then
+    raise exception 'REGRESSION (photo quotes): take_photo_quote() is missing: 0049 was never applied here';
+  end if;
+  if has_function_privilege('anon', 'public.take_photo_quote(uuid, text, integer, integer, integer)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.take_photo_quote(uuid, text, integer, integer, integer)', 'EXECUTE') then
+    raise exception 'REGRESSION (photo quotes): a customer or anon can take photo-quote taps directly';
+  end if;
+  if has_table_privilege('anon', 'public.photo_quote_usage', 'SELECT')
+     or has_table_privilege('authenticated', 'public.photo_quote_usage', 'SELECT')
+     or has_table_privilege('authenticated', 'public.photo_quote_usage', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.photo_quote_ip_usage', 'SELECT')
+     or has_table_privilege('authenticated', 'public.photo_quote_ip_usage', 'UPDATE') then
+    raise exception 'REGRESSION (photo quotes): customers can read or change the photo-quote counts';
+  end if;
+  raise notice 'PASS: photo-quote limits are taken only by the server, and the counts are private';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;
