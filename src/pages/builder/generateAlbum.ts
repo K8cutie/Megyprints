@@ -118,6 +118,16 @@ function groupPhotosByMoment(photos: UploadedPhoto[]): number[][] {
  *  BoxRoll only because saved albums carry it. */
 export const BOX_ROLL_WEIGHTS: Record<BoxRoll, number> = { quote: 0.70, text: 0.30, qr: 0 };
 
+/** BANK QUOTES IN BOXES — off (owner, 2026-10-21: "disable the quote bank
+ *  first", picking "stop filling boxes"). A box rolled 'quote' is left EMPTY,
+ *  still a quote box (its roll, the 70/30 odds and the cadence unchanged),
+ *  waiting for "Write a line for this photo", which writes a line from the
+ *  page's own photos ("short ones feels like your guessing how it relates").
+ *  Making the album, Surprise me and a new size no longer deal bank lines, and
+ *  "let Megy finish" no longer packs empty boxes with them. The bank still
+ *  backs the quote picker's lines. true deals them again, as before. */
+export const DEAL_BANK_QUOTES = false;
+
 /** What generation needs to deal boxes. Quote styling is passed in (not read
  *  from THEMES here) because generateAlbum is pure — the caller resolves the
  *  active theme's caption font/color so a dealt quote is EXACTLY what a
@@ -130,6 +140,9 @@ export interface BoxContentOptions {
   /** The occasion the pool was written for: each dealt quote carries it
    *  (TextElement.fromOccasion) so a later occasion change can swap it. */
   occasion?: string;
+  /** false: a quote roll stays an EMPTY quote box (DEAL_BANK_QUOTES off);
+   *  it still counts for the cadence. Absent: a line is dealt, as before. */
+  fillQuotes?: boolean;
 }
 
 export function rollBoxKind(): BoxRoll {
@@ -191,7 +204,12 @@ export function dealBoxContent(
     let kind = rollBoxKind();
     // Cadence: no quote when the previous page has one, and at most one per page.
     if (kind === 'quote' && (!allowQuote || quotesHere >= QUOTE_CADENCE.maxPerPage)) kind = rollNonQuoteKind();
-    if (kind === 'quote') {
+    if (kind === 'quote' && box.fillQuotes === false) {
+      // An empty quote box, waiting for a line written from the page's
+      // photos: the roll stays 'quote', and the cadence counts it so the
+      // next page doesn't get one too.
+      quotesHere++;
+    } else if (kind === 'quote') {
       const quote = dealQuote();
       if (quote) {
         quotesHere++;

@@ -25,7 +25,7 @@ import { placePhoto } from './slotSwap';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
@@ -2208,8 +2208,13 @@ export function useBuilderState(): BuilderActions {
     let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
-    setGenerating('quotes');
-    const quotePool = await ensureThemeQuotes(currentAlbumTheme(), countAlbumBoxes(newPages), { budgetMs: 12_000 });
+    // Bank quotes are off (DEAL_BANK_QUOTES): quote boxes are made empty, so
+    // there is no pool to wait for (that wait was up to 12 s).
+    let quotePool: string[] = [];
+    if (DEAL_BANK_QUOTES) {
+      setGenerating('quotes');
+      quotePool = await ensureThemeQuotes(currentAlbumTheme(), countAlbumBoxes(newPages), { budgetMs: 12_000 });
+    }
     setGenerating('finishing');
     await paintFrame();
     const boxContent: BoxContentOptions = {
@@ -2217,6 +2222,7 @@ export function useBuilderState(): BuilderActions {
       quoteFontFamily: quoteTheme.fontFamily,
       quoteColor: quoteTheme.textColor,
       occasion: currentAlbumTheme(),
+      fillQuotes: DEAL_BANK_QUOTES,
     };
     dealAlbumBoxes(newPages, boxContent);
     newPages = mergeStudioPages(newPages, kept);
@@ -3356,6 +3362,9 @@ export function useBuilderState(): BuilderActions {
    *  the album already carries, so the never-repeat rule survives the sweep).
    *  Styling mirrors setBoxText's defaults, same as generation-time deals. */
   const finishBoxesWithQuotes = useCallback(async (): Promise<{ filled: number; remaining: number; heldBack: number; noLine: number }> => {
+    // Bank quotes are off: empty quote boxes wait for a line written from the
+    // page's photos, never a bank line (DEAL_BANK_QUOTES).
+    if (!DEAL_BANK_QUOTES) return { filled: 0, remaining: 0, heldBack: 0, noLine: 0 };
     const theme = THEMES[selectedTemplate];
     // Grow the theme's pool to what a FULL sweep needs before dealing — the
     // sweep excludes every line the album already carries, so a pool sized

@@ -45,6 +45,9 @@ vi.mock('../../lib/useIndexedDBPhotos', () => {
   return { useIndexedDBPhotos: () => idb, getImageDimensions: async () => ({ width: 0, height: 0 }) };
 });
 vi.mock('./faceDetection', () => ({ initFaceApi: async () => {}, detectFaceCenter: async () => null }));
+// "Megy finishes it" is off while bank quotes are off (DEAL_BANK_QUOTES,
+// 2026-10-21); its undo is still proven here for when they come back.
+vi.mock('./generateAlbum', async (importOriginal) => ({ ...(await importOriginal<typeof import('./generateAlbum')>()), DEAL_BANK_QUOTES: true }));
 vi.mock('../../lib/quotes', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/quotes')>()),
   ensureThemeQuotes: async () => {

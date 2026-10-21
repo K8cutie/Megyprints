@@ -23,7 +23,7 @@ import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
 import { checkOrderReadiness, readinessMessage, coverIsBlank, BLANK_COVER_MESSAGE } from './orderReadiness';
 import { blankPagePlan, deleteBlankLabel, deletedBlankNote } from './blankPages';
 import { missingPhotos, missingPhotosMessage, copyNotesMessage } from '../../lib/photoPresence';
-import { fillableBoxCount } from './generateAlbum';
+import { fillableBoxCount, DEAL_BANK_QUOTES } from './generateAlbum';
 import { BOOK } from './bookFeel';
 import PageTurnLayer from './PageTurnLayer';
 import { planTurn, type TurnFace, type TurnPlan } from './pageTurn';
@@ -760,7 +760,9 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // never a silent checkout-time change (this is a paid, unrecallable print).
   const readiness = useMemo(() => checkOrderReadiness(pages), [pages]);
   // Boxes "let Megy finish" CAN fill — not the ones the cadence holds back.
-  const waitingBoxes = useMemo(() => fillableBoxCount(pages), [pages]);
+  // Bank quotes are off (DEAL_BANK_QUOTES): no "boxes waiting — let Megy
+  // finish" button, since it would fill them with bank lines.
+  const waitingBoxes = useMemo(() => (DEAL_BANK_QUOTES ? fillableBoxCount(pages) : 0), [pages]);
   const [sweepNote, setSweepNote] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const handleMegyFinish = async () => {

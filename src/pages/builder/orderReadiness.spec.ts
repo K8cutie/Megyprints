@@ -63,6 +63,7 @@ describe('wired in (source guards)', () => {
     expect(src).not.toMatch(/onOrder=\{handleOrder\}/);
   });
   it('"boxes waiting" counts only the boxes Megy can fill (not the ones the cadence keeps open)', () => {
-    expect(src).toMatch(/const waitingBoxes = useMemo\(\(\) => fillableBoxCount\(pages\), \[pages\]\);/);
+    // (none at all while bank quotes are off — DEAL_BANK_QUOTES, 2026-10-21)
+    expect(src).toMatch(/const waitingBoxes = useMemo\(\(\) => \(DEAL_BANK_QUOTES \? fillableBoxCount\(pages\) : 0\), \[pages\]\);/);
   });
 });
