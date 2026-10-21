@@ -21,6 +21,7 @@ import AddQrModal from './AddQrModal';
 import EndOfAlbumPrompt from './EndOfAlbumPrompt';
 import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
 import { checkOrderReadiness, readinessMessage, coverIsBlank, BLANK_COVER_MESSAGE } from './orderReadiness';
+import { blankPagePlan, deleteBlankLabel, deletedBlankNote } from './blankPages';
 import { missingPhotos, missingPhotosMessage, copyNotesMessage } from '../../lib/photoPresence';
 import { fillableBoxCount } from './generateAlbum';
 import { BOOK } from './bookFeel';
@@ -751,7 +752,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError, orderRequested = false, onOrderRequestTaken, turnAnimation = import.meta.env.MODE !== 'test' }: BuilderPreviewProps) {
   const total = pages.length;
-  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId } = useBuilderContext();
+  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId, deletePages } = useBuilderContext();
 
   // "Megy finishes it" — count the caption boxes still sitting empty (unfilled
   // invitations, deleted quotes, legacy empties). The chooser CTA in the
@@ -950,11 +951,35 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // text and blank pages print exactly as they look — say so once; "Order
   // anyway" goes on, "Show me" goes to the first one.
   const [notReady, setNotReady] = useState<string | null>(null);
+  // The warning up now names blank pages (so it offers to delete them).
+  const [notReadyBlank, setNotReadyBlank] = useState(false);
   const longFirstPageRef = useRef<number | null>(null);
+  // BLANK PAGES (blankPages): the end-of-album reminder and the warning above
+  // offer to delete them (never under 40 pages), or to go and fill them.
+  const blankPlan = useMemo(() => blankPagePlan(pages), [pages]);
+  const [deletedNote, setDeletedNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!deletedNote) return;
+    const t = window.setTimeout(() => setDeletedNote(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [deletedNote]);
+  const deleteBlankPages = (landOnLast: boolean) => {
+    const n = deletePages(blankPlan.deletable, { landOnLast });
+    if (n === 0) return;
+    setNotReady(null);
+    setDeletedNote(deletedBlankNote(n, pages.length - n));
+  };
+  const editBlankPages = () => {
+    const first = blankPlan.blank[0];
+    if (first != null) onGoToPage(first);
+    onBack();
+  };
   // PHOTOS NOT ON THIS DEVICE (photoPresence): the album would print blank
   // frames. No "Order anyway" — a paid, unrecallable print of empty pages.
   const [notHere, setNotHere] = useState<string | null>(null);
-  const handleOrder = (anyway = false) => {
+  // `blankOk`: the customer chose "Order with blank pages" — the warning
+  // still says anything else, but not those again.
+  const handleOrder = (anyway = false, blankOk = false) => {
     if (orderSaving) return;
     const have = albumPhotoCount(pages);
     if (photosShortBy(have) > 0) { setTooFew(have); return; }
@@ -970,16 +995,34 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     longFirstPageRef.current = long[0]?.pageIndex ?? null;
     // The cover title clipped on the front is said with the cover (round 3).
     const titleCut = coverTitleFit(coverFront, albumSize)?.fits === false;
-    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', titleCut ? COVER_TITLE_TOO_LONG_MESSAGE : '', readinessMessage(readiness), longTextsMessage(long.length), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
-    if (warning && !anyway) { setNotReady(warning); return; }
+    const ready = blankOk ? { ...readiness, blankPages: 0 } : readiness;
+    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', titleCut ? COVER_TITLE_TOO_LONG_MESSAGE : '', readinessMessage(ready), longTextsMessage(long.length), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
+    if (warning && !anyway) { setNotReady(warning); setNotReadyBlank(ready.blankPages > 0); return; }
     setNotReady(null);
     setPendingPrintJob({ pages, photos, albumSize, albumId: getAlbumId(), coverDesign, coverFront });
     onOrder();
   };
+  // End-of-album prompt — opens EVERY time they arrive at the last page (or
+  // the last open book) (useEndOfAlbumPrompt). It can be dismissed (keep
+  // browsing) and it offers a real way back to the pages (owner, 2026-09-13:
+  // "there doesn't seem to be a way to go back").
+  // It waits for the last page turn to land.
+  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim);
+  // A warning about blank pages from an earlier Order: the card's reminder says it now.
+  useEffect(() => {
+    if (endPrompt.open && notReadyBlank && blankPlan.blank.length > 0) setNotReady(null);
+  }, [endPrompt.open, notReadyBlank, blankPlan.blank.length]);
   const notReadyBanner = notReady != null && (
     <div role="alert" data-testid="order-not-ready"
       className="flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12] text-left">
       <span className="flex-1 min-w-[12rem]">{notReady}</span>
+      {/* In the end card's reminder the card's own Delete is the one. */}
+      {notReadyBlank && blankPlan.deletable.length > 0 && !endPrompt.open && (
+        <button onClick={() => deleteBlankPages(false)} data-testid="order-not-ready-delete-blank"
+          className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
+          {deleteBlankLabel(blankPlan.deletable.length)}
+        </button>
+      )}
       <button onClick={() => {
           setNotReady(null);
           // The cover first: "Show me" opens the cover editor.
@@ -1025,12 +1068,6 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const hasPrev = canTurnBack(pos);
   const hasNext = canTurnForward(pos);
 
-  // End-of-album prompt — opens EVERY time they arrive at the last page (or
-  // the last open book) (useEndOfAlbumPrompt). It can be dismissed (keep
-  // browsing) and it offers a real way back to the pages (owner, 2026-09-13:
-  // "there doesn't seem to be a way to go back").
-  // It waits for the last page turn to land.
-  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim);
   const currentPage = pages[currentIndex];
 
   // Megy's "Place Order →" (Step 7) lands here and orders exactly like the
@@ -1150,6 +1187,11 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       {upright && (sweepNote || waitingBoxes > 0) && <div className="pt-2 flex" data-testid="preview-megy-row">{megyFinish}</div>}
       </div>
       {(tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner) && <div className="px-5 pt-2 bg-paper">{tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner}</div>}
+      {deletedNote && !endPrompt.open && (
+        <div className="px-5 pt-2 bg-paper">
+          <p role="status" data-testid="preview-deleted-note" className="rounded-lg border border-[#BFDCC3] bg-[#EEF7EF] px-3 py-2 text-xs font-semibold text-[#2F6B3A]">✓ {deletedNote}</p>
+        </div>
+      )}
 
       {/* Page display with the page turn on each side — small labelled
           buttons, not bare ‹ › arrows (SpreadTurnButton). */}
@@ -1286,7 +1328,9 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           or ✕ to keep browsing; "Continue editing" is a real button. */}
       {endPrompt.open && (
         <EndOfAlbumPrompt onClose={endPrompt.close} onCheckCover={() => setCoverOpen(true)} onOrder={() => handleOrder()} onContinueEditing={onBack}
-          saving={orderSaving} error={tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner || null} />
+          saving={orderSaving} error={tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner || null}
+          blank={blankPlan} onDeleteBlank={() => deleteBlankPages(true)} onEditBlank={editBlankPages}
+          onOrderWithBlank={() => handleOrder(false, true)} note={deletedNote} />
       )}
 
       {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too).

@@ -56,6 +56,7 @@ vi.mock('../../lib/quotes', async (importOriginal) => ({
 import { useBuilderState, type BuilderActions } from './useBuilderState';
 import { getTemplatesForAlbum } from './pageTemplates';
 import { DRAFT_STORAGE_KEY } from '../../lib/localDraft';
+import { clampStickerGeom } from './stickers';
 
 const [QUAD, OTHER_QUAD] = getTemplatesForAlbum('8x8').filter((t) => t.slots.length === 4);
 
@@ -199,6 +200,7 @@ const ACTIONS: [string, (b: BuilderActions) => unknown][] = [
   ['regeneratePage', (b) => b.regeneratePage()],
   ['addPage', (b) => b.addPage()],
   ['deletePage', (b) => b.deletePage(5)],
+  ['deletePages (the end-of-album "Delete 2 blank pages")', (b) => b.deletePages([5, 7])],
   ['duplicatePage', (b) => b.duplicatePage(2)],
   ['addTextElement', (b) => b.addTextElement(120, 120, 'Hello')],
   ['applyBackgroundToAllPages', (b) => b.applyBackgroundToAllPages({ type: 'solid', solid: '#333333' })],
@@ -297,5 +299,77 @@ describe('an action that waits before saving its undo step', () => {
     await tap((b) => b.undo());
     expect(undoable()).toEqual(beforeSweep);
     expect(fills(0)).toEqual([8, 1, 2, 3]);
+  });
+});
+
+/* DELETING PAGES — the end-of-album reminder's "Delete 2 blank pages"
+   (blankPages.ts). This album is 42 pages, two over the minimum. */
+describe('deletePages — never under 40 pages, one undo step', () => {
+  const ids = () => builder.albumPages.map((p) => p.id);
+
+  it('asked to delete 4 of 42, only the LAST 2 go; one undo brings both back', async () => {
+    const before = ids();
+    let n = 0;
+    await tap((b) => { n = b.deletePages([10, 20, 30, 41]); });
+    expect(n).toBe(2);
+    expect(builder.albumPages).toHaveLength(40);
+    expect(ids()).not.toContain('page-30');
+    expect(ids()).not.toContain('page-41');
+    expect(ids()).toContain('page-10');
+    expect(ids()).toContain('page-20');
+
+    await tap((b) => b.undo());
+    expect(ids()).toEqual(before);
+  });
+
+  it('at 40 pages nothing goes, and no undo step is spent on it', async () => {
+    await tap((b) => b.deletePages([40, 41]));
+    expect(builder.albumPages).toHaveLength(40);
+    let n = -1;
+    await tap((b) => { n = b.deletePages([5, 6]); });
+    expect(n).toBe(0);
+    expect(builder.albumPages).toHaveLength(40);
+    await tap((b) => b.undo()); // the one real delete
+    expect(builder.albumPages).toHaveLength(42);
+    expect(builder.canUndo).toBe(false);
+  });
+
+  it('the page on screen stays on screen; landOnLast opens the new last page', async () => {
+    await tap((b) => b.goToPage(25));
+    await tap((b) => b.deletePages([3]));
+    expect(builder.currentPageIndex).toBe(24);
+    expect(builder.currentPage.id).toBe('page-25');
+
+    await tap((b) => b.deletePages([30], { landOnLast: true }));
+    expect(builder.albumPages).toHaveLength(40);
+    expect(builder.currentPageIndex).toBe(39);
+    expect(builder.currentPage.id).toBe('page-41');
+  });
+
+  it('a page that moves to the other side of the book keeps its sticker out of the spine', async () => {
+    // Page 11 (index 10) binds on the LEFT; the sticker hugs its outer RIGHT edge.
+    const geom = { cx: 0.9, cy: 0.5, w: 0.1, h: 0.1, rot: 0 };
+    const ctx = (pageIndex: number) => ({ albumSize: '8x8', pageIndex, template: QUAD });
+    expect(clampStickerGeom(geom, ctx(10)).geom).toEqual(geom); // fine where it is
+    const onRight = clampStickerGeom(geom, ctx(9)).geom;
+    expect(onRight.cx).toBeLessThan(geom.cx); // would sit in the spine one page earlier
+
+    await closeBuilder();
+    const draft = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY)!);
+    draft.albumPages[10].stickers = [{ uid: 's1', pack: 'florals', id: 'rose', pngDataUrl: 'data:image/png;base64,', appliedAt: 1, geom }];
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    await openBuilder();
+    const sticker = () => builder.albumPages.find((p) => p.id === 'page-10')!.stickers![0].geom;
+    expect(sticker()).toEqual(geom);
+
+    // Two pages before it go: same side of the book, the sticker is untouched.
+    await tap((b) => b.deletePages([3, 5]));
+    expect(sticker()).toEqual(geom);
+    await tap((b) => b.undo());
+
+    // One page before it goes: it is now page 10, a left-hand page, spine on its right.
+    await tap((b) => b.deletePages([3]));
+    expect(builder.albumPages.findIndex((p) => p.id === 'page-10')).toBe(9);
+    expect(sticker()).toEqual(onRight);
   });
 });
