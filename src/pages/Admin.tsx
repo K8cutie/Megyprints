@@ -1,13 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════════
    /admin — the OPERATOR CONSOLE. Separate from the customer app; gated by ROLE.
-     • owner       — Overview · Orders (full, incl. price) · Bookings · Templates · Team
+     • owner       — Overview · Album stats · Orders (full, incl. price) · Bookings · Templates · Team
      • fulfillment — Orders only, status changes only (no money, no overview)
    Role resolution + the DB functions in migration 0007 are the real guard.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
+import { BarChart3, Images, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
@@ -22,10 +22,12 @@ import TeamPanel from './admin/TeamPanel';
 import PricingPanel from './admin/PricingPanel';
 import MessagesPanel from './admin/MessagesPanel';
 import BookingsPanel from './admin/BookingsPanel';
+import AlbumStatsPanel from './admin/AlbumStatsPanel';
 
-type Tab = 'overview' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'team';
+type Tab = 'overview' | 'stats' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'team';
 const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3, ownerOnly: true },
+  { id: 'stats', label: 'Album stats', icon: Images, ownerOnly: true },
   { id: 'orders', label: 'Orders', icon: ClipboardList, ownerOnly: false },
   { id: 'bookings', label: 'Bookings', icon: CalendarHeart, ownerOnly: true },
   { id: 'messages', label: 'Messages', icon: Mail, ownerOnly: true },
@@ -170,10 +172,11 @@ export default function Admin() {
             <button onClick={() => void logout()} className="text-sm text-medium flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-paper"><LogOut size={14} /> Sign out</button>
           </div>
         </div>
-        <div className="max-w-6xl mx-auto px-4 flex gap-1">
+        {/* The tabs scroll sideways on a phone instead of widening the page. */}
+        <div className="max-w-6xl mx-auto px-4 flex gap-1 overflow-x-auto">
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className="px-3 py-2.5 text-sm font-medium border-b-2 flex items-center gap-1.5 -mb-px transition-colors"
+              className="px-3 py-2.5 text-sm font-medium border-b-2 flex items-center gap-1.5 -mb-px transition-colors shrink-0 whitespace-nowrap"
               style={{ borderColor: tab === t.id ? '#B85C38' : 'transparent', color: tab === t.id ? '#2D2D2D' : '#9B9B9B' }}>
               <t.icon size={15} /> {t.label}
               {t.id === 'bookings' && bookingsWaiting > 0 && (
@@ -211,6 +214,7 @@ export default function Admin() {
             )}
           </>
         ))}
+        {tab === 'stats' && isOwner && <AlbumStatsPanel />}
         {tab === 'bookings' && isOwner && <BookingsPanel />}
         {tab === 'messages' && isOwner && <MessagesPanel />}
         {tab === 'templates' && isOwner && <TemplatesPanel />}

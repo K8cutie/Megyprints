@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, type CSSProperties } from 'react'
 import { ChevronLeft, ShoppingCart, Plus, Trash2, Sparkles, X, Loader2, Pencil, BookOpen, FileText } from 'lucide-react';
 import SpreadTurnButton, { SPREAD_TURN_W } from './SpreadTurnButton';
 import PreviewTurnBar from './PreviewTurnBar';
-import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, swipeTurn, turnBack, turnForward, type PreviewPosition, type PreviewView, type Turn } from './previewPaging';
+import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, spreadStart, swipeTurn, turnBack, turnForward, type PreviewPosition, type PreviewView, type Turn } from './previewPaging';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss, dealtBoxRoll } from './types';
@@ -417,7 +417,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontWeight: st.bold ? 'bold' : 'normal', fontStyle: st.italic ? 'italic' : 'normal',
                 textDecoration: st.underline ? 'underline' : 'none', color: st.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                ...wordArtDomStyle(st, sx),
+                ...wordArtDomStyle(st, sx, coverMode),
               }}>{st.text}</span>
             </div>
           );
@@ -553,7 +553,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           textDecoration: t.underline ? 'underline' : 'none', lineHeight: TEXT_LINE_HEIGHT,
           display: 'flex', alignItems: 'center', justifyContent: t.alignment || 'center',
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
-          ...wordArtDomStyle(t, sx),
+          ...wordArtDomStyle(t, sx, coverMode),
         }}>{t.text}</div>
       ))}
       {/* Template text boxes. Filled → formatted text clipped to the box; empty →
@@ -614,7 +614,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontWeight: boxed.bold ? 'bold' : 'normal', fontStyle: boxed.italic ? 'italic' : 'normal',
                 textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                ...wordArtDomStyle(boxed, sx),
+                ...wordArtDomStyle(boxed, sx, coverMode),
               }}>{boxed.text}</span>
             </div>
           );
@@ -807,7 +807,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const [coverOpen, setCoverOpen] = useState(false);
   // THE COVER FIRST (1-star testers, 2026-10-04: "I paid without ever seeing
   // the finished front of the book"). The preview opens on the closed book's
-  // front cover, like picking it up; "Next" opens pages 1–2 and "Previous"
+  // front cover, like picking it up; "Next" opens it on page 1 and "Previous"
   // from there comes back to it. `coverAt` is the page the cover was opened
   // over, so any other page turn (Megy's "go to page 5") leaves the cover.
   const [coverAt, setCoverAt] = useState<number | null>(() => (coverFront && currentIndex === 0 ? 0 : null));
@@ -842,9 +842,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   };
 
 
-  // Spread pairs: 0-1, 2-3, 4-5, etc.
-  const spreadLeftIndex = Math.floor(currentIndex / 2) * 2;
-  const spreadLeftPage = pages[spreadLeftIndex];
+  // The open book, as it prints (binding.ts): (inside of the front cover | 1),
+  // (2 | 3), (4 | 5), … A side with no page is the inside of a cover.
+  const spreadLeftIndex = spreadStart(currentIndex);
+  const spreadLeftPage = spreadLeftIndex >= 0 ? pages[spreadLeftIndex] : undefined;
   const spreadRightPage = pages[spreadLeftIndex + 1];
 
   // Responsive sizing: the spread (two pages side by side) scales DOWN to fit the
@@ -1067,7 +1068,16 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     </div>
   );
 
-  // What a turning leaf shows: a page as it prints, the front cover, or a blank page.
+  // The inside of a cover: plain paper across from page 1 (and from a last
+  // left-hand page), named in small print so it doesn't read as a lost page.
+  const insideCover = (cover: 'front' | 'back') => (
+    <div className="absolute flex items-center justify-center bg-white" style={{ left: 0, top: 0, width: singleW, height: H }} data-testid={`preview-inside-${cover}`}>
+      <span className="text-taupe/70" style={{ fontSize: Math.max(9, Math.round(12 * fitScale)) }}>
+        Inside of the {cover} cover
+      </span>
+    </div>
+  );
+  // What a turning leaf shows: a page as it prints, the front cover, or the inside of a cover.
   const turnFace = (f: TurnFace) => {
     if (f.kind === 'page' && pages[f.index]) {
       return (
@@ -1085,6 +1095,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         </div>
       );
     }
+    if (f.kind === 'inside') return insideCover(f.cover);
     return null;
   };
   // The turn draws over the book that is showing (it changes view if the phone turns mid-turn: then no turn).
@@ -1213,31 +1224,32 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                 isolation: 'isolate',
               }}
             >
-              {/* Left Page */}
+              {/* Left Page — the inside of the front cover across from page 1 */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted
-                  onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
-                  onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
-                  onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
+                {spreadLeftPage ? (
+                  <PageView key={spreadLeftPage.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted
+                    onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
+                    onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
+                    onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
+                ) : insideCover('front')}
               </div>
 
               {/* Right Page — flush against the left page (no center gap/spine;
-                  the dashed binding guides already mark the gutter). */}
-              {spreadRightPage && (
-                <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
-                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted
+                  the dashed binding guides already mark the gutter). The
+                  inside of the back cover across from a last left-hand page. */}
+              <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
+                {spreadRightPage ? (
+                  <PageView key={spreadRightPage.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex + 1, slot })} />
-                </div>
-              )}
+                ) : insideCover('back')}
+              </div>
 
               {/* book layers over the pages: vignette, grain, gutter */}
               <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
               <div aria-hidden="true" style={BOOK.grain} />
-              {spreadRightPage
-                ? <div aria-hidden="true" style={BOOK.gutter} data-testid="preview-gutter" />
-                : <div aria-hidden="true" style={BOOK.edgeShade('right')} />}
+              <div aria-hidden="true" style={BOOK.gutter} data-testid="preview-gutter" />
             </div>
             </div>
             {turnLayer(singleW, singleW * 2, lip)}

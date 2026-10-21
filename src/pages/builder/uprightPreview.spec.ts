@@ -88,12 +88,12 @@ describe('an upright phone', () => {
     expect(q('preview-cover')).not.toBeNull();
   });
 
-  it('each page shows the side it is bound on (pages pair 1–2: page 1 bound on its right)', () => {
+  it('each page shows the side it is bound on (page 1 is a right-hand page: bound on its left)', () => {
     render(0);
     tap('preview-next'); // off the cover
-    expect(q('preview-spine')!.dataset.spine).toBe('right');
-    tap('preview-next');
     expect(q('preview-spine')!.dataset.spine).toBe('left');
+    tap('preview-next');
+    expect(q('preview-spine')!.dataset.spine).toBe('right');
   });
 
   it('the last page: the way forward is "Order this album", and it orders the ONE way (handleOrder)', () => {
@@ -125,11 +125,11 @@ describe('an upright phone', () => {
     expect(q('preview-open-book')!.textContent).toMatch(/See it as an open book/);
     tap('preview-open-book');
     expect(q('preview-gutter')).not.toBeNull();
-    expect(caption()).toBe('Pages 1–2 of 40');
+    expect(caption()).toBe('Pages 2–3 of 40');
     expect(q('preview-next')!.textContent).toMatch(/Next pages/);
     expect(q('spread-next')).toBeNull(); // still the turn under the book, not at the sides
     tap('preview-next');
-    expect(caption()).toBe('Pages 3–4 of 40');
+    expect(caption()).toBe('Pages 4–5 of 40');
     tap('preview-open-book');
     expect(q('preview-single-page')).not.toBeNull();
   });
@@ -157,7 +157,8 @@ describe('the phone really turned (a landscape screen)', () => {
     render(0);
     act(() => { q('spread-next')!.click(); });
     expect(q('preview-gutter')).not.toBeNull();
-    expect(caption()).toBe('Pages 1–2 of 40');
+    expect(caption()).toBe('Page 1 of 40'); // across from the inside of the cover
+    expect(q('preview-inside-front')).not.toBeNull();
     expect(q('preview-turn')).toBeNull();
     expect(q('preview-open-book')).toBeNull();
   });

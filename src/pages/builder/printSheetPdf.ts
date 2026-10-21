@@ -19,6 +19,7 @@ import {
   PRESS_SHEET, sheetPlan, trimInches, coverOnSheet, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
 } from './printSheet';
 import { isHardcover } from './coverGeometry';
+import { PAGE_ONE_RIGHT_MARK, type PageOneSide } from './binding';
 
 const PT = 72;
 const SHEET_W = PRESS_SHEET.wIn * PT;
@@ -62,6 +63,8 @@ function label(page: PDFPage, font: PDFFont, text: string, xIn: number, yIn: num
 export interface ImposeResult {
   bytes: Uint8Array;
   plan: SheetPlan;
+  /** Where the print file puts page 1: 'left' = a file from before 2026-10-21. */
+  pageOne: PageOneSide;
   /** Trim edge the print file had (0.125 normally; 0 on orders before PI-2). */
   sourceBleedIn: number;
 }
@@ -75,7 +78,7 @@ export const MAX_PRINT_FILE_BYTES = 200 * 1024 * 1024;
  * and strip what a page can carry besides its picture (links, actions,
  * thumbnails) so none of it is copied onto the sheets.
  */
-async function loadCustomerPdf(src: ArrayBuffer | Uint8Array, what: string): Promise<PDFPage[]> {
+async function loadCustomerPdf(src: ArrayBuffer | Uint8Array, what: string): Promise<{ doc: PDFDocument; pages: PDFPage[] }> {
   if (src.byteLength > MAX_PRINT_FILE_BYTES) throw new Error(`This ${what} is ${Math.round(src.byteLength / 1048576)} MB — bigger than any album. Ask the customer to order again.`);
   const doc = await PDFDocument.load(src);
   const pages = doc.getPages();
@@ -87,7 +90,19 @@ async function loadCustomerPdf(src: ArrayBuffer | Uint8Array, what: string): Pro
     }
     for (const key of ['Annots', 'AA', 'Thumb', 'PieceInfo']) pg.node.delete(PDFName.of(key));
   }
-  return pages;
+  return { doc, pages };
+}
+
+/** Where a print file puts page 1. The checkout writes PAGE_ONE_RIGHT_MARK
+ *  into every file it makes since page 1 became a right-hand page; a file
+ *  without it was drawn with page 1 on the left (its spine margin on the
+ *  right), and must go on the sheets that way. The mark only picks between
+ *  the two layouts, so a forged one can't do more than a wrong order would. */
+export function printFilePageOne(doc: PDFDocument): PageOneSide {
+  let keywords = '';
+  // pdf-lib throws on Keywords that aren't text: not a file our checkout made.
+  try { keywords = doc.getKeywords() ?? ''; } catch { /* treated as unmarked */ }
+  return keywords.split(/[\s,;]+/).includes(PAGE_ONE_RIGHT_MARK) ? 'right' : 'left';
 }
 
 /** How much trim edge the print file's pages carry, from their size. */
@@ -108,14 +123,15 @@ function sourceBleed(wPt: number, hPt: number, size: AlbumSizePreset): number {
  * the album size.
  */
 export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string): Promise<ImposeResult> {
-  const pages = await loadCustomerPdf(src, 'print file');
+  const { doc, pages } = await loadCustomerPdf(src, 'print file');
+  const pageOne = printFilePageOne(doc);
   // A page count no album has is a bad file, not a job to lay out (and would
   // only lock up this tab).
   if (pages.length > MAX_PRINT_PAGES) throw new Error(`This print file has ${pages.length} pages — more than any album. Ask the customer to order again.`);
   const first = pages[0].getSize();
   const srcBleed = sourceBleed(first.width, first.height, size);
   const { trimW, trimH } = trimInches(size);
-  const plan = sheetPlan(size, pages.length);
+  const plan = sheetPlan(size, pages.length, pageOne);
   pages.forEach((pg, i) => {
     const s = pg.getSize();
     if (Math.abs(s.width - first.width) > 1 || Math.abs(s.height - first.height) > 1) {
@@ -172,7 +188,7 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
     drawCutMarks(sheet, side.placements.map((q) => q.slot));
     drawSheetLabel(sheet, font, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q) => q.pile));
   }
-  return { bytes: await out.save(), plan, sourceBleedIn: srcBleed };
+  return { bytes: await out.save(), plan, pageOne, sourceBleedIn: srcBleed };
 }
 
 /** Cut marks for every cut line, in the white around the block — or, where
@@ -249,7 +265,7 @@ export interface CoverSheetResult { bytes: Uint8Array; wrapWIn: number; wrapHIn:
 export async function imposeCoverSheet(
   src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, cover: CoverType, pageCount: number, orderLabel: string,
 ): Promise<CoverSheetResult> {
-  const [srcPage] = await loadCustomerPdf(src, 'cover file');
+  const { pages: [srcPage] } = await loadCustomerPdf(src, 'cover file');
   const fit = coverOnSheet(size, cover, pageCount);
   if (!fit.fits) throw new Error(`This cover can't go on one ${PRESS_SHEET.wIn} × ${PRESS_SHEET.hIn} sheet. ${fit.reason}`);
   const s = srcPage.getSize();
