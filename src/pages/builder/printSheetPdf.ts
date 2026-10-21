@@ -11,15 +11,26 @@
    Where each page goes is printSheet.ts's job; this file only draws it. It
    runs in the console (pdf-lib is loaded only there), so it works for orders
    placed before it existed, and a fix here reaches every order.
+
+   NO FONTS (the shop's printer, 2026-10-21: "the font is not available"). The
+   album's pages are pictures already, but the PDF library the checkout uses
+   (jsPDF) lists 14 standard fonts on every page, used or not, and the sheet
+   labels were drawn in Helvetica, which isn't put in the file. A printer
+   without those fonts refuses the job. So every file the console hands out
+   has no font at all: the unused font lists are dropped as a file is opened
+   (loadCustomerPdf), and every word is drawn as a picture (TextPainter).
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { PDFDocument, PDFName, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, decodePDFRawStream, degrees, rgb, type PDFImage, type PDFPage } from 'pdf-lib';
 import type { AlbumSizePreset, CoverType } from './types';
 import {
   PRESS_SHEET, sheetPlan, trimInches, coverOnSheet, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
 } from './printSheet';
 import { isHardcover } from './coverGeometry';
 import { PAGE_ONE_RIGHT_MARK, type PageOneSide } from './binding';
+import type { TextPainter } from './textPainter';
+
+export type { TextPainter } from './textPainter';
 
 const PT = 72;
 const SHEET_W = PRESS_SHEET.wIn * PT;
@@ -55,9 +66,69 @@ function markLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number,
   page.drawLine({ start, end, thickness: 0.4, color: INK });
 }
 
-/** Text that stays inside the printable area. `vertical` reads bottom to top. */
-function label(page: PDFPage, font: PDFFont, text: string, xIn: number, yIn: number, size: number, vertical = false) {
-  page.drawText(text, { x: px(xIn), y: py(yIn), size, font, color: GREY, rotate: vertical ? degrees(90) : undefined });
+const GREY_HEX = '#595959';
+const INK_HEX = '#000000';
+
+interface WriteOpts { vertical?: boolean; color?: string; bold?: boolean }
+type Write = (page: PDFPage, text: string, xIn: number, yIn: number, size: number, opts?: WriteOpts) => Promise<void>;
+
+/** Words for one output file: each picture is put in the file once, however
+ *  many sheets show it. (x, y) is where the baseline starts, in sheet inches;
+ *  `vertical` reads bottom to top, like turned text. */
+function writer(out: PDFDocument, painter: TextPainter): { write: Write; widthIn: (text: string, size: number, bold?: boolean) => number } {
+  const made = new Map<string, Promise<{ img: PDFImage; wPt: number; hPt: number; descentPt: number }>>();
+  const write: Write = async (page, text, xIn, yIn, size, { vertical = false, color = GREY_HEX, bold = false } = {}) => {
+    const key = `${bold ? 'b' : 'r'}|${size}|${color}|${text}`;
+    let pic = made.get(key);
+    if (!pic) {
+      const p = painter.png(text, size, color, bold);
+      pic = out.embedPng(p.bytes).then((img) => ({ img, wPt: p.wPt, hPt: p.hPt, descentPt: p.descentPt }));
+      made.set(key, pic);
+    }
+    const { img, wPt, hPt, descentPt } = await pic;
+    const x = px(xIn), y = py(yIn);
+    // The picture's bottom-left: the baseline start, moved down by the descent
+    // (turned with the words: a quarter turn moves "down" to the right).
+    const at = vertical ? { x: x + descentPt, y } : { x, y: y - descentPt };
+    page.drawImage(img, { x: at.x, y: at.y, width: wPt, height: hPt, rotate: vertical ? degrees(90) : undefined });
+  };
+  return { write, widthIn: (text, size, bold = false) => painter.width(text, size, bold) / PT };
+}
+
+/** Whether any of the page's own drawing writes text (a BT operator). A
+ *  stream that can't be read counts as text, so its fonts stay. */
+function pageDrawsText(page: PDFPage): boolean {
+  const contents = page.node.Contents();
+  if (!contents) return false;
+  const streams = contents instanceof PDFArray ? contents.asArray().map((r) => page.doc.context.lookup(r)) : [contents];
+  for (const s of streams) {
+    if (!(s instanceof PDFRawStream)) return true;
+    let bytes: Uint8Array;
+    try { bytes = decodePDFRawStream(s).decode(); } catch { return true; }
+    let str = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) str += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    if (/(^|[\s\]>)])BT[\s/[(<]/.test(str)) return true;
+  }
+  return false;
+}
+
+/** Save a file the console made. pdf-lib gives every new page an empty font
+ *  list: it names nothing, but a strict print check could still stop on it. */
+function saveNoFonts(out: PDFDocument): Promise<Uint8Array> {
+  for (const p of out.getPages()) {
+    const res = p.node.Resources();
+    const fonts = res?.lookup(PDFName.of('Font'));
+    if (res && fonts instanceof PDFDict && fonts.keys().length === 0) res.delete(PDFName.of('Font'));
+  }
+  return out.save();
+}
+
+/** Drop the font lists from pages that write no text (every page our checkout
+ *  makes: one picture each). If any page writes text, every font stays: pages
+ *  can share one list, and that file isn't one our checkout made. */
+function dropUnusedFonts(pages: PDFPage[]): void {
+  if (pages.some(pageDrawsText)) return;
+  for (const pg of pages) pg.node.Resources()?.delete(PDFName.of('Font'));
 }
 
 export interface ImposeResult {
@@ -90,7 +161,24 @@ async function loadCustomerPdf(src: ArrayBuffer | Uint8Array, what: string): Pro
     }
     for (const key of ['Annots', 'AA', 'Thumb', 'PieceInfo']) pg.node.delete(PDFName.of(key));
   }
+  dropUnusedFonts(pages);
   return { doc, pages };
+}
+
+/** The customer's print file as the shop gets it from "Print PDF": the same
+ *  pages, with no font lists and nothing but the pictures (a fresh file, so
+ *  the old font objects aren't carried along unused). */
+export async function cleanPrintFile(src: ArrayBuffer | Uint8Array, what: 'print file' | 'cover file'): Promise<Uint8Array> {
+  const { doc, pages } = await loadCustomerPdf(src, what);
+  if (what === 'print file' && pages.length > MAX_PRINT_PAGES) throw new Error(`This print file has ${pages.length} pages — more than any album. Ask the customer to order again.`);
+  const out = await PDFDocument.create();
+  // The page-1 mark stays: the console's sheets read it (printFilePageOne).
+  let keywords = '';
+  try { keywords = doc.getKeywords() ?? ''; } catch { /* not text: leave it out */ }
+  if (keywords) out.setKeywords(keywords.split(/\s+/).filter(Boolean));
+  const copied = await out.copyPages(doc, pages.map((_, i) => i));
+  copied.forEach((p) => out.addPage(p));
+  return saveNoFonts(out);
 }
 
 /** Where a print file puts page 1. The checkout writes PAGE_ONE_RIGHT_MARK
@@ -119,10 +207,10 @@ function sourceBleed(wPt: number, hPt: number, size: AlbumSizePreset): number {
 
 /**
  * Lay the order's page PDF out on press sheets. `label` goes on every sheet
- * (the order number). Throws with a plain message if the file doesn't match
- * the album size.
+ * (the order number); `text` draws it (no fonts). Throws with a plain message
+ * if the file doesn't match the album size.
  */
-export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string): Promise<ImposeResult> {
+export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string, text: TextPainter): Promise<ImposeResult> {
   const { doc, pages } = await loadCustomerPdf(src, 'print file');
   const pageOne = printFilePageOne(doc);
   // A page count no album has is a bad file, not a job to lay out (and would
@@ -141,7 +229,7 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
 
   const out = await PDFDocument.create();
   out.setTitle(`${orderLabel} — press sheets`);
-  const font = await out.embedFont(StandardFonts.Helvetica);
+  const words = writer(out, text);
 
   // Keep only the trim edge each spot has room for (the file has 0.125).
   const keepOf = (p: SheetPlacement): Sides => ({
@@ -186,9 +274,9 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
       sheet.drawPage(embedded, { x: at.x, y: at.y, width: ew, height: eh, rotate: degrees(at.r) });
     }
     drawCutMarks(sheet, side.placements.map((q) => q.slot));
-    drawSheetLabel(sheet, font, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q) => q.pile));
+    await drawSheetLabel(sheet, words, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q) => q.pile));
   }
-  return { bytes: await out.save(), plan, pageOne, sourceBleedIn: srcBleed };
+  return { bytes: await saveNoFonts(out), plan, pageOne, sourceBleedIn: srcBleed };
 }
 
 /** Cut marks for every cut line, in the white around the block — or, where
@@ -225,7 +313,7 @@ function drawCutMarks(page: PDFPage, slots: SheetSlot[]) {
 /** The sheet's name, along the paper edge of the widest white band, and each
  *  spot's pile number next to it — in the side band beside its column, or
  *  above the top row / below the bottom row when the sides are too narrow. */
-function drawSheetLabel(page: PDFPage, font: PDFFont, text: string, slots: SheetSlot[], piles: number[]) {
+async function drawSheetLabel(page: PDFPage, words: ReturnType<typeof writer>, text: string, slots: SheetSlot[], piles: number[]) {
   const u = PRESS_SHEET.unprintableIn;
   const size = 7;
   const cap = 0.1; // text height, inches
@@ -234,25 +322,26 @@ function drawSheetLabel(page: PDFPage, font: PDFFont, text: string, slots: Sheet
   const left = Math.min(...slots.map((s) => s.x - s.bleed.left));
   const right = Math.max(...slots.map((s) => s.x + s.w + s.bleed.right));
   const bandL = left - u, bandR = PRESS_SHEET.wIn - u - right, bandT = top - u, bandB = PRESS_SHEET.hIn - u - bottom;
-  const widthIn = (t: string) => font.widthOfTextAtSize(t, size) / PT;
+  const widthIn = (t: string) => words.widthIn(t, size);
+  const label = (t: string, xIn: number, yIn: number, vertical = false) => words.write(page, t, xIn, yIn, size, { vertical });
 
   // Sheet name: right at the paper's printable edge, clear of the cut marks.
-  if (bandL >= 0.6) label(page, font, text, u + 0.02 + cap, PRESS_SHEET.hIn - u - 0.3, size, true);
-  else if (bandT >= 0.2) label(page, font, text, u + 0.3, u + cap + 0.02, size);
-  else if (bandB >= 0.2) label(page, font, text, u + 0.3, PRESS_SHEET.hIn - u - 0.04, size);
+  if (bandL >= 0.6) await label(text, u + 0.02 + cap, PRESS_SHEET.hIn - u - 0.3, true);
+  else if (bandT >= 0.2) await label(text, u + 0.3, u + cap + 0.02);
+  else if (bandB >= 0.2) await label(text, u + 0.3, PRESS_SHEET.hIn - u - 0.04);
 
   const lastCol = Math.max(...slots.map((s) => s.x));
   const firstCol = Math.min(...slots.map((s) => s.x));
   const firstRow = Math.min(...slots.map((s) => s.y));
   const lastRow = Math.max(...slots.map((s) => s.y));
-  slots.forEach((s, i) => {
+  for (const [i, s] of slots.entries()) {
     const t = `pile ${piles[i] + 1}`;
     const midY = s.y + s.h / 2 + widthIn(t) / 2;
-    if (s.x === firstCol && bandL >= 0.3) label(page, font, t, left - 0.08, midY, size, true);
-    else if (s.x === lastCol && bandR >= 0.3) label(page, font, t, right + 0.08 + cap, midY, size, true);
-    else if (s.y === firstRow && bandT >= 0.3) label(page, font, t, s.x + s.w / 2 - widthIn(t) / 2, top - 0.35, size);
-    else if (s.y === lastRow && bandB >= 0.3) label(page, font, t, s.x + s.w / 2 - widthIn(t) / 2, bottom + 0.35 + cap, size);
-  });
+    if (s.x === firstCol && bandL >= 0.3) await label(t, left - 0.08, midY, true);
+    else if (s.x === lastCol && bandR >= 0.3) await label(t, right + 0.08 + cap, midY, true);
+    else if (s.y === firstRow && bandT >= 0.3) await label(t, s.x + s.w / 2 - widthIn(t) / 2, top - 0.35);
+    else if (s.y === lastRow && bandB >= 0.3) await label(t, s.x + s.w / 2 - widthIn(t) / 2, bottom + 0.35 + cap);
+  }
 }
 
 export interface CoverSheetResult { bytes: Uint8Array; wrapWIn: number; wrapHIn: number }
@@ -263,7 +352,7 @@ export interface CoverSheetResult { bytes: Uint8Array; wrapWIn: number; wrapHIn:
  * the plain reason when the cover can't fit (e.g. 9x9 hardbound).
  */
 export async function imposeCoverSheet(
-  src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, cover: CoverType, pageCount: number, orderLabel: string,
+  src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, cover: CoverType, pageCount: number, orderLabel: string, text: TextPainter,
 ): Promise<CoverSheetResult> {
   const { pages: [srcPage] } = await loadCustomerPdf(src, 'cover file');
   const fit = coverOnSheet(size, cover, pageCount);
@@ -277,7 +366,7 @@ export async function imposeCoverSheet(
 
   const out = await PDFDocument.create();
   out.setTitle(`${orderLabel} — cover sheet`);
-  const font = await out.embedFont(StandardFonts.Helvetica);
+  const words = writer(out, text);
   const sheet = out.addPage([SHEET_W, SHEET_H]);
   const embedded = await out.embedPage(srcPage);
   // Turned a quarter clockwise: the cover's top faces the sheet's right edge.
@@ -341,10 +430,10 @@ export async function imposeCoverSheet(
   // that band holds a mark and the text, else down the left side, a quarter of
   // the way along (the corners and the spine have marks).
   const cap = 0.1;
-  const len = font.widthOfTextAtSize(txt, 7) / PT;
-  if (fit.y - u >= MARK_GAP + MARK_LEN + cap + 0.1) label(sheet, font, txt, u + 0.3, u + cap + 0.02, 7);
-  else label(sheet, font, txt, u + cap + 0.02, fit.y + fit.h / 4 + len / 2, 7, true);
-  return { bytes: await out.save(), wrapWIn: wrapW, wrapHIn: wrapH };
+  const len = words.widthIn(txt, 7);
+  if (fit.y - u >= MARK_GAP + MARK_LEN + cap + 0.1) await words.write(sheet, txt, u + 0.3, u + cap + 0.02, 7);
+  else await words.write(sheet, txt, u + cap + 0.02, fit.y + fit.h / 4 + len / 2, 7, { vertical: true });
+  return { bytes: await saveNoFonts(out), wrapWIn: wrapW, wrapHIn: wrapH };
 }
 
 /**
@@ -353,22 +442,21 @@ export async function imposeCoverSheet(
  * and which way it flips (hold it to a light — the circle must line up with
  * LONG).
  */
-export async function pressTestSheet(): Promise<Uint8Array> {
+export async function pressTestSheet(text: TextPainter): Promise<Uint8Array> {
   const out = await PDFDocument.create();
   out.setTitle('Megyprints press test sheet');
-  const font = await out.embedFont(StandardFonts.Helvetica);
-  const bold = await out.embedFont(StandardFonts.HelveticaBold);
+  const { write } = writer(out, text);
   const W = PRESS_SHEET.wIn, H = PRESS_SHEET.hIn;
   const target = { x: 3.5, y: 5 };
 
-  const rulers = (page: PDFPage) => {
+  const rulers = async (page: PDFPage) => {
     // Ticks at 1/8, 1/4 and 3/8 in from every edge: the first one that prints
     // is how close the printer gets.
     for (const d of [0.125, 0.25, 0.375]) {
       const c = d === 0.25 ? INK : GREY;
       page.drawRectangle({ x: px(d), y: py(H - d), width: (W - 2 * d) * PT, height: (H - 2 * d) * PT, borderColor: c, borderWidth: 0.5, borderDashArray: d === 0.25 ? undefined : [3, 3] });
     }
-    label(page, font, 'Lines at 1/8, 1/4 (solid) and 3/8 in from the edge.', 0.5, 0.62, 8);
+    await write(page, 'Lines at 1/8, 1/4 (solid) and 3/8 in from the edge.', 0.5, 0.62, 8);
   };
   const ring = (page: PDFPage, x: number, y: number) => {
     for (const r of [0.0625, 0.125, 0.25]) page.drawCircle({ x: px(x), y: py(y), size: r * PT, borderColor: INK, borderWidth: 0.6 });
@@ -377,8 +465,8 @@ export async function pressTestSheet(): Promise<Uint8Array> {
   };
 
   const front = out.addPage([SHEET_W, SHEET_H]);
-  rulers(front);
-  front.drawText('FRONT', { x: px(W / 2 - 0.6), y: py(1.3), size: 28, font: bold, color: INK });
+  await rulers(front);
+  await write(front, 'FRONT', W / 2 - 0.6, 1.3, 28, { bold: true, color: INK_HEX });
   ring(front, target.x, target.y);
   // A 5 in bar: if it measures less, the printer is shrinking the file.
   front.drawRectangle({ x: px(1), y: py(9.1), width: 5 * PT, height: 0.12 * PT, color: INK });
@@ -394,15 +482,15 @@ export async function pressTestSheet(): Promise<Uint8Array> {
     '4. If the circles are close but not on top of each other, the gap you see is how far',
     '   the back moves. Up to 1/16 in is fine.',
   ];
-  lines.forEach((t, i) => front.drawText(t, { x: px(1), y: py(10.2 + i * 0.3), size: 12, font, color: INK }));
+  for (const [i, t] of lines.entries()) await write(front, t, 1, 10.2 + i * 0.3, 12, { color: INK_HEX });
 
   const back = out.addPage([SHEET_W, SHEET_H]);
-  rulers(back);
-  back.drawText('BACK', { x: px(W / 2 - 0.5), y: py(1.3), size: 28, font: bold, color: INK });
+  await rulers(back);
+  await write(back, 'BACK', W / 2 - 0.5, 1.3, 28, { bold: true, color: INK_HEX });
   // Long-edge flip mirrors left↔right; short-edge flip mirrors top↔bottom.
   ring(back, W - target.x, target.y);
-  back.drawText('LONG', { x: px(W - target.x - 0.25), y: py(target.y + 0.75), size: 14, font: bold, color: INK });
+  await write(back, 'LONG', W - target.x - 0.25, target.y + 0.75, 14, { bold: true, color: INK_HEX });
   ring(back, target.x, H - target.y);
-  back.drawText('SHORT', { x: px(target.x - 0.3), y: py(H - target.y + 0.75), size: 14, font: bold, color: GREY });
-  return out.save();
+  await write(back, 'SHORT', target.x - 0.3, H - target.y + 0.75, 14, { bold: true });
+  return saveNoFonts(out);
 }

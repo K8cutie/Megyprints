@@ -50,7 +50,7 @@ export default defineConfig(({ command }) => ({
         // the console's press-sheet tool (pdf-lib, ~430 KB, the shop's first click)
         // and the iPhone-photo (HEIC) converter (lib/heicWorker + libheif WebAssembly,
         // ~2 MB, when a HEIC arrives).
-        globIgnores: ['**/printSheetPdf-*.js', '**/heicWorker-*.js'],
+        globIgnores: ['**/printSheetPdf-*.js', '**/heicWorker-*.js', '**/pressSheetJpeg-*.js', '**/pdf.worker*'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Apply a shipped build on the NEXT load instead of waiting for every tab
         // to close — the new service worker activates immediately and claims open

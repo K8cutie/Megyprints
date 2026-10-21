@@ -3,12 +3,14 @@
    render when canSeeFinancials (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
-import { Loader2, Check, Download, AlertTriangle, Receipt, Printer } from 'lucide-react';
+import { Loader2, Check, Download, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
 import {
   type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, printFilesOf,
 } from '../../lib/adminOrders';
 import { supabase } from '../../lib/supabase';
-import { downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet } from '../../lib/pressSheetFiles';
+import {
+  downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile,
+} from '../../lib/pressSheetFiles';
 
 export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds }: {
   orders: AdminOrder[];
@@ -48,6 +50,7 @@ function PressHowTo() {
         <li>Each spot on the sheet makes a pile (the sheet says which). Put pile 1 on top of pile 2, pile 2 on top of pile 3, and so on. The pages are now in order.</li>
         <li>The first side is blank on purpose: it faces the inside of the front cover. When the album has an even number of pages, the last side is blank too.</li>
         <li><b>Cover sheet</b>: print one side only. Cut on the marks; the dashed marks are the spine edges.</li>
+        <li><b>Sheets as JPEG</b>: the same sheets and cover sheet as 300 DPI pictures in one zip, for a printer that can't open the PDF. Print each at actual size (100%).</li>
       </ol>
       <button onClick={testSheet} disabled={busy}
         className="mt-3 h-9 px-4 rounded-lg bg-paper text-sm font-medium text-dark flex items-center gap-2 disabled:opacity-50">
@@ -65,11 +68,15 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
   const [price, setPrice] = useState(o.amount != null ? String(o.amount) : '');
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // What a long download is doing ("Making the JPEG pictures: 3 of 25…").
+  const [progress, setProgress] = useState<string | null>(null);
 
-  // The print files laid out on the shop's 12.5 × 19 sheet (pressSheetFiles).
-  const pressFile = async (make: () => Promise<string>) => {
-    setSaving(true); setErr(null); setNote(null);
-    try { setNote(await make()); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not make the sheet file.'); }
+  // The print files, as they are or laid out on the shop's 12.5 × 19 sheet
+  // (pressSheetFiles). None of them has a font.
+  const pressFile = async (make: (progress: (line: string) => void) => Promise<string>) => {
+    setSaving(true); setErr(null); setNote(null); setProgress(null);
+    try { setNote(await make(setProgress)); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not make the sheet file.'); }
+    setProgress(null);
     setSaving(false);
   };
 
@@ -93,30 +100,6 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
     const n = Number(raw);
     if (!Number.isFinite(n) || n <= 0) { setErr('Enter a valid peso amount (numbers only).'); return; }
     saveFin({ amount: n });
-  };
-
-  // Pull the print-ready PDF (operators only — RLS blocks customers). Built on
-  // the customer's device at order time and stored at "<order_id>.pdf".
-  const downloadPrintPdf = async () => {
-    setSaving(true); setErr(null);
-    const { data, error } = await supabase.storage
-      .from('print-pdfs')
-      .createSignedUrl(`${printFilesOf(o)}.pdf`, 120, { download: `megyprints-${o.order_number}.pdf` });
-    setSaving(false);
-    if (error || !data?.signedUrl) { setErr('Print file not ready for this order yet.'); return; }
-    window.open(data.signedUrl, '_blank');
-  };
-
-  // Pull the front·spine·back cover wrap ("<order_id>-cover.pdf"), a separate
-  // print file from the interior pages. Operators only (same RLS as above).
-  const downloadCoverPdf = async () => {
-    setSaving(true); setErr(null);
-    const { data, error } = await supabase.storage
-      .from('print-pdfs')
-      .createSignedUrl(`${printFilesOf(o)}-cover.pdf`, 120, { download: `megyprints-${o.order_number}-cover.pdf` });
-    setSaving(false);
-    if (error || !data?.signedUrl) { setErr('Cover file not ready for this order yet.'); return; }
-    window.open(data.signedUrl, '_blank');
   };
 
   // The customer's receipt (0033) — private bucket, operators only.
@@ -218,13 +201,20 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
             </button>
           )}
           {paid && (
-            <button onClick={downloadPrintPdf} disabled={saving}
+            <button onClick={() => pressFile((p) => downloadSheetsAsJpeg(o, p))} disabled={saving} data-testid="order-sheets-jpeg"
+              title="Every sheet side and the cover sheet as 300 DPI JPEG pictures, in one zip, for a printer that can't open the PDF."
+              className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
+              <FileImage size={13} /> Sheets as JPEG
+            </button>
+          )}
+          {paid && (
+            <button onClick={() => pressFile(() => downloadPrintFile(o))} disabled={saving} data-testid="order-print-pdf"
               className="h-8 px-3 rounded-lg bg-blush text-xs font-medium text-[#C98A5E] flex items-center gap-1 disabled:opacity-50">
               <Download size={13} /> Print PDF
             </button>
           )}
           {paid && (
-            <button onClick={downloadCoverPdf} disabled={saving}
+            <button onClick={() => pressFile(() => downloadCoverFile(o))} disabled={saving} data-testid="order-cover-pdf"
               className="h-8 px-3 rounded-lg bg-[#F1ECFF] text-xs font-medium text-[#7A5EC9] flex items-center gap-1 disabled:opacity-50">
               <Download size={13} /> Cover PDF
             </button>
@@ -237,6 +227,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
         </div>
       </div>
       {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
+      {progress && saving && <p className="text-xs text-medium mt-2 flex items-center gap-1.5" data-testid="order-press-progress"><Loader2 size={12} className="animate-spin" /> {progress}</p>}
       {note && !err && <p className="text-xs text-success mt-2" data-testid="order-press-note">✓ {note}</p>}
     </div>
   );

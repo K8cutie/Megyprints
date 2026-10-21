@@ -36,4 +36,16 @@ describe('press-sheet tool loading', () => {
     const pdfLib = sources(join(ROOT, 'src')).filter((p) => /from 'pdf-lib'/.test(readFileSync(p, 'utf8')));
     expect(pdfLib.map((p) => p.slice(ROOT.length + 1).replace(/\\/g, '/'))).toEqual(['src/pages/builder/printSheetPdf.ts']);
   });
+
+  it('pdf.js ("Sheets as JPEG") the same way: one dynamic import, skipped by the offline cache', () => {
+    const cfg = read('vite.config.ts');
+    expect(cfg).toMatch(/globIgnores:\s*\[[^\]]*'\*\*\/pressSheetJpeg-\*\.js'/);
+    expect(cfg).toMatch(/globIgnores:\s*\[[^\]]*'\*\*\/pdf\.worker\*'/);
+    const rel = (p: string) => p.slice(ROOT.length + 1).replace(/\\/g, '/');
+    const pdfjs = sources(join(ROOT, 'src')).filter((p) => /from 'pdfjs-dist/.test(readFileSync(p, 'utf8')));
+    expect(pdfjs.map(rel)).toEqual(['src/lib/pressSheetJpeg.ts']);
+    const importers = sources(join(ROOT, 'src')).filter((p) => /['"][./]*(lib\/)?pressSheetJpeg['"]/.test(readFileSync(p, 'utf8')));
+    expect(importers.map(rel)).toEqual(['src/lib/pressSheetFiles.ts']);
+    expect(read('src/lib/pressSheetFiles.ts')).toContain("import('./pressSheetJpeg')");
+  });
 });
