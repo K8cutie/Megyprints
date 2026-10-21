@@ -168,9 +168,14 @@ export function useIndexedDBPhotos(): UseIndexedDBPhotosReturn {
 
         await withStore('readwrite', (s) => s.put(record));
 
-        // Clean up old blob URL if re-storing same ID
+        // Clean up old blob URL if re-storing same ID — and forget it, or the
+        // next get(id) hands out that dead link (a replaced photo then opened
+        // blank from Your Projects).
         const oldUrl = urlCache.current.get(photoId);
-        if (oldUrl) URL.revokeObjectURL(oldUrl);
+        if (oldUrl) {
+          URL.revokeObjectURL(oldUrl);
+          urlCache.current.delete(photoId);
+        }
 
         return {
           id: photoId,
