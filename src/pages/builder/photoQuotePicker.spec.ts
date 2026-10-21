@@ -179,6 +179,46 @@ describe('box-sized lines (owner, 2026-10-21: longer lines where the box has roo
   });
 });
 
+describe('"Let AI write a quote": an empty quote box starts writing in ONE tap (owner, 2026-10-21)', () => {
+  const open = (props: Record<string, unknown>) => act(() => root.render(createElement(QuotePickerModal, { onPick, onClose, mobile: true, ...props })));
+  it('opened on an empty quote box: the lines are written without a second tap', async () => {
+    h.user = { id: 'u1' };
+    h.write.mockResolvedValue({ lines: ['A happy start to a big day'] });
+    open({ photoUrls: ['blob:x/0', 'blob:x/1'], autoWrite: true });
+    await settle();
+    await settle();
+    expect(h.write).toHaveBeenCalledTimes(1);
+    expect($$('photo-quote-line').map((b) => b.textContent)).toEqual(['A happy start to a big day']);
+  });
+  it('opened on a quote already there (the pool): nothing starts by itself', async () => {
+    h.user = { id: 'u1' };
+    open({ photoUrls: ['blob:x/0'], autoWrite: false, initial: 'Old line' });
+    await settle();
+    expect(h.write).not.toHaveBeenCalled();
+  });
+  it('signed out: it asks to sign in first, and sends nothing', async () => {
+    h.user = null;
+    open({ photoUrls: ['blob:x/0'], autoWrite: true });
+    await settle();
+    expect($('photo-quote-sign-in')).not.toBeNull();
+    expect(h.write).not.toHaveBeenCalled();
+  });
+  it('a page with no photos: nothing to write from, so nothing starts', async () => {
+    h.user = { id: 'u1' };
+    open({ photoUrls: [], autoWrite: true });
+    await settle();
+    expect(h.write).not.toHaveBeenCalled();
+  });
+  it('the empty quote box says "Let AI write a quote" on desktop and phone, and only an EMPTY box auto-writes', () => {
+    const canvas = readFileSync(resolve(__dirname, 'useCanvasEngine.ts'), 'utf8');
+    const dom = readFileSync(resolve(__dirname, 'BuilderPreview.tsx'), 'utf8');
+    expect(canvas).toMatch(/roll === 'quote' \? 'Let AI write a quote'/);
+    expect(dom).toMatch(/quote: 'Let AI write a quote',/);
+    expect(readFileSync(resolve(__dirname, 'BuilderEdit.tsx'), 'utf8')).toMatch(/autoWrite=\{!actions\.currentPage\?\.textElements\?\.some\(\(t\) => t\.boxIndex === boxQuoteSlot\)\}/);
+    expect(readFileSync(resolve(__dirname, 'MobileReview.tsx'), 'utf8')).toMatch(/autoWrite=\{!page\?\.textElements\?\.some\(\(t\) => t\.boxIndex === boxQuoteSlot\)\}/);
+  });
+});
+
 describe('wired in all four places the picker opens', () => {
   it('BuilderEdit (desktop) and MobileReview (phone) pass the page photos to both pickers', () => {
     for (const f of ['BuilderEdit.tsx', 'MobileReview.tsx']) {

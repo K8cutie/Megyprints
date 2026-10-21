@@ -25,7 +25,10 @@ export const PHOTO_QUOTE_MESSAGES: Record<'limit_user' | 'limit_all' | 'refused'
 
    The chosen line is written through the caller's setBoxText/setSlotText, which
    already evicts whatever else occupies the box: one box, one thing. */
-export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, onClose, mobile, photoUrls = [], quoteBox = null }: {
+export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, onClose, mobile, photoUrls = [], quoteBox = null, autoWrite = false }: {
+  /** Opened from an EMPTY quote box ("Let AI write a quote"): start writing
+   *  lines for the page's photos right away — one tap, not two. */
+  autoWrite?: boolean;
   /** The line currently in this box, if any — enables Change/Remove wording. */
   initial?: string | null;
   /** The photos on this box's page (photoQuotes.pagePhotoUrls). With any,
@@ -121,6 +124,15 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, on
     resumeRef.current = false;
     void Promise.resolve().then(writeForPhoto);
   }, [user, writeForPhoto]);
+
+  // "Let AI write a quote" on an empty box: start at once, ONCE (signed out,
+  // that's the sign-in step, which carries on by itself after).
+  const autoRef = useRef(autoWrite);
+  useEffect(() => {
+    if (!autoRef.current || photoUrls.length === 0) return;
+    autoRef.current = false;
+    void Promise.resolve().then(writeForPhoto);
+  }, [photoUrls.length, writeForPhoto]);
 
   const PhotoSection = photoUrls.length === 0 ? null : (
     <div className="px-4 pt-3 shrink-0" data-testid="photo-quote">

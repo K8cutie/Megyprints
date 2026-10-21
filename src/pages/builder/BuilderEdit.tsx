@@ -871,6 +871,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
         <QuotePickerModal
           photoUrls={pagePhotoUrls(actions.currentPage, actions.uploadedPhotos)}
           quoteBox={quoteBoxFor(actions.currentPage, boxQuoteSlot, actions.albumSize, actions.currentPageIndex)}
+          autoWrite={!actions.currentPage?.textElements?.some((t) => t.boxIndex === boxQuoteSlot)}
           initial={actions.currentPage?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
           onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }); setBoxQuoteSlot(null); }}

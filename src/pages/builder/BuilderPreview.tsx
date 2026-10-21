@@ -140,7 +140,10 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
  *  with the Fabric labels in useCanvasEngine's empty-textbox block — the two
  *  are SEPARATE and drift silently. */
 const ROLL_LABELS: Record<Exclude<BoxRoll, 'qr'>, string> = {
-  quote: 'Add a quote',
+  // An empty quote box invites a line written from the page's photos (owner,
+  // 2026-10-21: bank quotes are no longer dealt into boxes); the tap opens the
+  // picker already writing.
+  quote: 'Let AI write a quote',
   text: 'Your words here',
 };
 
