@@ -54,7 +54,8 @@ describe('readinessMessage — one plain sentence', () => {
 describe('wired in (source guards)', () => {
   const src = readFileSync(resolve(__dirname, 'BuilderPreview.tsx'), 'utf8');
   it('Order asks first; only "Order anyway" goes on with blanks', () => {
-    expect(src).toMatch(/const warning = \[coverIsBlank\(coverFront\) \? BLANK_COVER_MESSAGE : '', titleCut \? COVER_TITLE_TOO_LONG_MESSAGE : '', readinessMessage\(readiness\), longTextsMessage\(long\.length\), copies \? `\$\{copies\}\.` : ''\]\.filter\(Boolean\)\.join\(' '\);\s*if \(warning && !anyway\) \{ setNotReady\(warning\); return; \}/);
+    // "Order with blank pages" (blankOk, the end card's reminder) leaves out ONLY the blank pages.
+    expect(src).toMatch(/const ready = blankOk \? \{ \.\.\.readiness, blankPages: 0 \} : readiness;\s*const warning = \[coverIsBlank\(coverFront\) \? BLANK_COVER_MESSAGE : '', titleCut \? COVER_TITLE_TOO_LONG_MESSAGE : '', readinessMessage\(ready\), longTextsMessage\(long\.length\), copies \? `\$\{copies\}\.` : ''\]\.filter\(Boolean\)\.join\(' '\);\s*if \(warning && !anyway\) \{ setNotReady\(warning\); setNotReadyBlank\(ready\.blankPages > 0\); return; \}/);
     expect(src).toMatch(/onClick=\{\(\) => handleOrder\(true\)\} data-testid="order-not-ready-anyway"/);
   });
   it('no Order button passes its click event as "anyway"', () => {

@@ -66,7 +66,7 @@ import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveO
    + Supabase cloud persistence (Phase 1)
    ══════════════════════════════════════════════════════════════════════════ */
 
-const MIN_PAGES = 40;
+const MIN_PAGES = MIN_ALBUM_PAGES;
 const STORAGE_KEY = DRAFT_STORAGE_KEY;
 
 /** A fresh album row id, minted on the device so a draft knows which album it
@@ -743,6 +743,10 @@ export interface BuilderActions {
   goToPage: (index: number) => void;
   addPage: () => void;
   deletePage: (index: number) => void;
+  /** Delete these pages (0-based) in ONE undo step, never under the 40-page
+   *  floor. `landOnLast`: open the album's last page after (the end-of-album
+   *  reminder stays at the end). Returns how many were deleted. */
+  deletePages: (indexes: readonly number[], opts?: { landOnLast?: boolean }) => number;
   duplicatePage: (index: number) => void;
 
   // Generation
@@ -2030,15 +2034,38 @@ export function useBuilderState(): BuilderActions {
     setCurrentPageIndex((prev) => prev + 1);
   }, [currentPageIndex, albumSize]);
 
-  const deletePage = useCallback((index: number) => {
+  /* Deleting pages (blankPages.ts: the end-of-album reminder's "Delete 5
+     blank pages"). Never under MIN_PAGES: the LAST of the given pages go
+     first, so the earlier ones keep their numbers. Every page after a deleted
+     one moves up, and an odd number of them before it puts it on the other
+     side of the book (binding.ts: page 1, 3, 5… bind on the left). Frames
+     follow the spine by themselves (they are fractions of the safe area); a
+     sticker is placed in page fractions, so it is kept out of the spine again. */
+  const deletePages = useCallback((indexes: readonly number[], opts?: { landOnLast?: boolean }): number => {
+    const prev = albumPagesRef.current;
+    const room = Math.max(0, prev.length - MIN_PAGES);
+    const wanted = [...new Set(indexes)].filter((i) => i >= 0 && i < prev.length).sort((a, b) => a - b);
+    const going = new Set(wanted.slice(Math.max(0, wanted.length - room)));
+    if (going.size === 0) return 0;
     pushSnapshot();
-    setAlbumPages((prev) => {
-      // Hard block: cannot delete below MIN_PAGES
-      if (prev.length <= MIN_PAGES) return prev;
-      return prev.filter((_, i) => i !== index);
+    const next: AlbumPage[] = [];
+    prev.forEach((page, i) => {
+      if (going.has(i)) return;
+      const at = next.length;
+      if ((at - i) % 2 === 0 || !page.stickers?.length) { next.push(page); return; }
+      const template = page.templateId ? getTemplateById(page.templateId) : null;
+      const ctx = { albumSize, pageIndex: at, template };
+      next.push({ ...page, stickers: page.stickers.map((k) => ({ ...k, geom: clampStickerGeom(k.geom, ctx).geom })) });
     });
-    setCurrentPageIndex((prev) => Math.min(prev, Math.max(0, albumPages.length - 2)));
-  }, [albumPages.length]);
+    setAlbumPages(next);
+    const cur = currentPageIndex;
+    const before = [...going].filter((i) => i < cur).length;
+    const landed = opts?.landOnLast ? next.length - 1 : cur - before - (going.has(cur) ? 1 : 0);
+    setCurrentPageIndex(Math.max(0, Math.min(next.length - 1, landed)));
+    return going.size;
+  }, [pushSnapshot, albumSize, currentPageIndex]);
+
+  const deletePage = useCallback((index: number) => { deletePages([index]); }, [deletePages]);
 
   const duplicatePage = useCallback((index: number) => {
     pushSnapshot();
@@ -3856,6 +3883,7 @@ export function useBuilderState(): BuilderActions {
     goToPage,
     addPage,
     deletePage,
+    deletePages,
     duplicatePage,
     generateAlbum: generateAlbumAction,
     generating,

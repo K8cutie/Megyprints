@@ -65,7 +65,7 @@ describe('Before you order', () => {
   });
   it('the preview\'s Order says it, and "Show me" goes to the first such page (source guard)', () => {
     const src = readFileSync(resolve(__dirname, 'BuilderPreview.tsx'), 'utf8');
-    expect(src).toMatch(/readinessMessage\(readiness\), longTextsMessage\(long\.length\)/);
+    expect(src).toMatch(/readinessMessage\(ready\), longTextsMessage\(long\.length\)/);
     expect(src).toMatch(/const first = \[readiness\.firstPage, longFirstPageRef\.current\]/);
   });
   it('every caption editor is told its box (source guard)', () => {

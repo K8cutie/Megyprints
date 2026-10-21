@@ -9,6 +9,7 @@
 
 import type { AlbumPage, PageTemplate } from './types';
 import { getTemplateById } from './pageTemplates';
+import { isBlankPage } from './blankPages';
 
 /** The text a new text element starts with (useBuilderState.addTextElement). */
 export const PLACEHOLDER_TEXT = 'Double-tap to edit';
@@ -36,29 +37,30 @@ export function checkOrderReadiness(
   pages.forEach((page, idx) => {
     const t = page.templateId ? templateOf(page.templateId) : undefined;
     let issues = 0;
+    // A page with nothing on it is ONE blank page, not a list of empty frames
+    // (blankPages.ts says what "nothing" is; the end-of-album reminder uses it too).
+    if (isBlankPage(page)) {
+      r.blankPages++;
+      if (r.firstPage == null) r.firstPage = idx;
+      return;
+    }
     // Photo frames: a slot shows nothing when no photo, QR, text or ornament claims it.
     const slots = t?.slots ?? (page.slotFills ?? []).map(() => ({ kind: 'photo' as const }));
-    let shown = 0;
     slots.forEach((slot, i) => {
       const claimed = has(page.slotFills, i) || has(page.qrFills, i) || has(page.slotTexts, i) || has(page.ornamentFills, i);
-      if (claimed) { shown++; return; }
-      if (!slot.kind || slot.kind === 'photo') { r.emptyFrames++; issues++; }
+      if (!claimed && (!slot.kind || slot.kind === 'photo')) { r.emptyFrames++; issues++; }
     });
     // Combo / caption boxes.
     const boxes = t?.textSlots?.length ?? 0;
     for (let j = 0; j < boxes; j++) {
       const occupied = page.textElements?.some((x) => x.boxIndex === j)
         || has(page.textSlotFills, j) || !!page.textSlotQr?.[j] || !!page.textSlotOrnament?.[j];
-      if (occupied) shown++;
-      else { r.emptyBoxes++; issues++; }
+      if (!occupied) { r.emptyBoxes++; issues++; }
     }
-    // Free text still saying the placeholder.
+    // Text still saying the placeholder.
     for (const el of page.textElements ?? []) {
       if ((el.text ?? '').trim() === PLACEHOLDER_TEXT) { r.placeholderTexts++; issues++; }
-      else if ((el.text ?? '').trim() && el.boxIndex == null) shown++;
     }
-    if ((page.photos?.length ?? 0) > 0 || (page.stickers?.length ?? 0) > 0) shown++;
-    if (shown === 0) { r.blankPages++; issues++; }
     if (issues > 0 && r.firstPage == null) r.firstPage = idx;
   });
   return r;
