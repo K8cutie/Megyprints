@@ -117,7 +117,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, on
         </div>
       ) : photoLines.length > 0 ? (
         <>
-          <p className="text-[11px] text-stone mb-1">Written for this photo{many ? 's' : ''}</p>
+          <p className="text-[11px] text-stone mb-1" data-testid="photo-quote-heading">Written for {many ? 'these photos' : 'this photo'}</p>
           <div className="flex flex-col gap-2">
             {photoLines.map((q) => (
               <button key={q} data-testid="photo-quote-line" onClick={() => { onPick(q); onClose(); }}
@@ -144,7 +144,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, on
       )}
       {needSignIn && (
         <div className="mt-2 text-[11px] leading-snug text-cocoa bg-blush border border-peach/60 rounded-lg px-3 py-2 flex items-center justify-between gap-2" data-testid="photo-quote-sign-in">
-          <span><span className="font-semibold">Sign in first.</span> Lines written for your photo are part of your Megyprints account.</span>
+          <span><span className="font-semibold">Sign in first</span> to have Megy write lines for {many ? 'these photos' : 'this photo'}.</span>
           <button onClick={openLogin} className="shrink-0 px-3 py-1.5 rounded-lg bg-peach text-white text-xs font-semibold">Sign in</button>
         </div>
       )}

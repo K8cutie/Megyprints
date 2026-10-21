@@ -85,12 +85,21 @@ describe('signed out', () => {
 
 describe('signed in', () => {
   beforeEach(() => { h.user = { id: 'u1' }; });
+  it('a page of several photos: all of them go, and the lines say they are for these photos', async () => {
+    h.write.mockResolvedValue({ lines: ['A happy start to a big day', 'Arriving with big smiles', 'A fun day out in Hong Kong'] });
+    show(['blob:x/0', 'blob:x/1', 'blob:x/2']);
+    await settle();
+    await tap($('photo-quote-write'));
+    expect(h.write.mock.calls[0][0]).toEqual(['blob:x/0', 'blob:x/1', 'blob:x/2']);
+    expect($('photo-quote-heading')!.textContent).toBe('Written for these photos'); // walk 2026-10-21: it said "this photos"
+  });
   it('3 lines written for the photo; tapping one puts it in the box', async () => {
     h.write.mockResolvedValue({ lines: ['Making each other laugh', 'Riding the train together', 'A castle at night'] });
     show(['blob:x/0']);
     await settle();
     await tap($('photo-quote-write'));
     expect(h.write.mock.calls[0][0]).toEqual(['blob:x/0']);
+    expect($('photo-quote-heading')!.textContent).toBe('Written for this photo');
     const lines = $$('photo-quote-line');
     expect(lines).toHaveLength(3);
     await tap(lines[1]);
