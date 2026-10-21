@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { generateAlbum, canTakeMemoryQr } from './generateAlbum';
+import { generateAlbum, canTakeMemoryQr, MIN_MEMORY_PAGES, OPENING_FULL_PAGES } from './generateAlbum';
 import { separateLookAlikes } from './lookAlikes';
 import { getTemplateById } from './pageTemplates';
 import type { AlbumPage, UploadedPhoto } from './types';
@@ -11,8 +11,9 @@ seedMathRandom(); // same albums every run (generateAlbum deals with Math.random
 /* ══════════════════════════════════════════════════════════════════════════
    THE PHOTO CHECK SHAPES THE ALBUM (owner, 2026-10-04). With Megy's free
    photo check on each photo (lib/photoCheck):
-     • the 7 full pages (video memories) go to the best shots — never a
-       blurry one while there is another, and not one with shut eyes;
+     • the full pages (the 3 opening pages and the 7 video memories) go to
+       the best shots — never a blurry one while there is another, and not
+       one with shut eyes;
      • two shots of the same moment the customer kept never share a page.
    Without check results, the album is exactly what it was.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -44,10 +45,10 @@ describe('the full pages go to the best shots', () => {
 
   it('never a blurry shot while there is a sharp one', () => {
     const before = memoryPhotos(gen(landscapes(60, (i) => check(i))));
-    expect(before).toHaveLength(7);
+    expect(before).toHaveLength(OPENING_FULL_PAGES + MIN_MEMORY_PAGES);
     const blurry = new Set(before);
     const after = memoryPhotos(gen(landscapes(60, (i) => check(i, blurry.has(i) ? { sharp: 10 } : {}))));
-    expect(after).toHaveLength(7);
+    expect(after).toHaveLength(OPENING_FULL_PAGES + MIN_MEMORY_PAGES);
     expect(after.filter((i) => blurry.has(i))).toEqual([]);
   });
 

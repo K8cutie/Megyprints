@@ -238,6 +238,16 @@ export function dealBoxContent(
    ══════════════════════════════════════════════════════════════════════════ */
 export const MIN_MEMORY_PAGES = 7;
 
+/* OPENING FULL PAGES (owner, 2026-10-21): "make the first 3 pages always 1
+   page full bleed". Pages 1, 2 and 3 are each one photo over the whole page:
+   the EARLIEST photos that fit a full page, so the album still opens in the
+   order the photos were taken and no head or feet are cut (a portrait on a
+   square page waits for its normal place). They come ON TOP of the
+   MIN_MEMORY_PAGES memory pages ("Extra, 10 total"), and each can take "Add a
+   video memory" like any full page. Pages 1 and 2 face each other: the one
+   place two full pages sit side by side. */
+export const OPENING_FULL_PAGES = 3;
+
 /** A QR already sits on this page (a badge, or one placed in a box before
  *  box QRs were retired — those keep working). */
 export function hasActiveQr(page: AlbumPage): boolean {
@@ -352,7 +362,7 @@ export function memorySingleTemplate(size: AlbumSizePreset): PageTemplate | unde
 export function memoryFaceCandidates(photos: UploadedPhoto[], size: AlbumSizePreset, max = 40): number[] {
   const aspect = PAGE_ASPECT[size] ?? 1;
   const fitting = photos.filter((p) => fitsFullPage(p, aspect)).length;
-  if (fitting >= Math.min(MIN_MEMORY_PAGES, photos.length)) return [];
+  if (fitting >= Math.min(MIN_MEMORY_PAGES + OPENING_FULL_PAGES, photos.length)) return [];
   return photos.map((_, i) => i)
     .filter((i) => !fitsFullPage(photos[i], aspect) && allowedOnFullPage(photos[i], aspect))
     .slice(0, max);
@@ -539,15 +549,57 @@ function pickMemoryPhotos(
   return picks.filter((i): i is number => i != null);
 }
 
+/** The OPENING_FULL_PAGES photos, in the order they were taken: the earliest
+ *  that fit a full page (Megy's photo check: a sharp, eyes-open shot before a
+ *  blurry or eyes-shut one), then — only for an album short of those — the
+ *  earliest a full page may take at all, never one whose known face the crop
+ *  would cut. Never across orientation. `skip` = photos already spoken for
+ *  (a memory's own photo). */
+function pickOpeningPhotos(
+  photos: UploadedPhoto[], size: AlbumSizePreset, k: number, skip: Set<number>,
+  faces?: Record<number, { x: number; y: number }>,
+): number[] {
+  const aspect = PAGE_ASPECT[size] ?? 1;
+  const order = groupPhotosByMoment(photos).flat().filter((i) => !skip.has(i));
+  const median = medianSharpness(photos);
+  const sharp = (i: number) => !isBlurry(photos[i], median);
+  const passes: ((i: number) => boolean)[] = [
+    (i) => fitsFullPage(photos[i], aspect) && sharp(i) && !photos[i].check?.eyesClosed,
+    (i) => fitsFullPage(photos[i], aspect) && sharp(i),
+    (i) => fitsFullPage(photos[i], aspect),
+    (i) => allowedOnFullPage(photos[i], aspect) && fullPageCost(photos[i], aspect, faces?.[i]) < 4,
+  ];
+  const picks = new Set<number>();
+  for (const ok of passes) {
+    for (const i of order) {
+      if (picks.size >= k) break;
+      if (ok(i)) picks.add(i);
+    }
+  }
+  return order.filter((i) => picks.has(i));
+}
+
+/** A page of the size's full-page single holding one photo. Mutates. */
+function asFullPage(page: AlbumPage, solo: PageTemplate, photo: number): AlbumPage {
+  page.templateId = solo.id;
+  page.slotFills = [photo];
+  page.slotScales = [1];
+  page.slotOffsetsX = [0];
+  page.slotOffsetsY = [0];
+  return page;
+}
+
 /** Put each reserved photo's full-page single back where its photo falls in
- *  the album's order, never right beside another full-page single. A photo
- *  that carries a memory (`badges`) gets its badge page instead — one per
- *  memory it carries (it is reserved that many times). Mutates. */
+ *  the album's order, never right beside another full-page single, and never
+ *  before page `floor` (the opening full pages). A photo that carries a
+ *  memory (`badges`) gets its badge page instead — one per memory it carries
+ *  (it is reserved that many times). Mutates. */
 function insertMemoryPages(
   pages: AlbumPage[], reserved: number[], solo: PageTemplate | undefined, photos: UploadedPhoto[],
   size: AlbumSizePreset, background?: AlbumPage['background'],
   options?: { border?: { color: string; width: number }; cornerBase?: string },
   badges?: Map<number, CarriedMemory[]>,
+  floor = 0,
 ): void {
   const order = groupPhotosByMoment(photos).flat();
   const pos = new Map(order.map((idx, p) => [idx, p]));
@@ -568,22 +620,18 @@ function insertMemoryPages(
     // them (1-star testers round 3, the Hoarder).
     let at = 0;
     pages.forEach((p, i) => { if (pagePos(p) < (pos.get(r) ?? 0)) at = i + 1; });
+    at = Math.max(at, floor);
     // Facing pages must not repeat a look: step one page later (or earlier).
     if (isFullPage(pages[at - 1]) || isFullPage(pages[at])) {
       if (at + 1 <= pages.length && !isFullPage(pages[at]) && !isFullPage(pages[at + 1])) at += 1;
-      else if (at - 1 >= 0 && !isFullPage(pages[at - 2]) && !isFullPage(pages[at - 1])) at -= 1;
+      else if (at - 1 >= floor && !isFullPage(pages[at - 2]) && !isFullPage(pages[at - 1])) at -= 1;
     }
     const page = createEmptyPage(pages.length, size, background, options?.border, options?.cornerBase);
     const memory = badges?.get(r)?.shift();
     const badge = memory ? qrBadgeTemplate(size, memory.corner ?? 'br') : undefined;
     if (memory && badge) asBadgePage(page, badge, r, memory.fill);
-    else if (solo) {
-      page.templateId = solo.id;
-      page.slotFills = [r];
-      page.slotScales = [1];
-      page.slotOffsetsX = [0];
-      page.slotOffsetsY = [0];
-    } else continue;
+    else if (solo) asFullPage(page, solo, r);
+    else continue;
     pages.splice(at, 0, page);
   }
 }
@@ -964,19 +1012,23 @@ function chosenQueuePlans(photos: UploadedPhoto[], albumSize: AlbumSizePreset, p
 const planLength = (plans: Map<string, number[]>) => [...plans.values()].reduce((sum, p) => sum + p.length, 0);
 
 /** What generateAlbum makes for these photos at a CHOSEN photos-per-page:
- *  its pages, and how many are the full-page video-memory singles. null for
- *  Surprise. The upload step says it before Generate. */
+ *  its pages, and how many are full-page singles (the opening pages and the
+ *  video-memory pages — a memory can go on any of them). null for Surprise.
+ *  The upload step says it before Generate. */
 export function chosenAlbumPages(
   photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, minPages = MIN_PAGES,
-): { pages: number; memoryPages: number } | null {
+): { pages: number; fullPages: number } | null {
   if (!perPage || photos.length === 0) return null;
   const solo = memorySingleTemplate(albumSize);
-  const reserved = solo ? pickMemoryPhotos(photos, albumSize, Math.min(MIN_MEMORY_PAGES, photos.length)) : [];
-  const taken = new Set(reserved);
+  const opening = solo ? pickOpeningPhotos(photos, albumSize, OPENING_FULL_PAGES, new Set()) : [];
+  const want = Math.min(MIN_MEMORY_PAGES, photos.length - opening.length);
+  const reserved = solo && want > 0 ? pickMemoryPhotosBesides(photos, albumSize, want, new Set(opening)) : [];
+  const fullPages = opening.length + reserved.length;
+  const taken = new Set([...opening, ...reserved]);
   const rest = photos.filter((_, i) => !taken.has(i));
-  if (perPage === 1) return { pages: Math.max(minPages, photos.length), memoryPages: reserved.length };
-  const restMin = Math.max(1, minPages - reserved.length);
-  return { pages: Math.max(minPages, reserved.length + planLength(chosenQueuePlans(rest, albumSize, perPage, restMin))), memoryPages: reserved.length };
+  if (perPage === 1) return { pages: Math.max(minPages, photos.length), fullPages };
+  const restMin = Math.max(1, minPages - fullPages);
+  return { pages: Math.max(minPages, fullPages + planLength(chosenQueuePlans(rest, albumSize, perPage, restMin))), fullPages };
 }
 
 /** What `pages` pages add to the price past the included ones (pricing's
@@ -1005,13 +1057,14 @@ export function photosPerPageNote(
   if (made && made.pages > MIN_PAGES) {
     return `${perPage} per page makes your album`
       + extraPagesClause(made.pages, extraCost).replace(/\.$/, '')
-      + `. That counts ${made.memoryPages} full-page photos, where your video memories go.`;
+      + `. That counts ${made.fullPages} full-page photos, where your video memories go.`;
   }
   // Too few photos for every page to take `perPage`: the 40 pages are filled
-  // with fewer on some. (The video-memory singles count: 4 a page fills 40
-  // pages from 7 + 33 × 4 = 139 photos, not 160.)
-  const memory = memorySingleTemplate(albumSize) ? MIN_MEMORY_PAGES : 0;
-  const needed = memory + (MIN_PAGES - memory) * perPage;
+  // with fewer on some. (The full-page singles count — the 3 opening pages
+  // and the 7 video memories: 4 a page fills 40 pages from 10 + 30 × 4 = 130
+  // photos, not 160.)
+  const full = memorySingleTemplate(albumSize) ? OPENING_FULL_PAGES + MIN_MEMORY_PAGES : 0;
+  const needed = full + (MIN_PAGES - full) * perPage;
   if (live.length >= needed) return null;
   return `With ${live.length} photos, ${live.length * 2 < needed ? 'most' : 'some'} pages get fewer than ${perPage} so all ${MIN_PAGES} pages are filled. ${perPage} per page needs about ${needed} photos.`;
 }
@@ -1136,13 +1189,15 @@ export interface GenerateOptions {
 }
 
 /**
- * Album generation = the memory pages + the layout around them.
- * The MIN_MEMORY_PAGES photos that crop least on a full page are reserved
- * first, spread across the album, and each gets its own full-bleed single
- * (where "Add a video memory" goes); every other photo is laid out exactly as
- * before (layoutAlbum, with that many fewer pages to fill); the memory pages
- * then go back where their photos fall in the album's order. Memories that
- * come along take their full pages first, as badges on their own photos.
+ * Album generation = the opening full pages + the memory pages + the layout
+ * around them. The OPENING_FULL_PAGES earliest photos that fit a full page
+ * are set aside for pages 1–3. The MIN_MEMORY_PAGES photos that crop least on
+ * a full page are reserved next, spread across the album, and each gets its
+ * own full-bleed single (where "Add a video memory" goes); every other photo
+ * is laid out exactly as before (layoutAlbum, with that many fewer pages to
+ * fill); the opening pages go first and the memory pages then go back where
+ * their photos fall in the album's order. Memories that come along take
+ * their full pages first, as badges on their own photos.
  */
 export function generateAlbum(
   photos: UploadedPhoto[],
@@ -1157,24 +1212,29 @@ export function generateAlbum(
   for (const m of options?.memories ?? []) {
     if (photos[m.photo] && qrBadgeTemplate(albumSize, m.corner ?? 'br')) badges.set(m.photo, [...(badges.get(m.photo) ?? []), m]);
   }
+  const opening = solo ? pickOpeningPhotos(photos, albumSize, OPENING_FULL_PAGES, new Set(badges.keys()), options?.faceCenters) : [];
   const carried = [...badges].flatMap(([photo, list]) => list.map(() => photo));
-  const want = solo ? Math.max(0, Math.min(MIN_MEMORY_PAGES, photos.length) - carried.length) : 0;
-  const reserved = [...carried, ...(want > 0 ? pickMemoryPhotosBesides(photos, albumSize, want, badges, options) : [])];
-  if (reserved.length === 0) {
+  const want = solo ? Math.max(0, Math.min(MIN_MEMORY_PAGES, photos.length - opening.length) - carried.length) : 0;
+  const spoken = new Set([...badges.keys(), ...opening]);
+  const reserved = [...carried, ...(want > 0 ? pickMemoryPhotosBesides(photos, albumSize, want, spoken, options) : [])];
+  if (reserved.length === 0 && opening.length === 0) {
     const plain = layoutAlbum(photos, albumSize, photosPerPage, background, options);
     separateLookAlikes(plain, photos, isMemoryReady);
     return plain;
   }
-  const taken = new Set(reserved);
+  const taken = new Set([...reserved, ...opening]);
   const restMap = photos.map((_, i) => i).filter((i) => !taken.has(i));
   const pages = layoutAlbum(restMap.map((i) => photos[i]), albumSize, photosPerPage, background,
-    { ...options, minPages: Math.max(1, minPages - reserved.length) },
+    { ...options, minPages: Math.max(1, minPages - reserved.length - opening.length) },
     // Fill mode is a property of the WHOLE album (its photos vs its 40
     // pages); deciding it on what's left after reserving would flip the
     // density cap at the boundary (119 photos at 2/page dealt 3s).
-    { photos: photos.length, minPages });
+    { photos: photos.length, minPages },
+    opening.length && solo ? solo : undefined);
   remapSlotFills(pages, restMap);
-  insertMemoryPages(pages, reserved, solo, photos, albumSize, background, options, badges);
+  pages.unshift(...opening.map((photo, i) =>
+    asFullPage(createEmptyPage(i, albumSize, background, options?.border, options?.cornerBase), solo!, photo)));
+  insertMemoryPages(pages, reserved, solo, photos, albumSize, background, options, badges, opening.length);
   // Two shots of the same moment the customer kept never share a page (and
   // never swap a memory page's photo out from under its QR).
   separateLookAlikes(pages, photos, isMemoryReady);
@@ -1182,9 +1242,10 @@ export function generateAlbum(
   return pages;
 }
 
-/** pickMemoryPhotos, from the photos that don't already carry a memory. */
+/** pickMemoryPhotos, from the photos not already spoken for (a memory's own
+ *  photo, an opening page's photo). */
 function pickMemoryPhotosBesides(
-  photos: UploadedPhoto[], size: AlbumSizePreset, k: number, taken: Map<number, CarriedMemory[]>, options?: GenerateOptions,
+  photos: UploadedPhoto[], size: AlbumSizePreset, k: number, taken: Set<number>, options?: GenerateOptions,
 ): number[] {
   if (taken.size === 0) return pickMemoryPhotos(photos, size, k, options?.faceCenters, options?.randomize);
   const others = photos.map((_, i) => i).filter((i) => !taken.has(i));
@@ -1209,6 +1270,9 @@ function layoutAlbum(
   /** The whole album's photos + minimum pages, when these photos are only
    *  part of it (the memory photos were reserved): fill mode is decided on it. */
   basis?: { photos: number; minPages: number },
+  /** The layout of the page right before this layout's first one (the
+   *  opening full pages): the look and rhythm guards start from it. */
+  after?: PageTemplate,
 ): AlbumPage[] {
   // STUDIO: when the caller keeps some pages out of the reshuffle it asks for
   // fewer fresh pages, so the merged album still lands on the minimum.
@@ -1349,6 +1413,15 @@ function layoutAlbum(
     recentCounts.push(n);
     if (recentCounts.length > 2) recentCounts.shift();
   };
+  // The opening full pages sit right before this layout's first page, so the
+  // guards start from them: page 4 is not a fourth full page in a row when
+  // the deck has another look, and the hero clock starts as after a single.
+  if (after) {
+    lastTemplateId = after.id;
+    lastGeoSig = geoSigOf(after);
+    noteCount(photoSlotCount(after));
+    nextHeroIn = Math.max(nextHeroIn, 4 + Math.floor(Math.random() * 4));
+  }
 
   /** Deal a single-photo template that does NOT repeat the previous page's
    *  look. `boxFree` is the cadence-preferred subset (box-free while on

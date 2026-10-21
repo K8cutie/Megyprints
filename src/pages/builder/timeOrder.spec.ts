@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { generateAlbum, chosenAlbumPages, TIME_ORDER_REACH } from './generateAlbum';
+import { generateAlbum, chosenAlbumPages, TIME_ORDER_REACH, OPENING_FULL_PAGES } from './generateAlbum';
 import { DENSITY_BY_SIZE, MIN_ALBUM_PAGES } from './densities';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from './types';
 import { seedMathRandom, mulberry32 } from '../../test/seededRandom';
@@ -47,7 +47,15 @@ const gen = (seed: number, photos: UploadedPhoto[], size: AlbumSizePreset, ppp?:
  *  earlier so two full pages never face each other, so it may sit one page
  *  from its slot: never earlier than the page two before it, never later
  *  than the page two after. */
-function expectForward(pages: AlbumPage[], at: string) {
+function expectForward(album: AlbumPage[], at: string) {
+  // Pages 1-3 are the opening full pages: the earliest photos that FIT a full
+  // page, in order. The album reads forward from page 4, which starts with
+  // the photos the opening skipped (a portrait on a square page).
+  const opening = album.slice(0, OPENING_FULL_PAGES).map(fills);
+  expect(opening.every((f) => f.length === 1), `${at}: pages 1-3 hold one photo each`).toBe(true);
+  expect(opening.flat(), `${at}: the opening pages in time order`).toEqual(opening.flat().sort((a, b) => a - b));
+  const pages = album.slice(OPENING_FULL_PAGES);
+  const n0 = OPENING_FULL_PAGES; // page numbers in the messages count the opening
   const starts = pages.map((p) => { const f = fills(p); return f.length ? Math.min(...f) : null; });
   let last = -1;
   for (const [i, p] of pages.entries()) {
@@ -57,11 +65,11 @@ function expectForward(pages: AlbumPage[], at: string) {
     if (f.length === 1) {
       const before = starts[i - 2] ?? -1;
       const after = starts[i + 2] ?? Infinity;
-      expect(first, `${at}: single page ${i + 1} holds photo ${first}, before page ${i - 1} started at ${before}`).toBeGreaterThanOrEqual(before);
-      expect(first, `${at}: single page ${i + 1} holds photo ${first}, after page ${i + 3} starts at ${after}`).toBeLessThanOrEqual(after);
+      expect(first, `${at}: single page ${n0 + i + 1} holds photo ${first}, before page ${n0 + i - 1} started at ${before}`).toBeGreaterThanOrEqual(before);
+      expect(first, `${at}: single page ${n0 + i + 1} holds photo ${first}, after page ${n0 + i + 3} starts at ${after}`).toBeLessThanOrEqual(after);
       continue;
     }
-    expect(first, `${at}: page ${i + 1} starts at photo ${first}, after page ${i} started at ${last}`).toBeGreaterThanOrEqual(last);
+    expect(first, `${at}: page ${n0 + i + 1} starts at photo ${first}, after page ${n0 + i} started at ${last}`).toBeGreaterThanOrEqual(last);
     last = first;
   }
 }
