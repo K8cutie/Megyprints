@@ -16,6 +16,8 @@
 import { supabase } from './supabase';
 import { printFilesOf, type AdminOrder } from './adminOrders';
 import { ALBUM_SIZES, type AlbumSizePreset, type CoverType } from '../pages/builder/types';
+import { printSides } from '../pages/builder/printSheet';
+import type { PageOneSide } from '../pages/builder/binding';
 import { canvasTextPainter } from './canvasTextPainter';
 import { zipStored, type ZipEntry } from './jpegZip';
 
@@ -60,11 +62,22 @@ export function saveFile(bytes: Uint8Array, filename: string, type = 'applicatio
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-/** What to tell the operator about the album sheets (sheet count, and a
- *  warning if the file and the order disagree). */
-function sheetsNote(o: PrintOrder, plan: { sheets: number; pageCount: number; layout: { leavesPerSheet: number } }): string {
+/** Which sides of this order's stack are blank, read from its print file
+ *  (printSides). Files made since 21 Oct 2026 start with page 1; older ones
+ *  start with a blank side that faces the inside of the front cover. */
+export function blankSidesNote(pageCount: number, pageOne: PageOneSide): string {
+  const sides = printSides(pageCount, pageOne);
+  const first = sides[0] === null;
+  const last = sides[sides.length - 1] === null;
+  const start = first ? 'The first side is blank (an older order: it faces the inside of the front cover)' : 'Page 1 is the first side';
+  return last ? `${start}; the last side is blank${first ? ' too' : ''}` : start;
+}
+
+/** What to tell the operator about the album sheets (sheet count, blank
+ *  sides, and a warning if the file and the order disagree). */
+function sheetsNote(o: PrintOrder, plan: { sheets: number; pageCount: number; layout: { leavesPerSheet: number } }, pageOne: PageOneSide): string {
   const piles = plan.layout.leavesPerSheet;
-  const note = `${plan.sheets} sheets, both sides · cut into ${piles} ${piles === 1 ? 'pile' : 'piles'}, then stack pile 1 on top`;
+  const note = `${plan.sheets} sheets, both sides · cut into ${piles} ${piles === 1 ? 'pile' : 'piles'}, then stack pile 1 on top · ${blankSidesNote(plan.pageCount, pageOne)}`;
   return plan.pageCount === o.page_count
     ? note
     : `${note}. Check: the print file has ${plan.pageCount} pages, the order says ${o.page_count}.`;
@@ -75,9 +88,9 @@ export async function downloadAlbumSheets(o: PrintOrder): Promise<string> {
   const size = sizeOf(o);
   const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
   const { imposeAlbumSheets } = await pressTools();
-  const { bytes, plan } = await imposeAlbumSheets(src, size, o.order_number, canvasTextPainter());
+  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, canvasTextPainter());
   saveFile(bytes, `megyprints-${o.order_number}-sheets.pdf`);
-  return sheetsNote(o, plan);
+  return sheetsNote(o, plan, pageOne);
 }
 
 /** Download the flat cover on one press sheet. */
@@ -91,7 +104,7 @@ export async function downloadCoverSheet(o: PrintOrder): Promise<string> {
 }
 
 /** The words that go in the zip with the pictures. */
-export function jpegHowTo(o: PrintOrder, sheets: number, piles: number, cover: boolean): string {
+export function jpegHowTo(o: PrintOrder, sheets: number, piles: number, cover: boolean, blankSides: string): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return [
     `Megyprints order ${o.order_number}: the press sheets as JPEG pictures.`,
@@ -103,6 +116,7 @@ export function jpegHowTo(o: PrintOrder, sheets: number, piles: number, cover: b
     'same sheet, flipping on the long edge. Then sheet 02, and so on.',
     `Keep sheet 1 on top, front side up. Cut the whole stack on the marks into ${piles} ${piles === 1 ? 'pile' : 'piles'},`,
     'then put pile 1 on top of pile 2, pile 2 on top of pile 3, and so on.',
+    `${blankSides}.`,
     '',
     cover
       ? `Cover: print ${o.order_number}-cover.jpg on one side of its own sheet. Cut on the marks; the dashed marks are the spine edges.`
@@ -120,7 +134,7 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
   const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
   const { imposeAlbumSheets, imposeCoverSheet } = await pressTools();
   const { pdfToJpegs } = await jpegTools();
-  const { bytes, plan } = await imposeAlbumSheets(src, size, o.order_number, text);
+  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, text);
   const total = plan.sides.length + 1;
   const pad = (n: number) => String(n).padStart(2, '0');
   const say = (done: number) => progress(`Making the JPEG pictures: ${done} of ${total}…`);
@@ -139,9 +153,9 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
     coverMissing = e instanceof Error ? e.message : 'The cover file could not be read.';
   }
   say(total);
-  files.push({ name: 'HOW-TO-PRINT.txt', data: new TextEncoder().encode(jpegHowTo(o, plan.sheets, plan.layout.leavesPerSheet, !coverMissing)) });
+  files.push({ name: 'HOW-TO-PRINT.txt', data: new TextEncoder().encode(jpegHowTo(o, plan.sheets, plan.layout.leavesPerSheet, !coverMissing, blankSidesNote(plan.pageCount, pageOne))) });
   saveFile(zipStored(files), `megyprints-${o.order_number}-jpeg.zip`, 'application/zip');
-  const note = `JPEG: ${sides.length} sheet ${sides.length === 1 ? 'side' : 'sides'}${coverMissing ? '' : ' and the cover sheet'}, 300 DPI · ${sheetsNote(o, plan)}`;
+  const note = `JPEG: ${sides.length} sheet ${sides.length === 1 ? 'side' : 'sides'}${coverMissing ? '' : ' and the cover sheet'}, 300 DPI · ${sheetsNote(o, plan, pageOne)}`;
   return coverMissing ? `${note}. No cover picture: ${coverMissing}` : note;
 }
 

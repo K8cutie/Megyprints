@@ -46,7 +46,7 @@ vi.mock('./pressSheetJpeg', () => ({
   },
 }));
 
-import { downloadSheetsAsJpeg, jpegHowTo } from './pressSheetFiles';
+import { blankSidesNote, downloadSheetsAsJpeg, jpegHowTo } from './pressSheetFiles';
 
 function album(n: number): ArrayBuffer {
   const doc = new jsPDF({ unit: 'in', format: [8.25, 8.25], compress: true });
@@ -102,8 +102,8 @@ describe('Sheets as JPEG', () => {
     for (const e of entries.filter((x) => x.name.endsWith('.jpg'))) expect(jpegDpi(e.data)).toBe(300);
     // The sheet PDF drawn is the press-sheet file (24 sides), then the cover sheet (1).
     expect(files.drawnPages).toEqual([24, 1]);
-    expect(new TextDecoder().decode(entries.at(-1)!.data)).toBe(jpegHowTo(order, 12, 2, true));
-    expect(note).toBe('JPEG: 24 sheet sides and the cover sheet, 300 DPI · 12 sheets, both sides · cut into 2 piles, then stack pile 1 on top');
+    expect(new TextDecoder().decode(entries.at(-1)!.data)).toBe(jpegHowTo(order, 12, 2, true, 'Page 1 is the first side; the last side is blank'));
+    expect(note).toBe('JPEG: 24 sheet sides and the cover sheet, 300 DPI · 12 sheets, both sides · cut into 2 piles, then stack pile 1 on top · Page 1 is the first side; the last side is blank');
     expect(lines[0]).toBe('Getting the print files…');
     expect(lines.at(-1)).toBe('Making the JPEG pictures: 25 of 25…');
   });
@@ -124,10 +124,35 @@ describe('Sheets as JPEG', () => {
   });
 
   it('the how-to says actual size, 300 DPI, the long-edge flip and the piles', () => {
-    const t = jpegHowTo(order, 12, 4, true);
+    const t = jpegHowTo(order, 12, 4, true, blankSidesNote(45, 'right'));
     expect(t).toContain('12.5 x 19 in sheet at 300 DPI (3750 x 5700 pixels)');
     expect(t).toContain('Print at actual size (100%). Do not use "fit to page".');
     expect(t).toContain('flipping on the long edge');
     expect(t).toContain('into 4 piles');
+  });
+});
+
+/* BLANK SIDES (owner, 2026-10-21: the console said "the first side is blank"
+   for every order, but since page 1 became a right-hand page that's only true
+   for print files made before then). Each order's note says which. */
+describe('which sides are blank, per order', () => {
+  it('new orders start with page 1; an odd page count ends on a blank side', () => {
+    expect(blankSidesNote(45, 'right')).toBe('Page 1 is the first side; the last side is blank');
+    expect(blankSidesNote(40, 'right')).toBe('Page 1 is the first side');
+  });
+  it('older orders start with a blank side; an even page count ends on one too', () => {
+    expect(blankSidesNote(40, 'left')).toBe('The first side is blank (an older order: it faces the inside of the front cover); the last side is blank too');
+    expect(blankSidesNote(45, 'left')).toBe('The first side is blank (an older order: it faces the inside of the front cover)');
+  });
+  it('the how-to in the zip says it', () => {
+    expect(jpegHowTo(order, 12, 2, true, blankSidesNote(45, 'right'))).toContain('Page 1 is the first side; the last side is blank.');
+  });
+  it('the console\'s "How to print" no longer says every first side is blank', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const src = readFileSync(resolve(__dirname, '../pages/admin/OrdersPanel.tsx'), 'utf8');
+    expect(src).not.toContain('The first side is blank on purpose');
+    expect(src).toContain('orders from 21 Oct 2026 start with page 1');
+    expect(src).toContain('Older orders start with a blank side');
   });
 });

@@ -48,7 +48,7 @@ function PressHowTo() {
         <li><b>Print sheets</b>: print both sides, flip on the long edge, at actual size (100%). Don't use "fit to page".</li>
         <li>Keep sheet 1 on top, front side up. Cut the whole stack on the marks.</li>
         <li>Each spot on the sheet makes a pile (the sheet says which). Put pile 1 on top of pile 2, pile 2 on top of pile 3, and so on. The pages are now in order.</li>
-        <li>The first side is blank on purpose: it faces the inside of the front cover. When the album has an even number of pages, the last side is blank too.</li>
+        <li>Blank sides: orders from 21 Oct 2026 start with page 1, and end with a blank side when the album has an odd number of pages. Older orders start with a blank side (it faces the inside of the front cover), and end with one when the page count is even. After <b>Print sheets</b>, the line under the order says which.</li>
         <li><b>Cover sheet</b>: print one side only. Cut on the marks; the dashed marks are the spine edges.</li>
         <li><b>Sheets as JPEG</b>: the same sheets and cover sheet as 300 DPI pictures in one zip, for a printer that can't open the PDF. Print each at actual size (100%).</li>
       </ol>
