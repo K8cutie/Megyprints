@@ -52,7 +52,7 @@ const MAX_TRACKED_IPS = 10_000;
  *  a warm instance and resets on a cold start — see the note above. */
 const hits = new Map();
 
-function ipOf(req) {
+export function ipOf(req) {
   // Prefer the platform-set single-value headers, which the client cannot
   // append to. `x-forwarded-for` is only a last resort: a caller can send their
   // OWN x-forwarded-for, so its left-most entry is client-controlled and lets an
@@ -88,15 +88,18 @@ export function guard(req, opts = {}) {
   // 1. body size — check the declared length first (cheap), then the actual body.
   // On Vercel a JSON request arrives ALREADY PARSED as an object, so a raw-string
   // check alone never fires; measure the serialized object too so the cap is real
-  // even when Content-Length is absent or understated.
+  // even when Content-Length is absent or understated. opts.maxBodyBytes lets an
+  // endpoint that legitimately carries more (photo-quotes: ≤4 small photos) set
+  // its own cap; everything else keeps the 16 KB one.
+  const maxBody = opts.maxBodyBytes ?? MAX_BODY_BYTES;
   const declared = Number(req.headers['content-length'] || 0);
-  if (declared > MAX_BODY_BYTES) return { status: 413, error: 'request body too large' };
+  if (declared > maxBody) return { status: 413, error: 'request body too large' };
   if (typeof req.body === 'string') {
-    if (req.body.length > MAX_BODY_BYTES) return { status: 413, error: 'request body too large' };
+    if (req.body.length > maxBody) return { status: 413, error: 'request body too large' };
   } else if (req.body && typeof req.body === 'object') {
     let n = 0;
-    try { n = JSON.stringify(req.body).length; } catch { n = MAX_BODY_BYTES + 1; }
-    if (n > MAX_BODY_BYTES) return { status: 413, error: 'request body too large' };
+    try { n = JSON.stringify(req.body).length; } catch { n = maxBody + 1; }
+    if (n > maxBody) return { status: 413, error: 'request body too large' };
   }
 
   // 2. origin allow-list (opt-in via ALLOWED_ORIGINS; skipped for navigations).
@@ -132,8 +135,8 @@ export function guard(req, opts = {}) {
 
 /** Apply the guard and, if it rejects, send the response. Returns true when the
  *  request was rejected (caller should stop), false when it may proceed. */
-export function rejectIfAbusive(req, res) {
-  const g = guard(req);
+export function rejectIfAbusive(req, res, opts) {
+  const g = guard(req, opts);
   if (!g) return false;
   if (g.retryAfter) res.setHeader('Retry-After', String(g.retryAfter));
   res.status(g.status).json({ error: g.error });

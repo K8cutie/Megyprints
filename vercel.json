@@ -10,7 +10,8 @@
   ],
   "functions": {
     "api/expire-orders.mjs": { "maxDuration": 60 },
-    "api/event-cleanup.mjs": { "maxDuration": 60 }
+    "api/event-cleanup.mjs": { "maxDuration": 60 },
+    "api/photo-quotes.mjs": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/m/:code", "destination": "/api/m?code=:code" },
