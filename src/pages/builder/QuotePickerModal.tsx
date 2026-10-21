@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Quote, Loader2, RefreshCw, Trash2, Pencil, Sparkles } from 'lucide-react';
+import { X, Quote, Loader2, RefreshCw, Trash2, Pencil, Sparkles, Type } from 'lucide-react';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { fetchThemeQuotes, moreThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
 import { readAlbumTheme, writeAlbumTheme, cleanAlbumTheme, MAX_THEME_LENGTH } from '../../lib/albumTheme';
@@ -7,21 +7,26 @@ import { writeLinesForPhotos, type QuoteBox } from '../../lib/photoQuotes';
 import { quoteRoom, captionFits } from './textFit';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
+import { DEAL_BANK_QUOTES } from './generateAlbum';
 
 /** What the picker says when "Write a line for this photo" can't give lines.
- *  Every way it ends gets words, and the lines below always stay. */
+ *  Every way it ends gets words, and "Type your own words" is always there. */
 export const PHOTO_QUOTE_MESSAGES: Record<'limit_user' | 'limit_all' | 'refused' | 'failed' | 'no_fit', string> = {
-  limit_user: 'You have used today’s lines for photos. Try again tomorrow, or pick a line below.',
-  limit_all: 'Lines for photos are busy today. Try again tomorrow, or pick a line below.',
-  refused: 'Megy couldn’t write lines for this photo. Pick a line below.',
+  limit_user: 'You have used today’s lines for photos. Try again tomorrow, or type your own words.',
+  limit_all: 'Lines for photos are busy today. Try again tomorrow, or type your own words.',
+  refused: 'Megy couldn’t write lines for this photo. Type your own words instead.',
   failed: 'Couldn’t write lines just now. Tap to try again.',
-  no_fit: 'Megy’s lines were too long for this box. Tap to try again, or pick a line below.',
+  no_fit: 'Megy’s lines were too long for this box. Tap to try again, or type your own words.',
 };
 
-/* Themed quote picker for a caption box. Reads the album's free-text theme
-   (asked at setup, stored locally), asks the /api/theme-quotes proxy for short
-   ORIGINAL lines written for that exact theme, and falls back to the curated
-   corpus when there's no key or no network — so it always offers something.
+/** The picker on a page with no photo yet: nothing to write from. */
+export const NO_PHOTO_NOTE = 'Put a photo on this page, and Megy can write a line from it.';
+
+/* Quote picker for a caption box: lines Megy writes from the page's photos
+   ("Write a line for this photo"), or the customer's own words. The quote
+   bank — lines for the album's theme from the /api/theme-quotes proxy, with
+   the curated corpus behind it — is OFF (DEAL_BANK_QUOTES, owner 2026-10-21:
+   "haiku is now dynamically doing the quotes"); on, it is listed below again.
 
    The chosen line is written through the caller's setBoxText/setSlotText, which
    already evicts whatever else occupies the box: one box, one thing. */
@@ -54,7 +59,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, on
   const [theme, setTheme] = useState(readAlbumTheme);
   const [quotes, setQuotes] = useState<string[]>([]);
   const [source, setSource] = useState<'ai' | 'curated'>('curated');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(DEAL_BANK_QUOTES);
 
   const load = useCallback(async (t: string, fresh = false) => {
     // The album's occasion, held to the same length as Step 1 (albumTheme):
@@ -78,8 +83,9 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, on
 
   // On open: load lines straight away — the point of this picker is to offer
   // lines, not to ask the user to search first. Deferred a microtask so the
-  // effect body itself doesn't set state.
+  // effect body itself doesn't set state. (Bank off: no lines to load.)
   useEffect(() => {
+    if (!DEAL_BANK_QUOTES) return;
     void Promise.resolve().then(() => load(theme));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -178,7 +184,27 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, on
     </div>
   );
 
-  const Body = (
+  // Their own words, from any picker: no dead end when Megy can't write (signed
+  // out, no photo yet, today's lines used). A box with a line already has
+  // "Edit the words" below instead.
+  const OwnWords = onEdit && !initial ? (
+    <div className="px-4 pt-2 pb-4 shrink-0">
+      {photoUrls.length === 0 && <p className="text-xs text-cocoa mb-2 text-center" data-testid="quote-no-photo">{NO_PHOTO_NOTE}</p>}
+      <button onClick={() => { onClose(); onEdit(); }} data-testid="quote-own-words"
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-line text-dark text-sm font-medium hover:bg-cream active:scale-[0.99] transition">
+        <Type size={15} /> Type your own words
+      </button>
+    </div>
+  ) : photoUrls.length === 0 ? (
+    <p className="px-4 py-4 text-xs text-cocoa text-center" data-testid="quote-no-photo">{NO_PHOTO_NOTE}</p>
+  ) : null;
+
+  const Body = !DEAL_BANK_QUOTES ? (
+    <>
+      {PhotoSection}
+      {OwnWords}
+    </>
+  ) : (
     <>
       {PhotoSection}
       <div className="px-4 pt-3 pb-2 shrink-0">

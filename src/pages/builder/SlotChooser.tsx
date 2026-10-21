@@ -51,7 +51,7 @@ interface Option {
 export default function SlotChooser({ onPhoto, onText, onQuote, onClose, mobile }: SlotChooserProps) {
   const options: Option[] = [
     ...(onPhoto ? [{ key: 'photo' as const, label: 'Add Photo', desc: 'Place one of your photos here', Icon: ImageIcon, run: onPhoto }] : []),
-    ...(onQuote ? [{ key: 'quote' as const, label: 'Add Quote', desc: 'A line written for your album’s theme', Icon: Quote, run: onQuote }] : []),
+    ...(onQuote ? [{ key: 'quote' as const, label: 'Add Quote', desc: 'Megy writes a line from the photos on this page', Icon: Quote, run: onQuote }] : []),
     { key: 'text', label: 'Your Text', desc: 'Type your own caption or title', Icon: Type, run: onText },
   ];
 
