@@ -3,17 +3,19 @@ import { X, Quote, Loader2, RefreshCw, Trash2, Pencil, Sparkles } from 'lucide-r
 import { useModalDialog } from '../../lib/useModalDialog';
 import { fetchThemeQuotes, moreThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
 import { readAlbumTheme, writeAlbumTheme, cleanAlbumTheme, MAX_THEME_LENGTH } from '../../lib/albumTheme';
-import { writeLinesForPhotos } from '../../lib/photoQuotes';
+import { writeLinesForPhotos, type QuoteBox } from '../../lib/photoQuotes';
+import { quoteRoom, captionFits } from './textFit';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
 
 /** What the picker says when "Write a line for this photo" can't give lines.
  *  Every way it ends gets words, and the lines below always stay. */
-export const PHOTO_QUOTE_MESSAGES: Record<'limit_user' | 'limit_all' | 'refused' | 'failed', string> = {
+export const PHOTO_QUOTE_MESSAGES: Record<'limit_user' | 'limit_all' | 'refused' | 'failed' | 'no_fit', string> = {
   limit_user: 'You have used today’s lines for photos. Try again tomorrow, or pick a line below.',
   limit_all: 'Lines for photos are busy today. Try again tomorrow, or pick a line below.',
   refused: 'Megy couldn’t write lines for this photo. Pick a line below.',
   failed: 'Couldn’t write lines just now. Tap to try again.',
+  no_fit: 'Megy’s lines were too long for this box. Tap to try again, or pick a line below.',
 };
 
 /* Themed quote picker for a caption box. Reads the album's free-text theme
@@ -23,12 +25,15 @@ export const PHOTO_QUOTE_MESSAGES: Record<'limit_user' | 'limit_all' | 'refused'
 
    The chosen line is written through the caller's setBoxText/setSlotText, which
    already evicts whatever else occupies the box: one box, one thing. */
-export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, onClose, mobile, photoUrls = [] }: {
+export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, onClose, mobile, photoUrls = [], quoteBox = null }: {
   /** The line currently in this box, if any — enables Change/Remove wording. */
   initial?: string | null;
   /** The photos on this box's page (photoQuotes.pagePhotoUrls). With any,
    *  "Write a line for this photo" offers lines written for them. */
   photoUrls?: string[];
+  /** The quote box (photoQuotes.quoteBoxFor): lines are written for the room
+   *  it has and offered only if they fit. Without it: the caption cap. */
+  quoteBox?: QuoteBox | null;
   onPick: (quote: string) => void;
   onRemove?: () => void;
   /** Tapping a quote that is already on the page opens THIS pool (owner,
@@ -94,13 +99,22 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, on
     setNeedSignIn(false);
     setPhotoNote(null);
     setPhotoBusy(true);
-    const r = await writeLinesForPhotos(photoUrls, cleanAlbumTheme(theme), photoLines);
+    // As long as the box takes (a full sentence in a big box, a short line in
+    // a thin band); without a box or a way to measure, the server's caption cap.
+    const room = quoteBox ? quoteRoom(quoteBox.box, quoteBox.style) : null;
+    const r = await writeLinesForPhotos(photoUrls, cleanAlbumTheme(theme), photoLines, room ?? undefined);
     setPhotoBusy(false);
-    if ('lines' in r) { setPhotoLines(r.lines); return; }
+    if ('lines' in r) {
+      // Offered only if it prints whole in this box, checked the way print wraps.
+      const fit = quoteBox ? r.lines.filter((l) => captionFits(l, quoteBox.style, quoteBox.box)?.fits ?? true) : r.lines;
+      if (fit.length) { setPhotoLines(fit); return; }
+      setPhotoNote(PHOTO_QUOTE_MESSAGES.no_fit);
+      return;
+    }
     // Signed in here but the session ran out on the server: sign in again.
     if (r.error === 'sign_in') { setNeedSignIn(true); return; }
     setPhotoNote(PHOTO_QUOTE_MESSAGES[r.error]);
-  }, [user, photoUrls, theme, photoLines]);
+  }, [user, photoUrls, theme, photoLines, quoteBox]);
 
   useEffect(() => {
     if (!resumeRef.current || !user) return;

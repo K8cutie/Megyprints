@@ -23,9 +23,11 @@
 //      account, per address (hashed) — so free accounts from one place can't
 //      take the day's total from every real customer — and for everyone
 //      together, the bill's ceiling.
-// The lines then pass the theme quotes' filter (length, no lyrics/attribution,
-// no repeats) plus the photo rules: no relationship words, brand names,
-// memorial or body words, swearing.
+// The lines are written for the room the quote box has (maxChars, measured by
+// the app: up to 100 in a big box, ~40–52 in a thin band) and then pass the
+// theme quotes' filter (length, no lyrics/attribution, no repeats) plus the
+// photo rules: no relationship words, brand names, memorial or body words,
+// swearing.
 //
 // Cost: an honest tap is ~₱0.02; the worst a tap can be made to cost (6 photos
 // at 640 px, the longest avoid list, max_tokens of output) is ~₱0.06, so the
@@ -78,6 +80,13 @@ export const MAX_PHOTO_PX = 640;
 export const MAX_BODY_BYTES = Math.ceil((MAX_PHOTOS * MAX_PHOTO_BYTES * 4) / 3) + 16 * 1024;
 /** Lines the picker already shows for this box ("Write 3 more"). */
 const MAX_AVOID = 30;
+/** How long a line may be: the room of the box it's for, measured by the app
+ *  (textFit.quoteRoom) — a full sentence in a big box, a short line in a thin
+ *  band (owner, 2026-10-21: "the longer quotes makes the page template more
+ *  relatable, short ones feels like your guessing"). Without it: the caption
+ *  cap. Never past 100: one or two sentences, not a paragraph. */
+export const MIN_ROOM = 20;
+export const MAX_ROOM = 100;
 
 /** Words a line must never use: who these people are to each other can't be
  *  seen in a photo ("Two friends" under a mother and daughter). */
@@ -144,14 +153,17 @@ export function parseBody(body) {
   // The album's occasion, as the customer typed it: context, never instructions.
   const theme = String(b.theme || '').replace(/["“”<>{}]/g, '').trim().slice(0, 100);
   const avoid = Array.isArray(b.avoid)
-    ? b.avoid.filter((s) => typeof s === 'string').map((s) => s.trim().slice(0, MAX_QUOTE_CHARS + 4)).filter(Boolean).slice(-MAX_AVOID)
+    ? b.avoid.filter((s) => typeof s === 'string').map((s) => s.trim().slice(0, MAX_ROOM + 4)).filter(Boolean).slice(-MAX_AVOID)
     : [];
-  return { photos, theme, avoid };
+  const n = Math.trunc(Number(b.maxChars));
+  const maxChars = Number.isFinite(n) && b.maxChars != null ? Math.min(MAX_ROOM, Math.max(MIN_ROOM, n)) : MAX_QUOTE_CHARS;
+  return { photos, theme, avoid, maxChars };
 }
 
-/** The model's lines → at most 3 the album may print. Exported for the spec; pure. */
-export function keepLines(lines, avoid = []) {
-  const ok = clean(Array.isArray(lines) ? lines : [], { count: 10, avoid })
+/** The model's lines → at most 3 the album may print, none longer than the
+ *  box takes. Exported for the spec; pure. */
+export function keepLines(lines, avoid = [], maxChars = MAX_QUOTE_CHARS) {
+  const ok = clean(Array.isArray(lines) ? lines : [], { count: 10, avoid, max: maxChars })
     .filter((l) => ![RELATION, BRAND, MEMORIAL, BODY, SWEAR].some((re) => re.test(l)));
   return ok.slice(0, 3);
 }
@@ -165,7 +177,8 @@ export const SYSTEM = [
   'Then write 5 different caption lines, best first.',
   'WHO IS IN THE PHOTO: Never name a relationship (friends, sisters, brothers, mom, mother, daughter, son, dad, couple, husband, wife, kids, family members or similar): you cannot know who these people are to each other. Two or more people: use "together", "side by side", or leave the people out and write about what they are doing. Use "us" only in a clear group or family photo. One person: no pronoun at all; write about the place or the moment. NEVER comment on anyone\'s body, weight, face, age, skin, glasses, hair or clothes.',
   'WHAT TO WRITE: the feeling of the moment, not a list of what is visible. Would a family want it printed under their photo? Warm and timeless. Plain, simple English: many readers speak English as a second language. No slang, no wordplay that needs native English.',
-  `FORMAT: 6 to ${MAX_QUOTE_CHARS} characters per line, short is better. ORIGINAL writing: never quote or paraphrase song lyrics, poems, scripture, films, slogans or any famous quotation; do not use the words song, lyrics, verse or chapter; no attributions, author names, quotation marks or citations. No hashtags, no emoji, no period at the end. No brand, character or park names (the album is printed and sold); place names like Hong Kong are fine. Never sound like a memorial or a goodbye to a person ("forever in our hearts", "fly high", "gone but", "life well lived", "always with us"); avoid "families are forever" and "one day at a time". The 5 lines must differ clearly from each other.`,
+  'FORMAT: you are told how many characters this page\'s quote box holds. Every line must fit it: never longer. For a big box (80 or more), write one or two full, natural sentences that use the room, most lines between 60 and the limit. For a small box, write short lines that fill it. Name the place (like Hong Kong) only once in a while: most lines should not say it. ' +
+  `ORIGINAL writing: never quote or paraphrase song lyrics, poems, scripture, films, slogans or any famous quotation; do not use the words song, lyrics, verse or chapter; no attributions, author names, quotation marks or citations. No hashtags, no emoji, no period at the end. No brand, character or park names (the album is printed and sold); place names like Hong Kong are fine. Never sound like a memorial or a goodbye to a person ("forever in our hearts", "fly high", "gone but", "life well lived", "always with us"); avoid "families are forever" and "one day at a time". The 5 lines must differ clearly from each other.`,
 ].join('\n\n');
 
 const Lines = z.object({ lines: z.array(z.string()) });
@@ -176,16 +189,17 @@ let anthropic = null;
 const client = () => (anthropic ??= new Anthropic({ apiKey: KEY, maxRetries: 1, timeout: 20_000 }));
 
 /** One Haiku call. Returns { lines } (unfiltered) or { refused: true }. */
-async function haikuLines(photos, theme, avoid) {
+async function haikuLines(photos, theme, avoid, maxChars) {
   const ask =
     (theme ? `The album is about: ${theme}.\n` : '') +
+    `This page's quote box holds up to ${maxChars} characters.\n` +
     (avoid.length ? `These lines are already offered; write different ones: ${avoid.join(' | ')}\n` : '') +
     (photos.length > 1
       ? `These ${photos.length} photos are one album page. Write the 5 lines for the page as a whole.`
       : 'This photo is one album page. Write the 5 lines for it.');
   const resp = await client().messages.parse({
     model: MODEL,
-    max_tokens: 1024, // 5 short lines + low-effort thinking; also caps what an injected "think at length" can burn
+    max_tokens: 1024, // 5 lines of ≤100 chars (~150 tokens) + low-effort thinking; also caps what an injected "think at length" can burn
     system: SYSTEM,
     output_config: { effort: 'low', format: zodOutputFormat(Lines) },
     messages: [{
@@ -247,9 +261,9 @@ export default async function handler(req, res) {
   if (!slot?.ok) { res.status(429).json({ error: slot?.reason === 'user' ? 'limit_user' : 'limit_all' }); return; }
 
   try {
-    const out = await haikuLines(body.photos, body.theme, body.avoid);
+    const out = await haikuLines(body.photos, body.theme, body.avoid, body.maxChars);
     if (out.refused) { res.status(200).json({ lines: [], reason: 'refused', left: slot.left }); return; }
-    res.status(200).json({ lines: keepLines(out.lines, body.avoid), left: slot.left });
+    res.status(200).json({ lines: keepLines(out.lines, body.avoid, body.maxChars), left: slot.left });
   } catch (e) {
     console.error(JSON.stringify({ fn: 'photo-quotes', event: 'anthropic_failure', msg: e instanceof Error ? e.message : String(e) }));
     res.status(502).json({ error: 'failed' });

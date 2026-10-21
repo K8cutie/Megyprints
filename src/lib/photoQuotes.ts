@@ -10,7 +10,8 @@
    endpoint costs money per tap.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import type { AlbumPage, UploadedPhoto } from '../pages/builder/types';
+import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '../pages/builder/types';
+import { captionBoxSize, type Box, type CaptionStyle } from '../pages/builder/textFit';
 import { HEIC_CONVERTING_PREVIEW } from './heicPhoto';
 import { photoIsHere } from './photoPresence';
 import { supabase } from './supabase';
@@ -40,6 +41,18 @@ export function pagePhotoUrls(page: AlbumPage | null | undefined, photos: Upload
   return urls;
 }
 
+/** The quote box a line is written for, and the style its line prints in: the
+ *  line already there, or a picked quote's default (size 28, italic). The
+ *  picker sizes the lines to it (textFit.quoteRoom) and checks they fit. */
+export interface QuoteBox { box: Box; style: CaptionStyle }
+export function quoteBoxFor(page: AlbumPage | null | undefined, boxIndex: number, albumSize: AlbumSizePreset, pageIndex: number): QuoteBox | null {
+  if (!page) return null;
+  const box = captionBoxSize(page, boxIndex, albumSize, pageIndex);
+  if (!box) return null;
+  const t = page.textElements?.find((e) => e.boxIndex === boxIndex);
+  return { box, style: { fontSize: t?.fontSize ?? 28, fontFamily: t?.fontFamily ?? '"Playfair Display", serif', bold: t?.bold ?? false, italic: true } };
+}
+
 /** A photo as a small JPEG, base64 without the data: prefix. */
 export async function shrinkPhoto(url: string, max = PHOTO_QUOTE_PX): Promise<string> {
   const img = new Image();
@@ -63,9 +76,10 @@ export type PhotoQuotesResult =
   | { lines: string[]; left?: number }
   | { error: 'sign_in' | 'limit_user' | 'limit_all' | 'refused' | 'failed' };
 
-/** Ask for lines written for these photos. Never throws: every way it can end
- *  is a result the picker has words for. */
-export async function writeLinesForPhotos(urls: string[], theme: string, avoid: string[] = []): Promise<PhotoQuotesResult> {
+/** Ask for lines written for these photos, at most `maxChars` long (the room
+ *  of the box they're for, textFit.quoteRoom). Never throws: every way it can
+ *  end is a result the picker has words for. */
+export async function writeLinesForPhotos(urls: string[], theme: string, avoid: string[] = [], maxChars?: number): Promise<PhotoQuotesResult> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) return { error: 'sign_in' };
@@ -74,7 +88,7 @@ export async function writeLinesForPhotos(urls: string[], theme: string, avoid: 
     const r = await fetch('/api/photo-quotes', {
       method: 'POST',
       headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ photos, theme, avoid }),
+      body: JSON.stringify({ photos, theme, avoid, ...(maxChars ? { maxChars } : {}) }),
     });
     const body = await r.json().catch(() => ({}));
     if (r.status === 401) return { error: 'sign_in' };

@@ -101,6 +101,29 @@ describe('parseBody: only 1–6 small JPEGs get through', () => {
   });
 });
 
+describe('box-sized lines (owner, 2026-10-21: "the longer quotes makes the page template more relatable")', () => {
+  it('maxChars is the room of the box: 20 to 100, the caption cap (46) when not given', () => {
+    expect(mod.parseBody({ photos: [JPEG] }).maxChars).toBe(46);
+    expect(mod.parseBody({ photos: [JPEG], maxChars: 100 }).maxChars).toBe(100);
+    expect(mod.parseBody({ photos: [JPEG], maxChars: 52 }).maxChars).toBe(52);
+    expect(mod.parseBody({ photos: [JPEG], maxChars: 5000 }).maxChars).toBe(100); // never a paragraph
+    expect(mod.parseBody({ photos: [JPEG], maxChars: 3 }).maxChars).toBe(20);
+    expect(mod.parseBody({ photos: [JPEG], maxChars: 'lots' }).maxChars).toBe(46);
+  });
+  it('a big box keeps a full sentence; a thin band drops what would not fit it', () => {
+    const long = 'The lights came on after dark, and the whole night glowed with color and fun'; // 76
+    expect(mod.keepLines([long], [], 100)).toEqual([long]);
+    expect(mod.keepLines([long], [], 52)).toEqual([]);
+    expect(mod.keepLines([long])).toEqual([]); // no box given: the caption cap
+  });
+  it('Haiku is told the room, and to name the place only once in a while', async () => {
+    await call(mkReq({ body: { photos: [JPEG], theme: 'Hong Kong trip', maxChars: 100 } }));
+    expect(modelCalls[0].messages[0].content.at(-1).text).toContain("This page's quote box holds up to 100 characters.");
+    expect(modelCalls[0].system).toContain('Name the place (like Hong Kong) only once in a while');
+    expect(modelCalls[0].system).toContain('one or two full, natural sentences');
+  });
+});
+
 describe('keepLines: the lines a printed album may carry', () => {
   it('drops relationship words, brand names, lyric words, long lines and lines already offered; keeps 3', () => {
     const out = mod.keepLines([

@@ -16,7 +16,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
-import { pagePhotoUrls } from '../../lib/photoQuotes';
+import { pagePhotoUrls, quoteBoxFor } from '../../lib/photoQuotes';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import { placedPhotoPages, swapNotice } from './slotSwap';
@@ -366,6 +366,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
         <QuotePickerModal
           mobile
           photoUrls={pagePhotoUrls(page, actions.uploadedPhotos)}
+          quoteBox={quoteBoxFor(page, boxQuoteSlot, actions.albumSize, idx)}
           initial={page?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
           onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }, idx); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }, idx); setBoxQuoteSlot(null); }}

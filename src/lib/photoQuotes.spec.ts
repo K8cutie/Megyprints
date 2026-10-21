@@ -12,7 +12,7 @@ vi.mock('./supabase', () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: session.token ? { access_token: session.token } : null } }) } },
 }));
 
-import { pagePhotoUrls, writeLinesForPhotos, photoQuoteDeps, MAX_PAGE_PHOTOS } from './photoQuotes';
+import { pagePhotoUrls, writeLinesForPhotos, photoQuoteDeps, quoteBoxFor, MAX_PAGE_PHOTOS } from './photoQuotes';
 import { HEIC_CONVERTING_PREVIEW } from './heicPhoto';
 import type { AlbumPage, UploadedPhoto } from '../pages/builder/types';
 
@@ -66,6 +66,13 @@ describe('writeLinesForPhotos', () => {
     expect((sent[0].init.headers as Record<string, string>).Authorization).toBe('Bearer user-jwt');
     expect(JSON.parse(String(sent[0].init.body))).toEqual({ photos: ['small:blob:x/0', 'small:blob:x/1'], theme: 'Hong Kong trip', avoid: ['Old line'] });
   });
+  it("sends the box's room when there is one; without it, the server's caption cap applies", async () => {
+    answer(200, { lines: ['A line'] });
+    await writeLinesForPhotos(['blob:x/0'], 'Trip', [], 100);
+    expect(JSON.parse(String(sent[0].init.body)).maxChars).toBe(100);
+    await writeLinesForPhotos(['blob:x/0'], 'Trip');
+    expect(JSON.parse(String(sent[1].init.body))).not.toHaveProperty('maxChars');
+  });
   it('every other ending has a name the picker has words for', async () => {
     answer(401, { error: 'sign_in' });
     expect(await writeLinesForPhotos(['blob:x/0'], '')).toEqual({ error: 'sign_in' });
@@ -87,5 +94,21 @@ describe('writeLinesForPhotos', () => {
     vi.spyOn(photoQuoteDeps, 'shrink').mockResolvedValue('small');
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline'); }));
     expect(await writeLinesForPhotos(['blob:x/0'], '')).toEqual({ error: 'failed' });
+  });
+});
+
+describe('quoteBoxFor: the box a line is written for, and the style it prints in', () => {
+  const pg = (textElements: unknown[]) => ({ templateId: 't88-fb-sq-box-tl-gap', slotFills: [0, 1, 2], textElements } as unknown as AlbumPage);
+  it("the line already in the box sets the style (its font and size print the new line)", () => {
+    const q = quoteBoxFor(pg([{ boxIndex: 0, text: 'x', fontSize: 34, fontFamily: 'Lora, serif', bold: true }]), 0, '8x8', 2)!;
+    expect(q.box.w).toBeGreaterThan(0);
+    expect(q.style).toEqual({ fontSize: 34, fontFamily: 'Lora, serif', bold: true, italic: true });
+  });
+  it("an empty box: a picked quote's default, size 28 italic", () => {
+    expect(quoteBoxFor(pg([]), 0, '8x8', 2)!.style).toEqual({ fontSize: 28, fontFamily: '"Playfair Display", serif', bold: false, italic: true });
+  });
+  it('no page, or no such box: null (the caption cap applies)', () => {
+    expect(quoteBoxFor(null, 0, '8x8', 2)).toBeNull();
+    expect(quoteBoxFor(pg([]), 5, '8x8', 2)).toBeNull();
   });
 });

@@ -92,3 +92,11 @@ describe('handler', () => {
     expect(res.body.quotes).toEqual(['A brand new line']);
   });
 });
+
+describe('clean: max (photo-quotes passes the room of its box)', () => {
+  it('keeps the caption cap by default, and a longer max when given', () => {
+    const long = 'The lights came on after dark, and the whole night glowed with color'; // 68
+    expect(mod.clean([long], { count: 5 })).toEqual([]);
+    expect(mod.clean([long], { count: 5, max: 100 })).toEqual([long]);
+  });
+});

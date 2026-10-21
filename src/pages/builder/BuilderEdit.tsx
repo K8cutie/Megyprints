@@ -25,7 +25,7 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
-import { pagePhotoUrls } from '../../lib/photoQuotes';
+import { pagePhotoUrls, quoteBoxFor } from '../../lib/photoQuotes';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
 import { placedPhotoPages, swapNotice } from './slotSwap';
@@ -870,6 +870,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {boxQuoteSlot !== null && (
         <QuotePickerModal
           photoUrls={pagePhotoUrls(actions.currentPage, actions.uploadedPhotos)}
+          quoteBox={quoteBoxFor(actions.currentPage, boxQuoteSlot, actions.albumSize, actions.currentPageIndex)}
           initial={actions.currentPage?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
           onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }); setBoxQuoteSlot(null); }}

@@ -56,14 +56,15 @@ function unsafe(line) {
 const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 /** Filter model output down to printable, unique, not-already-held lines.
- *  Exported for the spec; pure. */
-export function clean(arr, { count = DEFAULT_COUNT, avoid = [] } = {}) {
+ *  `max` is the longest line kept: the caption cap here; photo-quotes passes
+ *  the room of the box it writes for. Exported for the spec; pure. */
+export function clean(arr, { count = DEFAULT_COUNT, avoid = [], max = MAX_QUOTE_CHARS } = {}) {
   const seen = new Set(avoid.map(norm));
   const out = [];
   for (const raw of arr) {
     if (typeof raw !== 'string') continue;
     const line = raw.trim().replace(/\s+/g, ' ').replace(/^["'“”]+|["'“”]+$/g, '');
-    if (line.length < MIN_QUOTE_CHARS || line.length > MAX_QUOTE_CHARS) continue;
+    if (line.length < MIN_QUOTE_CHARS || line.length > max) continue;
     if (unsafe(line)) continue;
     const k = norm(line);
     if (!k || seen.has(k)) continue;

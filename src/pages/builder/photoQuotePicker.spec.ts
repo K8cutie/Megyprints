@@ -21,6 +21,12 @@ const h = vi.hoisted(() => ({
 vi.mock('../../lib/authContext', () => ({ useAuth: () => ({ user: h.user }) }));
 vi.mock('../../components/AuthModalProvider', () => ({ useAuthModal: () => ({ openLogin: h.openLogin }) }));
 vi.mock('../../lib/photoQuotes', () => ({ writeLinesForPhotos: (...a: unknown[]) => h.write(...a) }));
+const fit = vi.hoisted(() => ({ room: 100 as number | null }));
+vi.mock('./textFit', () => ({
+  quoteRoom: () => fit.room,
+  // a line marked TOO LONG would not print whole in the box
+  captionFits: (line: string) => ({ fits: !line.includes('TOO LONG'), fitsAt: null }),
+}));
 vi.mock('../../lib/quotes', () => ({
   fetchThemeQuotes: async () => ({ quotes: ['A line for the trip'], source: 'curated' }),
   moreThemeQuotes: async () => ({ quotes: ['A line for the trip'], source: 'curated' }),
@@ -137,11 +143,49 @@ describe('signed in', () => {
   });
 });
 
+describe('box-sized lines (owner, 2026-10-21: longer lines where the box has room)', () => {
+  const quoteBox = { box: { w: 349, h: 372 }, style: { fontSize: 28, italic: true } };
+  beforeEach(() => { h.user = { id: 'u1' }; fit.room = 100; });
+  const showBox = () => act(() => root.render(createElement(QuotePickerModal, { photoUrls: ['blob:x/0'], quoteBox, onPick, onClose, mobile: true })));
+  it("asks for lines as long as the box takes", async () => {
+    h.write.mockResolvedValue({ lines: ['A fun day out, with bright signs and happy stops all along the way'] });
+    showBox();
+    await settle();
+    await tap($('photo-quote-write'));
+    expect(h.write.mock.calls[0][3]).toBe(100);
+  });
+  it('offers only the lines that print whole in this box', async () => {
+    h.write.mockResolvedValue({ lines: ['Fits nicely', 'TOO LONG for this box', 'Also fits'] });
+    showBox();
+    await settle();
+    await tap($('photo-quote-write'));
+    expect($$('photo-quote-line').map((b) => b.textContent)).toEqual(['Fits nicely', 'Also fits']);
+  });
+  it('none fit: it says so, and the theme lines stay', async () => {
+    h.write.mockResolvedValue({ lines: ['TOO LONG one', 'TOO LONG two'] });
+    showBox();
+    await settle();
+    await tap($('photo-quote-write'));
+    expect($('photo-quote-note')!.textContent).toBe(PHOTO_QUOTE_MESSAGES.no_fit);
+    expect(host.textContent).toContain('A line for the trip');
+  });
+  it("can't measure, or no box (a quote in a photo frame): no room is sent, the server's cap applies", async () => {
+    fit.room = null;
+    h.write.mockResolvedValue({ lines: ['Short line'] });
+    showBox();
+    await settle();
+    await tap($('photo-quote-write'));
+    expect(h.write.mock.calls[0][3]).toBeUndefined();
+  });
+});
+
 describe('wired in all four places the picker opens', () => {
   it('BuilderEdit (desktop) and MobileReview (phone) pass the page photos to both pickers', () => {
     for (const f of ['BuilderEdit.tsx', 'MobileReview.tsx']) {
       const src = readFileSync(resolve(__dirname, f), 'utf8');
       expect(src.match(/photoUrls=\{pagePhotoUrls\(/g)).toHaveLength(2);
+      // the quote BOX picker sizes lines to its box; the photo-frame one has none
+      expect(src.match(/quoteBox=\{quoteBoxFor\(/g)).toHaveLength(1);
     }
   });
 });
