@@ -147,6 +147,23 @@ describe('undo after a slot edit', () => {
     expect(fills(0)).toEqual([0, 1, 2, 3]);
   });
 
+  it('a photo picked from ANOTHER page comes here and leaves that page; one undo puts both back (owner, 2026-10-20)', async () => {
+    // page 1 slot 2 cleared, then photo 5 (page 3's second frame) picked for it
+    await tap((b) => b.clearSlot(1));
+    await tap((b) => b.fillSlot(1, 5));
+    expect(fills(0)).toEqual([0, 5, 2, 3]);
+    expect(fills(2)).toEqual([4, null, 6, 7]);
+
+    await tap((b) => b.undo());
+    expect(fills(0)).toEqual([0, null, 2, 3]);
+    expect(fills(2)).toEqual([4, 5, 6, 7]);
+
+    // straight swap, no clearing first: the two photos trade frames
+    await tap((b) => b.fillSlot(0, 6));
+    expect(fills(0)).toEqual([6, null, 2, 3]);
+    expect(fills(2)).toEqual([4, 5, 0, 7]);
+  });
+
   it('fill two slots, remove a third, undo: only the removal comes back, the fills stay', async () => {
     await tap((b) => b.fillSlot(0, 8));
     await tap((b) => b.fillSlot(1, 9));

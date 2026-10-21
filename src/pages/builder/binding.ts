@@ -2,14 +2,30 @@
  * binding.ts — Binding (gutter) keep-out for double-sided, back-to-back pages.
  * ============================================================================
  * The book is bound down the spine, so the 0.5" keep-out sits on each page's
- * INNER edge (mirrored margins):
- *   • left page  (even index) → reserve its RIGHT edge
- *   • right page (odd index)  → reserve its LEFT edge
+ * INNER edge (mirrored margins).
+ *
+ * PAGE 1 IS A RIGHT-HAND PAGE (owner, 2026-10-21: "Cover then as you flip the
+ * cover its Page 1 at once"). Open the cover and page 1 is the first page you
+ * see, across from the inside of the front cover; the open book then shows
+ * 2 | 3, 4 | 5, … and the last page sits across from the inside of the back
+ * cover. So:
+ *   • page 1, 3, 5… (even index) → right-hand page → reserve its LEFT edge
+ *   • page 2, 4, 6… (odd index)  → left-hand page  → reserve its RIGHT edge
  * Reserving it on the inner margin shrinks the template safe area, so
  * auto-placed photos/slots never land in the spine.
  */
 
 export const BINDING_INCHES = 0.5;
+
+/** Which side of the open book page 1 is on. Every album is 'right' now.
+ *  Print files made before 2026-10-21 put page 1 on the LEFT (a blank page
+ *  first, then 1 | 2): 'left' exists only so the console can still lay THOSE
+ *  files out on press sheets the way they were drawn. */
+export type PageOneSide = 'right' | 'left';
+
+/** Written into every print file's keywords, so the console knows the file
+ *  puts page 1 on the right. A file without it is from before the change. */
+export const PAGE_ONE_RIGHT_MARK = 'megy-page1-right';
 
 interface Margin { top: number; bottom: number; left: number; right: number; }
 
@@ -21,7 +37,7 @@ export function bindingMarginFraction(albumSize: string): number {
 
 /** Which edge binds for a page index (mirrored inner margin, double-sided). */
 export function bindingEdge(pageIndex: number): 'left' | 'right' {
-  return pageIndex % 2 === 0 ? 'right' : 'left';
+  return pageIndex % 2 === 0 ? 'left' : 'right';
 }
 
 /** Add the binding reserve to a template margin's inner edge for this page. */

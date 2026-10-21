@@ -9,6 +9,7 @@ import type { AlbumPage, UploadedPhoto } from './types';
 import { resolveBgImageSrc } from './types';
 import { toAlbumPhoto } from '../../lib/heicPhoto';
 import { TEXTURE_NAMES, TEXTURE_COLORS, DEFAULT_TEXTURE_COLORS, textureDataUri, TEXTURE_TILE_PX } from './textures';
+import PageColorPicker from './PageColorPicker';
 
 /* ─── Modes ───
    TEXTURES-ONLY by design (owner call 2026-08-06): solid/gradient/image page
@@ -17,7 +18,9 @@ import { TEXTURE_NAMES, TEXTURE_COLORS, DEFAULT_TEXTURE_COLORS, textureDataUri, 
    solid/gradient/image backgrounds (bgPreviewStyle below, and the page
    renderers), so old drafts keep rendering; they just can't be re-picked.
    The `imageOnly` cover mode is the ONE exception — a cover background IS a
-   photo (the picture browser is the whole panel there). */
+   photo (the picture browser is the whole panel there).
+   Owner, 2026-10-20: plain colours are back — the page colours (pageColors.ts),
+   one row above the materials. */
 type BgTab = 'image' | 'texture';
 
 /* ─── Live-preview CSS for a background (so opacity etc. is visible) ─── */
@@ -209,6 +212,11 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
         {/* ─── TEXTURES (the picker, everywhere else) ─── */}
         {effectiveTab === 'texture' && (
           <div className="space-y-3">
+            {/* Plain colour — the page colours (pageColors.ts). */}
+            <div>
+              <p className="text-[10px] text-stone-400 mb-1.5 uppercase tracking-wider font-semibold">Plain colour</p>
+              <PageColorPicker background={background} onPick={(hex) => onChange({ type: 'solid', solid: hex, opacity: background.opacity ?? 100 })} />
+            </div>
             {/* Material */}
             <div>
               <p className="text-[10px] text-stone-400 mb-1.5 uppercase tracking-wider font-semibold">Material</p>

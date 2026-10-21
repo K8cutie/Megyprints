@@ -291,6 +291,11 @@ export interface TextStyle {
    *  0/undefined = no outline. */
   outlineWidth?: number;
   shadow?: boolean;
+  /** A line from the QUOTE POOL (dealt by Megy or picked in QuotePickerModal).
+   *  Tapping it re-opens the pool (change / remove / edit the words) instead
+   *  of the typing editor. Absent on lines the customer typed, and on albums
+   *  from before 2026-10-20 — see isPoolQuote for that fallback. */
+  quote?: boolean;
 }
 
 export interface TextElement extends TextStyle {
@@ -350,7 +355,7 @@ export interface OrnamentTransform {
   rot: number;
 }
 
-/** Smallest side we will PRINT a QR at. The corner-badge flow uses 1.2" as
+/** Smallest side we will PRINT a QR at. The corner-badge flow uses 1.2" (0.9" on 6x4) as
  *  "comfortably scannable at arm's length" (see QR_BADGE_IN); 0.8" is the floor
  *  below which a phone camera starts to struggle on paper. A free-transformed
  *  QR is clamped to this — an unscannable code on a printed album is a defect
@@ -532,6 +537,17 @@ export type BoxRoll = 'quote' | 'text' | 'qr';
  *  full-page photos now), so a box an older album dealt 'qr' is an ordinary
  *  undealt box: the plain hint, and the tap opens the quote / text chooser.
  *  Every surface that reads a roll reads it through here. */
+/** Does tapping this filled line re-open the quote pool? True for a line the
+ *  pool put there (`quote`). Albums dealt before the flag existed: an italic
+ *  line in a box Megy dealt as a quote is that dealt quote. A line the customer
+ *  typed into a quote-dealt box (⋯ → Your Text) is upright by default, so it
+ *  opens the typing editor. */
+export function isPoolQuote(line: { quote?: boolean; italic?: boolean } | null | undefined, roll?: Exclude<BoxRoll, 'qr'> | null): boolean {
+  if (!line) return false;
+  if (line.quote !== undefined) return line.quote;
+  return roll === 'quote' && !!line.italic;
+}
+
 export function dealtBoxRoll(page: { textSlotRoll?: (BoxRoll | null)[] }, j: number): Exclude<BoxRoll, 'qr'> | null {
   const r = page.textSlotRoll?.[j] ?? null;
   return r === 'qr' ? null : r;

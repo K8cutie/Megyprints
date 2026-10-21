@@ -20,13 +20,14 @@ import {
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { CanvasPhoto, TextElement, PhotoFilters } from './types';
-import { dealtBoxRoll } from './types';
+import { dealtBoxRoll, isPoolQuote } from './types';
 import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
+import { placedPhotoPages, swapNotice } from './slotSwap';
 import { getTemplateById, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 import UnifiedPanel from './UnifiedPanel';
 import { useBuilderContext } from './BuilderContext';
@@ -164,11 +165,16 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     uploadedPhotos: actions.uploadedPhotos,
     albumType: actions.albumType,
     albumSize: actions.albumSize,
+    /* An EMPTY photo slot opens the chooser (Photo / Quote / Text) in Studio
+       too. The engine wires onSlotClick ONLY to the empty slot's dashed box,
+       never to a placed photo (a photo frame still selects, to move it), so
+       there is nothing to protect here. It bailed out on containerMode
+       (always on since 2026-09-30), so on desktop clicking "Click to add:"
+       did NOTHING: the owner cleared a photo to change it and could not put
+       one back (2026-10-20). */
     onSlotClick: useCallback((slotIndex: number) => {
-      if (containerMode) return;
-      // Empty slot → open the 3-way content chooser (photo / text / QR).
       setChooserSlot(slotIndex);
-    }, [containerMode]),
+    }, []),
     /* TEXT boxes open their editor even in Studio. Studio's container mode
        (always on since 2026-09-30, `useState(true)` above) makes PHOTO frames
        selectable so they can be moved — a click there selects, by design. A
@@ -177,8 +183,15 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
        "Your words here" box or its ⋯ did NOTHING, and no font or colour could
        be reached (found walking the 74 fonts, 2026-10-08). */
     onTextSlotClick: useCallback((slotIndex: number) => {
-      setTextEditSlot(slotIndex);
-    }, []),
+      // A line from the quote pool re-opens the pool (owner, 2026-10-20:
+      // tapping a quote was opening the typing editor, and nothing led back
+      // to the pool once a box was filled). The pool's "Edit the words"
+      // button is the way into the typing editor for that line.
+      const page = actions.currentPage;
+      const line = page?.textElements?.find((t) => t.boxIndex === slotIndex);
+      if (isPoolQuote(line, page ? dealtBoxRoll(page, slotIndex) : null)) setBoxQuoteSlot(slotIndex);
+      else setTextEditSlot(slotIndex);
+    }, [actions.currentPage]),
     /* A video memory's QR opens its editor (change the video, move the
        corner, remove it) in Studio too: the chip is never a movable frame,
        and "tap the QR and remove the video" is how a memory page gets other
@@ -192,8 +205,11 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       setOrnamentEditSlot(slotIndex);
     }, [containerMode]),
     onSlotTextClick: useCallback((slotIndex: number) => {
-      setSlotTextEditSlot(slotIndex); // a text box: opens in Studio too (see onTextSlotClick)
-    }, []),
+      // A text box: opens in Studio too (see onTextSlotClick). A pool quote
+      // in a photo slot re-opens the pool, like one in a caption box.
+      if (isPoolQuote(actions.currentPage?.slotTexts?.[slotIndex])) setSlotQuoteSlot(slotIndex);
+      else setSlotTextEditSlot(slotIndex);
+    }, [actions.currentPage]),
     onTextSlotEmptyClick: useCallback((slotIndex: number) => {
       // A text box: opens in Studio too (see onTextSlotClick).
       // A DEALT box (textSlotRoll) opens its kind's editor directly — the roll
@@ -318,20 +334,13 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
     };
   }, [actions.currentPage]);
 
-  /* ── Photo picker only offers UNUSED photos, so the same photo is never
-     placed twice. When everything's used, the picker asks for more. ── */
-  const usedPhotoIndices = useMemo(() => {
-    const used = new Set<number>();
-    actions.albumPages.forEach((p) => (p.slotFills ?? []).forEach((f) => { if (f != null) used.add(f); }));
-    return used;
-  }, [actions.albumPages]);
-
-  const availablePhotos = useMemo(
-    () => actions.uploadedPhotos
-      .map((photo, idx) => ({ photo, idx }))
-      .filter(({ idx }) => !usedPhotoIndices.has(idx)),
-    [actions.uploadedPhotos, usedPhotoIndices],
-  );
+  /* ── The photo picker offers EVERY photo. A placed one is tagged with its
+     page and picking it brings it here (its old frame swaps with this one —
+     see slotSwap.ts), so the same photo is still never printed twice. It
+     used to hide placed photos: with every photo placed the picker said
+     "All your photos are already in the album" and the owner, who had just
+     cleared a frame to change it, could not put anything in (2026-10-20). ── */
+  const placedOn = useMemo(() => placedPhotoPages(actions.albumPages), [actions.albumPages]);
 
   /* ── Report selection changes upward to Builder.tsx ── */
   useEffect(() => {
@@ -720,43 +729,55 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                 <p className="text-sm text-light text-center py-8">
                   No photos uploaded yet. Go to the Photos tab to upload.
                 </p>
-              ) : availablePhotos.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-medium font-medium mb-1">
-                    All your photos are already in the album.
-                  </p>
-                  <p className="text-xs text-light mb-4">
-                    Add more photos to swap in something new.
+              ) : (
+                <>
+                  <p className="text-xs text-light mb-3">
+                    A photo that is already on a page comes here when you pick it, and its old frame swaps with this one.
                   </p>
                   <button
                     onClick={() => { setShowPhotoPicker(false); _onAction?.('trigger-upload'); }}
-                    className="px-5 py-2 bg-peach text-white text-sm font-semibold rounded-lg hover:brightness-105 inline-flex items-center gap-2"
+                    className="mb-3 px-4 py-2 border-2 border-dashed border-peach text-blush-pink text-sm font-semibold rounded-lg inline-flex items-center gap-2 hover:bg-blush"
                   >
                     <Upload size={14} /> Add Photos
                   </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                  {availablePhotos.map(({ photo, idx }) => (
-                    <button
-                      key={photo.id}
-                      onClick={() => {
-                        if (pickerIsTextSlot) actions.setTextSlotPhoto(selectedSlotForPicker, idx);
-                        else actions.fillSlot(selectedSlotForPicker, idx);
-                        setShowPhotoPicker(false);
-                        setPickerIsTextSlot(false);
-                      }}
-                      className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-peach transition-all"
-                    >
-                      <img
-                        src={photo.previewUrl}
-                        alt={photo.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    </button>
-                  ))}
-                </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+                    {actions.uploadedPhotos.map((photo, idx) => {
+                      const onPage = placedOn.get(idx);
+                      const tag = onPage === undefined ? null : onPage === actions.currentPageIndex ? 'This page' : `Page ${onPage + 1}`;
+                      return (
+                        <button
+                          key={photo.id}
+                          data-testid="picker-photo"
+                          data-placed-on={onPage === undefined ? undefined : onPage + 1}
+                          onClick={() => {
+                            if (pickerIsTextSlot) actions.setTextSlotPhoto(selectedSlotForPicker, idx);
+                            else {
+                              const wasEmpty = (actions.currentPage.slotFills?.[selectedSlotForPicker] ?? null) === null;
+                              const notice = swapNotice(onPage === undefined ? null : { pageIndex: onPage, slotIndex: -1 }, actions.currentPageIndex, wasEmpty);
+                              actions.fillSlot(selectedSlotForPicker, idx);
+                              if (notice) sayGuard(notice);
+                            }
+                            setShowPhotoPicker(false);
+                            setPickerIsTextSlot(false);
+                          }}
+                          className="relative aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-peach transition-all"
+                        >
+                          <img
+                            src={photo.previewUrl}
+                            alt={photo.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                          {tag && (
+                            <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded bg-dark/75 text-warm-white text-[10px] font-semibold leading-tight">
+                              {tag}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
               )}
               <div className="mt-4 flex justify-end">
                 <button
@@ -848,8 +869,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {boxQuoteSlot !== null && (
         <QuotePickerModal
           initial={actions.currentPage?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
-          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true }); setBoxQuoteSlot(null); }}
+          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }); setBoxQuoteSlot(null); }}
+          onEdit={() => { const s = boxQuoteSlot; setBoxQuoteSlot(null); setTextEditSlot(s); }}
           onClose={() => setBoxQuoteSlot(null)}
         />
       )}
@@ -858,8 +880,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {slotQuoteSlot !== null && (
         <QuotePickerModal
           initial={actions.currentPage?.slotTexts?.[slotQuoteSlot]?.text ?? null}
-          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true }); setSlotQuoteSlot(null); }}
+          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true, quote: true }); setSlotQuoteSlot(null); }}
           onRemove={() => { actions.setSlotText(slotQuoteSlot, null); setSlotQuoteSlot(null); }}
+          onEdit={() => { const s = slotQuoteSlot; setSlotQuoteSlot(null); setSlotTextEditSlot(s); }}
           onClose={() => setSlotQuoteSlot(null)}
         />
       )}
@@ -877,7 +900,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
       {slotTextEditSlot !== null && (
         <MobileTextEditor
           initial={buildSlotTextInitial(slotTextEditSlot)}
-          onSave={(content) => { actions.setSlotText(slotTextEditSlot, content.text.trim() ? content : null); setSlotTextEditSlot(null); }}
+          onSave={(content) => { actions.setSlotText(slotTextEditSlot, content.text.trim() ? { ...content, quote: actions.currentPage?.slotTexts?.[slotTextEditSlot]?.quote } : null); setSlotTextEditSlot(null); }}
           onClose={() => setSlotTextEditSlot(null)}
         />
       )}
@@ -1106,7 +1129,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
           {studio && (
             <StudioStrip page={actions.currentPage} selectedSlotIndex={selectedSlotIndex}
               onMask={(i, m) => actions.setSlotMask(i, m)} onLook={(i, l) => actions.setSlotLook(i, l)}
-              onGuard={sayGuard} />
+              onGuard={sayGuard}
+              onPageColor={(hex) => actions.setPageColor(hex)}
+              onPageColorAll={(hex) => { actions.applyPageColorToAllPages(hex); sayGuard('Every page is that colour now.'); }} />
           )}
 
           {/* Canvas */}

@@ -13,8 +13,8 @@ import type { AlbumSizePreset } from './types';
    the keep-out guide warned about it while nothing moved out of the way.
    A full-bleed page now bleeds off three edges and stops short of the spine.
 
-   The reserved edge ALTERNATES (even page → right, odd page → left), so both
-   parities are checked for every layout.
+   The reserved edge ALTERNATES (page 1, 3, 5… → left; page 2, 4, 6… →
+   right — binding.ts), so both parities are checked for every layout.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const ALL: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];

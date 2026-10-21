@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Quote, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { X, Quote, Loader2, RefreshCw, Trash2, Pencil } from 'lucide-react';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { fetchThemeQuotes, moreThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
 import { readAlbumTheme, writeAlbumTheme, cleanAlbumTheme, MAX_THEME_LENGTH } from '../../lib/albumTheme';
@@ -11,11 +11,16 @@ import { readAlbumTheme, writeAlbumTheme, cleanAlbumTheme, MAX_THEME_LENGTH } fr
 
    The chosen line is written through the caller's setBoxText/setSlotText, which
    already evicts whatever else occupies the box: one box, one thing. */
-export default function QuotePickerModal({ initial, onPick, onRemove, onClose, mobile }: {
+export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, onClose, mobile }: {
   /** The line currently in this box, if any — enables Change/Remove wording. */
   initial?: string | null;
   onPick: (quote: string) => void;
   onRemove?: () => void;
+  /** Tapping a quote that is already on the page opens THIS pool (owner,
+   *  2026-10-20: "I thought clicking a quote gives a pool to select from").
+   *  Changing its words or font is one tap away: this hands the box to the
+   *  typing editor. */
+  onEdit?: () => void;
   onClose: () => void;
   mobile?: boolean;
 }) {
@@ -135,12 +140,20 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
     </div>
   );
 
-  const Footer = initial && onRemove ? (
-    <div className="px-5 py-3 border-t border-line shrink-0">
-      <button onClick={() => { onRemove(); onClose(); }}
-        className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
-        <Trash2 size={14} /> Remove quote
-      </button>
+  const Footer = initial && (onRemove || onEdit) ? (
+    <div className="px-5 py-3 border-t border-line shrink-0 flex items-center justify-between gap-2">
+      {onEdit ? (
+        <button onClick={() => { onClose(); onEdit(); }} data-testid="quote-edit-words"
+          className="text-xs font-medium text-dark flex items-center gap-1 px-2 py-2 hover:bg-cream rounded-lg">
+          <Pencil size={14} /> Edit the words
+        </button>
+      ) : <span />}
+      {onRemove && (
+        <button onClick={() => { onRemove(); onClose(); }}
+          className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
+          <Trash2 size={14} /> Remove quote
+        </button>
+      )}
     </div>
   ) : null;
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateAlbum } from './generateAlbum';
+import { generateAlbum, OPENING_FULL_PAGES } from './generateAlbum';
 import type { AlbumSizePreset, UploadedPhoto } from './types';
 import { seedMathRandom } from '../../test/seededRandom';
 
@@ -63,10 +63,12 @@ describe('photos-per-page rhythm', () => {
 
   it('single-photo pages still vary their LAYOUT (the count cannot change there)', () => {
     // 60 photos → 1/page by design; the look must still move page to page.
+    // (Pages 1-3 are the opening full pages: the same look on purpose. From
+    // page 3 on, it moves.)
     const pages = generateAlbum(roll(60), '8x8', undefined);
     const ids = pages.map((p) => p.templateId);
     let adjacentRepeats = 0;
-    for (let i = 1; i < ids.length; i++) if (ids[i] === ids[i - 1]) adjacentRepeats++;
+    for (let i = OPENING_FULL_PAGES; i < ids.length; i++) if (ids[i] === ids[i - 1]) adjacentRepeats++;
     expect(adjacentRepeats).toBe(0);
     expect(new Set(ids).size).toBeGreaterThan(3);
   });

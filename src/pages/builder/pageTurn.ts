@@ -14,13 +14,16 @@
    a tap that lands mid-turn) has to wait for an animation.
 
    Angles: the leaf is hinged at the spine; 0° = lying on the right, -180° =
-   lying on the left. One page at a time (an upright phone) has no left side
+   lying on the left. Opening the book turns the cover: its inside lands on
+   the left, across from page 1 (page 1 is a right-hand page, binding.ts). One page at a time (an upright phone) has no left side
    to land on, so the page lifts off to the left and is gone at -100°.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { spreadStart, type PreviewPosition, type Turn } from './previewPaging';
 
-export type TurnFace = { kind: 'page'; index: number } | { kind: 'cover' } | { kind: 'blank' };
+/** A side of a leaf: an album page, the front cover, or the inside of the
+ *  front / back cover (what faces page 1 and a last left-hand page). */
+export type TurnFace = { kind: 'page'; index: number } | { kind: 'cover' } | { kind: 'inside'; cover: 'front' | 'back' };
 
 export interface TurnPlan {
   /** The book the turn is drawn over: the open book, one page, or the closed cover. */
@@ -42,7 +45,8 @@ export const TURN_MS = { spread: 800, page: 560 } as const;
 /** One page at a time: the page lifts this far and is gone (past edge-on). */
 const LIFT = 100;
 
-const pageFace = (i: number, total: number): TurnFace => (i >= 0 && i < total ? { kind: 'page', index: i } : { kind: 'blank' });
+const pageFace = (i: number, total: number): TurnFace =>
+  i < 0 ? { kind: 'inside', cover: 'front' } : i >= total ? { kind: 'inside', cover: 'back' } : { kind: 'page', index: i };
 
 /** The turn from where the preview is to where a page turn takes it, or null
  *  when nothing turns (the same spread, or no cover to open). */
@@ -51,7 +55,7 @@ export function planTurn(p: PreviewPosition, t: Turn): TurnPlan | null {
   const ms = spread ? TURN_MS.spread : TURN_MS.page;
   const base = { cast: null, hideLeft: false, shift: [0, 0] as [number, number], ms, patch: null };
 
-  // Opening the closed book: the cover swings over to the left.
+  // Opening the closed book: the cover swings over to the left, its inside up.
   if (p.onCover && !t.cover) {
     if (spread) {
       return { ...base, layout: 'spread', leaf: { front: { kind: 'cover' }, back: pageFace(spreadStart(t.index), p.total), from: 0, to: -180 }, cast: 'right', hideLeft: true, shift: [-0.5, 0] };
