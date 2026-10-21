@@ -31,6 +31,7 @@ import { useModalDialog } from '../lib/useModalDialog';
 import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
+import { DEAL_BANK_QUOTES } from '../pages/builder/generateAlbum';
 import { FontList } from '../pages/builder/FontList';
 import { TEXT_COLOR_HEXES } from '../pages/builder/textColors';
 import {
@@ -183,7 +184,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     if (wizardStep === 'pick_theme') {
       if (!stepOneReady) { setStepOneNudge((n) => n + 1); return; }
       setStepOneNudge(0);
-      void fetchThemeQuotes(albumTheme.trim());
+      if (DEAL_BANK_QUOTES) void fetchThemeQuotes(albumTheme.trim());
       // A made album follows a new occasion: Megy's quotes switch to it
       // (the effect below, once the toast exists).
       if (albumIsMade(builder.albumPages)) setRequoteFor({ occasion: albumTheme.trim() });

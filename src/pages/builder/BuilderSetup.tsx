@@ -6,6 +6,7 @@ import type { AlbumSizePreset } from './types';
 import { loadStoreSettings } from '../../lib/storeSettings';
 import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
 import { fetchThemeQuotes } from '../../lib/quotes';
+import { DEAL_BANK_QUOTES } from './generateAlbum';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT } from '../../lib/albumTheme';
 import AlbumThemeStep from '../../assistant/AlbumThemeStep';
 import MegyMascot from '../../components/MegyMascot';
@@ -190,7 +191,7 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext, album
             <h2 className="font-display text-lg font-semibold text-dark mb-1">First — name your album and tell Megy what it's about</h2>
             <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme}
               name={albumTitle} onNameChange={onAlbumTitleChange}
-              onContinue={() => { if (isStepOneReady(albumTitle, albumTheme)) { void fetchThemeQuotes(albumTheme.trim()); onNext(); } }} />
+              onContinue={() => { if (isStepOneReady(albumTitle, albumTheme)) { if (DEAL_BANK_QUOTES) void fetchThemeQuotes(albumTheme.trim()); onNext(); } }} />
           </div>
         )}
 
@@ -212,8 +213,8 @@ export default function BuilderSetup({ selectedSize, onSizeChange, onNext, album
               // Warm the theme's AI quote pool NOW (one cached call) so the
               // album's first generation deals real themed lines instead of
               // waiting on the proxy. Generation tops the pool up to the
-              // album's box count from here.
-              void fetchThemeQuotes(theme);
+              // album's box count from here. (Not while the bank is off.)
+              if (DEAL_BANK_QUOTES) void fetchThemeQuotes(theme);
               onNext();
             }}
             className="inline-flex items-center gap-2 px-10 py-3.5 bg-gradient-to-r from-peach to-blush-pink text-white font-semibold rounded-2xl hover:brightness-105 transition-all shadow-lg shadow-peach/25 text-base disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100"

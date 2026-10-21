@@ -13,8 +13,12 @@ seedMathRandom(); // same albums every run (generateAlbum deals with Math.random
    and stays a quote box — the roll, the 70/30 odds and the cadence are kept —
    so it can wait for "Write a line for this photo", a line written from the
    page's own photos ("short ones feels like your guessing how it relates").
-   "let Megy finish" no longer fills empty boxes with bank lines. The bank
-   still backs the quote picker. One switch: DEAL_BANK_QUOTES.
+   "let Megy finish" no longer fills empty boxes with bank lines.
+   Then the WHOLE bank (owner, same day: "disable it since haiku is now
+   dynamically doing the quotes"): the picker shows only lines written for the
+   page's photos (photoQuotePicker.spec), Step 1 asks for no theme lines, and a
+   new occasion clears Megy's old lines (occasionQuotes.spec). One switch:
+   DEAL_BANK_QUOTES.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const roll = (n: number): UploadedPhoto[] => Array.from({ length: n }, (_, i) => {
@@ -68,5 +72,31 @@ describe('wired in: every place that filled boxes with bank lines follows the sw
   it('"let Megy finish" fills nothing, and its "boxes waiting" button does not show', () => {
     expect(state).toMatch(/if \(!DEAL_BANK_QUOTES\) return \{ filled: 0, remaining: 0, heldBack: 0, noLine: 0 \};/);
     expect(preview).toMatch(/DEAL_BANK_QUOTES \? fillableBoxCount\(pages\) : 0/);
+  });
+});
+
+describe('wired in: nothing else asks for or places a bank line while the switch is off', () => {
+  const src = (f: string) => readFileSync(resolve(__dirname, f), 'utf8');
+  it("Step 1 no longer asks /api/theme-quotes for the occasion's lines (on the page and in the chat)", () => {
+    const setup = src('BuilderSetup.tsx');
+    expect(setup.match(/fetchThemeQuotes\(/g)).toHaveLength(2);
+    expect(setup.match(/if \(DEAL_BANK_QUOTES\) void fetchThemeQuotes\(/g)).toHaveLength(2);
+    const chat = src('../../assistant/MegyAssistant.tsx');
+    expect(chat.match(/fetchThemeQuotes\(/g)).toHaveLength(1);
+    expect(chat).toMatch(/if \(DEAL_BANK_QUOTES\) void fetchThemeQuotes\(albumTheme\.trim\(\)\);/);
+  });
+  it('the picker loads no theme lines', () => {
+    expect(src('QuotePickerModal.tsx')).toMatch(/useEffect\(\(\) => \{\s*if \(!DEAL_BANK_QUOTES\) return;\s*void Promise\.resolve\(\)\.then\(\(\) => load\(theme\)\);/);
+  });
+  it('a new occasion finds no bank lines to swap in, and "add a themed quote" places none', () => {
+    const state = src('useBuilderState.ts');
+    expect(state).toMatch(/const pool = DEAL_BANK_QUOTES \? await ensureThemeQuotes\(occasion, [^\n]*\) : \[\];/);
+    expect(state).toMatch(/const quote = DEAL_BANK_QUOTES \? pickQuote\(selectedTemplate, used\) : null;/);
+  });
+  it('"Add Quote" says where the line comes from now, and the Step 4 tip no longer promises dealt quotes', () => {
+    expect(src('SlotChooser.tsx')).toContain("desc: 'Megy writes a line from the photos on this page'");
+    const wizard = src('../../assistant/wizard.ts');
+    expect(wizard).not.toContain('Quotes are 60 % of the little boxes');
+    expect(wizard).toContain('Tap an empty quote box and Megy writes a line from the photos on that page');
   });
 });

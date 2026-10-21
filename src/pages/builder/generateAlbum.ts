@@ -124,8 +124,13 @@ export const BOX_ROLL_WEIGHTS: Record<BoxRoll, number> = { quote: 0.70, text: 0.
  *  waiting for "Write a line for this photo", which writes a line from the
  *  page's own photos ("short ones feels like your guessing how it relates").
  *  Making the album, Surprise me and a new size no longer deal bank lines, and
- *  "let Megy finish" no longer packs empty boxes with them. The bank still
- *  backs the quote picker's lines. true deals them again, as before. */
+ *  "let Megy finish" no longer packs empty boxes with them.
+ *  THE WHOLE BANK IS OFF too (owner, 2026-10-21: "disable [the original quote
+ *  pool] since haiku is now dynamically doing the quotes"): the quote picker
+ *  offers only lines written for the page's photos (and "Type your own
+ *  words"), Step 1 no longer asks /api/theme-quotes for the occasion's lines,
+ *  and a new occasion clears Megy's old-occasion lines instead of swapping in
+ *  bank ones. true brings all of it back, as before. */
 export const DEAL_BANK_QUOTES = false;
 
 /** What generation needs to deal boxes. Quote styling is passed in (not read

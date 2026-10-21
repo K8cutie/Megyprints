@@ -3192,7 +3192,7 @@ export function useBuilderState(): BuilderActions {
     const used = new Set(
       albumPages.flatMap((p) => p.textElements.filter((t) => t.id.startsWith('theme-quote')).map((t) => t.text)),
     );
-    const quote = pickQuote(selectedTemplate, used);
+    const quote = DEAL_BANK_QUOTES ? pickQuote(selectedTemplate, used) : null;
     if (!quote) return null;
     const theme = THEMES[selectedTemplate];
     const { width: cw, height: ch } = getCanvasDimensions(albumSize);
@@ -3396,7 +3396,10 @@ export function useBuilderState(): BuilderActions {
     const stale = (t: TextElement) => t.fromOccasion != null && key(t.fromOccasion) !== key(occasion);
     const count = albumPages.reduce((n, p) => n + p.textElements.filter(stale).length, 0);
     if (!key(occasion) || count === 0) return { changed: 0, cleared: 0 };
-    const pool = await ensureThemeQuotes(occasion, quotesNeededForSweep(albumPages) + count, { budgetMs: 12_000 });
+    // Bank off (DEAL_BANK_QUOTES): no new-occasion lines to swap in, so Megy's
+    // old-occasion lines are cleared — the box waits for a line written from
+    // its photos — rather than printing the old occasion's.
+    const pool = DEAL_BANK_QUOTES ? await ensureThemeQuotes(occasion, quotesNeededForSweep(albumPages) + count, { budgetMs: 12_000 }) : [];
     // The pages as they are NOW (the customer may have edited during the wait).
     const prev = albumPagesRef.current;
     const result = { changed: 0, cleared: 0 };

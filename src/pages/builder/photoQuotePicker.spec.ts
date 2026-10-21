@@ -10,13 +10,17 @@ import { resolve } from 'node:path';
    Haiku, the customer picks from 3). A signed-out tap is answered with the
    sign-in step — never a greyed button — and carries on by itself after it;
    a signed-in tap shows 3 lines written for the photo; tapping one puts it in
-   the box. Every way it can end has words, and the theme lines stay.
+   the box. Every way it can end has words, and "Type your own words" is
+   always there. The quote bank's theme lines are OFF (owner, 2026-10-21:
+   "disable it since haiku is now dynamically doing the quotes"): the picker
+   never asks for them and never shows one.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const h = vi.hoisted(() => ({
   user: null as { id: string } | null,
   openLogin: vi.fn(),
   write: vi.fn(),
+  bankAsked: vi.fn(),
 }));
 vi.mock('../../lib/authContext', () => ({ useAuth: () => ({ user: h.user }) }));
 vi.mock('../../components/AuthModalProvider', () => ({ useAuthModal: () => ({ openLogin: h.openLogin }) }));
@@ -28,20 +32,21 @@ vi.mock('./textFit', () => ({
   captionFits: (line: string) => ({ fits: !line.includes('TOO LONG'), fitsAt: null }),
 }));
 vi.mock('../../lib/quotes', () => ({
-  fetchThemeQuotes: async () => ({ quotes: ['A line for the trip'], source: 'curated' }),
-  moreThemeQuotes: async () => ({ quotes: ['A line for the trip'], source: 'curated' }),
-  curatedQuotesFor: () => ['A line for the trip'],
+  fetchThemeQuotes: async () => { h.bankAsked(); return { quotes: ['A line for the trip'], source: 'curated' }; },
+  moreThemeQuotes: async () => { h.bankAsked(); return { quotes: ['A line for the trip'], source: 'curated' }; },
+  curatedQuotesFor: () => { h.bankAsked(); return ['A line for the trip']; },
   MAX_QUOTE_CHARS: 46,
 }));
 
-import QuotePickerModal, { PHOTO_QUOTE_MESSAGES } from './QuotePickerModal';
+import QuotePickerModal, { PHOTO_QUOTE_MESSAGES, NO_PHOTO_NOTE } from './QuotePickerModal';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement;
 let root: Root;
 const onPick = vi.fn();
 const onClose = vi.fn();
-const show = (photoUrls: string[] = ['blob:x/0']) => act(() => root.render(createElement(QuotePickerModal, { photoUrls, onPick, onClose, mobile: true })));
+const onEdit = vi.fn();
+const show = (photoUrls: string[] = ['blob:x/0']) => act(() => root.render(createElement(QuotePickerModal, { photoUrls, onPick, onClose, onEdit, mobile: true })));
 const $ = (id: string) => host.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 const $$ = (id: string) => [...host.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)];
 const tap = async (el: HTMLElement | null) => { await act(async () => { el!.click(); }); await act(async () => { await Promise.resolve(); }); };
@@ -49,7 +54,7 @@ const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 0)
 
 beforeEach(() => {
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
-  h.user = null; h.openLogin.mockReset(); h.write.mockReset(); onPick.mockReset(); onClose.mockReset();
+  h.user = null; h.openLogin.mockReset(); h.write.mockReset(); h.bankAsked.mockReset(); onPick.mockReset(); onClose.mockReset(); onEdit.mockReset();
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
@@ -121,14 +126,15 @@ describe('signed in', () => {
     expect(h.write.mock.calls[1][2]).toEqual(['One', 'Two', 'Three']);
     expect($$('photo-quote-line').map((b) => b.textContent)).toEqual(['Four', 'Five', 'Six']);
   });
-  it('every way it can end has words, and the theme lines stay to pick from', async () => {
+  it('every way it can end has words, and "Type your own words" is there', async () => {
     for (const error of ['limit_user', 'limit_all', 'refused', 'failed'] as const) {
       h.write.mockResolvedValueOnce({ error });
       show();
       await settle();
       await tap($('photo-quote-write'));
       expect($('photo-quote-note')!.textContent).toBe(PHOTO_QUOTE_MESSAGES[error]);
-      expect(host.textContent).toContain('A line for the trip');
+      expect($('quote-own-words')).not.toBeNull();
+      expect(PHOTO_QUOTE_MESSAGES[error]).not.toMatch(/below/); // nothing is listed below any more
       act(() => root.unmount());
       root = createRoot(host);
     }
@@ -146,7 +152,7 @@ describe('signed in', () => {
 describe('box-sized lines (owner, 2026-10-21: longer lines where the box has room)', () => {
   const quoteBox = { box: { w: 349, h: 372 }, style: { fontSize: 28, italic: true } };
   beforeEach(() => { h.user = { id: 'u1' }; fit.room = 100; });
-  const showBox = () => act(() => root.render(createElement(QuotePickerModal, { photoUrls: ['blob:x/0'], quoteBox, onPick, onClose, mobile: true })));
+  const showBox = () => act(() => root.render(createElement(QuotePickerModal, { photoUrls: ['blob:x/0'], quoteBox, onPick, onClose, onEdit, mobile: true })));
   it("asks for lines as long as the box takes", async () => {
     h.write.mockResolvedValue({ lines: ['A fun day out, with bright signs and happy stops all along the way'] });
     showBox();
@@ -161,13 +167,13 @@ describe('box-sized lines (owner, 2026-10-21: longer lines where the box has roo
     await tap($('photo-quote-write'));
     expect($$('photo-quote-line').map((b) => b.textContent)).toEqual(['Fits nicely', 'Also fits']);
   });
-  it('none fit: it says so, and the theme lines stay', async () => {
+  it('none fit: it says so, and "Type your own words" is there', async () => {
     h.write.mockResolvedValue({ lines: ['TOO LONG one', 'TOO LONG two'] });
     showBox();
     await settle();
     await tap($('photo-quote-write'));
     expect($('photo-quote-note')!.textContent).toBe(PHOTO_QUOTE_MESSAGES.no_fit);
-    expect(host.textContent).toContain('A line for the trip');
+    expect($('quote-own-words')).not.toBeNull();
   });
   it("can't measure, or no box (a quote in a photo frame): no room is sent, the server's cap applies", async () => {
     fit.room = null;
@@ -176,6 +182,45 @@ describe('box-sized lines (owner, 2026-10-21: longer lines where the box has roo
     await settle();
     await tap($('photo-quote-write'));
     expect(h.write.mock.calls[0][3]).toBeUndefined();
+  });
+});
+
+describe('the quote bank is off (owner, 2026-10-21): only lines for the photos, or your own words', () => {
+  it('opening the picker never asks for theme lines and shows none', async () => {
+    h.user = { id: 'u1' };
+    h.write.mockResolvedValue({ lines: ['One', 'Two', 'Three'] });
+    show();
+    await settle();
+    expect(h.bankAsked).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain('A line for the trip');
+    expect(host.textContent).not.toMatch(/theme|curated/i);
+  });
+  it('"Type your own words" hands the box to the typing editor', async () => {
+    show();
+    await settle();
+    expect($('quote-own-words')!.textContent!.trim()).toBe('Type your own words');
+    await tap($('quote-own-words'));
+    expect(onClose).toHaveBeenCalled();
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+  it('signed out: the sign-in step, and your own words right there', async () => {
+    show();
+    await settle();
+    await tap($('photo-quote-write'));
+    expect($('photo-quote-sign-in')).not.toBeNull();
+    expect($('quote-own-words')).not.toBeNull();
+  });
+  it('a page with no photo yet: says to put one on, and your own words', async () => {
+    show([]);
+    await settle();
+    expect($('quote-no-photo')!.textContent).toBe(NO_PHOTO_NOTE);
+    expect($('quote-own-words')).not.toBeNull();
+  });
+  it('a box that already has a line: "Edit the words" below instead (no second way in)', async () => {
+    act(() => root.render(createElement(QuotePickerModal, { photoUrls: ['blob:x/0'], initial: 'Our big week', onPick, onClose, onEdit, onRemove: vi.fn(), mobile: true })));
+    await settle();
+    expect($('quote-own-words')).toBeNull();
+    expect($('quote-edit-words')).not.toBeNull();
   });
 });
 

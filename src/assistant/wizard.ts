@@ -360,7 +360,7 @@ export class WizardEngine {
             : "Give your album a name — it's how you'll find it again in Your Projects. Then pick the occasion: Megy writes the quotes on your pages to match it, so this step can't be skipped.",
           /* Name box, occasion chips + free text render on the center stage (AlbumThemeStep). */
           actions: [],
-          tips: ["When you come back, Megy asks if you want to pick up this album where you left off", "Quotes are 60 % of the little boxes Megy deals into your album — the occasion is what they're about"],
+          tips: ["When you come back, Megy asks if you want to pick up this album where you left off", "Tap an empty quote box and Megy writes a line from the photos on that page"],
         };
       }
 
