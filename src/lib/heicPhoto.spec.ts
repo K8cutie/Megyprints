@@ -10,7 +10,7 @@ import { resolve } from 'node:path';
    (libheif via pillow-heif), 64×48, with EXIF capture dates.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { looksHeic, isHeifBytes, needsHeicConversion, jpegName, heicToJpeg, toAlbumPhoto, heicConverters } from './heicPhoto';
+import { looksHeic, isHeifBytes, needsHeicConversion, jpegName, heicToJpeg, toAlbumPhoto, heicConverters, heicWorkerCount } from './heicPhoto';
 import { heifExifTiff } from './heifExif';
 import { readCaptureTime } from '../pages/builder/exif';
 import { kindOfPick } from './pickedFiles';
@@ -120,12 +120,30 @@ describe('the JPEG the album keeps', () => {
     expect(src('./eventImage.ts')).toMatch(/const source = file instanceof File \? await toAlbumPhoto\(file\) : file;\s*const img = await decodeImage\(source\);/);
   });
 
-  it('the converter is loaded only when a HEIC arrives (a dynamic import, the no-eval build)', () => {
+  it('the converter runs in background workers, loaded only when a HEIC arrives (owner, 2026-10-12)', () => {
     const src = readFileSync(resolve(__dirname, 'heicPhoto.ts'), 'utf8');
-    expect(src).toMatch(/await import\('heic-to\/csp'\)/);
-    expect(src).not.toMatch(/^import .*heic-to/m);
-    // …and the offline cache doesn't download its ~3 MB for every visitor.
+    // A worker, not the page: libheif decodes synchronously and would freeze the screen.
+    expect(src).toMatch(/new Worker\(new URL\('\.\/heicWorker\.ts', import\.meta\.url\), \{ type: 'module' \}\)/);
+    expect(src).not.toMatch(/^import .*(libheif|heicWorker)/m);
+    const worker = readFileSync(resolve(__dirname, 'heicWorker.ts'), 'utf8');
+    // The WebAssembly build (2.9× faster than heic-to's plain JavaScript), which needs no eval.
+    expect(worker).toMatch(/from 'libheif-js\/libheif-wasm\/libheif-bundle\.mjs'/);
+    // heic-to is gone (one converter).
+    const pkg = readFileSync(resolve(__dirname, '../../package.json'), 'utf8');
+    expect(pkg).not.toMatch(/"heic-to"/);
+    expect(pkg).toMatch(/"libheif-js"/);
+    // …and the offline cache doesn't download its ~2 MB for every visitor.
     const vite = readFileSync(resolve(__dirname, '../../vite.config.ts'), 'utf8');
-    expect(vite).toMatch(/globIgnores:\s*\[[^\]]*'\*\*\/heic-to-\*\.js'/);
+    expect(vite).toMatch(/globIgnores:\s*\[[^\]]*'\*\*\/heicWorker-\*\.js'/);
+    expect(vite).toMatch(/worker: \{ format: 'es' \}/);
+  });
+
+  it('fewer photos at once on a phone with little memory', () => {
+    expect(heicWorkerCount(undefined, undefined)).toBe(3); // unknown: as addPhotos runs
+    expect(heicWorkerCount(8, 8)).toBe(3);
+    expect(heicWorkerCount(4, 8)).toBe(2);
+    expect(heicWorkerCount(2, 8)).toBe(1);
+    expect(heicWorkerCount(8, 2)).toBe(1); // two cores: one for the page
+    expect(heicWorkerCount(0.5, 1)).toBe(1); // never none
   });
 });
