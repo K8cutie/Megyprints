@@ -62,7 +62,7 @@ function PressHowTo() {
         <li>Each spot on the sheet makes a pile (the sheet says which). Put pile 1 on top of pile 2, pile 2 on top of pile 3, and so on. The pages are now in order.</li>
         <li>Blank sides: orders from 21 Oct 2026 start with page 1, and end with a blank side when the album has an odd number of pages. Older orders start with a blank side (it faces the inside of the front cover), and end with one when the page count is even. After <b>Print sheets</b>, the line under the order says which.</li>
         <li><b>Cover sheet</b>: print one side only. Cut on the marks; the dashed marks are the spine edges.</li>
-        <li><b>Sheets as JPEG</b>: the same sheets and cover sheet as 300 DPI pictures in one zip, for a printer that can't open the PDF. Print each at actual size (100%).</li>
+        <li><b>Sheets as JPEG</b>: the same sheets and cover sheet as 300 DPI pictures in one zip, for a printer that can't open the PDF. Each picture is one side of a sheet, numbered in print order: print them in number order, both sides (01 on the front of sheet 1, 02 on its back, 03 on the front of sheet 2…), at actual size (100%).</li>
       </ol>
       <button onClick={testSheet} disabled={busy}
         className="mt-3 h-9 px-4 rounded-lg bg-paper text-sm font-medium text-dark flex items-center gap-2 disabled:opacity-50">

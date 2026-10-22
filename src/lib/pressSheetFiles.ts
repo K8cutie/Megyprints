@@ -107,23 +107,40 @@ export async function downloadCoverSheet(o: PrintOrder): Promise<string> {
   return 'Cover sheet: print one side only';
 }
 
+/** A sheet side's picture name. The number in front is the print order, so
+ *  any folder lists the pictures the way they print: 01 the front of sheet 1,
+ *  02 its back, 03 the front of sheet 2… and the cover after them all.
+ *  (Named "sheet-01-front" / "sheet-01-back", a folder put every back before
+ *  its front and the cover first: printed in that order, no side lined up.) */
+export function sideJpegName(orderNumber: string, n: number, total: number, side: { sheet: number; side: 'front' | 'back' }): string {
+  const width = Math.max(2, String(total).length);
+  return `${orderNumber}-${String(n).padStart(width, '0')}-${side.side}-of-sheet-${side.sheet}.jpg`;
+}
+
+/** The cover's picture name: after every numbered side in a folder. */
+export const coverJpegName = (orderNumber: string) => `${orderNumber}-cover.jpg`;
+
 /** The words that go in the zip with the pictures. */
 export function jpegHowTo(o: PrintOrder, sheets: number, piles: number, cover: boolean, blankSides: string): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
+  const total = 2 * sheets;
+  const name = (n: number, side: 'front' | 'back', sheet: number) => sideJpegName(o.order_number, n, total, { sheet, side });
   return [
     `Megyprints order ${o.order_number}: the press sheets as JPEG pictures.`,
     '',
     'Every picture is one side of a 12.5 x 19 in sheet at 300 DPI (3750 x 5700 pixels).',
     'Print at actual size (100%). Do not use "fit to page".',
     '',
-    `Album: ${sheets} sheets, both sides. Print sheet-${pad(1)}-front, then sheet-${pad(1)}-back on the other side of the`,
-    'same sheet, flipping on the long edge. Then sheet 02, and so on.',
+    `Album: ${sheets} sheets, both sides: ${total} pictures, numbered in print order.`,
+    `Print them in number order, 2-sided (duplex), flipping on the long edge:`,
+    `${name(1, 'front', 1)} on the front of the first sheet, ${name(2, 'back', 1)} on its back,`,
+    `then ${name(3, 'front', 2)} on the front of the next sheet, and so on.`,
+    'Every sheet has a picture on both sides. Never print a picture on a sheet by itself.',
     `Keep sheet 1 on top, front side up. Cut the whole stack on the marks into ${piles} ${piles === 1 ? 'pile' : 'piles'},`,
     'then put pile 1 on top of pile 2, pile 2 on top of pile 3, and so on.',
     `${blankSides}.`,
     '',
     cover
-      ? `Cover: print ${o.order_number}-cover.jpg on one side of its own sheet. Cut on the marks; the dashed marks are the spine edges.`
+      ? `Cover: print ${coverJpegName(o.order_number)} on one side of its own sheet. Cut on the marks; the dashed marks are the spine edges.`
       : 'Cover: not in this zip (see the console for why).',
     '',
   ].join('\r\n');
@@ -140,11 +157,10 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
   const { pdfToJpegs } = await jpegTools();
   const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, text);
   const total = plan.sides.length + 1;
-  const pad = (n: number) => String(n).padStart(2, '0');
   const say = (done: number) => progress(`Making the JPEG pictures: ${done} of ${total}…`);
   say(0);
   const sides = await pdfToJpegs(bytes, (done) => say(done));
-  const files: ZipEntry[] = plan.sides.map((s, i) => ({ name: `${o.order_number}-sheet-${pad(s.sheet)}-${s.side}.jpg`, data: sides[i] }));
+  const files: ZipEntry[] = plan.sides.map((s, i) => ({ name: sideJpegName(o.order_number, i + 1, plan.sides.length, s), data: sides[i] }));
 
   // The cover sheet: an order can still be waiting on its cover file.
   let coverMissing: string | null = null;
@@ -152,7 +168,7 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
     const coverSrc = await readPrintFile(`${printFilesOf(o)}-cover.pdf`, 'cover file');
     const { bytes: coverPdf } = await imposeCoverSheet(coverSrc, size, coverOf(o), o.page_count, o.order_number, text);
     const [cover] = await pdfToJpegs(coverPdf);
-    files.push({ name: `${o.order_number}-cover.jpg`, data: cover });
+    files.push({ name: coverJpegName(o.order_number), data: cover });
   } catch (e) {
     coverMissing = e instanceof Error ? e.message : 'The cover file could not be read.';
   }
