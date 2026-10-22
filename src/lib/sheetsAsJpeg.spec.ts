@@ -46,7 +46,7 @@ vi.mock('./pressSheetJpeg', () => ({
   },
 }));
 
-import { blankSidesNote, downloadSheetsAsJpeg, jpegHowTo } from './pressSheetFiles';
+import { blankSidesNote, coverJpegName, downloadSheetsAsJpeg, jpegHowTo, sideJpegName } from './pressSheetFiles';
 
 function album(n: number): ArrayBuffer {
   const doc = new jsPDF({ unit: 'in', format: [8.25, 8.25], compress: true });
@@ -94,9 +94,10 @@ describe('Sheets as JPEG', () => {
     expect(saved[0].type).toBe('application/zip');
     const entries = readZip(saved[0].bytes);
     // 45 pages, 4 a sheet (2 leaves), page 1 on the first leaf's front → 23 leaves on 12 sheets: 24 sides.
-    const sides = entries.filter((e) => /-sheet-\d\d-(front|back)\.jpg$/.test(e.name));
+    const sides = entries.filter((e) => /-\d\d-(front|back)-of-sheet-\d+\.jpg$/.test(e.name));
     expect(sides).toHaveLength(24);
-    expect(sides.slice(0, 3).map((e) => e.name)).toEqual(['MP-2026-0045-sheet-01-front.jpg', 'MP-2026-0045-sheet-01-back.jpg', 'MP-2026-0045-sheet-02-front.jpg']);
+    expect(sides.slice(0, 3).map((e) => e.name)).toEqual(['MP-2026-0045-01-front-of-sheet-1.jpg', 'MP-2026-0045-02-back-of-sheet-1.jpg', 'MP-2026-0045-03-front-of-sheet-2.jpg']);
+    expect(sides.at(-1)!.name).toBe('MP-2026-0045-24-back-of-sheet-12.jpg');
     expect(entries.at(-2)!.name).toBe('MP-2026-0045-cover.jpg');
     expect(entries.at(-1)!.name).toBe('HOW-TO-PRINT.txt');
     for (const e of entries.filter((x) => x.name.endsWith('.jpg'))) expect(jpegDpi(e.data)).toBe(300);
@@ -129,6 +130,35 @@ describe('Sheets as JPEG', () => {
     expect(t).toContain('Print at actual size (100%). Do not use "fit to page".');
     expect(t).toContain('flipping on the long edge');
     expect(t).toContain('into 4 piles');
+  });
+
+  /* The owner, 2026-10-22: "I thought you arranged the pages so it prints
+     front and back on 12.5x19". Unzipped, the old names listed the cover
+     first and every back before its front (sheet-01-back < sheet-01-front):
+     printed 2-sided in folder order, no sheet had its own two sides. */
+  it('a folder lists the pictures in print order: front, back, next front… and the cover last', async () => {
+    files.store.set('o-45.pdf', album(45));
+    files.store.set('o-45-cover.pdf', cover(45));
+    await downloadSheetsAsJpeg(order);
+    await settle();
+    const pictures = readZip(saved[0].bytes).map((e) => e.name).filter((n) => n.endsWith('.jpg'));
+    const printOrder = [
+      ...Array.from({ length: 12 }, (_, i) => [`MP-2026-0045-${String(2 * i + 1).padStart(2, '0')}-front-of-sheet-${i + 1}.jpg`, `MP-2026-0045-${String(2 * i + 2).padStart(2, '0')}-back-of-sheet-${i + 1}.jpg`]).flat(),
+      'MP-2026-0045-cover.jpg',
+    ];
+    expect(pictures).toEqual(printOrder);
+    // Sorted by name the plain way, and the way Windows / a Mac lists them (numbers by value).
+    expect([...pictures].sort()).toEqual(printOrder);
+    expect([...pictures].sort(new Intl.Collator('en', { numeric: true, sensitivity: 'base' }).compare)).toEqual(printOrder);
+    expect([...pictures].sort((a, b) => a.localeCompare(b))).toEqual(printOrder);
+  });
+
+  it('100 sides or more: three-digit numbers, so 100 still lists after 99', () => {
+    const names = Array.from({ length: 120 }, (_, i) => sideJpegName('MP-1', i + 1, 120, { sheet: Math.floor(i / 2) + 1, side: i % 2 ? 'back' : 'front' }));
+    expect(names[0]).toBe('MP-1-001-front-of-sheet-1.jpg');
+    expect(names[99]).toBe('MP-1-100-back-of-sheet-50.jpg');
+    expect([...names].sort()).toEqual(names);
+    expect([...names, coverJpegName('MP-1')].sort()).toEqual([...names, 'MP-1-cover.jpg']);
   });
 });
 
