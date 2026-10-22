@@ -7,7 +7,7 @@
    storage for this order yet" (MP-2026-KGCFSQN). Nobody but that phone can
    make it, so Your orders asks for it:
      • myOrdersMissingCover — my orders whose album pages arrived but whose
-       cover didn't, while the cover can still be printed (0050);
+       cover didn't, while the cover can still be printed (0051);
      • sendOrderCover — makes the cover from the cover the ORDER froze
        (album_snapshot.cover_front: edits to the album since don't change what
        was ordered) with the order's own size, cover, paper and page count, and

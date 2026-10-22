@@ -4,7 +4,7 @@
 // customer's phone and the order went on without a cover. The app did report
 // the error, but the live site had no VITE_ERROR_ENDPOINT and no Sentry DSN, so
 // it went to the phone's console and nobody saw it. Reports now come here and
-// go into public.client_errors (0050), which only the owner can read (the
+// go into public.client_errors (0051), which only the owner can read (the
 // console's Errors tab).
 //
 // PUBLIC and unauthenticated on purpose: errors happen before sign-in too, and

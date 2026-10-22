@@ -3,7 +3,7 @@
  * here, so production reporting is wired in ONE place.
  *
  * Reports go to `VITE_ERROR_ENDPOINT` when it is set, and otherwise, in a
- * production build, to the app's own /api/client-error (0050): the owner reads
+ * production build, to the app's own /api/client-error (0051): the owner reads
  * them in the console's Errors tab. Until 2026-10-22 neither was set on the
  * live site, so a checkout that lost its cover (MP-2026-KGCFSQN) reported it
  * to the customer's phone console only. Dev builds just log to the console.

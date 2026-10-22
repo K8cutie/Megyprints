@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  Proof for 0050 (cover resend + error reports). Run AFTER 0050 is applied:
+--  Proof for 0051 (cover resend + error reports). Run AFTER 0051 is applied:
 --    npx supabase db query --linked --file supabase/security/cover-resend-proof.sql
 --  It changes nothing: every check runs in one transaction that ends in an
 --  error carrying the results (so it rolls back). Expected:

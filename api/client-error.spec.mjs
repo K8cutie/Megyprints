@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 /* ══════════════════════════════════════════════════════════════════════════
-   /api/client-error — where the app's error reports land (0050).
+   /api/client-error — where the app's error reports land (0051).
    Public on purpose, so these lock what it does with a report: store it
    through log_client_error with every field cut to size, never act on it,
    always answer 204, and refuse what the shared guard refuses.

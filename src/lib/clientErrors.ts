@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-/* The app's error reports (0050: api/client-error.mjs stores them), for the
+/* The app's error reports (0051: api/client-error.mjs stores them), for the
    console's Errors tab. Owner only (RLS). Kept 30 days. */
 
 export interface ClientError {

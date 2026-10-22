@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 0050_cover_resend_and_client_errors.sql  (idempotent; safe to re-run)
+--  MEGY PRINTS — 0051_cover_resend_and_client_errors.sql  (idempotent; safe to re-run)
 --
 --  WHY: order MP-2026-KGCFSQN (2026-10-22) was paid with no cover file. The
 --  cover is made at checkout on the customer's phone (the photos are only
@@ -30,8 +30,9 @@
 --     flood can store is about 300 a day × 6 KB × 30 days ≈ 55 MB, plus at
 --     most p_order_cap a day per real open order.
 --
---  Run AFTER 0049. (0047 is the event guest albums branch; this file does not
---  depend on it.)
+--  Run AFTER 0050 (0050_six_by_six_twelve_a_sheet, #180: a separate change
+--  that took the number first; this file was 0050 until then and does not
+--  depend on it). 0047 is the event guest albums branch; not needed either.
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ── 1. Orders waiting for their cover ──────────────────────────────────────

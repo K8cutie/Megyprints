@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   Errors — what went wrong on customers' phones (0050). A checkout lost its
+   Errors — what went wrong on customers' phones (0051). A checkout lost its
    cover on 2026-10-22 and nobody knew: the report went to the phone's own
    console. Reports now land here, newest first, kept 30 days.
    Checkout and Your orders come first (a failure there can cost an order);
