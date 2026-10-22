@@ -175,3 +175,28 @@ export async function uploadOrderCoverPdf(orderId: string, input: CoverPrintInpu
   const error = await uploadOnce('print-pdfs', `${orderId}-cover.pdf`, blob, { contentType: 'application/pdf' });
   if (error) throw new Error(`Cover file upload failed: ${error.message}`);
 }
+
+/** How long to wait before trying the cover again: a dropped connection, or a
+ *  phone that was short of memory for a moment, often clears in a few seconds. */
+export const COVER_RETRY_WAITS_MS = [1500, 4000];
+
+/** uploadOrderCoverPdf, tried up to 3 times (MP-2026-KGCFSQN, 2026-10-22: one
+ *  failed try at checkout left a paid order with no cover). `onFail` hears every
+ *  failed try, so each one can be reported. Throws the last error. */
+export async function uploadOrderCoverPdfWithRetry(
+  orderId: string,
+  input: CoverPrintInput,
+  onFail?: (error: unknown, attempt: number) => void,
+  waits: number[] = COVER_RETRY_WAITS_MS,
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await uploadOrderCoverPdf(orderId, input);
+      return;
+    } catch (e) {
+      onFail?.(e, attempt);
+      if (attempt > waits.length) throw e;
+      await new Promise((r) => setTimeout(r, waits[attempt - 1]));
+    }
+  }
+}

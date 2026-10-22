@@ -12,13 +12,15 @@ import {
   downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile, orderSpine,
 } from '../../lib/pressSheetFiles';
 
-export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds }: {
+export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds, coverReadyIds = null }: {
   orders: AdminOrder[];
   onChanged: () => Promise<void>;
   canSeeFinancials: boolean;
   /** Order ids that have a "<id>.pdf" in the private print-pdfs bucket. Any
    *  order NOT in this set is missing its print file and must not be fulfilled blind. */
   printReadyIds: Set<string>;
+  /** Order ids that have their "<id>-cover.pdf"; null while unknown. */
+  coverReadyIds?: Set<string> | null;
 }) {
   if (orders.length === 0) {
     return <p className="text-sm text-light py-16 text-center">No orders yet.</p>;
@@ -26,10 +28,20 @@ export default function OrdersPanel({ orders, onChanged, canSeeFinancials, print
   return (
     <div className="space-y-3">
       <PressHowTo />
-      {orders.map((o) => <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReadyIds.has(printFilesOf(o))} />)}
+      {orders.map((o) => {
+        const files = printFilesOf(o);
+        const printReady = printReadyIds.has(files);
+        return <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReady}
+          coverMissing={printReady && coverReadyIds !== null && !coverReadyIds.has(files) && COVER_STILL_NEEDED.includes(o.status)} />;
+      })}
     </div>
   );
 }
+
+/** Until it's printed, a missing cover still matters. */
+const COVER_STILL_NEEDED: AdminOrder['status'][] = ['pending_payment', 'paid', 'in_production'];
+/** Orders froze the album's cover design from 0036 (applied 2026-10-04). */
+const COVER_SAVED_WITH_ALBUM_SINCE = '2026-10-04';
 
 /** How to print on the shop's 12.5 × 19 sheets, and the one-sheet printer check. */
 function PressHowTo() {
@@ -61,8 +73,8 @@ function PressHowTo() {
   );
 }
 
-function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
-  o: AdminOrder; onChanged: () => Promise<void>; canSeeFinancials: boolean; printReady: boolean;
+function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: {
+  o: AdminOrder; onChanged: () => Promise<void>; canSeeFinancials: boolean; printReady: boolean; coverMissing?: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [price, setPrice] = useState(o.amount != null ? String(o.amount) : '');
@@ -144,6 +156,15 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1"
                 title="No print-ready PDF is in the fulfillment bucket for this order. Do not print until the customer re-orders from the device that holds the photos.">
                 <AlertTriangle size={12} /> Print file missing
+              </span>
+            )}
+            {coverMissing && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1" data-testid="order-cover-missing"
+                title={o.created_at < COVER_SAVED_WITH_ALBUM_SINCE
+                  // my_orders_missing_cover (0051) skips orders that froze no cover design.
+                  ? "The cover file didn't arrive, and this order is from before covers were saved with the album, so the customer gets no Send the cover button. Message them about the cover."
+                  : "The cover file didn't arrive. Only the customer's phone can make it (the photos are there): ask them to open Your orders on the phone they made the album on and tap Send the cover."}>
+                <AlertTriangle size={12} /> Cover missing
               </span>
             )}
           </div>

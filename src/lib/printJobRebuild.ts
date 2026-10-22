@@ -66,8 +66,8 @@ function draftCoverDesign(albumId: string | undefined): CoverDesign | undefined 
  *  say; it is trusted, as it always was.) It is normalized through the same
  *  sanitizer the interior pages use (shape + ornament data-URI validation). The
  *  back cover is NOT recovered — it's the reserved Megy Prints panel, derived
- *  from the front at wrap time. The cover upload is best-effort, so a missing
- *  cover photo degrades the cover only — it does NOT fail the interior job. */
+ *  from the front at wrap time. A cover photo missing from this device does not
+ *  fail the rebuild: checkout checks the cover's photos itself and says so. */
 function draftCoverPages(albumId: string, albumSize: AlbumSizePreset): { coverFront?: AlbumPage } {
   try {
     const d = readDraftCover(albumId);

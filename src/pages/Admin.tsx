@@ -1,13 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════════
    /admin — the OPERATOR CONSOLE. Separate from the customer app; gated by ROLE.
-     • owner       — Overview · Album stats · Orders (full, incl. price) · Bookings · Templates · Team
+     • owner       — Overview · Album stats · Orders (full, incl. price) · Bookings · Templates · Team · Errors
      • fulfillment — Orders only, status changes only (no money, no overview)
    Role resolution + the DB functions in migration 0007 are the real guard.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, Images, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, type LucideIcon } from 'lucide-react';
+import { BarChart3, Images, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
@@ -23,8 +23,9 @@ import PricingPanel from './admin/PricingPanel';
 import MessagesPanel from './admin/MessagesPanel';
 import BookingsPanel from './admin/BookingsPanel';
 import AlbumStatsPanel from './admin/AlbumStatsPanel';
+import ErrorsPanel from './admin/ErrorsPanel';
 
-type Tab = 'overview' | 'stats' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'team';
+type Tab = 'overview' | 'stats' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'team' | 'errors';
 const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3, ownerOnly: true },
   { id: 'stats', label: 'Album stats', icon: Images, ownerOnly: true },
@@ -34,6 +35,7 @@ const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }
   { id: 'templates', label: 'Templates', icon: LayoutGrid, ownerOnly: true },
   { id: 'pricing', label: 'Pricing', icon: Calculator, ownerOnly: true },
   { id: 'team', label: 'Team', icon: Users, ownerOnly: true },
+  { id: 'errors', label: 'Errors', icon: TriangleAlert, ownerOnly: true },
 ];
 
 export default function Admin() {
@@ -65,6 +67,9 @@ export default function Admin() {
   // already hold SELECT on that bucket (migration 0008), so we can observe print
   // readiness with zero schema/RLS/RPC change and flag any order missing its file.
   const [printReadyIds, setPrintReadyIds] = useState<Set<string>>(new Set());
+  // …and the ones that also have their cover, "<id>-cover.pdf". Null until
+  // the bucket has been read, so no row says "cover missing" by mistake.
+  const [coverReadyIds, setCoverReadyIds] = useState<Set<string> | null>(null);
 
   // Resolve the signed-in user's role, then land on a sensible default tab.
   useEffect(() => {
@@ -100,6 +105,7 @@ export default function Admin() {
       // the shop passes ~1000 print files the tail would falsely show "print file
       // missing / do not print". Accumulate every page until a short one.
       const ready = new Set<string>();
+      const covers = new Set<string>();
       const PAGE = 1000;
       for (let offset = 0; ; offset += PAGE) {
         const { data: files, error } = await supabase.storage
@@ -107,17 +113,19 @@ export default function Admin() {
         if (error) throw error;
         const batch = files ?? [];
         for (const f of batch) {
-          // The cover wrap is a SIBLING file "<id>-cover.pdf" — not an order-id key.
-          // Skip it so it can't pollute the set (→ bogus "<id>-cover" ids / a
-          // misfired "print file missing" badge). Only the interior "<id>.pdf" keys.
-          if (f.name.endsWith('-cover.pdf')) continue;
-          if (f.name.endsWith('.pdf')) ready.add(f.name.slice(0, -'.pdf'.length));
+          // The cover wrap is a SIBLING file "<id>-cover.pdf" — its own set, so it
+          // can't pollute the print set (→ bogus "<id>-cover" ids / a misfired
+          // "print file missing" badge).
+          if (f.name.endsWith('-cover.pdf')) covers.add(f.name.slice(0, -'-cover.pdf'.length));
+          else if (f.name.endsWith('.pdf')) ready.add(f.name.slice(0, -'.pdf'.length));
         }
         if (batch.length < PAGE) break;
       }
       setPrintReadyIds(ready);
+      setCoverReadyIds(covers);
     } catch {
       setPrintReadyIds(new Set());
+      setCoverReadyIds(null);
     }
   }, []);
 
@@ -198,7 +206,7 @@ export default function Admin() {
         {tab === 'overview' && isOwner && (ordersLoading ? <Spinner /> : <OverviewPanel orders={orders} />)}
         {tab === 'orders' && (ordersLoading ? <Spinner /> : (
           <>
-            <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} />
+            <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} coverReadyIds={coverReadyIds} />
             {/* Never let the list imply it is showing everything. */}
             {ordersTotal > orders.length && (
               <div className="mt-4 flex items-center justify-center gap-3 text-sm">
@@ -220,6 +228,7 @@ export default function Admin() {
         {tab === 'templates' && isOwner && <TemplatesPanel />}
         {tab === 'pricing' && isOwner && <PricingPanel />}
         {tab === 'team' && isOwner && <TeamPanel />}
+        {tab === 'errors' && isOwner && <ErrorsPanel orders={orders} />}
       </main>
     </div>
   );
