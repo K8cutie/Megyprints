@@ -121,10 +121,11 @@ describe('press sheet PDFs', () => {
     expect(mark).toBeLessThan(album.indexOf('doc.addImage('));
   });
 
-  it('turns pages for the sizes that fit more sideways (6x4: 12 a sheet)', async () => {
+  it('turns pages for the sizes that fit more sideways (6x4: 18 a sheet, 3 × 3 touching)', async () => {
     const { plan, bytes } = await imposeAlbumSheets(await albumPdf('6x4', 40), '6x4', 'MP-TURN', T);
     expect(plan.layout.rotated).toBe(true);
-    expect(plan.layout.pagesPerSheet).toBe(12);
+    expect(plan.layout.pagesPerSheet).toBe(18);
+    expect(plan.sheets).toBe(3);
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(2 * plan.sheets);
   });
 

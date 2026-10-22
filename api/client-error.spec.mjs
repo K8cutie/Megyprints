@@ -61,9 +61,16 @@ describe('readReport', () => {
     expect(Buffer.byteLength(JSON.stringify(r.p_context))).toBeLessThanOrEqual(2048);
   });
   it('a huge scrub-bait field is cut before it is scrubbed (stays fast)', () => {
-    const t0 = performance.now();
-    mod.readReport({ message: 'eyJ'.repeat(5400), stack: 'eyJ'.repeat(5400) }, 'ua');
-    expect(performance.now() - t0).toBeLessThan(50);
+    // Timed against the same machine, not a fixed 50 ms: CI's runner is ~5×
+    // slower than a laptop and the cut path took 50.1 ms there (PR #182).
+    // Scrubbing a whole 16 KB field is ~13× the cut path, and grows with the
+    // square of the length, so a missing cut (two such scrubs) still fails.
+    const bait = 'eyJ'.repeat(5400);
+    const time = (f) => { const t0 = performance.now(); f(); return performance.now() - t0; };
+    mod.readReport({ message: bait, stack: bait }, 'ua'); // warm up
+    const cut = Math.min(...[1, 2, 3].map(() => time(() => mod.readReport({ message: bait, stack: bait }, 'ua'))));
+    const whole = time(() => mod.scrub(bait));
+    expect(cut).toBeLessThan(whole / 4);
   });
   it('no message, not an object, or broken JSON → nothing', () => {
     expect(mod.readReport({ stack: 's' })).toBeNull();

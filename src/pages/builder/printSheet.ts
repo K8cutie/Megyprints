@@ -11,9 +11,9 @@
      • sheetLayout(size)  — how many leaves fit a sheet and where they sit.
        Pages keep their full 0.125" trim edge on the outside; where pages
        face each other they may sit 1/8" apart (1/16" trim edge each), but
-       only when that fits one more row (owner chose "B", 2026-10-11). On a
-       BUTTED size the pages touch, with no trim edge, when that fits one
-       more (6x6, owner 2026-10-22).
+       only when that fits one more row (owner chose "B", 2026-10-11). Pages
+       touch, with no trim edge, when that fits one more column (6x6 first,
+       2026-10-22; every size, 2026-10-23: BUTTED_SIZES).
      • sheetPlan(size, pages) — which album page goes on which sheet, side,
        slot and turn, in page order: sheet 1 holds the first leaves.
      • coverOnSheet(size, cover, pages) — whether the flat cover fits a sheet.
@@ -88,12 +88,16 @@ export function trimInches(size: AlbumSizePreset): { trimW: number; trimH: numbe
   return { trimW: (cfg?.width ?? 2400) / 300, trimH: (cfg?.height ?? 2400) / 300 };
 }
 
-/** Sizes whose pages may touch across the sheet, with no trim edge at all
- *  (owner, 2026-10-22, drawing his 6x6 sheet: 1 3 / 5 7 / 9 11 on the front,
- *  "yes, 6 a side"). Two 6" pages are exactly the 12" the printer prints, so
- *  6x6 goes 6 to a side instead of 3. The cut has to be exact: a hair off
- *  shows white at the outside edge, or a sliver of the next page. */
-export const BUTTED_SIZES: readonly AlbumSizePreset[] = ['6x6'];
+/** Sizes whose pages may touch, with no trim edge at all, where that fits one
+ *  more column (owner, 2026-10-22, drawing his 6x6 sheet: 1 3 / 5 7 / 9 11 on
+ *  the front, "yes, 6 a side"; 2026-10-23: the same for the other sizes).
+ *  Pages 4" or 6" wide fill the 12" the printer prints exactly, so 6x6 goes
+ *  6 to a side (was 3), 6x4 9 (was 6), 6x8 and 8x6 4 (was 3); the other
+ *  sizes gain nothing and keep their trim edges. Rows never gain, so they
+ *  always keep theirs. The cut has to be exact: a hair off shows white at
+ *  the outside edge, or a sliver of the next page. Take a size out of this
+ *  list to give it its trim edges back. */
+export const BUTTED_SIZES: readonly AlbumSizePreset[] = ALBUM_SIZES.map((s) => s.preset);
 
 /** How many pages of length `len` fit along one axis, and the trim edge they
  *  keep outside (`outer`) and where two pages face each other (`inner`).
