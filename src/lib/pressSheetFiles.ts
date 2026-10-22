@@ -25,7 +25,11 @@ type PrintOrder = Pick<AdminOrder, 'id' | 'copy_of_order_id' | 'order_number' | 
 
 async function readPrintFile(path: string, what: string): Promise<ArrayBuffer> {
   const { data, error } = await supabase.storage.from('print-pdfs').download(path);
-  if (error || !data) throw new Error(`The ${what} isn't in storage for this order yet.`);
+  if (error || !data) {
+    // Only the customer's phone can make a cover (the photos are there): say how.
+    const how = what === 'cover file' ? ' Ask the customer to open Your orders on the phone they made the album on and tap Send the cover.' : '';
+    throw new Error(`The ${what} isn't in storage for this order yet.${how}`);
+  }
   return data.arrayBuffer();
 }
 

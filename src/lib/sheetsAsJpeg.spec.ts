@@ -115,7 +115,7 @@ describe('Sheets as JPEG', () => {
     const entries = readZip(saved[0].bytes);
     expect(entries.some((e) => e.name.endsWith('-cover.jpg'))).toBe(false);
     expect(new TextDecoder().decode(entries.at(-1)!.data)).toContain('Cover: not in this zip');
-    expect(note).toMatch(/No cover picture: The cover file isn't in storage for this order yet\.$/);
+    expect(note).toMatch(/No cover picture: The cover file isn't in storage for this order yet\. Ask the customer to open Your orders on the phone they made the album on and tap Send the cover\.$/);
   });
 
   it('no print file: says so, and nothing is saved', async () => {

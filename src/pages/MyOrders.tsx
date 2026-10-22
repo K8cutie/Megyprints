@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Package, Loader2, Landmark } from 'lucide-react';
+import { Package, Loader2, Landmark, BookImage } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { listMyOrders, cancelMyUnpaidOrder, type MyOrder } from '../lib/myOrders';
+import { myOrdersMissingCover, sendOrderCover } from '../lib/orderCover';
+import { PhotosNotHereError } from '../lib/photoPresence';
+import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { payByDate, UNPAID_ORDER_DAYS } from '../lib/orderExpiry';
 import { trackOf } from '../lib/orderTracker';
 import { PAYEE } from '../lib/payment';
@@ -42,6 +45,18 @@ export default function MyOrders() {
     return () => { alive = false; };
   }, [user, reloadTick]);
 
+  // Orders whose cover never reached us (made on the phone, like the album
+  // pages). Unknown → nothing is asked: the shop sees it in the console too.
+  const [coverNeeded, setCoverNeeded] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    myOrdersMissingCover()
+      .then((ids) => { if (alive) setCoverNeeded(ids); })
+      .catch(() => { /* no box; the order list still shows */ });
+    return () => { alive = false; };
+  }, [user, reloadTick]);
+
   return (
     // pt-24: below the fixed header — the title was drawn over the logo (RC).
     <div className="max-w-3xl mx-auto px-4 pt-24 pb-10">
@@ -66,13 +81,13 @@ export default function MyOrders() {
       )}
 
       <div className="space-y-4">
-        {orders?.map((o) => <OrderCard key={o.id} order={o} focused={o.id === focusId} onChanged={() => setReloadTick((n) => n + 1)} />)}
+        {orders?.map((o) => <OrderCard key={o.id} order={o} focused={o.id === focusId} coverNeeded={coverNeeded.has(o.id)} onChanged={() => setReloadTick((n) => n + 1)} />)}
       </div>
     </div>
   );
 }
 
-function OrderCard({ order, focused, onChanged }: { order: MyOrder; focused?: boolean; onChanged?: () => void }) {
+function OrderCard({ order, focused, coverNeeded, onChanged }: { order: MyOrder; focused?: boolean; coverNeeded?: boolean; onChanged?: () => void }) {
   const track = trackOf(order);
   // Cancel asks once more before it acts (two taps, both in words).
   const [askCancel, setAskCancel] = useState(false);
@@ -118,6 +133,8 @@ function OrderCard({ order, focused, onChanged }: { order: MyOrder; focused?: bo
         <div className="mt-2"><OrderTracker track={track} compact /></div>
       )}
 
+      {coverNeeded && !track.cancelled && <SendCover order={order} />}
+
       {track.awaitingPayment && (
         <div className="mt-3 rounded-xl border border-peach bg-blush px-4 py-3 text-xs text-cocoa" data-testid="order-how-to-pay">
           <p className="flex items-center gap-1.5 font-semibold text-dark mb-1"><Landmark size={14} /> Send {peso(order.amount)} by bank transfer to finish</p>
@@ -161,6 +178,46 @@ function OrderCard({ order, focused, onChanged }: { order: MyOrder; focused?: bo
       {order.tracking && track.stage >= 4 && (
         <p className="mt-3 text-xs text-medium">Courier tracking number: <span className="font-mono text-dark">{order.tracking}</span></p>
       )}
+    </div>
+  );
+}
+
+/* The cover never reached us (MP-2026-KGCFSQN). Only the phone or computer the
+   album was made on can make it — the photos are there — so the customer
+   sends it from here, in one tap that says what it does. */
+function SendCover({ order }: { order: MyOrder }) {
+  const { user } = useAuth();
+  const idb = useIndexedDBPhotos();
+  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [err, setErr] = useState('');
+  const send = async () => {
+    if (!user) return;
+    setState('sending');
+    setErr('');
+    try {
+      await sendOrderCover(user.id, order.id, idb.get);
+      setState('sent');
+    } catch (e) {
+      setState('idle');
+      setErr(e instanceof PhotosNotHereError ? e.message : "We couldn't send the cover. Check your internet, then tap Send the cover again.");
+    }
+  };
+  if (state === 'sent') {
+    return (
+      <p className="mt-3 rounded-xl border border-[#CDE5D3] bg-[#EEF7F0] px-4 py-3 text-xs text-[#2E6B3F]" role="status" data-testid="order-cover-sent">
+        Cover sent. Thank you! We have everything we need to print your album.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3 rounded-xl border border-peach bg-blush px-4 py-3 text-xs text-cocoa" data-testid="order-cover-needed">
+      <p className="flex items-center gap-1.5 font-semibold text-dark mb-1"><BookImage size={14} /> We still need your album's cover</p>
+      <p>Your cover didn't reach us when you ordered, so we can't print this album yet. Tap the button on the phone or computer you made the album on: the cover photo is there.</p>
+      <button type="button" onClick={() => void send()} disabled={state === 'sending'} data-testid="order-send-cover"
+        className="mt-3 px-3 py-1.5 rounded-lg bg-blush-pink text-white text-xs font-semibold hover:brightness-105 disabled:opacity-60 disabled:cursor-wait inline-flex items-center gap-1.5">
+        {state === 'sending' ? <><Loader2 size={12} className="animate-spin" /> Making and sending your cover…</> : 'Send the cover'}
+      </button>
+      {err && <p className="mt-2 text-red-600" role="alert" data-testid="order-send-cover-error">{err}</p>}
     </div>
   );
 }

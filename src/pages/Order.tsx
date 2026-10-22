@@ -6,7 +6,7 @@ import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, Qr
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
-import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } from '../lib/orders';
+import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdfWithRetry } from '../lib/orders';
 import { getPendingPrintJob, setPendingPrintJob, readOrderHandoff, noteOrderHandoff, takeFreshHandoff, type PrintJob } from '../lib/printQueue';
 import { saveDraftToAccount as saveDraftAlbumToAccount } from '../lib/draftAccountSave';
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
@@ -29,7 +29,7 @@ import { startFreshAlbum } from '../lib/albumSession';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
 import { coverFitsSheet, coverChoiceNote } from './builder/printSheet';
 import { trackOf } from '../lib/orderTracker';
-import { missingPhotos, missingPhotosMessage } from '../lib/photoPresence';
+import { missingPhotos, missingPhotosMessage, PhotosNotHereError } from '../lib/photoPresence';
 import { getMyOrder, openOrderForAlbum, lastOrderForAlbum, type MyOrder } from '../lib/myOrders';
 import OrderTracker from '../components/OrderTracker';
 import { eventLinkForAlbum, eventDealState, coverOrderWithBooking, bookingsWaitingForAlbum, linkFromBooking, linkAlbumToBooking, unlinkAlbum } from '../lib/eventAlbum';
@@ -633,6 +633,39 @@ export default function Order() {
       // The album rebuilt after a reload is short of 40 photos: stop before
       // anything prints (the order row stays unpaid, like an abandoned checkout).
       if (photosShortBy(albumPhotoCount(printJob.pages)) > 0) throw new TooFewPhotosError(albumPhotoCount(printJob.pages));
+      // A rebuilt job checks its pages' photos, not the cover's: a cover photo
+      // that isn't on this device would print a plain cover.
+      const coverGone = missingPhotos([], printJob.photos, printJob.coverFront);
+      if (coverGone.count > 0) throw new PhotosNotHereError(missingPhotosMessage(coverGone));
+
+      // 2a. REQUIRED: build + upload the front·spine·back cover wrap as its own
+      //     "<id>-cover.pdf", FIRST — while the phone has the most memory free,
+      //     before the album pages (a 130-page album is minutes of work). It
+      //     used to come after them and be skipped on a failure, so a paid order
+      //     reached the console with no cover (MP-2026-KGCFSQN, 2026-10-22).
+      //     Now it is tried 3 times; if it still fails the order stays unpaid
+      //     and the customer taps Place order again (a cover already in the
+      //     bucket counts as done). Spine width comes from the frozen specs +
+      //     this print job's page count.
+      setPrepMsg('Making your cover…');
+      try {
+        await uploadOrderCoverPdfWithRetry(order.id, {
+          // Frozen specs from order creation — NOT the live pickers — so the cover
+          // wrap always matches the material/cover/size stored on the order row,
+          // even on a retry after the user changed a selection.
+          albumSize: order.albumSize,
+          pageCount: printJob.pages.length,
+          cover: order.cover,
+          // Cover-as-pages: when the FRONT cover page is present the wrap
+          // composites it + a derived spine + the reserved Megy Prints back
+          // panel; otherwise it falls back to the legacy CoverDesign form output.
+          coverDesign: printJob.coverDesign ?? DEFAULT_COVER_DESIGN,
+          coverFront: printJob.coverFront,
+          photos: printJob.photos,
+        }, (e, attempt) => reportError(e, { path: 'checkout', step: 'cover_pdf', attempt, orderId: order.id, pages: printJob.pages.length }));
+      } catch {
+        throw new Error("We couldn't make your album's cover. Your order is saved: check your internet, then tap Place order again.");
+      }
 
       // 2b. REQUIRED: upload every staged memory CLIP (0030). A printed QR must
       //     never point at a missing video, so a failed upload stops checkout —
@@ -656,35 +689,6 @@ export default function Order() {
       //    customers can't read this bucket, so an upsert is refused by RLS.)
       setPrepMsg('Making your print file…');
       await uploadOrderPrintPdf(order.id, printJob);
-
-      // 3b. BEST-EFFORT: build + upload the front·spine·back cover wrap as its own
-      //     "<id>-cover.pdf". Spine width is finalised HERE from the chosen cover
-      //     material + this print job's page count. Deliberately NON-blocking: it
-      //     requires migration 0017 (the RLS name gate) to be live, so if this
-      //     code deploys before 0017 is applied, a required upload would REJECT and
-      //     break EVERY checkout. Instead we fail loud but let the order proceed —
-      //     the interior PDF is already up, and the operator's "Cover PDF" button
-      //     visibly reports a missing cover. Flip to required once 0017 is
-      //     confirmed applied in prod.
-      try {
-        await uploadOrderCoverPdf(order.id, {
-          // Frozen specs from order creation — NOT the live pickers — so the cover
-          // wrap always matches the material/cover/size stored on the order row,
-          // even on a retry after the user changed a selection.
-          albumSize: order.albumSize,
-          pageCount: printJob.pages.length,
-          cover: order.cover,
-          // Cover-as-pages: when the FRONT cover page is present the wrap
-          // composites it + a derived spine + the reserved Megy Prints back
-          // panel; otherwise it falls back to the legacy CoverDesign form output.
-          coverDesign: printJob.coverDesign ?? DEFAULT_COVER_DESIGN,
-          coverFront: printJob.coverFront,
-          photos: printJob.photos,
-        });
-      } catch (e) {
-        console.error('Cover PDF upload failed (order still placed; check migration 0017 is applied):', e);
-        reportError(e, { path: 'checkout', step: 'cover_pdf', orderId: order.id });
-      }
 
       // 3c. The videos once more, right before their memory rows: the nightly
       //     cleanup (0042) may have removed one this order shares since 2b
@@ -748,10 +752,10 @@ export default function Order() {
       setPrepMsg('');
       // The money path must never fail silently in production — the customer sees
       // the message, and the operator/owner sees the cause in Sentry/the endpoint.
-      if (!(err instanceof TooFewPhotosError)) reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
+      if (!(err instanceof TooFewPhotosError || err instanceof PhotosNotHereError)) reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
       setErrorMsg(err instanceof MissingClipError ? missingClipMessage(err.codes)
         : err instanceof Error ? err.message : 'Something went wrong placing your order.');
-      setAlbumNotSaved(err instanceof AlbumNotSavedError || err instanceof TooFewPhotosError || err instanceof MissingClipError);
+      setAlbumNotSaved(err instanceof AlbumNotSavedError || err instanceof TooFewPhotosError || err instanceof MissingClipError || err instanceof PhotosNotHereError);
       setUnpaidLimit(err instanceof UnpaidLimitError);
     } finally {
       setSubmitting(false);
