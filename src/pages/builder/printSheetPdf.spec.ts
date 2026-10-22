@@ -72,12 +72,12 @@ async function coverPdf(size: AlbumSizePreset, cover: CoverType, pages: number):
 }
 
 describe('press sheet PDFs', () => {
-  it('lays a 40-page 6x6 album on 7 sheets: 14 pages of 12.5 × 19 in, front then back', async () => {
+  it('lays a 40-page 6x6 album on 4 sheets (12 pages a sheet): 8 pages of 12.5 × 19 in, front then back', async () => {
     const { bytes, plan, sourceBleedIn } = await imposeAlbumSheets(await albumPdf('6x6', 40), '6x6', 'MP-TEST', T);
     expect(sourceBleedIn).toBe(0.125);
-    expect(plan.sheets).toBe(7);
+    expect(plan.sheets).toBe(4);
     const out = await PDFDocument.load(bytes);
-    expect(out.getPageCount()).toBe(14);
+    expect(out.getPageCount()).toBe(8);
     for (const p of out.getPages()) {
       expect(p.getWidth()).toBeCloseTo(12.5 * 72, 6);
       expect(p.getHeight()).toBeCloseTo(19 * 72, 6);
@@ -215,9 +215,10 @@ describe('no file from the console has a font', () => {
     const { bytes, plan } = await imposeAlbumSheets(jsPdfAlbum('8x8', 45), '8x8', 'MP-2026-0045', T);
     expect(plan.pageCount).toBe(45);
     expect(await fontsIn(bytes)).toEqual({ objects: 0, pagesListing: 0 });
-    // The labels are still there, as pictures: the sheet name and the piles.
+    // The labels are still there, as pictures: the sheet name and each spot's pages.
     expect(drawn).toContain(`MP-2026-0045 · sheet 1 of ${plan.sheets} · front`);
-    expect(drawn.some((t) => /^pile \d+$/.test(t))).toBe(true);
+    expect(drawn).toContain('pages 1–2');
+    expect(drawn).toContain('page 45');
     // Each picture goes in the file once, however many sheets show it (a
     // picture with see-through edges is two objects: it and its mask).
     const doc = await PDFDocument.load(bytes);
