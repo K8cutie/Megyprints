@@ -46,8 +46,8 @@ function PressHowTo() {
       <ol className="mt-3 space-y-1.5 text-sm text-medium list-decimal pl-5">
         <li>Print the test sheet once first. It checks the size, the edge and the flip.</li>
         <li><b>Print sheets</b>: print both sides, flip on the long edge, at actual size (100%). Don't use "fit to page".</li>
-        <li>Keep sheet 1 on top, front side up. Cut the whole stack on the marks.</li>
-        <li>Each spot on the sheet makes a pile (the sheet says which). Put pile 1 on top of pile 2, pile 2 on top of pile 3, and so on. The pages are now in order.</li>
+        <li>The pages are in order: sheet 1 has the first ones (1, 3, 5… on the front, 2, 4, 6… on the back). Cut each sheet on the marks. 6×6 pages touch each other: cut exactly on the marks, and across the sheet along the edges of the small black blocks.</li>
+        <li>Stack the pieces front side up in page order: left to right, top to bottom, sheet 1&apos;s on top, then sheet 2&apos;s, and so on. The pages are now in order.</li>
         <li>Blank sides: orders from 21 Oct 2026 start with page 1, and end with a blank side when the album has an odd number of pages. Older orders start with a blank side (it faces the inside of the front cover), and end with one when the page count is even. After <b>Print sheets</b>, the line under the order says which.</li>
         <li><b>Cover sheet</b>: print one side only. Cut on the marks; the dashed marks are the spine edges.</li>
         <li><b>Sheets as JPEG</b>: the same sheets and cover sheet as 300 DPI pictures in one zip, for a printer that can't open the PDF. Each picture is one side of a sheet, numbered in print order: print them in number order, both sides (01 on the front of sheet 1, 02 on its back, 03 on the front of sheet 2…), at actual size (100%).</li>

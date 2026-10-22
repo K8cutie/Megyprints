@@ -106,7 +106,7 @@ describe('Sheets as JPEG', () => {
     // The sheet PDF drawn is the press-sheet file (24 sides), then the cover sheet (1).
     expect(files.drawnPages).toEqual([24, 1]);
     expect(new TextDecoder().decode(entries.at(-1)!.data)).toBe(jpegHowTo(order, 12, 2, SPINE, 'Page 1 is the first side; the last side is blank'));
-    expect(note).toBe('JPEG: 24 sheet sides and the cover sheet, 300 DPI · 12 sheets, both sides · cut into 2 piles, then stack pile 1 on top · Page 1 is the first side; the last side is blank');
+    expect(note).toBe('JPEG: 24 sheet sides and the cover sheet, 300 DPI · 12 sheets, both sides · cut each sheet into 2 pieces, stack them front up in page order: left to right, top to bottom, sheet 1\'s on top · Page 1 is the first side; the last side is blank');
     expect(lines[0]).toBe('Getting the print files…');
     expect(lines.at(-1)).toBe('Making the JPEG pictures: 25 of 25…');
   });
@@ -126,12 +126,14 @@ describe('Sheets as JPEG', () => {
     expect(saved).toHaveLength(0);
   });
 
-  it('the how-to says actual size, 300 DPI, the long-edge flip and the piles', () => {
+  it('the how-to says actual size, 300 DPI, the long-edge flip and how to stack the pieces', () => {
     const t = jpegHowTo(order, 12, 4, SPINE, blankSidesNote(45, 'right'));
     expect(t).toContain('12.5 x 19 in sheet at 300 DPI (3750 x 5700 pixels)');
     expect(t).toContain('Print at actual size (100%). Do not use "fit to page".');
     expect(t).toContain('flipping on the long edge');
-    expect(t).toContain('into 4 piles');
+    expect(t).toContain('into 4 pieces. The pages are in order: sheet 1 has the first ones.');
+    expect(t).toContain('Stack the pieces front side up in page order: left to right, top to bottom, sheet 1\'s on top');
+    expect(t).not.toContain('pile');
   });
 
   /* The owner, 2026-10-22: "I thought you arranged the pages so it prints

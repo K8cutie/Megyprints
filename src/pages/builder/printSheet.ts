@@ -11,9 +11,11 @@
      • sheetLayout(size)  — how many leaves fit a sheet and where they sit.
        Pages keep their full 0.125" trim edge on the outside; where pages
        face each other they may sit 1/8" apart (1/16" trim edge each), but
-       only when that fits one more row (owner chose "B", 2026-10-11).
+       only when that fits one more row (owner chose "B", 2026-10-11). On a
+       BUTTED size the pages touch, with no trim edge, when that fits one
+       more (6x6, owner 2026-10-22).
      • sheetPlan(size, pages) — which album page goes on which sheet, side,
-       slot and turn, in cut-and-stack order.
+       slot and turn, in page order: sheet 1 holds the first leaves.
      • coverOnSheet(size, cover, pages) — whether the flat cover fits a sheet.
    Pricing's pages-per-sheet must equal sheetLayout().pagesPerSheet; a spec
    holds the two together. Pricing counts sheets from the page count alone,
@@ -86,31 +88,43 @@ export function trimInches(size: AlbumSizePreset): { trimW: number; trimH: numbe
   return { trimW: (cfg?.width ?? 2400) / 300, trimH: (cfg?.height ?? 2400) / 300 };
 }
 
-/** How many pages of length `len` fit along one axis. Full trim edges between
- *  pages unless the narrow inner edge fits one more. */
-function fitAxis(avail: number, len: number): { n: number; inner: number } {
+/** Sizes whose pages may touch across the sheet, with no trim edge at all
+ *  (owner, 2026-10-22, drawing his 6x6 sheet: 1 3 / 5 7 / 9 11 on the front,
+ *  "yes, 6 a side"). Two 6" pages are exactly the 12" the printer prints, so
+ *  6x6 goes 6 to a side instead of 3. The cut has to be exact: a hair off
+ *  shows white at the outside edge, or a sliver of the next page. */
+export const BUTTED_SIZES: readonly AlbumSizePreset[] = ['6x6'];
+
+/** How many pages of length `len` fit along one axis, and the trim edge they
+ *  keep outside (`outer`) and where two pages face each other (`inner`).
+ *  Full trim edges unless the narrow inner edge fits one more; on a butted
+ *  size, no trim edge at all when THAT fits one more. */
+function fitAxis(avail: number, len: number, butt: boolean): { n: number; inner: number; outer: number } {
   const b = PRESS_SHEET.bleedIn;
   const bi = PRESS_SHEET.minInnerBleedIn;
   const full = Math.floor((avail + EPS) / (len + 2 * b));
   // n·len + 2b (outside) + (n−1)·2bi (shared gaps) ≤ avail
   const tight = Math.floor((avail - 2 * b + 2 * bi + EPS) / (len + 2 * bi));
-  return tight > full ? { n: tight, inner: bi } : { n: full, inner: b };
+  const best = tight > full ? { n: tight, inner: bi, outer: b } : { n: full, inner: b, outer: b };
+  // n·len ≤ avail: pages touching, cut on one line, the outside cuts right at the printer's edge.
+  const butted = Math.floor((avail + EPS) / len);
+  return butt && butted > best.n ? { n: butted, inner: 0, outer: 0 } : best;
 }
 
 /** The same sheet layout for every album of this size. */
 export function sheetLayout(size: AlbumSizePreset): SheetLayout {
   const { trimW, trimH } = trimInches(size);
   const u = PRESS_SHEET.unprintableIn;
-  const b = PRESS_SHEET.bleedIn;
   const availW = PRESS_SHEET.wIn - 2 * u;
   const availH = PRESS_SHEET.hIn - 2 * u;
 
+  const butt = BUTTED_SIZES.includes(size);
   let best: { rotated: boolean; pw: number; ph: number; ax: ReturnType<typeof fitAxis>; ay: ReturnType<typeof fitAxis> } | null = null;
   for (const rotated of [false, true]) {
     const pw = rotated ? trimH : trimW;
     const ph = rotated ? trimW : trimH;
-    const ax = fitAxis(availW, pw);
-    const ay = fitAxis(availH, ph);
+    const ax = fitAxis(availW, pw, butt);
+    const ay = fitAxis(availH, ph, butt);
     // Upright wins a tie: fewer turned pages, fewer ways to get it wrong.
     if (!best || ax.n * ay.n > best.ax.n * best.ay.n) best = { rotated, pw, ph, ax, ay };
   }
@@ -119,13 +133,13 @@ export function sheetLayout(size: AlbumSizePreset): SheetLayout {
   const { rotated, pw, ph, ax, ay } = best;
   const cols = ax.n;
   const rows = ay.n;
-  const usedW = cols * pw + 2 * b + (cols - 1) * 2 * ax.inner;
-  const usedH = rows * ph + 2 * b + (rows - 1) * 2 * ay.inner;
+  const usedW = cols * pw + 2 * ax.outer + (cols - 1) * 2 * ax.inner;
+  const usedH = rows * ph + 2 * ay.outer + (rows - 1) * 2 * ay.inner;
   const spareX = availW - usedW;
   const spareY = availH - usedH;
   // Centre the block in the printable area.
-  const x0 = u + spareX / 2 + b;
-  const y0 = u + spareY / 2 + b;
+  const x0 = u + spareX / 2 + ax.outer;
+  const y0 = u + spareY / 2 + ay.outer;
 
   const slots: SheetSlot[] = [];
   for (let r = 0; r < rows; r++) {
@@ -136,10 +150,10 @@ export function sheetLayout(size: AlbumSizePreset): SheetLayout {
         w: pw,
         h: ph,
         bleed: {
-          top: r === 0 ? b : ay.inner,
-          bottom: r === rows - 1 ? b : ay.inner,
-          left: c === 0 ? b : ax.inner,
-          right: c === cols - 1 ? b : ax.inner,
+          top: r === 0 ? ay.outer : ay.inner,
+          bottom: r === rows - 1 ? ay.outer : ay.inner,
+          left: c === 0 ? ax.outer : ax.inner,
+          right: c === cols - 1 ? ax.outer : ax.inner,
         },
       });
     }
@@ -198,8 +212,6 @@ export interface SheetPlacement {
   page: number | null;
   /** Leaf number in the book (0 = first leaf). */
   leaf: number;
-  /** Which cut-and-stack pile this slot makes (0 = the top pile). */
-  pile: number;
   /** Trim box and trim edges, in this side's sheet directions. */
   slot: SheetSlot;
   /** Clockwise turn applied to the page art. */
@@ -234,10 +246,13 @@ export function backOf(slot: SheetSlot): SheetSlot {
 }
 
 /**
- * Every album page's place on the press, in CUT-AND-STACK order: cut the whole
- * printed stack at once, and each slot position becomes a pile already in
- * order — pile 1 on top of pile 2, and so on. Slot s of sheet i holds leaf
- * s·S + i (S = number of sheets).
+ * Every album page's place on the press, in PAGE ORDER (owner, 2026-10-22:
+ * his sheet had 1 3 / 5 7 / 9 11 on the front, 2 behind 1, 4 behind 3):
+ * sheet 1 holds the first leaves, left to right, top to bottom, then sheet 2
+ * the next ones. Slot s of sheet i holds leaf i·K + s (K = leaves a sheet).
+ * Cut each sheet and stack its pieces in that order, sheet 1's on top. (It
+ * was cut-and-stack until then: slot s of sheet i held leaf s·S + i, so
+ * sheet 1 showed pages 1, 15, 29 — not what the shop expects to see.)
  *
  * A turned page faces the sheet's right edge on the front; on the back the
  * same physical edge is on the LEFT, so the back page turns the other way.
@@ -256,15 +271,15 @@ export function sheetPlan(size: AlbumSizePreset, pageCount: number, pageOne: Pag
     const front: SheetPlacement[] = [];
     const back: SheetPlacement[] = [];
     layout.slots.forEach((slot, s) => {
-      const leaf = s * sheets + i;
+      const leaf = i * k + s;
       const real = leaf < leaves;
       const bslot = backOf(slot);
       front.push({
-        page: real ? sides[2 * leaf] : null, leaf, pile: s, slot, turn: frontTurn,
+        page: real ? sides[2 * leaf] : null, leaf, slot, turn: frontTurn,
         pageBleed: pageSidesFromSheet(slot.bleed, frontTurn),
       });
       back.push({
-        page: real ? sides[2 * leaf + 1] : null, leaf, pile: s, slot: bslot, turn: backTurn,
+        page: real ? sides[2 * leaf + 1] : null, leaf, slot: bslot, turn: backTurn,
         pageBleed: pageSidesFromSheet(bslot.bleed, backTurn),
       });
     });

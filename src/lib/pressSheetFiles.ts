@@ -94,11 +94,16 @@ export function blankSidesNote(pageCount: number, pageOne: PageOneSide): string 
   return last ? `${start}; the last side is blank${first ? ' too' : ''}` : start;
 }
 
+/** How to stack the cut pieces (owner, 2026-10-22: the sheets are in page
+ *  order now, sheet 1 holds pages 1, 2, 3…). */
+export function stackHowTo(pieces: number): string {
+  return `cut each sheet into ${pieces} ${pieces === 1 ? 'piece' : 'pieces'}, stack them front up in page order: left to right, top to bottom, sheet 1's on top`;
+}
+
 /** What to tell the operator about the album sheets (sheet count, blank
  *  sides, and a warning if the file and the order disagree). */
 function sheetsNote(o: PrintOrder, plan: { sheets: number; pageCount: number; layout: { leavesPerSheet: number } }, pageOne: PageOneSide): string {
-  const piles = plan.layout.leavesPerSheet;
-  const note = `${plan.sheets} sheets, both sides · cut into ${piles} ${piles === 1 ? 'pile' : 'piles'}, then stack pile 1 on top · ${blankSidesNote(plan.pageCount, pageOne)}`;
+  const note = `${plan.sheets} sheets, both sides · ${stackHowTo(plan.layout.leavesPerSheet)} · ${blankSidesNote(plan.pageCount, pageOne)}`;
   return plan.pageCount === o.page_count
     ? note
     : `${note}. Check: the print file has ${plan.pageCount} pages, the order says ${o.page_count}.`;
@@ -138,7 +143,7 @@ export function sideJpegName(orderNumber: string, n: number, total: number, side
 export const coverJpegName = (orderNumber: string) => `${orderNumber}-cover.jpg`;
 
 /** The words that go in the zip with the pictures. */
-export function jpegHowTo(o: PrintOrder, sheets: number, piles: number, cover: { spineIn: number } | null, blankSides: string): string {
+export function jpegHowTo(o: PrintOrder, sheets: number, pieces: number, cover: { spineIn: number } | null, blankSides: string): string {
   const total = 2 * sheets;
   const name = (n: number, side: 'front' | 'back', sheet: number) => sideJpegName(o.order_number, n, total, { sheet, side });
   return [
@@ -152,8 +157,8 @@ export function jpegHowTo(o: PrintOrder, sheets: number, piles: number, cover: {
     `${name(1, 'front', 1)} on the front of the first sheet, ${name(2, 'back', 1)} on its back,`,
     `then ${name(3, 'front', 2)} on the front of the next sheet, and so on.`,
     'Every sheet has a picture on both sides. Never print a picture on a sheet by itself.',
-    `Keep sheet 1 on top, front side up. Cut the whole stack on the marks into ${piles} ${piles === 1 ? 'pile' : 'piles'},`,
-    'then put pile 1 on top of pile 2, pile 2 on top of pile 3, and so on.',
+    `Cut each sheet on the marks into ${pieces} ${pieces === 1 ? 'piece' : 'pieces'}. The pages are in order: sheet 1 has the first ones.`,
+    'Stack the pieces front side up in page order: left to right, top to bottom, sheet 1\'s on top, then sheet 2\'s, and so on.',
     `${blankSides}.`,
     '',
     cover
