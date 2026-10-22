@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Lock, Eye, EyeOff, Check } from 'lucide-react';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { useAuth } from '../../lib/authContext';
-import { useRecoveryState, endRecovery, saveNewPassword } from '../../lib/passwordRecovery';
-import type { RecoveryState } from '../../lib/passwordRecovery';
+import { saveNewPassword } from '../../lib/passwordRecovery';
+import { useRecoveryState, endRecovery } from '../../lib/recoveryState';
+import type { RecoveryState } from '../../lib/recoveryState';
 import { NEW_PASSWORD_MIN, newPasswordErrorText } from '../../lib/passwordReset';
 
 // =============================================================================
