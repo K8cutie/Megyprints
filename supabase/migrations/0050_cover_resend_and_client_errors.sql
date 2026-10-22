@@ -17,12 +17,18 @@
 --  2. client_errors + log_client_error() — where the app's error reports
 --     land (api/client-error.mjs writes them with the service key; the owner
 --     reads them in the console's Errors tab). Nobody else can read or write
---     the table. log_client_error caps every field, keeps at most p_ip_cap
---     reports a day from one address (hashed) and p_daily_cap from everyone,
---     and removes reports older than 30 days. Red-team (2026-10-22): the
---     endpoint is public, so the worst a flood can store is about
---     300 a day × 6 KB × 30 days ≈ 55 MB, and one address alone can't use up
---     the day's room and hide real checkout reports.
+--     the table. log_client_error caps every field and keeps, per day:
+--       • a report about a real, open order (context.orderId): up to
+--         p_order_cap for that order, OUTSIDE the shared room — so a flood of
+--         junk can't hide a real checkout failure (red-team round 2);
+--       • any other report: up to p_ip_cap from one address (hashed) and
+--         p_daily_cap from everyone.
+--     It runs one at a time (an advisory lock), so requests sent together
+--     can't all slip under a cap. What it drops is counted per day in
+--     client_errors_dropped, and the Errors tab says so. Reports older than
+--     30 days are removed. The endpoint cuts fields by BYTES, so the worst a
+--     flood can store is about 300 a day × 6 KB × 30 days ≈ 55 MB, plus at
+--     most p_order_cap a day per real open order.
 --
 --  Run AFTER 0049. (0047 is the event guest albums branch; this file does not
 --  depend on it.)
@@ -65,11 +71,29 @@ create table if not exists public.client_errors (
   url         text check (char_length(url) <= 500),
   user_agent  text check (char_length(user_agent) <= 400),
   -- The sender's address, keyed with a secret (never the address itself).
-  ip_hash     text check (char_length(ip_hash) <= 64)
+  ip_hash     text check (char_length(ip_hash) <= 64),
+  -- Set only when context.orderId named a real, open order (its own room).
+  order_id    uuid
 );
 
 create index if not exists client_errors_created_at_idx on public.client_errors (created_at desc);
 create index if not exists client_errors_ip_hash_idx on public.client_errors (ip_hash, created_at);
+create index if not exists client_errors_order_idx on public.client_errors (order_id, created_at) where order_id is not null;
+
+-- What the caps turned away, per Manila day: a flood shows as a number, not as
+-- silence that reads like "no errors".
+create table if not exists public.client_errors_dropped (
+  day  date primary key,
+  n    integer not null default 0
+);
+alter table public.client_errors_dropped enable row level security;
+drop policy if exists client_errors_dropped_select_owner on public.client_errors_dropped;
+create policy client_errors_dropped_select_owner on public.client_errors_dropped
+  for select to authenticated
+  using (public.operator_role() = 'owner');
+revoke all on table public.client_errors_dropped from anon, authenticated;
+grant select on table public.client_errors_dropped to authenticated;
+grant all on table public.client_errors_dropped to service_role;
 
 alter table public.client_errors enable row level security;
 
@@ -92,46 +116,67 @@ create or replace function public.log_client_error(
   p_user_agent text default null,
   p_ip_hash    text default null,
   p_daily_cap  integer default 300,
-  p_ip_cap     integer default 30
+  p_ip_cap     integer default 30,
+  p_order_cap  integer default 20
 )
 returns boolean
 language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_ctx   jsonb := case when jsonb_typeof(p_context) = 'object' and pg_column_size(p_context) <= 2048 then p_context end;
+  v_order uuid;
+  v_room  boolean;
 begin
   if coalesce(btrim(p_message), '') = '' then
     return false;
   end if;
-  if (select count(*) from public.client_errors
-       where created_at > now() - interval '1 day') >= greatest(coalesce(p_daily_cap, 300), 0) then
+  -- One report at a time: two sent together can't both see room under a cap.
+  perform pg_advisory_xact_lock(hashtext('public.log_client_error'));
+
+  -- A report about a real order that is still open gets that order's room.
+  if v_ctx ->> 'orderId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    select o.id into v_order
+      from public.orders o
+     where o.id = (v_ctx ->> 'orderId')::uuid
+       and o.status <> 'cancelled'
+       and o.purge_started_at is null;
+  end if;
+
+  if v_order is not null then
+    v_room := (select count(*) from public.client_errors
+                where order_id = v_order and created_at > now() - interval '1 day') < coalesce(p_order_cap, 20);
+  else
+    v_room := (select count(*) from public.client_errors
+                where order_id is null and created_at > now() - interval '1 day') < coalesce(p_daily_cap, 300)
+          and (p_ip_hash is null or (select count(*) from public.client_errors
+                where order_id is null and ip_hash = p_ip_hash and created_at > now() - interval '1 day') < coalesce(p_ip_cap, 30));
+  end if;
+
+  if not v_room then
+    insert into public.client_errors_dropped (day, n)
+    values ((now() at time zone 'Asia/Manila')::date, 1)
+    on conflict (day) do update set n = public.client_errors_dropped.n + 1;
     return false;
   end if;
-  if p_ip_hash is not null and (select count(*) from public.client_errors
-       where ip_hash = p_ip_hash and created_at > now() - interval '1 day') >= greatest(coalesce(p_ip_cap, 30), 0) then
-    return false;
-  end if;
-  insert into public.client_errors (message, stack, context, url, user_agent, ip_hash)
-  values (
-    left(p_message, 1000),
-    left(p_stack, 2000),
-    case when jsonb_typeof(p_context) = 'object' and pg_column_size(p_context) <= 2048 then p_context end,
-    left(p_url, 500),
-    left(p_user_agent, 400),
-    left(p_ip_hash, 64)
-  );
+
+  insert into public.client_errors (message, stack, context, url, user_agent, ip_hash, order_id)
+  values (left(p_message, 1000), left(p_stack, 2000), v_ctx, left(p_url, 500), left(p_user_agent, 400), left(p_ip_hash, 64), v_order);
   delete from public.client_errors where created_at < now() - interval '30 days';
+  delete from public.client_errors_dropped where day < (now() at time zone 'Asia/Manila')::date - 30;
   return true;
 end;
 $$;
 
-revoke all on function public.log_client_error(text, text, jsonb, text, text, text, integer, integer) from public;
-revoke execute on function public.log_client_error(text, text, jsonb, text, text, text, integer, integer) from anon, authenticated;
-grant execute on function public.log_client_error(text, text, jsonb, text, text, text, integer, integer) to service_role;
+revoke all on function public.log_client_error(text, text, jsonb, text, text, text, integer, integer, integer) from public;
+revoke execute on function public.log_client_error(text, text, jsonb, text, text, text, integer, integer, integer) from anon, authenticated;
+grant execute on function public.log_client_error(text, text, jsonb, text, text, text, integer, integer, integer) to service_role;
 
 -- ── Verify (read-only) ─────────────────────────────────────────────────────
+-- Full proof (rolled back): supabase/security/cover-resend-proof.sql
 -- select has_function_privilege('anon', 'public.my_orders_missing_cover()', 'execute');                                   -- false
 -- select has_function_privilege('authenticated', 'public.my_orders_missing_cover()', 'execute');                          -- true
--- select has_function_privilege('authenticated', 'public.log_client_error(text, text, jsonb, text, text, text, integer, integer)', 'execute'); -- false
+-- select has_function_privilege('authenticated', 'public.log_client_error(text, text, jsonb, text, text, text, integer, integer, integer)', 'execute'); -- false
 -- select has_table_privilege('anon', 'public.client_errors', 'select');                                                   -- false
 -- select has_table_privilege('authenticated', 'public.client_errors', 'insert');                                          -- false

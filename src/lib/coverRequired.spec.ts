@@ -86,7 +86,7 @@ describe('checkout makes the cover first, and stops without one', () => {
   });
   it('a failure stops checkout (no more "order still placed"), and each try is reported', () => {
     const block = place.slice(cover, place.indexOf("setPrepMsg('Uploading your memory videos…')"));
-    expect(block).toMatch(/catch \{\s*throw new Error\("We couldn't make your album's cover/);
+    expect(block).toMatch(/catch \(e\) \{[\s\S]*throw new Error\(sending/);
     expect(block).toContain("step: 'cover_pdf', attempt");
     expect(place).not.toMatch(/order still placed/);
     expect(place).not.toContain('uploadOrderCoverPdf(order.id');

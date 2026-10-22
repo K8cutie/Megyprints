@@ -15,7 +15,7 @@ const h = vi.hoisted(() => ({
   auth: { user: { id: 'user-1' } as { id: string } | null, loading: false },
   job: null as unknown,
   steps: [] as string[],
-  coverFails: false,
+  coverFails: false as false | 'send' | 'make',
   reports: [] as Record<string, unknown>[],
 }));
 vi.mock('../lib/authContext', () => ({ useAuth: () => h.auth }));
@@ -37,8 +37,11 @@ vi.mock('../lib/orders', () => ({
   uploadOrderCoverPdfWithRetry: async (_id: string, input: { pageCount: number }, onFail?: (e: unknown, n: number) => void) => {
     h.steps.push(`cover (${input.pageCount} pages)`);
     if (h.coverFails) {
-      for (const n of [1, 2, 3]) onFail?.(new Error('Cover file upload failed: Failed to fetch'), n);
-      throw new Error('Cover file upload failed: Failed to fetch');
+      const err = h.coverFails === 'send'
+        ? new Error('Cover file upload failed: Failed to fetch')
+        : new TypeError("Cannot read properties of null (reading 'fillStyle')");
+      for (const n of [1, 2, 3]) onFail?.(err, n);
+      throw err;
     }
   },
 }));
@@ -97,21 +100,30 @@ describe('Place order', () => {
     await placeOrder();
     expect(h.steps).toEqual(['order row', 'cover (41 pages)', 'album pages']);
     expect(host.textContent).toMatch(/MP-2026-TEST123/);
-    expect(host.textContent).not.toMatch(/couldn't make your album's cover/);
+    expect(host.textContent).not.toMatch(/couldn't (make|send) your album's cover/);
   });
 
-  it('a cover that fails 3 times stops checkout: no album pages, no payment screen, and every try reported', async () => {
-    h.coverFails = true;
+  it('a cover that fails to send 3 times stops checkout: no album pages, no payment screen, and every try reported', async () => {
+    h.coverFails = 'send';
     await open();
     await placeOrder();
     expect(h.steps).toEqual(['order row', 'cover (41 pages)']);
-    expect(host.textContent).toContain("We couldn't make your album's cover. Your order is saved: check your internet, then tap Place order again.");
+    expect(host.textContent).toContain("We couldn't send your album's cover. Your order is saved: check your internet, then tap Place order again.");
     expect(host.querySelector('[data-testid="order-place"]')).not.toBeNull(); // still on the form, to try again
     expect(h.reports.filter((r) => r.step === 'cover_pdf').map((r) => r.attempt)).toEqual([1, 2, 3]);
   });
 
+  it("a cover this phone can't make says so, not \"check your internet\" (red-team)", async () => {
+    h.coverFails = 'make';
+    await open();
+    await placeOrder();
+    expect(h.steps).toEqual(['order row', 'cover (41 pages)']);
+    expect(host.textContent).toContain("We couldn't make your album's cover on this phone. Your order is saved: close your other apps, then tap Place order again. If it keeps happening, message us.");
+    expect(host.textContent).not.toMatch(/check your internet/);
+  });
+
   it('tapping again after a failure reuses the order and goes on', async () => {
-    h.coverFails = true;
+    h.coverFails = 'send';
     await open();
     await placeOrder();
     h.coverFails = false;

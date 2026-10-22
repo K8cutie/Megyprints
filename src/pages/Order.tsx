@@ -663,8 +663,13 @@ export default function Order() {
           coverFront: printJob.coverFront,
           photos: printJob.photos,
         }, (e, attempt) => reportError(e, { path: 'checkout', step: 'cover_pdf', attempt, orderId: order.id, pages: printJob.pages.length }));
-      } catch {
-        throw new Error("We couldn't make your album's cover. Your order is saved: check your internet, then tap Place order again.");
+      } catch (e) {
+        // Sending it is the connection; anything before that is this phone
+        // making the picture, which "check your internet" won't fix (red-team).
+        const sending = e instanceof Error && e.message.startsWith('Cover file upload failed');
+        throw new Error(sending
+          ? "We couldn't send your album's cover. Your order is saved: check your internet, then tap Place order again."
+          : "We couldn't make your album's cover on this phone. Your order is saved: close your other apps, then tap Place order again. If it keeps happening, message us.");
       }
 
       // 2b. REQUIRED: upload every staged memory CLIP (0030). A printed QR must

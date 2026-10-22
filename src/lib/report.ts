@@ -45,7 +45,17 @@ export function takeReportSlot(key: string): boolean {
  *  sign-in return link has the customer's tokens in its query or after #.
  *  (The endpoint scrubs again.) */
 export function pageOf(href: string): string {
-  return href.replace(/([?#&])((?:access|refresh|provider)_token|code|token)=[^&#]*/gi, '$1$2=[removed]');
+  return href.replace(/([?#&])((?:access|refresh|provider|provider_refresh)_token|token_hash|code|token)=[^&#]*/gi, '$1$2=[removed]');
+}
+
+/** The context as sent: long values (a crash's component stack runs to
+ *  kilobytes) shortened, so the report keeps its context instead of losing it
+ *  at the database's 2 KB limit. */
+export function shortContext(context: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!context) return context;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(context)) out[k] = typeof v === 'string' && v.length > 300 ? `${v.slice(0, 299)}…` : v;
+  return out;
 }
 
 /** Tests only: a fresh page load. */
@@ -70,7 +80,7 @@ export function reportError(error: unknown, context?: Record<string, unknown>) {
     const payload = JSON.stringify({
       message,
       stack: error instanceof Error ? error.stack : undefined,
-      context,
+      context: shortContext(context),
       url: typeof location !== 'undefined' ? pageOf(location.href) : undefined,
       ts: new Date().toISOString(),
     });

@@ -15,12 +15,13 @@ const when = (iso: string) => new Date(iso).toLocaleString('en-PH', { timeZone: 
 
 export default function ErrorsPanel({ orders }: { orders: AdminOrder[] }) {
   const [rows, setRows] = useState<ClientError[] | null>(null);
+  const [dropped, setDropped] = useState(0);
   const [err, setErr] = useState('');
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
     fetchClientErrors()
-      .then((r) => { if (alive) setRows(r); })
+      .then((r) => { if (alive) { setRows(r.rows); setDropped(r.droppedToday); } })
       .catch((e: Error) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
   }, [tick]);
@@ -38,6 +39,14 @@ export default function ErrorsPanel({ orders }: { orders: AdminOrder[] }) {
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
+      <p className="text-xs text-medium" data-testid="errors-not-proof">
+        A customer's browser sends these, so they can be made up. Use them to find problems, never as proof of a payment.
+      </p>
+      {dropped > 0 && (
+        <p className="text-sm text-[#C0392B]" role="status" data-testid="errors-dropped">
+          {dropped} {dropped === 1 ? 'report was' : 'reports were'} turned away today by the daily limits, so some errors may be missing here.
+        </p>
+      )}
       {err && <p className="text-sm text-red-600" role="alert">Couldn't load errors: {err}</p>}
       {rows === null && !err && <div className="py-16 flex justify-center text-light"><Loader2 className="w-6 h-6 animate-spin" /></div>}
       {rows && (
@@ -45,7 +54,7 @@ export default function ErrorsPanel({ orders }: { orders: AdminOrder[] }) {
           <section>
             <h2 className="text-sm font-semibold text-dark mb-2">Checkout and Your orders ({money.length})</h2>
             {money.length === 0
-              ? <p className="text-sm text-light">None. Every checkout went through without an error.</p>
+              ? <p className="text-sm text-light">None in the last 30 days.</p>
               : <ul className="space-y-2">{money.map((e) => <ErrorRow key={e.id} e={e} order={orderNumber(e.context?.orderId)} />)}</ul>}
           </section>
           <details className="bg-white rounded-xl border border-line px-4 py-3">

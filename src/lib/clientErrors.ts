@@ -13,14 +13,25 @@ export interface ClientError {
   user_agent: string | null;
 }
 
-export async function fetchClientErrors(limit = 200): Promise<ClientError[]> {
-  const { data, error } = await supabase
-    .from('client_errors')
-    .select('id, created_at, message, stack, context, url, user_agent')
-    .order('created_at', { ascending: false })
-    .limit(limit);
+const COLUMNS = 'id, created_at, message, stack, context, url, user_agent';
+
+/** The newest reports, with the checkout's and Your orders' read on their own
+ *  so a flood of other reports can't push them out of view (red-team), and
+ *  how many the limits turned away today (Manila). */
+export async function fetchClientErrors(limit = 200): Promise<{ rows: ClientError[]; droppedToday: number }> {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  const [money, all, dropped] = await Promise.all([
+    supabase.from('client_errors').select(COLUMNS).in('context->>path', ['checkout', 'your_orders'])
+      .order('created_at', { ascending: false }).limit(limit),
+    supabase.from('client_errors').select(COLUMNS).order('created_at', { ascending: false }).limit(limit),
+    supabase.from('client_errors_dropped').select('n').eq('day', today).maybeSingle(),
+  ]);
+  const error = money.error ?? all.error;
   if (error) throw new Error(error.message);
-  return (data ?? []) as ClientError[];
+  const byId = new Map<number, ClientError>();
+  for (const r of [...(money.data ?? []), ...(all.data ?? [])] as ClientError[]) byId.set(r.id, r);
+  const rows = [...byId.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return { rows, droppedToday: Number((dropped.data as { n?: number } | null)?.n ?? 0) };
 }
 
 /** The checkout and Your orders: where a failure can cost an order. */

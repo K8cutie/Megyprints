@@ -33,6 +33,20 @@ describe('pageOf', async () => {
   it('an ordinary page is kept as it is', () => {
     expect(pageOf('https://megyprints.vercel.app/#/orders?order=abc')).toBe('https://megyprints.vercel.app/#/orders?order=abc');
   });
+  it('provider_refresh_token and token_hash too (red-team round 2)', () => {
+    expect(pageOf('https://megyprints.vercel.app/#provider_refresh_token=gp-1&token_hash=th-2&type=recovery'))
+      .toBe('https://megyprints.vercel.app/#provider_refresh_token=[removed]&token_hash=[removed]&type=recovery');
+  });
+});
+
+describe('shortContext', async () => {
+  const { shortContext } = await import('./report');
+  it("a crash's long component stack is shortened, the rest kept as is", () => {
+    const c = shortContext({ boundary: 'builder', attempt: 2, componentStack: 'x'.repeat(5000) })!;
+    expect(c.boundary).toBe('builder');
+    expect(c.attempt).toBe(2);
+    expect((c.componentStack as string).length).toBe(300);
+  });
 });
 
 describe('takeReportSlot', async () => {
