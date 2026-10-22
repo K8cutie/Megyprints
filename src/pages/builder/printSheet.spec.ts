@@ -12,12 +12,14 @@ import {
 const SIZES = ALBUM_SIZES.map((s) => s.preset);
 const MIGRATION = readFileSync(resolve(__dirname, '../../../supabase/migrations/0046_press_sheet.sql'), 'utf8');
 const MIGRATION_6X6 = readFileSync(resolve(__dirname, '../../../supabase/migrations/0050_six_by_six_twelve_a_sheet.sql'), 'utf8');
+const MIGRATION_TOUCHING = readFileSync(resolve(__dirname, '../../../supabase/migrations/0052_pages_touching_every_size.sql'), 'utf8');
 
 describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white edge, layout B)', () => {
   it('fits the pages per sheet the owner agreed to', () => {
     expect(pagesPerSheetBySize()).toEqual({
-      // 6x6: 12 since the owner's own sheet, 2026-10-22 (pages touching, 6 a side).
-      '6x4': 12, '8x6': 6, '6x8': 6, '6x6': 12, '8x8': 4, '9x9': 4, '11.5x8': 4, '8.5x11': 4,
+      // Pages touching across the sheet: 6x6 since the owner's own sheet
+      // (2026-10-22), every size since 2026-10-23 (6x4 18 was 12, 6x8 / 8x6 8 were 6).
+      '6x4': 18, '8x6': 8, '6x8': 8, '6x6': 12, '8x8': 4, '9x9': 4, '11.5x8': 4, '8.5x11': 4,
     });
   });
 
@@ -72,7 +74,7 @@ describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white ed
   /* The owner's 6x6 sheet (2026-10-22): two pages across, touching, three
      down. Two 6 in pages are exactly the 12 in the printer prints. */
   it('6x6 goes 2 across with the pages touching, right to the printer\'s edge; down the sheet it keeps its trim edges', () => {
-    expect(BUTTED_SIZES).toEqual(['6x6']);
+    expect(BUTTED_SIZES).toContain('6x6');
     const L = sheetLayout('6x6');
     expect([L.cols, L.rows, L.leavesPerSheet, L.pagesPerSheet]).toEqual([2, 3, 6, 12]);
     const u = PRESS_SHEET.unprintableIn;
@@ -90,10 +92,31 @@ describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white ed
     expect(L.cutsX).toEqual([0.25, 6.25, 12.25]);
   });
 
-  it('no other size changes: butting is only for the sizes the owner chose', () => {
-    expect(Object.fromEntries(SIZES.filter((s) => s !== '6x6').map((s) => [s, sheetLayout(s).leavesPerSheet]))).toEqual({
-      '8x8': 2, '9x9': 2, '6x4': 6, '8x6': 3, '6x8': 3, '11.5x8': 2, '8.5x11': 2,
+  /* "And how it has to be applied to other album sizes too" (owner, 2026-10-23):
+     pages touch wherever that fits one more column. Rows never gain. */
+  it('every size: pages touch across the sheet only where that fits one more column', () => {
+    expect([...BUTTED_SIZES].sort()).toEqual([...SIZES].sort());
+    const shape = (s: AlbumSizePreset) => { const L = sheetLayout(s); return `${L.cols}x${L.rows}${L.rotated ? ' turned' : ''}`; };
+    expect(Object.fromEntries(SIZES.map((s) => [s, shape(s)]))).toEqual({
+      '6x6': '2x3', '6x4': '3x3 turned', '6x8': '2x2', '8x6': '2x2 turned',
+      '8x8': '1x2', '9x9': '1x2', '11.5x8': '1x2', '8.5x11': '1x2 turned',
     });
+    const u = PRESS_SHEET.unprintableIn;
+    for (const size of ['6x4', '6x8', '8x6'] as AlbumSizePreset[]) {
+      const L = sheetLayout(size);
+      // Across: touching, the outside cuts right at the printer's edge.
+      expect(L.spareX, size).toBeCloseTo(0, 9);
+      expect(L.cutsX[0], size).toBeCloseTo(u, 9);
+      expect(L.cutsX.at(-1)!, size).toBeCloseTo(PRESS_SHEET.wIn - u, 9);
+      for (const s of L.slots) expect([s.bleed.left, s.bleed.right], size).toEqual([0, 0]);
+      // Down: trim edges kept.
+      expect(L.slots[0].bleed.top, size).toBe(PRESS_SHEET.bleedIn);
+      expect(L.slots.at(-1)!.bleed.bottom, size).toBe(PRESS_SHEET.bleedIn);
+    }
+    // The sizes that gain nothing keep a full trim edge all round.
+    for (const size of ['8x8', '9x9', '11.5x8', '8.5x11'] as AlbumSizePreset[]) {
+      for (const s of sheetLayout(size).slots) for (const v of Object.values(s.bleed)) expect(v, size).toBe(PRESS_SHEET.bleedIn);
+    }
   });
 });
 
@@ -260,11 +283,12 @@ describe('covers on the sheet', () => {
   });
 });
 
-describe('0046_press_sheet.sql (and 0050 for 6x6) stay in step with the press geometry', () => {
+describe('0046_press_sheet.sql (then 0050 for 6x6, 0052 for the rest) stay in step with the press geometry', () => {
   it('sets every changed pps to the layout, and the layout matches the rest', () => {
     const setBy = (sql: string) => Object.fromEntries([...sql.matchAll(/'\{([0-9.x]+),pps\}', '(\d+)'/g)].map((m) => [m[1], Number(m[2])]));
     expect(setBy(MIGRATION_6X6)).toEqual({ '6x6': 12 });
-    const set = { ...setBy(MIGRATION), ...setBy(MIGRATION_6X6) };
+    expect(setBy(MIGRATION_TOUCHING)).toEqual({ '6x4': 18, '6x8': 8, '8x6': 8 });
+    const set = { ...setBy(MIGRATION), ...setBy(MIGRATION_6X6), ...setBy(MIGRATION_TOUCHING) };
     const want = pagesPerSheetBySize();
     expect(Object.keys(set).sort()).toEqual(['6x4', '6x6', '6x8', '8x6']);
     for (const [size, pps] of Object.entries(set)) expect(pps, size).toBe(want[size as AlbumSizePreset]);
