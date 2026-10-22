@@ -7,7 +7,7 @@ import type { AlbumSizePreset } from './types';
 /* ══════════════════════════════════════════════════════════════════════════
    NO PHOTO MAY SIT IN THE BINDING GUTTER.
 
-   The book is bound down the spine, so the inner 0.5" of every page curves
+   The book is bound down the spine, so the inner 3/8" of every page curves
    into the binding and is effectively lost. Full-bleed pages used to run to
    ALL FOUR edges, which meant a face near the gutter came out half-eaten —
    the keep-out guide warned about it while nothing moved out of the way.
@@ -42,7 +42,7 @@ function slotsInInches(size: AlbumSizePreset, pageIndex: number) {
 
 describe('binding keep-out', () => {
   for (const size of ALL) {
-    it(`${size}: no photo enters the 0.5" spine reserve, on either page side`, () => {
+    it(`${size}: no photo enters the 3/8" spine reserve, on either page side`, () => {
       const { w: iw } = ALBUM_INCHES[size];
       for (const pageIndex of [0, 1]) {
         const onLeft = bindingEdge(pageIndex) === 'left';

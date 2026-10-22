@@ -10,7 +10,7 @@ import { qrRect } from '../../lib/qrMemory';
 
    Owner (2026-10-21), on 6×4: "can it still be reduced?" → "0.9 lets go with
    that". On a 4"-tall page the chip took over a quarter of the height. The
-   size is what PRINTS: a full-bleed page still stops 0.5" short of the spine
+   size is what PRINTS: a full-bleed page still stops 3/8" short of the spine
    (binding.ts), so the chip is measured inside what is left, on both page
    sides. The other sizes keep the chip they have printed all along.
    ══════════════════════════════════════════════════════════════════════════ */

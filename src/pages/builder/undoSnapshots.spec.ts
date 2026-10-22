@@ -351,7 +351,7 @@ describe('deletePages — never under 40 pages, one undo step', () => {
 
   it('a page that moves to the other side of the book keeps its sticker out of the spine', async () => {
     // Page 11 (index 10) binds on the LEFT; the sticker hugs its outer RIGHT edge.
-    const geom = { cx: 0.9, cy: 0.5, w: 0.1, h: 0.1, rot: 0 };
+    const geom = { cx: 0.92, cy: 0.5, w: 0.1, h: 0.1, rot: 0 }; // its right edge 7.76" in: inside the 3/8" spine on a right-bound page
     const ctx = (pageIndex: number) => ({ albumSize: '8x8', pageIndex, template: QUAD });
     expect(clampStickerGeom(geom, ctx(10)).geom).toEqual(geom); // fine where it is
     const onRight = clampStickerGeom(geom, ctx(9)).geom;
