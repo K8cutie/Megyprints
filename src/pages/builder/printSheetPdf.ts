@@ -22,11 +22,11 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, decodePDFRawStream, degrees, rgb, type PDFImage, type PDFPage } from 'pdf-lib';
-import type { AlbumSizePreset, CoverType } from './types';
+import { DEFAULT_MATERIAL, type AlbumSizePreset, type CoverType, type MaterialType } from './types';
 import {
-  PRESS_SHEET, sheetPlan, trimInches, coverOnSheet, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
+  PRESS_SHEET, sheetPlan, printSides, trimInches, coverOnSheet, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
 } from './printSheet';
-import { isHardcover } from './coverGeometry';
+import { LEGACY_LEAF_IN, coverWrapGeometry, isHardcover, leafInches, spineForLeaf, spineFromWrapWidth, spineLabel } from './coverGeometry';
 import { PAGE_ONE_RIGHT_MARK, type PageOneSide } from './binding';
 import type { TextPainter } from './textPainter';
 
@@ -231,6 +231,13 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
   out.setTitle(`${orderLabel} — press sheets`);
   const words = writer(out, text);
 
+  // Each spot's pages, front and back, for its label ("pages 1–2").
+  const sides = printSides(pages.length, pageOne);
+  const leafName = (leaf: number) => {
+    const shown = [sides[2 * leaf], sides[2 * leaf + 1]].filter((p): p is number => p !== null && p !== undefined).map((p) => p + 1);
+    return shown.length === 2 ? `pages ${shown[0]}–${shown[1]}` : shown.length === 1 ? `page ${shown[0]}` : '';
+  };
+
   // Keep only the trim edge each spot has room for (the file has 0.125).
   const keepOf = (p: SheetPlacement): Sides => ({
     top: Math.min(p.pageBleed.top, srcBleed), right: Math.min(p.pageBleed.right, srcBleed),
@@ -274,23 +281,59 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
       sheet.drawPage(embedded, { x: at.x, y: at.y, width: ew, height: eh, rotate: degrees(at.r) });
     }
     drawCutMarks(sheet, side.placements.map((q) => q.slot));
-    await drawSheetLabel(sheet, words, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q) => q.pile));
+    await drawSheetLabel(sheet, words, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q) => leafName(q.leaf)));
   }
   return { bytes: await saveNoFonts(out), plan, pageOne, sourceBleedIn: srcBleed };
 }
 
-/** Cut marks for every cut line, in the white around the block — or, where
- *  the block reaches the printer's white edge, over the outer trim edge (that
- *  strip is cut off). */
-function drawCutMarks(page: PDFPage, slots: SheetSlot[]) {
-  const u = PRESS_SHEET.unprintableIn;
+/** The block of pages on one side of a sheet: its outside (art) edges, and
+ *  the trim edge it keeps outside on each side — 0 where pages are butted
+ *  against the printer's edge (6x6 across). */
+function blockOf(slots: SheetSlot[]) {
   const top = Math.min(...slots.map((s) => s.y - s.bleed.top));
   const bottom = Math.max(...slots.map((s) => s.y + s.h + s.bleed.bottom));
   const left = Math.min(...slots.map((s) => s.x - s.bleed.left));
   const right = Math.max(...slots.map((s) => s.x + s.w + s.bleed.right));
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+  const edge = (on: (s: SheetSlot) => boolean, of: (s: SheetSlot) => number) => Math.min(...slots.filter(on).map(of));
+  return {
+    top, bottom, left, right,
+    edgeTop: edge((s) => near(s.y - s.bleed.top, top), (s) => s.bleed.top),
+    edgeBottom: edge((s) => near(s.y + s.h + s.bleed.bottom, bottom), (s) => s.bleed.bottom),
+    edgeLeft: edge((s) => near(s.x - s.bleed.left, left), (s) => s.bleed.left),
+    edgeRight: edge((s) => near(s.x + s.w + s.bleed.right, right), (s) => s.bleed.right),
+  };
+}
+
+/** The strips cut off between rows (and above / below them), along one axis:
+ *  [from, to] in inches, art that goes in the bin. */
+function wasteStrips(from: number, to: number, spans: [number, number][]): [number, number][] {
+  const sorted = [...new Map(spans.map(([a, b]) => [`${a.toFixed(4)}`, [a, b] as [number, number]])).values()].sort((p, q) => p[0] - q[0]);
+  const out: [number, number][] = [];
+  let at = from;
+  for (const [a, b] of sorted) {
+    if (a - at > 1 / 64) out.push([at, a]);
+    at = Math.max(at, b);
+  }
+  if (to - at > 1 / 64) out.push([at, to]);
+  return out;
+}
+
+/** How long a block marking a cut across is, along the strip. */
+const BLOCK_IN = 0.15;
+
+/** Cut marks for every cut line, in the white around the block — or, where
+ *  the block reaches the printer's white edge, over the outer trim edge (that
+ *  strip is cut off). Where pages are butted right against the printer's
+ *  edge (6x6 across) there is neither: there, a small black block fills each
+ *  end of every strip cut off between the rows, and its two edges are the
+ *  two cuts. The block goes in the bin with the strip. */
+function drawCutMarks(page: PDFPage, slots: SheetSlot[]) {
+  const u = PRESS_SHEET.unprintableIn;
+  const { top, bottom, left, right, edgeTop, edgeBottom, edgeLeft, edgeRight } = blockOf(slots);
   const cutsX = [...new Set(slots.flatMap((s) => [s.x, s.x + s.w]).map((v) => Math.round(v * 1e4) / 1e4))];
   const cutsY = [...new Set(slots.flatMap((s) => [s.y, s.y + s.h]).map((v) => Math.round(v * 1e4) / 1e4))];
-  const outerBleed = PRESS_SHEET.bleedIn;
+  const MIN_EDGE = 1 / 16;
 
   // Room in the white: from the art's edge to the printer's edge.
   const roomTop = top - u, roomBottom = PRESS_SHEET.hIn - u - bottom;
@@ -298,29 +341,39 @@ function drawCutMarks(page: PDFPage, slots: SheetSlot[]) {
   const span = (room: number) => Math.min(MARK_LEN, room - MARK_GAP);
   for (const x of cutsX) {
     if (span(roomTop) > 0.05) markLine(page, x, top - MARK_GAP - span(roomTop), x, top - MARK_GAP, false);
-    else markLine(page, x, top, x, top + outerBleed - 1 / 32, true);
+    else if (edgeTop >= MIN_EDGE) markLine(page, x, top, x, top + edgeTop - 1 / 32, true);
     if (span(roomBottom) > 0.05) markLine(page, x, bottom + MARK_GAP, x, bottom + MARK_GAP + span(roomBottom), false);
-    else markLine(page, x, bottom - outerBleed + 1 / 32, x, bottom, true);
+    else if (edgeBottom >= MIN_EDGE) markLine(page, x, bottom - edgeBottom + 1 / 32, x, bottom, true);
   }
   for (const y of cutsY) {
     if (span(roomLeft) > 0.05) markLine(page, left - MARK_GAP - span(roomLeft), y, left - MARK_GAP, y, false);
-    else markLine(page, left, y, left + outerBleed - 1 / 32, y, true);
+    else if (edgeLeft >= MIN_EDGE) markLine(page, left, y, left + edgeLeft - 1 / 32, y, true);
     if (span(roomRight) > 0.05) markLine(page, right + MARK_GAP, y, right + MARK_GAP + span(roomRight), y, false);
-    else markLine(page, right - outerBleed + 1 / 32, y, right, y, true);
+    else if (edgeRight >= MIN_EDGE) markLine(page, right - edgeRight + 1 / 32, y, right, y, true);
   }
+
+  // Butted sides: blocks at the ends of the strips cut off across the sheet
+  // (and down it, were pages ever butted top to bottom).
+  const block = (x: number, y: number, w: number, h: number) =>
+    page.drawRectangle({ x: px(x), y: py(y + h), width: w * PT, height: h * PT, color: INK });
+  const rowsY = wasteStrips(top, bottom, slots.map((s) => [s.y, s.y + s.h]));
+  const colsX = wasteStrips(left, right, slots.map((s) => [s.x, s.x + s.w]));
+  if (span(roomLeft) <= 0.05 && edgeLeft < MIN_EDGE) for (const [a, b] of rowsY) block(left, a, BLOCK_IN, b - a);
+  if (span(roomRight) <= 0.05 && edgeRight < MIN_EDGE) for (const [a, b] of rowsY) block(right - BLOCK_IN, a, BLOCK_IN, b - a);
+  if (span(roomTop) <= 0.05 && edgeTop < MIN_EDGE) for (const [a, b] of colsX) block(a, top, b - a, BLOCK_IN);
+  if (span(roomBottom) <= 0.05 && edgeBottom < MIN_EDGE) for (const [a, b] of colsX) block(a, bottom - BLOCK_IN, b - a, BLOCK_IN);
 }
 
-/** The sheet's name, along the paper edge of the widest white band, and each
- *  spot's pile number next to it — in the side band beside its column, or
- *  above the top row / below the bottom row when the sides are too narrow. */
-async function drawSheetLabel(page: PDFPage, words: ReturnType<typeof writer>, text: string, slots: SheetSlot[], piles: number[]) {
+/** The sheet's name, along the paper edge of the widest white band, and next
+ *  to each spot the pages it holds ("pages 1–2") — in the side band beside
+ *  its column, or above the top row / below the bottom row when the sides
+ *  are too narrow. With no white band at all (6x6), the name goes small on a
+ *  white patch in the strip cut off above the top row. */
+async function drawSheetLabel(page: PDFPage, words: ReturnType<typeof writer>, text: string, slots: SheetSlot[], names: string[]) {
   const u = PRESS_SHEET.unprintableIn;
   const size = 7;
   const cap = 0.1; // text height, inches
-  const top = Math.min(...slots.map((s) => s.y - s.bleed.top));
-  const bottom = Math.max(...slots.map((s) => s.y + s.h + s.bleed.bottom));
-  const left = Math.min(...slots.map((s) => s.x - s.bleed.left));
-  const right = Math.max(...slots.map((s) => s.x + s.w + s.bleed.right));
+  const { top, bottom, left, right, edgeTop } = blockOf(slots);
   const bandL = left - u, bandR = PRESS_SHEET.wIn - u - right, bandT = top - u, bandB = PRESS_SHEET.hIn - u - bottom;
   const widthIn = (t: string) => words.widthIn(t, size);
   const label = (t: string, xIn: number, yIn: number, vertical = false) => words.write(page, t, xIn, yIn, size, { vertical });
@@ -329,13 +382,20 @@ async function drawSheetLabel(page: PDFPage, words: ReturnType<typeof writer>, t
   if (bandL >= 0.6) await label(text, u + 0.02 + cap, PRESS_SHEET.hIn - u - 0.3, true);
   else if (bandT >= 0.2) await label(text, u + 0.3, u + cap + 0.02);
   else if (bandB >= 0.2) await label(text, u + 0.3, PRESS_SHEET.hIn - u - 0.04);
+  else if (edgeTop >= 0.1) {
+    const small = 5.5;
+    const x = left + 0.5;
+    page.drawRectangle({ x: px(x - 0.04), y: py(top + edgeTop - 1 / 64), width: (words.widthIn(text, small) + 0.08) * PT, height: (edgeTop - 1 / 32) * PT, color: PAPER });
+    await words.write(page, text, x, top + edgeTop - 0.03, small);
+  }
 
   const lastCol = Math.max(...slots.map((s) => s.x));
   const firstCol = Math.min(...slots.map((s) => s.x));
   const firstRow = Math.min(...slots.map((s) => s.y));
   const lastRow = Math.max(...slots.map((s) => s.y));
   for (const [i, s] of slots.entries()) {
-    const t = `pile ${piles[i] + 1}`;
+    const t = names[i];
+    if (!t) continue;
     const midY = s.y + s.h / 2 + widthIn(t) / 2;
     if (s.x === firstCol && bandL >= 0.3) await label(t, left - 0.08, midY, true);
     else if (s.x === lastCol && bandR >= 0.3) await label(t, right + 0.08 + cap, midY, true);
@@ -344,25 +404,39 @@ async function drawSheetLabel(page: PDFPage, words: ReturnType<typeof writer>, t
   }
 }
 
-export interface CoverSheetResult { bytes: Uint8Array; wrapWIn: number; wrapHIn: number }
+export interface CoverSheetResult {
+  bytes: Uint8Array; wrapWIn: number; wrapHIn: number;
+  /** The spine the cover file was drawn with, inches. */
+  spineIn: number;
+}
 
 /**
  * Put the flat cover on one sheet: centred, turned to run along the 19 in
  * side, with cut marks at its trim and fold marks at the spine. Throws with
  * the plain reason when the cover can't fit (e.g. 9x9 hardbound).
+ *
+ * The spine is read from the cover file's width, so the fold marks land on
+ * the spine it was drawn with: files made since 2026-10-22 for C2S 140
+ * (matte or glossy), older ones for a 0.006" leaf. A file wider or narrower
+ * than any of those for this page count is refused.
  */
 export async function imposeCoverSheet(
   src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, cover: CoverType, pageCount: number, orderLabel: string, text: TextPainter,
+  material: MaterialType = DEFAULT_MATERIAL,
 ): Promise<CoverSheetResult> {
   const { pages: [srcPage] } = await loadCustomerPdf(src, 'cover file');
-  const fit = coverOnSheet(size, cover, pageCount);
-  if (!fit.fits) throw new Error(`This cover can't go on one ${PRESS_SHEET.wIn} × ${PRESS_SHEET.hIn} sheet. ${fit.reason}`);
   const s = srcPage.getSize();
   const wrapW = s.width / PT;
   const wrapH = s.height / PT;
-  if (Math.abs(wrapW - fit.wrapW) > 0.05 || Math.abs(wrapH - fit.wrapH) > 0.05) {
-    throw new Error(`The cover file is ${wrapW.toFixed(2)} × ${wrapH.toFixed(2)} in, but a ${size} ${isHardcover(cover) ? 'hardbound' : 'softcover'} cover with ${pageCount} pages should be ${fit.wrapW.toFixed(2)} × ${fit.wrapH.toFixed(2)} in. Check the page count.`);
+  const spineIn = spineFromWrapWidth(size, cover, wrapW);
+  const shouldBe = coverWrapGeometry(size, pageCount, cover, { material }).wrap;
+  const thinnest = spineForLeaf(pageCount, cover, Math.min(leafInches('glossy'), leafInches('matte')));
+  const thickest = spineForLeaf(pageCount, cover, LEGACY_LEAF_IN);
+  if (spineIn < thinnest - 0.05 || spineIn > thickest + 0.05 || Math.abs(wrapH - shouldBe.hIn) > 0.05) {
+    throw new Error(`The cover file is ${wrapW.toFixed(2)} × ${wrapH.toFixed(2)} in, but a ${size} ${isHardcover(cover) ? 'hardbound' : 'softcover'} cover with ${pageCount} pages should be ${shouldBe.wIn.toFixed(2)} × ${shouldBe.hIn.toFixed(2)} in. Check the page count.`);
   }
+  const fit = coverOnSheet(size, cover, pageCount, { spineIn });
+  if (!fit.fits) throw new Error(`This cover can't go on one ${PRESS_SHEET.wIn} × ${PRESS_SHEET.hIn} sheet. ${fit.reason}`);
 
   const out = await PDFDocument.create();
   out.setTitle(`${orderLabel} — cover sheet`);
@@ -425,7 +499,7 @@ export async function imposeCoverSheet(
     }
   }
   const kind = isHardcover(cover) ? 'hardbound' : 'softcover';
-  const txt = `${orderLabel} · cover · ${size} ${kind} · ${pageCount} pages · print ONE side · dashed = spine edges`;
+  const txt = `${orderLabel} · cover · ${size} ${kind} · ${pageCount} pages · spine ${spineLabel(spineIn)} · print ONE side · dashed = spine edges`;
   // Along the paper's printable edge, clear of the marks: above the cover when
   // that band holds a mark and the text, else down the left side, a quarter of
   // the way along (the corners and the spine have marks).
@@ -433,7 +507,7 @@ export async function imposeCoverSheet(
   const len = words.widthIn(txt, 7);
   if (fit.y - u >= MARK_GAP + MARK_LEN + cap + 0.1) await words.write(sheet, txt, u + 0.3, u + cap + 0.02, 7);
   else await words.write(sheet, txt, u + cap + 0.02, fit.y + fit.h / 4 + len / 2, 7, { vertical: true });
-  return { bytes: await saveNoFonts(out), wrapWIn: wrapW, wrapHIn: wrapH };
+  return { bytes: await saveNoFonts(out), wrapWIn: wrapW, wrapHIn: wrapH, spineIn };
 }
 
 /**

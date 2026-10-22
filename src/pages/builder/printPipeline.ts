@@ -17,7 +17,7 @@ import { ornamentFit } from './ornaments';
 import { drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import { getCanvasDimensions } from './layouts';
-import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType } from './types';
+import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType, MaterialType } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 import { coverWrapGeometry, insetRect } from './coverGeometry';
 import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedText } from './coverLayout';
@@ -295,7 +295,7 @@ async function drawPrintPage(
 
   // ── Slot Photos ──
   // Match the editor/preview geometry EXACTLY: adapt the template to the page
-  // orientation, compute the safe area from its margins PLUS the 0.5" binding
+  // orientation, compute the safe area from its margins PLUS the binding
   // keep-out on the inner (spine) edge, then place each slot as a fraction of
   // that safe area. (Slot coords are fractions 0–1, not percentages.)
   const template = page.templateId ? getTemplateById(page.templateId) : null;
@@ -1162,6 +1162,9 @@ export interface CoverPrintInput {
   pageCount: number;
   /** Binding material chosen at checkout (softcover vs hardcover geometry). */
   cover: CoverType;
+  /** Paper finish chosen at checkout: C2S 140 matte or glossy, which sets how
+   *  thick the spine is. Missing = matte. */
+  material?: MaterialType;
   coverDesign: CoverDesign;
   photos: UploadedPhoto[];
   /** Cover-as-pages: when present, the wrap composites this ACTUAL front-page
@@ -1201,8 +1204,8 @@ function liftWords(ctx: CanvasRenderingContext2D, near: { x: number; y: number; 
 /** Render the flat cover wrap at full resolution: a JPEG, and its words (the
  *  front's title, the spine, the back's mark) on top at 300 DPI. */
 export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<PrintLayers> {
-  const { albumSize, pageCount, cover, coverDesign, photos, coverFront } = input;
-  const geom = coverWrapGeometry(albumSize, pageCount, cover);
+  const { albumSize, pageCount, cover, material, coverDesign, photos, coverFront } = input;
+  const geom = coverWrapGeometry(albumSize, pageCount, cover, { material });
   const W = geom.wrap.wPx;
   const H = geom.wrap.hPx;
 

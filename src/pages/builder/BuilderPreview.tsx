@@ -733,7 +733,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             }} />
         );
       })}
-      {/* Binding (gutter) keep-out guide — 0.5" reserve on the inner edge.
+      {/* Binding (gutter) keep-out guide — the 3/8" reserve (BINDING_INCHES) on the inner edge.
           Hidden on cover panels (they have no interior gutter). */}
       {!coverMode && (() => {
         const frac = bindingMarginFraction(page.size);

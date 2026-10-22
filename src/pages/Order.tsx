@@ -301,9 +301,9 @@ export default function Order() {
   // THE PRESS (builder/printSheet): a cover too big for the shop's 12.5 × 19
   // sheet isn't offered — 9×9 hardbound (owner, 2026-10-11), and any cover on
   // an album too thick for the paper. The database refuses them too (0046).
-  const coverChoices = COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount));
-  const coverFits = coverFitsSheet(albumSize, cover, pageCount);
-  const coverNote = coverChoiceNote(albumSize, pageCount, coverChoices.map((c) => c.type));
+  const coverChoices = COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount, { material }));
+  const coverFits = coverFitsSheet(albumSize, cover, pageCount, { material });
+  const coverNote = coverChoiceNote(albumSize, pageCount, coverChoices.map((c) => c.type), { material });
   // Only a new order changes cover. One already placed (before 0046) keeps the
   // cover it was placed with, so the screen and the order row agree.
   useEffect(() => {
@@ -674,6 +674,8 @@ export default function Order() {
           albumSize: order.albumSize,
           pageCount: printJob.pages.length,
           cover: order.cover,
+          // C2S 140 matte or glossy: the spine is that paper stacked.
+          material: order.material,
           // Cover-as-pages: when the FRONT cover page is present the wrap
           // composites it + a derived spine + the reserved Megy Prints back
           // panel; otherwise it falls back to the legacy CoverDesign form output.

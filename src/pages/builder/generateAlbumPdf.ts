@@ -86,7 +86,7 @@ export async function generateAlbumPdf(
  * the wrap is a different, wider size.
  */
 export async function generateCoverWrapPdf(input: CoverPrintInput): Promise<Blob> {
-  const geom = coverWrapGeometry(input.albumSize, input.pageCount, input.cover);
+  const geom = coverWrapGeometry(input.albumSize, input.pageCount, input.cover, { material: input.material });
   const wIn = geom.wrap.wIn;
   const hIn = geom.wrap.hIn;
   const orientation: 'landscape' | 'portrait' = wIn >= hIn ? 'landscape' : 'portrait';

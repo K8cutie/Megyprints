@@ -5,17 +5,19 @@ import { ALBUM_SIZES, type AlbumSizePreset, type CoverType } from './types';
 import { MIN_PAGES } from '../../lib/pricing';
 import { bindingEdge } from './binding';
 import {
-  PRESS_SHEET, sheetLayout, sheetPlan, printSides, leavesFor, pagesPerSheetBySize,
+  PRESS_SHEET, BUTTED_SIZES, sheetLayout, sheetPlan, printSides, leavesFor, pagesPerSheetBySize,
   pageSidesFromSheet, coverOnSheet, coverFitsSheet, coverChoiceNote, maxPagesForCover, type Turn,
 } from './printSheet';
 
 const SIZES = ALBUM_SIZES.map((s) => s.preset);
 const MIGRATION = readFileSync(resolve(__dirname, '../../../supabase/migrations/0046_press_sheet.sql'), 'utf8');
+const MIGRATION_6X6 = readFileSync(resolve(__dirname, '../../../supabase/migrations/0050_six_by_six_twelve_a_sheet.sql'), 'utf8');
 
 describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white edge, layout B)', () => {
   it('fits the pages per sheet the owner agreed to', () => {
     expect(pagesPerSheetBySize()).toEqual({
-      '6x4': 12, '8x6': 6, '6x8': 6, '6x6': 6, '8x8': 4, '9x9': 4, '11.5x8': 4, '8.5x11': 4,
+      // 6x6: 12 since the owner's own sheet, 2026-10-22 (pages touching, 6 a side).
+      '6x4': 12, '8x6': 6, '6x8': 6, '6x6': 12, '8x8': 4, '9x9': 4, '11.5x8': 4, '8.5x11': 4,
     });
   });
 
@@ -43,8 +45,8 @@ describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white ed
     }
   });
 
-  it('gives every outside edge the full 1/8 in and never less than 1/16 in between pages', () => {
-    for (const size of SIZES) {
+  it('gives every outside edge the full 1/8 in and never less than 1/16 in between pages (butted sizes aside)', () => {
+    for (const size of SIZES.filter((s) => !BUTTED_SIZES.includes(s))) {
       const L = sheetLayout(size);
       L.slots.forEach((s, i) => {
         const r = Math.floor(i / L.cols), c = i % L.cols;
@@ -65,6 +67,33 @@ describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white ed
     const small = sheetLayout('6x6');
     expect(small.rows).toBe(3);
     expect(small.slots[0].bleed.bottom).toBe(PRESS_SHEET.minInnerBleedIn);
+  });
+
+  /* The owner's 6x6 sheet (2026-10-22): two pages across, touching, three
+     down. Two 6 in pages are exactly the 12 in the printer prints. */
+  it('6x6 goes 2 across with the pages touching, right to the printer\'s edge; down the sheet it keeps its trim edges', () => {
+    expect(BUTTED_SIZES).toEqual(['6x6']);
+    const L = sheetLayout('6x6');
+    expect([L.cols, L.rows, L.leavesPerSheet, L.pagesPerSheet]).toEqual([2, 3, 6, 12]);
+    const u = PRESS_SHEET.unprintableIn;
+    for (const [i, s] of L.slots.entries()) {
+      const c = i % 2;
+      expect(s.bleed.left, `slot ${i}`).toBe(0);
+      expect(s.bleed.right, `slot ${i}`).toBe(0);
+      expect(s.x, `slot ${i}`).toBeCloseTo(c === 0 ? u : u + 6, 9);
+    }
+    // Rows: 1/8 in outside, 1/16 in where two rows face each other.
+    expect(L.slots[0].bleed.top).toBe(PRESS_SHEET.bleedIn);
+    expect(L.slots[4].bleed.bottom).toBe(PRESS_SHEET.bleedIn);
+    expect(L.slots[0].bleed.bottom).toBe(PRESS_SHEET.minInnerBleedIn);
+    expect(L.spareX).toBeCloseTo(0, 9);
+    expect(L.cutsX).toEqual([0.25, 6.25, 12.25]);
+  });
+
+  it('no other size changes: butting is only for the sizes the owner chose', () => {
+    expect(Object.fromEntries(SIZES.filter((s) => s !== '6x6').map((s) => [s, sheetLayout(s).leavesPerSheet]))).toEqual({
+      '8x8': 2, '9x9': 2, '6x4': 6, '8x6': 3, '6x8': 3, '11.5x8': 2, '8.5x11': 2,
+    });
   });
 });
 
@@ -113,7 +142,7 @@ describe('sheet plan', () => {
   const pageTop: Record<Turn, [number, number]> = { 0: [0, -1], 90: [1, 0], 180: [0, 1], 270: [-1, 0] };
 
   for (const size of SIZES) {
-    it(`${size}: every page prints once, back to back with its partner, in cut-and-stack order`, () => {
+    it(`${size}: every page prints once, back to back with its partner, in page order`, () => {
       const pages = 57;
       const plan = sheetPlan(size, pages);
       const seen = new Map<number, number>();
@@ -142,17 +171,32 @@ describe('sheet plan', () => {
         });
       }
 
-      // Cut the stack: pile s, sheets in order, then pile s+1 → leaves in book order.
+      // Cut each sheet, stack its pieces left to right, top to bottom, sheet 1's
+      // on top → leaves in book order.
       const stacked: number[] = [];
-      for (let s = 0; s < plan.layout.leavesPerSheet; s++) {
-        for (let i = 0; i < plan.sheets; i++) {
-          const p = plan.sides[2 * i].placements[s];
-          if (p.leaf < plan.leaves) stacked.push(p.leaf);
-        }
+      for (let i = 0; i < plan.sheets; i++) {
+        for (const p of plan.sides[2 * i].placements) if (p.leaf < plan.leaves) stacked.push(p.leaf);
       }
       expect(stacked).toEqual(Array.from({ length: plan.leaves }, (_, i) => i));
     });
   }
+
+  /* The owner's drawing, 2026-10-22: FRONT 1 3 / 5 7 / 9 11, BACK 4 2 / 8 6 / 12 10. */
+  it('6x6, sheet 1: the front is 1 3 / 5 7 / 9 11 and the back 4 2 / 8 6 / 12 10, as the owner drew it', () => {
+    const plan = sheetPlan('6x6', 40);
+    expect(plan.sheets).toBe(4);
+    const grid = (i: number) => {
+      const side = plan.sides[i];
+      const cells = [...side.placements].sort((a, b) => a.slot.y - b.slot.y || a.slot.x - b.slot.x);
+      return cells.map((p) => (p.page === null ? null : p.page + 1));
+    };
+    expect(grid(0)).toEqual([1, 3, 5, 7, 9, 11]);
+    expect(grid(1)).toEqual([4, 2, 8, 6, 12, 10]);
+    // Sheet 2 carries on: 13 15 / 17 19 / 21 23.
+    expect(grid(2)).toEqual([13, 15, 17, 19, 21, 23]);
+    // Sheet 4 holds the last 2 leaves (pages 37–40); its other spots are blank.
+    expect(grid(6)).toEqual([37, 39, null, null, null, null]);
+  });
 
   it('turns page edges with the page: a quarter turn puts the page top on the sheet\'s right', () => {
     const sheet = { top: 1, right: 2, bottom: 3, left: 4 };
@@ -179,21 +223,26 @@ describe('covers on the sheet', () => {
     }
   });
 
-  it('runs out of printable length on a very thick 9x9 softcover (124 pages fit, 126 do not)', () => {
-    expect(coverFitsSheet('9x9', 'softcover', 124)).toBe(true);
-    expect(coverFitsSheet('9x9', 'softcover', 126)).toBe(false);
+  it('runs out of printable length on a very thick 9x9 softcover (C2S 140 matte: 142 pages fit, 144 do not)', () => {
+    expect(coverFitsSheet('9x9', 'softcover', 142)).toBe(true);
+    expect(coverFitsSheet('9x9', 'softcover', 144)).toBe(false);
   });
 
   it('tells checkout, in plain words, why a cover is missing', () => {
     expect(coverChoiceNote('8x8', 40, ['softcover', HARD])).toBeNull();
     expect(coverChoiceNote('9x9', 40, ['softcover'])).toBe('Hardbound is not available for 9×9 albums. The cover is too big for our printer.');
     expect(coverChoiceNote('8x8', 400, ['softcover'])).toBe('Hardbound is not available for an album with 400 pages. The cover is too big for our printer.');
-    expect(coverChoiceNote('9x9', 140, [])).toBe('This album has too many pages for our printer. Make it 124 pages or fewer.');
+    expect(coverChoiceNote('9x9', 160, [])).toBe('This album has too many pages for our printer. Make it 142 pages or fewer.');
+    // Glossy C2S 140 is the thinner sheet: more pages fit under the same cover.
+    expect(coverChoiceNote('9x9', 160, [], { material: 'glossy' })).toBe('This album has too many pages for our printer. Make it 158 pages or fewer.');
     expect(coverChoiceNote('11.5x8', 40, [])).toBe('We can\'t print this album size right now.');
   });
 
   it('finds the most pages a cover can take', () => {
-    expect(maxPagesForCover('9x9', 'softcover', MIN_PAGES)).toBe(124);
+    // The spine may be 3/8" before the 9x9 flat cover outgrows what prints:
+    // 71 leaves of C2S 140 matte (0.134 mm), 79 of gloss (0.120 mm).
+    expect(maxPagesForCover('9x9', 'softcover', MIN_PAGES)).toBe(142);
+    expect(maxPagesForCover('9x9', 'softcover', MIN_PAGES, { material: 'glossy' })).toBe(158);
     expect(maxPagesForCover('9x9', HARD, MIN_PAGES)).toBeNull();
   });
 
@@ -211,9 +260,11 @@ describe('covers on the sheet', () => {
   });
 });
 
-describe('0046_press_sheet.sql stays in step with the press geometry', () => {
+describe('0046_press_sheet.sql (and 0050 for 6x6) stay in step with the press geometry', () => {
   it('sets every changed pps to the layout, and the layout matches the rest', () => {
-    const set = Object.fromEntries([...MIGRATION.matchAll(/'\{([0-9.x]+),pps\}', '(\d+)'/g)].map((m) => [m[1], Number(m[2])]));
+    const setBy = (sql: string) => Object.fromEntries([...sql.matchAll(/'\{([0-9.x]+),pps\}', '(\d+)'/g)].map((m) => [m[1], Number(m[2])]));
+    expect(setBy(MIGRATION_6X6)).toEqual({ '6x6': 12 });
+    const set = { ...setBy(MIGRATION), ...setBy(MIGRATION_6X6) };
     const want = pagesPerSheetBySize();
     expect(Object.keys(set).sort()).toEqual(['6x4', '6x6', '6x8', '8x6']);
     for (const [size, pps] of Object.entries(set)) expect(pps, size).toBe(want[size as AlbumSizePreset]);

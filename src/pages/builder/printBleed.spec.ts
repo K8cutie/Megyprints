@@ -14,10 +14,10 @@ import { BINDING_INCHES } from './binding';
    ══════════════════════════════════════════════════════════════════════════ */
 
 describe('the settled measures', () => {
-  it('bleed 0.125" (3 mm), hardcover turn-in 0.625" (16 mm), the 0.5" spine keep-out untouched', () => {
+  it('bleed 0.125" (3 mm), hardcover turn-in 0.625" (16 mm), the 3/8" spine keep-out untouched', () => {
     expect(PRINTER_SPEC.bleedIn).toBe(0.125);
     expect(PRINTER_SPEC.wrapTurnIn).toBe(0.625);
-    expect(BINDING_INCHES).toBe(0.5);
+    expect(BINDING_INCHES).toBe(0.375);
   });
   it('an 8×8 page file is 8.25 × 8.25 in; every size gets 0.125" on every edge', () => {
     expect(pageSizeWithBleedIn(8, 8)).toEqual({ wIn: 8.25, hIn: 8.25 });
