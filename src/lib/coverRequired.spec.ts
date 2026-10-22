@@ -49,7 +49,7 @@ const frozenCover = {
 };
 const snapPhotos = Array.from({ length: 10 }, (_, i) => ({ id: `ph${i}`, name: `2026101${i}_101010.jpg` }));
 const orderRow = (over: Record<string, unknown> = {}) => ({
-  id: 'order-1', album_size: '6x6', cover: 'softcover', page_count: 130, cover_front: frozenCover, photos: snapPhotos, ...over,
+  id: 'order-1', album_size: '6x6', cover: 'softcover', material: 'glossy', page_count: 130, cover_front: frozenCover, photos: snapPhotos, ...over,
 });
 const stored = (id: string) => ({ id, name: `${id}.jpg`, type: 'image/jpeg', size: 10, width: 4000, height: 3000, storedAt: '2026-10-21T08:00:00Z', blob: new Blob(['x']), url: `blob:live/${id}` });
 
@@ -112,7 +112,8 @@ describe('sendOrderCover', () => {
     expect(asked).toEqual(['ph7']); // only the cover's photo, not all 10
     expect(h.uploads.map((u) => u.path)).toEqual(['order-1-cover.pdf']);
     const made = h.made[0] as { albumSize: string; pageCount: number; cover: string; coverFront: { background: { photoId: string } }; photos: { id: string; previewUrl: string }[] };
-    expect(made).toMatchObject({ albumSize: '6x6', pageCount: 130, cover: 'softcover' });
+    // The order's paper too: the spine is that paper stacked (#177).
+    expect(made).toMatchObject({ albumSize: '6x6', pageCount: 130, cover: 'softcover', material: 'glossy' });
     expect(made.coverFront.background.photoId).toBe('ph7');
     // Full length and in order (frames point at photos by position).
     expect(made.photos.map((p) => p.id)).toEqual(snapPhotos.map((p) => p.id));

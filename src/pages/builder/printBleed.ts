@@ -16,7 +16,7 @@
    The page is drawn exactly as the customer approved it, then its outer
    edge is MIRRORED outward into the bleed / turn-in: nothing inside the cut
    line moves or rescales, and the strip that is cut off (or wrapped round
-   the board) continues the picture seamlessly. The 0.5" spine keep-out is
+   the board) continues the picture seamlessly. The 3/8" spine keep-out is
    untouched — that is inside the page, where the glue is.
    ══════════════════════════════════════════════════════════════════════════ */
 

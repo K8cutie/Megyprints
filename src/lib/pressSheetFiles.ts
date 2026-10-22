@@ -15,13 +15,14 @@
 
 import { supabase } from './supabase';
 import { printFilesOf, type AdminOrder } from './adminOrders';
-import { ALBUM_SIZES, type AlbumSizePreset, type CoverType } from '../pages/builder/types';
+import { ALBUM_SIZES, type AlbumSizePreset, type CoverType, type MaterialType } from '../pages/builder/types';
+import { PRINTER_SPEC, spineLabel, spineWidthInches } from '../pages/builder/coverGeometry';
 import { printSides } from '../pages/builder/printSheet';
 import type { PageOneSide } from '../pages/builder/binding';
 import { canvasTextPainter } from './canvasTextPainter';
 import { zipStored, type ZipEntry } from './jpegZip';
 
-type PrintOrder = Pick<AdminOrder, 'id' | 'copy_of_order_id' | 'order_number' | 'album_size' | 'cover' | 'page_count'>;
+type PrintOrder = Pick<AdminOrder, 'id' | 'copy_of_order_id' | 'order_number' | 'album_size' | 'cover' | 'material' | 'page_count'>;
 
 async function readPrintFile(path: string, what: string): Promise<ArrayBuffer> {
   const { data, error } = await supabase.storage.from('print-pdfs').download(path);
@@ -40,7 +41,27 @@ function sizeOf(o: PrintOrder): AlbumSizePreset {
 }
 
 /** Any cover but softcover binds as a hardcover (coverGeometry.isHardcover). */
-const coverOf = (o: PrintOrder) => (o.cover || 'softcover') as CoverType;
+const coverOf = (o: Pick<PrintOrder, 'cover'>) => (o.cover || 'softcover') as CoverType;
+
+/** The paper finish picked at checkout; anything but glossy is matte. */
+const finishOf = (o: Pick<PrintOrder, 'material'>): MaterialType => (o.material === 'glossy' ? 'glossy' : 'matte');
+
+/** How thick this book's spine is: its leaves of C2S 140 in the picked
+ *  finish, stacked (plus the boards on a hardcover). */
+export function orderSpine(o: Pick<PrintOrder, 'cover' | 'material' | 'page_count'>): string {
+  return `spine ${spineLabel(spineWidthInches(o.page_count, coverOf(o), finishOf(o)))}`;
+}
+
+/** What to tell the operator after the cover sheet: its spine, and when the
+ *  cover file was drawn for another spine than this paper makes (files from
+ *  before C2S 140 was set), the spine the pages will really stack to. */
+export function coverSheetNote(o: Pick<PrintOrder, 'cover' | 'material' | 'page_count'>, fileSpineIn: number): string {
+  const note = `Cover sheet: print one side only · spine ${spineLabel(fileSpineIn)}`;
+  const bookIn = spineWidthInches(o.page_count, coverOf(o), finishOf(o));
+  return Math.abs(fileSpineIn - bookIn) * 25.4 < 0.2
+    ? note
+    : `${note}. This cover was made before the paper was set to ${PRINTER_SPEC.paperName}: the pages on ${PRINTER_SPEC.paperName} ${finishOf(o)} stack to about ${spineLabel(bookIn)}`;
+}
 
 /** A tool loaded on first use. After a deploy the old file is gone from the
  *  server: say so in words instead of a module error. */
@@ -102,9 +123,9 @@ export async function downloadCoverSheet(o: PrintOrder): Promise<string> {
   const size = sizeOf(o);
   const src = await readPrintFile(`${printFilesOf(o)}-cover.pdf`, 'cover file');
   const { imposeCoverSheet } = await pressTools();
-  const { bytes } = await imposeCoverSheet(src, size, coverOf(o), o.page_count, o.order_number, canvasTextPainter());
+  const { bytes, spineIn } = await imposeCoverSheet(src, size, coverOf(o), o.page_count, o.order_number, canvasTextPainter(), finishOf(o));
   saveFile(bytes, `megyprints-${o.order_number}-cover-sheet.pdf`);
-  return 'Cover sheet: print one side only';
+  return coverSheetNote(o, spineIn);
 }
 
 /** A sheet side's picture name. The number in front is the print order, so
@@ -121,7 +142,7 @@ export function sideJpegName(orderNumber: string, n: number, total: number, side
 export const coverJpegName = (orderNumber: string) => `${orderNumber}-cover.jpg`;
 
 /** The words that go in the zip with the pictures. */
-export function jpegHowTo(o: PrintOrder, sheets: number, piles: number, cover: boolean, blankSides: string): string {
+export function jpegHowTo(o: PrintOrder, sheets: number, piles: number, cover: { spineIn: number } | null, blankSides: string): string {
   const total = 2 * sheets;
   const name = (n: number, side: 'front' | 'back', sheet: number) => sideJpegName(o.order_number, n, total, { sheet, side });
   return [
@@ -140,7 +161,7 @@ export function jpegHowTo(o: PrintOrder, sheets: number, piles: number, cover: b
     `${blankSides}.`,
     '',
     cover
-      ? `Cover: print ${coverJpegName(o.order_number)} on one side of its own sheet. Cut on the marks; the dashed marks are the spine edges.`
+      ? `Cover: print ${coverJpegName(o.order_number)} on one side of its own sheet. Cut on the marks; the dashed marks are the spine edges (spine ${spineLabel(cover.spineIn)}).`
       : 'Cover: not in this zip (see the console for why).',
     '',
   ].join('\r\n');
@@ -164,16 +185,18 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
 
   // The cover sheet: an order can still be waiting on its cover file.
   let coverMissing: string | null = null;
+  let coverSpine: { spineIn: number } | null = null;
   try {
     const coverSrc = await readPrintFile(`${printFilesOf(o)}-cover.pdf`, 'cover file');
-    const { bytes: coverPdf } = await imposeCoverSheet(coverSrc, size, coverOf(o), o.page_count, o.order_number, text);
+    const { bytes: coverPdf, spineIn } = await imposeCoverSheet(coverSrc, size, coverOf(o), o.page_count, o.order_number, text, finishOf(o));
     const [cover] = await pdfToJpegs(coverPdf);
     files.push({ name: coverJpegName(o.order_number), data: cover });
+    coverSpine = { spineIn };
   } catch (e) {
     coverMissing = e instanceof Error ? e.message : 'The cover file could not be read.';
   }
   say(total);
-  files.push({ name: 'HOW-TO-PRINT.txt', data: new TextEncoder().encode(jpegHowTo(o, plan.sheets, plan.layout.leavesPerSheet, !coverMissing, blankSidesNote(plan.pageCount, pageOne))) });
+  files.push({ name: 'HOW-TO-PRINT.txt', data: new TextEncoder().encode(jpegHowTo(o, plan.sheets, plan.layout.leavesPerSheet, coverSpine, blankSidesNote(plan.pageCount, pageOne))) });
   saveFile(zipStored(files), `megyprints-${o.order_number}-jpeg.zip`, 'application/zip');
   const note = `JPEG: ${sides.length} sheet ${sides.length === 1 ? 'side' : 'sides'}${coverMissing ? '' : ' and the cover sheet'}, 300 DPI · ${sheetsNote(o, plan, pageOne)}`;
   return coverMissing ? `${note}. No cover picture: ${coverMissing}` : note;

@@ -10,7 +10,7 @@
        cover didn't, while the cover can still be printed (0050);
      • sendOrderCover — makes the cover from the cover the ORDER froze
        (album_snapshot.cover_front: edits to the album since don't change what
-       was ordered) with the order's own size, cover and page count, and
+       was ordered) with the order's own size, cover, paper and page count, and
        uploads it the way checkout does (create-only, 3 tries).
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -38,6 +38,7 @@ type OrderCoverRow = {
   id: string;
   album_size: string | null;
   cover: string | null;
+  material: string | null;
   page_count: number | null;
   cover_front: unknown;
   photos: unknown;
@@ -53,7 +54,7 @@ export async function sendOrderCover(
 ): Promise<void> {
   const { data, error } = await supabase
     .from('orders')
-    .select('id, album_size, cover, page_count, cover_front:album_snapshot->cover_front, photos:album_snapshot->photos')
+    .select('id, album_size, cover, material, page_count, cover_front:album_snapshot->cover_front, photos:album_snapshot->photos')
     .eq('user_id', userId)
     .eq('id', orderId)
     .maybeSingle();
@@ -91,6 +92,9 @@ export async function sendOrderCover(
     albumSize,
     pageCount: row.page_count,
     cover: (row.cover || 'softcover') as CoverType,
+    // C2S 140 matte or glossy: the spine is that paper stacked, as at checkout
+    // (anything but glossy is matte, as in the console's press sheets).
+    material: row.material === 'glossy' ? 'glossy' : 'matte',
     coverDesign: DEFAULT_COVER_DESIGN,
     coverFront,
     photos,

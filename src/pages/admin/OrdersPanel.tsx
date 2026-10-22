@@ -9,7 +9,7 @@ import {
 } from '../../lib/adminOrders';
 import { supabase } from '../../lib/supabase';
 import {
-  downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile,
+  downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile, orderSpine,
 } from '../../lib/pressSheetFiles';
 
 export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds, coverReadyIds = null }: {
@@ -172,7 +172,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
             {o.ship_name || '—'}{o.ship_phone ? ` · ${o.ship_phone}` : ''} · {date}
           </div>
           <div className="text-xs text-light">
-            {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages{o.hosting_years ? ` · memories ${o.hosting_years} yrs` : ''}{o.hd_memories ? ' · HD' : ''}
+            {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages · <span data-testid="order-spine">{orderSpine(o)}</span>{o.hosting_years ? ` · memories ${o.hosting_years} yrs` : ''}{o.hd_memories ? ' · HD' : ''}
           </div>
           {o.ship_address && <div className="text-xs text-[#B9B9B9] mt-0.5 max-w-md">{o.ship_address}</div>}
           {(o.payment_reference || o.payment_submitted_at) && (

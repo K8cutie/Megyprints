@@ -22,11 +22,11 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, decodePDFRawStream, degrees, rgb, type PDFImage, type PDFPage } from 'pdf-lib';
-import type { AlbumSizePreset, CoverType } from './types';
+import { DEFAULT_MATERIAL, type AlbumSizePreset, type CoverType, type MaterialType } from './types';
 import {
   PRESS_SHEET, sheetPlan, trimInches, coverOnSheet, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
 } from './printSheet';
-import { isHardcover } from './coverGeometry';
+import { LEGACY_LEAF_IN, coverWrapGeometry, isHardcover, leafInches, spineForLeaf, spineFromWrapWidth, spineLabel } from './coverGeometry';
 import { PAGE_ONE_RIGHT_MARK, type PageOneSide } from './binding';
 import type { TextPainter } from './textPainter';
 
@@ -344,25 +344,39 @@ async function drawSheetLabel(page: PDFPage, words: ReturnType<typeof writer>, t
   }
 }
 
-export interface CoverSheetResult { bytes: Uint8Array; wrapWIn: number; wrapHIn: number }
+export interface CoverSheetResult {
+  bytes: Uint8Array; wrapWIn: number; wrapHIn: number;
+  /** The spine the cover file was drawn with, inches. */
+  spineIn: number;
+}
 
 /**
  * Put the flat cover on one sheet: centred, turned to run along the 19 in
  * side, with cut marks at its trim and fold marks at the spine. Throws with
  * the plain reason when the cover can't fit (e.g. 9x9 hardbound).
+ *
+ * The spine is read from the cover file's width, so the fold marks land on
+ * the spine it was drawn with: files made since 2026-10-22 for C2S 140
+ * (matte or glossy), older ones for a 0.006" leaf. A file wider or narrower
+ * than any of those for this page count is refused.
  */
 export async function imposeCoverSheet(
   src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, cover: CoverType, pageCount: number, orderLabel: string, text: TextPainter,
+  material: MaterialType = DEFAULT_MATERIAL,
 ): Promise<CoverSheetResult> {
   const { pages: [srcPage] } = await loadCustomerPdf(src, 'cover file');
-  const fit = coverOnSheet(size, cover, pageCount);
-  if (!fit.fits) throw new Error(`This cover can't go on one ${PRESS_SHEET.wIn} × ${PRESS_SHEET.hIn} sheet. ${fit.reason}`);
   const s = srcPage.getSize();
   const wrapW = s.width / PT;
   const wrapH = s.height / PT;
-  if (Math.abs(wrapW - fit.wrapW) > 0.05 || Math.abs(wrapH - fit.wrapH) > 0.05) {
-    throw new Error(`The cover file is ${wrapW.toFixed(2)} × ${wrapH.toFixed(2)} in, but a ${size} ${isHardcover(cover) ? 'hardbound' : 'softcover'} cover with ${pageCount} pages should be ${fit.wrapW.toFixed(2)} × ${fit.wrapH.toFixed(2)} in. Check the page count.`);
+  const spineIn = spineFromWrapWidth(size, cover, wrapW);
+  const shouldBe = coverWrapGeometry(size, pageCount, cover, { material }).wrap;
+  const thinnest = spineForLeaf(pageCount, cover, Math.min(leafInches('glossy'), leafInches('matte')));
+  const thickest = spineForLeaf(pageCount, cover, LEGACY_LEAF_IN);
+  if (spineIn < thinnest - 0.05 || spineIn > thickest + 0.05 || Math.abs(wrapH - shouldBe.hIn) > 0.05) {
+    throw new Error(`The cover file is ${wrapW.toFixed(2)} × ${wrapH.toFixed(2)} in, but a ${size} ${isHardcover(cover) ? 'hardbound' : 'softcover'} cover with ${pageCount} pages should be ${shouldBe.wIn.toFixed(2)} × ${shouldBe.hIn.toFixed(2)} in. Check the page count.`);
   }
+  const fit = coverOnSheet(size, cover, pageCount, { spineIn });
+  if (!fit.fits) throw new Error(`This cover can't go on one ${PRESS_SHEET.wIn} × ${PRESS_SHEET.hIn} sheet. ${fit.reason}`);
 
   const out = await PDFDocument.create();
   out.setTitle(`${orderLabel} — cover sheet`);
@@ -425,7 +439,7 @@ export async function imposeCoverSheet(
     }
   }
   const kind = isHardcover(cover) ? 'hardbound' : 'softcover';
-  const txt = `${orderLabel} · cover · ${size} ${kind} · ${pageCount} pages · print ONE side · dashed = spine edges`;
+  const txt = `${orderLabel} · cover · ${size} ${kind} · ${pageCount} pages · spine ${spineLabel(spineIn)} · print ONE side · dashed = spine edges`;
   // Along the paper's printable edge, clear of the marks: above the cover when
   // that band holds a mark and the text, else down the left side, a quarter of
   // the way along (the corners and the spine have marks).
@@ -433,7 +447,7 @@ export async function imposeCoverSheet(
   const len = words.widthIn(txt, 7);
   if (fit.y - u >= MARK_GAP + MARK_LEN + cap + 0.1) await words.write(sheet, txt, u + 0.3, u + cap + 0.02, 7);
   else await words.write(sheet, txt, u + cap + 0.02, fit.y + fit.h / 4 + len / 2, 7, { vertical: true });
-  return { bytes: await saveNoFonts(out), wrapWIn: wrapW, wrapHIn: wrapH };
+  return { bytes: await saveNoFonts(out), wrapWIn: wrapW, wrapHIn: wrapH, spineIn };
 }
 
 /**
