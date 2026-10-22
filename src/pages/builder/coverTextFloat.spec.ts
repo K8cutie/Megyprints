@@ -15,7 +15,8 @@ import { resolve } from 'node:path';
    ══════════════════════════════════════════════════════════════════════════ */
 
 vi.mock('../../lib/authContext', () => ({ useAuth: () => ({ user: null }) }));
-vi.mock('../../lib/supabase', () => ({ supabase: { auth: { getSession: async () => ({ data: { session: null } }) } } }));
+// onAuthStateChange: passwordRecovery.ts (reached through the sign-in boxes) listens from import.
+vi.mock('../../lib/supabase', () => ({ supabase: { auth: { getSession: async () => ({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) } } }));
 vi.mock('../../lib/useIndexedDBPhotos', () => {
   const idb = {
     store: async () => null, get: async () => null, getMany: async () => new Map(),

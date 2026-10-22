@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useMemo } from 'react
 import type { ReactNode } from 'react';
 import LoginModal from '../pages/auth/LoginModal';
 import SignupModal from '../pages/auth/SignupModal';
+import NewPasswordModal from '../pages/auth/NewPasswordModal';
 
 /* Global auth-modal controller. The Login/Signup modals live here (rendered once
    at the app root, above everything) so ANY surface — the soft sign-in nudge, the
@@ -17,9 +18,11 @@ interface AuthModalValue {
 const AuthModalContext = createContext<AuthModalValue | undefined>(undefined);
 
 export function AuthModalProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<'login' | 'signup' | null>(null);
+  // 'forgot' = sign-in opened on "Forgot your password?" (an expired reset link).
+  const [mode, setMode] = useState<'login' | 'forgot' | 'signup' | null>(null);
   const openLogin = useCallback(() => setMode('login'), []);
   const openSignup = useCallback(() => setMode('signup'), []);
+  const openForgot = useCallback(() => setMode('forgot'), []);
   const closeAuthModal = useCallback(() => setMode(null), []);
   const value = useMemo(
     () => ({ openLogin, openSignup, closeAuthModal }),
@@ -29,8 +32,14 @@ export function AuthModalProvider({ children }: { children: ReactNode }) {
   return (
     <AuthModalContext value={value}>
       {children}
-      <LoginModal isOpen={mode === 'login'} onClose={closeAuthModal} onSwitchToSignup={openSignup} />
+      <LoginModal
+        isOpen={mode === 'login' || mode === 'forgot'}
+        startOnForgot={mode === 'forgot'}
+        onClose={closeAuthModal}
+        onSwitchToSignup={openSignup}
+      />
       <SignupModal isOpen={mode === 'signup'} onClose={closeAuthModal} onSwitchToLogin={openLogin} />
+      <NewPasswordModal onAskForNewLink={openForgot} />
     </AuthModalContext>
   );
 }
