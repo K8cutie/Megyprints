@@ -14,7 +14,7 @@ import { bindingEdge, marginForTemplate } from './binding';
    old "container mode" wrote PERCENT OF THE CANVAS into these fields while
    the renderers read fractions of the safe area: it never worked.)
 
-   The safe area already excludes the page margin AND the 0.5" binding
+   The safe area already excludes the page margin AND the 3/8" binding
    keep-out on the spine edge, so clamping to [0, 1] is what keeps a frame out
    of the spine and off the trim. The 2" print floor is the third rule.
    Rotation is not part of the space: no renderer prints it.

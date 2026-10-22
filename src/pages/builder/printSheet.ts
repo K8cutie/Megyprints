@@ -24,7 +24,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { ALBUM_SIZES, COVERS, type AlbumSizePreset, type CoverType } from './types';
-import { PRINTER_SPEC, coverWrapGeometry, isHardcover } from './coverGeometry';
+import { PRINTER_SPEC, coverWrapGeometry, isHardcover, type CoverPaper } from './coverGeometry';
 import { MIN_PAGES, SIZE_LABELS } from '../../lib/pricing';
 import type { PageOneSide } from './binding';
 
@@ -304,8 +304,8 @@ export interface CoverOnSheet {
  * 1/16" past its trim; a hardcover's fold-over may run into the white edge,
  * but 1/4" past the trim must print so the art wraps the board's edge.
  */
-export function coverOnSheet(size: AlbumSizePreset, cover: CoverType, pageCount: number): CoverOnSheet {
-  const g = coverWrapGeometry(size, pageCount, cover);
+export function coverOnSheet(size: AlbumSizePreset, cover: CoverType, pageCount: number, paper: CoverPaper = {}): CoverOnSheet {
+  const g = coverWrapGeometry(size, pageCount, cover, paper);
   const hard = isHardcover(cover);
   const wrapW = g.wrap.wIn;
   const wrapH = g.wrap.hIn;
@@ -338,24 +338,26 @@ export function coverOnSheet(size: AlbumSizePreset, cover: CoverType, pageCount:
   };
 }
 
-/** Can this size + cover be printed at this page count? */
-export function coverFitsSheet(size: AlbumSizePreset, cover: CoverType, pageCount: number): boolean {
-  return coverOnSheet(size, cover, pageCount).fits;
+/** Can this size + cover be printed at this page count? With no finish
+ *  given, the spine is the matte one: the thicker paper, so a yes holds for
+ *  either finish. */
+export function coverFitsSheet(size: AlbumSizePreset, cover: CoverType, pageCount: number, paper: CoverPaper = {}): boolean {
+  return coverOnSheet(size, cover, pageCount, paper).fits;
 }
 
 /** What checkout says when a cover is left out, in plain words — or null when
  *  every cover fits. `available` = the covers that fit this album. */
-export function coverChoiceNote(size: AlbumSizePreset, pageCount: number, available: CoverType[]): string | null {
+export function coverChoiceNote(size: AlbumSizePreset, pageCount: number, available: CoverType[], paper: CoverPaper = {}): string | null {
   const off = COVERS.filter((c) => !available.includes(c.type));
   if (!off.length) return null;
   if (!available.length) {
-    const most = COVERS.map((c) => maxPagesForCover(size, c.type, MIN_PAGES)).filter((n): n is number => n !== null);
+    const most = COVERS.map((c) => maxPagesForCover(size, c.type, MIN_PAGES, paper)).filter((n): n is number => n !== null);
     return most.length
       ? `This album has too many pages for our printer. Make it ${Math.max(...most)} pages or fewer.`
       : 'We can\'t print this album size right now.';
   }
   const names = off.map((c) => c.name).join(' and ');
-  const never = off.every((c) => !coverFitsSheet(size, c.type, MIN_PAGES));
+  const never = off.every((c) => !coverFitsSheet(size, c.type, MIN_PAGES, paper));
   return never
     ? `${names} is not available for ${SIZE_LABELS[size]} albums. The cover is too big for our printer.`
     : `${names} is not available for an album with ${pageCount} pages. The cover is too big for our printer.`;
@@ -364,11 +366,11 @@ export function coverChoiceNote(size: AlbumSizePreset, pageCount: number, availa
 /** The most pages this size + cover can have and still fit the sheet, or null
  *  when it never fits. The spine only grows with pages, so the first page
  *  count that doesn't fit ends the search. */
-export function maxPagesForCover(size: AlbumSizePreset, cover: CoverType, minPages: number, upTo = 1000): number | null {
-  if (!coverFitsSheet(size, cover, minPages)) return null;
+export function maxPagesForCover(size: AlbumSizePreset, cover: CoverType, minPages: number, paper: CoverPaper = {}, upTo = 1000): number | null {
+  if (!coverFitsSheet(size, cover, minPages, paper)) return null;
   let last = minPages;
   for (let p = minPages + 1; p <= upTo; p++) {
-    if (!coverFitsSheet(size, cover, p)) return last;
+    if (!coverFitsSheet(size, cover, p, paper)) return last;
     last = p;
   }
   return last;

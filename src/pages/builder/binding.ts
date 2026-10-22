@@ -1,8 +1,8 @@
 /**
  * binding.ts — Binding (gutter) keep-out for double-sided, back-to-back pages.
  * ============================================================================
- * The book is bound down the spine, so the 0.5" keep-out sits on each page's
- * INNER edge (mirrored margins).
+ * The book is bound down the spine, so the keep-out (BINDING_INCHES) sits on
+ * each page's INNER edge (mirrored margins).
  *
  * PAGE 1 IS A RIGHT-HAND PAGE (owner, 2026-10-21: "Cover then as you flip the
  * cover its Page 1 at once"). Open the cover and page 1 is the first page you
@@ -15,7 +15,12 @@
  * auto-placed photos/slots never land in the spine.
  */
 
-export const BINDING_INCHES = 0.5;
+/** The binding side allowance: 3/8" (owner, 2026-10-22: "gawin mo lng .375
+ *  yung binding side allowance"; it was 0.5"). Every renderer, guide, frame
+ *  guardrail and template reads it from here. Frames are stored as fractions
+ *  of the safe area, so albums already in progress just grow a little toward
+ *  the spine. */
+export const BINDING_INCHES = 0.375;
 
 /** Which side of the open book page 1 is on. Every album is 'right' now.
  *  Print files made before 2026-10-21 put page 1 on the LEFT (a blank page
@@ -29,7 +34,7 @@ export const PAGE_ONE_RIGHT_MARK = 'megy-page1-right';
 
 interface Margin { top: number; bottom: number; left: number; right: number; }
 
-/** 0.5" binding reserve as a fraction of the page WIDTH for this album size. */
+/** The binding reserve as a fraction of the page WIDTH for this album size. */
 export function bindingMarginFraction(albumSize: string): number {
   const widthIn = parseFloat(String(albumSize).split('x')[0]) || 8;
   return BINDING_INCHES / widthIn;

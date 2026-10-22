@@ -2266,7 +2266,7 @@ function renderScene(
     canvas.sendToBack(rightLabel);
   }
 
-  // ── Binding (gutter) keep-out guide — the 0.5" spine reserve on the inner edge ──
+  // ── Binding (gutter) keep-out guide — the 3/8" spine reserve (BINDING_INCHES) on the inner edge ──
   // Skipped on cover panels (no interior gutter).
   if (!coverMode) {
     const bFrac = bindingMarginFraction(albumSize);
