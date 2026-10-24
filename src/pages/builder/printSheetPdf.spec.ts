@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import type { AlbumSizePreset, CoverType } from './types';
 import { trimInches, sheetPlan } from './printSheet';
 import { coverWrapGeometry } from './coverGeometry';
-import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, printFilePageOne, cleanPrintFile, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES, type TextPainter } from './printSheetPdf';
+import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, printFilePageOne, cleanPrintFile, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES, PIECE_NUMBER, type TextPainter } from './printSheetPdf';
 import { PAGE_ONE_RIGHT_MARK } from './binding';
 
 /** Words as pictures, as the console draws them (canvasTextPainter needs a
@@ -72,6 +72,28 @@ async function coverPdf(size: AlbumSizePreset, cover: CoverType, pages: number):
 }
 
 describe('press sheet PDFs', () => {
+  /* Owner, 2026-10-24: "once its cut the order of pages gets jumbled. Is it
+     possible to put a number on the bleed or the binding side like 1, 2, 3". */
+  it('numbers every piece 1, 2, 3… through the book, small and grey, once each', async () => {
+    for (const [size, pages, leaves] of [['6x6', 40, 20], ['6x4', 41, 21], ['8x8', 45, 23]] as const) {
+      drawn.length = 0;
+      const { plan } = await imposeAlbumSheets(await albumPdf(size, pages, 0.125, true), size, 'MP-NUM', T);
+      expect(plan.leaves, size).toBe(leaves);
+      const numbers = drawn.filter((t) => /^\d+$/.test(t)).map(Number).sort((a, b) => a - b);
+      expect(numbers, size).toEqual(Array.from({ length: leaves }, (_, i) => i + 1));
+    }
+    expect(PIECE_NUMBER).toEqual({ pt: 6, color: '#7A7A7A', fromSpineIn: 0.03 });
+    // Inside the first 1/8" of the binding side: the strip that goes into the glue.
+    expect(PIECE_NUMBER.fromSpineIn + PIECE_NUMBER.pt / 72).toBeLessThanOrEqual(0.125);
+  });
+
+  it('an older file (blank first side) numbers its pieces the same way: the blank-fronted piece is 1', async () => {
+    drawn.length = 0;
+    const { plan } = await imposeAlbumSheets(await albumPdf('8x8', 40), '8x8', 'MP-OLD', T);
+    expect(plan.leaves).toBe(21);
+    expect(drawn.filter((t) => /^\d+$/.test(t)).map(Number).sort((a, b) => a - b)).toEqual(Array.from({ length: 21 }, (_, i) => i + 1));
+  });
+
   it('lays a 40-page 6x6 album on 4 sheets (12 pages a sheet): 8 pages of 12.5 × 19 in, front then back', async () => {
     const { bytes, plan, sourceBleedIn } = await imposeAlbumSheets(await albumPdf('6x6', 40), '6x6', 'MP-TEST', T);
     expect(sourceBleedIn).toBe(0.125);

@@ -98,10 +98,11 @@ export function blankSidesNote(pageCount: number, pageOne: PageOneSide): string 
   return last ? `${start}; the last side is blank${first ? ' too' : ''}` : start;
 }
 
-/** How to stack the cut pieces (owner, 2026-10-22: the sheets are in page
- *  order now, sheet 1 holds pages 1, 2, 3…). */
+/** How to stack the cut pieces: every piece's front carries its number at
+ *  the spine edge (owner, 2026-10-24: "once its cut the order of pages gets
+ *  jumbled"). */
 export function stackHowTo(pieces: number): string {
-  return `cut each sheet into ${pieces} ${pieces === 1 ? 'piece' : 'pieces'}, stack them front up in page order: left to right, top to bottom, sheet 1's on top`;
+  return `cut each sheet into ${pieces} ${pieces === 1 ? 'piece' : 'pieces'}, stack them front up by the small number at the spine edge: 1 on top, then 2, 3…`;
 }
 
 /** What to tell the operator about the album sheets (sheet count, blank
@@ -162,7 +163,8 @@ export function jpegHowTo(o: PrintOrder, sheets: number, pieces: number, cover: 
     `then ${name(3, 'front', 2)} on the front of the next sheet, and so on.`,
     'Every sheet has a picture on both sides. Never print a picture on a sheet by itself.',
     `Cut each sheet on the marks into ${pieces} ${pieces === 1 ? 'piece' : 'pieces'}. The pages are in order: sheet 1 has the first ones.`,
-    'Stack the pieces front side up in page order: left to right, top to bottom, sheet 1\'s on top, then sheet 2\'s, and so on.',
+    'Every piece has its number (1, 2, 3...) printed small on its front, at the spine edge.',
+    'Stack the pieces front side up by that number: 1 on top, then 2, 3, and so on. No number showing = the piece is back side up.',
     `${blankSides}.`,
     '',
     cover
