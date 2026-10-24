@@ -84,7 +84,6 @@ function SizeCard({ size, selected, onSelect }: {
       <p className="text-[11px] text-taupe leading-relaxed">
         {size.preset === '6x6' && 'Perfect for small gifts & keepsakes'}
         {size.preset === '8x8' && 'Great for travel & everyday memories'}
-        {size.preset === '9x9' && 'Bold statement piece for special occasions'}
         {size.preset === '6x4' && 'Compact landscape for panoramas'}
         {size.preset === '8x6' && 'Roomy landscape for scenery & prints'}
         {size.preset === '6x8' && 'Tall portrait for people & keepsakes'}

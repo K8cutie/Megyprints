@@ -18,7 +18,7 @@ seedMathRandom(); // same albums every run (generateAlbum deals with Math.random
    not invent an orientation, and the generator must never cross one.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
+const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
 
 const photo = (id: number, w: number, h: number): UploadedPhoto => ({
   id: `p${id}`, previewUrl: '', name: `p${id}.jpg`, type: 'image/jpeg',

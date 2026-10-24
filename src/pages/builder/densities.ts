@@ -18,14 +18,13 @@ import type { AlbumSizePreset } from './types';
 // was a tsc-invisible size surface before the structural audit).
 export const DENSITY_BY_SIZE: Record<AlbumSizePreset, number[]> = {
   '6x4': [1, 2],
-  // The three SQUARE sizes share one authored layout set (squareTemplates.ts).
+  // The two SQUARE sizes share one authored layout set (squareTemplates.ts).
   // Since 2026-09-12 it deals box-free 4-up pages: a 2×2 grid on every square
-  // size, plus hero + three on 8x8/9x9. 4 is the deck max, so the picker may
+  // size, plus hero + three on 8x8. 4 is the deck max, so the picker may
   // offer it (a density the deck can't deal would be silently dealt lower and
   // throw off the pre-generation page estimate).
   '6x6': [1, 2, 3, 4],
   '8x8': [1, 2, 3, 4],
-  '9x9': [1, 2, 3, 4],
   // 8×6 / 6×8 are authored per-size (rectTemplates.ts); their densest layout is
   // the box-free 2×2 quad-grid, so the picker caps at 4. Offering a density the
   // deck can't deal would silently deal fewer and throw off the pre-generation
@@ -85,7 +84,7 @@ const NATURAL_BY_SIZE: Record<AlbumSizePreset, number> = {
   // opt-in "Collage" density, and a natural of 4 would move the fill-mode
   // threshold to 160 photos — spreading today's 120-159-photo albums to 1/page.
   '6x4': 2,
-  '8x6': 3, '6x8': 3, '6x6': 3, '8x8': 3, '9x9': 3, '11.5x8': 3, '8.5x11': 3,
+  '8x6': 3, '6x8': 3, '6x6': 3, '8x8': 3, '11.5x8': 3, '8.5x11': 3,
 };
 export function naturalPerPage(albumSize: string): number {
   // Loose-string read on purpose (see densityRangeLabel) — table stays strict.

@@ -448,7 +448,7 @@ export interface CoverSheetResult {
 /**
  * Put the flat cover on one sheet: centred, turned to run along the 19 in
  * side, with cut marks at its trim and fold marks at the spine. Throws with
- * the plain reason when the cover can't fit (e.g. 9x9 hardbound).
+ * the plain reason when the cover can't fit (e.g. 8.5x11 hardbound).
  *
  * The spine is read from the cover file's width, so the fold marks land on
  * the spine it was drawn with: files made since 2026-10-22 for C2S 140

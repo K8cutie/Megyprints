@@ -4,16 +4,16 @@ import { fill, rsBox, STD, ALBUM_INCHES, MIN_FRAME_INCHES, gutterFrac } from './
 import { BINDING_INCHES } from './binding';
 
 /** ══════════════════════════════════════════════════════════════════════════
- *  SQUARE ALBUM LAYOUTS — one builder for every square size (6×6, 8×8, 9×9).
+ *  SQUARE ALBUM LAYOUTS — one builder for every square size (6×6, 8×8).
  *
  *  A square page's layouts are pure FRACTIONS, so the same composition is valid
  *  at every square size — only the physical inches change (a 2/3 hero column is
- *  4" on a 6×6 but 6" on a 9×9). The bigger sizes are strictly SAFER on the 2"
+ *  4" on a 6×6 but 5.33" on an 8×8). The bigger size is are strictly SAFER on the 2"
  *  print floor: the tightest frame here is the 6×6's 1/3 column at exactly 2.00",
- *  which becomes 2.67" on 8×8 and 3.00" on 9×9.
+ *  which becomes 2.67" on 8×8.
  *
  *  Two things are genuinely size-dependent, and only two:
- *   • the id prefix (t66 / t88 / t99) so ids stay unique across the registry;
+ *   • the id prefix (t66 / t88) so ids stay unique across the registry;
  *   • the 1mm gutter, taken as a fraction of THIS size's page inches so it
  *     prints 1mm physical on every size, not a fixed fraction.
  *  Everything else — the fill() fractions, ratios, names — is shared verbatim.
@@ -35,7 +35,7 @@ import { BINDING_INCHES } from './binding';
 
 const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 
-const PREFIX: Record<string, string> = { '6x6': 't66', '8x8': 't88', '9x9': 't99' };
+const PREFIX: Record<string, string> = { '6x6': 't66', '8x8': 't88' };
 
 type TrioVariant = 'left' | 'right' | 'top' | 'bottom';
 type QuadVariant = TrioVariant;
@@ -101,8 +101,8 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
   /* ── 4 SQUARE photos, full bleed 2×2 grid — no box ──────────────────────
      The photo-only page a square album lacked (2026-09-12: quotes on most
      pages read as filler). Four exact 1:1 cells; the gutter is split evenly
-     on both axes. Cells are (page − 1mm) / 2: 2.97" on 6×6, 3.97" on 8×8,
-     4.47" on 9×9 — every size clears the 2" floor, and the inner column
+     on both axes. Cells are (page − 1mm) / 2: 2.97" on 6×6, 3.97" on 8×8 —
+     both clear the 2" floor, and the inner column
      still clears it after the 0.5" spine reserve (6×6: 2.72"). */
   const fbQuadGrid = (suffix: string, name: string, gap: number): PageTemplate => {
     const far = 1 / 2 + gap / 2, sideLen = 1 / 2 - gap / 2;
@@ -123,7 +123,7 @@ export function buildSquareTemplates(size: AlbumSizePreset): PageTemplate[] {
      floor-critical strip); the two gutters inside the strip shave each cell
      by 1mm, a <2% drift off 1:1 — far inside the crop budget. Offered only
      where a 1/3 cell clears the 2" floor after the spine reserve, i.e. the
-     same gate as the side trios (8×8 = 2.50", 9×9 = 2.83"; 6×6 = 1.83" → no). */
+     same gate as the side trios (8×8 = 2.50"; 6×6 = 1.83" → no). */
   const quadSlots = (v: QuadVariant, gap: number): PageTemplate['slots'] => {
     const r: PhotoRatio = v === 'left' || v === 'right' ? '2:3' : '3:2';
     const heroLong = 2 / 3 - gap;

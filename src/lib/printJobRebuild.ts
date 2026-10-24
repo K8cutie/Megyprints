@@ -28,6 +28,7 @@ import { DRAFT_STORAGE_KEY } from './localDraft';
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, CoverDesign } from '../pages/builder/types';
 import type { StoredPhoto } from './useIndexedDBPhotos';
 import { normalizeStoredPageFields, storedCoverPage } from '../pages/builder/pageNormalize';
+import { liveAlbumSize, liftRetiredPages } from '../pages/builder/retiredSizes';
 import { withLiveCoverPhoto } from '../pages/builder/coverPhoto';
 import { missingPhotos } from './photoPresence';
 
@@ -119,10 +120,10 @@ export async function rebuildPrintJobFromAlbum(
   }
   if (!album) return null;
 
-  const rawPages = Array.isArray(album.pages) ? album.pages : [];
+  const rawPages = Array.isArray(album.pages) ? liftRetiredPages(album.pages) : [];
   if (rawPages.length === 0) return null;
 
-  const albumSize = (album.album_size as AlbumSizePreset) ?? '8x8';
+  const albumSize = (liveAlbumSize(album.album_size) ?? '8x8') as AlbumSizePreset;
   const pages: AlbumPage[] = rawPages.map((p: any, idx: number) => {
     const np = normalizeStoredPage(p);
     return {

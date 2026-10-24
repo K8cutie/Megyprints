@@ -1,11 +1,12 @@
 -- ════════════════════════════════════════════════════════════════════════════
 --  MEGY PRINTS — PRESS SHEET PROOF (0046; live, always rolled back)
 --
---  As a real customer (RLS on, the way checkout inserts): a 9x9 hardbound
---  order is refused (MP005), also when the request claims 8x8 for a 9x9 album;
---  9x9 softcover and 8x8 hardbound go through. Plus the new pages-per-sheet
---  and the triggers in place. The script ends by raising, so NOTHING is
---  written; the report is the error message.
+--  As a real customer (RLS on, the way checkout inserts): an 8.5x11 hardbound
+--  order is refused (MP005), also when the request claims 8x8 for an 8.5x11
+--  album; 8.5x11 softcover and 8x8 hardbound go through. Plus the
+--  pages-per-sheet (0046, then 0050 / 0052) and the triggers in place. (It
+--  used 9x9 until 9x9 was removed: 0053 refuses every 9x9 order.) The script
+--  ends by raising, so NOTHING is written; the report is the error message.
 --
 --  HOW TO RUN:
 --    npx supabase db query --linked --file supabase/security/press-sheet-proof.sql
@@ -28,13 +29,13 @@ begin
   select sizes into s from public.pricing_model where id = 1;
   insert into proof_log(line) values ('pps ' || (select string_agg(key || '=' || (value->>'pps'), ' ' order by key) from jsonb_each(s)));
   insert into proof_log(line) values (case
-    when (s->'6x4'->>'pps')::int = 12 and (s->'6x6'->>'pps')::int = 6 and (s->'8x6'->>'pps')::int = 6
-     and (s->'6x8'->>'pps')::int = 6 and (s->'8x8'->>'pps')::int = 4 and (s->'9x9'->>'pps')::int = 4
+    when (s->'6x4'->>'pps')::int = 18 and (s->'6x6'->>'pps')::int = 12 and (s->'8x6'->>'pps')::int = 8
+     and (s->'6x8'->>'pps')::int = 8 and (s->'8x8'->>'pps')::int = 4
      and (s->'11.5x8'->>'pps')::int = 4 and (s->'8.5x11'->>'pps')::int = 4
     then 'PASS pages per sheet = printSheet.ts' else 'FAIL pages per sheet' end);
   insert into proof_log(line) values (case
-    when (s->'9x9'->>'hb')::numeric = 380 and (s->'9x9'->>'surcharge')::numeric = 150
-    then 'PASS other size settings untouched' else 'FAIL other size settings changed: ' || (s->'9x9')::text end);
+    when (s->'8.5x11'->>'hb')::numeric = 500 and (s->'8.5x11'->>'surcharge')::numeric = 300
+    then 'PASS other size settings untouched' else 'FAIL other size settings changed: ' || (s->'8.5x11')::text end);
 
   select u.id into v_user from auth.users u
    where not exists (select 1 from public.orders o where o.user_id = u.id and o.status = 'pending_payment' and o.payment_status = 'unpaid')
@@ -53,32 +54,32 @@ declare
 begin
   begin
     insert into public.orders (user_id, album_snapshot, album_size, cover, page_count, material, ship_name, ship_phone, ship_address, ship_zip, ship_region, ship_province, ship_city, ship_barangay, ship_street)
-    values (v_user, '{"album_size":"9x9"}', '9x9', 'hardboundLeather', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
-    insert into proof_log(line) values ('FAIL a 9x9 hardbound order was accepted');
+    values (v_user, '{"album_size":"8.5x11"}', '8.5x11', 'hardboundLeather', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
+    insert into proof_log(line) values ('FAIL an 8.5x11 hardbound order was accepted');
   exception when sqlstate 'MP005' then
-    insert into proof_log(line) values ('PASS 9x9 hardbound refused: ' || sqlerrm);
+    insert into proof_log(line) values ('PASS 8.5x11 hardbound refused: ' || sqlerrm);
   end;
   begin
     insert into public.orders (user_id, album_snapshot, album_size, cover, page_count, material, ship_name, ship_phone, ship_address, ship_zip, ship_region, ship_province, ship_city, ship_barangay, ship_street)
-    values (v_user, '{"album_size":"9x9"}', '8x8', 'hardboundLeather', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
-    insert into proof_log(line) values ('FAIL a 9x9 album sent as 8x8 hardbound was accepted');
+    values (v_user, '{"album_size":"8.5x11"}', '8x8', 'hardboundLeather', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
+    insert into proof_log(line) values ('FAIL an 8.5x11 album sent as 8x8 hardbound was accepted');
   exception when sqlstate 'MP005' then
-    insert into proof_log(line) values ('PASS a 9x9 album claiming 8x8 is refused too');
+    insert into proof_log(line) values ('PASS an 8.5x11 album claiming 8x8 is refused too');
   end;
   begin
-    -- album_size is free text: another spelling of 9x9 is still 9x9.
+    -- album_size is free text: another spelling of 8.5x11 is still 8.5x11.
     insert into public.orders (user_id, album_snapshot, album_size, cover, page_count, material, ship_name, ship_phone, ship_address, ship_zip, ship_region, ship_province, ship_city, ship_barangay, ship_street)
-    values (v_user, '{"album_size":" 9X9"}', ' 9X9', 'hardboundLeather', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
-    insert into proof_log(line) values ('FAIL another spelling of 9x9 (" 9X9") hardbound was accepted');
+    values (v_user, '{"album_size":" 8.5X11"}', ' 8.5X11', 'hardboundLeather', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
+    insert into proof_log(line) values ('FAIL another spelling of 8.5x11 (" 8.5X11") hardbound was accepted');
   exception when sqlstate 'MP005' then
-    insert into proof_log(line) values ('PASS another spelling of 9x9 is refused too');
+    insert into proof_log(line) values ('PASS another spelling of 8.5x11 is refused too');
   end;
   begin
     insert into public.orders (user_id, album_snapshot, album_size, cover, page_count, material, ship_name, ship_phone, ship_address, ship_zip, ship_region, ship_province, ship_city, ship_barangay, ship_street)
-    values (v_user, '{"album_size":"9x9"}', '9x9', 'softcover', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
-    insert into proof_log(line) values ('PASS 9x9 softcover accepted');
+    values (v_user, '{"album_size":"8.5x11"}', '8.5x11', 'softcover', 40, 'matte', 'Zz Probe', '+639170000000', '1 Probe St, Probe City', '0000', 'NCR', 'Metro Manila', 'Probe City', 'Probe', '1 Probe St');
+    insert into proof_log(line) values ('PASS 8.5x11 softcover accepted');
   exception when others then
-    insert into proof_log(line) values ('FAIL 9x9 softcover refused: ' || sqlstate || ' ' || sqlerrm);
+    insert into proof_log(line) values ('FAIL 8.5x11 softcover refused: ' || sqlstate || ' ' || sqlerrm);
   end;
   begin
     insert into public.orders (user_id, album_snapshot, album_size, cover, page_count, material, ship_name, ship_phone, ship_address, ship_zip, ship_region, ship_province, ship_city, ship_barangay, ship_street)
@@ -96,10 +97,10 @@ declare
   r text;
 begin
   insert into proof_log(line)
-  select 'info: 9x9 hardbound orders placed before 0046 (untouched): ' || count(*) from public.orders
-   where album_size = '9x9' and cover <> 'softcover' and created_at < now() - interval '1 minute';
+  select 'info: 8.5x11 hardbound orders placed before 0046 (untouched): ' || count(*) from public.orders
+   where album_size = '8.5x11' and cover <> 'softcover' and created_at < now() - interval '1 minute';
   insert into proof_log(line)
-  select 'info: event deals already 9x9 hard: ' || count(*) from public.event_bookings where deal_album_size = '9x9' and deal_cover = 'hard';
+  select 'info: event deals already 8.5x11 hard: ' || count(*) from public.event_bookings where deal_album_size = '8.5x11' and deal_cover = 'hard';
   insert into proof_log(line)
   select case when count(*) = 2 then 'PASS both triggers in place' else 'FAIL triggers: ' || coalesce(string_agg(tgname, ', '), 'none') end
     from pg_trigger where tgname in ('orders_press_fit_trg', 'event_bookings_press_fit_trg');

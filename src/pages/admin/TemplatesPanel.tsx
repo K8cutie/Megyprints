@@ -11,7 +11,7 @@ import { PAGE_TEMPLATES } from '../builder/pageTemplates';
 import type { AlbumSizePreset } from '../builder/types';
 import TemplateThumb from '../builder/TemplateThumb';
 
-const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
+const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
 
 export default function TemplatesPanel() {
   const [states, setStates] = useState<Map<string, TemplateState>>(new Map());
@@ -49,7 +49,7 @@ export default function TemplatesPanel() {
   // Turn the CURRENTLY SELECTED album size on/off for customers. Guarded so the
   // store can never end up with zero sizes offered (mirrors the Pricing panel).
   const toggleSelectedSize = async () => {
-    const enabledCount = SIZES.length - disabled.length;
+    const enabledCount = SIZES.filter((s) => !disabled.includes(s)).length;
     if (!selectedDisabled && enabledCount <= 1) {
       setSizeMsg('Keep at least one size on for customers.');
       return;

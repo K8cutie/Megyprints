@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { generateAlbum, dealAlbumBoxes, DEAL_BANK_QUOTES, QUOTE_CADENCE, type BoxContentOptions } from './generateAlbum';
 import type { UploadedPhoto } from './types';
-import { seedMathRandom } from '../../test/seededRandom';
+import { seedMathRandom, mulberry32, TEST_SEED } from '../../test/seededRandom';
 
 seedMathRandom(); // same albums every run (generateAlbum deals with Math.random)
 
@@ -33,8 +33,12 @@ const OFF: BoxContentOptions = {
 };
 
 describe('making the album with bank quotes off', () => {
+  // Built while the file loads, before seedMathRandom's beforeEach, so it
+  // takes the seed here: unseeded, about 1 album in 15 had too few quote boxes.
+  const seeded = vi.spyOn(Math, 'random').mockImplementation(mulberry32(TEST_SEED));
   const pages = generateAlbum(roll(120), '8x8', undefined);
   dealAlbumBoxes(pages, OFF);
+  seeded.mockRestore();
   const quoteBoxPages = pages.filter((p) => (p.textSlotRoll ?? []).includes('quote'));
 
   it('the switch is off (the owner turned the bank off for boxes)', () => {

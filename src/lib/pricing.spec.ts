@@ -32,7 +32,6 @@ const MODEL: PricingModel = {
     '6x8':    { pps: 4,  hb: 350, surcharge: 0 },
     '6x6':    { pps: 12, hb: 280, surcharge: 0 },
     '8x8':    { pps: 4,  hb: 350, surcharge: 0 },
-    '9x9':    { pps: 4,  hb: 380, surcharge: 150 },
     '11.5x8': { pps: 4,  hb: 450, surcharge: 300 },
     '8.5x11': { pps: 4,  hb: 500, surcharge: 300 },
   },
@@ -307,13 +306,13 @@ describe('pricing invariants', () => {
   });
 
   it('same-cost sizes differ by exactly their size premium', () => {
-    // 9x9 and 8x8 share pps, so their interior cost is identical — the whole
-    // price gap must be the premium and nothing else.
+    // 11.5x8 and 8x8 share pps, so their softcover cost is identical — the
+    // whole price gap must be the premium and nothing else.
     for (const pages of PAGE_COUNTS) {
-      expect(costOf(MODEL, '9x9', 'soft', pages)).toBe(costOf(MODEL, '8x8', 'soft', pages));
-      const diff = ownerPriceOf(MODEL, '9x9', 'soft', pages, 3)
+      expect(costOf(MODEL, '11.5x8', 'soft', pages)).toBe(costOf(MODEL, '8x8', 'soft', pages));
+      const diff = ownerPriceOf(MODEL, '11.5x8', 'soft', pages, 3)
         - ownerPriceOf(MODEL, '8x8', 'soft', pages, 3);
-      expect(diff).toBe(MODEL.sizes['9x9'].surcharge - MODEL.sizes['8x8'].surcharge);
+      expect(diff).toBe(MODEL.sizes['11.5x8'].surcharge - MODEL.sizes['8x8'].surcharge);
     }
   });
 
@@ -437,10 +436,10 @@ describe('the crossed-out "was" price (0041)', () => {
     expect(scheduleFrom({ ...LIVE, compare_multiple: 2 }, 2.5, [], '2026-10-08').compare_at).toBeUndefined();
   });
 
-  it('the owner\'s 2026-10-08 list: 8×8 hardbound ₱2,510 → ₱1,788, 9×9 ₱2,780 → ₱2,013, 8×8 softcover ₱1,710 → ₱1,288', () => {
+  it('the owner\'s 2026-10-08 list: 8×8 hardbound ₱2,510 → ₱1,788, 8×8 softcover ₱1,710 → ₱1,288 (9×9 since removed)', () => {
     const live = { ...MODEL, sheet_cost: 26.5, hosting_reserve: 50 };
     const schedule = scheduleFrom({ ...live, shipping_allowance: 200, compare_multiple: 4, compare_until: '2026-12-31' }, 2.5, [], '2026-10-08');
-    const cases: [AlbumSizePreset, Binding, number, number][] = [['8x8', 'hard', 2510, 1788], ['9x9', 'hard', 2780, 2013], ['8x8', 'soft', 1710, 1288], ['6x6', 'hard', 1594, 1215]];
+    const cases: [AlbumSizePreset, Binding, number, number][] = [['8x8', 'hard', 2510, 1788], ['8x8', 'soft', 1710, 1288], ['6x6', 'hard', 1594, 1215]];
     for (const [size, binding, was, now] of cases) {
       expect(priceOf(schedule, size, binding, 40), `${size} ${binding} now`).toBe(now);
       expect(compareAtPriceOf(schedule, size, binding, 40, '2026-10-08'), `${size} ${binding} was`).toBe(was);

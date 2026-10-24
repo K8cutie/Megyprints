@@ -206,12 +206,12 @@ describe('press sheet PDFs', () => {
     await expect(imposeAlbumSheets(await albumPdf('8x8', 40), '6x6', 'MP-X', T)).rejects.toThrow(/not 6x6 pages/);
   });
 
-  it('puts a fitting cover on one sheet and refuses a 9x9 hardbound one', async () => {
+  it('puts a fitting cover on one sheet and refuses an 8.5x11 hardbound one', async () => {
     const soft = await imposeCoverSheet(await coverPdf('8x8', 'softcover', 40), '8x8', 'softcover', 40, 'MP-C', T);
     const doc = await PDFDocument.load(soft.bytes);
     expect(doc.getPageCount()).toBe(1);
     expect(doc.getPage(0).getWidth()).toBeCloseTo(12.5 * 72, 6);
-    await expect(imposeCoverSheet(await coverPdf('9x9', 'hardboundLeather', 40), '9x9', 'hardboundLeather', 40, 'MP-9', T))
+    await expect(imposeCoverSheet(await coverPdf('8.5x11', 'hardboundLeather', 40), '8.5x11', 'hardboundLeather', 40, 'MP-9', T))
       .rejects.toThrow(/longer than the 19 in paper/);
   });
 
