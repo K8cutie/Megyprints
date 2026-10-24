@@ -287,5 +287,27 @@ begin
   raise notice 'PASS: photo-quote limits are taken only by the server, and the counts are private';
 end $$;
 
+-- ── GUARD 10: one account per Gmail (0054) ─────────────────────────────────
+-- The "Before User Created" hook refuses a second account for the same Gmail
+-- (dots moved, googlemail.com). Only the auth server may run it, and a "+tag"
+-- stays its own account (the owner's test accounts).
+do $$
+begin
+  if to_regprocedure('public.hook_one_account_per_gmail(jsonb)') is null then
+    raise exception 'REGRESSION (one account): hook_one_account_per_gmail() is missing: 0054 was never applied here';
+  end if;
+  if has_function_privilege('anon', 'public.hook_one_account_per_gmail(jsonb)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.hook_one_account_per_gmail(jsonb)', 'EXECUTE')
+     or not has_function_privilege('supabase_auth_admin', 'public.hook_one_account_per_gmail(jsonb)', 'EXECUTE') then
+    raise exception 'REGRESSION (one account): the hook can be run by customers, or not by the auth server';
+  end if;
+  if public.gmail_inbox('Marian.Reyes@GoogleMail.com') is distinct from 'marianreyes@gmail.com'
+     or public.gmail_inbox('a.b+test@gmail.com') is distinct from 'ab+test@gmail.com'
+     or public.gmail_inbox('bubbly.chic@yahoo.com') is not null then
+    raise exception 'REGRESSION (one account): gmail_inbox() no longer matches one Gmail inbox';
+  end if;
+  raise notice 'PASS: a Gmail can have only one account, and only the auth server runs the check';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;

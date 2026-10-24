@@ -9,26 +9,29 @@
    recoveryState.ts for the screens. See passwordReset.ts for the whole flow.
    ══════════════════════════════════════════════════════════════════════════ */
 import { supabase } from './supabase';
-import { isNativeShell } from './nativeAuth';
+import { emailLinkReturnUrl } from './nativeAuth';
 import { setRecoveryState } from './recoveryState';
 
 supabase.auth.onAuthStateChange((event) => {
   if (event === 'PASSWORD_RECOVERY') setRecoveryState('ready');
 });
 
-/** Where the emailed link brings the person back. The site root: Supabase
- *  always allows its own Site URL host. In the Android shell the origin is the
- *  app's own (https://localhost), which the email can't open, so send them to
- *  the website; they make the new password there and sign in on the app. */
-function resetReturnUrl(): string {
-  return isNativeShell() ? 'https://megyprints.vercel.app/' : `${window.location.origin}/`;
-}
-
 /** Email a reset link. Supabase answers the same whether or not the email has
  *  an account, so this never tells a stranger who has signed up. */
 export async function sendResetLink(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-    redirectTo: resetReturnUrl(),
+    redirectTo: emailLinkReturnUrl(),
+  });
+  return error;
+}
+
+/** Send the "finish making your account" link again. Only used once
+ *  "Confirm email" is on (the sign-in box offers it for "Email not confirmed"). */
+export async function resendSignupLink(email: string) {
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: email.trim(),
+    options: { emailRedirectTo: emailLinkReturnUrl() },
   });
   return error;
 }
