@@ -280,10 +280,45 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
             : { x: boxL, y: boxB, r: 0 };
       sheet.drawPage(embedded, { x: at.x, y: at.y, width: ew, height: eh, rotate: degrees(at.r) });
     }
+    if (side.side === 'front') {
+      for (const p of side.placements) if (p.leaf < plan.leaves) await drawPieceNumber(sheet, words, p);
+    }
     drawCutMarks(sheet, side.placements.map((q) => q.slot));
     await drawSheetLabel(sheet, words, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q) => leafName(q.leaf)));
   }
   return { bytes: await saveNoFonts(out), plan, pageOne, sourceBleedIn: srcBleed };
+}
+
+/** The piece number: small, grey, on the piece's FRONT. */
+export const PIECE_NUMBER = { pt: 6, color: '#7A7A7A', fromSpineIn: 0.03 } as const;
+
+/**
+ * Each cut piece's place in the stack ("1", "2", "3"… through the book) on
+ * its FRONT, just inside the spine edge (owner, 2026-10-24: "once its cut the
+ * order of pages gets jumbled… put a number on the bleed or the binding
+ * side"). Not the trim edge: that is what the cut takes off. The number sits
+ * in the first 1/8" of the binding side, the strip that goes into the glue,
+ * so the bound book doesn't show it. It runs along the spine edge, so it
+ * reaches no further in than the type is tall. A piece that shows no number
+ * is lying back side up.
+ *
+ * Every front's spine is the page's own LEFT edge (page 1, 3, 5… bind on the
+ * left; an older file's blank first side and even pages sit the same way),
+ * turned with the page onto the sheet.
+ */
+async function drawPieceNumber(sheet: PDFPage, words: ReturnType<typeof writer>, p: SheetPlacement) {
+  const text = String(p.leaf + 1);
+  const { pt, color, fromSpineIn } = PIECE_NUMBER;
+  const em = pt / PT;
+  const len = words.widthIn(text, pt);
+  const spine = SIDE_ORDER[(SIDE_ORDER.indexOf('left') + p.turn / 90) % 4];
+  const s = p.slot;
+  const midX = s.x + s.w / 2, midY = s.y + s.h / 2;
+  // Turned words read bottom to top, with the letters' tops toward the left.
+  if (spine === 'left') await words.write(sheet, text, s.x + fromSpineIn + em, midY + len / 2, pt, { vertical: true, color });
+  else if (spine === 'right') await words.write(sheet, text, s.x + s.w - fromSpineIn, midY + len / 2, pt, { vertical: true, color });
+  else if (spine === 'top') await words.write(sheet, text, midX - len / 2, s.y + fromSpineIn + em, pt, { color });
+  else await words.write(sheet, text, midX - len / 2, s.y + s.h - fromSpineIn, pt, { color });
 }
 
 /** The block of pages on one side of a sheet: its outside (art) edges, and
