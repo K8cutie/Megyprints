@@ -85,6 +85,9 @@
 .rotate-hint { display: inline-block; animation: megyRotateHint 3s ease-in-out infinite; transform-origin: center; }
 @media (prefers-reduced-motion: reduce) { .rotate-hint { animation: none; } }
 
+/* Edge adds its own eye to password boxes; PasswordInput already has one. */
+input::-ms-reveal { display: none; }
+
 @layer base {
   :root {
     --background: 40 23% 97%;

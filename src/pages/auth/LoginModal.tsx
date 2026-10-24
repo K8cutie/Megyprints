@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Lock, LogIn, Chrome, Send } from 'lucide-react';
+import { X, Mail, LogIn, Chrome, Send } from 'lucide-react';
 import { useAuth } from '../../lib/authContext';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { sendResetLink } from '../../lib/passwordRecovery';
 import { sendLinkErrorText } from '../../lib/passwordReset';
+import { PasswordInput } from './PasswordInput';
 
 // =============================================================================
 // Types
@@ -350,25 +351,17 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup, startOnForgot = 
                   >
                     Password
                   </label>
-                  <div className="relative">
-                    <Lock
-                      size={16}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-taupe"
-                    />
-                    <input
-                      id="login-password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (fieldErrors.password)
-                          setFieldErrors((p) => ({ ...p, password: undefined }));
-                      }}
-                      placeholder="Enter your password"
-                      className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-4 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
-                      autoComplete="current-password"
-                    />
-                  </div>
+                  <PasswordInput
+                    id="login-password"
+                    value={password}
+                    onChange={(v) => {
+                      setPassword(v);
+                      if (fieldErrors.password)
+                        setFieldErrors((p) => ({ ...p, password: undefined }));
+                    }}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                  />
                   {fieldErrors.password && (
                     <p className="mt-1 text-xs text-red-500">{fieldErrors.password}</p>
                   )}

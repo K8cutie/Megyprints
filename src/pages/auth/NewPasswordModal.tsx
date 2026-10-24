@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Lock, Eye, EyeOff, Check } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { useAuth } from '../../lib/authContext';
 import { saveNewPassword } from '../../lib/passwordRecovery';
 import { useRecoveryState, endRecovery } from '../../lib/recoveryState';
 import type { RecoveryState } from '../../lib/recoveryState';
 import { NEW_PASSWORD_MIN, newPasswordErrorText } from '../../lib/passwordReset';
+import { PasswordInput } from './PasswordInput';
 
 // =============================================================================
 // "Make a new password" — opens by itself, on any page, when the person
@@ -33,7 +34,6 @@ function NewPasswordPanel({ recovery, onAskForNewLink }: NewPasswordModalProps &
   const panelRef = useModalDialog<HTMLDivElement>(true, endRecovery);
   const { user } = useAuth();
   const [password, setPassword] = useState('');
-  const [show, setShow] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -158,28 +158,14 @@ function NewPasswordPanel({ recovery, onAskForNewLink }: NewPasswordModalProps &
                 <label htmlFor="new-password" className="block text-sm font-medium text-ink-warm mb-1">
                   New password
                 </label>
-                <div className="relative">
-                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-taupe" />
-                  <input
-                    id="new-password"
-                    type={show ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                    placeholder={`At least ${NEW_PASSWORD_MIN} letters or numbers`}
-                    data-autofocus
-                    autoComplete="new-password"
-                    className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-20 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShow((s) => !s)}
-                    aria-pressed={show}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-taupe hover:text-ink-warm"
-                  >
-                    {show ? <EyeOff size={14} /> : <Eye size={14} />}
-                    {show ? 'Hide' : 'Show'}
-                  </button>
-                </div>
+                <PasswordInput
+                  id="new-password"
+                  value={password}
+                  onChange={(v) => { setPassword(v); if (error) setError(null); }}
+                  placeholder={`At least ${NEW_PASSWORD_MIN} letters or numbers`}
+                  autoFocus
+                  autoComplete="new-password"
+                />
               </div>
 
               {error && (
