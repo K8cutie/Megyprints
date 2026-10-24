@@ -284,7 +284,7 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
       for (const p of side.placements) if (p.leaf < plan.leaves) await drawPieceNumber(sheet, words, p);
     }
     drawCutMarks(sheet, side.placements.map((q) => q.slot));
-    await drawSheetLabel(sheet, words, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q) => leafName(q.leaf)));
+    await drawSheetLabel(sheet, words, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q, s) => [`pile ${s + 1}`, leafName(q.leaf)].filter(Boolean).join(' · ')));
   }
   return { bytes: await saveNoFonts(out), plan, pageOne, sourceBleedIn: srcBleed };
 }
