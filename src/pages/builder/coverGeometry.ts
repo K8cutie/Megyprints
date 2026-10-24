@@ -10,7 +10,7 @@
 
    The SPINE width is the thickness of all the leaves stacked together, so this
    module computes it from the page count and the thickness of ONE leaf of the
-   shop's paper: C2S 140 (owner, 2026-10-22), matte or glossy as the customer
+   shop's paper: C2S 120 (owner, 2026-10-24), matte or glossy as the customer
    picked at checkout. A hardcover adds its two boards.
 
    The hardcover "allowances" (board, turn-in, hinge) are standard case
@@ -28,14 +28,17 @@ export const COVER_DPI = 300;
  *  wrap re-derives from these; nothing else hardcodes them.
  *  ───────────────────────────────────────────────────────────────────────── */
 export const PRINTER_SPEC = {
-  /** The inside pages' paper (owner, 2026-10-22): C2S 140, coated both
-   *  sides, 140 gsm. */
-  paperName: 'C2S 140',
+  /** The inside pages' paper (owner, 2026-10-24: "our standard paper would
+   *  be c2s 120"): C2S 120, coated both sides, 120 gsm. It was C2S 140. */
+  paperName: 'C2S 120',
   /** Thickness of ONE leaf of it (one leaf = 2 book pages), in mm, by finish:
-   *  the C2S mills' data sheets (ISO 534) give 140 gsm matte 0.134 mm and
-   *  140 gsm gloss 0.120 mm. Matte runs thicker at the same weight. To fine-
-   *  tune from a real album: its spine in mm ÷ its number of leaves. */
-  leafMm: { matte: 0.134, glossy: 0.12 },
+   *  the same coated stock as the 140 numbers (matte 0.134, gloss 0.120 mm,
+   *  ISO 534) at 120 gsm, i.e. ×120/140: matte 0.115 mm, gloss 0.103 mm.
+   *  Matte runs thicker at the same weight. Mill sheets for 120 gsm run
+   *  matte 0.103–0.117, gloss 0.089–0.110, so measure the shop's own paper:
+   *  a ream's height in mm ÷ its sheets, or a real album's spine in mm ÷ its
+   *  number of leaves. */
+  leafMm: { matte: 0.115, glossy: 0.103 },
   /** How many builder pages print on one physical leaf. Double-sided = 2.
    *  Spine leaves = ceil(pages / sidesPerLeaf). */
   sidesPerLeaf: 2,
@@ -125,7 +128,7 @@ export function spineForLeaf(pageCount: number, cover: CoverType, leafIn: number
     : blockIn;
 }
 
-/** Physical spine thickness in inches: (leaves × one leaf of C2S 140 in the
+/** Physical spine thickness in inches: (leaves × one leaf of C2S 120 in the
  *  picked finish) + (hardcover ? two boards : 0). */
 export function spineWidthInches(pageCount: number, cover: CoverType, material: MaterialType = DEFAULT_MATERIAL): number {
   return spineForLeaf(pageCount, cover, leafInches(material));
@@ -213,7 +216,7 @@ export function insetRect(r: Rect, inset: number): Rect {
   return { x: r.x + i, y: r.y + i, width: r.width - 2 * i, height: r.height - 2 * i };
 }
 
-/** Which spine a wrap is for: the finish picked at checkout (C2S 140 matte
+/** Which spine a wrap is for: the finish picked at checkout (C2S 120 matte
  *  or glossy), or, for a cover file that already exists, the spine it was
  *  drawn with (spineFromWrapWidth). */
 export interface CoverPaper {

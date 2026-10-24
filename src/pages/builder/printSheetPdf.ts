@@ -451,9 +451,10 @@ export interface CoverSheetResult {
  * the plain reason when the cover can't fit (e.g. 9x9 hardbound).
  *
  * The spine is read from the cover file's width, so the fold marks land on
- * the spine it was drawn with: files made since 2026-10-22 for C2S 140
- * (matte or glossy), older ones for a 0.006" leaf. A file wider or narrower
- * than any of those for this page count is refused.
+ * the spine it was drawn with: files made since 2026-10-24 for C2S 120
+ * (matte or glossy), 2026-10-22 to 24 for C2S 140, older ones for a 0.006"
+ * leaf. A file wider or narrower than any of those for this page count is
+ * refused.
  */
 export async function imposeCoverSheet(
   src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, cover: CoverType, pageCount: number, orderLabel: string, text: TextPainter,
