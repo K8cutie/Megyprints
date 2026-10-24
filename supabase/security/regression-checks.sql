@@ -245,20 +245,21 @@ begin
 end $$;
 
 -- ── GUARD: covers the press can't print stay refused (0046) ─────────────────
--- The shop's 12.5 × 19 in sheet can't hold a 9x9 hardbound cover (≈20.2 in),
--- an 8.5x11 hardbound one or any 11.5x8 one; a direct REST insert must not get
--- past checkout's check. The pages-per-sheet must stay what the press fits.
+-- The shop's 12.5 × 19 in sheet can't hold an 8.5x11 hardbound cover
+-- (≈19.2 in) or any 11.5x8 one; a direct REST insert must not get past
+-- checkout's check. The pages-per-sheet must stay what the press fits (0046,
+-- then pages touching: 0050 for 6x6, 0052 for 6x4 / 6x8 / 8x6).
 do $$
 declare s jsonb;
 begin
   if not exists (select 1 from pg_trigger where tgname = 'orders_press_fit_trg' and tgrelid = 'public.orders'::regclass and tgenabled <> 'D')
      or not exists (select 1 from pg_trigger where tgname = 'event_bookings_press_fit_trg' and tgrelid = 'public.event_bookings'::regclass and tgenabled <> 'D')
-     or not public.press_cover_never_fits('9x9', 'hard')
-     or not public.press_cover_never_fits(' 9X9"', 'hard') then
-    raise exception 'REGRESSION (press sheet): a 9x9 hardbound order or deal is no longer refused';
+     or not public.press_cover_never_fits('8.5x11', 'hard')
+     or not public.press_cover_never_fits(' 8.5X11"', 'hard') then
+    raise exception 'REGRESSION (press sheet): an 8.5x11 hardbound order or deal is no longer refused';
   end if;
   select sizes into s from public.pricing_model where id = 1;
-  if (s->'6x6'->>'pps')::int <> 6 or (s->'6x4'->>'pps')::int <> 12 or (s->'8x6'->>'pps')::int <> 6 or (s->'6x8'->>'pps')::int <> 6 then
+  if (s->'6x6'->>'pps')::int <> 12 or (s->'6x4'->>'pps')::int <> 18 or (s->'8x6'->>'pps')::int <> 8 or (s->'6x8'->>'pps')::int <> 8 then
     raise exception 'REGRESSION (press sheet): pages per sheet no longer match the press (printSheet.ts): %', s;
   end if;
   raise notice 'PASS: covers the press can''t print are refused, and pages per sheet match the press';
@@ -285,6 +286,30 @@ begin
     raise exception 'REGRESSION (photo quotes): customers can read or change the photo-quote counts';
   end if;
   raise notice 'PASS: photo-quote limits are taken only by the server, and the counts are private';
+end $$;
+
+-- ── GUARD 10: 9x9 stays gone (0053) ─────────────────────────────────────────
+-- The owner removed the 9x9 album (2026-10-24). albums.album_size is free text
+-- a customer can PATCH, so a 9x9 order must be refused by the database, not
+-- just hidden by the app — and nothing may price one.
+do $$
+begin
+  if to_regprocedure('public.retired_album_size(text)') is null then
+    raise exception 'REGRESSION (9x9): retired_album_size() is missing: 0053 was never applied here';
+  end if;
+  if not exists (select 1 from pg_trigger where tgname = 'orders_size_retired_trg' and tgrelid = 'public.orders'::regclass and tgenabled <> 'D')
+     or not public.retired_album_size('9x9')
+     or not public.retired_album_size(' 9X9"')
+     or public.retired_album_size('8x8') then
+    raise exception 'REGRESSION (9x9): a 9x9 order is no longer refused';
+  end if;
+  if exists (select 1 from public.pricing_model where id = 1 and sizes -> '9x9' is not null) then
+    raise exception 'REGRESSION (9x9): the price list has a 9x9 row again';
+  end if;
+  if (select pg_get_constraintdef(oid) from pg_constraint where conname = 'event_bookings_size_chk' and conrelid = 'public.event_bookings'::regclass) like '%9x9%' then
+    raise exception 'REGRESSION (9x9): an event deal can be quoted at 9x9 again';
+  end if;
+  raise notice 'PASS: 9x9 is gone — no price, no new order, no event deal';
 end $$;
 
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────

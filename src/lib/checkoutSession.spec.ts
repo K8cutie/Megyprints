@@ -15,7 +15,7 @@ import { resolve } from 'node:path';
 
 const order = (over: Partial<CheckoutOrder> = {}): CheckoutOrder => ({
   albumId: 'album-1', orderId: 'order-1', orderNumber: 'MP-2026-ABCDEFG', material: 'matte', cover: 'hardboundLeather',
-  albumSize: '9x9', amount: 2886, stage: 'payment', albumEditedAt: 1000, ...over,
+  albumSize: '6x6', amount: 2886, stage: 'payment', albumEditedAt: 1000, ...over,
 } as CheckoutOrder);
 
 beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
@@ -23,7 +23,7 @@ beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
 describe('the order placed in this checkout comes back after a reload', () => {
   it('same album, unchanged → the order, its amount and how far it got', () => {
     saveCheckoutOrder(order());
-    expect(resumableCheckoutOrder('album-1', 1000, 'user-1')).toMatchObject({ orderNumber: 'MP-2026-ABCDEFG', amount: 2886, stage: 'payment', albumSize: '9x9' });
+    expect(resumableCheckoutOrder('album-1', 1000, 'user-1')).toMatchObject({ orderNumber: 'MP-2026-ABCDEFG', amount: 2886, stage: 'payment', albumSize: '6x6' });
   });
 
   it('a different album is a new order', () => {
@@ -126,14 +126,14 @@ describe('a returning customer\'s last order fills only what is untouched', () =
 
 describe('readDraftAlbumForOrder — the device draft can price the album after a reload', () => {
   const draft = (over: Record<string, unknown> = {}) => localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
-    albumId: 'album-1', albumSize: '9x9', editedAt: 1234,
+    albumId: 'album-1', albumSize: '6x6', editedAt: 1234,
     albumPages: Array.from({ length: 41 }, (_, i) => ({ slotFills: [i] })), uploadedPhotos: [], ...over,
   }));
 
-  it('size, every page and the last edit — so a 9×9 is priced as a 9×9, not the old 8×8 fallback', () => {
+  it('size, every page and the last edit — so a 6×6 is priced as a 6×6, not the old 8×8 fallback', () => {
     draft();
     const d = readDraftAlbumForOrder('album-1')!;
-    expect(d.albumSize).toBe('9x9');
+    expect(d.albumSize).toBe('6x6');
     expect(d.pages).toHaveLength(41);
     expect(d.editedAt).toBe(1234);
   });

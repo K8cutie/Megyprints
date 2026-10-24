@@ -15,8 +15,8 @@ seedMathRandom(); // same albums every run (generateAlbum deals with Math.random
    reported, never dropped quietly (the caller asks).
    ══════════════════════════════════════════════════════════════════════════ */
 
-const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
-const ASPECT: Record<string, number> = { '6x6': 1, '8x8': 1, '9x9': 1, '6x4': 1.5, '8x6': 8 / 6, '6x8': 6 / 8, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11 };
+const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
+const ASPECT: Record<string, number> = { '6x6': 1, '8x8': 1, '6x4': 1.5, '8x6': 8 / 6, '6x8': 6 / 8, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11 };
 const orient = (a: number) => (a > 1.05 ? 'L' : a < 0.95 ? 'P' : 'S');
 const crosses = (a: number, b: number) => (orient(a) === 'L' && orient(b) === 'P') || (orient(a) === 'P' && orient(b) === 'L');
 
@@ -89,7 +89,7 @@ describe('the size matrix covers both answers', () => {
     }
     expect(carried).toBeGreaterThan(20);
     expect(asked).toBeGreaterThan(10);
-    expect(carried + asked).toBe(56);
+    expect(carried + asked).toBe(42); // 7 sizes × 6 others
   });
 });
 
@@ -154,11 +154,11 @@ describe('memories placed before they moved to full pages, and doubles', () => {
   // reach a photo claimed it, and a memory that could come was reported lost.
   it('two memories on one photo the album holds twice both come — the photo stays in twice', () => {
     const pages = [badgePage('8x8', 'tl', 0, memory('AAA')), badgePage('8x8', 'br', 0, memory('BBB'))];
-    const plan = memoriesAcrossSize(pages, photos, '8x8', '9x9');
+    const plan = memoriesAcrossSize(pages, photos, '8x8', '6x6');
     expect(plan).toEqual({ carried: [{ photo: 0, fill: memory('AAA'), corner: 'tl' }, { photo: 0, fill: memory('BBB'), corner: 'br' }], lost: [] });
-    const made = generateAlbum(photos, '9x9', undefined, undefined, { memories: plan.carried });
+    const made = generateAlbum(photos, '6x6', undefined, undefined, { memories: plan.carried });
     expect(made.filter((p) => memoriesOn(p).length).map((p) => [p.templateId, p.slotFills?.[0], memoriesOn(p)[0].code]).sort())
-      .toEqual([['qr-badge-9x9-br', 0, 'BBB'], ['qr-badge-9x9-tl', 0, 'AAA']]);
+      .toEqual([['qr-badge-6x6-br', 0, 'BBB'], ['qr-badge-6x6-tl', 0, 'AAA']]);
     const placed = made.flatMap((p) => p.slotFills ?? []).filter((f) => f != null).sort((a, b) => a! - b!);
     expect(placed).toEqual([0, ...photos.map((_, i) => i)]); // photo 0 twice, as before; every other once
   });

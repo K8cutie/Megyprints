@@ -42,7 +42,7 @@ describe('does the cover title fit the front?', () => {
     expect(coverTitleFit(cover(RULE_BREAKER, 32), '8x8', fake())!.fits).toBe(false);
   });
   it('on every size: the long title at 56 is caught', () => {
-    for (const size of ['6x4', '6x6', '8x8', '9x9', '8x6', '6x8', '11.5x8', '8.5x11'] as const) {
+    for (const size of ['6x4', '6x6', '8x8', '8x6', '6x8', '11.5x8', '8.5x11'] as const) {
       expect(coverTitleFit({ ...cover(LONG, 56), size }, size, fake())?.fits, size).toBe(false);
     }
   });

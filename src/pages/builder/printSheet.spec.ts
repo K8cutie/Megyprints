@@ -19,7 +19,7 @@ describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white ed
     expect(pagesPerSheetBySize()).toEqual({
       // Pages touching across the sheet: 6x6 since the owner's own sheet
       // (2026-10-22), every size since 2026-10-23 (6x4 18 was 12, 6x8 / 8x6 8 were 6).
-      '6x4': 18, '8x6': 8, '6x8': 8, '6x6': 12, '8x8': 4, '9x9': 4, '11.5x8': 4, '8.5x11': 4,
+      '6x4': 18, '8x6': 8, '6x8': 8, '6x6': 12, '8x8': 4, '11.5x8': 4, '8.5x11': 4,
     });
   });
 
@@ -99,7 +99,7 @@ describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white ed
     const shape = (s: AlbumSizePreset) => { const L = sheetLayout(s); return `${L.cols}x${L.rows}${L.rotated ? ' turned' : ''}`; };
     expect(Object.fromEntries(SIZES.map((s) => [s, shape(s)]))).toEqual({
       '6x6': '2x3', '6x4': '3x3 turned', '6x8': '2x2', '8x6': '2x2 turned',
-      '8x8': '1x2', '9x9': '1x2', '11.5x8': '1x2', '8.5x11': '1x2 turned',
+      '8x8': '1x2', '11.5x8': '1x2', '8.5x11': '1x2 turned',
     });
     const u = PRESS_SHEET.unprintableIn;
     for (const size of ['6x4', '6x8', '8x6'] as AlbumSizePreset[]) {
@@ -114,7 +114,7 @@ describe('press sheet layout (owner, 2026-10-11: 12.5 × 19 in, 0.25 in white ed
       expect(L.slots.at(-1)!.bleed.bottom, size).toBe(PRESS_SHEET.bleedIn);
     }
     // The sizes that gain nothing keep a full trim edge all round.
-    for (const size of ['8x8', '9x9', '11.5x8', '8.5x11'] as AlbumSizePreset[]) {
+    for (const size of ['8x8', '11.5x8', '8.5x11'] as AlbumSizePreset[]) {
       for (const s of sheetLayout(size).slots) for (const v of Object.values(s.bleed)) expect(v, size).toBe(PRESS_SHEET.bleedIn);
     }
   });
@@ -231,14 +231,14 @@ describe('sheet plan', () => {
 
 describe('covers on the sheet', () => {
   const HARD: CoverType = 'hardboundLeather';
-  it('cannot fit a 9x9 hardbound cover (≈20.2 in on 19 in paper)', () => {
-    const c = coverOnSheet('9x9', HARD, 40);
+  it('cannot fit an 8.5x11 hardbound cover (≈19.2 in on 19 in paper)', () => {
+    const c = coverOnSheet('8.5x11', HARD, 40);
     expect(c.fits).toBe(false);
     expect(c.reason).toMatch(/longer than the 19 in paper/);
   });
 
   it('fits the covers the owner sells', () => {
-    for (const size of ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9'] as AlbumSizePreset[]) {
+    for (const size of ['6x4', '8x6', '6x8', '6x6', '8x8'] as AlbumSizePreset[]) {
       expect(coverFitsSheet(size, 'softcover', 40), `${size} soft`).toBe(true);
     }
     for (const size of ['6x4', '8x6', '6x8', '6x6', '8x8'] as AlbumSizePreset[]) {
@@ -246,27 +246,27 @@ describe('covers on the sheet', () => {
     }
   });
 
-  it('runs out of printable length on a very thick 9x9 softcover (C2S 140 matte: 142 pages fit, 144 do not)', () => {
-    expect(coverFitsSheet('9x9', 'softcover', 142)).toBe(true);
-    expect(coverFitsSheet('9x9', 'softcover', 144)).toBe(false);
+  it('runs out of printable length on a very thick 8.5x11 softcover (C2S 140 matte: 520 pages fit, 522 do not)', () => {
+    expect(coverFitsSheet('8.5x11', 'softcover', 520)).toBe(true);
+    expect(coverFitsSheet('8.5x11', 'softcover', 522)).toBe(false);
   });
 
   it('tells checkout, in plain words, why a cover is missing', () => {
     expect(coverChoiceNote('8x8', 40, ['softcover', HARD])).toBeNull();
-    expect(coverChoiceNote('9x9', 40, ['softcover'])).toBe('Hardbound is not available for 9×9 albums. The cover is too big for our printer.');
+    expect(coverChoiceNote('8.5x11', 40, ['softcover'])).toBe('Hardbound is not available for 8.5×11 albums. The cover is too big for our printer.');
     expect(coverChoiceNote('8x8', 400, ['softcover'])).toBe('Hardbound is not available for an album with 400 pages. The cover is too big for our printer.');
-    expect(coverChoiceNote('9x9', 160, [])).toBe('This album has too many pages for our printer. Make it 142 pages or fewer.');
+    expect(coverChoiceNote('8.5x11', 600, [])).toBe('This album has too many pages for our printer. Make it 520 pages or fewer.');
     // Glossy C2S 140 is the thinner sheet: more pages fit under the same cover.
-    expect(coverChoiceNote('9x9', 160, [], { material: 'glossy' })).toBe('This album has too many pages for our printer. Make it 158 pages or fewer.');
+    expect(coverChoiceNote('8.5x11', 600, [], { material: 'glossy' })).toBe('This album has too many pages for our printer. Make it 582 pages or fewer.');
     expect(coverChoiceNote('11.5x8', 40, [])).toBe('We can\'t print this album size right now.');
   });
 
   it('finds the most pages a cover can take', () => {
-    // The spine may be 3/8" before the 9x9 flat cover outgrows what prints:
-    // 71 leaves of C2S 140 matte (0.134 mm), 79 of gloss (0.120 mm).
-    expect(maxPagesForCover('9x9', 'softcover', MIN_PAGES)).toBe(142);
-    expect(maxPagesForCover('9x9', 'softcover', MIN_PAGES, { material: 'glossy' })).toBe(158);
-    expect(maxPagesForCover('9x9', HARD, MIN_PAGES)).toBeNull();
+    // The 8.5x11 flat softcover outgrows what prints at 260 leaves of C2S 140
+    // matte (0.134 mm), 291 of gloss (0.120 mm); its hardbound never fits.
+    expect(maxPagesForCover('8.5x11', 'softcover', MIN_PAGES)).toBe(520);
+    expect(maxPagesForCover('8.5x11', 'softcover', MIN_PAGES, { material: 'glossy' })).toBe(582);
+    expect(maxPagesForCover('8.5x11', HARD, MIN_PAGES)).toBeNull();
   });
 
   it('places a fitting cover inside the paper', () => {
@@ -293,11 +293,14 @@ describe('0046_press_sheet.sql (then 0050 for 6x6, 0052 for the rest) stay in st
     expect(Object.keys(set).sort()).toEqual(['6x4', '6x6', '6x8', '8x6']);
     for (const [size, pps] of Object.entries(set)) expect(pps, size).toBe(want[size as AlbumSizePreset]);
     // The sizes the migration leaves alone were already right (0024's seed).
-    for (const size of ['8x8', '9x9', '11.5x8', '8.5x11'] as AlbumSizePreset[]) expect(want[size]).toBe(4);
+    for (const size of ['8x8', '11.5x8', '8.5x11'] as AlbumSizePreset[]) expect(want[size]).toBe(4);
   });
 
   it('refuses exactly the size + cover pairs that never fit', () => {
-    const listed = new Set([...MIGRATION.matchAll(/\('([0-9.x]+)', '(soft|hard)'\)/g)].map((m) => `${m[1]}:${m[2]}`));
+    // 0046 still names 9x9 hardbound; 9x9 is no longer made at all (0053
+    // refuses every 9x9 order), so only the sizes the app has are compared.
+    const listed = new Set([...MIGRATION.matchAll(/\('([0-9.x]+)', '(soft|hard)'\)/g)]
+      .filter((m) => SIZES.includes(m[1] as AlbumSizePreset)).map((m) => `${m[1]}:${m[2]}`));
     const never = new Set<string>();
     for (const size of SIZES) {
       for (const [binding, cover] of [['soft', 'softcover'], ['hard', 'hardboundLeather']] as const) {
@@ -306,6 +309,6 @@ describe('0046_press_sheet.sql (then 0050 for 6x6, 0052 for the rest) stay in st
       }
     }
     expect([...listed].sort()).toEqual([...never].sort());
-    expect(never.has('9x9:hard')).toBe(true);
+    expect(never.has('8.5x11:hard')).toBe(true);
   });
 });

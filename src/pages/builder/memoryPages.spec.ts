@@ -30,8 +30,8 @@ const tpl = (p: AlbumPage) => (p.templateId ? getTemplateById(p.templateId) : un
 const memoryIdx = (pages: AlbumPage[]) => pages.map((p, i) => (canTakeMemoryQr(p) ? i : -1)).filter((i) => i >= 0);
 const placed = (pages: AlbumPage[]) => pages.flatMap((p) => [...(p.slotFills ?? []), ...(p.textSlotFills ?? [])]).filter((f): f is number => f != null).sort((a, b) => a - b);
 const isBorderedSingle = (p: AlbumPage) => { const t = tpl(p); return !!t && photoSlotCount(t) === 1 && !t.fullBleed; };
-const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '8x6', '6x8', '6x4'];
-const PAGE_ASPECT: Record<string, number> = { '6x6': 1, '8x8': 1, '9x9': 1, '8x6': 8 / 6, '6x8': 6 / 8, '6x4': 1.5 };
+const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '8x6', '6x8', '6x4'];
+const PAGE_ASPECT: Record<string, number> = { '6x6': 1, '8x8': 1, '8x6': 8 / 6, '6x8': 6 / 8, '6x4': 1.5 };
 /** The spec's own statement of the crop rule: a photo may go on a full page
  *  unless that crosses orientation, cuts more than 25% off the top + bottom,
  *  or more than 34% off the sides. */
@@ -81,7 +81,7 @@ describe('every generated album offers at least MIN_MEMORY_PAGES full-page memor
   }
   it('every common size reaches the floor with ordinary phone photos (mixed, square, or its own shape)', () => {
     const cases: [AlbumSizePreset, (n: number) => UploadedPhoto[]][] = [
-      ['8x8', mixed], ['8x8', portraits], ['8x8', landscapes], ['8x8', sq], ['6x6', portraits], ['9x9', portraits],
+      ['8x8', mixed], ['8x8', portraits], ['8x8', landscapes], ['8x8', sq], ['6x6', portraits],
       ['8x6', mixed], ['8x6', landscapes], ['8x6', sq], ['6x8', mixed], ['6x8', portraits], ['6x8', sq], ['6x4', mixed], ['6x4', landscapes],
     ];
     for (const [size, set] of cases) for (const n of [60, 100, 240]) {
@@ -107,7 +107,7 @@ describe('every generated album offers at least MIN_MEMORY_PAGES full-page memor
 describe('memory pages get the photos that crop least on a full page', () => {
   const memoryPhotos = (pages: AlbumPage[], photos: UploadedPhoto[]) => memoryIdx(pages).map((i) => photos[pages[i].slotFills!.find((f) => f != null) as number]);
   it('square album: landscapes (sides trimmed) — never a portrait while landscapes remain', () => {
-    for (const size of ['6x6', '8x8', '9x9'] as const) for (const n of [60, 100, 160]) {
+    for (const size of ['6x6', '8x8'] as const) for (const n of [60, 100, 160]) {
       const photos = mixed(n);
       const mem = memoryPhotos(generateAlbum(photos, size), photos);
       expect(mem.filter((p) => p.height > p.width).map((p) => p.id), `${size}/${n}`).toEqual([]);
@@ -149,7 +149,7 @@ describe('bordered single-photo layouts are retired — never dealt, still resol
 });
 
 describe('memoryShortfall — the upload-step nudge when photos don\'t fit the album\'s full pages', () => {
-  const SIZES_OFFERED: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8'];
+  const SIZES_OFFERED: AlbumSizePreset[] = ['6x6', '8x8', '6x4', '8x6', '6x8'];
   const withLandscapes = (portraitN: number, landscapeN: number) => [
     ...Array.from({ length: portraitN }, (_, i) => ph(`v${i}`, 3024, 4032, i)),
     ...Array.from({ length: landscapeN }, (_, i) => ph(`h${i}`, 4032, 3024, portraitN + i)),

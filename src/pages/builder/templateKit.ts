@@ -24,7 +24,7 @@ import type { PhotoRatio } from './photoAnalyzer';
  *
  *  Add a size here when you take over authoring it; it starts EMPTY, and a size
  *  with zero layouts is not offered in the size picker (see albumSizeOptions). */
-export const PER_SIZE_AUTHORED = new Set<AlbumSizePreset>(['6x6', '8x8', '9x9', '6x4', '8x6', '6x8']);
+export const PER_SIZE_AUTHORED = new Set<AlbumSizePreset>(['6x6', '8x8', '6x4', '8x6', '6x8']);
 
 export const STD: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
 
@@ -50,7 +50,6 @@ export const CANVAS_DIMS: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x8':    { w: 1800, h: 2400 },
   '6x6':    { w: 1800, h: 1800 },
   '8x8':    { w: 2400, h: 2400 },
-  '9x9':    { w: 2700, h: 2700 },
   '11.5x8': { w: 3450, h: 2400 },
   '8.5x11': { w: 2550, h: 3300 },
 };
@@ -73,7 +72,6 @@ export const ALBUM_INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x8':    { w: 6,    h: 8  },
   '6x6':    { w: 6,    h: 6  },
   '8x8':    { w: 8,    h: 8  },
-  '9x9':    { w: 9,    h: 9  },
   '11.5x8': { w: 11.5, h: 8  },
   '8.5x11': { w: 8.5,  h: 11 },
 };
