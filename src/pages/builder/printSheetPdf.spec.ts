@@ -240,8 +240,9 @@ describe('no file from the console has a font', () => {
     expect(await fontsIn(bytes)).toEqual({ objects: 0, pagesListing: 0 });
     // The labels are still there, as pictures: the sheet name and each spot's pages.
     expect(drawn).toContain(`MP-2026-0045 · sheet 1 of ${plan.sheets} · front`);
-    expect(drawn).toContain('pages 1–2');
-    expect(drawn).toContain('page 45');
+    expect(drawn).toContain('pile 1 · pages 1–2');
+    // 45 pages = 23 pieces on 12 sheets: the last, page 45 alone, is pile 2 on sheet 11.
+    expect(drawn).toContain('pile 2 · page 45');
     // Each picture goes in the file once, however many sheets show it (a
     // picture with see-through edges is two objects: it and its mask).
     const doc = await PDFDocument.load(bytes);
