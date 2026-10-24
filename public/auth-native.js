@@ -12,7 +12,12 @@
   if (q.get('n')) p.set('n', q.get('n'));
   // Drop the tokens from this tab's address bar / history.
   try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
-  if (h.get('error')) document.getElementById('msg').textContent = 'Sign-in was cancelled. Go back to the app to try again.';
+  // Not signed in: cancelled, or refused (0054: that Gmail already has an
+  // account). The app shows the reason in its sign-in box; say it here too.
+  if (h.get('error')) {
+    document.querySelector('h1').textContent = "You're not signed in";
+    document.getElementById('msg').textContent = (h.get('error_description') || 'Sign-in was cancelled.') + ' Go back to the app.';
+  }
   var intent = 'intent://auth?' + p.toString() + '#Intent;scheme=megyprints;package=com.megyprints.app;end';
   var back = document.getElementById('back');
   back.href = intent;

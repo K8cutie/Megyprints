@@ -12,11 +12,22 @@
 import { Capacitor } from '@capacitor/core';
 import type { Provider } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { googleRefusedNotice } from './accountErrors';
+import { showAuthNotice } from './authNotice';
 
 const RETURN_PAGE = 'https://megyprints.vercel.app/auth-native.html';
 const NONCE_KEY = 'megy-native-auth-nonce';
 
 export const isNativeShell = (): boolean => Capacitor.isNativePlatform();
+
+/** Where an emailed link (reset password, finish sign-up) brings the person
+ *  back. The site root: Supabase always allows its own Site URL host. In the
+ *  Android shell the origin is the app's own (https://localhost), which the
+ *  email can't open, so send them to the website; they finish there and sign
+ *  in on the app. */
+export function emailLinkReturnUrl(): string {
+  return isNativeShell() ? 'https://megyprints.vercel.app/' : `${window.location.origin}/`;
+}
 
 /** Pull the auth params out of either return shape: https://…/auth-native.html#… or megyprints://auth?… */
 export function parseAuthReturn(url: string): URLSearchParams | null {
@@ -57,7 +68,12 @@ async function handleReturn(url: string): Promise<void> {
   void Browser.close().catch(() => { /* already closed */ });
   const access_token = p.get('access_token');
   const refresh_token = p.get('refresh_token');
-  if (!access_token || !refresh_token) return; // cancelled or provider error
+  if (!access_token || !refresh_token) {
+    // Cancelled, or Supabase refused it (0054: that Gmail already has an
+    // account). Say so in the sign-in box instead of doing nothing.
+    if (p.get('error') || p.get('error_description')) showAuthNotice(googleRefusedNotice(p.get('error_description') ?? ''));
+    return;
+  }
   const { error } = await supabase.auth.setSession({ access_token, refresh_token });
   if (error) return;
   // Back to the screen the sign-in started from (same stash the web flow uses).
