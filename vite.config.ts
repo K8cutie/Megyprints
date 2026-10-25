@@ -1,12 +1,34 @@
 import path from "path"
+import { execSync } from "child_process"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin } from "vite"
 import { inspectAttr } from 'plugin-inspect-react-code'
 import { VitePWA } from 'vite-plugin-pwa'
+
+/** This build's id: the commit Vercel builds, else the local commit, else the
+ *  time. Stamped into the app (__MEGY_BUILD__) and into /version.json, so a
+ *  phone can tell it runs an older copy than the live site (lib/appVersion). */
+function buildId(): string {
+  if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA
+  try { return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { /* not a checkout */ }
+  return `local-${Date.now()}`
+}
+const BUILD_ID = buildId()
+
+/** dist/version.json: the live build id, read fresh before print files are
+ *  made. Not precached (workbox globPatterns take no .json). */
+const versionJson = (): Plugin => ({
+  name: 'megy-version-json',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_ID }) + '\n' })
+  },
+})
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
   base: './',
+  define: { __MEGY_BUILD__: JSON.stringify(BUILD_ID) },
   // lib/heicWorker is a module worker (it imports the libheif WebAssembly build).
   worker: { format: 'es' },
   plugins: [
@@ -16,6 +38,7 @@ export default defineConfig(({ command }) => ({
     // stamps source-file paths into the DOM — neither belongs in a shipped app.
     command === 'serve' && inspectAttr(),
     react(),
+    versionJson(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
