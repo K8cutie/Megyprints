@@ -6,8 +6,9 @@
 import { useState } from 'react';
 import { Loader2, Check, Download, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
 import {
-  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, markOrderPaid, printFilesOf,
+  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, markOrderPaid, printFilesOf, quoteParts,
 } from '../../lib/adminOrders';
+import { peso } from '../../lib/eventBookings';
 import { supabase } from '../../lib/supabase';
 import {
   downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile, orderSpine,
@@ -185,6 +186,14 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
             <div className="text-xs text-medium mt-1">
               Transfer{o.payment_reference ? <> ref <span className="font-mono text-dark">{o.payment_reference}</span></> : ' sent'}
               {o.payment_submitted_at ? ` · ${o.payment_submitted_at.slice(0, 16).replace('T', ' ')}` : ''}
+            </div>
+          )}
+          {/* What the Pay screen asked for (0055), to match the GoTyme deposit
+              against. An event album is paid by its booking instead. */}
+          {canSeeFinancials && o.quoted_amount != null && !o.event_booking_number && (
+            <div className="text-xs text-medium mt-1" data-testid="order-quoted">
+              Asked to pay <span className="font-semibold text-dark">{peso(o.quoted_amount)}</span>
+              {o.quote ? <> · {quoteParts(o.quote)}</> : null}
             </div>
           )}
         </div>
