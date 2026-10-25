@@ -24,8 +24,10 @@ export interface AuthErrorLike {
 /** True when the page opened from an email link that is used up or over an
  *  hour old. Supabase sends those back as
  *  #error=access_denied&error_code=otp_expired&error_description=…
- *  This app emails nothing but reset links (sign-up is auto-confirmed), so an
- *  expired email link here is a reset link. Read it before the router
+ *  It opens "Forgot your password?". While sign-up is auto-confirmed this
+ *  app emails nothing but reset links. If "Confirm email" is turned on, an
+ *  expired sign-up link lands here too, and a reset link still gets the
+ *  person in: opening it confirms the email. Read it before the router
  *  replaces the hash. */
 export function isExpiredEmailLink(hash: string): boolean {
   const params = new URLSearchParams(hash.replace(/^#\/?/, ''));
