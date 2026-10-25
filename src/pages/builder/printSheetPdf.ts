@@ -21,7 +21,10 @@
    (loadCustomerPdf), and every word is drawn as a picture (TextPainter).
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, decodePDFRawStream, degrees, rgb, type PDFImage, type PDFPage } from 'pdf-lib';
+import {
+  PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, clip, decodePDFRawStream, degrees, endPath, popGraphicsState, pushGraphicsState, rectangle, rgb,
+  type PDFImage, type PDFPage,
+} from 'pdf-lib';
 import { DEFAULT_MATERIAL, type AlbumSizePreset, type CoverType, type MaterialType } from './types';
 import {
   PRESS_SHEET, sheetPlan, printSides, trimInches, coverOnSheet, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
@@ -278,13 +281,22 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
         : p.turn === 270 ? { x: boxL + eh, y: boxB, r: 90 }
           : p.turn === 180 ? { x: boxL + ew, y: boxB + eh, r: 180 }
             : { x: boxL, y: boxB, r: 0 };
+      // Cut the page at that box on the sheet too. The embedded page is trimmed
+      // by its own box (BBox), but some design programs ignore it and show the
+      // whole page, 1/8" past every edge: where pages touch, one page's edge then
+      // lies over its neighbour (the shop, 2026-10-25: "nag overlap… kasi
+      // bleeding mo all sides"). A clipping path on the sheet every program reads.
+      const boxW = (p.slot.w + ks.left + ks.right) * PT;
+      const boxH = (p.slot.h + ks.top + ks.bottom) * PT;
+      sheet.pushOperators(pushGraphicsState(), rectangle(boxL, boxB, boxW, boxH), clip(), endPath());
       sheet.drawPage(embedded, { x: at.x, y: at.y, width: ew, height: eh, rotate: degrees(at.r) });
+      sheet.pushOperators(popGraphicsState());
     }
     if (side.side === 'front') {
       for (const p of side.placements) if (p.leaf < plan.leaves) await drawPieceNumber(sheet, words, p);
     }
     drawCutMarks(sheet, side.placements.map((q) => q.slot));
-    await drawSheetLabel(sheet, words, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q) => leafName(q.leaf)));
+    await drawSheetLabel(sheet, words, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q, s) => [`pile ${s + 1}`, leafName(q.leaf)].filter(Boolean).join(' · ')));
   }
   return { bytes: await saveNoFonts(out), plan, pageOne, sourceBleedIn: srcBleed };
 }
@@ -354,15 +366,32 @@ function wasteStrips(from: number, to: number, spans: [number, number][]): [numb
   return out;
 }
 
-/** How long a block marking a cut across is, along the strip. */
-const BLOCK_IN = 0.15;
+/** How long a cutting line at the side of a butted sheet is. */
+export const SIDE_CUT_LINE_IN = 0.25;
+
+/** A cutting line lying just inside a strip that is cut off: its edge is the
+ *  cut, so nothing of it reaches the page. Black on a thin white line, so it
+ *  shows on dark art too. `inward` is the strip's side of the cut (+1 = down /
+ *  right in sheet inches). Horizontal for a cut across, vertical for a cut down. */
+function cutLineInStrip(page: PDFPage, cut: number, from: number, to: number, inward: 1 | -1, across: boolean) {
+  const at = (pt: number) => cut + inward * (pt / 2) / PT;
+  const line = (offset: number, thickness: number, color: typeof INK) => {
+    const c = at(offset);
+    const [x1, y1, x2, y2] = across ? [from, c, to, c] : [c, from, c, to];
+    page.drawLine({ start: { x: px(x1), y: py(y1) }, end: { x: px(x2), y: py(y2) }, thickness, color });
+  };
+  line(1.2, 1.2, PAPER);
+  line(0.5, 0.5, INK);
+}
 
 /** Cut marks for every cut line, in the white around the block — or, where
  *  the block reaches the printer's white edge, over the outer trim edge (that
  *  strip is cut off). Where pages are butted right against the printer's
- *  edge (6x6 across) there is neither: there, a small black block fills each
- *  end of every strip cut off between the rows, and its two edges are the
- *  two cuts. The block goes in the bin with the strip. */
+ *  edge (6x6 across) there is neither: there, each cut across the sheet gets
+ *  a short thin cutting line at both sides, lying inside the strip that is
+ *  cut off, with its edge on the cut. (They were small black blocks filling
+ *  those strips' ends, 2026-10-22 to -25; the shop: "wag na lagyan, cutting
+ *  line na lang" — leave them out, just a cutting line.) */
 function drawCutMarks(page: PDFPage, slots: SheetSlot[]) {
   const u = PRESS_SHEET.unprintableIn;
   const { top, bottom, left, right, edgeTop, edgeBottom, edgeLeft, edgeRight } = blockOf(slots);
@@ -387,16 +416,34 @@ function drawCutMarks(page: PDFPage, slots: SheetSlot[]) {
     else if (edgeRight >= MIN_EDGE) markLine(page, right - edgeRight + 1 / 32, y, right, y, true);
   }
 
-  // Butted sides: blocks at the ends of the strips cut off across the sheet
-  // (and down it, were pages ever butted top to bottom).
-  const block = (x: number, y: number, w: number, h: number) =>
-    page.drawRectangle({ x: px(x), y: py(y + h), width: w * PT, height: h * PT, color: INK });
+  // Butted sides: a cutting line at each end of every cut across the sheet
+  // (and down it, were pages ever butted top to bottom), inside the strip
+  // that is cut off. A strip's edge is a cut unless it is the art's own edge.
+  const isCut = (v: number, cuts: number[]) => cuts.some((c) => Math.abs(c - v) < 1e-3);
   const rowsY = wasteStrips(top, bottom, slots.map((s) => [s.y, s.y + s.h]));
   const colsX = wasteStrips(left, right, slots.map((s) => [s.x, s.x + s.w]));
-  if (span(roomLeft) <= 0.05 && edgeLeft < MIN_EDGE) for (const [a, b] of rowsY) block(left, a, BLOCK_IN, b - a);
-  if (span(roomRight) <= 0.05 && edgeRight < MIN_EDGE) for (const [a, b] of rowsY) block(right - BLOCK_IN, a, BLOCK_IN, b - a);
-  if (span(roomTop) <= 0.05 && edgeTop < MIN_EDGE) for (const [a, b] of colsX) block(a, top, b - a, BLOCK_IN);
-  if (span(roomBottom) <= 0.05 && edgeBottom < MIN_EDGE) for (const [a, b] of colsX) block(a, bottom - BLOCK_IN, b - a, BLOCK_IN);
+  const sides: [boolean, number, number][] = [
+    [span(roomLeft) <= 0.05 && edgeLeft < MIN_EDGE, left, left + SIDE_CUT_LINE_IN],
+    [span(roomRight) <= 0.05 && edgeRight < MIN_EDGE, right - SIDE_CUT_LINE_IN, right],
+  ];
+  for (const [butted, from, to] of sides) {
+    if (!butted) continue;
+    for (const [a, b] of rowsY) {
+      if (isCut(a, cutsY)) cutLineInStrip(page, a, from, to, 1, true);
+      if (isCut(b, cutsY)) cutLineInStrip(page, b, from, to, -1, true);
+    }
+  }
+  const ends: [boolean, number, number][] = [
+    [span(roomTop) <= 0.05 && edgeTop < MIN_EDGE, top, top + SIDE_CUT_LINE_IN],
+    [span(roomBottom) <= 0.05 && edgeBottom < MIN_EDGE, bottom - SIDE_CUT_LINE_IN, bottom],
+  ];
+  for (const [butted, from, to] of ends) {
+    if (!butted) continue;
+    for (const [a, b] of colsX) {
+      if (isCut(a, cutsX)) cutLineInStrip(page, a, from, to, 1, false);
+      if (isCut(b, cutsX)) cutLineInStrip(page, b, from, to, -1, false);
+    }
+  }
 }
 
 /** The sheet's name, along the paper edge of the widest white band, and next
@@ -448,7 +495,7 @@ export interface CoverSheetResult {
 /**
  * Put the flat cover on one sheet: centred, turned to run along the 19 in
  * side, with cut marks at its trim and fold marks at the spine. Throws with
- * the plain reason when the cover can't fit (e.g. 9x9 hardbound).
+ * the plain reason when the cover can't fit (e.g. 8.5x11 hardbound).
  *
  * The spine is read from the cover file's width, so the fold marks land on
  * the spine it was drawn with: files made since 2026-10-22 for C2S 140

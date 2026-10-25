@@ -46,7 +46,7 @@ describe('the setup page\'s size grid', () => {
     now += SETTLE_MS * 2;
     noteScreenTap(); // "6×4" on Megy's card
     now += 120;
-    tapCard('9×9');
+    tapCard('11.5×8');
     expect(onSizeChange).not.toHaveBeenCalled();
   });
 
@@ -54,8 +54,8 @@ describe('the setup page\'s size grid', () => {
     now += SETTLE_MS * 2;
     noteScreenTap();
     now += SETTLE_MS + 50;
-    tapCard('9×9');
-    expect(onSizeChange).toHaveBeenCalledWith('9x9');
+    tapCard('11.5×8');
+    expect(onSizeChange).toHaveBeenCalledWith('11.5x8');
   });
 
   it('a double tap on the grid itself picks the first size only', () => {

@@ -15,7 +15,8 @@
        touch, with no trim edge, when that fits one more column (6x6 first,
        2026-10-22; every size, 2026-10-23: BUTTED_SIZES).
      • sheetPlan(size, pages) — which album page goes on which sheet, side,
-       slot and turn, in page order: sheet 1 holds the first leaves.
+       slot and turn, in CUT-AND-STACK order: cut the whole printed stack at
+       once and every pile comes out already in page order.
      • coverOnSheet(size, cover, pages) — whether the flat cover fits a sheet.
    Pricing's pages-per-sheet must equal sheetLayout().pagesPerSheet; a spec
    holds the two together. Pricing counts sheets from the page count alone,
@@ -250,13 +251,18 @@ export function backOf(slot: SheetSlot): SheetSlot {
 }
 
 /**
- * Every album page's place on the press, in PAGE ORDER (owner, 2026-10-22:
- * his sheet had 1 3 / 5 7 / 9 11 on the front, 2 behind 1, 4 behind 3):
- * sheet 1 holds the first leaves, left to right, top to bottom, then sheet 2
- * the next ones. Slot s of sheet i holds leaf i·K + s (K = leaves a sheet).
- * Cut each sheet and stack its pieces in that order, sheet 1's on top. (It
- * was cut-and-stack until then: slot s of sheet i held leaf s·S + i, so
- * sheet 1 showed pages 1, 15, 29 — not what the shop expects to see.)
+ * Every album page's place on the press, in CUT-AND-STACK order (the shop,
+ * via the owner, 2026-10-24, for a 132-page 6x6 on 11 sheets: front 1 23 /
+ * 45 67 / 89 111, back 24 2 / 68 46 / 112 90 — "page 1, and behind it it runs
+ * on to page 22; once it's cut, put it on the one to its right, page 23, which
+ * runs on to 44; once that's cut, put it on page 45, and so on"). Slot s of
+ * sheet i holds leaf s·S + i (S = number of sheets). Stack the printed sheets
+ * with sheet 1 on top, front up, and cut them all at once: each spot is a
+ * pile already in order, so pile 1 (top left) goes on pile 2, pile 2 on pile
+ * 3, left to right, top to bottom. (2026-10-22 to -24 it was page order,
+ * leaf i·K + s, from the owner's 1 3 / 5 7 / 9 11 drawing: right for cutting
+ * one sheet at a time, but a guillotine cuts the whole stack, and every pile
+ * then mixed pages from every sheet.)
  *
  * A turned page faces the sheet's right edge on the front; on the back the
  * same physical edge is on the LEFT, so the back page turns the other way.
@@ -275,7 +281,7 @@ export function sheetPlan(size: AlbumSizePreset, pageCount: number, pageOne: Pag
     const front: SheetPlacement[] = [];
     const back: SheetPlacement[] = [];
     layout.slots.forEach((slot, s) => {
-      const leaf = i * k + s;
+      const leaf = s * sheets + i;
       const real = leaf < leaves;
       const bslot = backOf(slot);
       front.push({

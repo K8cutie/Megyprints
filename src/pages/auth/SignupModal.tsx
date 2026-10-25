@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, UserPlus, User } from 'lucide-react';
+import { X, Mail, UserPlus, User, LogIn } from 'lucide-react';
 import { useAuth } from '../../lib/authContext';
 import { useModalDialog } from '../../lib/useModalDialog';
+import { hasAccountProblem } from '../../lib/accountErrors';
+import type { HasAccount } from '../../lib/accountErrors';
 import { PasswordInput } from './PasswordInput';
 
 // =============================================================================
@@ -12,7 +14,8 @@ import { PasswordInput } from './PasswordInput';
 export interface SignupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSwitchToLogin: () => void;
+  /** `email` fills the sign-in box (the account this email already has). */
+  onSwitchToLogin: (email?: string) => void;
 }
 
 // =============================================================================
@@ -34,6 +37,11 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
     confirmPassword?: string;
   }>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // "Check your email" is showing (only when "Confirm email" is on).
+  const [linkSent, setLinkSent] = useState(false);
+  // The email already has an account: say so, and Sign in takes the place of
+  // Create Account (accountErrors.ts).
+  const [hasAccount, setHasAccount] = useState<HasAccount | null>(null);
 
   // Clear fields when modal opens
   useEffect(() => {
@@ -44,6 +52,8 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
       setConfirmPassword('');
       setFieldErrors({});
       setSuccessMessage(null);
+      setLinkSent(false);
+      setHasAccount(null);
       clearError();
     }
   }, [isOpen, clearError]);
@@ -87,13 +97,18 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
       e.preventDefault();
       clearError();
       setSuccessMessage(null);
+      setLinkSent(false);
+      setHasAccount(null);
 
       if (!validate()) return;
 
       try {
         const needsEmailConfirm = await signup(email, password, { full_name: fullName.trim() });
         if (needsEmailConfirm) {
-          setSuccessMessage('Account created! Check your email to confirm your account.');
+          // Show the address: a mistyped one is caught here, before it
+          // becomes an account nobody can open.
+          setSuccessMessage(`We sent a link to ${email.trim()}. Open it to finish making your account. Not there? Look in Spam.`);
+          setLinkSent(true);
           // Don't close — the user must confirm via email first.
         } else {
           // Auto-confirm is on: the account is created AND signed in, no email
@@ -102,8 +117,14 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
           setSuccessMessage("You're all set — you're signed in!");
           setTimeout(() => onClose(), 1100);
         }
-      } catch {
-        // Error is handled by auth context — displayed below
+      } catch (err) {
+        // "Already has an account" gets its own words and a Sign in button;
+        // anything else is shown by the auth context below.
+        const taken = hasAccountProblem(err as { message?: string; code?: string }, email);
+        if (taken) {
+          clearError();
+          setHasAccount(taken);
+        }
       }
     },
     [clearError, validate, signup, email, password, fullName, onClose]
@@ -116,6 +137,8 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
     setConfirmPassword('');
     setFieldErrors({});
     setSuccessMessage(null);
+    setLinkSent(false);
+    setHasAccount(null);
     clearError();
     onSwitchToLogin();
   }, [onSwitchToLogin, clearError]);
@@ -236,6 +259,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
+                        setHasAccount(null);
                         if (fieldErrors.email)
                           setFieldErrors((p) => ({ ...p, email: undefined }));
                       }}
@@ -308,7 +332,23 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                   </motion.p>
                 )}
 
-                {/* Submit */}
+                {/* The email already has an account: Sign in takes the place
+                    of Create Account, with that account's email filled in. */}
+                {hasAccount ? (
+                  <>
+                    <p role="alert" className="rounded-xl bg-blush-deep/40 px-4 py-3 text-sm text-ink-warm break-words">
+                      {hasAccount.text}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onSwitchToLogin(hasAccount.signInAs)}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-blush-pink px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blush-pink/25 hover:bg-coral-soft active:scale-[0.98] transition-all"
+                    >
+                      <LogIn size={16} />
+                      Sign in
+                    </button>
+                  </>
+                ) : !linkSent && (
                 <button
                   type="submit"
                   disabled={loading || !!successMessage}
@@ -321,6 +361,20 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                   )}
                   {loading ? 'Creating account...' : 'Create Account'}
                 </button>
+                )}
+
+                {/* "Check your email": a mistyped address is fixed here. */}
+                {linkSent && (
+                  <p className="text-center text-sm">
+                    <button
+                      type="button"
+                      onClick={() => { setSuccessMessage(null); setLinkSent(false); }}
+                      className="font-medium text-blush-pink hover:text-coral-soft transition-colors"
+                    >
+                      Wrong email? Change it
+                    </button>
+                  </p>
+                )}
               </form>
 
               {/* Switch to login */}

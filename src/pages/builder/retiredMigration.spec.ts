@@ -54,7 +54,7 @@ describe('albums laid out under a retired template set heal on load', () => {
   });
 
   it('leaves other sizes alone — square albums are not disturbed', () => {
-    for (const size of ['6x6', '8x8', '9x9'] as AlbumSizePreset[]) {
+    for (const size of ['6x6', '8x8'] as AlbumSizePreset[]) {
       const live = getTemplatesForAlbum(size).slice(0, 4).map((t) => page(t.id, [0]));
       expect(migrateRetiredPages(live, size)).toBe(live);
     }

@@ -21,7 +21,7 @@ const h = vi.hoisted(() => ({
   },
 }));
 vi.mock('../../lib/authContext', () => ({ useAuth: () => h.auth }));
-vi.mock('../../lib/passwordRecovery', () => ({ sendResetLink: vi.fn(), saveNewPassword: vi.fn() }));
+vi.mock('../../lib/passwordRecovery', () => ({ sendResetLink: vi.fn(), resendSignupLink: vi.fn(), saveNewPassword: vi.fn() }));
 
 import { PasswordInput } from './PasswordInput';
 import LoginModal from './LoginModal';
