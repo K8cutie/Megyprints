@@ -6,6 +6,7 @@
 
 import { supabase } from './supabase';
 import { peso } from './eventBookings';
+import { packageLabel } from './pricing';
 
 export const ORDER_STATUSES = [
   'pending_payment', 'paid', 'in_production', 'printed', 'shipped', 'delivered', 'cancelled',
@@ -68,6 +69,8 @@ export interface OrderQuote {
   qr: number;
   extra_qr: number;
   qr_fee: number;
+  /** The video packages charged for (0056), largest first; absent before. */
+  packages?: number[];
   /** The memory term the order was placed with; null when it has no QR memories. */
   years: number | null;
   term_fee: number;
@@ -79,7 +82,7 @@ export interface OrderQuote {
 export function quoteParts(q: OrderQuote): string {
   const parts = [`album ${peso(q.album)}`];
   if (q.extra_pages_fee > 0) parts.push(`${q.extra_pages} extra ${q.extra_pages === 1 ? 'page' : 'pages'} ${peso(q.extra_pages_fee)}`);
-  if (q.qr_fee > 0) parts.push(`${q.extra_qr} extra QR ${peso(q.qr_fee)}`);
+  if (q.qr_fee > 0) parts.push(q.packages?.length ? `${packageLabel(q.packages)} ${peso(q.qr_fee)}` : `${q.extra_qr} extra QR ${peso(q.qr_fee)}`);
   if (q.term_fee > 0) parts.push(`${q.years} years ${peso(q.term_fee)}`);
   if (q.hd_fee > 0) parts.push(`HD ${peso(q.hd_fee)}`);
   return parts.join(' + ');

@@ -66,6 +66,8 @@ export interface PricingModel {
   compare_multiple?: number | null;
   /** Last day (Asia/Manila, YYYY-MM-DD) the was price shows. */
   compare_until?: string | null;
+  /** Video memory packages past the free ones (0056). Absent before 0056. */
+  qr_packages?: VideoPackage[];
 }
 
 export interface HostingTier { years: number; price: number }
@@ -104,6 +106,9 @@ export interface PriceSchedule {
   free_shipping_value?: number;
   /** The crossed-out "was" prices, while they run (0041). */
   compare_at?: CompareAt | null;
+  /** Video memory packages past the free ones (0056). Absent before 0056:
+   *  then every extra QR is EXTRA_QR_RATE, as before. */
+  qr_packages?: VideoPackage[];
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
 }
@@ -269,6 +274,205 @@ export function countQrMemories(pages: readonly QrCountablePage[]): number {
   return n;
 }
 
+// ── Video memory packages (owner, 2026-10-26; migration 0056) ───────────────
+// Past the FREE_QR_MEMORIES, more videos come in packages the owner sets in
+// the Pricing tab (+2 ₱100, +5 ₱200, +12 ₱300). The customer picks one in the
+// builder when the free ones run out (AddQrModal); the choice stays on the
+// phone with the album (videoPackageChoice) and goes with the order. 0056's
+// video_package_fee() is this arithmetic in SQL, step for step, so the saved
+// "Asked to pay" total can't differ from the Pay screen's. A schedule without
+// packages (a database before 0056) keeps EXTRA_QR_RATE per extra QR.
+
+export interface VideoPackage { videos: number; price: number }
+export interface PackageMix { price: number; slots: number; mix: number[] }
+
+/** Past this many videos the cheapest mix is the best-value package repeated
+ *  (keeps the search small; no real album comes near it). */
+export const PACKAGE_SEARCH_LIMIT = 2000;
+/** More chosen packages than this isn't a real choice: priced as none. */
+export const MAX_CHOSEN_PACKAGES = 20;
+
+/** JavaScript's Math.round as the SQL writes it: floor(x + 0.5). */
+const roundHalfUp = (x: number) => Math.floor(x + 0.5);
+
+/** The packages on sale, smallest first: number fields only, 1–100 videos,
+ *  the first entry for a size kept, prices rounded and never below 0. */
+export function qrPackagesOf(src: { qr_packages?: unknown }): VideoPackage[] {
+  const raw = src.qr_packages;
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<number>();
+  const out: VideoPackage[] = [];
+  for (const t of raw) {
+    if (!t || typeof t !== 'object' || Array.isArray(t)) continue;
+    const { videos, price } = t as { videos?: unknown; price?: unknown };
+    if (typeof videos !== 'number' || typeof price !== 'number' || !Number.isFinite(videos) || !Number.isFinite(price)) continue;
+    const v = roundHalfUp(videos);
+    if (v < 1 || v > 100 || seen.has(v)) continue;
+    seen.add(v);
+    out.push({ videos: v, price: Math.max(0, roundHalfUp(price)) });
+  }
+  return out.sort((a, b) => a.videos - b.videos);
+}
+
+/** The cheapest mix of packages that holds at least `need` videos. Ties go
+ *  to more videos, then fewer packages, then the larger package first. */
+export function cheapestPackageMix(packages: readonly VideoPackage[], need: number): PackageMix {
+  const n = Math.max(0, Math.floor(need));
+  if (!packages.length || n === 0) return { price: 0, slots: 0, mix: [] };
+  const desc = [...packages].sort((a, b) => b.videos - a.videos);
+  if (n > PACKAGE_SEARCH_LIMIT) {
+    let best = desc[0];
+    for (const p of desc) if (p.price * best.videos < best.price * p.videos) best = p;
+    const k = Math.ceil(n / best.videos);
+    return { price: k * best.price, slots: k * best.videos, mix: new Array<number>(k).fill(best.videos) };
+  }
+  const price = new Array<number>(n + 1).fill(0);
+  const slots = new Array<number>(n + 1).fill(0);
+  const count = new Array<number>(n + 1).fill(0);
+  const choice = new Array<number>(n + 1).fill(0);
+  for (let k = 1; k <= n; k++) {
+    let bp = Infinity, bs = 0, bc = 0, bv = 0;
+    for (const p of desc) {
+      const r = Math.max(0, k - p.videos);
+      const cp = p.price + price[r], cs = p.videos + slots[r], cc = 1 + count[r];
+      if (cp < bp || (cp === bp && (cs > bs || (cs === bs && cc < bc)))) { bp = cp; bs = cs; bc = cc; bv = p.videos; }
+    }
+    price[k] = bp; slots[k] = bs; count[k] = bc; choice[k] = bv;
+  }
+  const mix: number[] = [];
+  for (let k = n; k > 0; k = Math.max(0, k - choice[k])) mix.push(choice[k]);
+  return { price: price[n], slots: slots[n], mix: mix.sort((a, b) => b - a) };
+}
+
+/** The packages the customer chose, as a mix — or null when they aren't a
+ *  real choice: none, too many, or a size that isn't on sale. */
+export function chosenPackages(packages: readonly VideoPackage[], chosen: readonly number[]): PackageMix | null {
+  if (!chosen.length || chosen.length > MAX_CHOSEN_PACKAGES) return null;
+  let price = 0, slots = 0;
+  for (const v of chosen) {
+    const p = packages.find((x) => x.videos === v);
+    if (!p) return null;
+    price += p.price;
+    slots += p.videos;
+  }
+  return { price, slots, mix: [...chosen].sort((a, b) => b - a) };
+}
+
+export interface VideoMemoryFee {
+  /** 'legacy': no packages on sale, EXTRA_QR_RATE per extra QR. */
+  mode: 'packages' | 'legacy';
+  fee: number;
+  /** The packages charged for, largest first. */
+  mix: number[];
+  slots: number;
+  /** True when it's the customer's own choice, false when the cheapest mix. */
+  chosen: boolean;
+}
+
+/** What the videos past the free ones cost. None past the free ones: ₱0. The
+ *  customer's packages when they hold every extra video; otherwise (none
+ *  chosen, too few, or not on sale) the cheapest mix that does. */
+export function videoMemoryFee(src: { qr_packages?: unknown }, qrMemories: number, chosen: readonly number[] = []): VideoMemoryFee {
+  const extra = Math.max(0, Math.floor(qrMemories) - FREE_QR_MEMORIES);
+  const packages = qrPackagesOf(src);
+  if (!packages.length) return { mode: 'legacy', fee: extra * EXTRA_QR_RATE, mix: [], slots: 0, chosen: false };
+  if (extra === 0) return { mode: 'packages', fee: 0, mix: [], slots: 0, chosen: false };
+  const own = chosenPackages(packages, chosen);
+  if (own && own.slots >= extra) return { mode: 'packages', fee: own.price, mix: own.mix, slots: own.slots, chosen: true };
+  const c = cheapestPackageMix(packages, extra);
+  return { mode: 'packages', fee: c.price, mix: c.mix, slots: c.slots, chosen: false };
+}
+
+/** The highest per-video price on sale (the +2's ₱50): what "Save" compares
+ *  with. Honest because a package at that rate IS on sale; a made-up regular
+ *  price would be a deceptive price claim (Consumer Act, see 0041). */
+export function packageReferenceRate(packages: readonly VideoPackage[]): number {
+  return packages.reduce((m, p) => Math.max(m, p.price / p.videos), 0);
+}
+
+/** "₱600, now ₱300 · Save 50%": the same videos at the reference rate, when
+ *  that's more than the price; null otherwise. */
+export function packageSaving(packages: readonly VideoPackage[], slots: number, price: number): { was: number; pct: number } | null {
+  const was = Math.round(slots * packageReferenceRate(packages));
+  if (!(was > price)) return null;
+  return { was, pct: Math.round((1 - price / was) * 100) };
+}
+
+export interface PackageOption extends PackageMix {
+  /** Pesos more than the current choice (the whole price when there's none). */
+  more: number;
+  save: { was: number; pct: number } | null;
+  /** The best value: lowest price per video, ties to more videos. */
+  best: boolean;
+}
+
+/** The pop-up's choices when the videos run out: for each package, the
+ *  cheapest mix holding the current ones plus that package (moving up, or
+ *  stacking past the biggest). Duplicates and worse deals left out; most
+ *  videos first. */
+export function packageOptions(packages: readonly VideoPackage[], current: readonly number[] = []): PackageOption[] {
+  if (!packages.length) return [];
+  const own = chosenPackages(packages, current);
+  const base = own?.slots ?? 0;
+  const basePrice = own?.price ?? 0;
+  const byMix = new Map<string, PackageMix>();
+  for (const p of packages) {
+    const m = cheapestPackageMix(packages, base + p.videos);
+    const key = m.mix.join('+');
+    if (!byMix.has(key)) byMix.set(key, m);
+  }
+  const all = [...byMix.values()].filter((m) => m.slots > base);
+  const kept = all.filter((a) => !all.some((b) => b !== a && b.slots >= a.slots && b.price <= a.price && (b.slots > a.slots || b.price < a.price)));
+  kept.sort((a, b) => b.slots - a.slots || a.price - b.price);
+  let best = kept[0];
+  for (const o of kept) if (o.price * best.slots < best.price * o.slots) best = o;
+  return kept.map((o) => ({ ...o, more: o.price - basePrice, save: packageSaving(packages, o.slots, o.price), best: o === best }));
+}
+
+/** At checkout: the customer's packages have empty spots and a cheaper mix
+ *  holds every video they added. Null when there's nothing to save. */
+export function cheaperPackageOffer(src: { qr_packages?: unknown }, qrMemories: number, chosen: readonly number[]): (PackageMix & { save: number; empty: number }) | null {
+  const packages = qrPackagesOf(src);
+  const extra = Math.max(0, Math.floor(qrMemories) - FREE_QR_MEMORIES);
+  if (!packages.length || extra === 0) return null;
+  const own = chosenPackages(packages, chosen);
+  if (!own || own.slots < extra) return null;
+  const c = cheapestPackageMix(packages, extra);
+  if (c.price >= own.price) return null;
+  return { ...c, save: own.price - c.price, empty: own.slots - extra };
+}
+
+/** "12-video package", or "12 + 2 video packages". */
+export function packageLabel(mix: readonly number[]): string {
+  if (!mix.length) return '';
+  return mix.length === 1 ? `${mix[0]}-video package` : `${mix.join(' + ')} video packages`;
+}
+
+/** What the free videos are worth: at the reference rate when packages are
+ *  on sale, else at EXTRA_QR_RATE. */
+export function includedVideosValue(src: { qr_packages?: unknown }): number {
+  const packages = qrPackagesOf(src);
+  return packages.length ? Math.round(FREE_QR_MEMORIES * packageReferenceRate(packages)) : FREE_QR_MEMORIES * EXTRA_QR_RATE;
+}
+
+/** What's wrong with packages as the owner typed them, in words; null when
+ *  they can be saved (0056's set_qr_packages refuses the same). */
+export function packagesProblem(pkgs: readonly VideoPackage[]): string | null {
+  if (pkgs.length < 1 || pkgs.length > 6) return 'Keep 1 to 6 packages.';
+  for (const [i, p] of pkgs.entries()) {
+    if (!Number.isInteger(p.videos) || p.videos < 1 || p.videos > 100) return `Package ${i + 1}: videos must be a whole number from 1 to 100.`;
+    if (!Number.isInteger(p.price) || p.price < 0 || p.price > 100000) return `Package ${i + 1}: the price must be a whole number of pesos.`;
+  }
+  if (new Set(pkgs.map((p) => p.videos)).size !== pkgs.length) return 'Two packages have the same number of videos.';
+  return null;
+}
+
+/** The cheapest package's price ("then packages from ₱100"); 0 when none. */
+export function packagesFromPrice(src: { qr_packages?: unknown }): number {
+  const packages = qrPackagesOf(src);
+  return packages.length ? Math.min(...packages.map((p) => p.price)) : 0;
+}
+
 /** CUSTOMER-FACING. Marked-up amounts only. The album line is always the
  *  price of the included pages, whatever the page count, and the extra-pages
  *  line is everything the pages past them add, so items sum exactly to the
@@ -284,12 +488,15 @@ export function priceBreakdown(
   hostingYears: number | null = null,
   /** HD (1080p) memories chosen for this album. Omitted = standard 720p. */
   hdMemories = false,
+  /** The video packages chosen for this album (0056). Omitted = none. */
+  videoPackages: readonly number[] = [],
 ): PriceBreakdown {
   const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
   const sizeLabel = SIZE_LABELS[size];
   const minPages = schedule.min_pages;
   const printTotal = priceOf(schedule, size, binding, pages);
-  const qrCharge = qrMemoryCharge(qrMemories);
+  const videoFee = videoMemoryFee(schedule, qrMemories, videoPackages);
+  const qrCharge = videoFee.fee;
   const termCharge = hostingTermCharge(schedule, hostingYears);
   const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
   const total = printTotal + qrCharge + termCharge + hdCharge;
@@ -315,7 +522,9 @@ export function priceBreakdown(
     });
   }
 
-  if (qrCharge > 0) {
+  if (qrCharge > 0 && videoFee.mode === 'packages') {
+    items.push({ label: `Video memories · ${FREE_QR_MEMORIES} free + ${packageLabel(videoFee.mix)}`, amount: qrCharge });
+  } else if (qrCharge > 0) {
     const extraQr = qrMemories - FREE_QR_MEMORIES;
     items.push({
       label: `Living-memory QR · ${FREE_QR_MEMORIES} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`,
@@ -420,6 +629,7 @@ export function scheduleFrom(
     hd_memories_price: model.hd_memories_price,
     free_shipping_value: ship,
     ...(showCompare ? { compare_at: { until: until as string, sheet_rate: model.sheet_cost * cm, sizes: compareSizes } } : {}),
+    ...(model.qr_packages ? { qr_packages: model.qr_packages } : {}),
     disabled_sizes: disabledSizes,
     sizes,
   };
