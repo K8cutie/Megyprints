@@ -22,6 +22,19 @@
  *  the spine. */
 export const BINDING_INCHES = 0.375;
 
+/** A hardbound book keeps 1/2" (owner, 2026-10-25: "for softbind the edge
+ *  allowance is .375 but for hardbound its still .5"): a case-bound book
+ *  doesn't open as flat. The cover is picked at checkout, after the album is
+ *  designed, so the editor shows 3/8" and only a hardbound order's PRINT FILE
+ *  is drawn with 1/2" (frames are fractions of the safe area, so they follow). */
+export const HARDBOUND_BINDING_INCHES = 0.5;
+
+/** The binding side allowance for an order's cover: 1/2" hardbound (every
+ *  cover but softcover binds as a hardcover), 3/8" softcover or not chosen. */
+export function bindingInchesFor(cover?: string | null): number {
+  return cover && cover !== 'softcover' ? HARDBOUND_BINDING_INCHES : BINDING_INCHES;
+}
+
 /** Which side of the open book page 1 is on. Every album is 'right' now.
  *  Print files made before 2026-10-21 put page 1 on the LEFT (a blank page
  *  first, then 1 | 2): 'left' exists only so the console can still lay THOSE
@@ -35,9 +48,9 @@ export const PAGE_ONE_RIGHT_MARK = 'megy-page1-right';
 interface Margin { top: number; bottom: number; left: number; right: number; }
 
 /** The binding reserve as a fraction of the page WIDTH for this album size. */
-export function bindingMarginFraction(albumSize: string): number {
+export function bindingMarginFraction(albumSize: string, bindingIn: number = BINDING_INCHES): number {
   const widthIn = parseFloat(String(albumSize).split('x')[0]) || 8;
-  return BINDING_INCHES / widthIn;
+  return bindingIn / widthIn;
 }
 
 /** Which edge binds for a page index (mirrored inner margin, double-sided). */
@@ -46,8 +59,8 @@ export function bindingEdge(pageIndex: number): 'left' | 'right' {
 }
 
 /** Add the binding reserve to a template margin's inner edge for this page. */
-export function applyBindingMargin(margin: Margin, albumSize: string, pageIndex: number): Margin {
-  const frac = bindingMarginFraction(albumSize);
+export function applyBindingMargin(margin: Margin, albumSize: string, pageIndex: number, bindingIn: number = BINDING_INCHES): Margin {
+  const frac = bindingMarginFraction(albumSize, bindingIn);
   return bindingEdge(pageIndex) === 'left'
     ? { ...margin, left: margin.left + frac }
     : { ...margin, right: margin.right + frac };
@@ -65,7 +78,7 @@ export function marginForTemplate(
   baseMargin: Margin,
   albumSize: string,
   pageIndex: number,
-  opts?: { noBinding?: boolean },
+  opts?: { noBinding?: boolean; bindingIn?: number },
 ): Margin {
   if (template?.fullBleed) {
     // A full-bleed page bleeds off THREE edges — top, bottom and the OUTER
@@ -74,11 +87,11 @@ export function marginForTemplate(
     // a face near the gutter came out half-eaten. The keep-out guide warned
     // about it, but nothing moved out of the way.
     if (opts?.noBinding) return { top: 0, bottom: 0, left: 0, right: 0 };
-    const frac = bindingMarginFraction(albumSize);
+    const frac = bindingMarginFraction(albumSize, opts?.bindingIn);
     return bindingEdge(pageIndex) === 'left'
       ? { top: 0, bottom: 0, left: frac, right: 0 }
       : { top: 0, bottom: 0, left: 0, right: frac };
   }
   if (opts?.noBinding) return { ...baseMargin };
-  return applyBindingMargin(baseMargin, albumSize, pageIndex);
+  return applyBindingMargin(baseMargin, albumSize, pageIndex, opts?.bindingIn);
 }

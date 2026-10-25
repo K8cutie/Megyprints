@@ -93,12 +93,12 @@ describe('wired in (source guards)', () => {
   it('the page is drawn once without its words — every kind of word — and once with them', () => {
     expect(pipeline).toMatch(/if \(st\) \{\s*if \(words\) \{\s*await loadFontFaces\(\[st\]\);[^\n]*\n\s*renderSlotText\(ctx, st, sx, sy, sw, sh, W, uiW, coverMode\);\s*\}\s*continue;/);
     expect(pipeline).toMatch(/for \(const text of words \? page\.textElements \|\| \[\] : \[\]\) \{/);
-    expect(pipeline).toMatch(/const bare = await drawPrintPage\(page, photos, albumSize, pageIndex, coverMode, false\);\s*const full = await drawPrintPage\(page, photos, albumSize, pageIndex, coverMode, true\);/);
+    expect(pipeline).toMatch(/const bare = await drawPrintPage\(page, photos, albumSize, pageIndex, coverMode, false, bindingIn\);\s*const full = await drawPrintPage\(page, photos, albumSize, pageIndex, coverMode, true, bindingIn\);/);
   });
 
   it('the page picture is still shrunk for the upload cap; the words are not', () => {
     expect(pipeline).toMatch(/const MAX_SIDE = 1800;/);
-    expect(pipeline).toMatch(/: await renderPageLayers\(page, photos, albumSize, pageIndex, false\);/);
+    expect(pipeline).toMatch(/: await renderPageLayers\(page, photos, albumSize, pageIndex, false, bindingIn\);/);
   });
 
   it('the cover: the front is drawn by the page renderer with its words lifted; the back and spine words are lifted too', () => {
