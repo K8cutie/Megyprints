@@ -31,6 +31,7 @@ import { coverFitsSheet, coverChoiceNote } from './builder/printSheet';
 import { trackOf } from '../lib/orderTracker';
 import { missingPhotos, missingPhotosMessage, PhotosNotHereError } from '../lib/photoPresence';
 import { getMyOrder, openOrderForAlbum, lastOrderForAlbum, type MyOrder } from '../lib/myOrders';
+import { ensureLatestApp, readUpdateNote, UPDATED_PLACE_ORDER, GETTING_NEWEST } from '../lib/appVersion';
 import OrderTracker from '../components/OrderTracker';
 import { eventLinkForAlbum, eventDealState, coverOrderWithBooking, bookingsWaitingForAlbum, linkFromBooking, linkAlbumToBooking, unlinkAlbum } from '../lib/eventAlbum';
 import { getMyBooking, listMyBookings, type EventBooking } from '../lib/eventBookings';
@@ -71,6 +72,8 @@ export default function Order() {
   const [step, setStep] = useState<Step>('form');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  // Back from an update reload at Place order (lib/appVersion): say so.
+  const [updateNote, setUpdateNote] = useState(() => readUpdateNote());
   // The album isn't in the account (a guest who signed in here), or it is
   // short of the 40-photo minimum: offer the way back to it.
   const [albumNotSaved, setAlbumNotSaved] = useState(false);
@@ -538,6 +541,15 @@ export default function Order() {
       return;
     }
     setSubmitting(true);
+    // The print files are made on THIS phone, so by the newest app, never an
+    // old copy left open for days (MP-2026-XNWRQT9 came with the ½" binding
+    // edge three days after it became 3/8"). An older copy reloads first,
+    // before any order row or file exists; the customer taps again.
+    if (await ensureLatestApp(UPDATED_PLACE_ORDER) === 'reloading') {
+      setPrepMsg(GETTING_NEWEST);
+      return;
+    }
+    setUpdateNote(null);
     try {
       // A checkout brought back in this tab (a reload) may hold an order that
       // has since closed: cancelled in Your orders, or 7 days unpaid (0042).
@@ -1257,6 +1269,12 @@ export default function Order() {
                       );
                     })}
                   </div>
+                </div>
+              )}
+              {updateNote && (
+                <div role="status" data-testid="order-app-updated"
+                  className="mt-4 rounded-xl border border-[#CDE5D3] bg-[#EEF7F0] px-3 py-3 text-sm text-[#2E6B3F]">
+                  {updateNote}
                 </div>
               )}
               {albumInfo === 'missing' ? (
