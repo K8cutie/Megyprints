@@ -305,3 +305,61 @@ describe('butted sides get cutting lines, not blocks', () => {
     expect(SIDE_CUT_LINE_IN).toBe(0.25);
   });
 });
+
+/* The shop, 2026-10-25, with the sheet PDF open in their design program:
+   "nag overlap… kasi bleeding mo all sides" (the pages overlap, because of the
+   edge on all sides). Each page was trimmed only by its own box (the embedded
+   page's BBox), which that program ignores, so every page showed its 1/8" past
+   every edge and page 23's spine strip lay over page 1. Now the sheet itself
+   cuts every page with a clipping path, the way every program reads it. */
+describe('every page is cut at its own box on the sheet', () => {
+  /** Each side's drawn pages: the clip box around each one (points), or null. */
+  async function clips(bytes: Uint8Array) {
+    const doc = await PDFDocument.load(bytes);
+    const { decodePDFRawStream } = await import('pdf-lib');
+    return doc.getPages().map((page) => {
+      const c = page.node.Contents()!;
+      const streams = 'asArray' in c ? (c as unknown as { asArray(): unknown[] }).asArray().map((r) => doc.context.lookup(r as never)) : [c];
+      const text = streams.map((s) => new TextDecoder('latin1').decode(decodePDFRawStream(s as never).decode())).join('\n');
+      const n = '(-?[\\d.]+)';
+      const clipped = [...text.matchAll(new RegExp(`q\\s+${n} ${n} ${n} ${n} re\\s+W\\s+n\\s+q\\s[^Q]*?\\sDo\\s+Q\\s+Q`, 'g'))]
+        .map((m) => m.slice(1, 5).map(Number));
+      return { drawn: (text.match(/\sDo\s/g) ?? []).length, clipped };
+    });
+  }
+
+  it('a clip exactly the size of the page plus the edge it keeps, round every page on every side', async () => {
+    for (const size of ['6x6', '6x4', '8x8', '8.5x11'] as const) {
+      const { bytes, plan } = await imposeAlbumSheets(await albumPdf(size, 41, 0.125, true), size, 'MP-CLIP', T);
+      const sides = await clips(bytes);
+      plan.sides.forEach((side, k) => {
+        const want = side.placements.filter((p) => p.page !== null).map(({ slot: s }) => {
+          const keep = (b: number) => Math.min(b, 0.125);
+          const l = s.x - keep(s.bleed.left), r = s.x + s.w + keep(s.bleed.right);
+          const t = s.y - keep(s.bleed.top), b = s.y + s.h + keep(s.bleed.bottom);
+          return [l * 72, (19 - b) * 72, (r - l) * 72, (b - t) * 72];
+        });
+        const where = `${size} sheet ${side.sheet} ${side.side}`;
+        // The page pictures are the only things drawn as embedded pages (words are images, not pages).
+        expect(sides[k].clipped.length, where).toBe(want.length);
+        const key = (v: number[]) => v.map((x) => x.toFixed(2)).join(' ');
+        expect(sides[k].clipped.map(key).sort(), where).toEqual(want.map(key).sort());
+      });
+    }
+  });
+
+  it('where 6x6 pages touch, the clips meet at the cut and never overlap', async () => {
+    const { bytes } = await imposeAlbumSheets(await albumPdf('6x6', 24, 0.125, true), '6x6', 'MP-TOUCH', T);
+    for (const { clipped } of await clips(bytes)) {
+      expect(clipped).toHaveLength(6);
+      const rows = new Map<string, number[][]>();
+      for (const c of clipped) rows.set(c[1].toFixed(2), [...(rows.get(c[1].toFixed(2)) ?? []), c]);
+      expect([...rows.values()].map((r) => r.length)).toEqual([2, 2, 2]);
+      for (const row of rows.values()) {
+        const [a, b] = row.sort((p, q) => p[0] - q[0]);
+        expect(a[0] + a[2]).toBeCloseTo(b[0], 6);
+        expect(b[0]).toBeCloseTo(6.25 * 72, 6);
+      }
+    }
+  });
+});

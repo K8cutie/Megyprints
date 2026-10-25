@@ -21,7 +21,10 @@
    (loadCustomerPdf), and every word is drawn as a picture (TextPainter).
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, decodePDFRawStream, degrees, rgb, type PDFImage, type PDFPage } from 'pdf-lib';
+import {
+  PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, clip, decodePDFRawStream, degrees, endPath, popGraphicsState, pushGraphicsState, rectangle, rgb,
+  type PDFImage, type PDFPage,
+} from 'pdf-lib';
 import { DEFAULT_MATERIAL, type AlbumSizePreset, type CoverType, type MaterialType } from './types';
 import {
   PRESS_SHEET, sheetPlan, printSides, trimInches, coverOnSheet, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
@@ -278,7 +281,16 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
         : p.turn === 270 ? { x: boxL + eh, y: boxB, r: 90 }
           : p.turn === 180 ? { x: boxL + ew, y: boxB + eh, r: 180 }
             : { x: boxL, y: boxB, r: 0 };
+      // Cut the page at that box on the sheet too. The embedded page is trimmed
+      // by its own box (BBox), but some design programs ignore it and show the
+      // whole page, 1/8" past every edge: where pages touch, one page's edge then
+      // lies over its neighbour (the shop, 2026-10-25: "nag overlap… kasi
+      // bleeding mo all sides"). A clipping path on the sheet every program reads.
+      const boxW = (p.slot.w + ks.left + ks.right) * PT;
+      const boxH = (p.slot.h + ks.top + ks.bottom) * PT;
+      sheet.pushOperators(pushGraphicsState(), rectangle(boxL, boxB, boxW, boxH), clip(), endPath());
       sheet.drawPage(embedded, { x: at.x, y: at.y, width: ew, height: eh, rotate: degrees(at.r) });
+      sheet.pushOperators(popGraphicsState());
     }
     if (side.side === 'front') {
       for (const p of side.placements) if (p.leaf < plan.leaves) await drawPieceNumber(sheet, words, p);
