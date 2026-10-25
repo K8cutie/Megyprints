@@ -25,7 +25,7 @@ import { placePhoto } from './slotSwap';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, FULL_PAGE_SHARE, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
@@ -55,6 +55,7 @@ import { TEXT_LINE_HEIGHT } from './wordArt';
 import { readCaptureTime } from './exif';
 import { looksHeic, toAlbumPhoto, HEIC_CONVERTING_PREVIEW, HEIC_READY_SHOWN_MS } from '../../lib/heicPhoto';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
+import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from './retiredSizes';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { DEFAULT_TITLE_FONT } from './fonts';
 import { readAlbumTheme, writeAlbumTheme } from '../../lib/albumTheme';
@@ -590,6 +591,16 @@ function getInitialState(): SerializedState {
     console.warn('[Megy] Detected corrupted album state in localStorage. Starting fresh.');
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     effectiveSaved = null;
+  }
+  // A draft saved at a size we no longer make (9x9) opens at its stand-in,
+  // same layouts and photos (retiredSizes).
+  if (effectiveSaved) {
+    effectiveSaved = {
+      ...effectiveSaved,
+      albumSize: liveAlbumSize(effectiveSaved.albumSize),
+      albumPages: effectiveSaved.albumPages && liftRetiredPages(effectiveSaved.albumPages),
+      coverFront: effectiveSaved.coverFront && liftRetiredPage(effectiveSaved.coverFront),
+    };
   }
 
   // ── Dead blob URLs are NOT a stale session ──
@@ -2191,7 +2202,10 @@ export function useBuilderState(): BuilderActions {
     // whose faces survive, so find the faces first (bounded; skipped
     // entirely in the common case, and harmless when detection fails).
     let faceCenters: Record<number, { x: number; y: number }> | undefined;
-    const faceCands = memoryFaceCandidates(pool, size);
+    // On Surprise about half the pages are full pages (FULL_PAGE_SHARE), so
+    // the faces matter whenever fewer than half of a 40-page album fit.
+    const faceCands = memoryFaceCandidates(pool, size, undefined,
+      photosPerPage == null ? Math.ceil(MIN_ALBUM_PAGES * FULL_PAGE_SHARE) : undefined);
     if (faceCands.length > 0) {
       faceCenters = {};
       try {
@@ -2278,7 +2292,7 @@ export function useBuilderState(): BuilderActions {
       )];
 
       // ── 2. Pick a random template different from current (and matched to
-      //       THIS album's size, so we don't pull a 9x9 template onto an 8x8). ──
+      //       THIS album's size, so we don't pull a 6x6 template onto an 8x8). ──
       let pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
       if (photosPerPage !== undefined) {
         pool = pool.filter((t) => t.slotCount === photosPerPage);

@@ -8,7 +8,8 @@ import { MemoryRouter } from 'react-router-dom';
    NO 9×9 HARDBOUND (owner, 2026-10-11). Its flat cover is about 20.2 in long
    and the shop's paper is 19 in, so checkout doesn't offer it — not even when
    the last order or a saved form picked Hardbound — and says why in plain
-   words. The database refuses it too (0046).
+   words. The database refuses it too (0046). 9×9 is gone (2026-10-24); the
+   same holds for 8.5×11 hardbound (≈19.2 in), which these tests now use.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const h = vi.hoisted(() => ({ job: null as unknown, auth: { user: null as { id: string } | null, loading: true } }));
@@ -24,7 +25,7 @@ vi.mock('../lib/memoryClips', () => ({
   removeStagedClip: async () => {}, currentClipQuality: () => 'standard',
 }));
 vi.mock('../lib/storeSettings', () => {
-  const sizes = Object.fromEntries(['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '8.5x11', '11.5x8'].map((s) => [s, { pps: 4, soft_rate: 1200, hard_rate: 2100 }]));
+  const sizes = Object.fromEntries(['6x6', '8x8', '6x4', '8x6', '6x8', '8.5x11', '11.5x8'].map((s) => [s, { pps: 4, soft_rate: 1200, hard_rate: 2100 }]));
   const schedule = { min_pages: 40, sheet_rate: 24, hosting_reserve: 0, hosting_tiers: [], disabled_sizes: [], sizes };
   return {
     getPriceSchedule: () => schedule, isStoreSettingsReady: () => true, storeSettingsReady: () => Promise.resolve(),
@@ -71,21 +72,21 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 describe('checkout covers and the press sheet', () => {
-  it('a 9×9 album: no Hardbound button, Softcover picked, and the reason in words', async () => {
-    await open('9x9');
+  it('an 8.5×11 album: no Hardbound button, Softcover picked, and the reason in words', async () => {
+    await open('8.5x11');
     expect(coverButton('Hardbound')).toBeUndefined();
     expect(picked('Softcover')).toBe(true);
     expect(host.querySelector('[data-testid="order-cover-note"]')?.textContent)
-      .toBe('Hardbound is not available for 9×9 albums. The cover is too big for our printer.');
+      .toBe('Hardbound is not available for 8.5×11 albums. The cover is too big for our printer.');
   });
 
-  it('an order placed before 0046 as 9×9 hardbound keeps its cover on screen (the order row says hardbound)', async () => {
+  it('an order placed before 0046 as 8.5×11 hardbound keeps its cover on screen (the order row says hardbound)', async () => {
     saveCheckoutOrder({
-      albumId: 'album-9x9', orderId: 'order-old', orderNumber: 'MP-2026-OLD9X9', material: 'matte', cover: 'hardboundLeather',
-      albumSize: '9x9', amount: 2079, stage: 'placed', albumEditedAt: Date.now() + 1e9, userId: 'user-1',
+      albumId: 'album-8.5x11', orderId: 'order-old', orderNumber: 'MP-2026-OLD8511', material: 'matte', cover: 'hardboundLeather',
+      albumSize: '8.5x11', amount: 2079, stage: 'placed', albumEditedAt: Date.now() + 1e9, userId: 'user-1',
     });
-    await open('9x9');
-    expect(host.textContent).toContain('Album — 9×9 Hardbound');
+    await open('8.5x11');
+    expect(host.textContent).toContain('Album — 8.5×11 Hardbound');
     expect(picked('Softcover')).toBe(false);
   });
 

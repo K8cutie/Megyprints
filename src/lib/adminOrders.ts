@@ -5,6 +5,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { supabase } from './supabase';
+import { peso } from './eventBookings';
 
 export const ORDER_STATUSES = [
   'pending_payment', 'paid', 'in_production', 'printed', 'shipped', 'delivered', 'cancelled',
@@ -51,6 +52,37 @@ export interface AdminOrder {
   copy_of_order_number?: string | null;
   /** The event booking that paid for this album (0045). */
   event_booking_number?: string | null;
+  /** What the customer was asked to pay, worked out by the database as the
+   *  order was placed (0055); owner only. Null on orders placed before it. */
+  quoted_amount?: number | null;
+  quote?: OrderQuote | null;
+}
+
+/** The checkout's total in its parts, as order_quote() (0055) saves it. */
+export interface OrderQuote {
+  total: number;
+  /** The album with the included pages. */
+  album: number;
+  extra_pages: number;
+  extra_pages_fee: number;
+  qr: number;
+  extra_qr: number;
+  qr_fee: number;
+  /** The memory term the order was placed with; null when it has no QR memories. */
+  years: number | null;
+  term_fee: number;
+  hd_fee: number;
+}
+
+/** "album ₱890 + 2 extra QR ₱40 + 10 years ₱99 + HD ₱49": the parts the
+ *  total is made of, the free ones left out. */
+export function quoteParts(q: OrderQuote): string {
+  const parts = [`album ${peso(q.album)}`];
+  if (q.extra_pages_fee > 0) parts.push(`${q.extra_pages} extra ${q.extra_pages === 1 ? 'page' : 'pages'} ${peso(q.extra_pages_fee)}`);
+  if (q.qr_fee > 0) parts.push(`${q.extra_qr} extra QR ${peso(q.qr_fee)}`);
+  if (q.term_fee > 0) parts.push(`${q.years} years ${peso(q.term_fee)}`);
+  if (q.hd_fee > 0) parts.push(`HD ${peso(q.hd_fee)}`);
+  return parts.join(' + ');
 }
 
 /** The order whose print files this order prints from: its own, or for a
@@ -111,3 +143,9 @@ export async function updateOrder(id: string, patch: OrderPatch): Promise<string
   }
   return null;
 }
+
+/** "Mark paid" (owner): the payment and the order both become paid, then the
+ *  memory years the customer bought take effect (updateOrder). The status
+ *  dropdown's "Paid" calls this too, so the two can never differ: through
+ *  set_order_status alone the order was paid but kept the included term. */
+export const markOrderPaid = (id: string): Promise<string | null> => updateOrder(id, { payment_status: 'paid', status: 'paid' });

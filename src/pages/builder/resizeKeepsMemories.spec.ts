@@ -178,8 +178,8 @@ describe('Setup → tap 6×6: every memory comes along, on its own photo, in its
     expect(r.message).toMatch(/3 video memories came along/);
   });
 
-  it('9×9 too, and back to 8×8: the same memories on the same photos', async () => {
-    await changeSize('9x9');
+  it('6×8 too, and back to 8×8: the same memories on the same photos', async () => {
+    await changeSize('6x8');
     await changeSize('8x8');
     expect(builder.albumSize).toBe('8x8');
     expect(memoriesIn(builder.albumPages).map((m) => [m.code, m.photo, m.templateId])).toEqual(

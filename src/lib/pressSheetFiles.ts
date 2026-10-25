@@ -99,10 +99,15 @@ export function blankSidesNote(pageCount: number, pageOne: PageOneSide): string 
   return last ? `${start}; the last side is blank${first ? ' too' : ''}` : start;
 }
 
-/** How to stack the cut pieces (owner, 2026-10-22: the sheets are in page
- *  order now, sheet 1 holds pages 1, 2, 3…). */
-export function stackHowTo(pieces: number): string {
-  return `cut each sheet into ${pieces} ${pieces === 1 ? 'piece' : 'pieces'}, stack them front up in page order: left to right, top to bottom, sheet 1's on top`;
+/** How to cut and stack: the whole printed stack at once, then the piles
+ *  one on the next (the shop's way, 2026-10-24: "page 1, and behind it it
+ *  runs on to page 22; once it's cut, put it on the one to its right, page
+ *  23…"). Every piece's front carries its number at the spine edge, so the
+ *  finished stack counts 1, 2, 3… from the top. */
+export function stackHowTo(piles: number): string {
+  return piles === 1
+    ? 'keep sheet 1 on top, front up, and cut the whole stack on the marks'
+    : `keep sheet 1 on top, front up, cut the whole stack at once into ${piles} piles, then put pile 1 (top left) on pile 2, that on pile 3, left to right, top to bottom`;
 }
 
 /** What to tell the operator about the album sheets (sheet count, blank
@@ -162,8 +167,10 @@ export function jpegHowTo(o: PrintOrder, sheets: number, pieces: number, cover: 
     `${name(1, 'front', 1)} on the front of the first sheet, ${name(2, 'back', 1)} on its back,`,
     `then ${name(3, 'front', 2)} on the front of the next sheet, and so on.`,
     'Every sheet has a picture on both sides. Never print a picture on a sheet by itself.',
-    `Cut each sheet on the marks into ${pieces} ${pieces === 1 ? 'piece' : 'pieces'}. The pages are in order: sheet 1 has the first ones.`,
-    'Stack the pieces front side up in page order: left to right, top to bottom, sheet 1\'s on top, then sheet 2\'s, and so on.',
+    'Keep the printed sheets in order: sheet 1 on top, front side up.',
+    `Cut the whole stack at once on the marks: ${pieces} ${pieces === 1 ? 'pile' : 'piles'}, each already in page order.`,
+    'Put pile 1 (top left) on top of pile 2 (to its right), that on pile 3, and so on: left to right, top to bottom.',
+    'Every piece has its number (1, 2, 3...) printed small on its front, at the spine edge: the finished stack counts 1, 2, 3 from the top.',
     `${blankSides}.`,
     '',
     cover

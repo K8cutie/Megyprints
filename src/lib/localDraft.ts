@@ -7,6 +7,8 @@
    the main bundle.
    ══════════════════════════════════════════════════════════════════════════ */
 
+import { liveAlbumSize, liftRetiredPages } from '../pages/builder/retiredSizes';
+
 export const DRAFT_STORAGE_KEY = 'megy-album-v5';
 
 interface DraftPageLike {
@@ -90,8 +92,8 @@ export function readDraftAlbumForOrder(albumId: string | undefined, userId?: str
     if (pages.length === 0 || typeof d.albumSize !== 'string') return null;
     return {
       albumId: typeof d.albumId === 'string' ? d.albumId : undefined,
-      albumSize: d.albumSize,
-      pages,
+      albumSize: liveAlbumSize(d.albumSize),
+      pages: liftRetiredPages(pages),
       editedAt: typeof d.editedAt === 'number' ? d.editedAt : 0,
     };
   } catch {

@@ -171,12 +171,12 @@ function pageHasWords(page: AlbumPage): boolean {
 /** The page at print size (W × H, no bleed) WITHOUT its words, and its words
  *  as patches in that canvas's pixels. */
 async function renderPageLayers(
-  page: AlbumPage, photos: UploadedPhoto[], albumSize: AlbumSizePreset, pageIndex: number, coverMode: boolean,
+  page: AlbumPage, photos: UploadedPhoto[], albumSize: AlbumSizePreset, pageIndex: number, coverMode: boolean, bindingIn?: number,
 ): Promise<{ canvas: HTMLCanvasElement; words: PxPatch[] }> {
-  if (!pageHasWords(page)) return { canvas: await drawPrintPage(page, photos, albumSize, pageIndex, coverMode, true), words: [] };
+  if (!pageHasWords(page)) return { canvas: await drawPrintPage(page, photos, albumSize, pageIndex, coverMode, true, bindingIn), words: [] };
   return withImageMemo(async () => {
-    const bare = await drawPrintPage(page, photos, albumSize, pageIndex, coverMode, false);
-    const full = await drawPrintPage(page, photos, albumSize, pageIndex, coverMode, true);
+    const bare = await drawPrintPage(page, photos, albumSize, pageIndex, coverMode, false, bindingIn);
+    const full = await drawPrintPage(page, photos, albumSize, pageIndex, coverMode, true, bindingIn);
     const words = wordPatches(full.getContext('2d')!, bare.getContext('2d')!, { x: 0, y: 0, w: full.width, h: full.height });
     full.width = 0; full.height = 0; // let the second page go now
     return { canvas: bare, words };
@@ -197,9 +197,12 @@ export async function renderPageForPrint(
     fabricCanvas?: any;
     /** Words drawn into the page picture (no WordPatch): the smaller file. */
     bakeWords?: boolean;
+    /** Binding side allowance, inches (binding.bindingInchesFor the order's
+     *  cover: 1/2" hardbound). Default: the editor's 3/8". */
+    bindingIn?: number;
   },
 ): Promise<PrintLayers> {
-  const { page, photos, albumSize, pageIndex = 0, fabricCanvas, bakeWords = false } = options;
+  const { page, photos, albumSize, pageIndex = 0, fabricCanvas, bakeWords = false, bindingIn } = options;
 
   // ── Method 1: Fabric.js canvas export (highest quality) ──
   if (fabricCanvas) {
@@ -213,7 +216,7 @@ export async function renderPageForPrint(
   }
 
   // ── Method 2: Manual canvas compositing (fallback) ──
-  return renderPageManually(page, photos, albumSize, pageIndex, bakeWords);
+  return renderPageManually(page, photos, albumSize, pageIndex, bakeWords, bindingIn);
 }
 
 /** An interior page for the print file: the picture with its bleed, shrunk to
@@ -225,10 +228,11 @@ async function renderPageManually(
   albumSize: AlbumSizePreset,
   pageIndex: number,
   bakeWords = false,
+  bindingIn?: number,
 ): Promise<PrintLayers> {
   const { canvas, words } = bakeWords
-    ? { canvas: await drawPrintPage(page, photos, albumSize, pageIndex, false, true), words: [] }
-    : await renderPageLayers(page, photos, albumSize, pageIndex, false);
+    ? { canvas: await drawPrintPage(page, photos, albumSize, pageIndex, false, true, bindingIn), words: [] }
+    : await renderPageLayers(page, photos, albumSize, pageIndex, false, bindingIn);
 
   // Fit Supabase Storage's upload cap. We composite at full 300 DPI above (crisp
   // text / QR / edges), then downscale + JPEG-compress the ENCODED image so a
@@ -271,6 +275,7 @@ async function drawPrintPage(
   pageIndex: number,
   coverMode: boolean,
   words: boolean,
+  bindingIn?: number,
 ): Promise<HTMLCanvasElement> {
   const { width: W, height: H } = getPrintDimensions(albumSize);
   // Authoring width — text (fontSize + free x/y) is authored by the Fabric editor
@@ -303,7 +308,7 @@ async function drawPrintPage(
   // text-only or ornament-only page (no photo fills) still renders its content.
   if (template && (page.slotFills || page.qrFills || page.slotTexts || page.ornamentFills)) {
     const adapted = adaptTemplateToOrientation(template, W, H);
-    const m = marginForTemplate(adapted, adapted.margin, albumSize, pageIndex, { noBinding: coverMode });
+    const m = marginForTemplate(adapted, adapted.margin, albumSize, pageIndex, { noBinding: coverMode, bindingIn });
     const safeX = W * m.left;
     const safeY = H * m.top;
     const safeW = W * (1 - m.left - m.right);
@@ -389,7 +394,7 @@ async function drawPrintPage(
   // its x/y. Each element's chosen font is loaded before drawing so the canvas
   // doesn't silently fall back to the default serif.
   const textTpl = template ? adaptTemplateToOrientation(template, W, H) : null;
-  const tm = textTpl ? marginForTemplate(textTpl, textTpl.margin, albumSize, pageIndex, { noBinding: coverMode }) : null;
+  const tm = textTpl ? marginForTemplate(textTpl, textTpl.margin, albumSize, pageIndex, { noBinding: coverMode, bindingIn }) : null;
   // Every face this page's text uses, loaded up front (any stored family string
   // — the old double-quote-only match skipped 'Great Vibes, cursive').
   if (words) await loadFontFaces(page.textElements || []);
@@ -1119,7 +1124,7 @@ export async function renderAlbumForPrint(
   photos: UploadedPhoto[],
   albumSize: AlbumSizePreset,
   onProgress?: (completed: number, total: number) => void,
-  opts: { bakeWords?: boolean } = {},
+  opts: { bakeWords?: boolean; bindingIn?: number } = {},
 ): Promise<Array<{ pageIndex: number; image: Blob; words: WordPatch[]; filename: string }>> {
   const results: Array<{ pageIndex: number; image: Blob; words: WordPatch[]; filename: string }> = [];
 
@@ -1130,6 +1135,7 @@ export async function renderAlbumForPrint(
       albumSize,
       pageIndex: i,
       bakeWords: opts.bakeWords,
+      bindingIn: opts.bindingIn,
     });
     results.push({
       pageIndex: i,

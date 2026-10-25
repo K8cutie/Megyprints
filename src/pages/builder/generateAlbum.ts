@@ -271,6 +271,17 @@ export const MIN_MEMORY_PAGES = 7;
    place two full pages sit side by side. */
 export const OPENING_FULL_PAGES = 3;
 
+/* HALF THE PAGES ARE FULL PAGES (owner, 2026-10-26: "in a 40 page output the
+   occurrence of full bleed should be 50%"). On Surprise, about half the
+   album's pages are one photo over the whole page, where a video memory can
+   go: the opening pages, the memory pages and more like them, spread through
+   the album the same way. Agreed rules: a chosen photos-per-page is left
+   alone; the album never gets more pages than it would without them (photos
+   that need the room keep it); the extra full pages take photos that fit a
+   full page, or ones whose known face the crop keeps, never a cut head; and
+   an album short of those simply has fewer. */
+export const FULL_PAGE_SHARE = 0.5;
+
 /** A QR already sits on this page (a badge, or one placed in a box before
  *  box QRs were retired — those keep working). */
 export function hasActiveQr(page: AlbumPage): boolean {
@@ -308,6 +319,13 @@ export function layoutHoldsMemory(t: PageTemplate): boolean {
   return photoSlotCount(t) === 1 && !(t.textSlots?.length) && coversWholeSheet(t);
 }
 
+/** A full page: one photo over the whole sheet, no box, with or without its
+ *  video's QR badge. What FULL_PAGE_SHARE counts. */
+export function isFullPagePhoto(page: AlbumPage): boolean {
+  const t = page.templateId ? getTemplateById(page.templateId) : undefined;
+  return !!t && layoutHoldsMemory(t) && (page.slotFills ?? []).some((f) => f != null);
+}
+
 /* ── Which photos go on the memory pages ──────────────────────────────────
    A full-page single shows the photo object-cover across the whole sheet, so
    any photo that isn't the page's shape loses an edge. Losing the SIDES is
@@ -317,7 +335,7 @@ export function layoutHoldsMemory(t: PageTemplate): boolean {
    fitting photos takes the least-bad others — and, when the caller detected
    faces, only those whose faces the centred crop keeps. */
 const PAGE_ASPECT: Record<string, number> = {
-  '6x4': 6 / 4, '8x6': 8 / 6, '6x8': 6 / 8, '6x6': 1, '8x8': 1, '9x9': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
+  '6x4': 6 / 4, '8x6': 8 / 6, '6x8': 6 / 8, '6x6': 1, '8x8': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
 };
 const SIDE_CROP_OK = 0.34;
 const TOP_CROP_OK = 0.12;
@@ -381,11 +399,15 @@ export function memorySingleTemplate(size: AlbumSizePreset): PageTemplate | unde
 
 /** Photos (by index) that would need a crop on a memory page — the ones worth
  *  running face detection on BEFORE generation. Empty when the album already
- *  has MIN_MEMORY_PAGES fitting photos (the common case: no detection cost). */
-export function memoryFaceCandidates(photos: UploadedPhoto[], size: AlbumSizePreset, max = 40): number[] {
+ *  has the full pages it needs in fitting photos (the common case: no
+ *  detection cost). `need` = the full pages wanted: the opening and memory
+ *  pages, or on Surprise half of a 40-page album (FULL_PAGE_SHARE). */
+export function memoryFaceCandidates(
+  photos: UploadedPhoto[], size: AlbumSizePreset, max = 40, need = MIN_MEMORY_PAGES + OPENING_FULL_PAGES,
+): number[] {
   const aspect = PAGE_ASPECT[size] ?? 1;
   const fitting = photos.filter((p) => fitsFullPage(p, aspect)).length;
-  if (fitting >= Math.min(MIN_MEMORY_PAGES + OPENING_FULL_PAGES, photos.length)) return [];
+  if (fitting >= Math.min(need, photos.length)) return [];
   return photos.map((_, i) => i)
     .filter((i) => !fitsFullPage(photos[i], aspect) && allowedOnFullPage(photos[i], aspect))
     .slice(0, max);
@@ -499,24 +521,39 @@ export function memoriesAcrossSize(
 /** Pick `k` memory photos spread across the album's chronological order:
  *  each of k equal stretches gives its best FITTING photo nearest its middle;
  *  a stretch with none borrows a spare fitting photo from elsewhere (kept a
- *  little apart from the others); only then does it take its least-bad other. */
+ *  little apart from the others); only then does it take its least-bad other.
+ *  `lenient` = how many picks may be that least-bad other (the memory pages:
+ *  all of them). Past it a pick must fit, or be a sharp photo whose known
+ *  face the crop keeps: the extra full pages (FULL_PAGE_SHARE) never cut a
+ *  head to make up their number. */
 function pickMemoryPhotos(
   photos: UploadedPhoto[], size: AlbumSizePreset, k: number,
-  faces?: Record<number, { x: number; y: number }>, randomize = false,
+  faces?: Record<number, { x: number; y: number }>, randomize = false, lenient = k,
 ): number[] {
   const aspect = PAGE_ASPECT[size] ?? 1;
   const order = groupPhotosByMoment(photos).flat();
   const n = order.length;
   if (k <= 0 || n === 0) return [];
   const allowed = (i: number) => allowedOnFullPage(photos[i], aspect);
-  if (n <= k) return order.filter(allowed);
   // Megy's photo check (lib/photoCheck): a blurry shot only as a last resort,
   // and the sharper, eyes-open shot wins within a stretch. Without check
   // results every photo scores the same, so nothing changes.
   const median = medianSharpness(photos);
   const blurry = (i: number) => isBlurry(photos[i], median);
+  // With extra full pages each stretch is short, and a shut-eyes shot can win
+  // its own: the extra pages take only open-eyed shots (one with shut eyes
+  // still has a place on a page of several).
+  const extra = k > lenient;
+  const shut = (i: number) => extra && !!photos[i].check?.eyesClosed;
+  const strict = (i: number) => !blurry(i) && !shut(i) && (fitsFullPage(photos[i], aspect)
+    || (!!faces?.[i] && allowed(i) && fullPageCost(photos[i], aspect, faces[i]) < 4));
+  if (n <= k) {
+    if (!extra) return order.filter(allowed);
+    let others = Math.max(0, lenient - order.filter(strict).length);
+    return order.filter((i) => strict(i) || (allowed(i) && others-- > 0));
+  }
   const weak = (i: number) => 1 - photoQuality(photos[i], median);
-  const fits = (i: number) => fitsFullPage(photos[i], aspect) && !blurry(i);
+  const fits = (i: number) => fitsFullPage(photos[i], aspect) && !blurry(i) && !shut(i);
   const cost = (i: number) => fullPageCost(photos[i], aspect, faces?.[i]);
   const picks: (number | null)[] = new Array(k).fill(null);
   const pickedAt: number[] = [];
@@ -556,19 +593,30 @@ function pickMemoryPhotos(
   // 3. Still short: the stretch's least-bad ALLOWED other photo (face-aware
   //    when known), else any allowed one left; none allowed → fewer memory
   //    pages rather than a photo cut across its orientation.
-  for (let s = 0; s < k; s++) {
-    if (picks[s] != null) continue;
-    const [lo, hi] = seg(s);
-    let best = -1, bestC = Infinity;
-    for (let p = lo; p < hi; p++) {
-      const i = order[p];
-      if (used.has(i) || !allowed(i)) continue;
-      const c = cost(i) + Math.abs(p - centre(s)) / n + weak(i) + (blurry(i) ? 10 : 0);
-      if (c < bestC) { bestC = c; best = p; }
+  const fill = (ok: (i: number) => boolean, room: () => boolean) => {
+    for (let s = 0; s < k; s++) {
+      if (picks[s] != null || !room()) continue;
+      const [lo, hi] = seg(s);
+      let best = -1, bestC = Infinity;
+      for (let p = lo; p < hi; p++) {
+        const i = order[p];
+        if (used.has(i) || !ok(i)) continue;
+        const c = cost(i) + Math.abs(p - centre(s)) / n + weak(i) + (blurry(i) ? 10 : 0);
+        if (c < bestC) { bestC = c; best = p; }
+      }
+      if (best < 0) for (let p = 0; p < n; p++) if (!used.has(order[p]) && ok(order[p])) { best = p; break; }
+      if (best >= 0) take(s, best);
     }
-    if (best < 0) for (let p = 0; p < n; p++) if (!used.has(order[p]) && allowed(order[p])) { best = p; break; }
-    if (best >= 0) take(s, best);
-  }
+  };
+  // With extra full pages the stretches are short, and one can hold only
+  // photos a crop would hurt while the next has one whose face it keeps
+  // (the opening pages took the first good ones). So every stretch first
+  // takes a `strict` photo; the least-bad others only make up the `lenient`
+  // memory pages still missing.
+  if (extra) {
+    fill(strict, () => true);
+    fill(allowed, () => pickedAt.length < lenient);
+  } else fill(allowed, () => true);
   return picks.filter((i): i is number => i != null);
 }
 
@@ -1209,6 +1257,9 @@ export interface GenerateOptions {
   /** Video memories that come along (a new album size, memoriesAcrossSize):
    *  each goes on its photo (an index into the photos) as its corner badge. */
   memories?: CarriedMemory[];
+  /** The share of Surprise pages that are full pages (FULL_PAGE_SHARE).
+   *  0 = only the opening and memory pages, as before 2026-10-26. */
+  fullPageShare?: number;
 }
 
 /**
@@ -1221,6 +1272,11 @@ export interface GenerateOptions {
  * fill); the opening pages go first and the memory pages then go back where
  * their photos fall in the album's order. Memories that come along take
  * their full pages first, as badges on their own photos.
+ *
+ * On Surprise, FULL_PAGE_SHARE of the pages are full pages: the album is made
+ * once as above, then again with more photos reserved for full pages (spread
+ * the same way), as many as keep its page count. A chosen photos-per-page is
+ * made once, as before.
  */
 export function generateAlbum(
   photos: UploadedPhoto[],
@@ -1228,6 +1284,65 @@ export function generateAlbum(
   photosPerPage?: number | undefined,
   background?: AlbumPage['background'] | undefined,
   options?: GenerateOptions,
+): AlbumPage[] {
+  const made = (memoryPages: number) => generateAlbumWith(photos, albumSize, photosPerPage, background, options, memoryPages);
+  const base = made(MIN_MEMORY_PAGES);
+  const share = options?.fullPageShare ?? FULL_PAGE_SHARE;
+  if (photosPerPage != null || !(share > 0) || !memorySingleTemplate(albumSize)) return base;
+  // An album with more photos than its minimum pages hold at the natural mix
+  // already needs every page it has: no full page fits without adding one, so
+  // don't spend the tries (a 300-photo album took 0.3 s more for nothing).
+  const minPages = Math.max(1, Math.floor(options?.minPages ?? MIN_PAGES));
+  if (photos.length >= minPages * naturalPerPage(albumSize)) return base;
+  const target = Math.ceil(base.length * share);
+  const fullPages = (pages: AlbumPage[]) => pages.filter(isFullPagePhoto).length;
+  let best = base;
+  const bestFull = fullPages(base);
+  if (bestFull >= target) return base;
+  // Set aside the missing full pages besides the memory pages, and keep the
+  // first album that doesn't grow. Never more pages than without them: a
+  // photo that needs the room keeps it.
+  //  • One page over, the same count is dealt once more: a second deal often
+  //    lands, the page count not climbing steadily with the count (70 photos
+  //    on an 8×8 made 41 pages with 9 to 15 more full pages and 40 again with
+  //    17, each shape's pages rounding up apart). Further over, the count
+  //    drops by the pages over.
+  //  • Short of the share once it fits (a hero single the first album had
+  //    didn't come back: 19 of 40), the missing ones are asked for too, once.
+  //  • A few tries at most: the album is made on the customer's phone.
+  let k = MIN_MEMORY_PAGES + (target - bestFull);
+  let bestNow = bestFull;
+  let again = false;
+  let topUp = false;
+  for (let tries = 0; tries < 12 && k > MIN_MEMORY_PAGES; tries++) {
+    const pages = made(k);
+    const over = pages.length - base.length;
+    if (over <= 0) {
+      const n = fullPages(pages);
+      if (n > bestNow) { best = pages; bestNow = n; }
+      if (n >= target || topUp) break;
+      topUp = true;
+      again = false;
+      k += target - n;
+      continue;
+    }
+    if (over === 1 && !again) { again = true; continue; }
+    if (topUp) break;
+    again = false;
+    k -= over;
+  }
+  return best;
+}
+
+/** generateAlbum with `memoryPages` photos reserved for full pages besides the
+ *  opening ones: past MIN_MEMORY_PAGES each must fit (pickMemoryPhotos). */
+function generateAlbumWith(
+  photos: UploadedPhoto[],
+  albumSize: AlbumSizePreset,
+  photosPerPage: number | undefined,
+  background: AlbumPage['background'] | undefined,
+  options: GenerateOptions | undefined,
+  memoryPages: number,
 ): AlbumPage[] {
   const minPages = Math.max(1, Math.floor(options?.minPages ?? MIN_PAGES));
   const solo = memorySingleTemplate(albumSize);
@@ -1237,9 +1352,10 @@ export function generateAlbum(
   }
   const opening = solo ? pickOpeningPhotos(photos, albumSize, OPENING_FULL_PAGES, new Set(badges.keys()), options?.faceCenters) : [];
   const carried = [...badges].flatMap(([photo, list]) => list.map(() => photo));
-  const want = solo ? Math.max(0, Math.min(MIN_MEMORY_PAGES, photos.length - opening.length) - carried.length) : 0;
+  const want = solo ? Math.max(0, Math.min(memoryPages, photos.length - opening.length) - carried.length) : 0;
+  const lenient = Math.max(0, MIN_MEMORY_PAGES - carried.length);
   const spoken = new Set([...badges.keys(), ...opening]);
-  const reserved = [...carried, ...(want > 0 ? pickMemoryPhotosBesides(photos, albumSize, want, spoken, options) : [])];
+  const reserved = [...carried, ...(want > 0 ? pickMemoryPhotosBesides(photos, albumSize, want, spoken, options, lenient) : [])];
   if (reserved.length === 0 && opening.length === 0) {
     const plain = layoutAlbum(photos, albumSize, photosPerPage, background, options);
     separateLookAlikes(plain, photos, isMemoryReady);
@@ -1268,13 +1384,13 @@ export function generateAlbum(
 /** pickMemoryPhotos, from the photos not already spoken for (a memory's own
  *  photo, an opening page's photo). */
 function pickMemoryPhotosBesides(
-  photos: UploadedPhoto[], size: AlbumSizePreset, k: number, taken: Set<number>, options?: GenerateOptions,
+  photos: UploadedPhoto[], size: AlbumSizePreset, k: number, taken: Set<number>, options?: GenerateOptions, lenient = k,
 ): number[] {
-  if (taken.size === 0) return pickMemoryPhotos(photos, size, k, options?.faceCenters, options?.randomize);
+  if (taken.size === 0) return pickMemoryPhotos(photos, size, k, options?.faceCenters, options?.randomize, lenient);
   const others = photos.map((_, i) => i).filter((i) => !taken.has(i));
   const faces: Record<number, { x: number; y: number }> = {};
   others.forEach((i, k2) => { const f = options?.faceCenters?.[i]; if (f) faces[k2] = f; });
-  return pickMemoryPhotos(others.map((i) => photos[i]), size, k, faces, options?.randomize).map((k2) => others[k2]);
+  return pickMemoryPhotos(others.map((i) => photos[i]), size, k, faces, options?.randomize, lenient).map((k2) => others[k2]);
 }
 
 /**

@@ -41,7 +41,7 @@ import { EMPTY_ADDRESS } from '../lib/contact';
 import { priceOf, compareAtPriceOf, type PriceSchedule } from '../lib/pricing';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const SIZES = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '8.5x11', '11.5x8'];
+const SIZES = ['6x6', '8x8', '6x4', '8x6', '6x8', '8.5x11', '11.5x8'];
 const schedule = (extra: Partial<PriceSchedule>): PriceSchedule => ({
   min_pages: 40, sheet_rate: 66.25, hosting_reserve: 50, hosting_tiers: [{ years: 5, price: 0 }, { years: 10, price: 99 }],
   disabled_sizes: [],
@@ -89,7 +89,7 @@ describe('free shipping and the real was price at checkout', () => {
     await render(); await settle();
     const now = peso('[data-testid="order-total"]');
     const was = peso('[data-testid="order-was"]');
-    // 41 pages of 8×8 hardbound, no add-ons: the print price IS the total. (Not 9×9: its hardbound cover can't print, 0046.)
+    // 41 pages of 8×8 hardbound, no add-ons: the print price IS the total.
     expect(now).toBe(priceOf(s, '8x8', 'hard', 41));
     expect(was).toBe(compareAtPriceOf(s, '8x8', 'hard', 41, '2026-10-08'));
     expect(was).toBeGreaterThan(now);
