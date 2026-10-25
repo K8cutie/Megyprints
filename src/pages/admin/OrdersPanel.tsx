@@ -1,11 +1,12 @@
 /* Orders tab — the fulfillment queue. Status changes go through the status-only
-   DB function (safe for fulfillment). Price + Mark-paid are FINANCIAL and only
-   render when canSeeFinancials (owner) — fulfillment never sees the peso amount. */
+   DB function (safe for fulfillment), except an owner's "Paid", which is Mark
+   paid. Price + Mark-paid are FINANCIAL and only render when canSeeFinancials
+   (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
 import { Loader2, Check, Download, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
 import {
-  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, printFilesOf, quoteParts,
+  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, markOrderPaid, printFilesOf, quoteParts,
 } from '../../lib/adminOrders';
 import { peso } from '../../lib/eventBookings';
 import { supabase } from '../../lib/supabase';
@@ -101,7 +102,11 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
     setSaving(false);
   };
   const saveFin = (patch: OrderPatch) => run(() => updateOrder(o.id, patch));
-  const changeStatus = (status: AdminOrder['status']) => run(() => setOrderStatus(o.id, status));
+  const markPaid = () => run(() => markOrderPaid(o.id));
+  // An owner's "Paid" is Mark paid (memory years included). Fulfillment can't
+  // mark paid: their "Paid" stays with set_order_status, which refuses it.
+  const changeStatus = (status: AdminOrder['status']) =>
+    status === 'paid' && canSeeFinancials ? markPaid() : run(() => setOrderStatus(o.id, status));
 
   // Commit the manually-typed price. The raw input is free text, so a comma,
   // a peso sign, or a stray letter would make `Number(price)` NaN — which
@@ -204,7 +209,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
                   className="h-8 px-2 rounded-lg bg-paper text-xs text-medium disabled:opacity-50">Set</button>
               </div>
               {!paid && (
-                <button onClick={() => saveFin({ payment_status: 'paid', status: 'paid' })} disabled={saving}
+                <button onClick={markPaid} disabled={saving}
                   className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
                   <Check size={13} /> Mark paid
                 </button>

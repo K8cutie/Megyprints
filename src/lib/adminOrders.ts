@@ -143,3 +143,9 @@ export async function updateOrder(id: string, patch: OrderPatch): Promise<string
   }
   return null;
 }
+
+/** "Mark paid" (owner): the payment and the order both become paid, then the
+ *  memory years the customer bought take effect (updateOrder). The status
+ *  dropdown's "Paid" calls this too, so the two can never differ: through
+ *  set_order_status alone the order was paid but kept the included term. */
+export const markOrderPaid = (id: string): Promise<string | null> => updateOrder(id, { payment_status: 'paid', status: 'paid' });
