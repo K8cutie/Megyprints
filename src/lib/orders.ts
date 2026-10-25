@@ -12,6 +12,8 @@ import { uploadOnce } from './storageUpload';
 import { generateAlbumPdf, generateCoverWrapPdf } from '../pages/builder/generateAlbumPdf';
 import type { CoverPrintInput } from '../pages/builder/printPipeline';
 import type { PrintJob } from './printQueue';
+import type { CoverType } from '../pages/builder/types';
+import { bindingInchesFor } from '../pages/builder/binding';
 import { selectOrderAlbum } from './orderAlbum';
 import { isUnpaidLimitError, UnpaidLimitError } from './orderExpiry';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
@@ -157,8 +159,9 @@ export async function createOrderFromAlbum(opts: {
  * Create-only (see storageUpload.ts): a retry that finds the file already there
  * counts as done. Throws on failure so the caller can surface it.
  */
-export async function uploadOrderPrintPdf(orderId: string, job: PrintJob): Promise<void> {
-  const blob = await generateAlbumPdf(job.pages, job.photos, job.albumSize);
+export async function uploadOrderPrintPdf(orderId: string, job: PrintJob, cover?: CoverType | null): Promise<void> {
+  // The binding side: 1/2" for a hardbound order, 3/8" softcover (binding.ts).
+  const blob = await generateAlbumPdf(job.pages, job.photos, job.albumSize, undefined, undefined, bindingInchesFor(cover));
   const error = await uploadOnce('print-pdfs', `${orderId}.pdf`, blob, { contentType: 'application/pdf' });
   if (error) throw new Error(`Print file upload failed: ${error.message}`);
 }

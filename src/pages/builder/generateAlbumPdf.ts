@@ -43,6 +43,8 @@ export async function generateAlbumPdf(
   albumSize: AlbumSizePreset,
   onProgress?: (completed: number, total: number) => void,
   budgetBytes = PRINT_FILE_BUDGET_BYTES,
+  /** Binding side allowance, inches: binding.bindingInchesFor(the order's cover). */
+  bindingIn?: number,
 ): Promise<Blob> {
   const config = ALBUM_SIZES.find((s) => s.preset === albumSize);
   // ALBUM_SIZES stores 300 DPI pixels → physical inches = px / 300. Each page
@@ -69,14 +71,14 @@ export async function generateAlbumPdf(
     return doc.output('blob');
   };
 
-  const rendered = await renderAlbumForPrint(pages, photos, albumSize, onProgress);
+  const rendered = await renderAlbumForPrint(pages, photos, albumSize, onProgress, { bindingIn });
   if (!rendered.length) throw new Error('Album has no pages to export.');
   const pdf = await build(rendered);
   // Sharp words add a little to every page that has words. If that tips the
   // file past the upload cap, the words go back into the page pictures — the
   // file as it was before sharp words — rather than the file not arriving.
   if (pdf.size <= budgetBytes || !rendered.some((r) => r.words.length)) return pdf;
-  return build(await renderAlbumForPrint(pages, photos, albumSize, onProgress, { bakeWords: true }));
+  return build(await renderAlbumForPrint(pages, photos, albumSize, onProgress, { bakeWords: true, bindingIn }));
 }
 
 /**

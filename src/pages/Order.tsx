@@ -707,7 +707,7 @@ export default function Order() {
       //    and the user stays on Pay to retry. (Create-only upload, never upsert:
       //    customers can't read this bucket, so an upsert is refused by RLS.)
       setPrepMsg('Making your print file…');
-      await uploadOrderPrintPdf(order.id, printJob);
+      await uploadOrderPrintPdf(order.id, printJob, order.cover);
 
       // 3c. The videos once more, right before their memory rows: the nightly
       //     cleanup (0042) may have removed one this order shares since 2b
