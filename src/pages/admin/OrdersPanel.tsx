@@ -1,12 +1,14 @@
 /* Orders tab — the fulfillment queue. Status changes go through the status-only
-   DB function (safe for fulfillment). Price + Mark-paid are FINANCIAL and only
-   render when canSeeFinancials (owner) — fulfillment never sees the peso amount. */
+   DB function (safe for fulfillment), except an owner's "Paid", which is Mark
+   paid. Price + Mark-paid are FINANCIAL and only render when canSeeFinancials
+   (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
 import { Loader2, Check, Download, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
 import {
-  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, printFilesOf,
+  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, markOrderPaid, printFilesOf, quoteParts,
 } from '../../lib/adminOrders';
+import { peso } from '../../lib/eventBookings';
 import { supabase } from '../../lib/supabase';
 import {
   downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile, orderSpine,
@@ -58,8 +60,9 @@ function PressHowTo() {
       <ol className="mt-3 space-y-1.5 text-sm text-medium list-decimal pl-5">
         <li>Print the test sheet once first. It checks the size, the edge and the flip.</li>
         <li><b>Print sheets</b>: print both sides, flip on the long edge, at actual size (100%). Don't use "fit to page".</li>
-        <li>The pages are in order: sheet 1 has the first ones (1, 3, 5… on the front, 2, 4, 6… on the back). Cut each sheet on the marks. On 6×4, 6×6, 6×8 and 8×6 the pages touch each other: cut exactly on the marks, and across the sheet along the edges of the small black blocks.</li>
-        <li>Every piece has its number (1, 2, 3…) printed small on its front, at the spine edge. Stack the pieces front side up by that number: 1 on top, then 2, 3, and so on. A piece with no number showing is back side up. The number is hidden in the glue once the book is bound.</li>
+        <li>Keep the printed sheets in order, sheet 1 on top, front side up, and cut the whole stack at once on the marks. On 6×4, 6×6, 6×8 and 8×6 the pages touch each other: cut exactly on the marks, and across the sheet on the short cutting lines at both sides.</li>
+        <li>Each spot on the sheet makes a pile that is already in page order. Put pile 1 (top left) on top of pile 2 (to its right), that on pile 3, and so on, left to right, top to bottom. The book is now in order.</li>
+        <li>Every piece has its number (1, 2, 3…) printed small on its front, at the spine edge, so the finished stack counts 1, 2, 3 from the top. A piece with no number showing is back side up. The number is hidden in the glue once the book is bound.</li>
         <li>Blank sides: orders from 21 Oct 2026 start with page 1, and end with a blank side when the album has an odd number of pages. Older orders start with a blank side (it faces the inside of the front cover), and end with one when the page count is even. After <b>Print sheets</b>, the line under the order says which.</li>
         <li><b>Cover sheet</b>: print one side only. Cut on the marks; the dashed marks are the spine edges.</li>
         <li><b>Sheets as JPEG</b>: the same sheets and cover sheet as 300 DPI pictures in one zip, for a printer that can't open the PDF. Each picture is one side of a sheet, numbered in print order: print them in number order, both sides (01 on the front of sheet 1, 02 on its back, 03 on the front of sheet 2…), at actual size (100%).</li>
@@ -99,7 +102,11 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
     setSaving(false);
   };
   const saveFin = (patch: OrderPatch) => run(() => updateOrder(o.id, patch));
-  const changeStatus = (status: AdminOrder['status']) => run(() => setOrderStatus(o.id, status));
+  const markPaid = () => run(() => markOrderPaid(o.id));
+  // An owner's "Paid" is Mark paid (memory years included). Fulfillment can't
+  // mark paid: their "Paid" stays with set_order_status, which refuses it.
+  const changeStatus = (status: AdminOrder['status']) =>
+    status === 'paid' && canSeeFinancials ? markPaid() : run(() => setOrderStatus(o.id, status));
 
   // Commit the manually-typed price. The raw input is free text, so a comma,
   // a peso sign, or a stray letter would make `Number(price)` NaN — which
@@ -181,6 +188,14 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
               {o.payment_submitted_at ? ` · ${o.payment_submitted_at.slice(0, 16).replace('T', ' ')}` : ''}
             </div>
           )}
+          {/* What the Pay screen asked for (0055), to match the GoTyme deposit
+              against. An event album is paid by its booking instead. */}
+          {canSeeFinancials && o.quoted_amount != null && !o.event_booking_number && (
+            <div className="text-xs text-medium mt-1" data-testid="order-quoted">
+              Asked to pay <span className="font-semibold text-dark">{peso(o.quoted_amount)}</span>
+              {o.quote ? <> · {quoteParts(o.quote)}</> : null}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -194,7 +209,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
                   className="h-8 px-2 rounded-lg bg-paper text-xs text-medium disabled:opacity-50">Set</button>
               </div>
               {!paid && (
-                <button onClick={() => saveFin({ payment_status: 'paid', status: 'paid' })} disabled={saving}
+                <button onClick={markPaid} disabled={saving}
                   className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
                   <Check size={13} /> Mark paid
                 </button>

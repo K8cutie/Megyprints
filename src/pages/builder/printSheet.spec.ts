@@ -165,7 +165,7 @@ describe('sheet plan', () => {
   const pageTop: Record<Turn, [number, number]> = { 0: [0, -1], 90: [1, 0], 180: [0, 1], 270: [-1, 0] };
 
   for (const size of SIZES) {
-    it(`${size}: every page prints once, back to back with its partner, in page order`, () => {
+    it(`${size}: every page prints once, back to back with its partner, in cut-and-stack order`, () => {
       const pages = 57;
       const plan = sheetPlan(size, pages);
       const seen = new Map<number, number>();
@@ -194,31 +194,49 @@ describe('sheet plan', () => {
         });
       }
 
-      // Cut each sheet, stack its pieces left to right, top to bottom, sheet 1's
-      // on top → leaves in book order.
+      // Cut the whole stack (sheet 1 on top) at once: spot s is a pile, sheets
+      // in order; pile 1 on pile 2 on pile 3 … → leaves in book order.
       const stacked: number[] = [];
-      for (let i = 0; i < plan.sheets; i++) {
-        for (const p of plan.sides[2 * i].placements) if (p.leaf < plan.leaves) stacked.push(p.leaf);
+      for (let s = 0; s < plan.layout.leavesPerSheet; s++) {
+        for (let i = 0; i < plan.sheets; i++) {
+          const p = plan.sides[2 * i].placements[s];
+          if (p.leaf < plan.leaves) stacked.push(p.leaf);
+        }
       }
       expect(stacked).toEqual(Array.from({ length: plan.leaves }, (_, i) => i));
     });
   }
 
-  /* The owner's drawing, 2026-10-22: FRONT 1 3 / 5 7 / 9 11, BACK 4 2 / 8 6 / 12 10. */
-  it('6x6, sheet 1: the front is 1 3 / 5 7 / 9 11 and the back 4 2 / 8 6 / 12 10, as the owner drew it', () => {
-    const plan = sheetPlan('6x6', 40);
-    expect(plan.sheets).toBe(4);
-    const grid = (i: number) => {
-      const side = plan.sides[i];
-      const cells = [...side.placements].sort((a, b) => a.slot.y - b.slot.y || a.slot.x - b.slot.x);
-      return cells.map((p) => (p.page === null ? null : p.page + 1));
-    };
-    expect(grid(0)).toEqual([1, 3, 5, 7, 9, 11]);
-    expect(grid(1)).toEqual([4, 2, 8, 6, 12, 10]);
-    // Sheet 2 carries on: 13 15 / 17 19 / 21 23.
-    expect(grid(2)).toEqual([13, 15, 17, 19, 21, 23]);
-    // Sheet 4 holds the last 2 leaves (pages 37–40); its other spots are blank.
-    expect(grid(6)).toEqual([37, 39, null, null, null, null]);
+  /* The shop's way, via the owner, 2026-10-24: "11 sheets of 12.5x19, 132
+     pages: page 1, and behind it it runs on to page 22; once it's cut, put it
+     on the one to its right, page 23, which runs on to 44; once that's cut,
+     put it on page 45, and so on". His sheet: FRONT 1 23 / 45 67 / 89 111,
+     BACK 24 2 / 68 46 / 112 90. */
+  const grid = (plan: ReturnType<typeof sheetPlan>, i: number) => [...plan.sides[i].placements]
+    .sort((a, b) => a.slot.y - b.slot.y || a.slot.x - b.slot.x)
+    .map((p) => (p.page === null ? null : p.page + 1));
+  it('6x6, 132 pages on 11 sheets: sheet 1 is 1 23 / 45 67 / 89 111, its back 24 2 / 68 46 / 112 90, as the shop drew it', () => {
+    const plan = sheetPlan('6x6', 132);
+    expect(plan.sheets).toBe(11);
+    expect(grid(plan, 0)).toEqual([1, 23, 45, 67, 89, 111]);
+    expect(grid(plan, 1)).toEqual([24, 2, 68, 46, 112, 90]);
+    expect(grid(plan, 2)).toEqual([3, 25, 47, 69, 91, 113]);
+    expect(grid(plan, 20)).toEqual([21, 43, 65, 87, 109, 131]);
+    // Each spot, down the 11 sheets, is one pile: top left 1–22, top right 23–44 …
+    const pile = (s: number) => plan.sides.filter((side) => side.side === 'front').flatMap((side) => {
+      const p = side.placements[s];
+      return p.page === null ? [] : [p.page + 1, p.page + 2];
+    });
+    expect(pile(0)).toEqual(Array.from({ length: 22 }, (_, i) => i + 1));
+    expect(pile(1)).toEqual(Array.from({ length: 22 }, (_, i) => i + 23));
+    expect(pile(5)).toEqual(Array.from({ length: 22 }, (_, i) => i + 111));
+  });
+
+  it('6x6, 130 pages (MP-2026-KGCFSQN): the same sheet 1; the last pile ends at 130 with one spot blank', () => {
+    const plan = sheetPlan('6x6', 130);
+    expect(plan.sheets).toBe(11);
+    expect(grid(plan, 0)).toEqual([1, 23, 45, 67, 89, 111]);
+    expect(grid(plan, 20)).toEqual([21, 43, 65, 87, 109, null]);
   });
 
   it('turns page edges with the page: a quarter turn puts the page top on the sheet\'s right', () => {

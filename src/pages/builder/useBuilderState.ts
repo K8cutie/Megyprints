@@ -25,7 +25,7 @@ import { placePhoto } from './slotSwap';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, FULL_PAGE_SHARE, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
@@ -2202,7 +2202,10 @@ export function useBuilderState(): BuilderActions {
     // whose faces survive, so find the faces first (bounded; skipped
     // entirely in the common case, and harmless when detection fails).
     let faceCenters: Record<number, { x: number; y: number }> | undefined;
-    const faceCands = memoryFaceCandidates(pool, size);
+    // On Surprise about half the pages are full pages (FULL_PAGE_SHARE), so
+    // the faces matter whenever fewer than half of a 40-page album fit.
+    const faceCands = memoryFaceCandidates(pool, size, undefined,
+      photosPerPage == null ? Math.ceil(MIN_ALBUM_PAGES * FULL_PAGE_SHARE) : undefined);
     if (faceCands.length > 0) {
       faceCenters = {};
       try {

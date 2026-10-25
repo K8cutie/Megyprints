@@ -33,12 +33,13 @@ const OFF: BoxContentOptions = {
 };
 
 describe('making the album with bank quotes off', () => {
-  // Built while the file loads, before seedMathRandom's beforeEach, so it
-  // takes the seed here: unseeded, about 1 album in 15 had too few quote boxes.
-  const seeded = vi.spyOn(Math, 'random').mockImplementation(mulberry32(TEST_SEED));
+  // Made while the file loads, before the seeding hook runs: seeded here, so
+  // it is the same album every run. Unseeded, its quote-box pages ran 7-13
+  // of 52 against the floor of 6.5 below, and a full run once drew fewer.
+  const spy = vi.spyOn(Math, 'random').mockImplementation(mulberry32(TEST_SEED));
   const pages = generateAlbum(roll(120), '8x8', undefined);
   dealAlbumBoxes(pages, OFF);
-  seeded.mockRestore();
+  spy.mockRestore();
   const quoteBoxPages = pages.filter((p) => (p.textSlotRoll ?? []).includes('quote'));
 
   it('the switch is off (the owner turned the bank off for boxes)', () => {

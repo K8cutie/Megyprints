@@ -4,6 +4,7 @@ import { Package, Loader2, Landmark, BookImage } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { listMyOrders, cancelMyUnpaidOrder, type MyOrder } from '../lib/myOrders';
 import { myOrdersMissingCover, sendOrderCover } from '../lib/orderCover';
+import { ensureLatestApp, readUpdateNote, UPDATED_SEND_COVER, GETTING_NEWEST } from '../lib/appVersion';
 import { PhotosNotHereError } from '../lib/photoPresence';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { payByDate, UNPAID_ORDER_DAYS } from '../lib/orderExpiry';
@@ -188,12 +189,19 @@ function OrderCard({ order, focused, coverNeeded, onChanged }: { order: MyOrder;
 function SendCover({ order }: { order: MyOrder }) {
   const { user } = useAuth();
   const idb = useIndexedDBPhotos();
-  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [state, setState] = useState<'idle' | 'updating' | 'sending' | 'sent'>('idle');
   const [err, setErr] = useState('');
+  // Back from an update reload at Send the cover (lib/appVersion): say so.
+  const [updateNote, setUpdateNote] = useState(() => readUpdateNote());
   const send = async () => {
     if (!user) return;
-    setState('sending');
     setErr('');
+    // The cover file is made on this phone: by the newest app, never an old
+    // copy left open for days. An older copy reloads first; tap again.
+    setState('updating');
+    if (await ensureLatestApp(UPDATED_SEND_COVER) === 'reloading') return;
+    setUpdateNote(null);
+    setState('sending');
     try {
       await sendOrderCover(user.id, order.id, idb.get);
       setState('sent');
@@ -213,9 +221,12 @@ function SendCover({ order }: { order: MyOrder }) {
     <div className="mt-3 rounded-xl border border-peach bg-blush px-4 py-3 text-xs text-cocoa" data-testid="order-cover-needed">
       <p className="flex items-center gap-1.5 font-semibold text-dark mb-1"><BookImage size={14} /> We still need your album's cover</p>
       <p>Your cover didn't reach us when you ordered, so we can't print this album yet. Tap the button on the phone or computer you made the album on: the cover photo is there.</p>
-      <button type="button" onClick={() => void send()} disabled={state === 'sending'} data-testid="order-send-cover"
+      {updateNote && <p className="mt-2 font-semibold text-[#2E6B3F]" role="status" data-testid="order-cover-app-updated">{updateNote}</p>}
+      <button type="button" onClick={() => void send()} disabled={state === 'sending' || state === 'updating'} data-testid="order-send-cover"
         className="mt-3 px-3 py-1.5 rounded-lg bg-blush-pink text-white text-xs font-semibold hover:brightness-105 disabled:opacity-60 disabled:cursor-wait inline-flex items-center gap-1.5">
-        {state === 'sending' ? <><Loader2 size={12} className="animate-spin" /> Making and sending your cover…</> : 'Send the cover'}
+        {state === 'sending' ? <><Loader2 size={12} className="animate-spin" /> Making and sending your cover…</>
+          : state === 'updating' ? <><Loader2 size={12} className="animate-spin" /> {GETTING_NEWEST}</>
+            : 'Send the cover'}
       </button>
       {err && <p className="mt-2 text-red-600" role="alert" data-testid="order-send-cover-error">{err}</p>}
     </div>
