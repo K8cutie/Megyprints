@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import type { AlbumSizePreset, CoverType } from './types';
 import { trimInches, sheetPlan } from './printSheet';
 import { coverWrapGeometry } from './coverGeometry';
-import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, printFilePageOne, cleanPrintFile, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES, PIECE_NUMBER, type TextPainter } from './printSheetPdf';
+import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, printFilePageOne, cleanPrintFile, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES, PIECE_NUMBER, SIDE_CUT_LINE_IN, type TextPainter } from './printSheetPdf';
 import { PAGE_ONE_RIGHT_MARK } from './binding';
 
 /** Words as pictures, as the console draws them (canvasTextPainter needs a
@@ -206,12 +206,12 @@ describe('press sheet PDFs', () => {
     await expect(imposeAlbumSheets(await albumPdf('8x8', 40), '6x6', 'MP-X', T)).rejects.toThrow(/not 6x6 pages/);
   });
 
-  it('puts a fitting cover on one sheet and refuses a 9x9 hardbound one', async () => {
+  it('puts a fitting cover on one sheet and refuses an 8.5x11 hardbound one', async () => {
     const soft = await imposeCoverSheet(await coverPdf('8x8', 'softcover', 40), '8x8', 'softcover', 40, 'MP-C', T);
     const doc = await PDFDocument.load(soft.bytes);
     expect(doc.getPageCount()).toBe(1);
     expect(doc.getPage(0).getWidth()).toBeCloseTo(12.5 * 72, 6);
-    await expect(imposeCoverSheet(await coverPdf('9x9', 'hardboundLeather', 40), '9x9', 'hardboundLeather', 40, 'MP-9', T))
+    await expect(imposeCoverSheet(await coverPdf('8.5x11', 'hardboundLeather', 40), '8.5x11', 'hardboundLeather', 40, 'MP-9', T))
       .rejects.toThrow(/longer than the 19 in paper/);
   });
 
@@ -240,8 +240,9 @@ describe('no file from the console has a font', () => {
     expect(await fontsIn(bytes)).toEqual({ objects: 0, pagesListing: 0 });
     // The labels are still there, as pictures: the sheet name and each spot's pages.
     expect(drawn).toContain(`MP-2026-0045 · sheet 1 of ${plan.sheets} · front`);
-    expect(drawn).toContain('pages 1–2');
-    expect(drawn).toContain('page 45');
+    expect(drawn).toContain('pile 1 · pages 1–2');
+    // 45 pages = 23 pieces on 12 sheets: the last, page 45 alone, is pile 2 on sheet 11.
+    expect(drawn).toContain('pile 2 · page 45');
     // Each picture goes in the file once, however many sheets show it (a
     // picture with see-through edges is two objects: it and its mask).
     const doc = await PDFDocument.load(bytes);
@@ -279,5 +280,86 @@ describe('no file from the console has a font', () => {
     const kept = await fontsIn(await cleanPrintFile(await doc.save(), 'print file'));
     expect(kept.objects).toBe(1);
     expect(kept.pagesListing).toBe(1);
+  });
+});
+
+/* The shop, 2026-10-25, on the small black blocks at the sides of a butted
+   sheet: "wag na lagyan, cutting line na lang" (leave them out, just a cutting
+   line). The real lines are checked on a rendered sheet in the PR. */
+describe('butted sides get cutting lines, not blocks', () => {
+  it('no filled black block in a 6x6 sheet; a short line for every cut across, at both sides', async () => {
+    const { bytes, plan } = await imposeAlbumSheets(await albumPdf('6x6', 24, 0.125, true), '6x6', 'MP-LINES', T);
+    expect(plan.layout.slots.every((s) => s.bleed.left === 0 && s.bleed.right === 0)).toBe(true);
+    const doc = await PDFDocument.load(bytes);
+    const ops = (await import('pdf-lib')).decodePDFRawStream;
+    const content = (i: number) => {
+      const c = doc.getPage(i).node.Contents()!;
+      const streams = 'asArray' in c ? (c as unknown as { asArray(): unknown[] }).asArray().map((r) => doc.context.lookup(r as never)) : [c];
+      return streams.map((s) => new TextDecoder('latin1').decode(ops(s as never).decode())).join('\n');
+    };
+    const front = content(0);
+    // A black block is a black fill ("0 0 0 rg") ending in "f"; the only fills left are white label patches.
+    expect(/0 0 0 rg[^Q]*\nf\n/.test(front)).toBe(false);
+    // 3 rows → 6 cuts across; each gets a line at both sides (white under black): 6 × 2 × 2 = 24 strokes.
+    expect((front.match(/ l\s*\n?S/g) ?? []).length).toBeGreaterThanOrEqual(24);
+    expect(SIDE_CUT_LINE_IN).toBe(0.25);
+  });
+});
+
+/* The shop, 2026-10-25, with the sheet PDF open in their design program:
+   "nag overlap… kasi bleeding mo all sides" (the pages overlap, because of the
+   edge on all sides). Each page was trimmed only by its own box (the embedded
+   page's BBox), which that program ignores, so every page showed its 1/8" past
+   every edge and page 23's spine strip lay over page 1. Now the sheet itself
+   cuts every page with a clipping path, the way every program reads it. */
+describe('every page is cut at its own box on the sheet', () => {
+  /** Each side's drawn pages: the clip box around each one (points), or null. */
+  async function clips(bytes: Uint8Array) {
+    const doc = await PDFDocument.load(bytes);
+    const { decodePDFRawStream } = await import('pdf-lib');
+    return doc.getPages().map((page) => {
+      const c = page.node.Contents()!;
+      const streams = 'asArray' in c ? (c as unknown as { asArray(): unknown[] }).asArray().map((r) => doc.context.lookup(r as never)) : [c];
+      const text = streams.map((s) => new TextDecoder('latin1').decode(decodePDFRawStream(s as never).decode())).join('\n');
+      const n = '(-?[\\d.]+)';
+      const clipped = [...text.matchAll(new RegExp(`q\\s+${n} ${n} ${n} ${n} re\\s+W\\s+n\\s+q\\s[^Q]*?\\sDo\\s+Q\\s+Q`, 'g'))]
+        .map((m) => m.slice(1, 5).map(Number));
+      return { drawn: (text.match(/\sDo\s/g) ?? []).length, clipped };
+    });
+  }
+
+  it('a clip exactly the size of the page plus the edge it keeps, round every page on every side', async () => {
+    for (const size of ['6x6', '6x4', '8x8', '8.5x11'] as const) {
+      const { bytes, plan } = await imposeAlbumSheets(await albumPdf(size, 41, 0.125, true), size, 'MP-CLIP', T);
+      const sides = await clips(bytes);
+      plan.sides.forEach((side, k) => {
+        const want = side.placements.filter((p) => p.page !== null).map(({ slot: s }) => {
+          const keep = (b: number) => Math.min(b, 0.125);
+          const l = s.x - keep(s.bleed.left), r = s.x + s.w + keep(s.bleed.right);
+          const t = s.y - keep(s.bleed.top), b = s.y + s.h + keep(s.bleed.bottom);
+          return [l * 72, (19 - b) * 72, (r - l) * 72, (b - t) * 72];
+        });
+        const where = `${size} sheet ${side.sheet} ${side.side}`;
+        // The page pictures are the only things drawn as embedded pages (words are images, not pages).
+        expect(sides[k].clipped.length, where).toBe(want.length);
+        const key = (v: number[]) => v.map((x) => x.toFixed(2)).join(' ');
+        expect(sides[k].clipped.map(key).sort(), where).toEqual(want.map(key).sort());
+      });
+    }
+  });
+
+  it('where 6x6 pages touch, the clips meet at the cut and never overlap', async () => {
+    const { bytes } = await imposeAlbumSheets(await albumPdf('6x6', 24, 0.125, true), '6x6', 'MP-TOUCH', T);
+    for (const { clipped } of await clips(bytes)) {
+      expect(clipped).toHaveLength(6);
+      const rows = new Map<string, number[][]>();
+      for (const c of clipped) rows.set(c[1].toFixed(2), [...(rows.get(c[1].toFixed(2)) ?? []), c]);
+      expect([...rows.values()].map((r) => r.length)).toEqual([2, 2, 2]);
+      for (const row of rows.values()) {
+        const [a, b] = row.sort((p, q) => p[0] - q[0]);
+        expect(a[0] + a[2]).toBeCloseTo(b[0], 6);
+        expect(b[0]).toBeCloseTo(6.25 * 72, 6);
+      }
+    }
   });
 });

@@ -82,5 +82,5 @@ grant execute on function public.hook_one_account_per_gmail(jsonb) to supabase_a
 -- Verify (run after applying):
 --   select public.gmail_inbox('Marian.Reyes@GoogleMail.com');      -- marianreyes@gmail.com
 --   select public.gmail_inbox('marian.reyes+test@gmail.com');      -- marianreyes+test@gmail.com
---   select public.gmail_inbox('bubbly.chic@yahoo.com');            -- null
+--   select public.gmail_inbox('jo.ann@yahoo.com');            -- null
 --   select has_function_privilege('anon', 'public.hook_one_account_per_gmail(jsonb)', 'EXECUTE');  -- false

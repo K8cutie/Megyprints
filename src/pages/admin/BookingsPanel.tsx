@@ -234,7 +234,7 @@ function DealEditor({ b, model, saving, onSend }: {
   const extra = Number.isFinite(draft.deposit) ? draft.deposit - cost.total : NaN;
   const problem = tried ? dealProblem(draft, cost, model.min_pages) : null;
   // The press (builder/printSheet): only the covers that fit the 12.5 × 19
-  // sheet — no 9×9 hardbound (owner, 2026-10-11). 0046 refuses the rest.
+  // sheet — no 8.5×11 or 11.5×8 hardbound. 0046 refuses the rest.
   const pagesN = Number(pages) || model.min_pages;
   const coverType = (c: DealDraft['cover']): CoverType => (c === 'soft' ? 'softcover' : 'hardboundLeather');
   const coverOptions = (['hard', 'soft'] as const).filter((c) => coverFitsSheet(size, coverType(c), pagesN));

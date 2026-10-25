@@ -136,9 +136,9 @@ describe('text resolution parity', () => {
 describe('album-size surfaces (the 9x9 class of bug)', () => {
   const presets = ALBUM_SIZES.map((s) => s.preset);
 
-  it('covers all 8 sizes (update EVERY assertion block here when adding one)', () => {
-    expect(presets).toHaveLength(8);
-    expect(presets).toContain('9x9');
+  it('covers all 7 sizes (update EVERY assertion block here when adding one)', () => {
+    expect(presets).toHaveLength(7);
+    expect(presets).not.toContain('9x9'); // removed 2026-10-24 — see retiredSizes.ts
   });
 
   it('editor canvas dims exist for every size and print multiplier derives from THEM', () => {
