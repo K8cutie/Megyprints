@@ -11,8 +11,9 @@ seedMathRandom(); // same albums every run (generateAlbum deals with Math.random
 /* ══════════════════════════════════════════════════════════════════════════
    THE PHOTO CHECK SHAPES THE ALBUM (owner, 2026-10-04). With Megy's free
    photo check on each photo (lib/photoCheck):
-     • the full pages (the 3 opening pages and the 7 video memories) go to
-       the best shots — never a blurry one while there is another, and not
+     • the full pages (the 3 opening pages, the 7 video memories and, since
+       2026-10-26, the extra full pages that make half a Surprise album) go
+       to the best shots — never a blurry one while there is another, and not
        one with shut eyes;
      • two shots of the same moment the customer kept never share a page.
    Without check results, the album is exactly what it was.
@@ -44,11 +45,12 @@ describe('the full pages go to the best shots', () => {
   });
 
   it('never a blurry shot while there is a sharp one', () => {
+    // 60 landscapes on an 8×8: about half its 40 pages are full pages.
     const before = memoryPhotos(gen(landscapes(60, (i) => check(i))));
-    expect(before).toHaveLength(OPENING_FULL_PAGES + MIN_MEMORY_PAGES);
+    expect(before.length).toBeGreaterThanOrEqual(OPENING_FULL_PAGES + MIN_MEMORY_PAGES);
     const blurry = new Set(before);
     const after = memoryPhotos(gen(landscapes(60, (i) => check(i, blurry.has(i) ? { sharp: 10 } : {}))));
-    expect(after).toHaveLength(OPENING_FULL_PAGES + MIN_MEMORY_PAGES);
+    expect(after.length).toBeGreaterThanOrEqual(OPENING_FULL_PAGES + MIN_MEMORY_PAGES);
     expect(after.filter((i) => blurry.has(i))).toEqual([]);
   });
 
