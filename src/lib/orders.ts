@@ -64,6 +64,9 @@ export async function createOrderFromAlbum(opts: {
   hostingYears?: number | null;
   /** HD (1080p) memory upgrade chosen for this album (0032). */
   hdMemories?: boolean;
+  /** The video packages chosen for this album (0056). Undefined = the column
+   *  isn't named at all, for a database before 0056. */
+  videoPackages?: number[];
 }): Promise<CreatedOrder> {
   // 1. Load the album being ordered to freeze into the order. '*' rather than a
   //    column list so its front cover (cover_front, 0036) comes along when the
@@ -133,6 +136,9 @@ export async function createOrderFromAlbum(opts: {
       ship_zip: addr.zip.trim(),
       hosting_years: opts.hostingYears ?? null,
       hd_memories: !!opts.hdMemories,
+      // The database prices them, and never below the cheapest packages that
+      // hold the album's videos (0056 video_package_fee).
+      ...(opts.videoPackages !== undefined ? { video_packages: opts.videoPackages.length ? opts.videoPackages : null } : {}),
       status_history: [{ status: 'pending_payment', at: new Date().toISOString() }],
     })
     .select('id, order_number, status')

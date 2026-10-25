@@ -11,7 +11,12 @@ import {
 } from '../../lib/memoryClips';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
-import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
+import {
+  FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceOf,
+  countQrMemories, qrPackagesOf, chosenPackages, packageLabel, packagesFromPrice,
+} from '../../lib/pricing';
+import { readVideoPackages, writeVideoPackages } from '../../lib/videoPackageChoice';
+import VideoPackagePicker from './VideoPackagePicker';
 import { getPriceSchedule } from '../../lib/storeSettings';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { useBuilderContext } from './BuilderContext';
@@ -88,6 +93,20 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   // here, and standard quality: the deal's cost to make doesn't count HD.
   const fromEvent = !!eventLinkForAlbum(builderCtx.getAlbumId());
   useEffect(() => { if (fromEvent) setQuality('standard'); }, [fromEvent]);
+
+  // Video packages (0056): once the free videos are used, or the album's
+  // package is full, a new video first asks for a package. Not for an event
+  // album (its deal includes the videos), and not before the price list has
+  // packages (then it's ₱20 per extra QR, as before).
+  const albumId = builderCtx.getAlbumId();
+  const packages = useMemo(() => qrPackagesOf(schedule ?? {}), [schedule]);
+  const packagesOn = packages.length > 0 && !fromEvent;
+  const [chosen, setChosen] = useState<number[]>(() => readVideoPackages(albumId));
+  const own = packagesOn ? chosenPackages(packages, chosen) : null;
+  const videoSlots = FREE_QR_MEMORIES + (own?.slots ?? 0);
+  const usedVideos = countQrMemories(albumPages);
+  const needPackage = !initial && packagesOn && usedVideos >= videoSlots;
+  const choosePackage = (mix: number[]) => { writeVideoPackages(albumId, mix); setChosen(mix); };
   const [fetchingEvent, setFetchingEvent] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
@@ -208,6 +227,23 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   const legacyLink = initial && initial.kind !== 'clip' ? initial.destination : null;
   const mb = file ? (file.size / 1024 / 1024).toFixed(1) : null;
 
+  if (needPackage) {
+    return (
+      <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+        <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="clip-modal-title" tabIndex={-1}
+          className="w-full max-w-md bg-white rounded-2xl shadow-2xl max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-3 border-b border-line shrink-0">
+            <span id="clip-modal-title" className="text-sm font-semibold text-dark flex items-center gap-2">
+              <Video size={18} className="text-blush-pink" /> More video memories
+            </span>
+            <button onClick={onClose} className="text-light p-1" aria-label="Close"><X size={18} /></button>
+          </div>
+          <VideoPackagePicker packages={packages} current={own ? chosen : []} used={usedVideos} onChoose={choosePackage} onNotNow={onClose} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="clip-modal-title" tabIndex={-1}
@@ -231,7 +267,13 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
                 <Clock size={11} className="shrink-0" />
                 {fromEvent
                   ? <span data-testid="qr-event-included">Part of your event deal{includedYears ? ` · live for ${includedYears} years` : ''}</span>
-                  : <>{FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>}
+                  : packagesOn
+                    ? <span data-testid="qr-video-counter">
+                        Video {usedVideos + 1} of {videoSlots}
+                        {own ? ` · ${packageLabel(own.mix)}` : ` free · then packages from ₱${packagesFromPrice(schedule ?? {}).toLocaleString('en-PH')}`}
+                        {includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}
+                      </span>
+                    : <>{FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>}
               </p>
             </div>
           )}

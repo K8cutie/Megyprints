@@ -14,7 +14,12 @@ import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, Albu
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
 import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
+import {
+  priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf,
+  qrPackagesOf, cheaperPackageOffer, chosenPackages, packageLabel, includedVideosValue, packagesFromPrice,
+  FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding,
+} from '../lib/pricing';
+import { readVideoPackages, writeVideoPackages } from '../lib/videoPackageChoice';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { PAYEE, checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
@@ -248,6 +253,10 @@ export default function Order() {
   const allQrFills = (info?.pages ?? []).flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
   const clipCodes = allQrFills.filter((f) => f?.kind === 'clip').map((f) => f!.code);
   const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
+  // The video packages chosen for this album in the builder, kept on this
+  // phone (videoPackageChoice, 0056).
+  const [videoPkgs, setVideoPkgs] = useState<number[]>(() => readVideoPackages(info?.albumId));
+  useEffect(() => { setVideoPkgs(readVideoPackages(info?.albumId)); }, [info?.albumId]);
 
   // ── Megyprints Events (0045): an album made from an event booking ──
   // The event page linked it to its booking on this device. The booking pays
@@ -378,11 +387,24 @@ export default function Order() {
   const includedYears = schedule ? includedHostingYears(schedule) : null;
   const effectiveYears = qrCount > 0 ? (eventLink ? includedYears : (hostingYears ?? includedYears)) : null;
   const hdPrice = schedule ? hdMemoriesPriceOf(schedule) : 0;
+  // Video packages (0056): only when the price list has them. Before that
+  // (the app deployed ahead of the migration) it's ₱20 per extra QR, and the
+  // order never names video_packages, a column that isn't there yet.
+  const packagesOn = !!schedule && qrPackagesOf(schedule).length > 0 && !eventLink;
+  const albumPackages = packagesOn ? videoPkgs : [];
 
   // Cheap arithmetic — recomputed per render on purpose (schedule is read fresh).
   const breakdown = schedule
-    ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount, effectiveYears, hdMemories)
+    ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount, effectiveYears, hdMemories, albumPackages)
     : { items: [], total: 0 };
+  // Picked more packages than the videos need: a cheaper one holds them all.
+  const cheaperPackages = packagesOn && schedule ? cheaperPackageOffer(schedule, qrCount, albumPackages) : null;
+  const ownPackages = packagesOn && schedule ? chosenPackages(qrPackagesOf(schedule), albumPackages) : null;
+  const switchPackages = () => {
+    if (!cheaperPackages || !info?.albumId) return;
+    writeVideoPackages(info.albumId, cheaperPackages.mix);
+    setVideoPkgs(cheaperPackages.mix);
+  };
   const totalPrice = breakdown.total;
   // Shipping is built into the price (0041), so it is free here — the value
   // shown is what the schedule says is inside the price, never an extra charge.
@@ -601,6 +623,8 @@ export default function Order() {
           amount: totalPrice,
           hostingYears: effectiveYears,
           hdMemories,
+          // Only when the price list has packages (so the column exists).
+          videoPackages: packagesOn ? albumPackages : undefined,
         });
         let created;
         try {
@@ -1193,6 +1217,18 @@ export default function Order() {
                       New lower price: you save ₱{(wasTotal - totalPrice).toLocaleString('en-PH')}
                     </p>
                   )}
+                  {cheaperPackages && ownPackages && (
+                    <div className="rounded-xl border border-peach/60 bg-blush px-3 py-2.5 text-xs text-cocoa" data-testid="order-package-switch">
+                      <p>
+                        You have <b className="text-dark">{cheaperPackages.empty}</b> empty video {cheaperPackages.empty === 1 ? 'spot' : 'spots'} in your {packageLabel(ownPackages.mix)}.
+                        {' '}Switch to the {packageLabel(cheaperPackages.mix)} and save ₱{cheaperPackages.save.toLocaleString('en-PH')}.
+                      </p>
+                      <button type="button" onClick={switchPackages} data-testid="order-package-switch-button"
+                        className="mt-2 px-3 py-1.5 rounded-lg border border-peach bg-white text-xs font-semibold text-dark hover:bg-cream">
+                        Switch and save ₱{cheaperPackages.save.toLocaleString('en-PH')}
+                      </button>
+                    </div>
+                  )}
                   {coveredByBooking && <p className="text-xs text-success text-right" data-testid="order-covered">Covered by your event booking</p>}
                   {eventLink && !coveredByBooking && <p className="text-xs text-medium text-right" data-testid="order-covered-later">Your booking pays for it. See the note at the top.</p>}
                 </div>
@@ -1201,7 +1237,7 @@ export default function Order() {
                 <p className="text-xs font-semibold text-dark">Included with your album</p>
                 <ul className="mt-1 text-xs text-medium space-y-0.5">
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />Free shipping{freeShippingValue > 0 && <> (₱{freeShippingValue.toLocaleString('en-PH')} value)</>}</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{FREE_QR_MEMORIES} living-memory QRs (₱{(FREE_QR_MEMORIES * EXTRA_QR_RATE).toLocaleString('en-PH')} value)</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{FREE_QR_MEMORIES} living-memory QRs (₱{(schedule ? includedVideosValue(schedule) : FREE_QR_MEMORIES * EXTRA_QR_RATE).toLocaleString('en-PH')} value)</li>
                   {includedYears !== null && (
                     <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{includedYears} years of memory hosting</li>
                   )}
@@ -1212,7 +1248,8 @@ export default function Order() {
                 <p className="text-xs text-cocoa leading-snug">
                   {eventLink
                     ? <><b className="text-dark">Video memories are part of your event deal</b> — a video plays when anyone scans your printed album.</>
-                    : <><b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.</>}
+                    : <><b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album.
+                      {packagesOn && schedule ? <> More videos come in packages from ₱{packagesFromPrice(schedule).toLocaleString('en-PH')}.</> : <> Extra QRs are ₱{EXTRA_QR_RATE} each.</>}</>}
                   {qrCount > 0 && <> This album has <b className="text-dark">{qrCount}</b>.</>}
                   {qrCount > 0 && hdPrice > 0 && !eventLink && (
                     <> Quality: <b className="text-dark">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>

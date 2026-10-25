@@ -9,8 +9,11 @@ import { useState, useEffect } from 'react';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
-import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
-import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
+import {
+  SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf,
+  qrPackagesOf, packageReferenceRate, packageSaving, packagesProblem, FREE_QR_MEMORIES,
+} from '../../lib/pricing';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setShippingAllowance, setPriceCompare, setQrPackages } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
 
@@ -68,6 +71,12 @@ export default function PricingPanel() {
   const [savedTiers, setSavedTiers] = useState(false);
   const [tiersErr, setTiersErr] = useState('');
 
+  // ── Persisted video memory PACKAGES past the free ones (0056) ──
+  const [pkgs, setPkgs] = useState<{ videos: number; price: number }[]>([]);
+  const [savingPkgs, setSavingPkgs] = useState(false);
+  const [savedPkgs, setSavedPkgs] = useState(false);
+  const [pkgsErr, setPkgsErr] = useState('');
+
   const [disabledSizes, setDisabledSizesState] = useState<AlbumSizePreset[]>(getDisabledSizes());
   const [savingSizes, setSavingSizes] = useState(false);
   const [savedSizes, setSavedSizes] = useState(false);
@@ -80,7 +89,7 @@ export default function PricingPanel() {
     setDisabledSizesState(getDisabledSizes());
     void loadOwnerPricingModel().then((m) => {
       if (!alive) return;
-      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); setHdPrice(Number(m.hd_memories_price ?? 0)); setShip(shippingAllowanceOf(m)); setCmpMult(m.compare_multiple != null ? String(m.compare_multiple) : ''); setCmpUntil(m.compare_until ?? ''); }
+      if (m) { setModel(m); setPkgs(qrPackagesOf(m)); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); setHdPrice(Number(m.hd_memories_price ?? 0)); setShip(shippingAllowanceOf(m)); setCmpMult(m.compare_multiple != null ? String(m.compare_multiple) : ''); setCmpUntil(m.compare_until ?? ''); }
       else setModelErr('Could not load the cost model. Owner sign-in is required to view pricing.');
     });
     return () => { alive = false; };
@@ -154,6 +163,21 @@ export default function PricingPanel() {
       setTiers(clean);
       setModel((m) => (m ? { ...m, hosting_tiers: clean } : m));
       setSavedTiers(true); setTimeout(() => setSavedTiers(false), 2500);
+    }
+  };
+
+  const savePkgs = async () => {
+    setSavingPkgs(true); setSavedPkgs(false); setPkgsErr('');
+    const problem = packagesProblem(pkgs);
+    if (problem) { setPkgsErr(problem); setSavingPkgs(false); return; }
+    const clean = [...pkgs].sort((a, b) => a.videos - b.videos);
+    const err = await setQrPackages(clean);
+    setSavingPkgs(false);
+    if (err) setPkgsErr(err);
+    else {
+      setPkgs(clean);
+      setModel((m) => (m ? { ...m, qr_packages: clean } : m));
+      setSavedPkgs(true); setTimeout(() => setSavedPkgs(false), 2500);
     }
   };
 
@@ -243,7 +267,7 @@ export default function PricingPanel() {
               <p className="text-xs text-medium mt-1 leading-snug">
                 Flat ₱ added to <b>every album</b> after the markup (like the size premium — never multiplied).
                 Funds ~10 years of hosting for the {7} included living-memory videos: ≈₱29 on R2 at today's rates,
-                so ₱50 buffers price drift and scans. Extra QRs pay their own ₱20.
+                so ₱50 buffers price drift and scans. Videos past those are sold in packages (below) that pay their own way.
               </p>
             </div>
             <div className="flex items-end gap-2">
@@ -381,6 +405,53 @@ export default function PricingPanel() {
             </button>
             {savedTiers && <p className="text-xs text-success font-semibold">✓ Saved — checkout now offers these terms.</p>}
             {tiersErr && <p className="text-xs text-rust-deep">Couldn't save: {tiersErr}</p>}
+          </div>
+        </div>
+
+        {/* Video PACKAGES — past the free videos (0056) */}
+        <div className="mt-5 pt-5 border-t border-sand-deep" data-testid="pricing-video-packages">
+          <h4 className="font-semibold text-dark">Video packages</h4>
+          <p className="text-xs text-medium mt-1 leading-snug max-w-2xl">
+            Every album has {FREE_QR_MEMORIES} free videos. When they run out, the builder offers these packages, the best value picked.
+            A package's "Save" compares with your <b>highest price per video</b> (₱{Math.round(packageReferenceRate(qrPackagesOf({ qr_packages: pkgs })))} each now).
+            Keep a package at that price on sale, or the saving isn't real (a made-up regular price is a deceptive price claim under the Consumer Act).
+            Each video costs you about ₱2–12 to keep for 5 years.
+          </p>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {pkgs.map((p, i) => {
+              const save = packageSaving(qrPackagesOf({ qr_packages: pkgs }), p.videos, p.price);
+              return (
+                <div key={i} className="rounded-lg border border-line p-2">
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-light block">Videos</label>
+                  <input type="number" min={1} max={100} step={1} value={p.videos} aria-label={`Package ${i + 1} videos`}
+                    onChange={(e) => { const v = +e.target.value; setPkgs((ps) => ps.map((x, j) => (j === i ? { ...x, videos: v } : x))); setSavedPkgs(false); }}
+                    className="w-full border border-line rounded px-2 py-1 font-mono text-sm tabular-nums" />
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-light block mt-1.5">₱ price</label>
+                  <input type="number" min={0} max={100000} step={1} value={p.price} aria-label={`Package ${i + 1} price`}
+                    onChange={(e) => { const v = +e.target.value; setPkgs((ps) => ps.map((x, j) => (j === i ? { ...x, price: v } : x))); setSavedPkgs(false); }}
+                    className="w-full border border-line rounded px-2 py-1 font-mono text-sm tabular-nums" />
+                  <p className="text-[11px] text-medium mt-1.5">
+                    {p.videos > 0 ? <>₱{Math.round(p.price / p.videos)} each{save ? <> · <span className="text-success font-semibold">Save {save.pct}%</span></> : ''}</> : '—'}
+                  </p>
+                  {pkgs.length > 1 && (
+                    <button type="button" onClick={() => { setPkgs((ps) => ps.filter((_, j) => j !== i)); setSavedPkgs(false); }}
+                      className="mt-1 text-[11px] text-rust-deep underline">Remove</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            {pkgs.length < 6 && (
+              <button type="button" onClick={() => { setPkgs((ps) => [...ps, { videos: 1, price: 50 }]); setSavedPkgs(false); }}
+                className="px-3 py-2 rounded-lg border border-line text-sm font-semibold text-dark">Add a package</button>
+            )}
+            <button onClick={savePkgs} disabled={savingPkgs}
+              className="px-4 py-2 rounded-lg bg-dark text-white text-sm font-semibold disabled:opacity-40">
+              {savingPkgs ? 'Saving…' : 'Save packages'}
+            </button>
+            {savedPkgs && <p className="text-xs text-success font-semibold">✓ Saved — the builder and checkout now offer these packages.</p>}
+            {pkgsErr && <p className="text-xs text-rust-deep">Couldn't save: {pkgsErr}</p>}
           </div>
         </div>
       </div>

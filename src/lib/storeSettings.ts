@@ -149,6 +149,16 @@ export async function setHostingTiers(tiers: { years: number; price: number }[])
   return null;
 }
 
+/** Owner-only (definer RPC, 0056, shape-validated in SQL). Replaces the
+ *  video memory packages and reloads the schedule. */
+export async function setQrPackages(packages: { videos: number; price: number }[]): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_qr_packages', { p_packages: packages });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
 /** Owner-only (definer RPC). Sets the one-time HD memory upgrade price. */
 export async function setHdMemoriesPrice(next: number): Promise<string | null> {
   if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
