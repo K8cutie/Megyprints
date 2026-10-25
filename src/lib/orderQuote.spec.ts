@@ -24,7 +24,7 @@ const LIVE = {
     '11.5x8': { hard_rate: 1625, pps: 4, soft_rate: 875 }, '6x4': { hard_rate: 825, pps: 18, soft_rate: 575 },
     '6x6': { hard_rate: 900, pps: 12, soft_rate: 575 }, '6x8': { hard_rate: 1075, pps: 8, soft_rate: 575 },
     '8.5x11': { hard_rate: 1750, pps: 4, soft_rate: 875 }, '8x6': { hard_rate: 1075, pps: 8, soft_rate: 575 },
-    '8x8': { hard_rate: 1075, pps: 4, soft_rate: 575 }, '9x9': { hard_rate: 1300, pps: 4, soft_rate: 725 },
+    '8x8': { hard_rate: 1075, pps: 4, soft_rate: 575 },
   },
 } as unknown as PriceSchedule;
 

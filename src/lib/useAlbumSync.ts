@@ -2,6 +2,7 @@ import type { PhotoCheck } from './photoCheck';
 import { useState, useCallback } from 'react';
 import { supabase } from './supabase';
 import { cleanAlbumTheme } from './albumTheme';
+import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from '../pages/builder/retiredSizes';
 
 // =============================================================================
 // Types
@@ -163,8 +164,9 @@ export function deserializeAlbum(row: Record<string, unknown>): AlbumData {
   return {
     id: row.id as string,
     title: (row.title as string) ?? 'Untitled Album',
-    sizePreset: (row.album_size as string) ?? '8x8',
-    pages: Array.isArray(row.pages) ? (row.pages as AlbumPage[]) : [],
+    // A size we no longer make (9x9) opens at its stand-in — retiredSizes.
+    sizePreset: liveAlbumSize(row.album_size as string | null | undefined) ?? '8x8',
+    pages: Array.isArray(row.pages) ? liftRetiredPages(row.pages as AlbumPage[]) : [],
     // Map DB photo metadata back to AlbumData format.
     // cloudUrl/storagePath are legacy fields — will be null for new albums.
     photos: dbPhotos.map((p) => ({
@@ -182,7 +184,7 @@ export function deserializeAlbum(row: Record<string, unknown>): AlbumData {
     })),
     coverPhoto: (row.cover_photo as string) ?? null,
     // Absent when the database predates 0036 or the query didn't ask for it.
-    coverFront: isPlainObject(row.cover_front) ? row.cover_front : null,
+    coverFront: isPlainObject(row.cover_front) ? liftRetiredPage(row.cover_front) : null,
     occasion: typeof row.occasion === 'string' && row.occasion.trim() ? row.occasion : null,
     photosPerPage: typeof row.photos_per_page === 'number' && row.photos_per_page > 0 ? row.photos_per_page : null,
     createdAt: (row.created_at as string) ?? undefined,

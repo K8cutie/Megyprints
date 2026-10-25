@@ -89,7 +89,7 @@ describe('Your orders asks for the customer\'s OWN orders', () => {
 
 const order = (o: Record<string, unknown>) => ({
   id: String(o.order_number), order_number: 'MP-2026-AAAA', status: 'pending_payment', amount: 2886, created_at: '2026-10-04T08:00:00Z',
-  payment_submitted_at: null, album_size: '9x9', page_count: 40, tracking: null, ...o,
+  payment_submitted_at: null, album_size: '8x8', page_count: 40, tracking: null, ...o,
 });
 
 describe('the Your orders page', () => {

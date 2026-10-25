@@ -33,7 +33,7 @@ const longestRun = (xs: number[]) => {
 };
 
 // Sizes with a deck rich enough to offer more than one photo count.
-const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '8x6', '6x8'];
+const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '8x6', '6x8'];
 
 describe('photos-per-page rhythm', () => {
   for (const size of SIZES) {

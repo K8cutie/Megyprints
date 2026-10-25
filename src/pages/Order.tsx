@@ -302,7 +302,7 @@ export default function Order() {
     if (eventLink) setCover(eventLink.cover === 'soft' ? 'softcover' : 'hardboundLeather');
   }, [eventLink?.cover]); // eslint-disable-line react-hooks/exhaustive-deps
   // THE PRESS (builder/printSheet): a cover too big for the shop's 12.5 × 19
-  // sheet isn't offered — 9×9 hardbound (owner, 2026-10-11), and any cover on
+  // sheet isn't offered — 8.5×11 and 11.5×8 hardbound, and any cover on
   // an album too thick for the paper. The database refuses them too (0046).
   const coverChoices = COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount, { material }));
   const coverFits = coverFitsSheet(albumSize, cover, pageCount, { material });

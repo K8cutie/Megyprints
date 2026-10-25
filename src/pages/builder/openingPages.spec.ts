@@ -16,9 +16,9 @@ seedMathRandom(); // same albums every run (generateAlbum deals with Math.random
    EXTRA: the 7 video-memory full pages are still spread through the album.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
+const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
 const PAGE_ASPECT: Record<string, number> = {
-  '6x4': 6 / 4, '8x6': 8 / 6, '6x8': 6 / 8, '6x6': 1, '8x8': 1, '9x9': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
+  '6x4': 6 / 4, '8x6': 8 / 6, '6x8': 6 / 8, '6x6': 1, '8x8': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
 };
 const SHAPE = { L: [4032, 3024], P: [3024, 4032], S: [3000, 3000] } as const;
 type Shape = keyof typeof SHAPE;
@@ -109,7 +109,7 @@ describe('pages 1, 2 and 3 are full-page photos', () => {
     // Portraits first, then landscapes: the opening skips the portraits.
     const photos = [...roll(10, { P: 1, L: 0, S: 0 }, 1), ...roll(50, { P: 0.5, L: 0.5, S: 0 }, 2)]
       .map((p, i) => ({ ...p, id: `ph-${i}`, capturedAt: i * 60_000 }));
-    for (const size of ['6x6', '8x8', '9x9'] as AlbumSizePreset[]) {
+    for (const size of ['6x6', '8x8'] as AlbumSizePreset[]) {
       const pages = generateAlbum(photos, size);
       for (let i = 0; i < OPENING_FULL_PAGES; i++) {
         const p = photos[fills(pages[i])[0]];
@@ -169,7 +169,7 @@ describe('the opening pages are extra', () => {
     // The six sizes with their own layouts. (On 11.5x8 and 8.5x11 every
     // box-free single is the same full page, and those decks already let two
     // sit side by side — see dealSingle's breakCadenceForAdjacency.)
-    for (const size of ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8'] as AlbumSizePreset[]) {
+    for (const size of ['6x6', '8x8', '6x4', '8x6', '6x8'] as AlbumSizePreset[]) {
       let fourth = 0, albums = 0;
       for (const n of [40, 60, 100, 200]) for (const [, mix] of Object.entries(MIXES)) for (let s = 0; s < 5; s++) {
         const pages = generateAlbum(roll(n, mix, n * 10 + s), size);

@@ -15,7 +15,7 @@ import { qrRect } from '../../lib/qrMemory';
    sides. The other sizes keep the chip they have printed all along.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const SIZES: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
+const SIZES: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '11.5x8', '8.5x11'];
 
 /** The QR as it prints on page `pageIndex`: inches from the page's left / top. */
 function printedQr(size: AlbumSizePreset, corner: typeof QR_CORNERS[number], pageIndex: number) {

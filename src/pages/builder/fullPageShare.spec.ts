@@ -22,7 +22,7 @@ seedMathRandom(); // each album below re-seeds explicitly
      • spread through the album, not bunched.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const SIZES: AlbumSizePreset[] = ['8x8', '6x6', '9x9', '8x6', '6x8', '6x4'];
+const SIZES: AlbumSizePreset[] = ['8x8', '6x6', '8x6', '6x8', '6x4'];
 type Shape = [number, number];
 const L: Shape = [4032, 3024], P: Shape = [3024, 4032], S: Shape = [1440, 1440];
 /** A phone roll: 3 landscapes to 2 portraits, a minute apart. */
@@ -55,7 +55,7 @@ describe('half of a 40-page Surprise album is full pages', () => {
   // an 8×8, seed 1, made 41 pages on every deal with 20).
   const cases: [AlbumSizePreset, number, number][] = [
     ['8x8', 40, 0], ['8x8', 50, 0], ['8x8', 60, 1], ['6x6', 40, 0], ['6x6', 50, 0],
-    ['9x9', 40, 0], ['9x9', 50, 0], ['9x9', 60, 1], ['8x6', 40, 0], ['6x8', 70, 1],
+    ['8x6', 40, 0], ['6x8', 70, 1],
   ];
   it.each(cases)('%s, %i phone photos: half the pages, at most %i short (it was 10 to 17 of 40)', (size, n, short) => {
     for (const seed of SEEDS) {
@@ -75,7 +75,7 @@ describe('half of a 40-page Surprise album is full pages', () => {
   }, 30_000);
 
   it('with the share at 0 the album is as it was: the 3 opening pages and the 7 video-memory pages', () => {
-    for (const size of ['8x8', '6x6', '9x9'] as AlbumSizePreset[]) {
+    for (const size of ['8x8', '6x6'] as AlbumSizePreset[]) {
       expect(fullCount(before(1, roll(40, phone), size)), size).toBe(OPENING_FULL_PAGES + MIN_MEMORY_PAGES);
     }
   });
@@ -159,7 +159,7 @@ describe('only photos that fit a full page — never a cut head', () => {
 
 describe('spread through the album', () => {
   it('after the opening pages, never more than two full pages in a row, and every quarter has its share', () => {
-    for (const [size, n] of [['8x8', 40], ['8x8', 50], ['6x6', 50], ['9x9', 60], ['8x6', 40], ['6x8', 70]] as [AlbumSizePreset, number][]) {
+    for (const [size, n] of [['8x8', 40], ['8x8', 50], ['6x6', 50], ['8x8', 60], ['8x6', 40], ['6x8', 70]] as [AlbumSizePreset, number][]) {
       for (const seed of SEEDS) {
         const pages = gen(seed, roll(n, phone), size);
         const full = pages.map(isFullPagePhoto);

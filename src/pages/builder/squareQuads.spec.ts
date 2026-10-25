@@ -18,8 +18,8 @@ seedMathRandom(); // same albums every run (generateAlbum deals with Math.random
    on a page or on two pages in a row — at generation AND in the sweep.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const SQUARES: AlbumSizePreset[] = ['6x6', '8x8', '9x9'];
-const prefix: Record<string, string> = { '6x6': 't66', '8x8': 't88', '9x9': 't99' };
+const SQUARES: AlbumSizePreset[] = ['6x6', '8x8'];
+const prefix: Record<string, string> = { '6x6': 't66', '8x8': 't88' };
 
 describe('square 4-up layouts', () => {
   for (const size of SQUARES) {
@@ -62,9 +62,9 @@ describe('square 4-up layouts', () => {
     });
   }
 
-  it('hero + three exists on 8x8 and 9x9, not on 6x6 (its 1/3 cell is 1.83" beside the spine)', () => {
+  it('hero + three exists on 8x8, not on 6x6 (its 1/3 cell is 1.83" beside the spine)', () => {
     expect(getTemplatesForAlbum('6x6').some((t) => t.id.includes('quad-hero'))).toBe(false);
-    for (const size of ['8x8', '9x9'] as AlbumSizePreset[]) {
+    for (const size of ['8x8'] as AlbumSizePreset[]) {
       const heroes = getTemplatesForAlbum(size).filter((t) => t.id.includes('quad-hero'));
       expect(heroes.map((t) => t.id).sort()).toEqual(['bottom', 'left', 'right', 'top'].map((v) => `${prefix[size]}-fb-quad-hero-${v}-gap`).sort());
       for (const t of heroes) {
@@ -134,7 +134,7 @@ describe('an explicit density never pads the album with blank pages', () => {
   // blanks, and then exactly the unavoidable ones.
   const MIN_PAGES = 40;
   const sq = (n: number): UploadedPhoto[] => Array.from({ length: n }, (_, i) => ({ id: `q${i}`, previewUrl: '', name: `q${i}.jpg`, type: 'image/jpeg', size: 1, width: 3000, height: 3000, capturedAt: i }));
-  for (const size of ['6x6', '8x8', '9x9', '8x6', '6x8'] as AlbumSizePreset[]) {
+  for (const size of ['6x6', '8x8', '8x6', '6x8'] as AlbumSizePreset[]) {
     for (const density of DENSITY_BY_SIZE[size].filter((d) => d > 1)) {
       it(`${size} at ${density}/page: 24, 40, 60, 90, 119, 121 and 160 photos → no avoidable blank page, every photo placed`, () => {
         for (const n of [24, 40, 60, 90, 119, 121, 160]) {
