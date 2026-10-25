@@ -58,7 +58,7 @@ function PressHowTo() {
       <ol className="mt-3 space-y-1.5 text-sm text-medium list-decimal pl-5">
         <li>Print the test sheet once first. It checks the size, the edge and the flip.</li>
         <li><b>Print sheets</b>: print both sides, flip on the long edge, at actual size (100%). Don't use "fit to page".</li>
-        <li>Keep the printed sheets in order, sheet 1 on top, front side up, and cut the whole stack at once on the marks. On 6×4, 6×6, 6×8 and 8×6 the pages touch each other: cut exactly on the marks, and across the sheet along the edges of the small black blocks.</li>
+        <li>Keep the printed sheets in order, sheet 1 on top, front side up, and cut the whole stack at once on the marks. On 6×4, 6×6, 6×8 and 8×6 the pages touch each other: cut exactly on the marks, and across the sheet on the short cutting lines at both sides.</li>
         <li>Each spot on the sheet makes a pile that is already in page order. Put pile 1 (top left) on top of pile 2 (to its right), that on pile 3, and so on, left to right, top to bottom. The book is now in order.</li>
         <li>Every piece has its number (1, 2, 3…) printed small on its front, at the spine edge, so the finished stack counts 1, 2, 3 from the top. A piece with no number showing is back side up. The number is hidden in the glue once the book is bound.</li>
         <li>Blank sides: orders from 21 Oct 2026 start with page 1, and end with a blank side when the album has an odd number of pages. Older orders start with a blank side (it faces the inside of the front cover), and end with one when the page count is even. After <b>Print sheets</b>, the line under the order says which.</li>
