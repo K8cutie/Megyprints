@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import type { AlbumSizePreset, CoverType } from './types';
 import { trimInches, sheetPlan } from './printSheet';
 import { coverWrapGeometry } from './coverGeometry';
-import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, printFilePageOne, cleanPrintFile, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES, PIECE_NUMBER, type TextPainter } from './printSheetPdf';
+import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, printFilePageOne, cleanPrintFile, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES, PIECE_NUMBER, SIDE_CUT_LINE_IN, type TextPainter } from './printSheetPdf';
 import { PAGE_ONE_RIGHT_MARK } from './binding';
 
 /** Words as pictures, as the console draws them (canvasTextPainter needs a
@@ -280,5 +280,28 @@ describe('no file from the console has a font', () => {
     const kept = await fontsIn(await cleanPrintFile(await doc.save(), 'print file'));
     expect(kept.objects).toBe(1);
     expect(kept.pagesListing).toBe(1);
+  });
+});
+
+/* The shop, 2026-10-25, on the small black blocks at the sides of a butted
+   sheet: "wag na lagyan, cutting line na lang" (leave them out, just a cutting
+   line). The real lines are checked on a rendered sheet in the PR. */
+describe('butted sides get cutting lines, not blocks', () => {
+  it('no filled black block in a 6x6 sheet; a short line for every cut across, at both sides', async () => {
+    const { bytes, plan } = await imposeAlbumSheets(await albumPdf('6x6', 24, 0.125, true), '6x6', 'MP-LINES', T);
+    expect(plan.layout.slots.every((s) => s.bleed.left === 0 && s.bleed.right === 0)).toBe(true);
+    const doc = await PDFDocument.load(bytes);
+    const ops = (await import('pdf-lib')).decodePDFRawStream;
+    const content = (i: number) => {
+      const c = doc.getPage(i).node.Contents()!;
+      const streams = 'asArray' in c ? (c as unknown as { asArray(): unknown[] }).asArray().map((r) => doc.context.lookup(r as never)) : [c];
+      return streams.map((s) => new TextDecoder('latin1').decode(ops(s as never).decode())).join('\n');
+    };
+    const front = content(0);
+    // A black block is a black fill ("0 0 0 rg") ending in "f"; the only fills left are white label patches.
+    expect(/0 0 0 rg[^Q]*\nf\n/.test(front)).toBe(false);
+    // 3 rows → 6 cuts across; each gets a line at both sides (white under black): 6 × 2 × 2 = 24 strokes.
+    expect((front.match(/ l\s*\n?S/g) ?? []).length).toBeGreaterThanOrEqual(24);
+    expect(SIDE_CUT_LINE_IN).toBe(0.25);
   });
 });
