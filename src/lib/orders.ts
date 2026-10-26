@@ -159,6 +159,12 @@ export async function createOrderFromAlbum(opts: {
   return { ...(data as Omit<CreatedOrder, 'album_id'>), album_id: album.id };
 }
 
+/** The print file on its way: `pages` after each page is made (`smaller` on
+ *  the pass that makes a too-big file smaller), then `sending`. */
+export type PrintFileProgress =
+  | { phase: 'pages'; done: number; total: number; smaller: boolean }
+  | { phase: 'sending' };
+
 /**
  * Build the print-ready PDF for an order and upload it to the private
  * `print-pdfs` bucket (path "<order_id>.pdf"). MUST run on the customer's device
@@ -167,9 +173,17 @@ export async function createOrderFromAlbum(opts: {
  * Create-only (see storageUpload.ts): a retry that finds the file already there
  * counts as done. Throws on failure so the caller can surface it.
  */
-export async function uploadOrderPrintPdf(orderId: string, job: PrintJob, cover?: CoverType | null): Promise<void> {
+export async function uploadOrderPrintPdf(
+  orderId: string,
+  job: PrintJob,
+  cover?: CoverType | null,
+  /** Where it is, for checkout's progress bar: each page made, then sending. */
+  onProgress?: (p: PrintFileProgress) => void,
+): Promise<void> {
+  const pages = onProgress && ((done: number, total: number, smaller?: boolean) => onProgress({ phase: 'pages', done, total, smaller: !!smaller }));
   // The binding side: 1/2" for a hardbound order, 3/8" softcover (binding.ts).
-  const blob = await generateAlbumPdf(job.pages, job.photos, job.albumSize, undefined, undefined, bindingInchesFor(cover));
+  const blob = await generateAlbumPdf(job.pages, job.photos, job.albumSize, pages, undefined, bindingInchesFor(cover));
+  onProgress?.({ phase: 'sending' });
   const error = await uploadOnce('print-pdfs', `${orderId}.pdf`, blob, { contentType: 'application/pdf' });
   if (error) throw new Error(`Print file upload failed: ${error.message}`);
 }

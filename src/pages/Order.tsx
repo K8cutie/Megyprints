@@ -6,7 +6,7 @@ import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, Qr
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
-import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdfWithRetry } from '../lib/orders';
+import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdfWithRetry, type PrintFileProgress } from '../lib/orders';
 import { getPendingPrintJob, setPendingPrintJob, readOrderHandoff, noteOrderHandoff, takeFreshHandoff, type PrintJob } from '../lib/printQueue';
 import { saveDraftToAccount as saveDraftAlbumToAccount } from '../lib/draftAccountSave';
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
@@ -37,6 +37,9 @@ import { eventLinkForAlbum, eventDealState, coverOrderWithBooking, bookingsWaiti
 import { getMyBooking, listMyBookings, type EventBooking } from '../lib/eventBookings';
 import { amountToPay, claimTesterOrder, testerLine, TesterCodeGoneError, type TesterCode } from '../lib/testerCode';
 import TesterCodeBox from '../components/TesterCodeBox';
+import PlaceOrderProgress from '../components/PlaceOrderProgress';
+import { PLACE_AT, forward, pagesAt, pagesLabel, videosAt, type PlaceProgress } from '../lib/placeProgress';
+import { keepScreenOn } from '../lib/keepScreenOn';
 
 // The front cover at checkout — lazy: it brings the page renderer.
 const CoverThumb = lazy(() => import('./builder/CoverThumb'));
@@ -102,6 +105,9 @@ export default function Order() {
     return () => { alive = false; window.clearInterval(timer); };
   }, [step, user]);
   const [prepMsg, setPrepMsg] = useState('');
+  // How far along Place order is, for the bar under the button (placeProgress).
+  const [placing, setPlacing] = useState<PlaceProgress | null>(null);
+  const advance = (at: number, sending = false) => setPlacing((p) => forward(p, at, sending));
   // Manual transfer (0033): the receipt + bank reference the customer attaches.
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofError, setProofError] = useState('');
@@ -559,6 +565,11 @@ export default function Order() {
       return;
     }
     setUpdateNote(null);
+    // The bar under Place order, and the screen kept on while the files are
+    // made on this phone: a locked screen paused a 70-page print file
+    // (placeProgress, keepScreenOn; the live tester walk, 2026-10-26).
+    const releaseScreen = keepScreenOn();
+    advance(PLACE_AT.start);
     try {
       // A checkout brought back in this tab (a reload) may hold an order that
       // has since closed: cancelled in Your orders, or 7 days unpaid (0042).
@@ -644,6 +655,7 @@ export default function Order() {
       //    at checkout — so when it's gone we rebuild it from the SAME album the
       //    order froze + the photo blobs in this browser's IndexedDB.
       setPrepMsg('Preparing your album for printing…');
+      advance(PLACE_AT.preparing);
       let printJob = getPendingPrintJob();
       if (!printJob || printJob.pages.length === 0) {
         printJob = await rebuildPrintJobFromAlbum(user!.id, idbPhotos.get, order.albumId);
@@ -671,6 +683,7 @@ export default function Order() {
       //     bucket counts as done). Spine width comes from the frozen specs +
       //     this print job's page count.
       setPrepMsg('Making your cover…');
+      advance(PLACE_AT.cover);
       try {
         await uploadOrderCoverPdfWithRetry(order.id, {
           // Frozen specs from order creation — NOT the live pickers — so the cover
@@ -704,7 +717,9 @@ export default function Order() {
       let replacedCodes: string[] = [];
       if (clipCodes.length) {
         setPrepMsg('Uploading your memory videos…');
+        advance(PLACE_AT.videos);
         const r = await uploadStagedClips(clipCodes, (d, t, phase) => {
+          advance(videosAt(d, t));
           if (d >= t) return;
           setPrepMsg(phase === 'compress'
             ? `Preparing memory video ${d + 1} of ${t}…`
@@ -717,8 +732,20 @@ export default function Order() {
       //    errors it propagates to the outer catch, the order does NOT advance,
       //    and the user stays on Pay to retry. (Create-only upload, never upsert:
       //    customers can't read this bucket, so an upsert is refused by RLS.)
+      //    Page by page on the bar; sending has no measure, so a moving band.
       setPrepMsg('Making your print file…');
-      await uploadOrderPrintPdf(order.id, printJob, order.cover);
+      advance(PLACE_AT.pages);
+      const onPrintFile = (p: PrintFileProgress) => {
+        if (p.phase === 'sending') {
+          setPrepMsg('Sending your print file…');
+          advance(PLACE_AT.sending, true);
+          return;
+        }
+        setPrepMsg(pagesLabel(p.done, p.total, p.smaller));
+        advance(pagesAt(p.done, p.total, p.smaller));
+      };
+      await uploadOrderPrintPdf(order.id, printJob, order.cover, onPrintFile);
+      advance(PLACE_AT.checking);
 
       // 3c. The videos once more, right before their memory rows: the nightly
       //     cleanup (0042) may have removed one this order shares since 2b
@@ -743,6 +770,7 @@ export default function Order() {
       try {
         if (jobFills.length) {
           setPrepMsg('Saving your memories…');
+          advance(PLACE_AT.saving);
           // The client may only stamp the INCLUDED term (RLS caps it — 0030);
           // the PAID term is applied by the operator at "Mark paid" from the
           // order's hosting_years, exactly as the price is set server-side.
@@ -768,6 +796,7 @@ export default function Order() {
       // 5a. An event album: its booking pays (0045), no QR. The files are in.
       if (eventLink && coveredByBooking) {
         setPrepMsg('Paying with your event booking…');
+        advance(PLACE_AT.finishing);
         await coverOrderWithBooking(order.id, eventLink.bookingId);
         setPrepMsg('');
         recordOrder('tracking');
@@ -779,6 +808,7 @@ export default function Order() {
       //     in, so it is exactly the order a paid customer's would be.
       if (order.tester) {
         setPrepMsg('Finishing your test order…');
+        advance(PLACE_AT.finishing);
         await claimTesterOrder(order.id);
         setPrepMsg('');
         recordOrder('tracking');
@@ -800,6 +830,8 @@ export default function Order() {
       setAlbumNotSaved(err instanceof AlbumNotSavedError || err instanceof TooFewPhotosError || err instanceof MissingClipError || err instanceof PhotosNotHereError);
       setUnpaidLimit(err instanceof UnpaidLimitError);
     } finally {
+      releaseScreen();
+      setPlacing(null);
       setSubmitting(false);
     }
   };
@@ -1345,6 +1377,7 @@ export default function Order() {
                         : <>Prices didn't load — tap to try again</>}
               </button>
               )}
+              {submitting && placing && <PlaceOrderProgress progress={placing} />}
               {askSecond && openOrder && (
                 <div role="alert" data-testid="order-second-ask"
                   className="mt-3 rounded-xl border border-peach bg-blush px-3 py-3 text-sm text-cocoa">
