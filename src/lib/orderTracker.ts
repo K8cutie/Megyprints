@@ -19,6 +19,11 @@ export const TRACK_STAGES = [
 /** The first step while the customer hasn't said they've paid. */
 export const AWAITING_PAYMENT_STAGE = 'Waiting for your payment';
 
+/** A tester-code order (0057). Owner, 2026-10-26: the code is "for testing
+ *  purposes to disable payment", not a free album, so nothing on it is
+ *  printed or sent and it never shows the printing journey. */
+export const TEST_ORDER_HEADLINE = 'Test order: nothing will be printed or sent';
+
 const RANK: Record<string, number> = { pending_payment: 0, paid: 1, in_production: 2, printed: 3, shipped: 4, delivered: 5 };
 const HEADLINES = [
   "Payment sent — we're confirming it",
@@ -37,18 +42,23 @@ export interface OrderTrack {
   cancelled: boolean;
   /** Placed, and the customer hasn't said they've paid yet. */
   awaitingPayment: boolean;
+  /** Placed with a tester code: a test, never printed or sent (no journey to draw). */
+  test: boolean;
   /** What is happening now, in one line. */
   headline: string;
   /** The step labels to draw (the first reads "Waiting for your payment" until they pay). */
   labels: string[];
 }
 
-export function trackOf(order: { status: string; payment_submitted_at?: string | null }): OrderTrack {
+export function trackOf(order: { status: string; payment_submitted_at?: string | null; tester_code?: string | null }): OrderTrack {
   const labels: string[] = [...TRACK_STAGES];
   if (order.status === 'cancelled') {
-    return { stage: 0, finished: false, cancelled: true, awaitingPayment: false, headline: 'Cancelled', labels };
+    return { stage: 0, finished: false, cancelled: true, awaitingPayment: false, test: false, headline: 'Cancelled', labels };
   }
   const stage = RANK[order.status] ?? 0;
+  if (order.tester_code) {
+    return { stage, finished: false, cancelled: false, awaitingPayment: false, test: true, headline: TEST_ORDER_HEADLINE, labels };
+  }
   const awaitingPayment = stage === 0 && !order.payment_submitted_at;
   if (awaitingPayment) labels[0] = AWAITING_PAYMENT_STAGE;
   return {
@@ -56,6 +66,7 @@ export function trackOf(order: { status: string; payment_submitted_at?: string |
     finished: stage === TRACK_STAGES.length - 1,
     cancelled: false,
     awaitingPayment,
+    test: false,
     headline: awaitingPayment ? AWAITING_PAYMENT_STAGE : HEADLINES[stage],
     labels,
   };

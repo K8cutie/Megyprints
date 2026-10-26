@@ -322,6 +322,20 @@ input::-ms-reveal { display: none; }
   }
 }
 
+/* Checkout's "Sending your print file" (PlaceOrderProgress): the upload can't
+   be measured, so a light band runs along the bar instead of a made-up number. */
+@keyframes megy-progress-band {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(260%); }
+}
+.megy-progress-band {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.7), transparent);
+  animation: megy-progress-band 1.4s ease-in-out infinite;
+}
+
 /* ───────────────────────────────────────────────────────────────
    Reduced motion support
    ─────────────────────────────────────────────────────────────── */
@@ -335,6 +349,13 @@ input::-ms-reveal { display: none; }
   .animate-bounce-gentle,
   .animate-float {
     animation: none;
+  }
+
+  /* Still says "something is happening", without the movement. */
+  .megy-progress-band {
+    animation: none;
+    width: 100%;
+    background: rgb(255 255 255 / 0.3);
   }
 }
 

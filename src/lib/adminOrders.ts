@@ -56,6 +56,9 @@ export interface AdminOrder {
    *  order was placed (0055); owner only. Null on orders placed before it. */
   quoted_amount?: number | null;
   quote?: OrderQuote | null;
+  /** Placed with the tester code (0057): a free test album. Every operator
+   *  sees it, so the shop knows which orders are tests. */
+  tester_code?: string | null;
 }
 
 /** The checkout's total in its parts, as order_quote() (0055) saves it. */
@@ -72,6 +75,8 @@ export interface OrderQuote {
   years: number | null;
   term_fee: number;
   hd_fee: number;
+  /** A tester code made it free (0057); total stays the real price. */
+  tester?: { code: string; real_total: number | null } | null;
 }
 
 /** "album ₱890 + 2 extra QR ₱40 + 10 years ₱99 + HD ₱49": the parts the

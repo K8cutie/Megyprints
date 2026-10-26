@@ -31,8 +31,8 @@ describe('binding side allowance by cover', () => {
 
   it('checkout draws the print file with the ORDER\'s cover: Order → uploadOrderPrintPdf → generateAlbumPdf → every page margin', () => {
     const src = (p: string) => readFileSync(resolve(__dirname, p), 'utf8');
-    expect(src('../Order.tsx')).toContain('await uploadOrderPrintPdf(order.id, printJob, order.cover);');
-    expect(src('../../lib/orders.ts')).toContain('generateAlbumPdf(job.pages, job.photos, job.albumSize, undefined, undefined, bindingInchesFor(cover))');
+    expect(src('../Order.tsx')).toContain('await uploadOrderPrintPdf(order.id, printJob, order.cover, onPrintFile);');
+    expect(src('../../lib/orders.ts')).toContain('generateAlbumPdf(job.pages, job.photos, job.albumSize, pages, undefined, bindingInchesFor(cover))');
     const gen = src('./generateAlbumPdf.ts');
     expect(gen).toContain('renderAlbumForPrint(pages, photos, albumSize, onProgress, { bindingIn })');
     expect(gen).toContain('{ bakeWords: true, bindingIn }');

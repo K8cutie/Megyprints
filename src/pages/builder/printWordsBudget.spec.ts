@@ -42,6 +42,16 @@ describe('generateAlbumPdf — never past the upload cap because of sharp words'
     expect(await textOf(pdf)).not.toMatch(/\/SMask/);
   });
 
+  it('the second pass tells the progress bar it is the "smaller" pass, so the bar never starts over', async () => {
+    const { generateAlbumPdf } = await import('./generateAlbumPdf');
+    const seen: unknown[][] = [];
+    const onProgress = (...a: unknown[]) => { seen.push(a); };
+    await generateAlbumPdf([], [], '8x8', onProgress, 100);
+    expect(renderAlbumForPrint.mock.calls[0][3]).toBe(onProgress);
+    (renderAlbumForPrint.mock.calls[1][3] as (d: number, t: number) => void)(4, 70);
+    expect(seen).toEqual([[4, 70, true]]);
+  });
+
   it('over the cap with no words anywhere: nothing to take back, one pass', async () => {
     renderAlbumForPrint.mockImplementation(async () => [pageOf([]), pageOf([])]);
     const { generateAlbumPdf } = await import('./generateAlbumPdf');

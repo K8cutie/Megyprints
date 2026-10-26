@@ -87,6 +87,8 @@ describe('checkout (source guards)', () => {
     expect(src).toMatch(/onClick=\{priceReady \? handleProceedToPayment : \(settingsReady && albumInfo !== 'loading' \? retryPrices : undefined\)\}/);
     expect(src).toMatch(/Prices didn't load — tap to try again/);
     expect(src).not.toMatch(/Pricing unavailable — please refresh/);
-    expect(src).toMatch(/\{priceReady \? `₱\$\{totalPrice\.toLocaleString\('en-PH'\)\}` : '—'\}/);
+    // payTotal: the total, or ₱0 with a tester code (0057). Unpriced is '—'.
+    expect(src).toMatch(/\{priceReady \? `₱\$\{payTotal\.toLocaleString\('en-PH'\)\}` : '—'\}/);
+    expect(src).toMatch(/const payTotal = amountToPay\(totalPrice, tester\);/);
   });
 });

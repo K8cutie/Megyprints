@@ -31,14 +31,24 @@ export function NewPasswordModal({ onAskForNewLink }: NewPasswordModalProps) {
 
 /** Mounted only while open, so every visit starts with an empty form. */
 function NewPasswordPanel({ recovery, onAskForNewLink }: NewPasswordModalProps & { recovery: RecoveryState }) {
-  const panelRef = useModalDialog<HTMLDivElement>(true, endRecovery);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [linkGone, setLinkGone] = useState(false);
   const expired = recovery === 'expired' || linkGone;
+
+  // The emailed link signed them in only so they could make a new password.
+  // Closing without one used to leave them signed in on the old, forgotten
+  // password (tester 2026-10-26: "forget password is entering direct in your
+  // app"), so it signs them out. Saved or run out: plain close.
+  const closeWithoutSaving = useCallback(() => {
+    endRecovery();
+    logout().catch(() => { /* offline: the session ends with the tab */ });
+  }, [logout]);
+  const close = saved || expired ? endRecovery : closeWithoutSaving;
+  const panelRef = useModalDialog<HTMLDivElement>(true, close);
 
   // Saved / run out swap the form out from under the focused button.
   useEffect(() => {
@@ -87,12 +97,13 @@ function NewPasswordPanel({ recovery, onAskForNewLink }: NewPasswordModalProps &
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
     >
+      {/* A tap outside never signs anyone out: only the X does that. */}
       <motion.div
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={endRecovery}
+        onClick={saved || expired ? endRecovery : undefined}
       />
 
       <motion.div
@@ -109,7 +120,7 @@ function NewPasswordPanel({ recovery, onAskForNewLink }: NewPasswordModalProps &
       >
         <div className="relative px-6 pt-6 pb-4">
           <button
-            onClick={endRecovery}
+            onClick={close}
             className="absolute top-4 right-4 p-1.5 rounded-full text-taupe hover:text-ink-warm hover:bg-blush-pink/10 transition-colors"
             aria-label="Close"
           >
@@ -182,6 +193,9 @@ function NewPasswordPanel({ recovery, onAskForNewLink }: NewPasswordModalProps &
                 )}
                 {saving ? 'Saving...' : 'Save new password'}
               </button>
+              <p className="text-center text-xs text-taupe">
+                If you close this, your password stays the same and you are signed out.
+              </p>
             </form>
           )}
         </div>

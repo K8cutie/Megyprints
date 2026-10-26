@@ -17,6 +17,7 @@ const h = vi.hoisted(() => ({
   auth: {
     user: { email: 'pat@example.test' },
     login: () => Promise.resolve(), signup: () => Promise.resolve(false), signInWithOAuth: () => Promise.resolve(),
+    logout: () => Promise.resolve(),
     loading: false, error: null, clearError: () => {},
   },
 }));

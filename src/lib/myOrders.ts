@@ -21,9 +21,11 @@ export interface MyOrder {
   album_title?: string | null;
   /** The album this order printed — "Order this album again" opens it. */
   album_id?: string | null;
+  /** Placed with a tester code (0057): a test order, never printed or sent. */
+  tester_code?: string | null;
 }
 
-const COLUMNS = 'id, order_number, status, amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title, album_id';
+const COLUMNS = 'id, order_number, status, amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title, album_id, tester_code';
 
 /** Newest first. */
 export async function listMyOrders(userId: string): Promise<MyOrder[]> {
