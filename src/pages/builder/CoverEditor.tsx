@@ -7,10 +7,12 @@
    the spine auto-follows the front title, and the BACK is reserved for the
    Megy Prints mark (coverLayout.deriveBrandedBack) — no Back face here.
 
-   • Background — tapping it opens the file picker (owner, 2026-10-04: no
-     separate "Upload Custom Image" box). The album's own photos are listed
-     under it once there are some. Setting an image here IS how you put a
-     photo on the cover.
+   • Background — the album's own photos, best first, to tap (the cover step
+     comes after the photos, so there are always some), and "Or choose a
+     photo from your phone". With no album photos yet, tapping it opens the
+     phone's picker straight away (owner, 2026-10-04: no separate "Upload
+     Custom Image" box). Setting an image here IS how you put a photo on the
+     cover.
    • Text — the cover title, typed inline (+ font / colour).
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -33,16 +35,23 @@ import { coverTitleFit } from './textFit';
 import { useModalDialog } from '../../lib/useModalDialog';
 
 const SPINE_STRIP_W = 26;
+/** Album photos shown for the cover before "Show all": two rows, so the
+ *  colours and the zoom stay on screen with a 200-photo album. */
+export const COVER_PHOTOS_SHOWN = 10;
 type CoverTab = 'background' | 'text';
 
 interface Props {
   mode?: 'step' | 'modal';
+  /** The step's filled button (wizard coverStepNext): "Make my album →". */
+  nextLabel?: string;
+  /** Why the album wasn't made (the step came back here), shown over the button. */
+  error?: string | null;
   onNext?: () => void;
   onBack?: () => void;
   onClose?: () => void;
 }
 
-export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }: Props) {
+export default function CoverEditor({ mode = 'modal', nextLabel = 'Continue →', error, onNext, onBack, onClose }: Props) {
   const b = useBuilderContext();
   // As a dialog (not the wizard step): focus in, Tab kept inside, Escape closes (KB-2).
   const panelRef = useModalDialog<HTMLDivElement>(mode === 'modal', onClose);
@@ -67,6 +76,17 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
   const [tab, setTab] = useState<CoverTab>('background');
   const activeTab: CoverTab = tab;
+
+  // The best few first; "Show all" for the rest. The photo on the cover is
+  // always among those shown, so its tick can be seen.
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
+  const shownPhotos = useMemo(() => {
+    if (showAllPhotos || coverPhotos.length <= COVER_PHOTOS_SHOWN) return coverPhotos;
+    const top = coverPhotos.slice(0, COVER_PHOTOS_SHOWN);
+    const onCover = (coverFront.background as { photoId?: string } | undefined)?.photoId;
+    const picked = onCover && !top.some((p) => p.id === onCover) ? coverPhotos.find((p) => p.id === onCover) : undefined;
+    return picked ? [picked, ...top.slice(0, COVER_PHOTOS_SHOWN - 1)] : top;
+  }, [coverPhotos, showAllPhotos, coverFront.background]);
 
   // The Background button opens the file picker straight away; the chosen
   // photo becomes the cover background, kept on the device so it is still
@@ -205,7 +225,9 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     <div className="flex items-center justify-between px-5 h-14 border-b border-line shrink-0">
       <div>
         <h2 className="font-display text-lg font-semibold text-dark">Design your cover</h2>
-        <p className="text-[11px] text-stone -mt-0.5">Style the front — the spine follows your title</p>
+        {/* Says it's ONE photo (tester, 2026-10-27, read the cover's picker
+            as the album's: "why can I only submit one photo?"). */}
+        <p className="text-[11px] text-stone -mt-0.5" data-testid="cover-one-photo">Pick 1 photo for the front cover</p>
       </div>
       {mode === 'modal' && (
         <button onClick={onClose} className="p-2 rounded-full hover:bg-black/5 text-medium"><X size={20} /></button>
@@ -269,7 +291,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
         return (
           <button
             key={t.key}
-            onClick={() => { setTab(t.key); if (t.key === 'background') bgFileRef.current?.click(); }}
+            onClick={() => { setTab(t.key); if (t.key === 'background' && coverPhotos.length === 0) bgFileRef.current?.click(); }}
             className={`py-2 px-3 rounded-xl border-2 text-sm font-semibold transition-all active:scale-[0.98] ${
               open
                 ? 'bg-peach text-white border-peach shadow'
@@ -288,6 +310,25 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
     <div className="flex-1 overflow-auto min-h-0 px-4 pt-3 pb-4">
       {activeTab === 'background' && (
         <div className="space-y-3">
+          {/* The album's own photos first: the cover step comes after the
+              photos, so the cover is a tap on one of them. The phone's picker
+              (one photo) is the second choice, after them. */}
+          {coverPhotos.length > 0 && (
+            <div data-testid="cover-your-photos">
+              <span className="block text-[11px] font-medium text-stone">Your photos, best ones first. Tap one.</span>
+              <BackgroundDesigner hidePreview compact imageOnly hideOpacity hideUpload background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={shownPhotos} />
+              {coverPhotos.length > COVER_PHOTOS_SHOWN && (
+                <button type="button" onClick={() => setShowAllPhotos((v) => !v)} data-testid="cover-show-all-photos"
+                  className="w-full -mt-1 mb-2 py-1.5 text-[12px] font-medium text-[#C56B4E] hover:underline">
+                  {showAllPhotos ? 'Show fewer' : `Show all ${coverPhotos.length} photos`}
+                </button>
+              )}
+              <button type="button" onClick={() => bgFileRef.current?.click()} data-testid="cover-photo-from-phone"
+                className="w-full py-2 rounded-xl bg-white border border-peach/40 text-[13px] font-medium text-dark hover:border-peach hover:bg-peach/10 transition-colors">
+                Or choose a photo from your phone
+              </button>
+            </div>
+          )}
           {/* Owner, 2026-10-20: a cover isn't only a photo — the page colours
               (pageColors.ts). Picking one replaces a photo; a title that
               wouldn't show on a dark colour switches to an ink that does. */}
@@ -319,11 +360,6 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
               <p className="text-[10px] text-[#B9A992] mt-1">Drag the cover above to reposition the photo.</p>
             </div>
           )}
-          {/* The album's own photos, once there are some (the cover reopened
-              from the preview). At the cover step there are none yet. */}
-          {coverPhotos.length > 0 && (
-            <BackgroundDesigner hidePreview compact imageOnly hideOpacity hideUpload background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={coverPhotos} />
-          )}
           {bgIsImage ? (
             !(bg as { photoId?: string }).photoId && (
               <button
@@ -333,7 +369,7 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
                 <X size={12} /> Remove photo
               </button>
             )
-          ) : (
+          ) : coverPhotos.length === 0 && (
             <p className="text-center text-[11px] text-[#B9A992]">Pick a colour above, or tap Background to choose a photo for your cover.</p>
           )}
         </div>
@@ -467,12 +503,17 @@ export default function CoverEditor({ mode = 'modal', onNext, onBack, onClose }:
 
   const footer =
     mode === 'step' ? (
+      <>
+      {error && (
+        <p role="alert" data-testid="cover-step-error" className="shrink-0 mx-3 mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">{error}</p>
+      )}
       <div className="shrink-0 border-t border-line p-3 flex justify-between items-center bg-cream">
         <button onClick={onBack} className="px-4 py-2.5 rounded-xl text-taupe font-medium hover:bg-black/5 transition-colors">← Back</button>
-        <button onClick={onNext} className="px-6 py-2.5 rounded-xl bg-blush-pink text-white font-semibold hover:brightness-105 active:scale-[0.98] transition-all shadow-sm">
-          Continue to photos →
+        <button onClick={onNext} data-testid="cover-step-next" className="px-6 py-2.5 rounded-xl bg-blush-pink text-white font-semibold hover:brightness-105 active:scale-[0.98] transition-all shadow-sm">
+          {nextLabel}
         </button>
       </div>
+      </>
     ) : (
       <div className="shrink-0 border-t border-line p-3 flex justify-end bg-cream">
         <button onClick={onClose} className="px-6 py-2.5 rounded-xl bg-blush-pink text-white font-semibold hover:brightness-105 active:scale-[0.98] transition-all shadow-sm">

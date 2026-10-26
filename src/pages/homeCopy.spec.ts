@@ -65,7 +65,7 @@ describe('no themes or templates to pick', () => {
 describe('How It Works follows the wizard', () => {
   it('is the wizard\'s path, in its order', () => {
     expect(HOW_IT_WORKS.map((s) => s.title)).toEqual(
-      ['Name & occasion', 'Size', 'Cover', 'Photos', 'Review', 'Preview', 'Order'],
+      ['Name & occasion', 'Size', 'Photos', 'Cover', 'Review', 'Preview', 'Order'],
     );
   });
 

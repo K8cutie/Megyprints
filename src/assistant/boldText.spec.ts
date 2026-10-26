@@ -87,7 +87,8 @@ describe('every wizard message shows its bold words, never asterisks', () => {
     ['welcome', ['Megy']],
     ['pick_theme', ["Maria's Debut", 'Wedding']],
     ['pick_size', ['8x8']],
-    ['design_cover', ['Continue to photos']],
+    // The cover comes after the photos: 3 is short of 40, so the way on is the photos.
+    ['design_cover', ['Next: add your photos']],
     // 3 photos is short of the 40-photo minimum (albumMinimum): the body says how many more.
     ['upload_photos', ['3', '40', '37 more']],
     ['review_pages', ['page 1 of 3', 'Next page']],
@@ -97,6 +98,13 @@ describe('every wizard message shows its bold words, never asterisks', () => {
     const out = shown(engine(), step);
     expect(out.bolds).toEqual(bolds);
     expect(out.text).not.toContain('*');
+  });
+
+  it('the cover with the photos in (not made yet): 1 photo, Text, Make my album', () => {
+    const forty = Array.from({ length: 40 }, () => ({}));
+    const cover = shown(engine({ uploadedPhotos: forty }), 'design_cover');
+    expect(cover.bolds).toEqual(['1 photo', 'Text', 'Make my album']);
+    expect(cover.text).not.toContain('*');
   });
 
   it('the last-page nudge and the empty upload step too', () => {
