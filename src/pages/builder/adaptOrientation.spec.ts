@@ -17,7 +17,7 @@ import type { AlbumSizePreset } from './types';
    same template looked right in one place and wrong in another.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
+const SIZES: AlbumSizePreset[] = ['6x6', '8x8', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'];
 
 describe('the Fabric canvas never rewrites an authored layout', () => {
   for (const size of SIZES) {

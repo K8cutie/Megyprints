@@ -35,7 +35,7 @@ export const MIN_PAGES = 40;
  *  picker — so these stay client-side; only the cost figures moved to the DB. */
 export const SIZE_LABELS: Record<AlbumSizePreset, string> = {
   '6x4': '6×4', '8x6': '8×6', '6x8': '6×8', '6x6': '6×6',
-  '8x8': '8×8', '9x9': '9×9', '11.5x8': '11.5×8', '8.5x11': '8.5×11',
+  '8x8': '8×8', '11.5x8': '11.5×8', '8.5x11': '8.5×11',
 };
 
 /** Owner-only view of the cost model — the shape of owner_pricing_model(). */

@@ -46,7 +46,7 @@ describe('albumContentKey: the same album gives the same key however it travelle
     const base = albumContentKey(serializeAlbum(album()));
     const changed = [
       album({ title: 'HK Trip 2026' }),
-      album({ sizePreset: '9x9' }),
+      album({ sizePreset: '6x6' }),
       album({ pages: [{ id: 'p1', templateId: 't88-fb-quad-grid-gap', slotFills: [0, null, null, null] }] as unknown as AlbumData['pages'] }),
       album({ photos: [{ id: 'ph0', name: 'a.jpg', leftOut: true }] }),
       album({ coverFront: { id: 'cover', background: { type: 'solid', solid: '#000' }, textElements: [] } }),

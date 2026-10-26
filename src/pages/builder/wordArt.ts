@@ -11,6 +11,8 @@ export interface WordArtStyle {
   outlineColor?: string;
   outlineWidth?: number; // design px; 0/undefined = no outline
   shadow?: boolean;
+  /** Design px; the cover's floating shadow is sized from it. */
+  fontSize?: number;
 }
 
 /** Outline width (design px) the editor's Outline toggle applies. */
@@ -18,6 +20,28 @@ export const WORDART_OUTLINE_WIDTH = 3;
 
 /** Soft drop-shadow geometry in DESIGN px (scaled per renderer). */
 export const WORDART_SHADOW = { color: 'rgba(0,0,0,0.38)', offsetX: 0, offsetY: 2, blur: 3 };
+
+/** The COVER's floating text (owner, 2026-10-21: "add a floating effect so
+ *  there is a distinction"). A dark, soft shadow dropped below the letters and
+ *  sized from them, so the words sit lifted off the cover instead of printed
+ *  into it — white words stay readable on bright sand or sky. Offset and blur
+ *  are shares of the text's own font size: the small caption shadow above is
+ *  2px whatever the size, which a 60px title hides. One layer (not an edge +
+ *  a glow): every renderer, Fabric included, draws exactly one shadow. */
+export const WORDART_FLOAT = { color: 'rgba(0,0,0,0.6)', offsetX: 0, offsetY: 0.06, blur: 0.14 };
+
+/** The shadow a text casts, in DESIGN px, or null. Cover text floats unless its
+ *  Shadow switch was turned OFF (shadow === false), so every cover, old ones
+ *  included, gets it; anywhere else a text casts the small caption shadow only
+ *  when it was switched ON. */
+export function wordArtShadow(s: WordArtStyle, onCover = false): { color: string; offsetX: number; offsetY: number; blur: number } | null {
+  if (onCover) {
+    if (s.shadow === false) return null;
+    const size = s.fontSize || 24;
+    return { color: WORDART_FLOAT.color, offsetX: WORDART_FLOAT.offsetX * size, offsetY: WORDART_FLOAT.offsetY * size, blur: WORDART_FLOAT.blur * size };
+  }
+  return s.shadow ? WORDART_SHADOW : null;
+}
 
 export const hasWordArt = (s: WordArtStyle): boolean =>
   !!s.shadow || !!(s.outlineWidth && s.outlineColor);
@@ -35,17 +59,15 @@ export function contrastOutline(fill: string): string {
 
 /** Extra CSS for a DOM text node. `scale` = the factor the node's fontSize is
  *  multiplied by (so outline/shadow track the on-screen text size). */
-export function wordArtDomStyle(s: WordArtStyle, scale: number): CSSProperties {
+export function wordArtDomStyle(s: WordArtStyle, scale: number, onCover = false): CSSProperties {
   const css: CSSProperties = {};
   if (s.outlineWidth && s.outlineColor) {
     (css as any).WebkitTextStrokeWidth = `${s.outlineWidth * scale}px`;
     (css as any).WebkitTextStrokeColor = s.outlineColor;
     (css as any).paintOrder = 'stroke fill';
   }
-  if (s.shadow) {
-    const { offsetX, offsetY, blur, color } = WORDART_SHADOW;
-    css.textShadow = `${offsetX * scale}px ${offsetY * scale}px ${blur * scale}px ${color}`;
-  }
+  const sh = wordArtShadow(s, onCover);
+  if (sh) css.textShadow = `${sh.offsetX * scale}px ${sh.offsetY * scale}px ${sh.blur * scale}px ${sh.color}`;
   return css;
 }
 
@@ -169,11 +191,12 @@ export function drawWrappedWordArtText(
   fontSize: number,
   s: WordArtStyle,
   scale: number,
+  onCover = false,
 ): string[] {
   const lines = wrapTextLines(ctx, text, maxWidth);
   const step = fontSize * TEXT_LINE_HEIGHT;
   const top = cy - ((lines.length - 1) * step) / 2;
-  lines.forEach((line, i) => drawWordArtText(ctx, line, cx, top + i * step, s, scale));
+  lines.forEach((line, i) => drawWordArtText(ctx, line, cx, top + i * step, s, scale, onCover));
   return lines;
 }
 
@@ -188,26 +211,29 @@ export function drawWordArtText(
   y: number,
   s: WordArtStyle,
   scale: number,
+  onCover = false,
 ): void {
   const outline = !!(s.outlineWidth && s.outlineColor);
+  const sh = wordArtShadow(s, onCover);
   const setShadow = () => {
-    ctx.shadowColor = WORDART_SHADOW.color;
-    ctx.shadowBlur = WORDART_SHADOW.blur * scale;
-    ctx.shadowOffsetX = WORDART_SHADOW.offsetX * scale;
-    ctx.shadowOffsetY = WORDART_SHADOW.offsetY * scale;
+    if (!sh) return;
+    ctx.shadowColor = sh.color;
+    ctx.shadowBlur = sh.blur * scale;
+    ctx.shadowOffsetX = sh.offsetX * scale;
+    ctx.shadowOffsetY = sh.offsetY * scale;
   };
   const clearShadow = () => { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; };
   if (outline) {
-    if (s.shadow) setShadow();
+    if (sh) setShadow();
     ctx.save();
     ctx.lineJoin = 'round';
     ctx.lineWidth = (s.outlineWidth as number) * scale;
     ctx.strokeStyle = s.outlineColor as string;
     ctx.strokeText(line, x, y);
     ctx.restore();
-    if (s.shadow) clearShadow();
+    if (sh) clearShadow();
     ctx.fillText(line, x, y);
-  } else if (s.shadow) {
+  } else if (sh) {
     setShadow();
     ctx.fillText(line, x, y);
     clearShadow();

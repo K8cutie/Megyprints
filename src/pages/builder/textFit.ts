@@ -71,6 +71,28 @@ export function captionFits(text: string, s: CaptionStyle, box: Box, m: Measurer
   return { fits: false, fitsAt: null };
 }
 
+/** A plain sentence to measure a box with, longer than any cap. */
+const ROOM_SAMPLE = 'The castle lights came on and none of us wanted this happy day to end so we stayed a little longer together under the bright night sky and talked about every ride we took';
+
+/** The longest line a box takes at this style, in characters, capped at
+ *  `max`: measured word by word on a plain sentence, the way print wraps.
+ *  "Write a line for this photo" writes for the room a box has — a full
+ *  sentence in a big box, a short line in a thin band (owner, 2026-10-21:
+ *  "the longer quotes makes the page template more relatable"). null when it
+ *  can't be measured. */
+export function quoteRoom(box: Box, s: CaptionStyle, max = 100, m: Measurer | null = defaultMeasurer()): number | null {
+  if (!m || box.w <= 0 || box.h <= 0) return null;
+  const words = ROOM_SAMPLE.split(' ');
+  let room = 0;
+  for (let n = 1; n <= words.length; n++) {
+    const t = words.slice(0, n).join(' ');
+    if (t.length > max) return max; // it takes everything up to the cap
+    if (!captionFits(t, s, box, m)?.fits) break;
+    room = t.length;
+  }
+  return room;
+}
+
 /** The captions in the album that don't fit their boxes (0-based pages). */
 export function overflowingCaptions(
   pages: readonly AlbumPage[], albumSize: AlbumSizePreset, m: Measurer | null = defaultMeasurer(),

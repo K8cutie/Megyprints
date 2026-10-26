@@ -41,7 +41,7 @@ vi.mock('../lib/supabase', () => {
   return { supabase: { from: (t: string) => { h.query.push(['from', t]); return chain; } } };
 });
 
-import { trackOf, TRACK_STAGES } from '../lib/orderTracker';
+import { trackOf, TRACK_STAGES, TEST_ORDER_HEADLINE } from '../lib/orderTracker';
 import { listMyOrders, openOrderForAlbum, lastOrderForAlbum } from '../lib/myOrders';
 import { saveLastDelivery, readLastDelivery, clearLastDelivery } from '../lib/checkoutSession';
 import { EMPTY_ADDRESS } from '../lib/contact';
@@ -74,7 +74,18 @@ describe('where an order is, from its real status', () => {
     expect(t.labels[0]).toBe(awaiting ? 'Waiting for your payment' : TRACK_STAGES[0]);
   });
   it('cancelled', () => {
-    expect(trackOf({ status: 'cancelled' })).toMatchObject({ cancelled: true, headline: 'Cancelled', finished: false });
+    expect(trackOf({ status: 'cancelled' })).toMatchObject({ cancelled: true, headline: 'Cancelled', finished: false, test: false });
+  });
+  /* A tester-code order (0057) is a test, whatever its status: the owner
+     never prints it, so it never reads "printing soon" (live walk, 2026-10-26). */
+  it.each(['paid', 'in_production', 'shipped'])('a tester-code order, status %s → a test order, no journey', (status) => {
+    expect(trackOf({ status, tester_code: 'MEGYTEST' })).toMatchObject({ test: true, headline: TEST_ORDER_HEADLINE, finished: false, awaitingPayment: false, cancelled: false });
+  });
+  it('a cancelled tester-code order reads Cancelled', () => {
+    expect(trackOf({ status: 'cancelled', tester_code: 'MEGYTEST' })).toMatchObject({ cancelled: true, headline: 'Cancelled', test: false });
+  });
+  it('no code → not a test', () => {
+    expect(trackOf({ status: 'paid', tester_code: null }).test).toBe(false);
   });
 });
 
@@ -89,7 +100,7 @@ describe('Your orders asks for the customer\'s OWN orders', () => {
 
 const order = (o: Record<string, unknown>) => ({
   id: String(o.order_number), order_number: 'MP-2026-AAAA', status: 'pending_payment', amount: 2886, created_at: '2026-10-04T08:00:00Z',
-  payment_submitted_at: null, album_size: '9x9', page_count: 40, tracking: null, ...o,
+  payment_submitted_at: null, album_size: '8x8', page_count: 40, tracking: null, ...o,
 });
 
 describe('the Your orders page', () => {
@@ -113,6 +124,19 @@ describe('the Your orders page', () => {
     expect(cards[2].querySelector('[data-testid="order-tracker"]')).toBeNull();
     expect(cards[2].textContent).toContain('This order was cancelled');
   });
+  it('a tester-code order: "Test order: nothing will be printed or sent", the code, no journey, and the list asks for the code', async () => {
+    h.orders = [order({ order_number: 'MP-2026-R9Q3SDP', status: 'paid', amount: 0, tester_code: 'MEGYTEST', album_id: 'album-9' })];
+    await render(createElement(MyOrders));
+    const card = host.querySelector('[data-testid="order-card"]')!;
+    expect(card.querySelector('[data-testid="order-headline"]')?.textContent).toBe('Test order: nothing will be printed or sent');
+    expect(card.querySelector('[data-testid="order-test-note"]')?.textContent).toBe('You used the tester code MEGYTEST, so nothing is charged. Thank you for testing Megy Prints!');
+    expect(card.querySelector('[data-testid="order-tracker"]')).toBeNull();
+    expect(card.querySelector('[data-testid="order-how-to-pay"]')).toBeNull();
+    expect(card.textContent).not.toMatch(/printing soon/);
+    expect(card.textContent).toContain('₱0');
+    expect(card.querySelector('[data-testid="order-again"]')).not.toBeNull(); // they can test again
+    expect(h.query.find((q) => q[0] === 'select')?.[1]).toMatch(/\btester_code\b/);
+  });
   it('no orders yet → says so, and offers to make one', async () => {
     await render(createElement(MyOrders));
     expect(host.querySelector('[data-testid="orders-empty"]')?.textContent).toContain('No orders yet.');
@@ -128,7 +152,10 @@ describe('the way there', () => {
   });
   it('the thank-you screen follows the real order and leads to Your orders (source guard)', () => {
     const src = readFileSync(resolve(__dirname, 'Order.tsx'), 'utf8');
-    expect(src).toMatch(/const track = trackOf\(placedOrder \?\? \{ status: 'pending_payment', payment_submitted_at: 'now' \}\);/);
+    // Until the order row answers: where the customer just put it (a tester
+    // order is paid already, 0057, and is a test order either way).
+    expect(src).toMatch(/const base = placedOrder \?\? \(freeTester \? \{ status: 'paid' \} : \{ status: 'pending_payment', payment_submitted_at: 'now' \}\);/);
+    expect(src).toMatch(/const track = trackOf\(\{ \.\.\.base, tester_code: placedOrder\?\.tester_code \?\? tester\?\.code \?\? null \}\);/);
     expect(src).toMatch(/getMyOrder\(user\.id, orderId\)/);
     expect(src).toMatch(/window\.setInterval\(refresh, 60_000\)/);
     expect(src).toMatch(/<OrderTracker track=\{track\} \/>/);

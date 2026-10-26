@@ -127,6 +127,25 @@ describe('a new request', () => {
     expect(rpcs('owner_event_bookings')).toHaveLength(2);
   });
 
+  it('an 8.5×11 deal offers Softcover only and says why: its hardbound cover is too big for the press (0046)', async () => {
+    h.rows = [booking({})];
+    await render();
+    const size = $('deal-size') as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(size, '8.5x11');
+      size.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await settle();
+    const cover = $('deal-cover') as HTMLSelectElement;
+    expect([...cover.options].map((o) => o.value)).toEqual(['soft']);
+    expect(cover.value).toBe('soft');
+    expect($('deal-cover-note')!.textContent).toBe('Hardbound is not available for 8.5×11 albums. The cover is too big for our printer.');
+    await type($('deal-total'), '30000');
+    await type($('deal-deposit'), '12000');
+    await click($('deal-send'));
+    expect(rpcs('set_booking_deal')[0]).toMatchObject({ p_album_size: '8.5x11', p_cover: 'soft' });
+  });
+
   it('no cost model → says so instead of an editor that would guess', async () => {
     h.model = null;
     h.rows = [booking({})];

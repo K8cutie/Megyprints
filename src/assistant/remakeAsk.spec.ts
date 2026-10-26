@@ -32,11 +32,11 @@ import { placedMemories, remakeLosesMessage, rebuildQuestion } from './rebuildQu
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const GIF = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
 
-/** A made 9×9 album of 41 pages, with video memories on pages 1 and 3. */
+/** A made 8×8 album of 41 pages, with video memories on pages 1 and 3. */
 function madeAlbum() {
   const uploadedPhotos = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, previewUrl: GIF, name: `p${i}.jpg`, type: 'image/jpeg', size: 1000, width: 1200, height: 1200 }));
   const albumPages = Array.from({ length: 41 }, (_, i) => ({
-    id: `page-${i}`, layout: 'single', templateId: 't99-solo', slotFills: [i], photos: [], textElements: [],
+    id: `page-${i}`, layout: 'single', templateId: 't88-solo', slotFills: [i], photos: [], textElements: [],
     background: { type: 'solid', solid: '#FFFFFF' },
     ...(i === 0 || i === 2 ? { qrFills: [{ kind: 'clip', code: `code${i}` }] } : {}),
   }));
@@ -45,7 +45,7 @@ function madeAlbum() {
 function builderAtStep4() {
   const { uploadedPhotos, albumPages } = madeAlbum();
   return {
-    phase: 'edit', wizardStep: 'upload_photos', albumTitle: 'Quinn HK Trip R3', albumSize: '9x9',
+    phase: 'edit', wizardStep: 'upload_photos', albumTitle: 'Quinn HK Trip R3', albumSize: '8x8',
     selectedTemplate: 'classic', photosPerPage: undefined, uploadedPhotos, albumPages,
     currentPageIndex: 0, currentPage: albumPages[0], selectedTextId: null, selectedPhotoId: null,
     user: { id: 'user-1' }, coverDesign: undefined, coverFront: undefined,
@@ -149,7 +149,7 @@ describe('what a remake replaces, said one way everywhere', () => {
     expect(remakeLosesMessage(2)).toContain("and your 2 video memories (you'd add them again)");
   });
   it('Megy\'s chat "generate" question says the memories go too', () => {
-    const q = rebuildQuestion({ type: 'generate_album' } as never, { albumPages: madeAlbum().albumPages as never, albumSize: '9x9' });
+    const q = rebuildQuestion({ type: 'generate_album' } as never, { albumPages: madeAlbum().albumPages as never, albumSize: '8x8' });
     expect(q).toContain('your 2 video memories');
   });
   it('the editor\'s "Generate All" on a made album asks too (source guard)', () => {

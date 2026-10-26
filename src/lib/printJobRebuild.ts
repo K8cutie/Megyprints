@@ -28,6 +28,7 @@ import { DRAFT_STORAGE_KEY } from './localDraft';
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, CoverDesign } from '../pages/builder/types';
 import type { StoredPhoto } from './useIndexedDBPhotos';
 import { normalizeStoredPageFields, storedCoverPage } from '../pages/builder/pageNormalize';
+import { liveAlbumSize, liftRetiredPages } from '../pages/builder/retiredSizes';
 import { withLiveCoverPhoto } from '../pages/builder/coverPhoto';
 import { missingPhotos } from './photoPresence';
 
@@ -66,8 +67,8 @@ function draftCoverDesign(albumId: string | undefined): CoverDesign | undefined 
  *  say; it is trusted, as it always was.) It is normalized through the same
  *  sanitizer the interior pages use (shape + ornament data-URI validation). The
  *  back cover is NOT recovered — it's the reserved Megy Prints panel, derived
- *  from the front at wrap time. The cover upload is best-effort, so a missing
- *  cover photo degrades the cover only — it does NOT fail the interior job. */
+ *  from the front at wrap time. A cover photo missing from this device does not
+ *  fail the rebuild: checkout checks the cover's photos itself and says so. */
 function draftCoverPages(albumId: string, albumSize: AlbumSizePreset): { coverFront?: AlbumPage } {
   try {
     const d = readDraftCover(albumId);
@@ -119,10 +120,10 @@ export async function rebuildPrintJobFromAlbum(
   }
   if (!album) return null;
 
-  const rawPages = Array.isArray(album.pages) ? album.pages : [];
+  const rawPages = Array.isArray(album.pages) ? liftRetiredPages(album.pages) : [];
   if (rawPages.length === 0) return null;
 
-  const albumSize = (album.album_size as AlbumSizePreset) ?? '8x8';
+  const albumSize = (liveAlbumSize(album.album_size) ?? '8x8') as AlbumSizePreset;
   const pages: AlbumPage[] = rawPages.map((p: any, idx: number) => {
     const np = normalizeStoredPage(p);
     return {

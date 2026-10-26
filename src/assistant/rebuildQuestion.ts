@@ -37,6 +37,11 @@ const memoriesPhrase = (n: number) => (n > 0 ? ` and your ${n} video ${n === 1 ?
  *  on a made album). */
 export function occasionQuotesMessage(occasion: string, changed: number, cleared: number): string {
   const lines = (n: number) => `${n} ${n === 1 ? 'quote' : 'quotes'}`;
+  // None changed: the quote bank is off (DEAL_BANK_QUOTES), so the old lines were cleared.
+  if (changed === 0) {
+    return `Your album is about ${occasion} now, so Megy cleared ${lines(cleared)} she wrote for the old occasion.`
+      + ` Tap an empty quote box and Megy writes a new line from its photos. Lines you wrote or picked stay. Undo puts the old ones back.`;
+  }
   return `Your album is about ${occasion} now, so Megy changed ${lines(changed)} she wrote to ${occasion} ones`
     + (cleared > 0 ? ` and cleared ${lines(cleared)} she had no new line for` : '')
     + '. Lines you wrote or picked stay. Undo puts the old ones back.';

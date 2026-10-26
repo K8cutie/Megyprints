@@ -1,21 +1,54 @@
-import { useState, useEffect, useCallback } from 'react';
-import { X, Quote, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { X, Quote, Loader2, RefreshCw, Trash2, Pencil, Sparkles, Type } from 'lucide-react';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { fetchThemeQuotes, moreThemeQuotes, curatedQuotesFor, MAX_QUOTE_CHARS } from '../../lib/quotes';
 import { readAlbumTheme, writeAlbumTheme, cleanAlbumTheme, MAX_THEME_LENGTH } from '../../lib/albumTheme';
+import { writeLinesForPhotos, type QuoteBox } from '../../lib/photoQuotes';
+import { quoteRoom, captionFits } from './textFit';
+import { useAuth } from '../../lib/authContext';
+import { useAuthModal } from '../../components/AuthModalProvider';
+import { DEAL_BANK_QUOTES } from './generateAlbum';
 
-/* Themed quote picker for a caption box. Reads the album's free-text theme
-   (asked at setup, stored locally), asks the /api/theme-quotes proxy for short
-   ORIGINAL lines written for that exact theme, and falls back to the curated
-   corpus when there's no key or no network — so it always offers something.
+/** What the picker says when "Write a line for this photo" can't give lines.
+ *  Every way it ends gets words, and "Type your own words" is always there. */
+export const PHOTO_QUOTE_MESSAGES: Record<'limit_user' | 'limit_all' | 'refused' | 'failed' | 'no_fit', string> = {
+  limit_user: 'You have used today’s lines for photos. Try again tomorrow, or type your own words.',
+  limit_all: 'Lines for photos are busy today. Try again tomorrow, or type your own words.',
+  refused: 'Megy couldn’t write lines for this photo. Type your own words instead.',
+  failed: 'Couldn’t write lines just now. Tap to try again.',
+  no_fit: 'Megy’s lines were too long for this box. Tap to try again, or type your own words.',
+};
+
+/** The picker on a page with no photo yet: nothing to write from. */
+export const NO_PHOTO_NOTE = 'Put a photo on this page, and Megy can write a line from it.';
+
+/* Quote picker for a caption box: lines Megy writes from the page's photos
+   ("Write a line for this photo"), or the customer's own words. The quote
+   bank — lines for the album's theme from the /api/theme-quotes proxy, with
+   the curated corpus behind it — is OFF (DEAL_BANK_QUOTES, owner 2026-10-21:
+   "haiku is now dynamically doing the quotes"); on, it is listed below again.
 
    The chosen line is written through the caller's setBoxText/setSlotText, which
    already evicts whatever else occupies the box: one box, one thing. */
-export default function QuotePickerModal({ initial, onPick, onRemove, onClose, mobile }: {
+export default function QuotePickerModal({ initial, onPick, onRemove, onEdit, onClose, mobile, photoUrls = [], quoteBox = null, autoWrite = false }: {
+  /** Opened from an EMPTY quote box ("Let AI write a quote"): start writing
+   *  lines for the page's photos right away — one tap, not two. */
+  autoWrite?: boolean;
   /** The line currently in this box, if any — enables Change/Remove wording. */
   initial?: string | null;
+  /** The photos on this box's page (photoQuotes.pagePhotoUrls). With any,
+   *  "Write a line for this photo" offers lines written for them. */
+  photoUrls?: string[];
+  /** The quote box (photoQuotes.quoteBoxFor): lines are written for the room
+   *  it has and offered only if they fit. Without it: the caption cap. */
+  quoteBox?: QuoteBox | null;
   onPick: (quote: string) => void;
   onRemove?: () => void;
+  /** Tapping a quote that is already on the page opens THIS pool (owner,
+   *  2026-10-20: "I thought clicking a quote gives a pool to select from").
+   *  Changing its words or font is one tap away: this hands the box to the
+   *  typing editor. */
+  onEdit?: () => void;
   onClose: () => void;
   mobile?: boolean;
 }) {
@@ -26,7 +59,7 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
   const [theme, setTheme] = useState(readAlbumTheme);
   const [quotes, setQuotes] = useState<string[]>([]);
   const [source, setSource] = useState<'ai' | 'curated'>('curated');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(DEAL_BANK_QUOTES);
 
   const load = useCallback(async (t: string, fresh = false) => {
     // The album's occasion, held to the same length as Step 1 (albumTheme):
@@ -50,14 +83,130 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
 
   // On open: load lines straight away — the point of this picker is to offer
   // lines, not to ask the user to search first. Deferred a microtask so the
-  // effect body itself doesn't set state.
+  // effect body itself doesn't set state. (Bank off: no lines to load.)
   useEffect(() => {
+    if (!DEAL_BANK_QUOTES) return;
     void Promise.resolve().then(() => load(theme));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const Body = (
+  // ── "Write a line for this photo" ── Signed in only (it costs per tap); a
+  // signed-out tap is answered with the sign-in step, never a greyed button,
+  // and carries on by itself once they're in.
+  const { user } = useAuth();
+  const { openLogin } = useAuthModal();
+  const [photoLines, setPhotoLines] = useState<string[]>([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
+  const [needSignIn, setNeedSignIn] = useState(false);
+  /** A signed-out tap, waiting for the sign-in to finish: carry on ONCE. */
+  const resumeRef = useRef(false);
+  const many = photoUrls.length > 1;
+
+  const writeForPhoto = useCallback(async () => {
+    if (!user) { resumeRef.current = true; setNeedSignIn(true); return; }
+    setNeedSignIn(false);
+    setPhotoNote(null);
+    setPhotoBusy(true);
+    // As long as the box takes (a full sentence in a big box, a short line in
+    // a thin band); without a box or a way to measure, the server's caption cap.
+    const room = quoteBox ? quoteRoom(quoteBox.box, quoteBox.style) : null;
+    const r = await writeLinesForPhotos(photoUrls, cleanAlbumTheme(theme), photoLines, room ?? undefined);
+    setPhotoBusy(false);
+    if ('lines' in r) {
+      // Offered only if it prints whole in this box, checked the way print wraps.
+      const fit = quoteBox ? r.lines.filter((l) => captionFits(l, quoteBox.style, quoteBox.box)?.fits ?? true) : r.lines;
+      if (fit.length) { setPhotoLines(fit); return; }
+      setPhotoNote(PHOTO_QUOTE_MESSAGES.no_fit);
+      return;
+    }
+    // Signed in here but the session ran out on the server: sign in again.
+    if (r.error === 'sign_in') { setNeedSignIn(true); return; }
+    setPhotoNote(PHOTO_QUOTE_MESSAGES[r.error]);
+  }, [user, photoUrls, theme, photoLines, quoteBox]);
+
+  useEffect(() => {
+    if (!resumeRef.current || !user) return;
+    resumeRef.current = false;
+    void Promise.resolve().then(writeForPhoto);
+  }, [user, writeForPhoto]);
+
+  // "Let AI write a quote" on an empty box: start at once, ONCE (signed out,
+  // that's the sign-in step, which carries on by itself after).
+  const autoRef = useRef(autoWrite);
+  useEffect(() => {
+    if (!autoRef.current || photoUrls.length === 0) return;
+    autoRef.current = false;
+    void Promise.resolve().then(writeForPhoto);
+  }, [photoUrls.length, writeForPhoto]);
+
+  const PhotoSection = photoUrls.length === 0 ? null : (
+    <div className="px-4 pt-3 shrink-0" data-testid="photo-quote">
+      {photoBusy ? (
+        <div className="py-4 flex items-center justify-center gap-2 text-light">
+          <Loader2 size={18} className="animate-spin text-blush-pink" />
+          <span className="text-xs">Looking at the photo{many ? 's' : ''}…</span>
+        </div>
+      ) : photoLines.length > 0 ? (
+        <>
+          <p className="text-[11px] text-stone mb-1" data-testid="photo-quote-heading">Written for {many ? 'these photos' : 'this photo'}</p>
+          <div className="flex flex-col gap-2">
+            {photoLines.map((q) => (
+              <button key={q} data-testid="photo-quote-line" onClick={() => { onPick(q); onClose(); }}
+                className="text-left px-3.5 py-3 rounded-xl border border-peach bg-blush hover:bg-cream transition active:scale-[0.99]">
+                <span className="text-sm text-dark font-serif italic leading-snug">{q}</span>
+              </button>
+            ))}
+          </div>
+          <button onClick={() => void writeForPhoto()} data-testid="photo-quote-more"
+            className="mt-2 text-xs font-semibold text-blush-pink flex items-center gap-1 px-1 py-1">
+            <Sparkles size={13} /> Write 3 more
+          </button>
+        </>
+      ) : (
+        <>
+          <button onClick={() => void writeForPhoto()} data-testid="photo-quote-write"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-peach text-blush-pink text-sm font-semibold active:scale-[0.99] transition">
+            <Sparkles size={16} /> Write a line for {many ? 'these photos' : 'this photo'}
+          </button>
+          <p className="text-[10px] text-[#B5A99B] mt-1 text-center">
+            A small copy of {many ? 'each photo' : 'the photo'} on this page goes to Claude AI (Anthropic) to write 3 lines. We don’t keep it.
+          </p>
+        </>
+      )}
+      {needSignIn && (
+        <div className="mt-2 text-[11px] leading-snug text-cocoa bg-blush border border-peach/60 rounded-lg px-3 py-2 flex items-center justify-between gap-2" data-testid="photo-quote-sign-in">
+          <span><span className="font-semibold">Sign in first</span> to have Megy write lines for {many ? 'these photos' : 'this photo'}.</span>
+          <button onClick={openLogin} className="shrink-0 px-3 py-1.5 rounded-lg bg-peach text-white text-xs font-semibold">Sign in</button>
+        </div>
+      )}
+      {photoNote && <p className="mt-2 text-[11px] text-cocoa" data-testid="photo-quote-note">{photoNote}</p>}
+    </div>
+  );
+
+  // Their own words, from any picker: no dead end when Megy can't write (signed
+  // out, no photo yet, today's lines used). A box with a line already has
+  // "Edit the words" below instead.
+  const OwnWords = onEdit && !initial ? (
+    <div className="px-4 pt-2 pb-4 shrink-0">
+      {photoUrls.length === 0 && <p className="text-xs text-cocoa mb-2 text-center" data-testid="quote-no-photo">{NO_PHOTO_NOTE}</p>}
+      <button onClick={() => { onClose(); onEdit(); }} data-testid="quote-own-words"
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-line text-dark text-sm font-medium hover:bg-cream active:scale-[0.99] transition">
+        <Type size={15} /> Type your own words
+      </button>
+    </div>
+  ) : photoUrls.length === 0 ? (
+    <p className="px-4 py-4 text-xs text-cocoa text-center" data-testid="quote-no-photo">{NO_PHOTO_NOTE}</p>
+  ) : null;
+
+  const Body = !DEAL_BANK_QUOTES ? (
     <>
+      {PhotoSection}
+      {OwnWords}
+    </>
+  ) : (
+    <>
+      {PhotoSection}
       <div className="px-4 pt-3 pb-2 shrink-0">
         <label className="text-[11px] text-stone mb-1 block">Lines written for your album’s theme</label>
         <div className="flex gap-2">
@@ -135,12 +284,20 @@ export default function QuotePickerModal({ initial, onPick, onRemove, onClose, m
     </div>
   );
 
-  const Footer = initial && onRemove ? (
-    <div className="px-5 py-3 border-t border-line shrink-0">
-      <button onClick={() => { onRemove(); onClose(); }}
-        className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
-        <Trash2 size={14} /> Remove quote
-      </button>
+  const Footer = initial && (onRemove || onEdit) ? (
+    <div className="px-5 py-3 border-t border-line shrink-0 flex items-center justify-between gap-2">
+      {onEdit ? (
+        <button onClick={() => { onClose(); onEdit(); }} data-testid="quote-edit-words"
+          className="text-xs font-medium text-dark flex items-center gap-1 px-2 py-2 hover:bg-cream rounded-lg">
+          <Pencil size={14} /> Edit the words
+        </button>
+      ) : <span />}
+      {onRemove && (
+        <button onClick={() => { onRemove(); onClose(); }}
+          className="text-xs font-medium text-red-500 flex items-center gap-1 px-2 py-2 hover:bg-red-50 rounded-lg">
+          <Trash2 size={14} /> Remove quote
+        </button>
+      )}
     </div>
   ) : null;
 

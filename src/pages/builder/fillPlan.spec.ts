@@ -61,7 +61,7 @@ const mixed = (n: number): UploadedPhoto[] => Array.from({ length: n }, (_, i) =
 const counts = (pages: ReturnType<typeof generateAlbum>) => pages.map((p) => (p.slotFills ?? []).filter((f) => f != null).length);
 
 describe('generated albums in fill mode keep changing count', () => {
-  for (const size of ['6x6', '8x8', '9x9', '8x6', '6x8'] as AlbumSizePreset[]) {
+  for (const size of ['6x6', '8x8', '8x6', '6x8'] as AlbumSizePreset[]) {
     it(`${size} AUTO with 60 / 90 / 110 photos: ≥ 40 pages, no blanks, at least two counts, no run over 4`, () => {
       for (const n of [60, 90, 110]) {
         for (const photos of [sq(n), mixed(n)]) {

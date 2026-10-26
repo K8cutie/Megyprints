@@ -166,7 +166,7 @@ describe('every size, from a roll of every shape (phone, camera, square, wide)',
     id: `m${i}`, previewUrl: `https://example.test/m${i}.jpg`, name: `m${i}.jpg`, type: 'image/jpeg', size: 1,
     width: shapes[i % 6][0], height: shapes[i % 6][1], capturedAt: 1791100000000 + i * 60_000,
   }));
-  for (const size of ['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'] as AlbumSizePreset[]) {
+  for (const size of ['6x6', '8x8', '6x4', '8x6', '6x8', '11.5x8', '8.5x11'] as AlbumSizePreset[]) {
     it(`${size}: every page's sheet starts with its own layout, and the rest hold its photos well`, () => {
       for (const [n, page] of generateAlbum(mixed, size).entries()) {
         const choices = layoutChoicesForPage(page, mixed, size);

@@ -31,6 +31,7 @@ import { useModalDialog } from '../lib/useModalDialog';
 import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
+import { DEAL_BANK_QUOTES } from '../pages/builder/generateAlbum';
 import { FontList } from '../pages/builder/FontList';
 import { TEXT_COLOR_HEXES } from '../pages/builder/textColors';
 import {
@@ -183,7 +184,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     if (wizardStep === 'pick_theme') {
       if (!stepOneReady) { setStepOneNudge((n) => n + 1); return; }
       setStepOneNudge(0);
-      void fetchThemeQuotes(albumTheme.trim());
+      if (DEAL_BANK_QUOTES) void fetchThemeQuotes(albumTheme.trim());
       // A made album follows a new occasion: Megy's quotes switch to it
       // (the effect below, once the toast exists).
       if (albumIsMade(builder.albumPages)) setRequoteFor({ occasion: albumTheme.trim() });
@@ -398,7 +399,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         break;
       case 'pick_size':
         const sizes: Record<string, string> = {
-          '6×6': '6x6', '8×8': '8x8', '9×9': '9x9',
+          '6×6': '6x6', '8×8': '8x8',
           '6×4': '6x4', '8×6': '8x6', '6×8': '6x8', '11.5×8': '11.5x8', '8.5×11': '8.5x11',
         };
         const size = Object.keys(sizes).find(k => action.includes(k));

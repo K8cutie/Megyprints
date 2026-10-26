@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { generateAlbum } from './generateAlbum';
+import { generateAlbum, chosenAlbumPages as estimate, OPENING_FULL_PAGES } from './generateAlbum';
 import type { AlbumPage, UploadedPhoto } from './types';
 import { seedMathRandom, mulberry32 } from '../../test/seededRandom';
 
@@ -50,35 +50,48 @@ describe('the Hoarder: all 196 at "4 · Collage"', () => {
   // pages sat in a row on pages 1-7. Now each shape's photos get their own
   // plan at 4: the 176 squares are 44 pages of 4, the 13 portraits 4+3+3+3,
   // and the 7 video-memory singles are spread through the album.
-  it('55 pages on every seed: 45 of 4, 3 of 3, the 7 video-memory singles and nothing else (it was 72-75, then 62, then 59)', () => {
+  // 2026-10-21 (owner): pages 1-3 are always full-page photos, on top of the
+  // 7 — three squares leave the 4-ups (55 → 58 pages, 10 singles).
+  it('58 pages on every seed: 42 of 4, 6 of 3, the 3 opening + 7 video-memory singles and nothing else (it was 72-75, then 62, then 59, then 55 before the opening pages)', () => {
     for (const seed of SEEDS) {
       const pages = gen(seed, roll(0, 196), 4);
       const counts = pages.map(onPage);
-      expect(pages.length, `seed ${seed}: pages`).toBe(55);
-      expect(counts.filter((c) => c === 4).length, `seed ${seed}: pages of 4`).toBe(45);
-      expect(counts.filter((c) => c === 3).length, `seed ${seed}: pages of 3`).toBe(3);
-      expect(counts.filter((c) => c === 1).length, `seed ${seed}: single pages`).toBe(7);
+      expect(pages.length, `seed ${seed}: pages`).toBe(58);
+      expect(counts.filter((c) => c === 4).length, `seed ${seed}: pages of 4`).toBe(42);
+      expect(counts.filter((c) => c === 3).length, `seed ${seed}: pages of 3`).toBe(6);
+      expect(counts.filter((c) => c === 1).length, `seed ${seed}: single pages`).toBe(OPENING_FULL_PAGES + 7);
       expect(counts.filter((c) => c === 0), `seed ${seed}: blank`).toHaveLength(0);
       expect(new Set(pages.flatMap((p) => (p.slotFills ?? []).filter((f) => f != null))).size, `seed ${seed}`).toBe(196);
     }
   });
   it('the video-memory pages are spread through the album, never bunched (it was pages 1-7, six in a row)', () => {
     for (const seed of SEEDS) {
-      const at = gen(seed, roll(0, 196), 4).map((p, i) => (onPage(p) === 1 ? i : -1)).filter((i) => i >= 0);
-      const gaps = at.slice(1).map((x, i) => x - at[i]);
-      expect(Math.min(...gaps), `seed ${seed}: singles at pages ${at.map((i) => i + 1).join(', ')}`).toBeGreaterThanOrEqual(5);
+      const singles = gen(seed, roll(0, 196), 4).map((p, i) => (onPage(p) === 1 ? i : -1)).filter((i) => i >= 0);
+      // Pages 1-3 are the opening full pages, together on purpose.
+      expect(singles.slice(0, OPENING_FULL_PAGES), `seed ${seed}: the opening`).toEqual([0, 1, 2]);
+      const at = singles.slice(OPENING_FULL_PAGES);
+      const gaps = at.map((x, i) => x - (i === 0 ? OPENING_FULL_PAGES - 1 : at[i - 1]));
+      expect(Math.min(...gaps), `seed ${seed}: singles at pages ${singles.map((i) => i + 1).join(', ')}`).toBeGreaterThanOrEqual(5);
     }
   });
-  it('more photos, same rule: 260 at 4 a page make 71 pages (7 singles + 64 of 3-4; it was 82, 36 of them 4-ups)', () => {
+  it('more photos, same rule: 260 at 4 a page make 74 pages (10 singles + 64 of 3-4; it was 82, 36 of them 4-ups)', () => {
     const big = [...Array(260)].map((_, i) => roll(0, 196)[i % 196]).map((p, i) => ({ ...p, id: `big-${i}` }));
     for (const seed of SEEDS.slice(0, 4)) {
       const pages = gen(seed, big, 4);
-      expect(pages.length, `seed ${seed}`).toBe(71);
-      expect(pages.filter((p) => onPage(p) === 4).length, `seed ${seed}: pages of 4`).toBeGreaterThanOrEqual(61);
+      expect(pages.length, `seed ${seed}`).toBe(74);
+      expect(pages.filter((p) => onPage(p) === 4).length, `seed ${seed}: pages of 4`).toBeGreaterThanOrEqual(58);
     }
   });
-  it('too few for 4 on every page: 130 photos make exactly the 40 pages, never the 41-42 leftover singles made', () => {
-    for (const seed of SEEDS) expect(gen(seed, roll(66, 196), 4).length, `seed ${seed}`).toBe(40);
+  it('130 photos at 4: the 10 full pages + 31 of 3-4 = 41 pages, as the upload step says — never the leftover singles of old', () => {
+    // 130 = 10 + 30 × 4 exactly, and the 13 portraits can't share a page with
+    // the squares, so one page more than 40. (It was 40 before the opening
+    // pages; the 41-42 of old were leftover SINGLES.)
+    for (const seed of SEEDS) {
+      const pages = gen(seed, roll(66, 196), 4);
+      expect(pages.length, `seed ${seed}: what the upload step says`).toBe(estimate(roll(66, 196), '8x8', 4)!.pages);
+      expect(pages.length, `seed ${seed}`).toBe(41);
+      expect(pages.filter((p) => onPage(p) === 1).length, `seed ${seed}: singles`).toBe(OPENING_FULL_PAGES + 7);
+    }
   });
 });
 
@@ -95,12 +108,12 @@ describe('every slice of the roll from 40 to 196 photos fills all 40 pages', () 
 });
 
 describe('the upload card says when photos-per-page will be lowered', () => {
-  it('too few photos for 4 a page: why, and how many 4 per page needs (the 7 video-memory singles count)', async () => {
+  it('too few photos for 4 a page: why, and how many 4 per page needs (the 3 opening + 7 video-memory singles count)', async () => {
     const { photosPerPageNote } = await import('./generateAlbum');
     const photos = roll(70, 120); // 50 squares
-    expect(photosPerPageNote(photos, '8x8', 4)).toBe('With 50 photos, most pages get fewer than 4 so all 40 pages are filled. 4 per page needs about 139 photos.');
-    expect(photosPerPageNote(roll(66, 196), '8x8', 4)).toBe('With 130 photos, some pages get fewer than 4 so all 40 pages are filled. 4 per page needs about 139 photos.');
-    expect(photosPerPageNote(photos, '8x8', 3)).toBe('With 50 photos, most pages get fewer than 3 so all 40 pages are filled. 3 per page needs about 106 photos.');
+    expect(photosPerPageNote(photos, '8x8', 4)).toBe('With 50 photos, most pages get fewer than 4 so all 40 pages are filled. 4 per page needs about 130 photos.');
+    expect(photosPerPageNote(roll(66, 186), '8x8', 4)).toBe('With 120 photos, some pages get fewer than 4 so all 40 pages are filled. 4 per page needs about 130 photos.');
+    expect(photosPerPageNote(roll(70, 118), '8x8', 3)).toBe('With 48 photos, most pages get fewer than 3 so all 40 pages are filled. 3 per page needs about 100 photos.');
     expect(photosPerPageNote(photos, '8x8', 1)).toBeNull(); // 1 a page is always met
     expect(photosPerPageNote(photos, '8x8', undefined)).toBeNull(); // Surprise
     expect(photosPerPageNote(roll(70, 100), '8x8', 4)).toBeNull(); // under 40 the 40-photo gate speaks instead
@@ -108,16 +121,16 @@ describe('the upload card says when photos-per-page will be lowered', () => {
 });
 
 describe('the upload step says what "4 · Collage" costs BEFORE Generate (round 3, the Hoarder: no page or price estimate)', () => {
-  it('196 photos at 4 a page: about 55 pages, 15 extra, and the pesos they add (whole sheets: 14 of 4 pages, 4 more than 40 pages take)', async () => {
+  it('196 photos at 4 a page: about 58 pages, 18 extra, and the pesos they add (whole sheets: 15 of 4 pages, 5 more than 40 pages take)', async () => {
     const { photosPerPageNote, chosenAlbumPages } = await import('./generateAlbum');
     const { extraPagesCharge } = await import('../../lib/pricing');
     const schedule = { min_pages: 40, sheet_rate: 106, disabled_sizes: [], sizes: { '8x8': { pps: 4, soft_rate: 600, hard_rate: 1400 } } } as unknown as Parameters<typeof extraPagesCharge>[0];
     expect(photosPerPageNote(roll(0, 196), '8x8', 4, (pages) => extraPagesCharge(schedule, '8x8', 'soft', pages).amount)).toBe(
-      '4 per page makes your album: about 55 pages, 15 more than the 40 included, which adds ₱424. That counts 7 full-page photos, where your video memories go.');
-    expect(chosenAlbumPages(roll(0, 196), '8x8', 4)).toEqual({ pages: 55, memoryPages: 7 });
+      '4 per page makes your album: about 58 pages, 18 more than the 40 included, which adds ₱530. That counts 10 full-page photos, where your video memories go.');
+    expect(chosenAlbumPages(roll(0, 196), '8x8', 4)).toEqual({ pages: 58, fullPages: 10 });
     // the price schedule not loaded yet: the pages, without pesos
     expect(photosPerPageNote(roll(0, 196), '8x8', 4, null)).toBe(
-      '4 per page makes your album: about 55 pages, 15 more than the 40 included. That counts 7 full-page photos, where your video memories go.');
+      '4 per page makes your album: about 58 pages, 18 more than the 40 included. That counts 10 full-page photos, where your video memories go.');
   });
 });
 

@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
-import { LayoutGrid, Loader2, X, ImagePlus, Wand2 } from 'lucide-react';
+import { LayoutGrid, Loader2, X, ImagePlus, Wand2, Palette } from 'lucide-react';
 import type { BuilderContextValue } from './BuilderContext';
 import { PageView } from './BuilderPreview';
 import { getCanvasDimensions } from './layouts';
@@ -16,15 +16,19 @@ import MobileTextEditor, { type BoxTextContent } from './MobileTextEditor';
 import { captionBoxSize } from './textFit';
 import AddQrModal from './AddQrModal';
 import QuotePickerModal from './QuotePickerModal';
+import { pagePhotoUrls, quoteBoxFor } from '../../lib/photoQuotes';
 import RemoveGraphicModal from './RemoveGraphicModal';
 import SlotChooser from './SlotChooser';
+import { placedPhotoPages, swapNotice } from './slotSwap';
 import type { QrFill } from './types';
-import { dealtBoxRoll } from './types';
+import { dealtBoxRoll, isPoolQuote } from './types';
 import { StudioSheet, StudioLayer } from './StudioPhone';
 import { GUARD_MESSAGES, type GuardReason } from './slotGeometry';
 import { isMaskId, edgeGuardMessage, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
 import PageTurnBar from './PageTurnBar';
+import { PageColorSheet } from './PageColorPicker';
+import { pageColorOf } from './pageColors';
 import VideoMemoryButton from './VideoMemoryButton';
 
 /** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
@@ -37,6 +41,8 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
   const page = pages[idx];
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
+  const [colorSheet, setColorSheet] = useState(false); // the page-colour sheet (pageColors.ts)
+  const placedOn = placedPhotoPages(pages); // photo → page, for the picker's "Page 3" tag
 
   /* ── STUDIO on the phone (album-wide on the phone) ── */
   const studio = true; // owner, 2026-09-30: no Simple/Studio switch — every Studio tool is always on
@@ -240,8 +246,14 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
               onSlotTap={studio ? (slotIndex) => { setStudioSticker(null); setStudioSlot(slotIndex); } : undefined}
               onChooseSlot={(slotIndex) => setChooserSlot(slotIndex)}
               onRemoveFromSlot={(slotIndex) => actions.clearSlot(slotIndex)}
-              onSlotTextTap={(slotIndex) => setSlotTextEditSlot(slotIndex)}
-              onTextSlotTap={(slotIndex) => setEditSlot(slotIndex)}
+              // A line from the quote pool re-opens the pool (owner, 2026-10-20);
+              // the pool's "Edit the words" leads to the typing editor.
+              onSlotTextTap={(slotIndex) => { if (isPoolQuote(page.slotTexts?.[slotIndex])) setSlotQuoteSlot(slotIndex); else setSlotTextEditSlot(slotIndex); }}
+              onTextSlotTap={(slotIndex) => {
+                const line = page.textElements?.find((t) => t.boxIndex === slotIndex);
+                if (isPoolQuote(line, dealtBoxRoll(page, slotIndex))) setBoxQuoteSlot(slotIndex);
+                else setEditSlot(slotIndex);
+              }}
               onTextTap={(textId) => setEditTextId(textId)}
               onQrSlotTap={(slot) => setQrEditSlot(slot)}
               onOrnamentSlotTap={(slot) => setOrnamentEditSlot(slot)}
@@ -277,12 +289,16 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
           <p className="mb-2 text-center text-xs font-semibold text-success">{uploadMsg}</p>
         )}
         {/* Tools — quiet, so the one loud button on the screen is the way on. */}
-        <div className="grid grid-cols-2 gap-2" data-testid="studio-tray">
+        <div className="grid grid-cols-3 gap-2" data-testid="studio-tray">
           <button onClick={() => uploadRef.current?.click()} className={TOOL}>
             <ImagePlus size={18} /> Add photos
           </button>
           <button onClick={() => actions.setLayoutPickerOpen(true)} className={TOOL}>
             <LayoutGrid size={18} /> Change layout
+          </button>
+          {/* Owner, 2026-10-20: the page colours (pageColors.ts) on every page. */}
+          <button onClick={() => setColorSheet(true)} className={TOOL} data-testid="page-color-tool">
+            <Palette size={18} /> Page colour
           </button>
         </div>
         {/* Living-memory QR — offered on a single full photo page; turns it into
@@ -294,6 +310,18 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
           onPrev={goPrev} onNext={goNext} onDone={handleDone}
           onBackToPreview={actions.previewSeen && onBackToPreview ? handleBack : undefined} />
       </div>
+
+      {/* The page-colour sheet: this page, or every page. */}
+      {colorSheet && page && (
+        <PageColorSheet background={page.background}
+          onPick={(hex) => actions.setPageColor(hex)}
+          onPickAll={(hex) => {
+            actions.applyPageColorToAllPages(hex);
+            setColorSheet(false);
+            sayGuard(`Every page is ${pageColorOf({ type: 'solid', solid: hex })?.name.toLowerCase() ?? 'that colour'} now.`);
+          }}
+          onClose={() => setColorSheet(false)} />
+      )}
 
       {/* STUDIO: mask / look sheets, the guardrail line */}
       {studio && studioSheet && studioSlot != null && page && (
@@ -337,9 +365,13 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
       {boxQuoteSlot !== null && (
         <QuotePickerModal
           mobile
+          photoUrls={pagePhotoUrls(page, actions.uploadedPhotos)}
+          quoteBox={quoteBoxFor(page, boxQuoteSlot, actions.albumSize, idx)}
+          autoWrite={!page?.textElements?.some((t) => t.boxIndex === boxQuoteSlot)}
           initial={page?.textElements?.find((t) => t.boxIndex === boxQuoteSlot)?.text ?? null}
-          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true }, idx); setBoxQuoteSlot(null); }}
+          onPick={(quote) => { actions.setBoxText(boxQuoteSlot, { text: quote, italic: true, quote: true }, idx); setBoxQuoteSlot(null); }}
           onRemove={() => { actions.setBoxText(boxQuoteSlot, { text: '' }, idx); setBoxQuoteSlot(null); }}
+          onEdit={() => { const s = boxQuoteSlot; setBoxQuoteSlot(null); setEditSlot(s); }}
           onClose={() => setBoxQuoteSlot(null)}
         />
       )}
@@ -348,9 +380,11 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
       {slotQuoteSlot !== null && (
         <QuotePickerModal
           mobile
+          photoUrls={pagePhotoUrls(page, actions.uploadedPhotos)}
           initial={page?.slotTexts?.[slotQuoteSlot]?.text ?? null}
-          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true }, idx); setSlotQuoteSlot(null); }}
+          onPick={(quote) => { actions.setSlotText(slotQuoteSlot, { ...buildSlotTextInitial(slotQuoteSlot), text: quote, italic: true, quote: true }, idx); setSlotQuoteSlot(null); }}
           onRemove={() => { actions.setSlotText(slotQuoteSlot, null, idx); setSlotQuoteSlot(null); }}
+          onEdit={() => { const s = slotQuoteSlot; setSlotQuoteSlot(null); setSlotTextEditSlot(s); }}
           onClose={() => setSlotQuoteSlot(null)}
         />
       )}
@@ -386,10 +420,24 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
                 <p className="p-6 text-center text-sm text-light">No photos uploaded yet.</p>
               ) : (
                 <div className="overflow-y-auto p-3 grid grid-cols-3 gap-2">
-                  {actions.uploadedPhotos.map((p, i) => (
+                  {/* ONE PHOTO, ONE PLACE (owner, 2026-10-20): a placed photo is
+                      tagged with its page; picking it brings it HERE and its old
+                      frame swaps with this one (slotSwap.ts). It used to be
+                      copied — the same photo on two pages, printed twice. */}
+                  {actions.uploadedPhotos.map((p, i) => {
+                    const onPage = placedOn.get(i);
+                    const tag = onPage === undefined ? null : onPage === idx ? 'This page' : `Page ${onPage + 1}`;
+                    return (
                     <button key={i}
+                      data-testid="picker-photo"
+                      data-placed-on={onPage === undefined ? undefined : onPage + 1}
                       onClick={() => {
-                        if (replaceSlot !== null) actions.fillSlot(replaceSlot, i);
+                        if (replaceSlot !== null) {
+                          const wasEmpty = (page?.slotFills?.[replaceSlot] ?? null) === null;
+                          const notice = swapNotice(onPage === undefined ? null : { pageIndex: onPage, slotIndex: -1 }, idx, wasEmpty);
+                          actions.fillSlot(replaceSlot, i);
+                          if (notice) sayGuard(notice);
+                        }
                         else if (textReplaceSlot !== null) actions.setTextSlotPhoto(textReplaceSlot, i, idx);
                         setReplaceSlot(null); setTextReplaceSlot(null);
                       }}
@@ -399,8 +447,14 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
                       // browser; the image is absolutely positioned to fill it.
                       className="relative h-0 pb-[100%] rounded-lg overflow-hidden bg-line-soft active:scale-95 transition-transform">
                       <img src={p.previewUrl} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+                      {tag && (
+                        <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded bg-dark/75 text-warm-white text-[10px] font-semibold leading-tight">
+                          {tag}
+                        </span>
+                      )}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </motion.div>
@@ -441,7 +495,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
       {slotTextEditSlot !== null && (
         <MobileTextEditor
           initial={buildSlotTextInitial(slotTextEditSlot)}
-          onSave={(content) => actions.setSlotText(slotTextEditSlot, content.text.trim() ? content : null, idx)}
+          onSave={(content) => actions.setSlotText(slotTextEditSlot, content.text.trim() ? { ...content, quote: page?.slotTexts?.[slotTextEditSlot]?.quote } : null, idx)}
           onClose={() => setSlotTextEditSlot(null)}
         />
       )}

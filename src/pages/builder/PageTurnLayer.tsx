@@ -22,7 +22,7 @@ export default function PageTurnLayer({ plan, go, W, H, spineX, face }: {
   H: number;
   /** Where the spine is, from the layer's left edge. */
   spineX: number;
-  /** Draws a page, the cover or a blank page at W × H. */
+  /** Draws a page, the cover or the inside of a cover at W × H. */
   face: (f: TurnFace) => ReactNode;
 }) {
   const { leaf, patch, cast, ms } = plan;

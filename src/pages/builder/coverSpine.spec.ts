@@ -112,7 +112,8 @@ describe('every spine renderer draws what deriveSpine fits (source guards)', () 
   it('print: the fitted line, in the same safe inset', () => {
     const p = src('printPipeline.ts');
     expect(p).toMatch(/const spine = deriveSpine\(coverFront, geom\);/);
-    expect(p).toMatch(/drawCoverText\(ctx, \{ style: spine\.text, rect: spineSafe, rotateDeg: -90, valign: 'middle' \}\);/);
+    // (lifted off the wrap as sharp words — printPipeline's WordPatch)
+    expect(p).toMatch(/words\.push\(\.\.\.liftWords\(ctx, spineSafe, \(\) => drawCoverText\(ctx, \{ style: spine\.text, rect: spineSafe, rotateDeg: -90, valign: 'middle' \}\)\)\);/);
     expect(p).toMatch(/const spineSafe = insetRect\(spineRect, geom\.safeInsetPx\);/);
   });
   it('the editor strip shows the whole fitted line and says when it is shortened', () => {

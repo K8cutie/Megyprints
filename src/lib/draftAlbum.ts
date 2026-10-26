@@ -16,6 +16,7 @@ import type { AlbumData } from './useAlbumSync';
 import { DRAFT_STORAGE_KEY } from './localDraft';
 import { albumNameToSave } from './albumName';
 import { readAlbumTheme } from './albumTheme';
+import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from '../pages/builder/retiredSizes';
 
 export interface StoredDraft {
   albumId?: string;
@@ -35,8 +36,8 @@ export function albumDataFromDraft(stored: StoredDraft): AlbumData {
   return {
     id: stored.albumId,
     title: albumNameToSave(stored.title),
-    sizePreset: stored.albumSize ?? '8x8',
-    pages: (stored.albumPages ?? []) as unknown as AlbumData['pages'],
+    sizePreset: liveAlbumSize(stored.albumSize) ?? '8x8',
+    pages: liftRetiredPages(stored.albumPages ?? []) as unknown as AlbumData['pages'],
     photos: (stored.uploadedPhotos ?? []).map((p) => ({
       ...(p.size ? { size: p.size } : {}),
       ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
@@ -47,7 +48,7 @@ export function albumDataFromDraft(stored: StoredDraft): AlbumData {
       ...(p.kept ? { kept: true } : {}),
       ...(p.leftOut ? { leftOut: true } : {}),
     })),
-    ...(stored.coverFront ? { coverFront: stored.coverFront as unknown as AlbumData['coverFront'] } : {}),
+    ...(stored.coverFront ? { coverFront: liftRetiredPage(stored.coverFront) as unknown as AlbumData['coverFront'] } : {}),
     // The occasion and photos-per-page travel with the album, as in the
     // builder's own save (round 2, N4). A draft knows only this device's.
     occasion: readAlbumTheme() || null,

@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 
-const UPDATED = 'August 2026';
+const UPDATED = 'October 2026';
 const CONTACT = 'megyprintsph@gmail.com';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -31,10 +31,19 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="Your photos stay on your device">
+        <Section title="Where your photos go">
           <p>
             While you design an album, <b>your photos are stored only on your own device</b> (in your
-            browser's local storage). They are <b>not</b> uploaded to our servers during design.
+            browser's local storage). They are <b>not</b> uploaded to our servers during design, with one
+            exception that happens only when you ask for it:
+          </p>
+          <p>
+            When you tap <b>Write a line for this photo</b>, small copies of the photos on that page (at
+            most 6, at 512 pixels) are sent through our server to Anthropic, the company that makes Claude
+            AI, which writes caption lines for them. We don't save these copies. Anthropic does not use them
+            to train its AI; it keeps them for a limited time for safety checks, then deletes them. You need
+            to be signed in to use it, and to stop misuse we count how many times it is used each day
+            (those counts are deleted after 30 days).
           </p>
           <p>
             When you place an order, a print-ready file of your finished album — which includes the
@@ -69,6 +78,7 @@ export default function Privacy() {
             <li><b>Supabase</b> — secure database, private file storage, and sign-in.</li>
             <li><b>Vercel</b> — hosting for the app and website.</li>
             <li><b>Google</b> — optional "Sign in with Google."</li>
+            <li><b>Anthropic</b> — Claude AI, which writes quote lines for your album's theme, and for a page's photos when you tap Write a line for this photo.</li>
           </ul>
           <p>These providers process data only to provide their service to us.</p>
         </Section>

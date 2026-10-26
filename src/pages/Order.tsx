@@ -6,7 +6,7 @@ import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, Qr
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
-import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdf } from '../lib/orders';
+import { createOrderFromAlbum, uploadOrderPrintPdf, uploadOrderCoverPdfWithRetry, type PrintFileProgress } from '../lib/orders';
 import { getPendingPrintJob, setPendingPrintJob, readOrderHandoff, noteOrderHandoff, takeFreshHandoff, type PrintJob } from '../lib/printQueue';
 import { saveDraftToAccount as saveDraftAlbumToAccount } from '../lib/draftAccountSave';
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
@@ -27,12 +27,19 @@ import AddressPicker from '../components/AddressPicker';
 import { scrollPageToTop } from '../lib/pageScroll';
 import { startFreshAlbum } from '../lib/albumSession';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage, TooFewPhotosError } from './builder/albumMinimum';
+import { coverFitsSheet, coverChoiceNote } from './builder/printSheet';
 import { trackOf } from '../lib/orderTracker';
-import { missingPhotos, missingPhotosMessage } from '../lib/photoPresence';
+import { missingPhotos, missingPhotosMessage, PhotosNotHereError } from '../lib/photoPresence';
 import { getMyOrder, openOrderForAlbum, lastOrderForAlbum, type MyOrder } from '../lib/myOrders';
+import { ensureLatestApp, readUpdateNote, UPDATED_PLACE_ORDER, GETTING_NEWEST } from '../lib/appVersion';
 import OrderTracker from '../components/OrderTracker';
 import { eventLinkForAlbum, eventDealState, coverOrderWithBooking, bookingsWaitingForAlbum, linkFromBooking, linkAlbumToBooking, unlinkAlbum } from '../lib/eventAlbum';
 import { getMyBooking, listMyBookings, type EventBooking } from '../lib/eventBookings';
+import { amountToPay, claimTesterOrder, testerLine, TesterCodeGoneError, type TesterCode } from '../lib/testerCode';
+import TesterCodeBox from '../components/TesterCodeBox';
+import PlaceOrderProgress from '../components/PlaceOrderProgress';
+import { PLACE_AT, forward, pagesAt, pagesLabel, videosAt, type PlaceProgress } from '../lib/placeProgress';
+import { keepScreenOn } from '../lib/keepScreenOn';
 
 // The front cover at checkout — lazy: it brings the page renderer.
 const CoverThumb = lazy(() => import('./builder/CoverThumb'));
@@ -58,7 +65,7 @@ export default function Order() {
   // stored order and the uploaded PDF silently diverge.
   // albumId = the album the order row froze; a PDF rebuild must read that one.
   const createdOrderRef = useRef<
-    { id: string; order_number: string; albumId: string; material: MaterialType; cover: CoverType; albumSize: AlbumSizePreset } | null
+    { id: string; order_number: string; albumId: string; material: MaterialType; cover: CoverType; albumSize: AlbumSizePreset; tester?: TesterCode | null } | null
   >(null);
   const [material, setMaterial] = useState<MaterialType>(DEFAULT_MATERIAL);
   const [cover, setCover] = useState<CoverType>(DEFAULT_COVER);
@@ -70,6 +77,8 @@ export default function Order() {
   const [step, setStep] = useState<Step>('form');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  // Back from an update reload at Place order (lib/appVersion): say so.
+  const [updateNote, setUpdateNote] = useState(() => readUpdateNote());
   // The album isn't in the account (a guest who signed in here), or it is
   // short of the 40-photo minimum: offer the way back to it.
   const [albumNotSaved, setAlbumNotSaved] = useState(false);
@@ -96,6 +105,9 @@ export default function Order() {
     return () => { alive = false; window.clearInterval(timer); };
   }, [step, user]);
   const [prepMsg, setPrepMsg] = useState('');
+  // How far along Place order is, for the bar under the button (placeProgress).
+  const [placing, setPlacing] = useState<PlaceProgress | null>(null);
+  const advance = (at: number, sending = false) => setPlacing((p) => forward(p, at, sending));
   // Manual transfer (0033): the receipt + bank reference the customer attaches.
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofError, setProofError] = useState('');
@@ -107,6 +119,9 @@ export default function Order() {
   const [placedAmount, setPlacedAmount] = useState<number | null>(null);
   // Memory-hosting TERM (0030): the included term unless the customer upgrades.
   const [hostingYears, setHostingYears] = useState<number | null>(null);
+  // A tester code the database said works (0057): the album is free.
+  // Once the order is placed the code is on it, and this follows the order.
+  const [tester, setTester] = useState<TesterCode | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const addressRef = useRef<HTMLDivElement>(null);
@@ -149,8 +164,9 @@ export default function Order() {
     // (1-star testers round 3, the Returning Customer). A reload still is.
     if (o && fresh && o.stage === 'tracking') return;
     if (!o) return;
-    createdOrderRef.current = { id: o.orderId, order_number: o.orderNumber, albumId: o.albumId, material: o.material, cover: o.cover, albumSize: o.albumSize };
-    orderRecordRef.current = { albumId: o.albumId, orderId: o.orderId, orderNumber: o.orderNumber, material: o.material, cover: o.cover, albumSize: o.albumSize, amount: o.amount, albumEditedAt: o.albumEditedAt, userId: o.userId ?? user?.id ?? null };
+    createdOrderRef.current = { id: o.orderId, order_number: o.orderNumber, albumId: o.albumId, material: o.material, cover: o.cover, albumSize: o.albumSize, tester: o.tester ?? null };
+    orderRecordRef.current = { albumId: o.albumId, orderId: o.orderId, orderNumber: o.orderNumber, material: o.material, cover: o.cover, albumSize: o.albumSize, amount: o.amount, albumEditedAt: o.albumEditedAt, userId: o.userId ?? user?.id ?? null, tester: o.tester ?? null };
+    setTester(o.tester ?? null);
     setOrderNumber(o.orderNumber);
     setMaterial(o.material);
     setCover(o.cover);
@@ -297,6 +313,20 @@ export default function Order() {
   useEffect(() => {
     if (eventLink) setCover(eventLink.cover === 'soft' ? 'softcover' : 'hardboundLeather');
   }, [eventLink?.cover]); // eslint-disable-line react-hooks/exhaustive-deps
+  // THE PRESS (builder/printSheet): a cover too big for the shop's 12.5 × 19
+  // sheet isn't offered — 8.5×11 and 11.5×8 hardbound, and any cover on
+  // an album too thick for the paper. The database refuses them too (0046).
+  const coverChoices = COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount, { material }));
+  const coverFits = coverFitsSheet(albumSize, cover, pageCount, { material });
+  const coverNote = coverChoiceNote(albumSize, pageCount, coverChoices.map((c) => c.type), { material });
+  // Only a new order changes cover. One already placed (before 0046) keeps the
+  // cover it was placed with, so the screen and the order row agree.
+  useEffect(() => {
+    if (eventLink || coverFits || !coverChoices.length || step !== 'form' || createdOrderRef.current) return;
+    setCover(coverChoices[0].type);
+    // "Same paper and cover as your last order" is no longer true.
+    setPrefilled((p) => (p?.finishFrom ? { ...p, finishFrom: null } : p));
+  }, [albumSize, pageCount, cover, !!eventLink, step]); // eslint-disable-line react-hooks/exhaustive-deps
   // THE 40-PHOTO GATE (builder/albumMinimum): the Preview's Order stops a
   // short album, but /order can be opened directly (an old tab, a bookmark).
   const jobPhotos = info ? albumPhotoCount(info.pages) : null;
@@ -366,6 +396,9 @@ export default function Order() {
     ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount, effectiveYears, hdMemories)
     : { items: [], total: 0 };
   const totalPrice = breakdown.total;
+  // What the customer pays: the real total, or nothing with a tester code
+  // (0057). The real total still shows, crossed out.
+  const payTotal = amountToPay(totalPrice, tester);
   // Shipping is built into the price (0041), so it is free here — the value
   // shown is what the schedule says is inside the price, never an extra charge.
   const freeShippingValue = schedule ? freeShippingValueOf(schedule) : 0;
@@ -405,6 +438,12 @@ export default function Order() {
     // An event album that its booking can't pay for (yet): say why, place nothing.
     if (eventLink && eventDeal?.state !== 'covered') {
       setErrorMsg(eventDeal?.state === 'blocked' ? eventDeal.message : 'Checking your event booking… try again in a moment.');
+      return;
+    }
+    // A cover the printer can't make (an old event deal, a very thick album).
+    // An order already placed keeps its cover: this checks new orders only.
+    if (!coverFits && !createdOrderRef.current) {
+      setErrorMsg(coverNote ?? 'This cover is too big for our printer. Choose another cover.');
       return;
     }
     const cleanName = normalizeFullName(name);
@@ -517,6 +556,20 @@ export default function Order() {
       return;
     }
     setSubmitting(true);
+    // The print files are made on THIS phone, so by the newest app, never an
+    // old copy left open for days (MP-2026-XNWRQT9 came with the ½" binding
+    // edge three days after it became 3/8"). An older copy reloads first,
+    // before any order row or file exists; the customer taps again.
+    if (await ensureLatestApp(UPDATED_PLACE_ORDER) === 'reloading') {
+      setPrepMsg(GETTING_NEWEST);
+      return;
+    }
+    setUpdateNote(null);
+    // The bar under Place order, and the screen kept on while the files are
+    // made on this phone: a locked screen paused a 70-page print file
+    // (placeProgress, keepScreenOn; the live tester walk, 2026-10-26).
+    const releaseScreen = keepScreenOn();
+    advance(PLACE_AT.start);
     try {
       // A checkout brought back in this tab (a reload) may hold an order that
       // has since closed: cancelled in Your orders, or 7 days unpaid (0042).
@@ -565,9 +618,10 @@ export default function Order() {
           // createOrderFromAlbum normalizes name/phone + composes the address
           // from these structured PSGC parts (single source of truth).
           shipping: { name, phone, address },
-          amount: totalPrice,
+          amount: payTotal,
           hostingYears: effectiveYears,
           hdMemories,
+          testerCode: tester?.code ?? null,
         });
         let created;
         try {
@@ -581,15 +635,16 @@ export default function Order() {
         createdOrderRef.current = {
           id: created.id, order_number: created.order_number, albumId: created.album_id,
           material, cover, albumSize, // freeze the specs the order row was built with
+          tester, // and the code it was placed with
         };
         // The next checkout on this device starts from these details (RC-1).
         if (user) saveLastDelivery({ userId: user.id, name, phone, address });
         order = createdOrderRef.current;
-        setPlacedAmount(totalPrice);
+        setPlacedAmount(payTotal);
         orderRecordRef.current = {
           albumId: created.album_id, orderId: created.id, orderNumber: created.order_number,
-          material, cover, albumSize, amount: totalPrice, albumEditedAt: info?.editedAt ?? 0,
-          userId: user?.id ?? null,
+          material, cover, albumSize, amount: payTotal, albumEditedAt: info?.editedAt ?? 0,
+          userId: user?.id ?? null, tester,
         };
         recordOrder('placed');
       }
@@ -600,6 +655,7 @@ export default function Order() {
       //    at checkout — so when it's gone we rebuild it from the SAME album the
       //    order froze + the photo blobs in this browser's IndexedDB.
       setPrepMsg('Preparing your album for printing…');
+      advance(PLACE_AT.preparing);
       let printJob = getPendingPrintJob();
       if (!printJob || printJob.pages.length === 0) {
         printJob = await rebuildPrintJobFromAlbum(user!.id, idbPhotos.get, order.albumId);
@@ -612,6 +668,47 @@ export default function Order() {
       // The album rebuilt after a reload is short of 40 photos: stop before
       // anything prints (the order row stays unpaid, like an abandoned checkout).
       if (photosShortBy(albumPhotoCount(printJob.pages)) > 0) throw new TooFewPhotosError(albumPhotoCount(printJob.pages));
+      // A rebuilt job checks its pages' photos, not the cover's: a cover photo
+      // that isn't on this device would print a plain cover.
+      const coverGone = missingPhotos([], printJob.photos, printJob.coverFront);
+      if (coverGone.count > 0) throw new PhotosNotHereError(missingPhotosMessage(coverGone));
+
+      // 2a. REQUIRED: build + upload the front·spine·back cover wrap as its own
+      //     "<id>-cover.pdf", FIRST — while the phone has the most memory free,
+      //     before the album pages (a 130-page album is minutes of work). It
+      //     used to come after them and be skipped on a failure, so a paid order
+      //     reached the console with no cover (MP-2026-KGCFSQN, 2026-10-22).
+      //     Now it is tried 3 times; if it still fails the order stays unpaid
+      //     and the customer taps Place order again (a cover already in the
+      //     bucket counts as done). Spine width comes from the frozen specs +
+      //     this print job's page count.
+      setPrepMsg('Making your cover…');
+      advance(PLACE_AT.cover);
+      try {
+        await uploadOrderCoverPdfWithRetry(order.id, {
+          // Frozen specs from order creation — NOT the live pickers — so the cover
+          // wrap always matches the material/cover/size stored on the order row,
+          // even on a retry after the user changed a selection.
+          albumSize: order.albumSize,
+          pageCount: printJob.pages.length,
+          cover: order.cover,
+          // C2S 140 matte or glossy: the spine is that paper stacked.
+          material: order.material,
+          // Cover-as-pages: when the FRONT cover page is present the wrap
+          // composites it + a derived spine + the reserved Megy Prints back
+          // panel; otherwise it falls back to the legacy CoverDesign form output.
+          coverDesign: printJob.coverDesign ?? DEFAULT_COVER_DESIGN,
+          coverFront: printJob.coverFront,
+          photos: printJob.photos,
+        }, (e, attempt) => reportError(e, { path: 'checkout', step: 'cover_pdf', attempt, orderId: order.id, pages: printJob.pages.length }));
+      } catch (e) {
+        // Sending it is the connection; anything before that is this phone
+        // making the picture, which "check your internet" won't fix (red-team).
+        const sending = e instanceof Error && e.message.startsWith('Cover file upload failed');
+        throw new Error(sending
+          ? "We couldn't send your album's cover. Your order is saved: check your internet, then tap Place order again."
+          : "We couldn't make your album's cover on this phone. Your order is saved: close your other apps, then tap Place order again. If it keeps happening, message us.");
+      }
 
       // 2b. REQUIRED: upload every staged memory CLIP (0030). A printed QR must
       //     never point at a missing video, so a failed upload stops checkout —
@@ -620,7 +717,9 @@ export default function Order() {
       let replacedCodes: string[] = [];
       if (clipCodes.length) {
         setPrepMsg('Uploading your memory videos…');
+        advance(PLACE_AT.videos);
         const r = await uploadStagedClips(clipCodes, (d, t, phase) => {
+          advance(videosAt(d, t));
           if (d >= t) return;
           setPrepMsg(phase === 'compress'
             ? `Preparing memory video ${d + 1} of ${t}…`
@@ -633,37 +732,20 @@ export default function Order() {
       //    errors it propagates to the outer catch, the order does NOT advance,
       //    and the user stays on Pay to retry. (Create-only upload, never upsert:
       //    customers can't read this bucket, so an upsert is refused by RLS.)
+      //    Page by page on the bar; sending has no measure, so a moving band.
       setPrepMsg('Making your print file…');
-      await uploadOrderPrintPdf(order.id, printJob);
-
-      // 3b. BEST-EFFORT: build + upload the front·spine·back cover wrap as its own
-      //     "<id>-cover.pdf". Spine width is finalised HERE from the chosen cover
-      //     material + this print job's page count. Deliberately NON-blocking: it
-      //     requires migration 0017 (the RLS name gate) to be live, so if this
-      //     code deploys before 0017 is applied, a required upload would REJECT and
-      //     break EVERY checkout. Instead we fail loud but let the order proceed —
-      //     the interior PDF is already up, and the operator's "Cover PDF" button
-      //     visibly reports a missing cover. Flip to required once 0017 is
-      //     confirmed applied in prod.
-      try {
-        await uploadOrderCoverPdf(order.id, {
-          // Frozen specs from order creation — NOT the live pickers — so the cover
-          // wrap always matches the material/cover/size stored on the order row,
-          // even on a retry after the user changed a selection.
-          albumSize: order.albumSize,
-          pageCount: printJob.pages.length,
-          cover: order.cover,
-          // Cover-as-pages: when the FRONT cover page is present the wrap
-          // composites it + a derived spine + the reserved Megy Prints back
-          // panel; otherwise it falls back to the legacy CoverDesign form output.
-          coverDesign: printJob.coverDesign ?? DEFAULT_COVER_DESIGN,
-          coverFront: printJob.coverFront,
-          photos: printJob.photos,
-        });
-      } catch (e) {
-        console.error('Cover PDF upload failed (order still placed; check migration 0017 is applied):', e);
-        reportError(e, { path: 'checkout', step: 'cover_pdf', orderId: order.id });
-      }
+      advance(PLACE_AT.pages);
+      const onPrintFile = (p: PrintFileProgress) => {
+        if (p.phase === 'sending') {
+          setPrepMsg('Sending your print file…');
+          advance(PLACE_AT.sending, true);
+          return;
+        }
+        setPrepMsg(pagesLabel(p.done, p.total, p.smaller));
+        advance(pagesAt(p.done, p.total, p.smaller));
+      };
+      await uploadOrderPrintPdf(order.id, printJob, order.cover, onPrintFile);
+      advance(PLACE_AT.checking);
 
       // 3c. The videos once more, right before their memory rows: the nightly
       //     cleanup (0042) may have removed one this order shares since 2b
@@ -688,6 +770,7 @@ export default function Order() {
       try {
         if (jobFills.length) {
           setPrepMsg('Saving your memories…');
+          advance(PLACE_AT.saving);
           // The client may only stamp the INCLUDED term (RLS caps it — 0030);
           // the PAID term is applied by the operator at "Mark paid" from the
           // order's hosting_years, exactly as the price is set server-side.
@@ -713,7 +796,20 @@ export default function Order() {
       // 5a. An event album: its booking pays (0045), no QR. The files are in.
       if (eventLink && coveredByBooking) {
         setPrepMsg('Paying with your event booking…');
+        advance(PLACE_AT.finishing);
         await coverOrderWithBooking(order.id, eventLink.bookingId);
+        setPrepMsg('');
+        recordOrder('tracking');
+        setStep('tracking');
+        return;
+      }
+
+      // 5b. A tester order (0057): the database marks it paid. The files are
+      //     in, so it is exactly the order a paid customer's would be.
+      if (order.tester) {
+        setPrepMsg('Finishing your test order…');
+        advance(PLACE_AT.finishing);
+        await claimTesterOrder(order.id);
         setPrepMsg('');
         recordOrder('tracking');
         setStep('tracking');
@@ -727,12 +823,15 @@ export default function Order() {
       setPrepMsg('');
       // The money path must never fail silently in production — the customer sees
       // the message, and the operator/owner sees the cause in Sentry/the endpoint.
-      if (!(err instanceof TooFewPhotosError)) reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
+      if (!(err instanceof TooFewPhotosError || err instanceof PhotosNotHereError)) reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
+      if (err instanceof TesterCodeGoneError) setTester(null);
       setErrorMsg(err instanceof MissingClipError ? missingClipMessage(err.codes)
         : err instanceof Error ? err.message : 'Something went wrong placing your order.');
-      setAlbumNotSaved(err instanceof AlbumNotSavedError || err instanceof TooFewPhotosError || err instanceof MissingClipError);
+      setAlbumNotSaved(err instanceof AlbumNotSavedError || err instanceof TooFewPhotosError || err instanceof MissingClipError || err instanceof PhotosNotHereError);
       setUnpaidLimit(err instanceof UnpaidLimitError);
     } finally {
+      releaseScreen();
+      setPlacing(null);
       setSubmitting(false);
     }
   };
@@ -780,30 +879,39 @@ export default function Order() {
   /* ══════════════ TRACKING ══════════════ */
   if (step === 'tracking') {
     // Until the order row answers, it is where the customer just put it.
-    const track = trackOf(placedOrder ?? { status: 'pending_payment', payment_submitted_at: 'now' });
-    const printerReached = track.stage >= 2; // printing onward
+    // A tester order is paid the moment it's placed (0057), and is a test:
+    // nothing on it is printed or sent (orderTracker).
+    const freeTester = !!tester;
+    const base = placedOrder ?? (freeTester ? { status: 'paid' } : { status: 'pending_payment', payment_submitted_at: 'now' });
+    const track = trackOf({ ...base, tester_code: placedOrder?.tester_code ?? tester?.code ?? null });
+    const printerReached = !track.test && track.stage >= 2; // printing onward
     const finished = track.finished;
     return (
       <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg">
           <div className="text-center mb-8">
             <h2 className="font-display text-3xl font-bold text-dark">
-              {track.cancelled ? 'This order was cancelled' : finished ? 'Your album has arrived! 🎉' : track.stage === 0 ? 'Thank you — we\'re confirming your payment' : track.headline}
+              {track.cancelled ? 'This order was cancelled' : track.test ? 'Test order placed' : finished ? 'Your album has arrived! 🎉' : track.stage === 0 ? 'Thank you — we\'re confirming your payment' : track.headline}
             </h2>
             {orderNumber && (
               <p className="mt-2 text-sm font-medium text-dark">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
             )}
             {eventLink && coveredByBooking ? (
               <p className="mt-2 text-xs text-taupe max-w-sm mx-auto" data-testid="order-paid-by-booking">Your event booking <span className="font-mono">{eventLink.bookingNumber}</span> paid for this album. We print it and ship it to your door.</p>
+            ) : track.test ? (
+              <p className="mt-2 text-xs text-taupe max-w-sm mx-auto" data-testid="order-tester-thanks">You used the tester code <span className="font-mono">{tester?.code ?? placedOrder?.tester_code}</span>. Thank you for testing Megy Prints!</p>
             ) : (
               <p className="mt-2 text-xs text-taupe max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-dark">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
             )}
           </div>
 
-          {/* Status tracker — the order's real status (orderTracker). */}
+          {/* Status tracker — the order's real status (orderTracker). A test
+              order has no printing journey, so it says so instead. */}
           {!track.cancelled && (
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <OrderTracker track={track} />
+              {track.test
+                ? <p className="text-sm font-semibold text-dark" data-testid="order-test-note">This was a test order. Nothing is charged, and nothing will be printed or sent.</p>
+                : <OrderTracker track={track} />}
               <p className="mt-3 text-xs text-medium">You can check on this order any time in <Link to="/orders" className="underline font-semibold text-dark">Your orders</Link>.</p>
             </div>
           )}
@@ -1031,7 +1139,7 @@ export default function Order() {
                 </div>
               ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {COVERS.map((c) => (
+                {coverChoices.map((c) => (
                   <button key={c.type} onClick={() => setCover(c.type)}
                     className="p-3 rounded-xl border-2 text-left transition-all"
                     style={{ borderColor: cover === c.type ? '#B85C38' : '#E8E8E8', backgroundColor: cover === c.type ? '#F6E7DF' : '#fff' }}>
@@ -1040,6 +1148,9 @@ export default function Order() {
                   </button>
                 ))}
               </div>
+              )}
+              {info && coverNote && (eventLink ? !coverFits : true) && (
+                <p className="mt-3 text-sm text-medium" data-testid="order-cover-note">{coverNote}</p>
               )}
             </div>
 
@@ -1132,21 +1243,32 @@ export default function Order() {
                     <span className="font-semibold text-success text-right whitespace-nowrap" data-testid="order-shipping">Free</span>
                   </div>
                   {/* An event album shows ₱0 and no "was" price: its booking pays for it. */}
+                  {/* A tester code (0057): the real price stays, crossed out. */}
+                  {!eventLink && tester && (
+                    <div className="flex justify-between gap-3 text-[13px]" data-testid="order-tester-line">
+                      <span className="font-semibold text-[#2E6B3F]">{testerLine(tester)}</span>
+                      <span className="font-semibold text-[#2E6B3F] text-right whitespace-nowrap">−₱{(totalPrice - payTotal).toLocaleString('en-PH')}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-baseline pt-2 border-t border-line-soft">
                     <span className="font-semibold text-dark">Total</span>
                     <span className="text-right">
-                      {!eventLink && priceReady && wasTotal !== null && (
+                      {!eventLink && priceReady && tester && (
+                        <s className="mr-2 text-sm font-medium text-light" data-testid="order-real-price">₱{totalPrice.toLocaleString('en-PH')}</s>
+                      )}
+                      {!eventLink && priceReady && !tester && wasTotal !== null && (
                         <s className="mr-2 text-sm font-medium text-light" data-testid="order-was">₱{wasTotal.toLocaleString('en-PH')}</s>
                       )}
-                      <span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{eventLink ? '₱0' : <>{priceReady ? `₱${totalPrice.toLocaleString('en-PH')}` : '—'}</>}</span>
+                      <span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{eventLink ? '₱0' : <>{priceReady ? `₱${payTotal.toLocaleString('en-PH')}` : '—'}</>}</span>
                     </span>
                   </div>
-                  {!eventLink && priceReady && wasTotal !== null && (
+                  {!eventLink && priceReady && !tester && wasTotal !== null && (
                     <p className="text-xs font-semibold text-success text-right" data-testid="order-savings">
                       New lower price: you save ₱{(wasTotal - totalPrice).toLocaleString('en-PH')}
                     </p>
                   )}
                   {coveredByBooking && <p className="text-xs text-success text-right" data-testid="order-covered">Covered by your event booking</p>}
+                  {!eventLink && priceReady && <TesterCodeBox tester={tester} onChange={setTester} locked={!!orderNumber} />}
                   {eventLink && !coveredByBooking && <p className="text-xs text-medium text-right" data-testid="order-covered-later">Your booking pays for it. See the note at the top.</p>}
                 </div>
               </div>
@@ -1224,6 +1346,12 @@ export default function Order() {
                   </div>
                 </div>
               )}
+              {updateNote && (
+                <div role="status" data-testid="order-app-updated"
+                  className="mt-4 rounded-xl border border-[#CDE5D3] bg-[#EEF7F0] px-3 py-3 text-sm text-[#2E6B3F]">
+                  {updateNote}
+                </div>
+              )}
               {albumInfo === 'missing' ? (
                 <div role="alert" data-testid="order-no-album"
                   className="mt-4 rounded-xl border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-3 text-sm text-[#8A5A12]">
@@ -1241,6 +1369,7 @@ export default function Order() {
                 className="w-full mt-4 py-3 bg-peach text-white font-semibold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait">
                 {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
                   : eventLink ? <><ShoppingCart size={16} /> Place my event album order</>
+                  : priceReady && tester ? <><ShoppingCart size={16} /> Place order · free with tester code</>
                   : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${totalPrice.toLocaleString('en-PH')}`} by bank transfer</>
                     : !settingsReady || albumInfo === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
                       // A tap that answers: try the prices again (they also come back on their own).
@@ -1248,6 +1377,7 @@ export default function Order() {
                         : <>Prices didn't load — tap to try again</>}
               </button>
               )}
+              {submitting && placing && <PlaceOrderProgress progress={placing} />}
               {askSecond && openOrder && (
                 <div role="alert" data-testid="order-second-ask"
                   className="mt-3 rounded-xl border border-peach bg-blush px-3 py-3 text-sm text-cocoa">

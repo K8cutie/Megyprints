@@ -26,17 +26,17 @@ describe('resolveSlotBox', () => {
 
 describe('clampSlotBox', () => {
   it('a frame pushed past the SPINE edge snaps back and says so — the spine side follows the page side', () => {
-    // even page (left of the spread): the spine is its RIGHT edge
-    const even = clampSlotBox({ x: 0.9, y: 0.1, width: 0.4, height: 0.4 }, ctx('8x8', 0));
-    expect(even.box.x + even.box.width).toBeCloseTo(1, 6);
-    expect(even.reasons[0]).toBe('spine');
-    // odd page (right of the spread): the spine is its LEFT edge
-    const odd = clampSlotBox({ x: -0.2, y: 0.1, width: 0.4, height: 0.4 }, ctx('8x8', 1));
-    expect(odd.box.x).toBe(0);
-    expect(odd.reasons[0]).toBe('spine');
+    // page 1, 3, 5… (a right-hand page, binding.ts): the spine is its LEFT edge
+    const right = clampSlotBox({ x: -0.2, y: 0.1, width: 0.4, height: 0.4 }, ctx('8x8', 0));
+    expect(right.box.x).toBe(0);
+    expect(right.reasons[0]).toBe('spine');
+    // page 2, 4, 6… (a left-hand page): the spine is its RIGHT edge
+    const left = clampSlotBox({ x: 0.9, y: 0.1, width: 0.4, height: 0.4 }, ctx('8x8', 1));
+    expect(left.box.x + left.box.width).toBeCloseTo(1, 6);
+    expect(left.reasons[0]).toBe('spine');
     // the same pushes on the OTHER side are plain trim edges
-    expect(clampSlotBox({ x: -0.2, y: 0.1, width: 0.4, height: 0.4 }, ctx('8x8', 0)).reasons).toEqual(['edge']);
-    expect(clampSlotBox({ x: 0.9, y: 0.1, width: 0.4, height: 0.4 }, ctx('8x8', 1)).reasons).toEqual(['edge']);
+    expect(clampSlotBox({ x: 0.9, y: 0.1, width: 0.4, height: 0.4 }, ctx('8x8', 0)).reasons).toEqual(['edge']);
+    expect(clampSlotBox({ x: -0.2, y: 0.1, width: 0.4, height: 0.4 }, ctx('8x8', 1)).reasons).toEqual(['edge']);
   });
   it('top and bottom are trim edges', () => {
     expect(clampSlotBox({ x: 0.1, y: -0.3, width: 0.4, height: 0.4 }, ctx('8x8', 0)).box.y).toBe(0);
