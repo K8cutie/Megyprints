@@ -153,6 +153,12 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
                 Copy of {o.copy_of_order_number}
               </span>
             )}
+            {o.tester_code && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#FFF6E5] text-[#8A5A12]" data-testid="order-tester"
+                title="Placed with the tester code: a test order. Print it only if you want this test album made.">
+                Tester order · {o.tester_code}
+              </span>
+            )}
             {o.event_booking_number && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#E6F4EA] text-success" data-testid="order-event-album"
                 title="An event album: paid by its booking, not by transfer.">
@@ -193,7 +199,8 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
           {canSeeFinancials && o.quoted_amount != null && !o.event_booking_number && (
             <div className="text-xs text-medium mt-1" data-testid="order-quoted">
               Asked to pay <span className="font-semibold text-dark">{peso(o.quoted_amount)}</span>
-              {o.quote ? <> · {quoteParts(o.quote)}</> : null}
+              {o.quote?.tester ? <> with tester code {o.quote.tester.code} · real price {peso(o.quote.total)}: {quoteParts(o.quote)}</>
+                : o.quote ? <> · {quoteParts(o.quote)}</> : null}
             </div>
           )}
         </div>

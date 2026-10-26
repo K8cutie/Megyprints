@@ -128,7 +128,9 @@ describe('the way there', () => {
   });
   it('the thank-you screen follows the real order and leads to Your orders (source guard)', () => {
     const src = readFileSync(resolve(__dirname, 'Order.tsx'), 'utf8');
-    expect(src).toMatch(/const track = trackOf\(placedOrder \?\? \{ status: 'pending_payment', payment_submitted_at: 'now' \}\);/);
+    // Until the order row answers: where the customer just put it (a tester
+    // order is paid already, 0057).
+    expect(src).toMatch(/const track = trackOf\(placedOrder \?\? \(freeTester \? \{ status: 'paid' \} : \{ status: 'pending_payment', payment_submitted_at: 'now' \}\)\);/);
     expect(src).toMatch(/getMyOrder\(user\.id, orderId\)/);
     expect(src).toMatch(/window\.setInterval\(refresh, 60_000\)/);
     expect(src).toMatch(/<OrderTracker track=\{track\} \/>/);

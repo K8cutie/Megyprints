@@ -20,6 +20,7 @@
    name, phone, address and unpaid order (Kraken, 2026-10-05).
    ══════════════════════════════════════════════════════════════════════════ */
 
+import type { TesterCode } from './testerCode';
 import type { AlbumSizePreset, CoverType, MaterialType } from '../pages/builder/types';
 import { isEmptyAddress, type AddressValue } from './contact';
 
@@ -46,6 +47,9 @@ export interface CheckoutOrder {
   albumEditedAt: number;
   /** The account that placed it. Never resumed for another one. */
   userId?: string | null;
+  /** The tester code it was placed with (0057): a free one finishes without
+   *  the payment screen, even after a reload. */
+  tester?: TesterCode | null;
 }
 
 export interface CheckoutForm {
