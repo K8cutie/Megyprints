@@ -41,7 +41,9 @@ export async function generateAlbumPdf(
   pages: AlbumPage[],
   photos: UploadedPhoto[],
   albumSize: AlbumSizePreset,
-  onProgress?: (completed: number, total: number) => void,
+  /** After each page. `smaller` = the second pass below, so a progress bar
+   *  never starts over at page 1 (placeProgress). */
+  onProgress?: (completed: number, total: number, smaller?: boolean) => void,
   budgetBytes = PRINT_FILE_BUDGET_BYTES,
   /** Binding side allowance, inches: binding.bindingInchesFor(the order's cover). */
   bindingIn?: number,
@@ -78,7 +80,8 @@ export async function generateAlbumPdf(
   // file past the upload cap, the words go back into the page pictures — the
   // file as it was before sharp words — rather than the file not arriving.
   if (pdf.size <= budgetBytes || !rendered.some((r) => r.words.length)) return pdf;
-  return build(await renderAlbumForPrint(pages, photos, albumSize, onProgress, { bakeWords: true, bindingIn }));
+  const again = onProgress && ((done: number, total: number) => onProgress(done, total, true));
+  return build(await renderAlbumForPrint(pages, photos, albumSize, again, { bakeWords: true, bindingIn }));
 }
 
 /**
