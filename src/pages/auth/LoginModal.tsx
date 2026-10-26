@@ -6,6 +6,38 @@ import { useModalDialog } from '../../lib/useModalDialog';
 import { sendResetLink, resendSignupLink } from '../../lib/passwordRecovery';
 import { sendLinkErrorText } from '../../lib/passwordReset';
 import { signInErrorText } from '../../lib/accountErrors';
+import { isNativeShell } from '../../lib/nativeAuth';
+import { inAppBrowserName, isAndroid, openInChromeHref, inAppSignInText } from '../../lib/inAppBrowser';
+
+/** Inside Messenger, Facebook… Google refuses to sign anyone in
+ *  (inAppBrowser.ts), so this takes the Google button's place: say so, and
+ *  offer Chrome (Android) or the link to paste into a real browser. */
+function InAppGoogleNote({ app }: { app: string }) {
+  const [copied, setCopied] = useState(false);
+  const ua = navigator.userAgent;
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/`);
+      setCopied(true);
+    } catch { /* no clipboard: the words still say what to do */ }
+  }, []);
+  const outline = 'mt-3 flex w-full items-center justify-center gap-2.5 rounded-xl border-2 border-blush-deep bg-white px-4 py-2.5 text-sm font-medium text-ink-warm hover:border-blush-pink/40 transition-all';
+  return (
+    <div className="rounded-xl bg-blush-deep/40 px-4 py-3" data-testid="in-app-google-note">
+      <p className="text-sm text-ink-warm">{inAppSignInText(app)}</p>
+      {isAndroid(ua) ? (
+        <a href={openInChromeHref(window.location.href)} className={outline}>
+          <Chrome size={18} className="text-[#4285F4]" />
+          Open in Chrome
+        </a>
+      ) : (
+        <button type="button" onClick={copy} className={outline}>
+          {copied ? 'Link copied. Paste it in Safari or Chrome.' : 'Copy the link'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 // =============================================================================
 // Types
@@ -49,6 +81,9 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup, startOnForgot = 
   // "Send the link again" for an account still waiting for its email link.
   const [resent, setResent] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
   const [resendError, setResendError] = useState<string | null>(null);
+  // Messenger, Facebook…: no Google button (Google refuses there). Our own
+  // Android app signs in to Google through a Chrome tab, so it keeps it.
+  const inApp = isNativeShell() ? null : inAppBrowserName(navigator.userAgent);
 
   // Clear fields when modal opens
   useEffect(() => {
@@ -267,6 +302,9 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup, startOnForgot = 
                 {/* Google sign-in lands in the same account when the Gmail
                     matches (Supabase links identities by verified email), so a
                     Gmail user needs no email at all. */}
+                {inApp !== null ? (
+                  <div className="mt-5"><InAppGoogleNote app={inApp} /></div>
+                ) : (
                 <div className="mt-5 rounded-xl bg-blush-deep/40 px-4 py-3">
                   <p className="text-sm text-ink-warm">
                     Signed up with a Gmail? Sign in with Google using that same Gmail. Your albums will be there.
@@ -280,6 +318,7 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup, startOnForgot = 
                     Sign in with Google
                   </button>
                 </div>
+                )}
 
                 <p className="mt-5 text-center text-sm">
                   <button onClick={() => showView('signin')} className="font-medium text-blush-pink hover:text-coral-soft transition-colors">
@@ -321,6 +360,9 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup, startOnForgot = 
               )}
 
               {/* Google Sign In */}
+              {inApp !== null ? (
+                <InAppGoogleNote app={inApp} />
+              ) : (
               <button
                 onClick={handleGoogleSignIn}
                 disabled={loading}
@@ -329,6 +371,7 @@ export function LoginModal({ isOpen, onClose, onSwitchToSignup, startOnForgot = 
                 <Chrome size={18} className="text-[#4285F4]" />
                 Sign in with Google
               </button>
+              )}
 
               {/* Divider */}
               <div className="flex items-center gap-3 my-5">
