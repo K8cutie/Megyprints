@@ -130,11 +130,15 @@ function OrderCard({ order, focused, coverNeeded, onChanged }: { order: MyOrder;
 
       {track.cancelled ? (
         <p className="mt-1 text-xs text-medium">This order was cancelled. Your album is still saved, so you can order it again. If that's a surprise, <Link to="/contact" className="underline font-semibold">message us</Link>.</p>
+      ) : track.test ? (
+        // A tester-code order: no printing journey to follow (orderTracker).
+        <p className="mt-1 text-xs text-medium" data-testid="order-test-note">You used the tester code <span className="font-mono">{order.tester_code}</span>, so nothing is charged. Thank you for testing Megy Prints!</p>
       ) : (
         <div className="mt-2"><OrderTracker track={track} compact /></div>
       )}
 
-      {coverNeeded && !track.cancelled && <SendCover order={order} />}
+      {/* Nothing is printed from a test order, so it never asks for a cover. */}
+      {coverNeeded && !track.cancelled && !track.test && <SendCover order={order} />}
 
       {track.awaitingPayment && (
         <div className="mt-3 rounded-xl border border-peach bg-blush px-4 py-3 text-xs text-cocoa" data-testid="order-how-to-pay">

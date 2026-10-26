@@ -20,12 +20,13 @@ const h = vi.hoisted(() => ({
   checks: [] as string[],
   check: { ok: true, tester: { code: 'MEGYTEST' } } as unknown,
   codeGone: false,
+  placed: null as Record<string, unknown> | null,
 }));
 vi.mock('../lib/authContext', () => ({ useAuth: () => h.auth }));
 vi.mock('../components/AuthModalProvider', () => ({ useAuthModal: () => ({ openLogin: vi.fn() }) }));
 vi.mock('../lib/printJobRebuild', () => ({ rebuildPrintJobFromAlbum: async () => h.job }));
 vi.mock('../lib/useIndexedDBPhotos', () => ({ useIndexedDBPhotos: () => ({ get: async () => null }) }));
-vi.mock('../lib/myOrders', () => ({ getMyOrder: async () => null, openOrderForAlbum: async () => null, lastOrderForAlbum: async () => null }));
+vi.mock('../lib/myOrders', () => ({ getMyOrder: async () => h.placed, openOrderForAlbum: async () => null, lastOrderForAlbum: async () => null }));
 vi.mock('../components/AddressPicker', () => ({ default: () => null }));
 vi.mock('./builder/CoverThumb', () => ({ default: () => createElement('div', { 'data-testid': 'cover-thumb' }) }));
 vi.mock('../lib/memoryClips', async (importOriginal) => ({
@@ -76,7 +77,7 @@ beforeEach(() => {
   clearPendingPrintJob();
   window.scrollTo = (() => {}) as typeof window.scrollTo;
   Element.prototype.scrollIntoView = () => {};
-  h.steps = []; h.orders = []; h.checks = []; h.codeGone = false;
+  h.steps = []; h.orders = []; h.checks = []; h.codeGone = false; h.placed = null;
   h.check = { ok: true, tester: { code: 'MEGYTEST' } };
   h.job = { albumId: 'album-1', albumSize: '6x6', pages: Array.from({ length: 41 }, (_, i) => page(i)), photos, coverFront: { ...page(99), id: 'cover', slotFills: [null] } };
   noteOrderHandoff({ albumId: 'album-1', saved: true });
@@ -120,9 +121,46 @@ describe('a tester code that makes the album free', () => {
     expect(h.orders).toHaveLength(1);
     expect(h.orders[0]).toMatchObject({ testerCode: 'MEGYTEST', amount: 0 });
     expect(h.steps).toEqual(['order row', 'cover', 'album pages', 'claim order-1']);
-    expect($('order-paid-by-tester')?.textContent).toBe('Your tester code MEGYTEST paid for this album. Thank you for testing Megy Prints.');
     expect(host.textContent).not.toMatch(/Send exactly|I've sent/);
     expect(host.textContent).toContain('MP-2026-TEST123');
+  });
+
+  /* Owner, 2026-10-26: the code is "for testing purposes to disable payment",
+     not a free album. The thank-you said "Payment confirmed — printing soon"
+     and drew the printing journey (MP-2026-R9Q3SDP, the live walk). */
+  it('the thank-you says it is a test order: nothing charged, nothing printed or sent, no printing journey', async () => {
+    await open();
+    await useCode('MEGYTEST');
+    await click('order-place');
+    expect(host.querySelector('h2')?.textContent).toBe('Test order placed');
+    expect($('order-tester-thanks')?.textContent).toBe('You used the tester code MEGYTEST. Thank you for testing Megy Prints!');
+    expect($('order-test-note')?.textContent).toBe('This was a test order. Nothing is charged, and nothing will be printed or sent.');
+    expect($('order-tracker')).toBeNull();
+    expect(host.textContent).not.toMatch(/printing soon|Printing your album|Sent to print|paid for this album/);
+    expect(host.textContent).toContain('Your orders');
+  });
+
+  it('the order row decides too: a test order stays a test order when this tab forgot the code', async () => {
+    saveCheckoutOrder({
+      albumId: 'album-1', orderId: 'order-1', orderNumber: 'MP-2026-TEST123', material: 'matte', cover: 'softcover', albumSize: '6x6',
+      amount: 0, stage: 'tracking', albumEditedAt: 0, userId: 'user-1', tester: null,
+    });
+    h.placed = { id: 'order-1', order_number: 'MP-2026-TEST123', status: 'in_production', amount: 0, created_at: '2026-10-26T00:25:33Z', payment_submitted_at: null, album_size: '6x6', page_count: 41, tracking: null, tester_code: 'MEGYTEST' };
+    await open();
+    expect(host.querySelector('h2')?.textContent).toBe('Test order placed');
+    expect($('order-tester-thanks')?.textContent).toContain('MEGYTEST');
+    expect($('order-tracker')).toBeNull();
+    expect(host.textContent).not.toMatch(/Sent to print/);
+  });
+
+  it('the code box can be seen: its own border and fill (soft-glass turns border-line white), and it says what to type', async () => {
+    await open();
+    await click('tester-code-open');
+    const input = $('tester-code-input') as HTMLInputElement;
+    expect(input.placeholder).toBe('Type your code');
+    expect(input.className).not.toMatch(/\bborder-line\b/);
+    expect(input.className).toMatch(/border-\[#C9BBAF\]/);
+    expect(input.className).toMatch(/bg-\[#FFFAF6\]/);
   });
 
   it('Remove puts the real price back, and the order goes without a code', async () => {
@@ -173,6 +211,6 @@ describe('a reload after the free order was placed (its files not in yet)', () =
     await click('order-place');
     expect(h.orders).toEqual([]); // the same order row, not a second one
     expect(h.steps).toEqual(['cover', 'album pages', 'claim order-1']);
-    expect($('order-paid-by-tester')).not.toBeNull();
+    expect($('order-tester-thanks')).not.toBeNull();
   });
 });

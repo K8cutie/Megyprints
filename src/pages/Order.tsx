@@ -778,7 +778,7 @@ export default function Order() {
       // 5b. A tester order (0057): the database marks it paid. The files are
       //     in, so it is exactly the order a paid customer's would be.
       if (order.tester) {
-        setPrepMsg('Finishing your free tester order…');
+        setPrepMsg('Finishing your test order…');
         await claimTesterOrder(order.id);
         setPrepMsg('');
         recordOrder('tracking');
@@ -847,34 +847,39 @@ export default function Order() {
   /* ══════════════ TRACKING ══════════════ */
   if (step === 'tracking') {
     // Until the order row answers, it is where the customer just put it.
-    // A tester order is paid the moment it's placed (0057).
+    // A tester order is paid the moment it's placed (0057), and is a test:
+    // nothing on it is printed or sent (orderTracker).
     const freeTester = !!tester;
-    const track = trackOf(placedOrder ?? (freeTester ? { status: 'paid' } : { status: 'pending_payment', payment_submitted_at: 'now' }));
-    const printerReached = track.stage >= 2; // printing onward
+    const base = placedOrder ?? (freeTester ? { status: 'paid' } : { status: 'pending_payment', payment_submitted_at: 'now' });
+    const track = trackOf({ ...base, tester_code: placedOrder?.tester_code ?? tester?.code ?? null });
+    const printerReached = !track.test && track.stage >= 2; // printing onward
     const finished = track.finished;
     return (
       <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg">
           <div className="text-center mb-8">
             <h2 className="font-display text-3xl font-bold text-dark">
-              {track.cancelled ? 'This order was cancelled' : finished ? 'Your album has arrived! 🎉' : track.stage === 0 ? 'Thank you — we\'re confirming your payment' : track.headline}
+              {track.cancelled ? 'This order was cancelled' : track.test ? 'Test order placed' : finished ? 'Your album has arrived! 🎉' : track.stage === 0 ? 'Thank you — we\'re confirming your payment' : track.headline}
             </h2>
             {orderNumber && (
               <p className="mt-2 text-sm font-medium text-dark">Order <span className="font-mono text-[#C98A5E]">{orderNumber}</span></p>
             )}
             {eventLink && coveredByBooking ? (
               <p className="mt-2 text-xs text-taupe max-w-sm mx-auto" data-testid="order-paid-by-booking">Your event booking <span className="font-mono">{eventLink.bookingNumber}</span> paid for this album. We print it and ship it to your door.</p>
-            ) : tester ? (
-              <p className="mt-2 text-xs text-taupe max-w-sm mx-auto" data-testid="order-paid-by-tester">Your tester code <span className="font-mono">{tester.code}</span> paid for this album. Thank you for testing Megy Prints.</p>
+            ) : track.test ? (
+              <p className="mt-2 text-xs text-taupe max-w-sm mx-auto" data-testid="order-tester-thanks">You used the tester code <span className="font-mono">{tester?.code ?? placedOrder?.tester_code}</span>. Thank you for testing Megy Prints!</p>
             ) : (
               <p className="mt-2 text-xs text-taupe max-w-sm mx-auto">We match transfers in our bank app during business hours and text you at <b className="text-dark">{phone}</b> once it's confirmed. Your album goes to print right after.</p>
             )}
           </div>
 
-          {/* Status tracker — the order's real status (orderTracker). */}
+          {/* Status tracker — the order's real status (orderTracker). A test
+              order has no printing journey, so it says so instead. */}
           {!track.cancelled && (
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <OrderTracker track={track} />
+              {track.test
+                ? <p className="text-sm font-semibold text-dark" data-testid="order-test-note">This was a test order. Nothing is charged, and nothing will be printed or sent.</p>
+                : <OrderTracker track={track} />}
               <p className="mt-3 text-xs text-medium">You can check on this order any time in <Link to="/orders" className="underline font-semibold text-dark">Your orders</Link>.</p>
             </div>
           )}

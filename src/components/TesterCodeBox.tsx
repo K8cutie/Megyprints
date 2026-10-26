@@ -50,11 +50,14 @@ export default function TesterCodeBox({ tester, onChange, locked }: {
     <div className="mt-3" data-testid="tester-code-box">
       <label htmlFor="tester-code" className="text-xs font-semibold text-dark block mb-1">Tester code</label>
       <div className="flex gap-2">
+        {/* Its own border and fill, not border-line: on a white summary card a
+            hairline box with no text inside read as no box at all, and the
+            soft-glass look turns border-line white (live, 2026-10-26). */}
         <input id="tester-code" value={typed} maxLength={30} autoComplete="off" autoCapitalize="characters" spellCheck={false}
           onChange={(e) => { setTyped(e.target.value); if (error) setError(''); }}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void use(); } }}
-          aria-invalid={!!error} data-testid="tester-code-input"
-          className={`flex-1 min-w-0 border rounded-lg px-3 py-2 text-sm font-mono uppercase ${error ? 'border-red-400' : 'border-line'}`} />
+          aria-invalid={!!error} data-testid="tester-code-input" placeholder="Type your code"
+          className={`flex-1 min-w-0 border rounded-lg px-3 py-2 text-sm font-mono uppercase bg-[#FFFAF6] placeholder:font-sans placeholder:normal-case placeholder:text-light focus:outline-none focus:ring-2 focus:ring-peach/30 ${error ? 'border-red-400' : 'border-[#C9BBAF] focus:border-peach'}`} />
         <button type="button" onClick={() => void use()} data-testid="tester-code-apply"
           className="shrink-0 px-4 py-2 bg-peach text-white text-sm font-semibold rounded-lg hover:brightness-105 flex items-center gap-1.5">
           {checking ? <><Loader2 size={14} className="animate-spin" /> Checking…</> : 'Use code'}
