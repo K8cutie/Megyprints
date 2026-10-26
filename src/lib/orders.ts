@@ -16,6 +16,7 @@ import type { CoverType } from '../pages/builder/types';
 import { bindingInchesFor } from '../pages/builder/binding';
 import { selectOrderAlbum } from './orderAlbum';
 import { isUnpaidLimitError, UnpaidLimitError } from './orderExpiry';
+import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
 
 export interface ShippingDetails {
@@ -64,6 +65,9 @@ export async function createOrderFromAlbum(opts: {
   hostingYears?: number | null;
   /** HD (1080p) memory upgrade chosen for this album (0032). */
   hdMemories?: boolean;
+  /** A tester code the database said works (0057). It decides again on the
+   *  insert: the order then asks ₱0, or is refused if the code stopped. */
+  testerCode?: string | null;
 }): Promise<CreatedOrder> {
   // 1. Load the album being ordered to freeze into the order. '*' rather than a
   //    column list so its front cover (cover_front, 0036) comes along when the
@@ -133,6 +137,9 @@ export async function createOrderFromAlbum(opts: {
       ship_zip: addr.zip.trim(),
       hosting_years: opts.hostingYears ?? null,
       hd_memories: !!opts.hdMemories,
+      // Only with a code: an order without one never names the column, so
+      // checkout keeps working on a database without 0057.
+      ...(opts.testerCode ? { tester_code: opts.testerCode } : {}),
       status_history: [{ status: 'pending_payment', at: new Date().toISOString() }],
     })
     .select('id, order_number, status')
@@ -141,6 +148,7 @@ export async function createOrderFromAlbum(opts: {
   // The 4th unpaid order on this account (0042): a plain sentence, not a
   // database message.
   if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
+  if (isTesterCodeGoneError(error)) throw new TesterCodeGoneError(opts.testerCode ?? '');
   if (error) throw new Error(`Could not place your order: ${error.message}`);
 
   // NOTE: the QR "living memory" reliability belt runs in Order.handlePay over

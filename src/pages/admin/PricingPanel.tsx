@@ -6,6 +6,7 @@
    tool. Raw cost figures are admin-only — never rendered to customers.
    ══════════════════════════════════════════════════════════════════════════ */
 import { useState, useEffect } from 'react';
+import TesterCodeSettings from './TesterCodeSettings';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
@@ -206,6 +207,9 @@ export default function PricingPanel() {
           (flagged below); confirm them and we lock these into checkout.
         </p>
       </div>
+
+      {/* Tester code (0057): testers see the real price, the album is free */}
+      <TesterCodeSettings />
 
       {/* Store price multiple — the PERSISTED setting that drives live checkout */}
       <div className="rounded-2xl border-2 border-rust/40 bg-warm-white px-5 py-4">

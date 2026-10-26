@@ -334,5 +334,33 @@ begin
   raise notice 'PASS: a Gmail can have only one account, and only the auth server runs the check';
 end $$;
 
+-- ── GUARD 12: the tester code gives nothing away (0057) ────────────────────
+-- A code that makes an album free (owner, testing phase). Only signed-in
+-- customers may check it, the tries and the code stay private, and only the
+-- database may put it on an order or mark an order paid with it.
+do $$
+begin
+  if to_regprocedure('public.check_tester_code(text)') is null
+     or to_regprocedure('public.claim_tester_order(uuid)') is null then
+    raise exception 'REGRESSION (tester code): check_tester_code/claim_tester_order missing: 0057 was never applied here';
+  end if;
+  if has_function_privilege('anon', 'public.check_tester_code(text)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.claim_tester_order(uuid)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.orders_tester_code()', 'EXECUTE') then
+    raise exception 'REGRESSION (tester code): signed-out visitors can check or claim, or customers can run the order trigger';
+  end if;
+  if has_table_privilege('authenticated', 'public.tester_code_tries', 'SELECT')
+     or has_table_privilege('anon', 'public.tester_code_tries', 'SELECT') then
+    raise exception 'REGRESSION (tester code): customers can read the code tries';
+  end if;
+  if not exists (select 1 from pg_trigger where tgname = 'orders_tester_code_trg' and tgrelid = 'public.orders'::regclass and tgenabled <> 'D') then
+    raise exception 'REGRESSION (tester code): orders_tester_code_trg is gone: any code on an order would be kept as sent';
+  end if;
+  if exists (select 1 from public.store_settings where id = 1 and tester_code !~ '^[A-Z0-9]{4,24}$') then
+    raise exception 'REGRESSION (tester code): the code is malformed';
+  end if;
+  raise notice 'PASS: the tester code is checked by signed-in customers only, kept private, and only the database applies it';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;
