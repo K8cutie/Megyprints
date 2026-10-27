@@ -188,6 +188,41 @@ release build (the release must point at megyprints.vercel.app).
 
 The old `android/` TWA project is kept for reference only; don't build from it.
 
+**Debug build on a local dev server:** start Vite with `--host 127.0.0.1`. On
+Windows it otherwise listens on `::1` only, and the emulator (10.0.2.2, IPv4)
+gets the "You're offline" page.
+
+## Small app updates during the closed test (from 1.2.0)
+
+Google turned down production on 2026-10-26, partly because nothing new came out
+on the testing track: every fix shipped through the website, so Google saw the
+same 1.1.0 for three weeks. So the app now gets a small update every few days
+until the next application (2026-11-09 at the earliest):
+
+- Each version has one real change inside the app (`android-native/`), plus
+  release notes listing the tester fixes that went live since the version before.
+- Release notes say only what's true. Every item goes in
+  [`docs/tester-feedback-log.md`](tester-feedback-log.md) first, with where the
+  report came from. That log is the answer to "summarize tester feedback" on the
+  production form.
+- Upload to **Alpha**, paste `android-native/release/release-notes-<version>.txt`,
+  then Publishing overview → **Send changes for review** (saving alone sends
+  nothing). Post in the tester group what changed and what to try.
+
+| Version | Code | Change inside the app |
+|---|---|---|
+| 1.2.0 | 3 | None (version only); notes list the website fixes since Oct 2 |
+| 1.3.0 | 4 | Photo picker opens in the Camera folder (`MegyWebChromeClient`) |
+
+**Build from a worktree** (the signing files stay in the main checkout, gitignored):
+hard-link (`mklink /H`, never copy) the main checkout's
+`android-native/keystore.properties` and `android/megyprints-upload.keystore` into
+the worktree, `npx cap sync android` with no `CAP_SERVER_URL`, `gradlew.bat
+bundleRelease`, copy `app-release.aab` to the main checkout's
+`android-native/release/megyprints-<version>-code<N>.aab`, then delete the two
+links. Check the key before upload: `keytool -printcert -jarfile <aab>` must show
+SHA-256 `53:1A:…:C0:AE`.
+
 ## Updating the app later
 
 - **Web changes** (layouts, quotes, checkout…): just deploy to Vercel. Store app

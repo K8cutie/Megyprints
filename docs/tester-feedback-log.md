@@ -1,0 +1,34 @@
+# Tester feedback log (closed test, Alpha track)
+
+Google turned down production access on 2026-10-26: testers were not engaged
+enough, and feedback was not acted on "through updates to your app". The next
+application (2026-11-09 at the earliest) asks us to sum up what testers told us
+and what we changed. This log is that record. Every line must be true.
+
+**Source** says where a report came from:
+- **Tester**: a person in the closed test (Messenger, the tester group, Play feedback).
+- **Owner test**: the owner's own test order or walk.
+- **For testers**: built so testers can use the app, not a reply to a report.
+
+**Live** is the day the fix reached everyone. Website fixes go live through
+Vercel at once, inside every app version. **App version** is the Play release
+whose notes list it.
+
+| Reported | Source | What they told us | What we changed | Live | App version |
+|---|---|---|---|---|---|
+| 2026-10-24 | Tester | Made a second account by mistyping her email | "Already has an account" sends you to Sign in; the same Gmail can't make a second account (#187) | 2026-10-26 | 1.2.0 |
+| 2026-10-26 | For testers | — | Tester code MEGYTEST: walk the whole checkout without paying; nothing is printed or sent (#197) | 2026-10-26 | 1.2.0 |
+| 2026-10-26 | Owner test | The tester code box was hard to see; a test order said "Payment confirmed" | The box can be seen; a test order says nothing is charged or printed (#198) | 2026-10-26 | 1.2.0 |
+| 2026-10-26 | Owner test | "Making your print file…" sat for minutes with nothing moving | A progress bar that follows the real work, page by page, and the screen stays on (#199) | 2026-10-26 | 1.2.0 |
+| 2026-10-27 | Tester | "Login using Gmail is not working, and forget password is entering direct in your app" | Closing "Make a new password" signs you out; Google sign-in inside Messenger says to open Chrome (#200) | 2026-10-27 | 1.2.0 |
+| 2026-10-27 | Tester | "I can't send more than 1 photo" | Photos come before the cover, so the first picker takes all your photos (#201) | 2026-10-27 | 1.2.0 |
+| 2026-10-27 | Tester | (same report) | A box on the photo step: press and hold, or ⋮ → Select all (#202) | 2026-10-27 | 1.2.0 |
+| 2026-10-27 | Tester | (same report) | The photo picker opens in the Camera folder, so ⋮ → Select all takes the whole roll. Before, it opened on Recent, where Select all took only the newest 64 pictures, screenshots too | with 1.3.0 | 1.3.0 |
+
+## App versions on the Alpha track
+
+| Version | Code | Built | What's in it |
+|---|---|---|---|
+| 1.1.0 | 2 | 2026-10-01 | Native shell: no 100-photo limit, Google sign-in in a Chrome tab |
+| 1.2.0 | 3 | 2026-10-27 | Version only; notes list the website fixes above (#204) |
+| 1.3.0 | 4 | 2026-10-27 | Photo picker opens in the Camera folder |

@@ -5,6 +5,8 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
+import android.provider.DocumentsContract;
 import android.webkit.ValueCallback;
 import android.webkit.WebView;
 import androidx.activity.result.ActivityResultLauncher;
@@ -23,8 +25,18 @@ import com.getcapacitor.BridgeWebChromeClient;
  * disk-backed File objects — exactly like Chrome. No copying through JS, so 500
  * full-size photos cost no memory (an earlier bytes-over-the-bridge version hit
  * WebView's ~360 MB blob ceiling at ~120 photos).
+ *
+ * The picker opens in the phone's Camera folder (1.3.0, tester 2026-10-27: "I can't
+ * send more than 1 photo"): there ⋮ → Select all takes the whole roll in one go.
+ * It used to open on Recent, where Select all stops at the newest 64 pictures,
+ * screenshots included (emulator, Android 14). It opens there every time, even
+ * after a pick from another folder. A phone without that folder opens the picker
+ * on the last folder used, as before.
  */
 public class MegyWebChromeClient extends BridgeWebChromeClient {
+
+    private static final Uri CAMERA_FOLDER =
+        DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:DCIM/Camera");
 
     private final ActivityResultLauncher<Intent> photoLauncher;
     private ValueCallback<Uri[]> pending;
@@ -72,6 +84,8 @@ public class MegyWebChromeClient extends BridgeWebChromeClient {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("image/*");
         intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        // EXTRA_INITIAL_URI is Android 8+; older phones open where they always did.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, CAMERA_FOLDER);
         try {
             photoLauncher.launch(intent);
         } catch (ActivityNotFoundException e) {
