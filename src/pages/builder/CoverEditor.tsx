@@ -33,6 +33,7 @@ import { DEFAULT_COVER, type AlbumPage } from './types';
 import { medianSharpness, photoQuality } from '../../lib/photoCheck';
 import { coverTitleFit } from './textFit';
 import { useModalDialog } from '../../lib/useModalDialog';
+import { useTesterStamp } from './useTesterStamp';
 
 const SPINE_STRIP_W = 26;
 /** Album photos shown for the cover before "Show all": two rows, so the
@@ -56,6 +57,7 @@ export default function CoverEditor({ mode = 'modal', nextLabel = 'Continue →'
   // As a dialog (not the wizard step): focus in, Tab kept inside, Escape closes (KB-2).
   const panelRef = useModalDialog<HTMLDivElement>(mode === 'modal', onClose);
   const { setEditScope, coverFront, albumSize, albumPages, uploadedPhotos } = b;
+  const testerStamp = useTesterStamp(albumPages);
 
   // Own the cover scope for the editor's lifetime; always restore 'interior' on
   // unmount so a stale cover scope can't corrupt the next interior edit.
@@ -247,7 +249,7 @@ export default function CoverEditor({ mode = 'modal', nextLabel = 'Continue →'
         onPointerUp={onPanEnd}
         onPointerCancel={onPanEnd}
       >
-        <PageView page={page} photos={uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={0} coverMode />
+        <PageView page={page} photos={uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={0} coverMode testerStamp={testerStamp} />
         {/* Drag handle over the title — only once there's text to move. */}
         {title.text.trim() && titleRect && (
           <div

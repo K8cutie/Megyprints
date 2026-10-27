@@ -33,6 +33,7 @@ const EventCopy = lazy(() => import('./pages/EventCopy'));
 import InstallPrompt from './components/InstallPrompt';
 import ResumePrompt from './components/ResumePrompt';
 import PaidClipSweep from './components/PaidClipSweep';
+import TesterStamp from './components/TesterStamp';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
 
@@ -68,6 +69,8 @@ export default function App() {
       <ResumePrompt />
       {/* Paid orders free the phone's kept video copies (0042). */}
       <PaidClipSweep />
+      {/* Android app on the test track: the date and time on every screen. */}
+      <TesterStamp />
       <Suspense fallback={<div className="min-h-screen bg-cream" aria-busy="true" />}>
       <Routes>
         {/* A lazy page inside Layout waits HERE, under the page's fade-in. With

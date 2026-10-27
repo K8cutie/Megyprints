@@ -44,6 +44,9 @@ import { PAGE_TEMPLATES, hasQrSlot } from './pageTemplates';
 import { templateTracker } from './varietyTracker';
 import { useModalDialog } from '../../lib/useModalDialog';
 import fabric from './fabric-loader';
+import TesterPageStamp from './TesterPageStamp';
+import { useTesterStamp } from './useTesterStamp';
+import { bindingEdge } from './binding';
 
 /* ── Local helper types for in-place filter effects ─────────────────────── */
 
@@ -82,6 +85,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   const canvasElRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
+  const testerStamp = useTesterStamp(actions.albumPages);
 
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
@@ -1164,6 +1168,10 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               {/* Fabric owns the canvas display size (CSS) via the fit routine —
                   no inline width/height here, or it would clobber the fit. */}
               <canvas ref={canvasElRef} />
+              {/* The testers' stamp, over the canvas: Fabric never draws it,
+                  so it is in no export or print file (testingPhase). */}
+              {testerStamp && <TesterPageStamp lines={testerStamp} pageW={400}
+                side={bindingEdge(actions.currentPageIndex) === 'left' ? 'right' : 'left'} />}
 
               {/* Empty State Overlay */}
               <AnimatePresence>

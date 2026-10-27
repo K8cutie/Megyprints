@@ -30,6 +30,7 @@ import PageTurnBar from './PageTurnBar';
 import { PageColorSheet } from './PageColorPicker';
 import { pageColorOf } from './pageColors';
 import VideoMemoryButton from './VideoMemoryButton';
+import { useTesterStamp } from './useTesterStamp';
 
 /** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
 const TOOL = 'h-14 rounded-xl bg-cream text-medium text-[12px] font-semibold flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform';
@@ -39,6 +40,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
   const idx = actions.currentPageIndex;
   const total = pages.length;
   const page = pages[idx];
+  const testerStamp = useTesterStamp(pages);
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
   const [colorSheet, setColorSheet] = useState(false); // the page-colour sheet (pageColors.ts)
@@ -241,7 +243,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
             className="bg-white shadow-xl shrink-0 relative overflow-hidden"
             style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
           >
-            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx}
+            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx} testerStamp={testerStamp}
               editable
               onSlotTap={studio ? (slotIndex) => { setStudioSticker(null); setStudioSlot(slotIndex); } : undefined}
               onChooseSlot={(slotIndex) => setChooserSlot(slotIndex)}
