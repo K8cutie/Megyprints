@@ -463,7 +463,8 @@ export class WizardEngine {
           actions: photoCount === 0 ? ["Upload Photos"] : short > 0 ? [addMoreLabel(short)] : ["Upload More Photos", TO_COVER],
           tips: [
             // Android app: the Files picker has no photo cap but hides "Select all" in its ⋮ menu.
-            ...(Capacitor.isNativePlatform() ? ["📂 Lots of photos? In the picker tap ☰ → Images → open a folder → ⋮ → Select all"] : []),
+            // From 1.3.0 it opens in the Camera folder; older apps open on Recent, where Select all stops at 64.
+            ...(Capacitor.isNativePlatform() ? ["📂 Lots of photos? In the picker, open your Camera folder (☰ → Images → Camera), then tap ⋮ → Select all"] : []),
             "📱 Upload straight from your phone for the best quality — and I'll auto-sort your photos into pages by the moment they were taken", "I'll match photo ratios to frame shapes automatically",
             // Photos never go to the cloud before an order (photoPresence) — say so up front.
             "🔒 Your photos stay on this device until you order. To finish on another device, add the same photos there and I'll put each one back in its place"],
