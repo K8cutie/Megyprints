@@ -20,8 +20,25 @@ import { createRoot, type Root } from 'react-dom/client';
    ══════════════════════════════════════════════════════════════════════════ */
 
 const touched: string[] = [];
+/** Who the saved sign-in says is signed in (reset() asks it), and the
+ *  account saves the builder makes (the cloud itself is not reached). */
+const cloud = vi.hoisted(() => ({
+  session: null as null | { user: { id: string } },
+  saved: [] as Array<{ userId: string; data: { id?: string; occasion?: string | null } }>,
+}));
 vi.mock('../../lib/authContext', () => ({ useAuth: () => ({ user: null }) }));
-vi.mock('../../lib/supabase', () => ({ supabase: { auth: { getSession: async () => ({ data: { session: null } }) } } }));
+vi.mock('../../lib/supabase', () => ({ supabase: { auth: { getSession: async () => ({ data: { session: cloud.session } }) } } }));
+vi.mock('../../lib/useAlbumSync', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../lib/useAlbumSync')>();
+  const sync = {
+    save: async (userId: string, data: { id?: string; occasion?: string | null }) => {
+      cloud.saved.push({ userId, data });
+      return { success: true, updatedAt: '2026-10-28T00:00:00Z' };
+    },
+    load: async () => null,
+  };
+  return { ...real, useAlbumSync: () => sync };
+});
 vi.mock('../../lib/useIndexedDBPhotos', () => ({
   useIndexedDBPhotos: () => { touched.push('IndexedDB'); throw new Error('the browser photo store was used'); },
   getImageDimensions: async () => { touched.push('getImageDimensions'); return { width: 0, height: 0 }; },
@@ -41,6 +58,7 @@ import { useBuilderState, type BuilderActions } from './useBuilderState';
 import { BuilderPlatformContext, type BuilderPlatform, type KeyValueStore, type PickedPhoto, type StoredPhoto } from '../../shared/platform';
 import { heicConverters } from '../../lib/heicPhoto';
 import { DRAFT_STORAGE_KEY } from '../../lib/localDraft';
+import { ALBUM_THEME_KEY } from '../../lib/albumTheme';
 import type { AlbumPage, UploadedPhoto } from './types';
 
 function memoryStore(): KeyValueStore & { data: Map<string, string> } {
@@ -56,7 +74,9 @@ function memoryStore(): KeyValueStore & { data: Map<string, string> } {
 /** When every photo on the made-up device was taken (2026-09-12, noon UTC). */
 const TAKEN_AT = Date.UTC(2026, 8, 12, 12);
 
-/** The made-up device. Photos are kept by id; a picture's URL is mem://… */
+/** The made-up device. Photos are kept by id. A picture's URL is mem://…:
+ *  mem://kept/… is the photo store's own copy (it lasts), mem://shown/… is
+ *  what a pick showed (like a picker's URI, it may be gone next time). */
 function makeDevice() {
   const kept = new Map<string, StoredPhoto>();
   const calls = { faces: [] as string[], sizes: [] as string[], checks: [] as string[], converted: [] as string[], released: [] as string[], dated: [] as string[], init: 0 };
@@ -92,6 +112,7 @@ function makeDevice() {
       captureTime: async (p) => { calls.dated.push(p.name); return TAKEN_AT; },
       previewUrlOf: (p) => `mem://shown/${p.name}`,
       releasePreviewUrl: (url) => { calls.released.push(url); },
+      urlNeedsReload: (url) => !url.startsWith('mem://kept/'),
       pictureSize: async (url) => { calls.sizes.push(url); return { width: 1000, height: 2000 }; },
       convertingPreview: 'mem://converting',
     },
@@ -159,8 +180,11 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   touched.length = 0;
   localStorage.clear(); sessionStorage.clear();
-  // The browser's own album: it must never open on this device.
+  // The browser's own album and occasion: they must never open on this device.
   localStorage.setItem(DRAFT_STORAGE_KEY, draft('The browser album', [photo(0, 'blob:browser/p0')]));
+  localStorage.setItem(ALBUM_THEME_KEY, 'Birthday');
+  cloud.session = null;
+  cloud.saved.length = 0;
   device = makeDevice();
 });
 afterEach(async () => {
@@ -181,17 +205,21 @@ describe('the album builder on a device of its own (no browser pieces)', () => {
   });
 
   it('opens the album saved on THIS device, its photos found again in this device\'s photo store', async () => {
-    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'blob:dead/p0'), photo(1, 'mem://shown/p1.jpg')]));
+    // p0 and p1 were shown from a pick last time (that URL may be gone now),
+    // p2 from the store's own copy (it lasts). The store still has p0 only.
+    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://shown/p0.jpg'), photo(1, 'mem://shown/p1.jpg'), photo(2, 'mem://kept/p2')]));
     device.kept.set('p0', { id: 'p0', name: 'p0.jpg', type: 'image/jpeg', size: 100, width: 1000, height: 2000, url: 'mem://kept/p0' });
     await open();
     expect(builder.albumTitle).toBe('Device album');
-    expect(builder.uploadedPhotos.map((p) => p.previewUrl)).toEqual(['mem://kept/p0', 'mem://shown/p1.jpg']);
+    // p0: the store's copy. p1: not on this device, so it shows as missing
+    // (picking it again puts it back), never a dead picture. p2: as it was.
+    expect(builder.uploadedPhotos.map((p) => p.previewUrl)).toEqual(['mem://kept/p0', '', 'mem://kept/p2']);
     expect(device.calls.init).toBe(1); // the face model is got ready on this device's finder
     expect(touched).toEqual([]);
   });
 
   it('a "start a new album" signal on this device opens an empty album', async () => {
-    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://shown/p0.jpg')]));
+    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://kept/p0')]));
     device.session.setItem('megy-fresh-start', '1');
     await open();
     expect(builder.albumTitle).toBe('');
@@ -231,19 +259,19 @@ describe('the album builder on a device of its own (no browser pieces)', () => {
   });
 
   it('removing a photo lets go of its picture on the device', async () => {
-    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://shown/p0.jpg')]));
+    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://kept/p0')]));
     await open();
     await act(async () => { builder.removePhoto('p0'); });
-    expect(device.calls.released).toEqual(['mem://shown/p0.jpg']);
+    expect(device.calls.released).toEqual(['mem://kept/p0']);
   });
 
   it('a photo put in a frame is centred on the face this device found', async () => {
-    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://shown/p0.jpg'), photo(1, 'mem://shown/p1.jpg')]));
+    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://kept/p0'), photo(1, 'mem://kept/p1')]));
     await open();
     await act(async () => { builder.fillSlot(0, 1); });
     await settle();
-    expect(device.calls.faces).toEqual(['mem://shown/p1.jpg']);
-    expect(device.calls.sizes).toEqual(['mem://shown/p1.jpg']);
+    expect(device.calls.faces).toEqual(['mem://kept/p1']);
+    expect(device.calls.sizes).toEqual(['mem://kept/p1']);
     const pan = builder.albumPages[0].slotOffsetsY?.[0] ?? 0;
     expect(pan).toBeGreaterThan(0); // a tall photo with the face near the top moves down
     expect(touched).toEqual([]);
@@ -265,8 +293,21 @@ describe('the album builder on a device of its own (no browser pieces)', () => {
     expect(device.listening()).toEqual({ leave: false, back: false });
   });
 
+  it('the occasion is kept on this device: the album saved to the account carries it, and a new album clears it', async () => {
+    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://kept/p0')]));
+    device.store.setItem(ALBUM_THEME_KEY, 'Wedding');
+    cloud.session = { user: { id: 'user-1' } };
+    await open();
+    // A new album: the one being put away is saved to the account first.
+    await act(async () => { builder.reset(); });
+    await settle();
+    expect(cloud.saved.map((s) => [s.userId, s.data.id, s.data.occasion])).toEqual([['user-1', 'album-device', 'Wedding']]);
+    expect(device.store.getItem(ALBUM_THEME_KEY)).toBeNull(); // Step 1 asks it again
+    expect(localStorage.getItem(ALBUM_THEME_KEY)).toBe('Birthday'); // the browser's, untouched
+  });
+
   it('a new album clears this device\'s draft', async () => {
-    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://shown/p0.jpg')]));
+    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://kept/p0')]));
     device.store.setItem('megy_wizard_state', '{}');
     await open();
     await act(async () => { builder.reset(); });

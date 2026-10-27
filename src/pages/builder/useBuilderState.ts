@@ -33,7 +33,7 @@ import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
 import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
 import { withPhotoOnLastPage } from './lastPagePhoto';
-import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
+import { ensureThemeQuotes } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
 import { useAlbumSync, serializeAlbum as toAlbumRow } from '../../lib/useAlbumSync';
@@ -58,7 +58,7 @@ import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from './retiredSizes';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { DEFAULT_TITLE_FONT } from './fonts';
-import { readAlbumTheme, writeAlbumTheme } from '../../lib/albumTheme';
+import { readAlbumThemeFrom, writeAlbumThemeTo } from '../../lib/albumTheme';
 import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -472,14 +472,6 @@ function saveState(store: KeyValueStore, state: SerializedState) {
 }
 
 /* ── Initial state factory ── */
-
-/** Check if a photo URL is a dead blob: URL (session-only, expires on reload) */
-function isDeadBlobUrl(url: string | undefined): boolean {
-  if (!url) return true;
-  // Blob URLs are session-only — they ALWAYS expire on page reload
-  if (url.startsWith('blob:')) return true;
-  return false;
-}
 
 function isStateCorrupted(state: SerializedState): boolean {
   // Corruption = pages with broken photo references (photo indices pointing
@@ -1008,7 +1000,14 @@ export function useBuilderState(): BuilderActions {
   const platform = useContext(BuilderPlatformContext) ?? defaultBuilderPlatform;
   if (!platform) throw new Error('The album builder needs its device pieces: wrap it in <BuilderPlatformContext.Provider>.');
   const { deviceStore, sessionStore, faces, photoCheck: checker, lifecycle } = platform;
-  const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, previewUrlOf, releasePreviewUrl, pictureSize, convertingPreview } = platform.photos;
+  const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, previewUrlOf, releasePreviewUrl, urlNeedsReload, pictureSize, convertingPreview } = platform.photos;
+  /** A saved photo URL that must be found again in the photo store when the
+   *  album opens: none at all, or one the device says doesn't last (website:
+   *  a blob: URL, dead with the old tab; app: a picker's URI). */
+  const needsReload = (url: string | undefined) => !url || urlNeedsReload(url);
+  /** The album's occasion, kept on this device (deviceStore; the website:
+   *  localStorage, where its own steps read and write it too). */
+  const currentAlbumTheme = useCallback(() => readAlbumThemeFrom(deviceStore), [deviceStore]);
   // ── Phase 1: Cloud hooks ──
   const { user } = useAuth();
   const albumSync = useAlbumSync();
@@ -1280,10 +1279,10 @@ export function useBuilderState(): BuilderActions {
       coverPhoto: pageSnapshotsRef.current[albumPages[0]?.id] ?? null,
       coverFront: coverFront as unknown as AlbumData['coverFront'],
       // The album's occasion and photos-per-page go with it (round 2, N4).
-      occasion: readAlbumTheme() || null,
+      occasion: currentAlbumTheme() || null,
       photosPerPage: photosPerPage ?? null,
     };
-  }, [albumTitle, albumSize, albumPages, uploadedPhotos, coverFront, photosPerPage]);
+  }, [albumTitle, albumSize, albumPages, uploadedPhotos, coverFront, photosPerPage, currentAlbumTheme]);
 
   /** An album opened from the cloud brings its own occasion and photos-per-page
    *  (a fresh browser had none: "Generate Album" bounced back to Step 1, and the
@@ -1292,11 +1291,11 @@ export function useBuilderState(): BuilderActions {
    *  over into it, and out with its next save (Kraken, 2026-10-05). Only the
    *  SAME album reopened keeps what this device has for it. */
   const restoreAlbumChoices = useCallback((a: AlbumData, sameAlbum = false) => {
-    if (a.occasion) writeAlbumTheme(a.occasion);
-    else if (!sameAlbum) writeAlbumTheme('');
+    if (a.occasion) writeAlbumThemeTo(deviceStore, a.occasion);
+    else if (!sameAlbum) writeAlbumThemeTo(deviceStore, '');
     if (a.photosPerPage != null) setPhotosPerPage(a.photosPerPage);
     else if (!sameAlbum) setPhotosPerPage(undefined);
-  }, []);
+  }, [deviceStore]);
 
   /* ── Persistence strategy ──
      • Local (localStorage): debounced ~30s — cheap and client-only.
@@ -1686,9 +1685,7 @@ export function useBuilderState(): BuilderActions {
       // ── LEAK FIX #2b: If reset() just fired, skipCloudLoadRef is true ──
       if (skipCloudLoadRef.current) return;
 
-      const needsRehydration = uploadedPhotos.some(
-        (p) => !p.previewUrl || isDeadBlobUrl(p.previewUrl)
-      );
+      const needsRehydration = uploadedPhotos.some((p) => needsReload(p.previewUrl));
       if (!needsRehydration) return;
 
       // NOTE: We intentionally do NOT wipe IndexedDB when all blob URLs are
@@ -1698,8 +1695,8 @@ export function useBuilderState(): BuilderActions {
       // skipCloudLoadRef).
       const rehydrated = await Promise.all(
         uploadedPhotos.map(async (photo) => {
-          // Skip photos that already have valid blob URLs
-          if (photo.previewUrl && !isDeadBlobUrl(photo.previewUrl)) {
+          // Skip photos whose URL still works (the device says it lasts)
+          if (!needsReload(photo.previewUrl)) {
             return photo;
           }
           // Restore from IndexedDB
@@ -2272,7 +2269,7 @@ export function useBuilderState(): BuilderActions {
     } finally {
       setGenerating(null);
     }
-  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces]);
+  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces, currentAlbumTheme]);
 
   /** Does the current page carry a video memory? Then its layout stays the
    *  full photo with the QR badge (see relayPageOnTemplate), and the layout
@@ -3419,7 +3416,7 @@ export function useBuilderState(): BuilderActions {
       return filled > 0 ? pages : prev;
     });
     return result;
-  }, [albumPages, selectedTemplate, pushSnapshot]);
+  }, [albumPages, selectedTemplate, pushSnapshot, currentAlbumTheme]);
 
   /** The occasion changed on a made album (Step 1, then Next): every quote
    *  Megy dealt for another occasion gets an unused line for this one, in the
@@ -3630,7 +3627,7 @@ export function useBuilderState(): BuilderActions {
     const leaving: AlbumData | null = draftHasContent(persistRef.current?.local)
       ? serializeAlbum()
       : stored && draftHasContent(stored)
-        ? albumDataFromDraft(stored as StoredDraft)
+        ? albumDataFromDraft(stored as StoredDraft, currentAlbumTheme())
         : null;
     // getSession reads the saved session directly, so this is right even while
     // the auth context is still loading (it is, on the fresh-start mount).
@@ -3671,7 +3668,7 @@ export function useBuilderState(): BuilderActions {
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
     // A new album is a new occasion (Step 1 asks it again).
-    writeAlbumTheme('');
+    writeAlbumThemeTo(deviceStore, '');
     setCoverDesign(DEFAULT_COVER_DESIGN);
     setCoverFrontPage(createCoverPage('8x8'));
     setEditScope('interior');
@@ -3683,7 +3680,7 @@ export function useBuilderState(): BuilderActions {
     try { deviceStore.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     // ── Clear wizard state so it restarts from step 1 ──
     try { deviceStore.removeItem('megy_wizard_state'); } catch { /* ignore */ }
-  }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict, setCloudGone, syncRecFor, deviceStore]);
+  }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict, setCloudGone, syncRecFor, deviceStore, currentAlbumTheme]);
 
   /* ── Another account's album is not opened for this one ──
      A shared device: B signs in where A's album was left. It used to open as

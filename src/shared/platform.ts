@@ -44,9 +44,10 @@ export interface KeyValueStore {
 /** A photo as it comes from a pick, before the album takes it. Website: a
  *  browser File. App (Phase 2): its picked asset, which has these three and
  *  its own URI. The builder only reads these fields; each platform reads the
- *  rest of its own kind (the browser platform knows it was handed a File, so
- *  on the website a PickedPhoto must be one: addPhotos, replacePhoto and
- *  setCoverPhoto are only ever called with Files there). */
+ *  rest of its own kind. On the website a PickedPhoto must be a File
+ *  (addPhotos, replacePhoto and setCoverPhoto are only ever called with Files
+ *  there); the browser pieces refuse anything else with a plain error rather
+ *  than failing deep inside the browser. */
 export interface PickedPhoto {
   readonly name: string;
   readonly size: number;
@@ -101,10 +102,21 @@ export interface PhotoIntake {
   getImageDimensions(photo: PickedPhoto): Promise<PhotoSize>;
   /** When it was taken (ms since 1970), or null when that isn't known. Read
    *  from the photo as PICKED (a HEIC's JPEG copy carries no date). Website:
-   *  the photo's EXIF. App: the gallery's own date for the picked asset. */
+   *  the photo's EXIF. App: the gallery's own date for the picked asset.
+   *  (Open PR #158 adds the file's own date as a fallback and says which one
+   *  it was: whichever merges second widens this to { capturedAt, timeSource }.) */
   captureTime(photo: PickedPhoto): Promise<number | null>;
-  /** A URL that shows this photo right now (website: a new blob: URL). */
+  /** A URL that shows this photo right now (website: a new blob: URL). It may
+   *  stop working once the app is closed: see urlNeedsReload. */
   previewUrlOf(photo: PickedPhoto): string;
+  /** Whether a picture URL saved with the album on an earlier visit must be
+   *  found again in the photo store when the album opens (the builder always
+   *  reloads a photo with no URL). Website: a blob: URL, which dies with the
+   *  tab. App: any URL that is not the photo store's own lasting copy (a
+   *  picker's content:// URI or a cache file can stop working once the app is
+   *  closed). Reloading one the store doesn't have shows the photo as missing,
+   *  so picking it again puts it back. */
+  urlNeedsReload(url: string): boolean;
   /** Let go of a URL from previewUrlOf or the store (website: revokes a blob: URL;
    *  anything else is left alone). */
   releasePreviewUrl(url: string): void;
