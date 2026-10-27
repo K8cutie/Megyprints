@@ -43,16 +43,15 @@ const INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x8':    { w: 6,    h: 8  },
   '6x6':    { w: 6,    h: 6  },
   '8x8':    { w: 8,    h: 8  },
-  '9x9':    { w: 9,    h: 9  },
   '11.5x8': { w: 11.5, h: 8  },
   '8.5x11': { w: 8.5,  h: 11 },
 };
 
-/** Square albums this generator serves. Per-size-authored sizes (6x6/8x8/9x9)
+/** Square albums this generator serves. Per-size-authored sizes (6x6/8x8)
  *  are STILL generated here so an album saved before the size was cleared keeps
  *  resolving its old `tile-…-<size>` ids; withoutOwnedSizes then strips the
  *  owned size so they are resolvable but never selected. */
-const SQUARE_SIZES: AlbumSizePreset[] = ['6x6', '8x8', '9x9'];
+const SQUARE_SIZES: AlbumSizePreset[] = ['6x6', '8x8'];
 
 /** A photo region inside a recipe — 0–1 of the safe area, tagged with its ratio.
  *  For SQUARE pages the safe area is ~square, so width/height ≈ ratio value. */
@@ -179,10 +178,10 @@ const SQUARE_RECIPES: Recipe[] = [
       { x: 0, y: 0.5, w: 0.5, h: 0.5, ratio: '1:1' }, { x: 0.5, y: 0.5, w: 0.5, h: 0.5, ratio: '1:1' },
     ] },
 
-  // dense (6-up) — only valid on the larger square albums (8×8, 9×9); 6×6 drops it
+  // dense (6-up) — only valid on the larger square album (8×8); 6×6 drops it
   // automatically because each frame would print under 2". A 9-up "Nine squares"
   // recipe was intentionally removed: per-size MAX photos/page is capped at
-  // 2 / 4 / 6 / 6 for 6×4 / 6×6 / 8×8·9×9 / landscape·portrait respectively.
+  // 2 / 4 / 6 / 6 for 6×4 / 6×6 / 8×8 / landscape·portrait respectively.
   { key: 'six-sq-text', name: 'Six squares + caption', category: 'sextet',
     photos: Array.from({ length: 6 }, (_v, i) => ({
       x: (i % 3) / 3, y: Math.floor(i / 3) / 3, w: 1 / 3, h: 1 / 3, ratio: '1:1' as PhotoRatio,

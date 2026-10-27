@@ -4,7 +4,7 @@ import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { captionBoxSize, captionFits, overflowingCaptions, longTextsMessage, type Measurer } from './textFit';
+import { captionBoxSize, captionFits, overflowingCaptions, longTextsMessage, quoteRoom, type Measurer } from './textFit';
 import { getTemplatesForAlbum, photoSlotCount } from './pageTemplates';
 import type { AlbumPage } from './types';
 
@@ -65,7 +65,7 @@ describe('Before you order', () => {
   });
   it('the preview\'s Order says it, and "Show me" goes to the first such page (source guard)', () => {
     const src = readFileSync(resolve(__dirname, 'BuilderPreview.tsx'), 'utf8');
-    expect(src).toMatch(/readinessMessage\(readiness\), longTextsMessage\(long\.length\)/);
+    expect(src).toMatch(/readinessMessage\(ready\), longTextsMessage\(long\.length\)/);
     expect(src).toMatch(/const first = \[readiness\.firstPage, longFirstPageRef\.current\]/);
   });
   it('every caption editor is told its box (source guard)', () => {
@@ -101,5 +101,32 @@ describe('the text editor says it as you type', () => {
     host.remove();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+});
+
+/* "Write a line for this photo" writes for the room a box has (owner,
+   2026-10-21: "the longer quotes makes the page template more relatable,
+   short ones feels like your guessing"). quoteRoom says how long a line the
+   box takes at the line's own style, measured the way print wraps. */
+describe('quoteRoom', () => {
+  const style = { fontSize: 28, italic: true };
+  it('a thin band takes one short line', () => {
+    const band = { w: 703, h: 63 }; // the 8x6 band under the photos
+    const room = quoteRoom(band, style, 100, fake())!;
+    expect(room).toBeGreaterThan(20);
+    expect(room).toBeLessThan(46);
+  });
+  it('a big box takes a full sentence, up to the cap', () => {
+    expect(quoteRoom({ w: 703, h: 250 }, style, 100, fake())).toBe(100);
+    expect(quoteRoom({ w: 703, h: 250 }, style, 70, fake())).toBe(70);
+  });
+  it('a line of exactly that length fits the box it was measured for', () => {
+    const band = { w: 703, h: 63 };
+    const room = quoteRoom(band, style, 100, fake())!;
+    expect(captionFits('x'.repeat(room).replace(/x{6}/g, 'xxxxx '), style, band, fake())!.fits).toBe(true);
+  });
+  it("can't measure (no canvas) or no box: null, and the caller keeps its own cap", () => {
+    expect(quoteRoom({ w: 703, h: 250 }, style, 100, null)).toBeNull();
+    expect(quoteRoom({ w: 0, h: 250 }, style, 100, fake())).toBeNull();
   });
 });

@@ -3,3 +3,7 @@ Theme Background
 *.md
 *.sql
 nginx
+# Tests next to the endpoints: Vercel would deploy each one as a function, and
+# the Hobby plan allows 12 (PR #178's deploy failed at 14). CI runs them from
+# the repo. api/deployLimit.spec.mjs keeps the count in check.
+api/*.spec.mjs

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, type CSSProperties } from 'react'
 import { ChevronLeft, ShoppingCart, Plus, Trash2, Sparkles, X, Loader2, Pencil, BookOpen, FileText } from 'lucide-react';
 import SpreadTurnButton, { SPREAD_TURN_W } from './SpreadTurnButton';
 import PreviewTurnBar from './PreviewTurnBar';
-import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, swipeTurn, turnBack, turnForward, type PreviewPosition, type PreviewView, type Turn } from './previewPaging';
+import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, spreadStart, swipeTurn, turnBack, turnForward, type PreviewPosition, type PreviewView, type Turn } from './previewPaging';
 import { useIsMobile, useIsPortrait } from '../../hooks/use-mobile';
 import type { UploadedPhoto, AlbumPage, AlbumSizePreset, OrnamentTransform, BoxRoll } from './types';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, frameStyleToCss, dealtBoxRoll } from './types';
@@ -21,8 +21,9 @@ import AddQrModal from './AddQrModal';
 import EndOfAlbumPrompt from './EndOfAlbumPrompt';
 import { useEndOfAlbumPrompt } from './useEndOfAlbumPrompt';
 import { checkOrderReadiness, readinessMessage, coverIsBlank, BLANK_COVER_MESSAGE } from './orderReadiness';
+import { blankPagePlan, deleteBlankLabel, deletedBlankNote } from './blankPages';
 import { missingPhotos, missingPhotosMessage, copyNotesMessage } from '../../lib/photoPresence';
-import { fillableBoxCount } from './generateAlbum';
+import { fillableBoxCount, DEAL_BANK_QUOTES } from './generateAlbum';
 import { BOOK } from './bookFeel';
 import PageTurnLayer from './PageTurnLayer';
 import { planTurn, type TurnFace, type TurnPlan } from './pageTurn';
@@ -139,7 +140,10 @@ function backgroundToCss(bg: any, photos: UploadedPhoto[] = [], coverMode = fals
  *  with the Fabric labels in useCanvasEngine's empty-textbox block — the two
  *  are SEPARATE and drift silently. */
 const ROLL_LABELS: Record<Exclude<BoxRoll, 'qr'>, string> = {
-  quote: 'Add a quote',
+  // An empty quote box invites a line written from the page's photos (owner,
+  // 2026-10-21: bank quotes are no longer dealt into boxes); the tap opens the
+  // picker already writing.
+  quote: 'Let AI write a quote',
   text: 'Your words here',
 };
 
@@ -417,7 +421,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontWeight: st.bold ? 'bold' : 'normal', fontStyle: st.italic ? 'italic' : 'normal',
                 textDecoration: st.underline ? 'underline' : 'none', color: st.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                ...wordArtDomStyle(st, sx),
+                ...wordArtDomStyle(st, sx, coverMode),
               }}>{st.text}</span>
             </div>
           );
@@ -553,7 +557,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           textDecoration: t.underline ? 'underline' : 'none', lineHeight: TEXT_LINE_HEIGHT,
           display: 'flex', alignItems: 'center', justifyContent: t.alignment || 'center',
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
-          ...wordArtDomStyle(t, sx),
+          ...wordArtDomStyle(t, sx, coverMode),
         }}>{t.text}</div>
       ))}
       {/* Template text boxes. Filled → formatted text clipped to the box; empty →
@@ -614,7 +618,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 fontWeight: boxed.bold ? 'bold' : 'normal', fontStyle: boxed.italic ? 'italic' : 'normal',
                 textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                ...wordArtDomStyle(boxed, sx),
+                ...wordArtDomStyle(boxed, sx, coverMode),
               }}>{boxed.text}</span>
             </div>
           );
@@ -729,7 +733,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             }} />
         );
       })}
-      {/* Binding (gutter) keep-out guide — 0.5" reserve on the inner edge.
+      {/* Binding (gutter) keep-out guide — the 3/8" reserve (BINDING_INCHES) on the inner edge.
           Hidden on cover panels (they have no interior gutter). */}
       {!coverMode && (() => {
         const frac = bindingMarginFraction(page.size);
@@ -751,7 +755,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError, orderRequested = false, onOrderRequestTaken, turnAnimation = import.meta.env.MODE !== 'test' }: BuilderPreviewProps) {
   const total = pages.length;
-  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId } = useBuilderContext();
+  const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId, deletePages } = useBuilderContext();
 
   // "Megy finishes it" — count the caption boxes still sitting empty (unfilled
   // invitations, deleted quotes, legacy empties). The chooser CTA in the
@@ -759,7 +763,9 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // never a silent checkout-time change (this is a paid, unrecallable print).
   const readiness = useMemo(() => checkOrderReadiness(pages), [pages]);
   // Boxes "let Megy finish" CAN fill — not the ones the cadence holds back.
-  const waitingBoxes = useMemo(() => fillableBoxCount(pages), [pages]);
+  // Bank quotes are off (DEAL_BANK_QUOTES): no "boxes waiting — let Megy
+  // finish" button, since it would fill them with bank lines.
+  const waitingBoxes = useMemo(() => (DEAL_BANK_QUOTES ? fillableBoxCount(pages) : 0), [pages]);
   const [sweepNote, setSweepNote] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const handleMegyFinish = async () => {
@@ -807,7 +813,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const [coverOpen, setCoverOpen] = useState(false);
   // THE COVER FIRST (1-star testers, 2026-10-04: "I paid without ever seeing
   // the finished front of the book"). The preview opens on the closed book's
-  // front cover, like picking it up; "Next" opens pages 1–2 and "Previous"
+  // front cover, like picking it up; "Next" opens it on page 1 and "Previous"
   // from there comes back to it. `coverAt` is the page the cover was opened
   // over, so any other page turn (Megy's "go to page 5") leaves the cover.
   const [coverAt, setCoverAt] = useState<number | null>(() => (coverFront && currentIndex === 0 ? 0 : null));
@@ -842,9 +848,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   };
 
 
-  // Spread pairs: 0-1, 2-3, 4-5, etc.
-  const spreadLeftIndex = Math.floor(currentIndex / 2) * 2;
-  const spreadLeftPage = pages[spreadLeftIndex];
+  // The open book, as it prints (binding.ts): (inside of the front cover | 1),
+  // (2 | 3), (4 | 5), … A side with no page is the inside of a cover.
+  const spreadLeftIndex = spreadStart(currentIndex);
+  const spreadLeftPage = spreadLeftIndex >= 0 ? pages[spreadLeftIndex] : undefined;
   const spreadRightPage = pages[spreadLeftIndex + 1];
 
   // Responsive sizing: the spread (two pages side by side) scales DOWN to fit the
@@ -949,11 +956,35 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // text and blank pages print exactly as they look — say so once; "Order
   // anyway" goes on, "Show me" goes to the first one.
   const [notReady, setNotReady] = useState<string | null>(null);
+  // The warning up now names blank pages (so it offers to delete them).
+  const [notReadyBlank, setNotReadyBlank] = useState(false);
   const longFirstPageRef = useRef<number | null>(null);
+  // BLANK PAGES (blankPages): the end-of-album reminder and the warning above
+  // offer to delete them (never under 40 pages), or to go and fill them.
+  const blankPlan = useMemo(() => blankPagePlan(pages), [pages]);
+  const [deletedNote, setDeletedNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!deletedNote) return;
+    const t = window.setTimeout(() => setDeletedNote(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [deletedNote]);
+  const deleteBlankPages = (landOnLast: boolean) => {
+    const n = deletePages(blankPlan.deletable, { landOnLast });
+    if (n === 0) return;
+    setNotReady(null);
+    setDeletedNote(deletedBlankNote(n, pages.length - n));
+  };
+  const editBlankPages = () => {
+    const first = blankPlan.blank[0];
+    if (first != null) onGoToPage(first);
+    onBack();
+  };
   // PHOTOS NOT ON THIS DEVICE (photoPresence): the album would print blank
   // frames. No "Order anyway" — a paid, unrecallable print of empty pages.
   const [notHere, setNotHere] = useState<string | null>(null);
-  const handleOrder = (anyway = false) => {
+  // `blankOk`: the customer chose "Order with blank pages" — the warning
+  // still says anything else, but not those again.
+  const handleOrder = (anyway = false, blankOk = false) => {
     if (orderSaving) return;
     const have = albumPhotoCount(pages);
     if (photosShortBy(have) > 0) { setTooFew(have); return; }
@@ -969,16 +1000,34 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     longFirstPageRef.current = long[0]?.pageIndex ?? null;
     // The cover title clipped on the front is said with the cover (round 3).
     const titleCut = coverTitleFit(coverFront, albumSize)?.fits === false;
-    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', titleCut ? COVER_TITLE_TOO_LONG_MESSAGE : '', readinessMessage(readiness), longTextsMessage(long.length), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
-    if (warning && !anyway) { setNotReady(warning); return; }
+    const ready = blankOk ? { ...readiness, blankPages: 0 } : readiness;
+    const warning = [coverIsBlank(coverFront) ? BLANK_COVER_MESSAGE : '', titleCut ? COVER_TITLE_TOO_LONG_MESSAGE : '', readinessMessage(ready), longTextsMessage(long.length), copies ? `${copies}.` : ''].filter(Boolean).join(' ');
+    if (warning && !anyway) { setNotReady(warning); setNotReadyBlank(ready.blankPages > 0); return; }
     setNotReady(null);
     setPendingPrintJob({ pages, photos, albumSize, albumId: getAlbumId(), coverDesign, coverFront });
     onOrder();
   };
+  // End-of-album prompt — opens EVERY time they arrive at the last page (or
+  // the last open book) (useEndOfAlbumPrompt). It can be dismissed (keep
+  // browsing) and it offers a real way back to the pages (owner, 2026-09-13:
+  // "there doesn't seem to be a way to go back").
+  // It waits for the last page turn to land.
+  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim);
+  // A warning about blank pages from an earlier Order: the card's reminder says it now.
+  useEffect(() => {
+    if (endPrompt.open && notReadyBlank && blankPlan.blank.length > 0) setNotReady(null);
+  }, [endPrompt.open, notReadyBlank, blankPlan.blank.length]);
   const notReadyBanner = notReady != null && (
     <div role="alert" data-testid="order-not-ready"
       className="flex flex-wrap items-center gap-2 rounded-lg border border-[#F0D9A8] bg-[#FFF6E5] px-3 py-2 text-xs text-[#8A5A12] text-left">
       <span className="flex-1 min-w-[12rem]">{notReady}</span>
+      {/* In the end card's reminder the card's own Delete is the one. */}
+      {notReadyBlank && blankPlan.deletable.length > 0 && !endPrompt.open && (
+        <button onClick={() => deleteBlankPages(false)} data-testid="order-not-ready-delete-blank"
+          className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-[#E8C98A] font-semibold hover:bg-[#FFF0D1]">
+          {deleteBlankLabel(blankPlan.deletable.length)}
+        </button>
+      )}
       <button onClick={() => {
           setNotReady(null);
           // The cover first: "Show me" opens the cover editor.
@@ -1024,12 +1073,6 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const hasPrev = canTurnBack(pos);
   const hasNext = canTurnForward(pos);
 
-  // End-of-album prompt — opens EVERY time they arrive at the last page (or
-  // the last open book) (useEndOfAlbumPrompt). It can be dismissed (keep
-  // browsing) and it offers a real way back to the pages (owner, 2026-09-13:
-  // "there doesn't seem to be a way to go back").
-  // It waits for the last page turn to land.
-  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim);
   const currentPage = pages[currentIndex];
 
   // Megy's "Place Order →" (Step 7) lands here and orders exactly like the
@@ -1067,7 +1110,16 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     </div>
   );
 
-  // What a turning leaf shows: a page as it prints, the front cover, or a blank page.
+  // The inside of a cover: plain paper across from page 1 (and from a last
+  // left-hand page), named in small print so it doesn't read as a lost page.
+  const insideCover = (cover: 'front' | 'back') => (
+    <div className="absolute flex items-center justify-center bg-white" style={{ left: 0, top: 0, width: singleW, height: H }} data-testid={`preview-inside-${cover}`}>
+      <span className="text-taupe/70" style={{ fontSize: Math.max(9, Math.round(12 * fitScale)) }}>
+        Inside of the {cover} cover
+      </span>
+    </div>
+  );
+  // What a turning leaf shows: a page as it prints, the front cover, or the inside of a cover.
   const turnFace = (f: TurnFace) => {
     if (f.kind === 'page' && pages[f.index]) {
       return (
@@ -1085,6 +1137,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
         </div>
       );
     }
+    if (f.kind === 'inside') return insideCover(f.cover);
     return null;
   };
   // The turn draws over the book that is showing (it changes view if the phone turns mid-turn: then no turn).
@@ -1139,6 +1192,11 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
       {upright && (sweepNote || waitingBoxes > 0) && <div className="pt-2 flex" data-testid="preview-megy-row">{megyFinish}</div>}
       </div>
       {(tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner) && <div className="px-5 pt-2 bg-paper">{tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner}</div>}
+      {deletedNote && !endPrompt.open && (
+        <div className="px-5 pt-2 bg-paper">
+          <p role="status" data-testid="preview-deleted-note" className="rounded-lg border border-[#BFDCC3] bg-[#EEF7EF] px-3 py-2 text-xs font-semibold text-[#2F6B3A]">✓ {deletedNote}</p>
+        </div>
+      )}
 
       {/* Page display with the page turn on each side — small labelled
           buttons, not bare ‹ › arrows (SpreadTurnButton). */}
@@ -1213,31 +1271,32 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                 isolation: 'isolate',
               }}
             >
-              {/* Left Page */}
+              {/* Left Page — the inside of the front cover across from page 1 */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-                <PageView key={spreadLeftPage?.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted
-                  onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
-                  onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
-                  onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
+                {spreadLeftPage ? (
+                  <PageView key={spreadLeftPage.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted
+                    onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
+                    onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
+                    onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
+                ) : insideCover('front')}
               </div>
 
               {/* Right Page — flush against the left page (no center gap/spine;
-                  the dashed binding guides already mark the gutter). */}
-              {spreadRightPage && (
-                <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
-                  <PageView key={spreadRightPage?.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted
+                  the dashed binding guides already mark the gutter). The
+                  inside of the back cover across from a last left-hand page. */}
+              <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
+                {spreadRightPage ? (
+                  <PageView key={spreadRightPage.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex + 1, slot })} />
-                </div>
-              )}
+                ) : insideCover('back')}
+              </div>
 
               {/* book layers over the pages: vignette, grain, gutter */}
               <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
               <div aria-hidden="true" style={BOOK.grain} />
-              {spreadRightPage
-                ? <div aria-hidden="true" style={BOOK.gutter} data-testid="preview-gutter" />
-                : <div aria-hidden="true" style={BOOK.edgeShade('right')} />}
+              <div aria-hidden="true" style={BOOK.gutter} data-testid="preview-gutter" />
             </div>
             </div>
             {turnLayer(singleW, singleW * 2, lip)}
@@ -1274,7 +1333,9 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           or ✕ to keep browsing; "Continue editing" is a real button. */}
       {endPrompt.open && (
         <EndOfAlbumPrompt onClose={endPrompt.close} onCheckCover={() => setCoverOpen(true)} onOrder={() => handleOrder()} onContinueEditing={onBack}
-          saving={orderSaving} error={tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner || null} />
+          saving={orderSaving} error={tooFewBanner || notHereBanner || notReadyBanner || orderErrorBanner || null}
+          blank={blankPlan} onDeleteBlank={() => deleteBlankPages(true)} onEditBlank={editBlankPages}
+          onOrderWithBlank={() => handleOrder(false, true)} note={deletedNote} />
       )}
 
       {/* Tap-to-edit textbox — the floating-bar editor (works on desktop too).

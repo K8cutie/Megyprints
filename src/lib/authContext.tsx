@@ -1,9 +1,9 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { User, Session, Provider } from '@supabase/supabase-js';
-import { AuthError } from '@supabase/supabase-js';
+import { AuthError, AuthApiError } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from './supabase';
-import { isNativeShell, nativeSignInWithOAuth } from './nativeAuth';
+import { isNativeShell, nativeSignInWithOAuth, emailLinkReturnUrl } from './nativeAuth';
 import { forgetCheckoutOnDevice } from './checkoutSession';
 import { clearPendingPrintJob } from './printQueue';
 import { forgetResumeCache } from './resumeCache';
@@ -140,10 +140,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
           options: {
             data: metadata,
+            // Used only once "Confirm email" is on: where the emailed link lands.
+            emailRedirectTo: emailLinkReturnUrl(),
           },
         });
         if (signUpError) {
           throw signUpError;
+        }
+        // With "Confirm email" on, Supabase answers an email that already has
+        // an account with a stand-in user that has no identities (so strangers
+        // can't test emails) and sends nothing. Without this the box said
+        // "check your email" for a link that never comes. Same words as the
+        // auto-confirm refusal (accountErrors.ts).
+        if (data.user && data.user.identities?.length === 0) {
+          throw new AuthApiError('User already registered', 422, 'user_already_exists');
         }
         // With email auto-confirm ON (this project), signUp returns a live
         // session and the user is signed in immediately — no email is sent, so

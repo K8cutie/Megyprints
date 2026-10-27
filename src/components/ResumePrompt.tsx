@@ -12,6 +12,7 @@ import {
 } from '../lib/albumSession';
 import { formatRelativeTime } from './UserProjectsSection';
 import { useModalDialog } from '../lib/useModalDialog';
+import { useRecoveryState } from '../lib/recoveryState';
 import MegyMascot from './MegyMascot';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -169,12 +170,17 @@ export function ResumePrompt() {
     return () => { cancelled = true; window.clearTimeout(giveUp); };
   }, [accountId, loading]);
 
+  // A reset link signs the customer in, which counts as "logging back in" — and
+  // this full-screen layer (z-210) covered "Make a new password" (live,
+  // 2026-10-23). The password comes first; this waits and shows after Done.
+  const recovery = useRecoveryState();
+
   // Keyboard (KB-2): focus on "Yes, resume", Tab kept inside, Escape = not now.
-  const showing = !!offers && offers.length > 0 && !!user;
+  const showing = recovery === 'none' && !!offers && offers.length > 0 && !!user;
   const panelRef = useModalDialog<HTMLDivElement>(showing, () => setOffers(null));
 
   if (!showing) {
-    if (!holding) return null;
+    if (!holding || recovery !== 'none') return null;
     // Checking for albums: a plain screen, not Home flashing first.
     return (
       <div className="fixed inset-0 z-[210] flex items-center justify-center bg-cream" aria-busy="true" data-testid="resume-holding">

@@ -6,13 +6,18 @@
    tool. Raw cost figures are admin-only — never rendered to customers.
    ══════════════════════════════════════════════════════════════════════════ */
 import { useState, useEffect } from 'react';
+import TesterCodeSettings from './TesterCodeSettings';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
 import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
 import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
 
-const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '9x9', '11.5x8', '8.5x11'];
+const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '11.5x8', '8.5x11'];
+/** Sizes the picker offers. disabled_sizes can also name a size the app no
+ *  longer has (9x9 stays in it so app copies from before its removal keep it
+ *  hidden), so count the sizes that are on rather than subtract. */
+const sizesOn = (disabled: AlbumSizePreset[]) => ALBUM_SIZES.filter((s) => !disabled.includes(s.preset)).length;
 
 const peso = (n: number) => '₱' + Math.round(n).toLocaleString('en-PH');
 // Competitor 8×8: ₱3,000 base (20 pages) + ₱30/pg; voucher ≈ 51% of regular.
@@ -162,7 +167,7 @@ export default function PricingPanel() {
     setSavedSizes(false);
   };
   const saveSizes = async () => {
-    if (ALBUM_SIZES.length - disabledSizes.length < 1) { setSizeErr('Keep at least one size enabled.'); return; }
+    if (sizesOn(disabledSizes) < 1) { setSizeErr('Keep at least one size enabled.'); return; }
     setSavingSizes(true); setSavedSizes(false); setSizeErr('');
     const err = await setDisabledSizes(disabledSizes);
     setSavingSizes(false);
@@ -202,6 +207,9 @@ export default function PricingPanel() {
           (flagged below); confirm them and we lock these into checkout.
         </p>
       </div>
+
+      {/* Tester code (0057): testers see the real price, the album is free */}
+      <TesterCodeSettings />
 
       {/* Store price multiple — the PERSISTED setting that drives live checkout */}
       <div className="rounded-2xl border-2 border-rust/40 bg-warm-white px-5 py-4">
@@ -421,7 +429,7 @@ export default function PricingPanel() {
             );
           })}
         </div>
-        {savedSizes && <p className="text-xs text-success mt-2 font-semibold">✓ Saved — the size picker now offers {ALBUM_SIZES.length - disabledSizes.length} of {ALBUM_SIZES.length} sizes.</p>}
+        {savedSizes && <p className="text-xs text-success mt-2 font-semibold">✓ Saved — the size picker now offers {sizesOn(disabledSizes)} of {ALBUM_SIZES.length} sizes.</p>}
         {sizeErr && <p className="text-xs text-rust-deep mt-2">{sizeErr}</p>}
       </div>
 
@@ -560,7 +568,7 @@ export default function PricingPanel() {
         <h3 className="font-display text-lg font-semibold text-dark mb-1">Reference sheet — the 40-page floor</h3>
         <p className="text-sm text-medium mb-3">
           <b>3×</b> is the recommended baseline (under their sale); <b>5×</b> is the ceiling (their regular price) — worth holding on premium hardbound where the QR living-memory sells it.
-          The <b>3×/5×</b> columns include the flat <b>size premium</b> (marked beside the size): <b>+₱150</b> on 9×9, <b>+₱300</b> on 11.5×8 &amp; 8.5×11 — pure margin, since those cost the same to print as 8×8.
+          The <b>3×/5×</b> columns include the flat <b>size premium</b> (marked beside the size): <b>+₱300</b> on 11.5×8 &amp; 8.5×11 — pure margin, since those cost the same to print as 8×8.
         </p>
         <div className="overflow-x-auto border border-line rounded-xl">
           <table className="w-full min-w-[560px] text-sm">

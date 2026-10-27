@@ -1,38 +1,99 @@
 /* Orders tab — the fulfillment queue. Status changes go through the status-only
-   DB function (safe for fulfillment). Price + Mark-paid are FINANCIAL and only
-   render when canSeeFinancials (owner) — fulfillment never sees the peso amount. */
+   DB function (safe for fulfillment), except an owner's "Paid", which is Mark
+   paid. Price + Mark-paid are FINANCIAL and only render when canSeeFinancials
+   (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
-import { Loader2, Check, Download, AlertTriangle, Receipt } from 'lucide-react';
+import { Loader2, Check, Download, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
 import {
-  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, printFilesOf,
+  type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, markOrderPaid, printFilesOf, quoteParts,
 } from '../../lib/adminOrders';
+import { peso } from '../../lib/eventBookings';
 import { supabase } from '../../lib/supabase';
+import {
+  downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile, orderSpine,
+} from '../../lib/pressSheetFiles';
 
-export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds }: {
+export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds, coverReadyIds = null }: {
   orders: AdminOrder[];
   onChanged: () => Promise<void>;
   canSeeFinancials: boolean;
   /** Order ids that have a "<id>.pdf" in the private print-pdfs bucket. Any
    *  order NOT in this set is missing its print file and must not be fulfilled blind. */
   printReadyIds: Set<string>;
+  /** Order ids that have their "<id>-cover.pdf"; null while unknown. */
+  coverReadyIds?: Set<string> | null;
 }) {
   if (orders.length === 0) {
     return <p className="text-sm text-light py-16 text-center">No orders yet.</p>;
   }
   return (
     <div className="space-y-3">
-      {orders.map((o) => <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReadyIds.has(printFilesOf(o))} />)}
+      <PressHowTo />
+      {orders.map((o) => {
+        const files = printFilesOf(o);
+        const printReady = printReadyIds.has(files);
+        return <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReady}
+          coverMissing={printReady && coverReadyIds !== null && !coverReadyIds.has(files) && COVER_STILL_NEEDED.includes(o.status)} />;
+      })}
     </div>
   );
 }
 
-function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
-  o: AdminOrder; onChanged: () => Promise<void>; canSeeFinancials: boolean; printReady: boolean;
+/** Until it's printed, a missing cover still matters. */
+const COVER_STILL_NEEDED: AdminOrder['status'][] = ['pending_payment', 'paid', 'in_production'];
+/** Orders froze the album's cover design from 0036 (applied 2026-10-04). */
+const COVER_SAVED_WITH_ALBUM_SINCE = '2026-10-04';
+
+/** How to print on the shop's 12.5 × 19 sheets, and the one-sheet printer check. */
+function PressHowTo() {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const testSheet = async () => {
+    setBusy(true); setErr(null);
+    try { await downloadPressTestSheet(); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not make the test sheet.'); }
+    setBusy(false);
+  };
+  return (
+    <details className="rounded-xl border border-line bg-white p-4" data-testid="press-how-to">
+      <summary className="cursor-pointer text-sm font-semibold text-dark">How to print on 12.5 × 19 sheets</summary>
+      <ol className="mt-3 space-y-1.5 text-sm text-medium list-decimal pl-5">
+        <li>Print the test sheet once first. It checks the size, the edge and the flip.</li>
+        <li><b>Print sheets</b>: print both sides, flip on the long edge, at actual size (100%). Don't use "fit to page".</li>
+        <li>Keep the printed sheets in order, sheet 1 on top, front side up, and cut the whole stack at once on the marks. On 6×4, 6×6, 6×8 and 8×6 the pages touch each other: cut exactly on the marks, and across the sheet on the short cutting lines at both sides.</li>
+        <li>Each spot on the sheet makes a pile that is already in page order. Put pile 1 (top left) on top of pile 2 (to its right), that on pile 3, and so on, left to right, top to bottom. The book is now in order.</li>
+        <li>Every piece has its number (1, 2, 3…) printed small on its front, at the spine edge, so the finished stack counts 1, 2, 3 from the top. A piece with no number showing is back side up. The number is hidden in the glue once the book is bound.</li>
+        <li>Blank sides: orders from 21 Oct 2026 start with page 1, and end with a blank side when the album has an odd number of pages. Older orders start with a blank side (it faces the inside of the front cover), and end with one when the page count is even. After <b>Print sheets</b>, the line under the order says which.</li>
+        <li><b>Cover sheet</b>: print one side only. Cut on the marks; the dashed marks are the spine edges.</li>
+        <li><b>Sheets as JPEG</b>: the same sheets and cover sheet as 300 DPI pictures in one zip, for a printer that can't open the PDF. Each picture is one side of a sheet, numbered in print order: print them in number order, both sides (01 on the front of sheet 1, 02 on its back, 03 on the front of sheet 2…), at actual size (100%).</li>
+      </ol>
+      <button onClick={testSheet} disabled={busy}
+        className="mt-3 h-9 px-4 rounded-lg bg-paper text-sm font-medium text-dark flex items-center gap-2 disabled:opacity-50">
+        {busy ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Download printer test sheet
+      </button>
+      {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
+    </details>
+  );
+}
+
+function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: {
+  o: AdminOrder; onChanged: () => Promise<void>; canSeeFinancials: boolean; printReady: boolean; coverMissing?: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [price, setPrice] = useState(o.amount != null ? String(o.amount) : '');
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  // What a long download is doing ("Making the JPEG pictures: 3 of 25…").
+  const [progress, setProgress] = useState<string | null>(null);
+
+  // The print files, as they are or laid out on the shop's 12.5 × 19 sheet
+  // (pressSheetFiles). None of them has a font.
+  const pressFile = async (make: (progress: (line: string) => void) => Promise<string>) => {
+    setSaving(true); setErr(null); setNote(null); setProgress(null);
+    try { setNote(await make(setProgress)); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not make the sheet file.'); }
+    setProgress(null);
+    setSaving(false);
+  };
 
   const run = async (fn: () => Promise<string | null>) => {
     setSaving(true); setErr(null);
@@ -41,7 +102,11 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
     setSaving(false);
   };
   const saveFin = (patch: OrderPatch) => run(() => updateOrder(o.id, patch));
-  const changeStatus = (status: AdminOrder['status']) => run(() => setOrderStatus(o.id, status));
+  const markPaid = () => run(() => markOrderPaid(o.id));
+  // An owner's "Paid" is Mark paid (memory years included). Fulfillment can't
+  // mark paid: their "Paid" stays with set_order_status, which refuses it.
+  const changeStatus = (status: AdminOrder['status']) =>
+    status === 'paid' && canSeeFinancials ? markPaid() : run(() => setOrderStatus(o.id, status));
 
   // Commit the manually-typed price. The raw input is free text, so a comma,
   // a peso sign, or a stray letter would make `Number(price)` NaN — which
@@ -54,30 +119,6 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
     const n = Number(raw);
     if (!Number.isFinite(n) || n <= 0) { setErr('Enter a valid peso amount (numbers only).'); return; }
     saveFin({ amount: n });
-  };
-
-  // Pull the print-ready PDF (operators only — RLS blocks customers). Built on
-  // the customer's device at order time and stored at "<order_id>.pdf".
-  const downloadPrintPdf = async () => {
-    setSaving(true); setErr(null);
-    const { data, error } = await supabase.storage
-      .from('print-pdfs')
-      .createSignedUrl(`${printFilesOf(o)}.pdf`, 120, { download: `megyprints-${o.order_number}.pdf` });
-    setSaving(false);
-    if (error || !data?.signedUrl) { setErr('Print file not ready for this order yet.'); return; }
-    window.open(data.signedUrl, '_blank');
-  };
-
-  // Pull the front·spine·back cover wrap ("<order_id>-cover.pdf"), a separate
-  // print file from the interior pages. Operators only (same RLS as above).
-  const downloadCoverPdf = async () => {
-    setSaving(true); setErr(null);
-    const { data, error } = await supabase.storage
-      .from('print-pdfs')
-      .createSignedUrl(`${printFilesOf(o)}-cover.pdf`, 120, { download: `megyprints-${o.order_number}-cover.pdf` });
-    setSaving(false);
-    if (error || !data?.signedUrl) { setErr('Cover file not ready for this order yet.'); return; }
-    window.open(data.signedUrl, '_blank');
   };
 
   // The customer's receipt (0033) — private bucket, operators only.
@@ -112,6 +153,12 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
                 Copy of {o.copy_of_order_number}
               </span>
             )}
+            {o.tester_code && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#FFF6E5] text-[#8A5A12]" data-testid="order-tester"
+                title="Placed with the tester code: a test order. Print it only if you want this test album made.">
+                Tester order · {o.tester_code}
+              </span>
+            )}
             {o.event_booking_number && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#E6F4EA] text-success" data-testid="order-event-album"
                 title="An event album: paid by its booking, not by transfer.">
@@ -124,18 +171,36 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
                 <AlertTriangle size={12} /> Print file missing
               </span>
             )}
+            {coverMissing && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1" data-testid="order-cover-missing"
+                title={o.created_at < COVER_SAVED_WITH_ALBUM_SINCE
+                  // my_orders_missing_cover (0051) skips orders that froze no cover design.
+                  ? "The cover file didn't arrive, and this order is from before covers were saved with the album, so the customer gets no Send the cover button. Message them about the cover."
+                  : "The cover file didn't arrive. Only the customer's phone can make it (the photos are there): ask them to open Your orders on the phone they made the album on and tap Send the cover."}>
+                <AlertTriangle size={12} /> Cover missing
+              </span>
+            )}
           </div>
           <div className="text-xs text-light mt-1">
             {o.ship_name || '—'}{o.ship_phone ? ` · ${o.ship_phone}` : ''} · {date}
           </div>
           <div className="text-xs text-light">
-            {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages{o.hosting_years ? ` · memories ${o.hosting_years} yrs` : ''}{o.hd_memories ? ' · HD' : ''}
+            {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages · <span data-testid="order-spine">{orderSpine(o)}</span>{o.hosting_years ? ` · memories ${o.hosting_years} yrs` : ''}{o.hd_memories ? ' · HD' : ''}
           </div>
           {o.ship_address && <div className="text-xs text-[#B9B9B9] mt-0.5 max-w-md">{o.ship_address}</div>}
           {(o.payment_reference || o.payment_submitted_at) && (
             <div className="text-xs text-medium mt-1">
               Transfer{o.payment_reference ? <> ref <span className="font-mono text-dark">{o.payment_reference}</span></> : ' sent'}
               {o.payment_submitted_at ? ` · ${o.payment_submitted_at.slice(0, 16).replace('T', ' ')}` : ''}
+            </div>
+          )}
+          {/* What the Pay screen asked for (0055), to match the GoTyme deposit
+              against. An event album is paid by its booking instead. */}
+          {canSeeFinancials && o.quoted_amount != null && !o.event_booking_number && (
+            <div className="text-xs text-medium mt-1" data-testid="order-quoted">
+              Asked to pay <span className="font-semibold text-dark">{peso(o.quoted_amount)}</span>
+              {o.quote?.tester ? <> with tester code {o.quote.tester.code} · real price {peso(o.quote.total)}: {quoteParts(o.quote)}</>
+                : o.quote ? <> · {quoteParts(o.quote)}</> : null}
             </div>
           )}
         </div>
@@ -151,7 +216,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
                   className="h-8 px-2 rounded-lg bg-paper text-xs text-medium disabled:opacity-50">Set</button>
               </div>
               {!paid && (
-                <button onClick={() => saveFin({ payment_status: 'paid', status: 'paid' })} disabled={saving}
+                <button onClick={markPaid} disabled={saving}
                   className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
                   <Check size={13} /> Mark paid
                 </button>
@@ -165,13 +230,34 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
             </button>
           )}
           {paid && (
-            <button onClick={downloadPrintPdf} disabled={saving}
+            <button onClick={() => pressFile(() => downloadAlbumSheets(o))} disabled={saving} data-testid="order-print-sheets"
+              title="The album pages laid out on 12.5 × 19 sheets, both sides, with cut marks."
+              className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
+              <Printer size={13} /> Print sheets
+            </button>
+          )}
+          {paid && (
+            <button onClick={() => pressFile(() => downloadCoverSheet(o))} disabled={saving} data-testid="order-cover-sheet"
+              title="The cover on one 12.5 × 19 sheet, with cut and spine marks."
+              className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
+              <Printer size={13} /> Cover sheet
+            </button>
+          )}
+          {paid && (
+            <button onClick={() => pressFile((p) => downloadSheetsAsJpeg(o, p))} disabled={saving} data-testid="order-sheets-jpeg"
+              title="Every sheet side and the cover sheet as 300 DPI JPEG pictures, in one zip, for a printer that can't open the PDF."
+              className="h-8 px-3 rounded-lg bg-[#E6F4EA] text-xs font-medium text-success flex items-center gap-1 disabled:opacity-50">
+              <FileImage size={13} /> Sheets as JPEG
+            </button>
+          )}
+          {paid && (
+            <button onClick={() => pressFile(() => downloadPrintFile(o))} disabled={saving} data-testid="order-print-pdf"
               className="h-8 px-3 rounded-lg bg-blush text-xs font-medium text-[#C98A5E] flex items-center gap-1 disabled:opacity-50">
               <Download size={13} /> Print PDF
             </button>
           )}
           {paid && (
-            <button onClick={downloadCoverPdf} disabled={saving}
+            <button onClick={() => pressFile(() => downloadCoverFile(o))} disabled={saving} data-testid="order-cover-pdf"
               className="h-8 px-3 rounded-lg bg-[#F1ECFF] text-xs font-medium text-[#7A5EC9] flex items-center gap-1 disabled:opacity-50">
               <Download size={13} /> Cover PDF
             </button>
@@ -184,6 +270,8 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady }: {
         </div>
       </div>
       {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
+      {progress && saving && <p className="text-xs text-medium mt-2 flex items-center gap-1.5" data-testid="order-press-progress"><Loader2 size={12} className="animate-spin" /> {progress}</p>}
+      {note && !err && <p className="text-xs text-success mt-2" data-testid="order-press-note">✓ {note}</p>}
     </div>
   );
 }

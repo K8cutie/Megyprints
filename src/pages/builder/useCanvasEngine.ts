@@ -13,7 +13,7 @@ import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPath
 import { applyLookPixels, isLookId, type LookId } from './looks';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { WORDART_SHADOW, FABRIC_LINE_HEIGHT, CAPTION_PAD_X, resolveTextSlotAlign } from './wordArt';
+import { wordArtShadow, FABRIC_LINE_HEIGHT, CAPTION_PAD_X, resolveTextSlotAlign, type WordArtStyle } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import type { QrFill, OrnamentFill } from './types';
 import { clampQrGeom, dealtBoxRoll } from './types';
@@ -75,6 +75,27 @@ let currentRenderId = 0;
 export function nextRenderId(): number {
   currentRenderId += 1;
   return currentRenderId;
+}
+
+/** Size the canvas ON SCREEN (CSS only), then draw it again.
+ *
+ *  Fabric 5.3's setDimensions re-applies its retina scaling even with
+ *  cssOnly. On a screen set above 100% (devicePixelRatio > 1: most Windows
+ *  laptops run at 125% or 150%) that re-sets the canvas's width and height,
+ *  which wipes everything drawn on it, and cssOnly skips the repaint. Every
+ *  zoom, window resize or panel change left the page blank — photos and all —
+ *  until a page turn drew it again (owner, 2026-10-21: "photos sometimes dont
+ *  appear on a page or disappears", "i zoomed out the rendered album
+ *  disappears"). */
+export function setCanvasCssSize(
+  c: { setDimensions(size: { width: string; height: string }, options: { cssOnly: boolean }): unknown; renderAll(): unknown },
+  width: number,
+  height: number,
+): void {
+  // fabric 5.x setDimensions(cssOnly) does NOT append units, so the CSS
+  // values MUST be passed as 'px' strings or the browser ignores them.
+  c.setDimensions({ width: width + 'px', height: height + 'px' }, { cssOnly: true });
+  c.renderAll();
 }
 
 /* ── Snap helpers ──────────────────────────────────────────────────────── */
@@ -196,7 +217,7 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   const textData = page.textElements.map((t) =>
     `${t.id}:${t.text.slice(0,20)}:${t.fontSize}:${Math.round(t.x)}:${Math.round(t.y)}:${t.rotation}` +
     `:${t.fontFamily ?? ''}:${t.color ?? ''}:${t.bold ? 1 : 0}:${t.italic ? 1 : 0}:${t.underline ? 1 : 0}:${t.alignment ?? ''}:${t.opacity ?? 100}:${t.backgroundColor ?? ''}` +
-    `:${t.width ?? ''}:${t.scaleX ?? ''}:${t.scaleY ?? ''}:${t.outlineColor ?? ''}:${t.outlineWidth ?? ''}:${t.shadow ? 1 : 0}`
+    `:${t.width ?? ''}:${t.scaleX ?? ''}:${t.scaleY ?? ''}:${t.outlineColor ?? ''}:${t.outlineWidth ?? ''}:${t.shadow === undefined ? '' : t.shadow ? 1 : 0}`
   ).join('|');
   const slotGeoms = page.slotGeometries ? page.slotGeometries.map((g) => `${g?.x ?? ''}:${g?.y ?? ''}:${g?.width ?? ''}:${g?.height ?? ''}`).join('|') : '';
   // Per-slot photo TRANSFORMS (zoom + pan) — PropertiesPanel writes slotScales/
@@ -212,7 +233,7 @@ function pageFingerprint(pageIndex: number, page: AlbumPage): string {
   // and the editor desynced from PageView/print until a page-nav.
   const slotTextData = page.slotTexts
     ? page.slotTexts.map((s) => s
-        ? `${s.text.slice(0,20)}:${s.fontSize}:${s.fontFamily ?? ''}:${s.color ?? ''}:${s.bold ? 1 : 0}:${s.italic ? 1 : 0}:${s.underline ? 1 : 0}:${s.alignment ?? ''}:${s.outlineColor ?? ''}:${s.outlineWidth ?? ''}:${s.shadow ? 1 : 0}`
+        ? `${s.text.slice(0,20)}:${s.fontSize}:${s.fontFamily ?? ''}:${s.color ?? ''}:${s.bold ? 1 : 0}:${s.italic ? 1 : 0}:${s.underline ? 1 : 0}:${s.alignment ?? ''}:${s.outlineColor ?? ''}:${s.outlineWidth ?? ''}:${s.shadow === undefined ? '' : s.shadow ? 1 : 0}`
         : '').join('|')
     : '';
   // Caption-box photo/QR content (page.textSlotFills / textSlotQr) — so placing
@@ -696,12 +717,7 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     if (availW <= 0) return;
     const baseFit = Math.max(0.2, Math.min(1, availW / CANVAS_W));
     const scale = baseFit * zoomRef.current;
-    // NOTE: fabric 5.x setDimensions(cssOnly) does NOT append units, so the CSS
-    // values MUST be passed as 'px' strings or the browser ignores them.
-    c.setDimensions(
-      { width: Math.round(CANVAS_W * scale) + 'px', height: Math.round(CANVAS_H * scale) + 'px' },
-      { cssOnly: true },
-    );
+    setCanvasCssSize(c, Math.round(CANVAS_W * scale), Math.round(CANVAS_H * scale));
   }, [CANVAS_W, CANVAS_H]);
 
   /* ═══════ Resize canvas when album size changes ═══════ */
@@ -1274,7 +1290,7 @@ export function renderTemplateSlots(
         stroke: st.outlineWidth && st.outlineColor ? st.outlineColor : undefined,
         strokeWidth: st.outlineWidth && st.outlineColor ? st.outlineWidth : 0,
         paintFirst: 'stroke',
-        shadow: st.shadow ? new fab.Shadow({ color: WORDART_SHADOW.color, blur: WORDART_SHADOW.blur, offsetX: WORDART_SHADOW.offsetX, offsetY: WORDART_SHADOW.offsetY }) : undefined,
+        shadow: fabricShadow(fab, st, coverMode),
         selectable: false,
         evented: true,
         editable: false,
@@ -1743,6 +1759,14 @@ export function renderTemplateSlots(
  *  Scene Renderer
  *  ══════════════════════════════════════════════════════════════════════════ */
 
+/** The canvas shadow for a text: the cover's floating shadow or the small
+ *  caption shadow (wordArtShadow, the one rule all three renderers share), in
+ *  design px like the text's fontSize. */
+function fabricShadow(fab: any, s: WordArtStyle, coverMode: boolean) {
+  const sh = wordArtShadow(s, coverMode);
+  return sh ? new fab.Shadow({ color: sh.color, blur: sh.blur, offsetX: sh.offsetX, offsetY: sh.offsetY }) : undefined;
+}
+
 function renderScene(
   fab: any,
   canvas: FabricCanvas,
@@ -2066,7 +2090,7 @@ function renderScene(
       stroke: text.outlineWidth && text.outlineColor ? text.outlineColor : undefined,
       strokeWidth: text.outlineWidth && text.outlineColor ? text.outlineWidth : 0,
       paintFirst: 'stroke',
-      shadow: text.shadow ? new fab.Shadow({ color: WORDART_SHADOW.color, blur: WORDART_SHADOW.blur, offsetX: WORDART_SHADOW.offsetX, offsetY: WORDART_SHADOW.offsetY }) : undefined,
+      shadow: fabricShadow(fab, text, coverMode),
       angle: text.rotation,
       opacity: text.opacity / 100,
       /* Free text (a title/quote) stays fully movable + inline-editable. A caption
@@ -2159,9 +2183,11 @@ function renderScene(
     // (Read through dealtBoxRoll: a box an older album dealt the retired 'qr'
     // is an ordinary undealt box now.)
     const roll = dealtBoxRoll(page, i);
+    // An empty quote box invites a line written from the page's photos (owner,
+    // 2026-10-21: bank quotes are no longer dealt into boxes).
     const labelText =
       roll === 'text' ? 'Your words here' :
-      roll === 'quote' ? 'Add a quote' : 'Tap to add';
+      roll === 'quote' ? 'Let AI write a quote' : 'Tap to add';
     // WRAP, don't clip. A single-line fab.Text sized by an estimated glyph
     // width still clipped the longer labels on tall-narrow bands; a Textbox
     // wraps within its width instead. Font is capped so the longest WORD fits
@@ -2240,7 +2266,7 @@ function renderScene(
     canvas.sendToBack(rightLabel);
   }
 
-  // ── Binding (gutter) keep-out guide — the 0.5" spine reserve on the inner edge ──
+  // ── Binding (gutter) keep-out guide — the 3/8" spine reserve (BINDING_INCHES) on the inner edge ──
   // Skipped on cover panels (no interior gutter).
   if (!coverMode) {
     const bFrac = bindingMarginFraction(albumSize);

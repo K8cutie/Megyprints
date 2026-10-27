@@ -76,6 +76,12 @@ While the 14 days run, finish Steps 3–5 (all doable immediately).
     customer places an order; then the finished album **PDF is uploaded** to a
     private bucket for printing. Declare: *Photos and videos → collected,
     optional at order time, for app functionality, not shared, not sold.*
+    Since 2026-10-21 ("Write a line for this photo", api/photo-quotes.mjs):
+    when a signed-in customer taps it, small 512 px copies of that page's
+    photos go through our server to Anthropic (Claude) to write caption lines;
+    we don't store them. Declare it as collected, optional (user-initiated),
+    for app functionality, processed ephemerally; Anthropic is a service
+    provider (not "shared" in Play's sense).
   - **Personal info (name, address, phone):** collected at checkout for
     delivery, app functionality, not shared beyond fulfillment.
   - **Crash logs / diagnostics:** YES — Sentry is wired (`@sentry/react`).

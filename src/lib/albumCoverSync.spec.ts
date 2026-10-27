@@ -99,8 +99,8 @@ describe('cover round trip — save → albums row → load → builder', () => 
   });
 
   it('the restored cover takes the album size, and a cover with no id gets one', () => {
-    const restored = storedCoverPage({ ...cover, id: undefined, size: '6x6' }, '9x9');
-    expect(restored?.size).toBe('9x9');
+    const restored = storedCoverPage({ ...cover, id: undefined, size: '6x6' }, '8x6');
+    expect(restored?.size).toBe('8x6');
     expect(restored?.id).toMatch(/^cover-front-/);
   });
 

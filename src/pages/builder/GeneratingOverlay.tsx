@@ -40,7 +40,7 @@ export default function GeneratingOverlay() {
         <div>
           <p className="text-lg font-semibold text-dark">Making your album</p>
           <p className="mt-1 text-sm text-light" data-testid="generating-stage">
-            {heicWait ? `Getting your iPhone photos ready: ${heicWait.done} of ${heicWait.total}` : GENERATING_COPY[generating]}
+            {heicWait ? `Getting your photos ready: ${heicWait.done} of ${heicWait.total}` : GENERATING_COPY[generating]}
           </p>
           {heicWait && (
             <div className="mx-auto mt-2 h-1.5 w-48 overflow-hidden rounded-full bg-blush" aria-hidden="true">

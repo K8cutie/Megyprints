@@ -31,7 +31,7 @@ vi.mock('../lib/memoryClips', () => ({
   removeStagedClip: async () => {}, currentClipQuality: () => 'standard',
 }));
 vi.mock('../lib/storeSettings', () => {
-  const sizes = Object.fromEntries(['6x6', '8x8', '9x9', '6x4', '8x6', '6x8', '8.5x11', '11.5x8'].map((s) => [s, { pps: 2, soft_rate: 1200, hard_rate: 2100 }]));
+  const sizes = Object.fromEntries(['6x6', '8x8', '6x4', '8x6', '6x8', '8.5x11', '11.5x8'].map((s) => [s, { pps: 2, soft_rate: 1200, hard_rate: 2100 }]));
   const schedule = { min_pages: 40, sheet_rate: 24, hosting_reserve: 0, hosting_tiers: [], disabled_sizes: [], sizes };
   return {
     getPriceSchedule: () => schedule, isStoreSettingsReady: () => true, storeSettingsReady: () => Promise.resolve(),
@@ -45,7 +45,7 @@ import { noteOrderHandoff } from '../lib/printQueue';
 import { EMPTY_ADDRESS } from '../lib/contact';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const page = (i: number) => ({ id: `p${i}`, layout: 'single', size: '9x9', templateId: 't99-solo', slotFills: [i], photos: [], textElements: [], background: { type: 'solid', solid: '#fff' } });
+const page = (i: number) => ({ id: `p${i}`, layout: 'single', size: '8x8', templateId: 't88-solo-square', slotFills: [i], photos: [], textElements: [], background: { type: 'solid', solid: '#fff' } });
 const photos = Array.from({ length: 41 }, (_, i) => ({ id: `ph${i}`, name: `${i}.jpg`, previewUrl: '', type: 'image/jpeg', size: 1, width: 1200, height: 1200 }));
 
 let host: HTMLDivElement;
@@ -55,7 +55,7 @@ beforeEach(() => {
   window.scrollTo = (() => {}) as typeof window.scrollTo;
   h.auth = { user: null, loading: true };
   h.rebuilt = [];
-  h.job = { albumId: 'album-1', albumSize: '9x9', pages: Array.from({ length: 41 }, (_, i) => page(i)), photos, coverFront: { ...page(99), id: 'cover' } };
+  h.job = { albumId: 'album-1', albumSize: '8x8', pages: Array.from({ length: 41 }, (_, i) => page(i)), photos, coverFront: { ...page(99), id: 'cover' } };
   // What the Quitter had picked and typed before reloading, saved by checkout.
   noteOrderHandoff({ albumId: 'album-1', saved: true });
   saveCheckoutForm({ albumId: 'album-1', name: 'Quinn Quitter', phone: '0917 555 0133', address: EMPTY_ADDRESS, material: 'glossy', cover: 'hardboundLeather', userId: 'user-1' });
@@ -98,11 +98,11 @@ describe('a reload at checkout, signed in (the session reads back a moment later
 describe('a guest (no session at all) is not held up', () => {
   it('checkout goes on with the device draft', async () => {
     sessionStorage.clear();
-    localStorage.setItem('megy-album-v5', JSON.stringify({ albumId: 'album-1', albumSize: '9x9', editedAt: 1, albumPages: Array.from({ length: 41 }, (_, i) => page(i)), uploadedPhotos: [] }));
+    localStorage.setItem('megy-album-v5', JSON.stringify({ albumId: 'album-1', albumSize: '8x8', editedAt: 1, albumPages: Array.from({ length: 41 }, (_, i) => page(i)), uploadedPhotos: [] }));
     h.auth = { user: null, loading: false };
     await render();
     await settle();
     expect(h.rebuilt).toEqual([]);
-    expect(host.querySelector('[data-testid="order-album-size"]')?.textContent).toMatch(/9×9/);
+    expect(host.querySelector('[data-testid="order-album-size"]')?.textContent).toMatch(/8×8/);
   });
 });

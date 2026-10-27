@@ -9,12 +9,14 @@ const ctx = (albumSize: string, pageIndex: number, coverMode = false) => ({ albu
 
 describe('clampStickerGeom', () => {
   it('a sticker pushed into the spine snaps back and says spine; the spine side follows the page side', () => {
-    const even = clampStickerGeom({ cx: 0.98, cy: 0.5, w: 0.2, h: 0.2, rot: 0 }, ctx('8x8', 0));
-    expect(even.reasons[0]).toBe('spine');
-    expect(even.geom.cx + even.geom.w / 2).toBeLessThanOrEqual(1);
-    const odd = clampStickerGeom({ cx: 0.02, cy: 0.5, w: 0.2, h: 0.2, rot: 0 }, ctx('8x8', 1));
-    expect(odd.reasons[0]).toBe('spine');
-    expect(clampStickerGeom({ cx: 0.02, cy: 0.5, w: 0.2, h: 0.2, rot: 0 }, ctx('8x8', 0)).reasons).toEqual(['edge']);
+    // page 2 (a left-hand page): the spine is its right edge
+    const left = clampStickerGeom({ cx: 0.98, cy: 0.5, w: 0.2, h: 0.2, rot: 0 }, ctx('8x8', 1));
+    expect(left.reasons[0]).toBe('spine');
+    expect(left.geom.cx + left.geom.w / 2).toBeLessThanOrEqual(1);
+    // page 1 (a right-hand page): the spine is its left edge
+    const right = clampStickerGeom({ cx: 0.02, cy: 0.5, w: 0.2, h: 0.2, rot: 0 }, ctx('8x8', 0));
+    expect(right.reasons[0]).toBe('spine');
+    expect(clampStickerGeom({ cx: 0.02, cy: 0.5, w: 0.2, h: 0.2, rot: 0 }, ctx('8x8', 1)).reasons).toEqual(['edge']);
   });
   it('holds the half-inch floor and keeps the aspect', () => {
     const r = clampStickerGeom({ cx: 0.5, cy: 0.5, w: 0.01, h: 0.02, rot: 0 }, ctx('8x8', 0));

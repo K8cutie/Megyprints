@@ -14,10 +14,10 @@ import { BINDING_INCHES } from './binding';
    ══════════════════════════════════════════════════════════════════════════ */
 
 describe('the settled measures', () => {
-  it('bleed 0.125" (3 mm), hardcover turn-in 0.625" (16 mm), the 0.5" spine keep-out untouched', () => {
+  it('bleed 0.125" (3 mm), hardcover turn-in 0.625" (16 mm), the 3/8" spine keep-out untouched', () => {
     expect(PRINTER_SPEC.bleedIn).toBe(0.125);
     expect(PRINTER_SPEC.wrapTurnIn).toBe(0.625);
-    expect(BINDING_INCHES).toBe(0.5);
+    expect(BINDING_INCHES).toBe(0.375);
   });
   it('an 8×8 page file is 8.25 × 8.25 in; every size gets 0.125" on every edge', () => {
     expect(pageSizeWithBleedIn(8, 8)).toEqual({ wIn: 8.25, hIn: 8.25 });
@@ -73,7 +73,11 @@ describe('it is what prints (source guards)', () => {
   const pipeline = readFileSync(resolve(__dirname, 'printPipeline.ts'), 'utf8');
   const pdf = readFileSync(resolve(__dirname, 'generateAlbumPdf.ts'), 'utf8');
   it('every interior page goes out with its bleed; a cover panel does not (the wrap handles it)', () => {
-    expect(pipeline).toMatch(/const page300: HTMLCanvasElement = coverMode \? canvas : withBleed\(canvas, bleedPx\(PRINT_DPI\)\);/);
+    expect(pipeline).toMatch(/const page300: HTMLCanvasElement = withBleed\(canvas, bleed\);/);
+    // …and its words sit where the page is, past the same bleed.
+    expect(pipeline).toMatch(/x: \(p\.x \+ bleed\) \/ PW, y: \(p\.y \+ bleed\) \/ PH/);
+    // The cover panel is drawn by the page renderer straight into the wrap: no bleed of its own.
+    expect(pipeline).toMatch(/const frontPage = await renderPageLayers\(coverFront, photos, albumSize, 0, true\);/);
   });
   it('the PDF pages are the trim plus the bleed', () => {
     expect(pdf).toMatch(/const \{ wIn, hIn \} = pageSizeWithBleedIn\(/);

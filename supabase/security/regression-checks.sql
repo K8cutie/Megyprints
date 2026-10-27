@@ -244,5 +244,123 @@ begin
   raise notice 'PASS: the guest camera is limited, its files private or unlistable, and a booking pays for one album';
 end $$;
 
+-- ── GUARD: covers the press can't print stay refused (0046) ─────────────────
+-- The shop's 12.5 × 19 in sheet can't hold an 8.5x11 hardbound cover
+-- (≈19.2 in) or any 11.5x8 one; a direct REST insert must not get past
+-- checkout's check. The pages-per-sheet must stay what the press fits (0046,
+-- then pages touching: 0050 for 6x6, 0052 for 6x4 / 6x8 / 8x6).
+do $$
+declare s jsonb;
+begin
+  if not exists (select 1 from pg_trigger where tgname = 'orders_press_fit_trg' and tgrelid = 'public.orders'::regclass and tgenabled <> 'D')
+     or not exists (select 1 from pg_trigger where tgname = 'event_bookings_press_fit_trg' and tgrelid = 'public.event_bookings'::regclass and tgenabled <> 'D')
+     or not public.press_cover_never_fits('8.5x11', 'hard')
+     or not public.press_cover_never_fits(' 8.5X11"', 'hard') then
+    raise exception 'REGRESSION (press sheet): an 8.5x11 hardbound order or deal is no longer refused';
+  end if;
+  select sizes into s from public.pricing_model where id = 1;
+  if (s->'6x6'->>'pps')::int <> 12 or (s->'6x4'->>'pps')::int <> 18 or (s->'8x6'->>'pps')::int <> 8 or (s->'6x8'->>'pps')::int <> 8 then
+    raise exception 'REGRESSION (press sheet): pages per sheet no longer match the press (printSheet.ts): %', s;
+  end if;
+  raise notice 'PASS: covers the press can''t print are refused, and pages per sheet match the press';
+end $$;
+
+-- ── GUARD 9: photo-quote limits are server-only (0049) ──────────────────────
+-- "Write a line for this photo" spends money per tap; its daily limits are the
+-- bill's ceiling. Only the server (service_role) may take a tap, and nobody
+-- else may read or change the counts (red team 2026-10-21).
+do $$
+begin
+  if to_regprocedure('public.take_photo_quote(uuid, text, integer, integer, integer)') is null then
+    raise exception 'REGRESSION (photo quotes): take_photo_quote() is missing: 0049 was never applied here';
+  end if;
+  if has_function_privilege('anon', 'public.take_photo_quote(uuid, text, integer, integer, integer)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.take_photo_quote(uuid, text, integer, integer, integer)', 'EXECUTE') then
+    raise exception 'REGRESSION (photo quotes): a customer or anon can take photo-quote taps directly';
+  end if;
+  if has_table_privilege('anon', 'public.photo_quote_usage', 'SELECT')
+     or has_table_privilege('authenticated', 'public.photo_quote_usage', 'SELECT')
+     or has_table_privilege('authenticated', 'public.photo_quote_usage', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.photo_quote_ip_usage', 'SELECT')
+     or has_table_privilege('authenticated', 'public.photo_quote_ip_usage', 'UPDATE') then
+    raise exception 'REGRESSION (photo quotes): customers can read or change the photo-quote counts';
+  end if;
+  raise notice 'PASS: photo-quote limits are taken only by the server, and the counts are private';
+end $$;
+
+-- ── GUARD 10: 9x9 stays gone (0053) ─────────────────────────────────────────
+-- The owner removed the 9x9 album (2026-10-24). albums.album_size is free text
+-- a customer can PATCH, so a 9x9 order must be refused by the database, not
+-- just hidden by the app — and nothing may price one.
+do $$
+begin
+  if to_regprocedure('public.retired_album_size(text)') is null then
+    raise exception 'REGRESSION (9x9): retired_album_size() is missing: 0053 was never applied here';
+  end if;
+  if not exists (select 1 from pg_trigger where tgname = 'orders_size_retired_trg' and tgrelid = 'public.orders'::regclass and tgenabled <> 'D')
+     or not public.retired_album_size('9x9')
+     or not public.retired_album_size(' 9X9"')
+     or public.retired_album_size('8x8') then
+    raise exception 'REGRESSION (9x9): a 9x9 order is no longer refused';
+  end if;
+  if exists (select 1 from public.pricing_model where id = 1 and sizes -> '9x9' is not null) then
+    raise exception 'REGRESSION (9x9): the price list has a 9x9 row again';
+  end if;
+  if (select pg_get_constraintdef(oid) from pg_constraint where conname = 'event_bookings_size_chk' and conrelid = 'public.event_bookings'::regclass) like '%9x9%' then
+    raise exception 'REGRESSION (9x9): an event deal can be quoted at 9x9 again';
+  end if;
+  raise notice 'PASS: 9x9 is gone — no price, no new order, no event deal';
+end $$;
+
+-- ── GUARD 11: one account per Gmail (0054) ─────────────────────────────────
+-- The "Before User Created" hook refuses a second account for the same Gmail
+-- (dots moved, googlemail.com). Only the auth server may run it, and a "+tag"
+-- stays its own account (the owner's test accounts).
+do $$
+begin
+  if to_regprocedure('public.hook_one_account_per_gmail(jsonb)') is null then
+    raise exception 'REGRESSION (one account): hook_one_account_per_gmail() is missing: 0054 was never applied here';
+  end if;
+  if has_function_privilege('anon', 'public.hook_one_account_per_gmail(jsonb)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.hook_one_account_per_gmail(jsonb)', 'EXECUTE')
+     or not has_function_privilege('supabase_auth_admin', 'public.hook_one_account_per_gmail(jsonb)', 'EXECUTE') then
+    raise exception 'REGRESSION (one account): the hook can be run by customers, or not by the auth server';
+  end if;
+  if public.gmail_inbox('Marian.Reyes@GoogleMail.com') is distinct from 'marianreyes@gmail.com'
+     or public.gmail_inbox('a.b+test@gmail.com') is distinct from 'ab+test@gmail.com'
+     or public.gmail_inbox('jo.ann@yahoo.com') is not null then
+    raise exception 'REGRESSION (one account): gmail_inbox() no longer matches one Gmail inbox';
+  end if;
+  raise notice 'PASS: a Gmail can have only one account, and only the auth server runs the check';
+end $$;
+
+-- ── GUARD 12: the tester code gives nothing away (0057) ────────────────────
+-- A code that makes an album free (owner, testing phase). Only signed-in
+-- customers may check it, the tries and the code stay private, and only the
+-- database may put it on an order or mark an order paid with it.
+do $$
+begin
+  if to_regprocedure('public.check_tester_code(text)') is null
+     or to_regprocedure('public.claim_tester_order(uuid)') is null then
+    raise exception 'REGRESSION (tester code): check_tester_code/claim_tester_order missing: 0057 was never applied here';
+  end if;
+  if has_function_privilege('anon', 'public.check_tester_code(text)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.claim_tester_order(uuid)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.orders_tester_code()', 'EXECUTE') then
+    raise exception 'REGRESSION (tester code): signed-out visitors can check or claim, or customers can run the order trigger';
+  end if;
+  if has_table_privilege('authenticated', 'public.tester_code_tries', 'SELECT')
+     or has_table_privilege('anon', 'public.tester_code_tries', 'SELECT') then
+    raise exception 'REGRESSION (tester code): customers can read the code tries';
+  end if;
+  if not exists (select 1 from pg_trigger where tgname = 'orders_tester_code_trg' and tgrelid = 'public.orders'::regclass and tgenabled <> 'D') then
+    raise exception 'REGRESSION (tester code): orders_tester_code_trg is gone: any code on an order would be kept as sent';
+  end if;
+  if exists (select 1 from public.store_settings where id = 1 and tester_code !~ '^[A-Z0-9]{4,24}$') then
+    raise exception 'REGRESSION (tester code): the code is malformed';
+  end if;
+  raise notice 'PASS: the tester code is checked by signed-in customers only, kept private, and only the database applies it';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;

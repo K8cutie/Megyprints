@@ -12,7 +12,8 @@ import {
   balanceOf, costToMake, dealProblem, eventTypeLabel, moneyToSettle, peso, type DealDraft, type EventBooking, type PaymentKind,
 } from '../../lib/eventBookings';
 import { closeBooking, fetchOwnerBookings, markBookingPaid, receiptUrl, setBookingDeal, settleBookingMoney } from '../../lib/adminBookings';
-import { ALBUM_SIZES } from '../builder/types';
+import { ALBUM_SIZES, type CoverType } from '../builder/types';
+import { coverFitsSheet, coverChoiceNote } from '../builder/printSheet';
 
 /** A database time as the owner reads it: Manila, not UTC (a deposit sent
  *  at 7 AM on the 10th showed as 23:01 on the 9th). */
@@ -232,10 +233,19 @@ function DealEditor({ b, model, saving, onSend }: {
   );
   const extra = Number.isFinite(draft.deposit) ? draft.deposit - cost.total : NaN;
   const problem = tried ? dealProblem(draft, cost, model.min_pages) : null;
+  // The press (builder/printSheet): only the covers that fit the 12.5 × 19
+  // sheet — no 8.5×11 or 11.5×8 hardbound. 0046 refuses the rest.
+  const pagesN = Number(pages) || model.min_pages;
+  const coverType = (c: DealDraft['cover']): CoverType => (c === 'soft' ? 'softcover' : 'hardboundLeather');
+  const coverOptions = (['hard', 'soft'] as const).filter((c) => coverFitsSheet(size, coverType(c), pagesN));
+  const coverNote = coverChoiceNote(size, pagesN, coverOptions.map(coverType));
+  useEffect(() => {
+    if (coverOptions.length && !coverOptions.includes(cover)) setCover(coverOptions[0]);
+  }, [size, pagesN]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = async () => {
     setTried(true);
-    if (dealProblem(draft, cost, model.min_pages)) return;
+    if (dealProblem(draft, cost, model.min_pages) || !coverOptions.includes(cover)) return;
     await onSend(draft, cost);
   };
 
@@ -250,8 +260,8 @@ function DealEditor({ b, model, saving, onSend }: {
           </select>
         </label>
         <select value={cover} onChange={(e) => setCover(e.target.value as DealDraft['cover'])} className={input} data-testid="deal-cover" aria-label="Cover">
-          <option value="hard">Hardbound</option>
-          <option value="soft">Softcover</option>
+          {coverOptions.includes('hard') && <option value="hard">Hardbound</option>}
+          {coverOptions.includes('soft') && <option value="soft">Softcover</option>}
         </select>
         <label className="flex items-center gap-1">Pages
           <input value={pages} onChange={(e) => setPages(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className={`${input} w-16`} data-testid="deal-pages" />
@@ -260,6 +270,7 @@ function DealEditor({ b, model, saving, onSend }: {
           <input value={other} onChange={(e) => setOther(e.target.value)} inputMode="decimal" placeholder="table cards, travel…" className={`${input} w-36`} data-testid="deal-other" />
         </label>
       </div>
+      {coverNote && <p className="text-xs text-medium" data-testid="deal-cover-note">{coverNote}</p>}
       <p className="text-xs text-medium" data-testid="deal-cost">
         Cost to make: <b className="text-dark">{peso(cost.total)}</b> (album {peso(cost.album)} + photo storage {peso(cost.storage)}{cost.other ? ` + other ${peso(cost.other)}` : ''})
       </p>

@@ -150,20 +150,20 @@ describe('slotPhotoRect — cover, zoom, pan', () => {
 /* ── The slot box the pan is measured against ─────────────────────────────── */
 
 describe('slotDesignSize — template fractions × the design canvas safe area', () => {
-  it('a margined page: 4% margins + the 0.5" binding keep-out on the spine edge', () => {
-    // 8×8 canvas 750 × 750: safe width 750 × (1 − 0.04 − 0.04 − 0.0625), height 750 × 0.92.
+  it('a margined page: 4% margins + the 3/8" binding keep-out on the spine edge', () => {
+    // 8×8 canvas 750 × 750: safe width 750 × (1 − 0.04 − 0.04 − 0.046875), height 750 × 0.92.
     const s = slotDesignSize({ templateId: 't88-solo-square' }, 0, '8x8', 0);
-    expect(s?.w).toBeCloseTo(643.125, 9);
+    expect(s?.w).toBeCloseTo(654.84375, 9);
     expect(s?.h).toBeCloseTo(690, 9);
     // the binding moves sides page to page; the box stays the same size
     const odd = slotDesignSize({ templateId: 't88-solo-square' }, 0, '8x8', 1);
-    expect(odd?.w).toBeCloseTo(643.125, 9);
+    expect(odd?.w).toBeCloseTo(654.84375, 9);
     expect(odd?.h).toBeCloseTo(690, 9);
   });
 
   it('a full-bleed page keeps only the spine keep-out', () => {
     const s = slotDesignSize({ templateId: 't88-fb-solo' }, 0, '8x8', 1);
-    expect(s?.w).toBeCloseTo(703.125, 9);
+    expect(s?.w).toBeCloseTo(714.84375, 9);
     expect(s?.h).toBeCloseTo(750, 9);
   });
 
@@ -175,7 +175,7 @@ describe('slotDesignSize — template fractions × the design canvas safe area',
 
   it('a frame the customer moved or resized in Studio uses its own box', () => {
     const s = slotDesignSize({ templateId: 't88-solo-square', slotGeometries: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.4 }] }, 0, '8x8', 0);
-    expect(s?.w).toBeCloseTo(643.125 * 0.5, 9);
+    expect(s?.w).toBeCloseTo(654.84375 * 0.5, 9);
     expect(s?.h).toBeCloseTo(690 * 0.4, 9);
   });
 

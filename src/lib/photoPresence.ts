@@ -11,6 +11,16 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumPage, UploadedPhoto } from '../pages/builder/types';
+import { coverLocalPhotoId } from '../pages/builder/coverPhoto';
+
+/** The album photo the front cover uses as its whole background
+ *  (background.photoId), as an index into `photos`, or -1. A cover's own
+ *  uploaded photo (localPhotoId) is not one of the album's photos. */
+export function coverBackgroundIndex(coverFront: AlbumPage | null | undefined, photos: { id?: string }[]): number {
+  const bg = coverFront?.background;
+  if (!bg || bg.type !== 'image' || !bg.photoId || coverLocalPhotoId(coverFront)) return -1;
+  return photos.findIndex((p) => p?.id === bg.photoId);
+}
 
 /** Indexes of the photos an album prints: photo frames and caption-box photos
  *  on every page, and the front cover's photo frames. */
@@ -36,14 +46,19 @@ export interface MissingPhotos {
   names: string[];
 }
 
-export function missingPhotos(pages: AlbumPage[], photos: Pick<UploadedPhoto, 'previewUrl' | 'name'>[], coverFront?: AlbumPage | null): MissingPhotos {
+export function missingPhotos(pages: AlbumPage[], photos: (Pick<UploadedPhoto, 'previewUrl' | 'name'> & { id?: string })[], coverFront?: AlbumPage | null): MissingPhotos {
   const gone = (i: number) => !photoIsHere(photos[i]);
-  const missing = [...usedPhotoIndexes(pages, coverFront)].filter(gone);
+  // A cover whose background is an album photo prints it across the whole
+  // front: without it the cover came out plain (MP-2026-KGCFSQN's shape).
+  const bgIdx = coverBackgroundIndex(coverFront, photos);
+  const used = usedPhotoIndexes(pages, coverFront);
+  if (bgIdx >= 0) used.add(bgIdx);
+  const missing = [...used].filter(gone);
   const onPage = (pg: AlbumPage) => [...(pg.slotFills ?? []), ...(pg.textSlotFills ?? [])].some((f) => typeof f === 'number' && f >= 0 && gone(f));
   return {
     count: missing.length,
     pages: pages.flatMap((pg, i) => (onPage(pg) ? [i + 1] : [])),
-    cover: !!coverFront && onPage(coverFront),
+    cover: !!coverFront && (onPage(coverFront) || (bgIdx >= 0 && gone(bgIdx))),
     names: missing.map((i) => photos[i]?.name ?? '').filter(Boolean),
   };
 }
@@ -58,6 +73,15 @@ export function copyNotesMessage(pages: AlbumPage[], photos: Pick<UploadedPhoto,
     softer ? `${softer} photo${softer > 1 ? 's were' : ' was'} put back from a different, smaller copy and may print softer` : '',
     odd ? `${odd} photo${odd > 1 ? 's' : ''} put back ${odd > 1 ? "don't" : "doesn't"} have the original's shape — check ${odd > 1 ? 'they are' : "it's"} the right picture` : '',
   ].filter(Boolean).join('; ');
+}
+
+/** Checkout stopped because photos it prints aren't on this device; the
+ *  message is missingPhotosMessage's. */
+export class PhotosNotHereError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PhotosNotHereError';
+  }
 }
 
 const list = (n: number[]) => (n.length <= 1 ? String(n[0] ?? '') : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);

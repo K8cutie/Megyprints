@@ -15,7 +15,17 @@ import type { AlbumPage, TextElement, UploadedPhoto } from './types';
    away every page edit. Now each quote Megy deals carries its occasion; Next
    on Step 1 swaps those for the new occasion's lines, keeps the customer's
    own, says so, and Undo puts them back.
+   With the quote bank OFF (DEAL_BANK_QUOTES, owner 2026-10-21: Haiku writes
+   the quotes from the photos now) there are no new-occasion lines to swap in:
+   Megy's old-occasion lines are cleared instead, and the boxes wait for a
+   line written from their photos. The swap below runs with the bank on.
    ══════════════════════════════════════════════════════════════════════════ */
+
+const bank = vi.hoisted(() => ({ on: true }));
+vi.mock('./generateAlbum', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./generateAlbum')>();
+  return { ...real, get DEAL_BANK_QUOTES() { return bank.on; } };
+});
 
 vi.mock('../../lib/authContext', () => ({ useAuth: () => ({ user: null }) }));
 vi.mock('../../lib/supabase', () => ({ supabase: { from: () => ({}), auth: { getSession: async () => ({ data: { session: null } }) } } }));
@@ -83,6 +93,7 @@ function Probe() {
 let root: Root | null = null;
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  bank.on = true;
   localStorage.clear(); sessionStorage.clear();
   localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
     albumType: 'standard', albumSize: '8x8', selectedTemplate: 'classic', uploadedPhotos: photos,
@@ -131,6 +142,27 @@ describe('Family → Vacation on a made album', () => {
     expect(lineOn(builder, 21)).toMatchObject({ text: 'Our big Hong Kong week' });
     expect(VACATION.has(lineOn(builder, 28).text)).toBe(true);
     expect(lineOn(builder, 28).fontFamily).toBe('Playfair Display'); // the customer's style stays
+  });
+});
+
+describe("the quote bank off (owner, 2026-10-21): no new lines to swap in, so Megy's old ones are cleared", () => {
+  beforeEach(() => { bank.on = false; });
+  it("Family → Vacation: both Family quotes go, the boxes wait empty; the customer's own line stays", async () => {
+    let r = { changed: -1, cleared: -1 };
+    await act(async () => { r = await builder.requoteForOccasion('Vacation'); });
+    expect(r).toEqual({ changed: 0, cleared: 2 });
+    for (const i of [21, 28]) expect(builder.albumPages[i].textElements).toEqual([]);
+    expect(lineOn(builder, 9)).toMatchObject({ text: 'Grandma turns 80!' });
+  });
+  it('Undo puts the Family quotes back', async () => {
+    await act(async () => { await builder.requoteForOccasion('Vacation'); });
+    await act(async () => { builder.undo(); });
+    expect(lineOn(builder, 21).text).toBe(FAMILY[0]);
+    expect(lineOn(builder, 28).text).toBe(FAMILY[1]);
+  });
+  it('Megy says so, and where the new lines come from', () => {
+    expect(occasionQuotesMessage('Vacation', 0, 2)).toBe('Your album is about Vacation now, so Megy cleared 2 quotes she wrote for the old occasion. Tap an empty quote box and Megy writes a new line from its photos. Lines you wrote or picked stay. Undo puts the old ones back.');
+    expect(occasionQuotesMessage('Vacation', 0, 1)).toMatch(/^Your album is about Vacation now, so Megy cleared 1 quote she wrote/);
   });
 });
 

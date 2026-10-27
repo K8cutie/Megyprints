@@ -96,6 +96,17 @@ describe('missingPhotos — what the album prints that isn\'t here', () => {
   it('nothing missing → nothing said', () => {
     expect(missingPhotosMessage(missingPhotos(pages, photos.map((p) => ({ ...p, previewUrl: 'blob:x' }))))).toBe('');
   });
+  // MP-2026-KGCFSQN's cover: an album photo as the whole background, its frame empty.
+  const bgCover = (bg: Record<string, unknown>) => ({ ...page(9, [null]), background: { type: 'image', image: 'blob:dead', ...bg } } as AlbumPage);
+  it("a cover whose background is an album photo that isn't here", () => {
+    const here = photos.map((p) => ({ ...p, previewUrl: 'blob:x' }));
+    const noBg = here.map((p, i) => (i === 2 ? { ...p, previewUrl: '' } : p));
+    expect(missingPhotos([], noBg, bgCover({ photoId: 'photo-2' }))).toEqual({ count: 1, pages: [], cover: true, names: ['IMG_1002.jpg'] });
+    expect(missingPhotos([], here, bgCover({ photoId: 'photo-2' })).count).toBe(0);
+    // Its own uploaded photo (localPhotoId) is not an album photo; an unknown id isn't one either.
+    expect(missingPhotos([], noBg, bgCover({ photoId: 'photo-2', localPhotoId: 'cover-a-1' })).count).toBe(0);
+    expect(missingPhotos([], noBg, bgCover({ photoId: 'photo-77' })).count).toBe(0);
+  });
 });
 
 describe('copies put back are said before ordering (not blocking)', () => {

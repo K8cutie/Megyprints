@@ -20,11 +20,13 @@ import type {
   TextStyle,
 } from './types';
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
+import { recolorPage } from './pageColors';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
+import { placePhoto } from './slotSwap';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, FULL_PAGE_SHARE, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
@@ -54,6 +56,7 @@ import { TEXT_LINE_HEIGHT } from './wordArt';
 import { readCaptureTime } from './exif';
 import { looksHeic, toAlbumPhoto, HEIC_CONVERTING_PREVIEW, HEIC_READY_SHOWN_MS } from '../../lib/heicPhoto';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
+import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from './retiredSizes';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { DEFAULT_TITLE_FONT } from './fonts';
 import { readAlbumTheme, writeAlbumTheme } from '../../lib/albumTheme';
@@ -65,7 +68,7 @@ import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveO
    + Supabase cloud persistence (Phase 1)
    ══════════════════════════════════════════════════════════════════════════ */
 
-const MIN_PAGES = 40;
+const MIN_PAGES = MIN_ALBUM_PAGES;
 const STORAGE_KEY = DRAFT_STORAGE_KEY;
 
 /** A fresh album row id, minted on the device so a draft knows which album it
@@ -590,6 +593,16 @@ function getInitialState(): SerializedState {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     effectiveSaved = null;
   }
+  // A draft saved at a size we no longer make (9x9) opens at its stand-in,
+  // same layouts and photos (retiredSizes).
+  if (effectiveSaved) {
+    effectiveSaved = {
+      ...effectiveSaved,
+      albumSize: liveAlbumSize(effectiveSaved.albumSize),
+      albumPages: effectiveSaved.albumPages && liftRetiredPages(effectiveSaved.albumPages),
+      coverFront: effectiveSaved.coverFront && liftRetiredPage(effectiveSaved.coverFront),
+    };
+  }
 
   // ── Dead blob URLs are NOT a stale session ──
   // Blob URLs never survive a page reload, so "all photos have dead URLs"
@@ -742,6 +755,10 @@ export interface BuilderActions {
   goToPage: (index: number) => void;
   addPage: () => void;
   deletePage: (index: number) => void;
+  /** Delete these pages (0-based) in ONE undo step, never under the 40-page
+   *  floor. `landOnLast`: open the album's last page after (the end-of-album
+   *  reminder stays at the end). Returns how many were deleted. */
+  deletePages: (indexes: readonly number[], opts?: { landOnLast?: boolean }) => number;
   duplicatePage: (index: number) => void;
 
   // Generation
@@ -868,6 +885,12 @@ export interface BuilderActions {
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
+  /** The page in one of the page colours (pageColors.ts): a solid background,
+   *  with words that wouldn't show on it switched to an ink that does. Under
+   *  the cover scope it colours the cover. */
+  setPageColor: (hex: string) => void;
+  /** Every page in that colour — the cover too. */
+  applyPageColorToAllPages: (hex: string) => void;
   /** COVER: put a photo the customer picked on the cover. The file is kept in
    *  the device's photo store, so the cover still has it after the app is
    *  closed (coverPhoto). Resolves once it is on the cover. */
@@ -1775,7 +1798,7 @@ export function useBuilderState(): BuilderActions {
     // "converting" square. Each settles to 'ok' or, if it couldn't be opened,
     // its name: add_photos says so once the batch is done.
     const heicTasks: Promise<'ok' | { unreadable: string; fresh: boolean }>[] = [];
-    // Each one counts toward "Getting your iPhone photos ready: 12 of 44"
+    // Each one counts toward "Getting your photos ready: 12 of 44"
     // (HeicProgress): on a phone a batch takes tens of seconds, and grey
     // squares with no word read as a hang (owner, 2026-10-12).
     const trackHeic = (t: Promise<'ok' | { unreadable: string; fresh: boolean }>) => {
@@ -2025,15 +2048,38 @@ export function useBuilderState(): BuilderActions {
     setCurrentPageIndex((prev) => prev + 1);
   }, [currentPageIndex, albumSize]);
 
-  const deletePage = useCallback((index: number) => {
+  /* Deleting pages (blankPages.ts: the end-of-album reminder's "Delete 5
+     blank pages"). Never under MIN_PAGES: the LAST of the given pages go
+     first, so the earlier ones keep their numbers. Every page after a deleted
+     one moves up, and an odd number of them before it puts it on the other
+     side of the book (binding.ts: page 1, 3, 5… bind on the left). Frames
+     follow the spine by themselves (they are fractions of the safe area); a
+     sticker is placed in page fractions, so it is kept out of the spine again. */
+  const deletePages = useCallback((indexes: readonly number[], opts?: { landOnLast?: boolean }): number => {
+    const prev = albumPagesRef.current;
+    const room = Math.max(0, prev.length - MIN_PAGES);
+    const wanted = [...new Set(indexes)].filter((i) => i >= 0 && i < prev.length).sort((a, b) => a - b);
+    const going = new Set(wanted.slice(Math.max(0, wanted.length - room)));
+    if (going.size === 0) return 0;
     pushSnapshot();
-    setAlbumPages((prev) => {
-      // Hard block: cannot delete below MIN_PAGES
-      if (prev.length <= MIN_PAGES) return prev;
-      return prev.filter((_, i) => i !== index);
+    const next: AlbumPage[] = [];
+    prev.forEach((page, i) => {
+      if (going.has(i)) return;
+      const at = next.length;
+      if ((at - i) % 2 === 0 || !page.stickers?.length) { next.push(page); return; }
+      const template = page.templateId ? getTemplateById(page.templateId) : null;
+      const ctx = { albumSize, pageIndex: at, template };
+      next.push({ ...page, stickers: page.stickers.map((k) => ({ ...k, geom: clampStickerGeom(k.geom, ctx).geom })) });
     });
-    setCurrentPageIndex((prev) => Math.min(prev, Math.max(0, albumPages.length - 2)));
-  }, [albumPages.length]);
+    setAlbumPages(next);
+    const cur = currentPageIndex;
+    const before = [...going].filter((i) => i < cur).length;
+    const landed = opts?.landOnLast ? next.length - 1 : cur - before - (going.has(cur) ? 1 : 0);
+    setCurrentPageIndex(Math.max(0, Math.min(next.length - 1, landed)));
+    return going.size;
+  }, [pushSnapshot, albumSize, currentPageIndex]);
+
+  const deletePage = useCallback((index: number) => { deletePages([index]); }, [deletePages]);
 
   const duplicatePage = useCallback((index: number) => {
     pushSnapshot();
@@ -2159,7 +2205,10 @@ export function useBuilderState(): BuilderActions {
     // whose faces survive, so find the faces first (bounded; skipped
     // entirely in the common case, and harmless when detection fails).
     let faceCenters: Record<number, { x: number; y: number }> | undefined;
-    const faceCands = memoryFaceCandidates(pool, size);
+    // On Surprise about half the pages are full pages (FULL_PAGE_SHARE), so
+    // the faces matter whenever fewer than half of a 40-page album fit.
+    const faceCands = memoryFaceCandidates(pool, size, undefined,
+      photosPerPage == null ? Math.ceil(MIN_ALBUM_PAGES * FULL_PAGE_SHARE) : undefined);
     if (faceCands.length > 0) {
       faceCenters = {};
       try {
@@ -2176,8 +2225,13 @@ export function useBuilderState(): BuilderActions {
     let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
-    setGenerating('quotes');
-    const quotePool = await ensureThemeQuotes(currentAlbumTheme(), countAlbumBoxes(newPages), { budgetMs: 12_000 });
+    // Bank quotes are off (DEAL_BANK_QUOTES): quote boxes are made empty, so
+    // there is no pool to wait for (that wait was up to 12 s).
+    let quotePool: string[] = [];
+    if (DEAL_BANK_QUOTES) {
+      setGenerating('quotes');
+      quotePool = await ensureThemeQuotes(currentAlbumTheme(), countAlbumBoxes(newPages), { budgetMs: 12_000 });
+    }
     setGenerating('finishing');
     await paintFrame();
     const boxContent: BoxContentOptions = {
@@ -2185,6 +2239,7 @@ export function useBuilderState(): BuilderActions {
       quoteFontFamily: quoteTheme.fontFamily,
       quoteColor: quoteTheme.textColor,
       occasion: currentAlbumTheme(),
+      fillQuotes: DEAL_BANK_QUOTES,
     };
     dealAlbumBoxes(newPages, boxContent);
     newPages = mergeStudioPages(newPages, kept);
@@ -2240,7 +2295,7 @@ export function useBuilderState(): BuilderActions {
       )];
 
       // ── 2. Pick a random template different from current (and matched to
-      //       THIS album's size, so we don't pull a 9x9 template onto an 8x8). ──
+      //       THIS album's size, so we don't pull a 6x6 template onto an 8x8). ──
       let pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
       if (photosPerPage !== undefined) {
         pool = pool.filter((t) => t.slotCount === photosPerPage);
@@ -2468,36 +2523,20 @@ export function useBuilderState(): BuilderActions {
   }, [uploadedPhotos, currentPageIndex, updateCurrentPage, albumSize]);
 
   /* ── Slot management ── */
+  /* ONE PHOTO, ONE PLACE (owner, 2026-10-20): a photo picked for this frame
+     comes here from wherever it is — another page's frame swaps with this one
+     (an empty frame here = a move, and that page's frame goes empty), a frame
+     on this page swaps as before. See slotSwap.ts. The cover is its own page
+     and never trades with the interior. */
   const fillSlot = useCallback((slotIndex: number, photoIndex: number) => {
     pushSnapshot();
-    updateCurrentPage((page) => {
-      const fills = [...(page.slotFills ?? [])];
-      // Mutual exclusivity: a photo claims this slot → clear any QR/text/ornament there.
-      const qrFills = [...(page.qrFills ?? [])];
-      const slotTexts = [...(page.slotTexts ?? [])];
-      const ornamentFills = [...(page.ornamentFills ?? [])];
-      qrFills[slotIndex] = null;
-      slotTexts[slotIndex] = null;
-      ornamentFills[slotIndex] = null;
-      const other = fills.indexOf(photoIndex);
-      if (other !== -1 && other !== slotIndex) {
-        // This photo is already on the page → SWAP the two slots (taking their
-        // framing along) so we never end up with the same picture twice.
-        const scales = [...(page.slotScales ?? [])];
-        const offsetsX = [...(page.slotOffsetsX ?? [])];
-        const offsetsY = [...(page.slotOffsetsY ?? [])];
-        fills[other] = fills[slotIndex] ?? null;
-        fills[slotIndex] = photoIndex;
-        [scales[other], scales[slotIndex]] = [scales[slotIndex], scales[other]];
-        [offsetsX[other], offsetsX[slotIndex]] = [offsetsX[slotIndex], offsetsX[other]];
-        [offsetsY[other], offsetsY[slotIndex]] = [offsetsY[slotIndex], offsetsY[other]];
-        return { ...page, slotFills: fills, slotScales: scales, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY, qrFills, slotTexts, ornamentFills };
-      }
-      fills[slotIndex] = photoIndex;
-      return { ...page, slotFills: fills, qrFills, slotTexts, ornamentFills };
-    });
+    if (editScopeRef.current === 'coverFront') {
+      setCoverFrontPage((p) => placePhoto([p], 0, slotIndex, photoIndex).pages[0]);
+    } else {
+      setAlbumPages((prev) => (prev[currentPageIndex] ? placePhoto(prev, currentPageIndex, slotIndex, photoIndex).pages : prev));
+    }
     centreOnFace(slotIndex, photoIndex);
-  }, [updateCurrentPage, centreOnFace, pushSnapshot]);
+  }, [currentPageIndex, centreOnFace, pushSnapshot]);
 
   const clearSlot = useCallback((slotIndex: number) => {
     pushSnapshot();
@@ -3185,7 +3224,7 @@ export function useBuilderState(): BuilderActions {
     const used = new Set(
       albumPages.flatMap((p) => p.textElements.filter((t) => t.id.startsWith('theme-quote')).map((t) => t.text)),
     );
-    const quote = pickQuote(selectedTemplate, used);
+    const quote = DEAL_BANK_QUOTES ? pickQuote(selectedTemplate, used) : null;
     if (!quote) return null;
     const theme = THEMES[selectedTemplate];
     const { width: cw, height: ch } = getCanvasDimensions(albumSize);
@@ -3290,6 +3329,7 @@ export function useBuilderState(): BuilderActions {
         outlineColor: content.outlineColor,
         outlineWidth: content.outlineWidth,
         shadow: content.shadow,
+        quote: content.quote,
         rotation: 0,
         opacity: 100,
         boxIndex: slotIndex,
@@ -3314,6 +3354,17 @@ export function useBuilderState(): BuilderActions {
     pushSnapshot();
     updateCurrentPage((page) => ({ ...page, background: bg }));
   }, [updateCurrentPage]);
+
+  const setPageColor = useCallback((hex: string) => {
+    pushSnapshot();
+    updateCurrentPage((page) => recolorPage(page, hex));
+  }, [updateCurrentPage]);
+
+  const applyPageColorToAllPages = useCallback((hex: string) => {
+    pushSnapshot();
+    setAlbumPages((prev) => prev.map((p) => recolorPage(p, hex)));
+    setCoverFrontPage((p) => recolorPage(p, hex));
+  }, []);
 
   const setCoverPhoto = useCallback(async (picked: File) => {
     // An iPhone photo (HEIC) becomes a JPEG first (Chrome can't show a HEIC);
@@ -3343,6 +3394,9 @@ export function useBuilderState(): BuilderActions {
    *  the album already carries, so the never-repeat rule survives the sweep).
    *  Styling mirrors setBoxText's defaults, same as generation-time deals. */
   const finishBoxesWithQuotes = useCallback(async (): Promise<{ filled: number; remaining: number; heldBack: number; noLine: number }> => {
+    // Bank quotes are off: empty quote boxes wait for a line written from the
+    // page's photos, never a bank line (DEAL_BANK_QUOTES).
+    if (!DEAL_BANK_QUOTES) return { filled: 0, remaining: 0, heldBack: 0, noLine: 0 };
     const theme = THEMES[selectedTemplate];
     // Grow the theme's pool to what a FULL sweep needs before dealing — the
     // sweep excludes every line the album already carries, so a pool sized
@@ -3374,7 +3428,10 @@ export function useBuilderState(): BuilderActions {
     const stale = (t: TextElement) => t.fromOccasion != null && key(t.fromOccasion) !== key(occasion);
     const count = albumPages.reduce((n, p) => n + p.textElements.filter(stale).length, 0);
     if (!key(occasion) || count === 0) return { changed: 0, cleared: 0 };
-    const pool = await ensureThemeQuotes(occasion, quotesNeededForSweep(albumPages) + count, { budgetMs: 12_000 });
+    // Bank off (DEAL_BANK_QUOTES): no new-occasion lines to swap in, so Megy's
+    // old-occasion lines are cleared — the box waits for a line written from
+    // its photos — rather than printing the old occasion's.
+    const pool = DEAL_BANK_QUOTES ? await ensureThemeQuotes(occasion, quotesNeededForSweep(albumPages) + count, { budgetMs: 12_000 }) : [];
     // The pages as they are NOW (the customer may have edited during the wait).
     const prev = albumPagesRef.current;
     const result = { changed: 0, cleared: 0 };
@@ -3870,6 +3927,7 @@ export function useBuilderState(): BuilderActions {
     goToPage,
     addPage,
     deletePage,
+    deletePages,
     duplicatePage,
     generateAlbum: generateAlbumAction,
     generating,
@@ -3921,6 +3979,8 @@ export function useBuilderState(): BuilderActions {
     finishBoxesWithQuotes,
     requoteForOccasion,
     setPageBackground,
+    setPageColor,
+    applyPageColorToAllPages,
     setCoverPhoto,
     setBackgroundCrop,
     setBoxTextOffset,

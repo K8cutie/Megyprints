@@ -9,9 +9,10 @@
 import jsPDF from 'jspdf';
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { ALBUM_SIZES } from './types';
-import { renderAlbumForPrint, renderCoverWrapForPrint, type CoverPrintInput } from './printPipeline';
+import { renderAlbumForPrint, renderCoverWrapForPrint, type CoverPrintInput, type WordPatch } from './printPipeline';
 import { coverWrapGeometry } from './coverGeometry';
 import { pageSizeWithBleedIn } from './printBleed';
+import { PAGE_ONE_RIGHT_MARK } from './binding';
 
 function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -22,6 +23,16 @@ function blobToDataURL(blob: Blob): Promise<string> {
   });
 }
 
+/** The most a print file may weigh: Supabase Storage takes 50 MB a file on
+ *  this plan (0015_print_pdfs_size_limit), less room for the upload itself. */
+export const PRINT_FILE_BUDGET_BYTES = 45 * 1024 * 1024;
+
+/** A page's words over its picture: sharp, see-through, at 300 DPI
+ *  (printPipeline's WordPatch). The page is `pw` × `ph`. */
+function addWords(doc: jsPDF, words: WordPatch[], pw: number, ph: number): void {
+  for (const w of words) doc.addImage(w.png, 'PNG', w.x * pw, w.y * ph, w.w * pw, w.h * ph, undefined, 'FAST');
+}
+
 /**
  * Compile the album into one print-ready PDF (300 DPI, one page per album page).
  * Returns the PDF as a Blob — ready to upload/transport.
@@ -30,7 +41,12 @@ export async function generateAlbumPdf(
   pages: AlbumPage[],
   photos: UploadedPhoto[],
   albumSize: AlbumSizePreset,
-  onProgress?: (completed: number, total: number) => void,
+  /** After each page. `smaller` = the second pass below, so a progress bar
+   *  never starts over at page 1 (placeProgress). */
+  onProgress?: (completed: number, total: number, smaller?: boolean) => void,
+  budgetBytes = PRINT_FILE_BUDGET_BYTES,
+  /** Binding side allowance, inches: binding.bindingInchesFor(the order's cover). */
+  bindingIn?: number,
 ): Promise<Blob> {
   const config = ALBUM_SIZES.find((s) => s.preset === albumSize);
   // ALBUM_SIZES stores 300 DPI pixels → physical inches = px / 300. Each page
@@ -39,21 +55,33 @@ export async function generateAlbumPdf(
   const { wIn, hIn } = pageSizeWithBleedIn((config?.width ?? 2400) / 300, (config?.height ?? 2400) / 300);
   const orientation: 'landscape' | 'portrait' = wIn >= hIn ? 'landscape' : 'portrait';
 
-  const rendered = await renderAlbumForPrint(pages, photos, albumSize, onProgress);
+  const build = async (rendered: Awaited<ReturnType<typeof renderAlbumForPrint>>): Promise<Blob> => {
+    const doc = new jsPDF({ orientation, unit: 'in', format: [wIn, hIn], compress: true });
+    // Page 1 is drawn as a right-hand page (spine margin on its left). The
+    // console's press-sheet layout reads this to put it on the first leaf's front.
+    doc.setProperties({ keywords: PAGE_ONE_RIGHT_MARK });
+
+    for (let i = 0; i < rendered.length; i++) {
+      if (i > 0) doc.addPage([wIn, hIn], orientation);
+      const dataUrl = await blobToDataURL(rendered[i].image);
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      // Pages are JPEG (see printPipeline) so the PDF stays small enough to upload.
+      doc.addImage(dataUrl, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
+      addWords(doc, rendered[i].words, pw, ph);
+    }
+    return doc.output('blob');
+  };
+
+  const rendered = await renderAlbumForPrint(pages, photos, albumSize, onProgress, { bindingIn });
   if (!rendered.length) throw new Error('Album has no pages to export.');
-
-  const doc = new jsPDF({ orientation, unit: 'in', format: [wIn, hIn], compress: true });
-
-  for (let i = 0; i < rendered.length; i++) {
-    if (i > 0) doc.addPage([wIn, hIn], orientation);
-    const dataUrl = await blobToDataURL(rendered[i].blob);
-    const pw = doc.internal.pageSize.getWidth();
-    const ph = doc.internal.pageSize.getHeight();
-    // Pages are JPEG (see printPipeline) so the PDF stays small enough to upload.
-    doc.addImage(dataUrl, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
-  }
-
-  return doc.output('blob');
+  const pdf = await build(rendered);
+  // Sharp words add a little to every page that has words. If that tips the
+  // file past the upload cap, the words go back into the page pictures — the
+  // file as it was before sharp words — rather than the file not arriving.
+  if (pdf.size <= budgetBytes || !rendered.some((r) => r.words.length)) return pdf;
+  const again = onProgress && ((done: number, total: number) => onProgress(done, total, true));
+  return build(await renderAlbumForPrint(pages, photos, albumSize, again, { bakeWords: true, bindingIn }));
 }
 
 /**
@@ -63,18 +91,19 @@ export async function generateAlbumPdf(
  * the wrap is a different, wider size.
  */
 export async function generateCoverWrapPdf(input: CoverPrintInput): Promise<Blob> {
-  const geom = coverWrapGeometry(input.albumSize, input.pageCount, input.cover);
+  const geom = coverWrapGeometry(input.albumSize, input.pageCount, input.cover, { material: input.material });
   const wIn = geom.wrap.wIn;
   const hIn = geom.wrap.hIn;
   const orientation: 'landscape' | 'portrait' = wIn >= hIn ? 'landscape' : 'portrait';
 
-  const blob = await renderCoverWrapForPrint(input);
-  const dataUrl = await blobToDataURL(blob);
+  const { image, words } = await renderCoverWrapForPrint(input);
+  const dataUrl = await blobToDataURL(image);
 
   const doc = new jsPDF({ orientation, unit: 'in', format: [wIn, hIn], compress: true });
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
   doc.addImage(dataUrl, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
+  addWords(doc, words, pw, ph);
   return doc.output('blob');
 }
 
