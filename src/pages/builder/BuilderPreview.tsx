@@ -33,6 +33,9 @@ import { applyMask, isMaskId, textureOverlayCss } from './masks';
 import { lookCss, isLookId } from './looks';
 import CoverEditor from './CoverEditor';
 import TesterPageStamp from './TesterPageStamp';
+import TesterPageNote from './TesterPageNote';
+import { useSampleAlbumNotes } from './useSampleAlbumNotes';
+import { SAMPLE_DONE_NOTE, type SampleAlbumNote } from '../../lib/samplePhotos';
 import { useTesterStamp } from './useTesterStamp';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
@@ -313,7 +316,7 @@ function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onT
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode, asPrinted, testerStamp }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode, asPrinted, testerStamp, testerNote }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -356,6 +359,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
   /** The testers' "For Testing purposes" stamp over the page (testingPhase):
    *  screen only, so only the views a tester looks at pass it. */
   testerStamp?: readonly [string, string] | null;
+  /** A sample album's card over the page (lib/samplePhotos): screen only, like the stamp. */
+  testerNote?: SampleAlbumNote | null;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -757,6 +762,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
       {/* The cover's spine is on its left; a page's binding is on its inner edge. */}
       {testerStamp && <TesterPageStamp lines={testerStamp} pageW={singleW}
         side={coverMode || bindingEdge(pageIndex) === 'left' ? 'right' : 'left'} />}
+      {testerNote && <TesterPageNote note={testerNote} pageW={singleW} />}
     </>
   );
 }
@@ -765,6 +771,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const total = pages.length;
   const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId, deletePages } = useBuilderContext();
   const testerStamp = useTesterStamp(pages);
+  // A sample album: its last page says the day's test is done (and Preview
+  // opens there, actionEngine preview_album), with no order card over it.
+  const sampleNotes = useSampleAlbumNotes(photos);
+  const doneNote = (i: number) => (sampleNotes && i === total - 1 ? SAMPLE_DONE_NOTE : null);
 
   // "Megy finishes it" — count the caption boxes still sitting empty (unfilled
   // invitations, deleted quotes, legacy empties). The chooser CTA in the
@@ -1021,7 +1031,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // browsing) and it offers a real way back to the pages (owner, 2026-09-13:
   // "there doesn't seem to be a way to go back").
   // It waits for the last page turn to land.
-  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim);
+  // Not over a sample album's "You're done" page: the tester screenshots it (Order is in the top bar).
+  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim && !sampleNotes);
   // A warning about blank pages from an earlier Order: the card's reminder says it now.
   useEffect(() => {
     if (endPrompt.open && notReadyBlank && blankPlan.blank.length > 0) setNotReady(null);
@@ -1133,7 +1144,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     if (f.kind === 'page' && pages[f.index]) {
       return (
         <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-          <PageView page={pages[f.index]} photos={photos} singleW={singleW} H={H} pageIndex={f.index} asPrinted testerStamp={testerStamp} />
+          <PageView page={pages[f.index]} photos={photos} singleW={singleW} H={H} pageIndex={f.index} asPrinted testerStamp={testerStamp} testerNote={doneNote(f.index)} />
         </div>
       );
     }
@@ -1242,7 +1253,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               <div aria-hidden="true" style={BOOK.edges(singleW, H, fitScale)} />
               <div className="relative bg-white" style={{ width: singleW, height: H, isolation: 'isolate' }} data-testid="preview-single-page">
                 <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-                  <PageView key={currentPage.id} page={currentPage} photos={photos} singleW={singleW} H={H} pageIndex={currentIndex} asPrinted testerStamp={testerStamp}
+                  <PageView key={currentPage.id} page={currentPage} photos={photos} singleW={singleW} H={H} pageIndex={currentIndex} asPrinted testerStamp={testerStamp} testerNote={doneNote(currentIndex)}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: currentIndex, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: currentIndex, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: currentIndex, slot })} />
@@ -1283,7 +1294,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               {/* Left Page — the inside of the front cover across from page 1 */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
                 {spreadLeftPage ? (
-                  <PageView key={spreadLeftPage.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted testerStamp={testerStamp}
+                  <PageView key={spreadLeftPage.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted testerStamp={testerStamp} testerNote={doneNote(spreadLeftIndex)}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
@@ -1295,7 +1306,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                   inside of the back cover across from a last left-hand page. */}
               <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
                 {spreadRightPage ? (
-                  <PageView key={spreadRightPage.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted testerStamp={testerStamp}
+                  <PageView key={spreadRightPage.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted testerStamp={testerStamp} testerNote={doneNote(spreadLeftIndex + 1)}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex + 1, slot })} />

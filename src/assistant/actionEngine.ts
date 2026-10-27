@@ -12,6 +12,8 @@ import { getThemedBackground, getThemedPhotoBorder, getThemeCornerBase } from '.
 import { photosGoingIn, photosShortBy, tooFewToMakeMessage } from '../pages/builder/albumMinimum';
 import { albumIsMade, resizeMemoriesLine, resizedMemoriesNote } from './rebuildQuestion';
 import { leftOutNote } from '../lib/pickedFiles';
+import { isNativeShell } from '../lib/nativeShell';
+import { showSampleAlbumNotes } from '../lib/samplePhotos';
 import { memoriesOn } from '../pages/builder/generateAlbum';
 import { eventLinkForAlbum } from '../lib/eventAlbum';
 
@@ -368,7 +370,12 @@ export class ActionEngine {
           // last spread — so without this it would skip straight to ordering.
           // "Back to preview" (any page but the last, PageTurnBar) stays on the
           // page being edited: the customer goes back to where they were.
-          if (!intent.payload?.stay) this.builder.goToPage(0);
+          // A sample album in the app opens on its last page instead: "You're
+          // done with today's test", with no order card over it (lib/samplePhotos).
+          if (!intent.payload?.stay) {
+            const last = showSampleAlbumNotes(isNativeShell(), this.builder.uploadedPhotos);
+            this.builder.goToPage(last ? Math.max(0, this.builder.albumPages.length - 1) : 0);
+          }
           this.builder.setPhase('preview');
           return { intentType: intent.type, success: true, message: 'Opening preview.' };
         }

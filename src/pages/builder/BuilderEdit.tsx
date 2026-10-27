@@ -46,6 +46,9 @@ import { useModalDialog } from '../../lib/useModalDialog';
 import fabric from './fabric-loader';
 import TesterPageStamp from './TesterPageStamp';
 import { useTesterStamp } from './useTesterStamp';
+import TesterPageNote from './TesterPageNote';
+import { useSampleAlbumNotes } from './useSampleAlbumNotes';
+import { SAMPLE_WELCOME_NOTE } from '../../lib/samplePhotos';
 import { bindingEdge } from './binding';
 
 /* ── Local helper types for in-place filter effects ─────────────────────── */
@@ -86,6 +89,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const testerStamp = useTesterStamp(actions.albumPages);
+  const sampleNotes = useSampleAlbumNotes(actions.uploadedPhotos);
 
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
@@ -1172,6 +1176,8 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
                   so it is in no export or print file (testingPhase). */}
               {testerStamp && <TesterPageStamp lines={testerStamp} pageW={400}
                 side={bindingEdge(actions.currentPageIndex) === 'left' ? 'right' : 'left'} />}
+              {/* A sample album's page 1: what to do (lib/samplePhotos), over the canvas like the stamp. */}
+              {sampleNotes && actions.currentPageIndex === 0 && <TesterPageNote note={SAMPLE_WELCOME_NOTE} pageW={400} />}
 
               {/* Empty State Overlay */}
               <AnimatePresence>

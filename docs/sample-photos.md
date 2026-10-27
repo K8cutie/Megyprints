@@ -55,7 +55,7 @@ Each one was re-encoded at most 1600 px on its long side (about 250 KB) with no 
 | megy-sample-41.jpg | portrait | https://images.unsplash.com/photo-1627662166825-a860471632e4 |
 | megy-sample-42.jpg | landscape | https://images.unsplash.com/photo-1576089073624-b5751a8f4de9 |
 | megy-sample-43.jpg | landscape | https://images.unsplash.com/photo-1578496780896-7081cc23c111 |
-| megy-sample-44.jpg | landscape | https://images.unsplash.com/photo-1532635241-17e820acc59f |
+| megy-sample-44.jpg | landscape | https://images.unsplash.com/photo-1767617774446-5bb3ce40824d |
 | megy-sample-45.jpg | portrait | https://images.unsplash.com/photo-1582298538104-fe2e74c27f59 |
 | megy-sample-46.jpg | portrait | https://images.unsplash.com/photo-1607748862156-7c548e7e98f4 |
 | megy-sample-47.jpg | portrait | https://images.unsplash.com/photo-1625283518288-00362afc8663 |

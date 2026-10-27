@@ -66,6 +66,40 @@ export function sampleCoverPhoto<P extends { name: string; leftOut?: boolean }>(
     ?? live[0];
 }
 
+/* The sample album tells the tester what to do (owner, 2026-10-28: "page 1
+   says welcome to the megyprints app test go scroll until you reach the last
+   page of the album and select preview then the last page of the album shows
+   your done with todays test take a screenshot and send it as proof").
+   Cards drawn over page 1 (in the pages) and the last page (in Preview),
+   screen only like the stamp. The buttons are named as they read. */
+
+/** Every photo in the album is a sample: Step 1's sample album, or an empty
+ *  album filled with "Add 40 sample photos". */
+export function isSampleAlbum(photos: readonly { name: string }[]): boolean {
+  return photos.length > 0 && photos.every((p) => SAMPLE_PHOTO_NAMES.includes(p.name));
+}
+
+/** A card over a page: a bold first line, then what to do (**bold** words). */
+export interface SampleAlbumNote { title: string; body: string }
+
+/** Page 1, where the sample album opens. */
+export const SAMPLE_WELCOME_NOTE: SampleAlbumNote = {
+  title: 'Welcome to the Megy Prints app test!',
+  body: 'Tap **Next page** until you reach the last page, then tap **Done — Preview my album**.',
+};
+
+/** The last page, in Preview. With the stamp's date and time beside it, the screenshot is the proof. */
+export const SAMPLE_DONE_NOTE: SampleAlbumNote = {
+  title: "You're done with today's test!",
+  body: 'Take a screenshot and send it as proof.',
+};
+
+/** The cards show, and Preview opens on the last page, in a sample album in
+ *  the Android app while the testing switch is on. */
+export function showSampleAlbumNotes(inApp: boolean, photos: readonly { name: string }[], switchOn: boolean = TESTING_PHASE): boolean {
+  return showSamplePhotos(inApp, switchOn) && isSampleAlbum(photos);
+}
+
 /** The button: "Add 25 sample photos". */
 export function addSamplesLabel(count: number): string {
   return `Add ${count} sample photo${count === 1 ? '' : 's'}`;
