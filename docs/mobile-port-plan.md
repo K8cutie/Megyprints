@@ -122,6 +122,46 @@ If 0b turns out bigger than it is worth, the fallback is that the app keeps
 its own, smaller album state built on the shared rules. Phases 1–2 do not
 need 0b, so that choice can wait.
 
+### 0b so far (2026-10-28, branch `feat/port-phase-0b`)
+
+Step 2 is done for the device pieces. `useBuilderState` no longer touches the
+browser itself: it reads one `BuilderPlatform` (`src/shared/platform.ts`, on
+the shared list) from `BuilderPlatformContext`:
+
+- `deviceStore` / `sessionStore`: the saved draft and the "start a new album"
+  signal (website: localStorage / sessionStorage).
+- `usePhotoStore()`: photos kept on the device, read back with a URL or URI
+  (website: IndexedDB).
+- `photos`: HEIC check and conversion, size, when the photo was taken, a URL
+  to show it, the "converting" picture (website: the HEIC worker, EXIF).
+- `faces`: face finding for crops and the QR corner (website: face-api).
+- `photoCheck`: blur, repeats, closed eyes (website: photoCheckRunner).
+- `lifecycle`: the app going to the background and coming back (website:
+  tab visibility).
+
+The website passes nothing and gets `lib/browserPlatform.ts`, which calls
+exactly what the builder called before (no change on the website). The
+default comes from `lib/defaultBuilderPlatform.ts`; the app's bundler picks
+its twin `defaultBuilderPlatform.native.ts` ("none"), so the app never loads
+face-api, IndexedDB or the HEIC worker and must wrap the builder in the
+Provider with its own pieces. The shared-code check accepts an import whose
+`.native.ts` twin is listed, and checks the twin exports the same names. The
+app's tsconfig needs `"moduleSuffixes": [".native", ""]`, and the app's own
+import check must resolve `.native.ts` the same way.
+
+Still not shared: `useBuilderState` imports 15 files that are not on the
+list. Step 1 splits (pure part listed): `masks` (isMaskId), `looks`
+(isLookId), `pageColors` (contrastRatio from coverLayout), `fonts`
+(DEFAULT_TITLE_FONT), `wordArt` (TEXT_LINE_HEIGHT), the `WizardStep` type
+from `assistant/wizard`. Device storage still read inside helpers (each
+fails closed, without a crash, outside a browser, but forgets): `albumTheme`
+and `quotes` (the occasion, the AI quote cache), `albumSyncRecord`
+(readSyncRecord, drafts saved before DraftSync), `draftAlbum` and
+`localDraft` (pure parts used; the files also read localStorage). Needs a
+platform piece: `textFit` (caption measuring with a browser canvas). Phase 1
+pieces: `supabase`, `authContext`, `useAlbumSync` (the app's own Supabase
+client and sign-in, as a twin or passed in).
+
 ## 5. Risks, each with its fix
 
 | Risk | Fix |

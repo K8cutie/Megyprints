@@ -10,7 +10,9 @@
    listed file and fails, naming the file and line, if it:
      • imports a file that is not on the list (type-only imports too: the
        app's type check reads them), or an npm package that is not in
-       SHARED_NPM_PACKAGES;
+       SHARED_NPM_PACKAGES. A file whose name.native.ts twin is listed is
+       fine: the app's bundler and type check take the twin, which must
+       export the same names (checked here too);
      • imports a web-only package (fabric, jsPDF, pdf-lib, pdf.js, Supabase,
        face-api, TensorFlow, libheif, mp4-muxer, react-dom);
      • uses the browser: document. window. navigator. localStorage
@@ -73,6 +75,32 @@ function resolveLocal(fromFile: string, spec: string): string {
   return base;
 }
 
+/** 'src/lib/x.ts' → 'src/lib/x.native.ts': the file the app's bundler (Metro)
+ *  and type check (moduleSuffixes) take in its place, when there is one. */
+function nativeTwin(file: string): string {
+  return file.replace(/(?<!\.native)\.tsx?$/, '.native.ts');
+}
+
+/** The names a file exports (declarations and `export { … }`). */
+function exportedNames(file: string, text: string): string[] {
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const names: string[] = [];
+  for (const st of sf.statements) {
+    const exported = ts.canHaveModifiers(st) && !!ts.getModifiers(st)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+    if (exported && ts.isVariableStatement(st)) {
+      for (const d of st.declarationList.declarations) if (ts.isIdentifier(d.name)) names.push(d.name.text);
+    } else if (exported && (ts.isFunctionDeclaration(st) || ts.isClassDeclaration(st) || ts.isInterfaceDeclaration(st)
+      || ts.isTypeAliasDeclaration(st) || ts.isEnumDeclaration(st)) && st.name) {
+      names.push(st.name.text);
+    } else if (ts.isExportDeclaration(st) && st.exportClause && ts.isNamedExports(st.exportClause)) {
+      for (const e of st.exportClause.elements) names.push(e.name.text);
+    } else if (ts.isExportDeclaration(st) && !st.exportClause) {
+      names.push(`* from ${(st.moduleSpecifier as ts.StringLiteral | undefined)?.text ?? '?'}`);
+    }
+  }
+  return names.sort();
+}
+
 /** Is this identifier a property/member NAME (obj.name, { name: … }) rather than a use of a global? */
 function isMemberName(id: ts.Identifier): boolean {
   const p = id.parent;
@@ -103,7 +131,8 @@ function findProblems(file: string, text: string, listed: ReadonlySet<string>): 
     const kind = typeOnly ? 'type import' : 'import';
     if (spec.startsWith('.') || spec.startsWith('@/')) {
       const target = resolveLocal(file, spec);
-      if (!listed.has(target)) add(node, `${kind} '${spec}' (${target}) is not a shared file`);
+      // A listed name.native.ts twin stands in for name.ts in the app.
+      if (!listed.has(target) && !listed.has(nativeTwin(target))) add(node, `${kind} '${spec}' (${target}) is not a shared file`);
       return;
     }
     const name = packageName(spec);
@@ -171,6 +200,16 @@ describe('shared album code (the 2.0 app imports these files)', () => {
     const text = readFileSync(resolve(ROOT, file), 'utf8');
     expect(asLines(file, findProblems(file, text, LISTED))).toEqual([]);
   });
+
+  // A twin stands in for the website's file in the app, so whatever imports
+  // one gets the other: they must offer the same names.
+  const twins = SHARED_MODULES.filter((f) => f.endsWith('.native.ts'));
+  it.each(twins)('%s exports the same names as the website file it stands in for', (twin) => {
+    const web = twin.replace(/\.native\.ts$/, '.ts');
+    expect(existsSync(resolve(ROOT, web)), `${web} (the website's file) is missing`).toBe(true);
+    expect(exportedNames(twin, readFileSync(resolve(ROOT, twin), 'utf8')))
+      .toEqual(exportedNames(web, readFileSync(resolve(ROOT, web), 'utf8')));
+  });
 });
 
 describe('the check itself catches browser code', () => {
@@ -198,6 +237,17 @@ describe('the check itself catches browser code', () => {
       "7: import 'jspdf': a web-only package",
       "9: import 'react-dom/client': a web-only package",
     ]);
+  });
+
+  it('a website file with a listed .native.ts twin may be imported (the app gets the twin); one without may not', () => {
+    expect(whats([
+      "import { defaultBuilderPlatform } from '../../lib/defaultBuilderPlatform';",
+      "import { browserBuilderPlatform } from '../../lib/browserPlatform';",
+    ].join('\n'))).toEqual([
+      "2: import '../../lib/browserPlatform' (src/lib/browserPlatform.ts) is not a shared file",
+    ]);
+    expect(nativeTwin('src/lib/x.ts')).toBe('src/lib/x.native.ts');
+    expect(nativeTwin('src/lib/x.native.ts')).toBe('src/lib/x.native.ts');
   });
 
   it('flags browser globals, canvas and the website build', () => {

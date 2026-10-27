@@ -114,7 +114,7 @@ describe('the JPEG the album keeps', () => {
     // The album's photos (both new and put back), replace, and the cover photo.
     expect(state.match(/await toAlbumPhoto\(file\)/g)?.length).toBe(2);
     expect(state).toMatch(/const replacePhoto = useCallback[\s\S]{0,300}void toAlbumPhoto\(file\)/);
-    expect(state).toMatch(/const setCoverPhoto = useCallback\(async \(picked: File\) => \{[\s\S]{0,300}await toAlbumPhoto\(picked\)/);
+    expect(state).toMatch(/const setCoverPhoto = useCallback\(async \(picked: PickedPhoto\) => \{[\s\S]{0,300}await toAlbumPhoto\(picked\)/);
     // A page's own background photo, and a guest's photo at an event.
     expect(src('../pages/builder/BackgroundDesigner.tsx')).toMatch(/void toAlbumPhoto\(file\)\.then/);
     expect(src('./eventImage.ts')).toMatch(/const source = file instanceof File \? await toAlbumPhoto\(file\) : file;\s*const img = await decodeImage\(source\);/);

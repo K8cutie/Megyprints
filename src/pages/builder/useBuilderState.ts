@@ -1,5 +1,5 @@
 import type { WizardStep } from '../../assistant/wizard';
-import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo, useContext } from 'react';
 import type {
   AlbumSizePreset,
   AlbumPage,
@@ -39,7 +39,7 @@ import { useAuth } from '../../lib/authContext';
 import { useAlbumSync, serializeAlbum as toAlbumRow } from '../../lib/useAlbumSync';
 import type { AlbumData, SaveResult } from '../../lib/useAlbumSync';
 import { readSyncRecord, albumContentKey, decideSync, draftSyncRecord, toDraftSync, type DraftSync, type SyncRecord } from '../../lib/albumSyncRecord';
-import { useIndexedDBPhotos, getImageDimensions } from '../../lib/useIndexedDBPhotos';
+import { defaultBuilderPlatform } from '../../lib/defaultBuilderPlatform';
 import { supabase } from '../../lib/supabase';
 import { photosToForget } from '../../lib/photoKeeping';
 import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
@@ -47,20 +47,18 @@ import { albumDataFromDraft, type StoredDraft } from '../../lib/draftAlbum';
 import { kindOfPick } from '../../lib/pickedFiles';
 import { planRelink, copyQuality } from '../../lib/photoRelink';
 import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
-import { detectFaceCenter, initFaceApi } from './faceDetection';
+import { BuilderPlatformContext, type BuilderPlatform, type KeyValueStore, type PickedPhoto } from '../../shared/platform';
 import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
 import { createLimiter } from '../../lib/limit';
 import { templateTracker, shuffleArray } from './varietyTracker';
 import { captionBoxSize, captionFits } from './textFit';
 import { TEXT_LINE_HEIGHT } from './wordArt';
-import { readCaptureTime } from './exif';
-import { looksHeic, toAlbumPhoto, HEIC_CONVERTING_PREVIEW, HEIC_READY_SHOWN_MS } from '../../lib/heicPhoto';
+import { HEIC_READY_SHOWN_MS } from '../../lib/heicRules';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from './retiredSizes';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { DEFAULT_TITLE_FONT } from './fonts';
 import { readAlbumTheme, writeAlbumTheme } from '../../lib/albumTheme';
-import { checkPhoto, facesForAllPhotos } from '../../lib/photoCheckRunner';
 import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -454,9 +452,10 @@ interface Snapshot {
 
 const MAX_UNDO_DEPTH = 20;
 
-function loadState(): Partial<SerializedState> | null {
+/** The draft kept on this device (the website: localStorage). */
+function loadState(store: KeyValueStore): Partial<SerializedState> | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = store.getItem(STORAGE_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as SerializedState;
   } catch {
@@ -464,9 +463,9 @@ function loadState(): Partial<SerializedState> | null {
   }
 }
 
-function saveState(state: SerializedState) {
+function saveState(store: KeyValueStore, state: SerializedState) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    store.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Storage full — silently fail
   }
@@ -560,10 +559,10 @@ function stripDefaultThemeTitles(pages: AlbumPage[]): AlbumPage[] {
   });
 }
 
-function getInitialState(): SerializedState {
+function getInitialState({ deviceStore, sessionStore }: Pick<BuilderPlatform, 'deviceStore' | 'sessionStore'>): SerializedState {
   // ── LEAK FIX #1a: Check for explicit fresh-start signal ──
   // Home.tsx sets this when user clicks "Create New Album"
-  const freshStart = sessionStorage.getItem('megy-fresh-start');
+  const freshStart = sessionStore.getItem('megy-fresh-start');
   if (freshStart === '1') {
     // Do NOT remove the signal here — the cloud effect also checks it.
     // Removing it here creates a race: cloud effect never sees it → loads old photos.
@@ -583,14 +582,14 @@ function getInitialState(): SerializedState {
     };
   }
 
-  const saved = loadState();
+  const saved = loadState(deviceStore);
   const defaultSize: AlbumSizePreset = '8x8';
 
   // ── Full corruption check (structural issues only) ──
   let effectiveSaved = saved;
   if (saved && isStateCorrupted(saved as SerializedState)) {
     console.warn('[Megy] Detected corrupted album state in localStorage. Starting fresh.');
-    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+    try { deviceStore.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     effectiveSaved = null;
   }
   // A draft saved at a size we no longer make (9x9) opens at its stand-in,
@@ -733,7 +732,7 @@ export interface BuilderActions {
    *  reporting the selected count lies whenever a re-picked batch is deduped. */
   /** `videos`/`others`: picked files left out — only photos go on pages
    *  (lib/pickedFiles); the confirmation says so. */
-  addPhotos: (files: FileList | File[]) => AddPhotosResult;
+  addPhotos: (files: ArrayLike<PickedPhoto>) => AddPhotosResult;
   /** iPhone photos (HEIC) being made ready: "12 of 44" (HeicProgress). Null when none. */
   heicProgress: { done: number; total: number } | null;
   removePhoto: (id: string) => void;
@@ -746,7 +745,7 @@ export interface BuilderActions {
   keepPhotos: (ids: string[]) => void;
   /** Put every left-out photo back (and keep it). */
   bringBackPhotos: () => void;
-  replacePhoto: (id: string, file: File) => void;
+  replacePhoto: (id: string, file: PickedPhoto) => void;
 
   // Pages
   albumPages: AlbumPage[];
@@ -892,7 +891,7 @@ export interface BuilderActions {
   /** COVER: put a photo the customer picked on the cover. The file is kept in
    *  the device's photo store, so the cover still has it after the app is
    *  closed (coverPhoto). Resolves once it is on the cover. */
-  setCoverPhoto: (file: File) => Promise<void>;
+  setCoverPhoto: (file: PickedPhoto) => Promise<void>;
   /** COVER: one of the album's photos on the cover, as a tap on it in the
    *  cover step puts it (testing phase: the sample album's cover), and the
    *  title in a colour, as the cover editor's colours set it. */
@@ -1000,17 +999,27 @@ export interface BuilderActions {
 const measureLimit = createLimiter(3);
 
 export function useBuilderState(): BuilderActions {
+  // ── The device underneath (shared/platform.ts): where the draft and the
+  // photos are kept, HEIC, faces, the photo check, the app going to the
+  // background. The website provides nothing and gets the browser's own
+  // pieces (lib/defaultBuilderPlatform → lib/browserPlatform); the 2.0 app
+  // provides its own (its default is none). The platform is one object for
+  // the builder's life: its pieces in a callback's deps never re-make it.
+  const platform = useContext(BuilderPlatformContext) ?? defaultBuilderPlatform;
+  if (!platform) throw new Error('The album builder needs its device pieces: wrap it in <BuilderPlatformContext.Provider>.');
+  const { deviceStore, sessionStore, faces, photoCheck: checker, lifecycle } = platform;
+  const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, previewUrlOf, releasePreviewUrl, pictureSize, convertingPreview } = platform.photos;
   // ── Phase 1: Cloud hooks ──
   const { user } = useAuth();
   const albumSync = useAlbumSync();
-  const idbPhotos = useIndexedDBPhotos(); // local-only — zero cloud I/O
+  const idbPhotos = platform.usePhotoStore(); // this device's photo store (website: IndexedDB) — zero cloud I/O
 
   // ── Core state ──
-  const [albumType, setAlbumTypeState] = useState<AlbumType>(() => getInitialState().albumType);
-  const [albumSize, setAlbumSizeState] = useState<AlbumSizePreset>(() => getInitialState().albumSize);
-  const [selectedTemplate, setSelectedTemplateState] = useState<TemplateType>(() => getInitialState().selectedTemplate);
-  const [albumTitle, setAlbumTitle] = useState<string>(() => getInitialState().title ?? '');
-  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>(() => getInitialState().uploadedPhotos);
+  const [albumType, setAlbumTypeState] = useState<AlbumType>(() => getInitialState(platform).albumType);
+  const [albumSize, setAlbumSizeState] = useState<AlbumSizePreset>(() => getInitialState(platform).albumSize);
+  const [selectedTemplate, setSelectedTemplateState] = useState<TemplateType>(() => getInitialState(platform).selectedTemplate);
+  const [albumTitle, setAlbumTitle] = useState<string>(() => getInitialState(platform).title ?? '');
+  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>(() => getInitialState(platform).uploadedPhotos);
   // Live mirror of uploadedPhotos so addPhotos can dedup against the current set
   // (and same-tick repeats) without a stale closure.
   const uploadedPhotosRef = useRef<UploadedPhoto[]>(uploadedPhotos);
@@ -1029,10 +1038,10 @@ export function useBuilderState(): BuilderActions {
    *  down, so every new session saved the same album as ANOTHER row — Your
    *  Projects filled with copies, and a copy could be a stale one. */
   const albumIdRef = useRef<string | undefined>(undefined);
-  if (albumIdRef.current === undefined) albumIdRef.current = getInitialState().albumId ?? newAlbumId();
+  if (albumIdRef.current === undefined) albumIdRef.current = getInitialState(platform).albumId ?? newAlbumId();
   /** Account this draft belongs to (SerializedState.accountId). */
   const draftAccountRef = useRef<string | null | undefined>(undefined);
-  if (draftAccountRef.current === undefined) draftAccountRef.current = getInitialState().accountId ?? null;
+  if (draftAccountRef.current === undefined) draftAccountRef.current = getInitialState(platform).accountId ?? null;
   if (user?.id && draftAccountRef.current !== user.id) {
     // Another account picked this draft up on a shared device. Its album id
     // belongs to the first account (a save to it would be refused), so from
@@ -1047,7 +1056,7 @@ export function useBuilderState(): BuilderActions {
    *  moved into it reads the old per-device one, once. */
   const syncRecRef = useRef<SyncRecord | null | undefined>(undefined);
   if (syncRecRef.current === undefined) {
-    const init = getInitialState();
+    const init = getInitialState(platform);
     syncRecRef.current = draftSyncRecord(init.albumId, init.sync) ?? readSyncRecord(init.albumId);
   }
   /** The record for `albumId`, when it is the one this tab holds. */
@@ -1057,18 +1066,18 @@ export function useBuilderState(): BuilderActions {
   }, []);
   /** When the album last changed on this device (SerializedState.editedAt). */
   const editedAtRef = useRef<number | undefined>(undefined);
-  if (editedAtRef.current === undefined) editedAtRef.current = getInitialState().editedAt ?? 0;
-  const [albumPages, setAlbumPages] = useState<AlbumPage[]>(() => getInitialState().albumPages);
+  if (editedAtRef.current === undefined) editedAtRef.current = getInitialState(platform).editedAt ?? 0;
+  const [albumPages, setAlbumPages] = useState<AlbumPage[]>(() => getInitialState(platform).albumPages);
   const [generating, setGenerating] = useState<GeneratingPhase | null>(null);
   const albumPagesRef = useRef(albumPages);
   useEffect(() => { albumPagesRef.current = albumPages; }, [albumPages]);
-  const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState().currentPageIndex);
-  const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState().rejectedTemplateIds);
-  const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState().photosPerPage);
+  const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState(platform).currentPageIndex);
+  const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState(platform).rejectedTemplateIds);
+  const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState(platform).photosPerPage);
   // Designed front·spine·back cover artwork (see CoverDesign). Persisted with the
   // album; the physical spine geometry is resolved at print time from the
   // checkout's cover material + actual page count (coverGeometry.ts).
-  const [coverDesign, setCoverDesign] = useState<CoverDesign>(() => getInitialState().coverDesign);
+  const [coverDesign, setCoverDesign] = useState<CoverDesign>(() => getInitialState(platform).coverDesign);
   // Panel-scoped merge helpers so the editor never has to hand-spread the nested
   // front/spine/back shape (and can't accidentally drop a sibling panel).
   const setCoverFront = useCallback((patch: Partial<CoverDesign['front']>) =>
@@ -1083,7 +1092,7 @@ export function useBuilderState(): BuilderActions {
   // A ref mirrors editScope so updateCurrentPage stays scope-aware without a
   // stale closure. (No coverBack state: the back is the reserved Megy Prints
   // panel, derived from the front at wrap time.)
-  const [coverFront, setCoverFrontPage] = useState<AlbumPage>(() => getInitialState().coverFront);
+  const [coverFront, setCoverFrontPage] = useState<AlbumPage>(() => getInitialState(platform).coverFront);
 
   /* The album's name is its cover title until the customer writes their own
      (1-star testers round 2: two albums went to print with a plain white
@@ -1129,7 +1138,7 @@ export function useBuilderState(): BuilderActions {
   // megy-fresh-start signal → empty state) still opens on 'setup'.
   const [phase, setPhase] = useState<string>(() => {
     try {
-      const init = getInitialState();
+      const init = getInitialState(platform);
       // Resume at the editor ONLY for a real generated album — pages that carry
       // a templateId AND photos to fill them. That is the safe signal: such an
       // album came from generateAlbum, so every page is fully normalized and the
@@ -1407,8 +1416,8 @@ export function useBuilderState(): BuilderActions {
     // the saves set them AFTER the render that built persistRef.
     settleEdited();
     const p = persistRef.current;
-    if (p) saveState({ ...p.local, editedAt: editedAtRef.current, sync: toDraftSync(syncRecFor(p.local.albumId)) });
-  }, [syncRecFor, settleEdited]);
+    if (p) saveState(deviceStore, { ...p.local, editedAt: editedAtRef.current, sync: toDraftSync(syncRecFor(p.local.albumId)) });
+  }, [syncRecFor, settleEdited, deviceStore]);
 
   const flushCloud = useCallback(() => {
     const p = persistRef.current;
@@ -1499,18 +1508,11 @@ export function useBuilderState(): BuilderActions {
   // Flush local + push a cloud backup when the tab is hidden / app exits.
   useEffect(() => {
     const onHide = () => {
-      if (document.visibilityState === 'hidden') {
-        flushLocal();
-        flushCloud();
-      }
+      flushLocal();
+      flushCloud();
     };
-    document.addEventListener('visibilitychange', onHide);
-    window.addEventListener('pagehide', onHide);
-    return () => {
-      document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', onHide);
-    };
-  }, [flushLocal, flushCloud]);
+    return lifecycle.onLeave(onHide);
+  }, [flushLocal, flushCloud, lifecycle]);
 
   // Back to the app (the phone woken up, the laptop window clicked): did the
   // album move on on the other device meanwhile? At most every 15 s.
@@ -1518,24 +1520,18 @@ export function useBuilderState(): BuilderActions {
   useEffect(() => {
     let lastAsked = 0;
     const onShow = () => {
-      if (document.visibilityState !== 'visible') return;
       const now = Date.now();
       if (now - lastAsked < 15_000) return;
       lastAsked = now;
       void reconcileRef.current?.();
     };
-    document.addEventListener('visibilitychange', onShow);
-    window.addEventListener('focus', onShow);
-    return () => {
-      document.removeEventListener('visibilitychange', onShow);
-      window.removeEventListener('focus', onShow);
-    };
-  }, []);
+    return lifecycle.onReturn(onShow);
+  }, [lifecycle]);
 
   /* ── Phase 1: Face API init + Cloud load on mount / login ── */
   useEffect(() => {
-    void initFaceApi(); // preload face detection models
-  }, []);
+    void faces.init(); // preload face detection models
+  }, [faces]);
 
   useEffect(() => {
     if (!user) return;
@@ -1543,9 +1539,9 @@ export function useBuilderState(): BuilderActions {
     // ── LEAK FIX #3: Skip cloud auto-load on fresh start ──
     // If the user just clicked "Create New Album", don't pull old
     // album data from cloud and overwrite the fresh empty state.
-    const freshStart = sessionStorage.getItem('megy-fresh-start');
+    const freshStart = sessionStore.getItem('megy-fresh-start');
     if (freshStart === '1') {
-      sessionStorage.removeItem('megy-fresh-start');
+      sessionStore.removeItem('megy-fresh-start');
       return;
     }
 
@@ -1684,7 +1680,7 @@ export function useBuilderState(): BuilderActions {
   useEffect(() => {
     async function rehydrate() {
       // ── LEAK FIX #2a: Don't rehydrate during a fresh start ──
-      const freshStart = sessionStorage.getItem('megy-fresh-start');
+      const freshStart = sessionStore.getItem('megy-fresh-start');
       if (freshStart === '1') return;
 
       // ── LEAK FIX #2b: If reset() just fired, skipCloudLoadRef is true ──
@@ -1747,7 +1743,7 @@ export function useBuilderState(): BuilderActions {
      which return early at the cover step: there are none yet. Same fresh-start
      guards. Only a cover still showing the link we started from is patched. */
   useEffect(() => {
-    if (sessionStorage.getItem('megy-fresh-start') === '1' || skipCloudLoadRef.current) return;
+    if (sessionStore.getItem('megy-fresh-start') === '1' || skipCloudLoadRef.current) return;
     const start = coverFrontRef.current;
     if (!coverLocalPhotoId(start)) return;
     void withLiveCoverPhoto(start, idbPhotos.get).then((live) => {
@@ -1788,11 +1784,11 @@ export function useBuilderState(): BuilderActions {
   const [heicProgress, setHeicProgress] = useState<{ done: number; total: number } | null>(null);
   useEffect(() => {
     if (!heicProgress || heicProgress.done < heicProgress.total) return;
-    const t = window.setTimeout(() => setHeicProgress(null), HEIC_READY_SHOWN_MS);
-    return () => window.clearTimeout(t);
+    const t = setTimeout(() => setHeicProgress(null), HEIC_READY_SHOWN_MS);
+    return () => clearTimeout(t);
   }, [heicProgress]);
 
-  const addPhotos = useCallback((files: FileList | File[]): AddPhotosResult => {
+  const addPhotos = useCallback((files: ArrayLike<PickedPhoto>): AddPhotosResult => {
     // Only photos go on pages; videos and other files are counted, not added.
     const picked = Array.from(files);
     const fileArray = picked.filter((f) => kindOfPick(f) === 'photo');
@@ -1825,14 +1821,14 @@ export function useBuilderState(): BuilderActions {
         const b = back.get(p.id);
         if (!b) return p;
         // A fresh file: any note about an earlier copy no longer applies.
-        return { ...p, copyNote: b.sameCopy ? undefined : 'differentCopy', previewUrl: looksHeic(b.file) ? HEIC_CONVERTING_PREVIEW : URL.createObjectURL(b.file), type: b.file.type, size: b.file.size };
+        return { ...p, copyNote: b.sameCopy ? undefined : 'differentCopy', previewUrl: looksHeic(b.file) ? convertingPreview : previewUrlOf(b.file), type: b.file.type, size: b.file.size };
       };
       uploadedPhotosRef.current = uploadedPhotosRef.current.map(refill);
       setUploadedPhotos((prev) => prev.map(refill));
       for (const [id, { file }] of back) {
         // Stored under the photo's OWN id, so the next reload finds it here.
         const task = measureLimit(async () => {
-          let usable: File;
+          let usable: PickedPhoto;
           try {
             usable = await toAlbumPhoto(file);
           } catch {
@@ -1846,10 +1842,10 @@ export function useBuilderState(): BuilderActions {
           }
           const stored = await idbPhotos.store(usable, id);
           const dims = stored ?? await getImageDimensions(usable);
-          const capturedAt = await readCaptureTime(file); // the original: a JPEG copy has no EXIF
+          const capturedAt = await captureTime(file); // the original: a JPEG copy has no EXIF
           if (dims.width > 0 && dims.height > 0) measuredRef.current.set(id, { width: dims.width, height: dims.height });
           const note = copyQuality(recorded.get(id) ?? { width: 0, height: 0 }, dims);
-          const shown = usable !== file ? { previewUrl: URL.createObjectURL(usable), type: usable.type } : {};
+          const shown = usable !== file ? { previewUrl: previewUrlOf(usable), type: usable.type } : {};
           uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === id ? { ...p, ...shown } : p));
           setUploadedPhotos((prev) => prev.map((p) => (p.id === id
             ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(note ? { copyNote: note } : {}) }
@@ -1877,7 +1873,7 @@ export function useBuilderState(): BuilderActions {
     const newPhotos: UploadedPhoto[] = freshFiles.map((file) => ({
       id: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       name: file.name,
-      previewUrl: looksHeic(file) ? HEIC_CONVERTING_PREVIEW : URL.createObjectURL(file),
+      previewUrl: looksHeic(file) ? convertingPreview : previewUrlOf(file),
       type: file.type,
       size: file.size,
       width: 0, // filled in after IndexedDB store
@@ -1898,7 +1894,7 @@ export function useBuilderState(): BuilderActions {
       // once, a 250-photo pick decoded ~12 GB and the phone killed the app.
       const task = measureLimit(async () => {
         // A HEIC becomes a JPEG first (everything after reads the JPEG).
-        let usable: File;
+        let usable: PickedPhoto;
         try {
           usable = await toAlbumPhoto(file);
         } catch {
@@ -1911,7 +1907,7 @@ export function useBuilderState(): BuilderActions {
         // A failed write (e.g. a full disk) returns null — still measure, or the
         // photo stays 0×0 and gets classified by guesswork.
         const dims = stored ?? await getImageDimensions(usable);
-        const capturedAt = await readCaptureTime(file); // the original: a JPEG copy has no EXIF
+        const capturedAt = await captureTime(file); // the original: a JPEG copy has no EXIF
         // Record the size SYNCHRONOUSLY here — see measuredRef.
         if (dims.width > 0 && dims.height > 0) {
           measuredRef.current.set(photo.id, { width: dims.width, height: dims.height });
@@ -1919,7 +1915,7 @@ export function useBuilderState(): BuilderActions {
         // The name and size stay the ORIGINAL's: picking the same HEIC again is
         // then "already in your album", and on another device it goes back in
         // its place (photoRelink matches by name + size).
-        const shown = usable !== file ? { previewUrl: URL.createObjectURL(usable), type: usable.type } : {};
+        const shown = usable !== file ? { previewUrl: previewUrlOf(usable), type: usable.type } : {};
         if (usable !== file) uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === photo.id ? { ...p, ...shown } : p));
         setUploadedPhotos((prev) =>
           prev.map((p) =>
@@ -1937,7 +1933,7 @@ export function useBuilderState(): BuilderActions {
     }
 
     return { added: freshFiles.length, skipped: plan.duplicate.length, videos, others, restored, otherCopies, heic: heicDone() };
-  }, [idbPhotos]);
+  }, [idbPhotos, looksHeic, toAlbumPhoto, getImageDimensions, captureTime, previewUrlOf, convertingPreview]);
 
   /* ── Megy's free photo check (lib/photoCheck) ──
      One photo at a time, in the background, on the phone: blur + fingerprint
@@ -1949,20 +1945,20 @@ export function useBuilderState(): BuilderActions {
   const checkRunningRef = useRef(false);
   useEffect(() => {
     // A browser that can't decode a small copy (no createImageBitmap) skips the check.
-    if (typeof createImageBitmap !== 'function') return;
-    if (checkRunningRef.current || !nextCheckJob(uploadedPhotos, checkTriedRef.current, facesForAllPhotos())) return;
+    if (!checker.available()) return;
+    if (checkRunningRef.current || !nextCheckJob(uploadedPhotos, checkTriedRef.current, checker.facesForAllPhotos())) return;
     checkRunningRef.current = true;
     void (async () => {
       try {
         for (;;) {
-          const job = nextCheckJob(uploadedPhotosRef.current, checkTriedRef.current, facesForAllPhotos());
+          const job = nextCheckJob(uploadedPhotosRef.current, checkTriedRef.current, checker.facesForAllPhotos());
           if (!job) break;
           checkTriedRef.current.add(`${job.stage}:${job.id}`);
           const photo = uploadedPhotosRef.current.find((p) => p.id === job.id);
           const stored = photo ? await idbPhotos.get(job.id) : null;
-          if (!photo || !stored?.blob) continue;
+          if (!photo || !stored || !checker.readable(stored)) continue;
           try {
-            const res = await checkPhoto(stored.blob, photo.width, photo.height, { faces: job.stage === 'faces' });
+            const res = await checker.check(stored, photo.width, photo.height, { faces: job.stage === 'faces' });
             const merge = (p: UploadedPhoto): UploadedPhoto => job.stage === 'basic'
               ? { ...p, check: { ...res, faces: null, facesTried: false } }
               : { ...p, check: p.check ? { ...p.check, faces: res.faces, eyesClosed: res.eyesClosed, facesTried: true } : p.check };
@@ -2008,12 +2004,12 @@ export function useBuilderState(): BuilderActions {
 
     setUploadedPhotos((prev) => {
       const photo = prev.find((p) => p.id === id);
-      if (photo) URL.revokeObjectURL(photo.previewUrl);
+      if (photo) releasePreviewUrl(photo.previewUrl);
       return prev.filter((p) => p.id !== id);
     });
-  }, [idbPhotos]);
+  }, [idbPhotos, releasePreviewUrl]);
 
-  const replacePhoto = useCallback((id: string, file: File) => {
+  const replacePhoto = useCallback((id: string, file: PickedPhoto) => {
     pushSnapshot();
     // An iPhone photo (HEIC) becomes a JPEG first; one that can't be opened
     // leaves the old photo where it is.
@@ -2021,7 +2017,7 @@ export function useBuilderState(): BuilderActions {
       setUploadedPhotos((prev) =>
         prev.map((p) =>
           p.id === id
-            ? { ...p, name: file.name, previewUrl: URL.createObjectURL(usable), type: usable.type, size: file.size }
+            ? { ...p, name: file.name, previewUrl: previewUrlOf(usable), type: usable.type, size: file.size }
             : p
         )
       );
@@ -2036,7 +2032,7 @@ export function useBuilderState(): BuilderActions {
         }
       });
     }).catch(() => { /* couldn't open it: nothing changes */ });
-  }, [idbPhotos]);
+  }, [idbPhotos, toAlbumPhoto, previewUrlOf]);
 
   /* ── Page navigation ── */
   const goToPage = useCallback((index: number) => {
@@ -2199,7 +2195,7 @@ export function useBuilderState(): BuilderActions {
       if (!corner) {
         const url = photos[m.photo]?.previewUrl;
         let face: { x: number; y: number } | null = null;
-        try { face = url ? await detectFaceCenter(url) : null; } catch { face = null; }
+        try { face = url ? await faces.detectFaceCenter(url) : null; } catch { face = null; }
         corner = qrCornerAwayFromFace(face);
       }
       carried.push({ ...m, photo: poolMap.indexOf(m.photo), corner });
@@ -2217,12 +2213,12 @@ export function useBuilderState(): BuilderActions {
     if (faceCands.length > 0) {
       faceCenters = {};
       try {
-        await initFaceApi();
+        await faces.init();
         const deadline = Date.now() + 8000;
         for (const i of faceCands) {
           if (Date.now() > deadline) break;
           const url = pool[i]?.previewUrl;
-          const c = url ? await detectFaceCenter(url) : null;
+          const c = url ? await faces.detectFaceCenter(url) : null;
           if (c) faceCenters[i] = c;
         }
       } catch { /* no faces known → least-crop order */ }
@@ -2276,7 +2272,7 @@ export function useBuilderState(): BuilderActions {
     } finally {
       setGenerating(null);
     }
-  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate]);
+  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces]);
 
   /** Does the current page carry a video memory? Then its layout stays the
    *  full photo with the QR badge (see relayPageOnTemplate), and the layout
@@ -2508,12 +2504,12 @@ export function useBuilderState(): BuilderActions {
     const photoUrl = uploadedPhotos[photoIndex]?.previewUrl;
     if (!photoUrl) return;
     const pageIndex = currentPageIndex;
-    void detectFaceCenter(photoUrl).then((face) => {
+    void faces.detectFaceCenter(photoUrl).then((face) => {
       if (!face) return;
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const natural = { w: img.naturalWidth, h: img.naturalHeight };
+      // The picture's own size, once it loads (none when it can't: nothing moves).
+      void pictureSize(photoUrl).then((loaded) => {
+        if (!loaded) return;
+        const natural = { w: loaded.width, h: loaded.height };
         const coverMode = editScopeRef.current === 'coverFront';
         updateCurrentPage((p) => {
           if ((p.slotFills ?? [])[slotIndex] !== photoIndex) return p;
@@ -2526,10 +2522,9 @@ export function useBuilderState(): BuilderActions {
           offsetsY[slotIndex] = pan.y;
           return { ...p, slotOffsetsX: offsetsX, slotOffsetsY: offsetsY };
         });
-      };
-      img.src = photoUrl;
+      });
     });
-  }, [uploadedPhotos, currentPageIndex, updateCurrentPage, albumSize]);
+  }, [uploadedPhotos, currentPageIndex, updateCurrentPage, albumSize, faces, pictureSize]);
 
   /* ── Slot management ── */
   /* ONE PHOTO, ONE PLACE (owner, 2026-10-20): a photo picked for this frame
@@ -2702,7 +2697,7 @@ export function useBuilderState(): BuilderActions {
     } else {
       let face: { x: number; y: number } | null = null;
       if (photo?.previewUrl) {
-        try { face = await detectFaceCenter(photo.previewUrl); } catch { face = null; }
+        try { face = await faces.detectFaceCenter(photo.previewUrl); } catch { face = null; }
       }
       chosen = qrCornerAwayFromFace(face);
     }
@@ -2736,7 +2731,7 @@ export function useBuilderState(): BuilderActions {
       };
     });
     return true;
-  }, [updateCurrentPage, pushSnapshot]);
+  }, [updateCurrentPage, pushSnapshot, faces]);
 
   /** Move an EXISTING QR-badge to a different corner. Swaps the badge template to
    *  the same size + new corner, preserving the full-bleed photo (slot 0, with its
@@ -3377,7 +3372,7 @@ export function useBuilderState(): BuilderActions {
     setAlbumPages((prev) => withPhotoOnLastPage(prev, index));
   }, []);
 
-  const setCoverPhoto = useCallback(async (picked: File) => {
+  const setCoverPhoto = useCallback(async (picked: PickedPhoto) => {
     // An iPhone photo (HEIC) becomes a JPEG first (Chrome can't show a HEIC);
     // one that can't be opened leaves the cover as it is.
     const file = await toAlbumPhoto(picked).catch(() => null);
@@ -3392,7 +3387,7 @@ export function useBuilderState(): BuilderActions {
       ...p,
       background: live?.url
         ? { type: 'image', image: live.url, localPhotoId: id }
-        : { type: 'image', image: URL.createObjectURL(file) },
+        : { type: 'image', image: previewUrlOf(file) },
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idbPhotos]);
@@ -3622,7 +3617,7 @@ export function useBuilderState(): BuilderActions {
     // What is on disk (Home → "Start Creating" arrives here with an already-
     // empty state) plus what is in memory (a restart can land inside the 30 s
     // local-save debounce).
-    const stored = loadState();
+    const stored = loadState(deviceStore);
     const discardedPhotoIds = [...(stored?.uploadedPhotos ?? []), ...uploadedPhotosRef.current].map((p) => p.id);
     // The cover's own uploaded photo goes the same way (coverPhoto).
     for (const c of [stored?.coverFront, coverFrontRef.current]) {
@@ -3685,10 +3680,10 @@ export function useBuilderState(): BuilderActions {
     setCloudSaveStatus('idle');
     setLastSavedAt(null);
     skipCloudLoadRef.current = true;  // Prevent cloud load from overwriting fresh state
-    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+    try { deviceStore.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     // ── Clear wizard state so it restarts from step 1 ──
-    try { localStorage.removeItem('megy_wizard_state'); } catch { /* ignore */ }
-  }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict, setCloudGone, syncRecFor]);
+    try { deviceStore.removeItem('megy_wizard_state'); } catch { /* ignore */ }
+  }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict, setCloudGone, syncRecFor, deviceStore]);
 
   /* ── Another account's album is not opened for this one ──
      A shared device: B signs in where A's album was left. It used to open as
@@ -3697,7 +3692,7 @@ export function useBuilderState(): BuilderActions {
      (Kraken, 2026-10-05). B gets a fresh album; A's stays in A's account,
      and its photos stay on the device (reset keeps an account's photos).
      Before paint, so B never sees A's album. */
-  const draftOwnerRef = useRef<string | null>(getInitialState().accountId ?? null);
+  const draftOwnerRef = useRef<string | null>(getInitialState(platform).accountId ?? null);
   useLayoutEffect(() => {
     if (!user?.id) return;
     const owner = draftOwnerRef.current;

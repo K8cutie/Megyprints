@@ -22,6 +22,15 @@
 
    Made 2026-10-28 from every non-spec .ts file in src/pages/builder and
    src/lib that passes the check: 70 files, about 13,000 lines.
+   Phase 0b added lib/heicRules (knowing an iPhone photo by its label),
+   shared/platform (what the album builder needs from the device: the
+   website passes the browser's pieces, the app passes its own) and
+   lib/defaultBuilderPlatform.native (the app's default for those: none).
+
+   A TWIN: a file listed as name.native.ts stands in for name.ts in the app.
+   The app's bundler (Metro) and type check (tsconfig moduleSuffixes) pick
+   the .native.ts file, so a listed file may import name.ts (the website's,
+   not listed) when its twin is listed. The twin must export the same names.
    ══════════════════════════════════════════════════════════════════════════ */
 
 /** Repo-relative paths, in plain sort order. */
@@ -29,6 +38,8 @@ export const SHARED_MODULES = [
   'src/lib/accountErrors.ts',
   'src/lib/albumName.ts',
   'src/lib/contact.ts',
+  'src/lib/defaultBuilderPlatform.native.ts',
+  'src/lib/heicRules.ts',
   'src/lib/heifExif.ts',
   'src/lib/inAppBrowser.ts',
   'src/lib/jpegZip.ts',
@@ -96,6 +107,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/types.ts',
   'src/pages/builder/useEndOfAlbumPrompt.ts',
   'src/pages/builder/varietyTracker.ts',
+  'src/shared/platform.ts',
 ] as const;
 
 /** npm packages a shared file may import. Each must run the same in a
