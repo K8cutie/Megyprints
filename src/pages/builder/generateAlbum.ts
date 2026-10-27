@@ -130,7 +130,9 @@ export const BOX_ROLL_WEIGHTS: Record<BoxRoll, number> = { quote: 0.70, text: 0.
  *  offers only lines written for the page's photos (and "Type your own
  *  words"), Step 1 no longer asks /api/theme-quotes for the occasion's lines,
  *  and a new occasion clears Megy's old-occasion lines instead of swapping in
- *  bank ones. true brings all of it back, as before. */
+ *  bank ones. true brings the curated lines back; the AI-written bank lines
+ *  need a new endpoint (/api/theme-quotes was deleted 2026-10-27, see
+ *  src/lib/quotes.ts). */
 export const DEAL_BANK_QUOTES = false;
 
 /** What generation needs to deal boxes. Quote styling is passed in (not read
