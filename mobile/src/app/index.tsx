@@ -24,19 +24,23 @@ export default function Start() {
           <ActivityIndicator color={colors.accent} size="large" />
         ) : session ? (
           <>
+            <Button label="Make an album" onPress={() => router.push('/photos')} testID="make-album" />
             <Text style={styles.who}>Signed in as {email ?? 'your account'}</Text>
-            <Button label="See my albums" onPress={() => router.push('/albums')} testID="see-albums" />
+            <Button label="See my albums" kind="plain" onPress={() => router.push('/albums')} testID="see-albums" />
             <Pressable accessibilityRole="button" onPress={() => { void signOut(); }} style={styles.link}>
               <Text style={styles.linkText}>Sign out</Text>
             </Pressable>
           </>
         ) : (
-          <Button label="Sign in" onPress={() => router.push('/sign-in')} testID="go-sign-in" />
+          <>
+            <Button label="Make an album" onPress={() => router.push('/photos')} testID="make-album" />
+            <Button label="Sign in" kind="plain" onPress={() => router.push('/sign-in')} testID="go-sign-in" />
+          </>
         )}
         <Button label="Shared code check" kind="plain" onPress={() => router.push('/shared-check')} testID="go-check" />
       </View>
 
-      <Text style={styles.note}>Test version 2.0 (dev). Making and ordering albums are not in this version yet.</Text>
+      <Text style={styles.note}>Test version 2.0 (dev). You can pick the photos for an album. Making the pages and ordering come in later versions.</Text>
     </SafeAreaView>
   );
 }
