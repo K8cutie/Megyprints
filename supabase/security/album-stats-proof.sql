@@ -35,7 +35,7 @@ begin
             set_config('request.jwt.claim.role', p_role, true),
             set_config('request.jwt.claims',
               case when p_email = '' then json_build_object('role', p_role)::text
-                   else json_build_object('sub', gen_random_uuid(), 'role', p_role, 'email', p_email, 'aud', 'authenticated')::text end, true);
+                   else json_build_object('sub', coalesce((select u.id from auth.users u where lower(u.email) = lower(p_email) order by u.created_at limit 1), gen_random_uuid()), 'role', p_role, 'email', p_email, 'aud', 'authenticated')::text end, true);
     execute p_sql into v_out;
     perform set_config('role', 'none', true),
             set_config('request.jwt.claim.role', '', true),
@@ -115,6 +115,10 @@ begin
     r := r || pg_temp.line('A2', 'a signed-in customer cannot', 'REFUSED 42501',
            pg_temp.as_email('authenticated', 'zz-probe-stats-u@probe.invalid', 'select count(*)::text from public.admin_album_stats()'));
     insert into public.operator_roles (email, role) values ('zz-probe-stats-ful@probe.invalid', 'fulfillment');
+    -- 0058: a Team role needs a Google sign-in with that email.
+    insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at)
+    select 'zz-probe-' || u.id, u.id, jsonb_build_object('sub', u.id, 'email', u.email, 'email_verified', true), 'google', now(), now()
+      from auth.users u where u.email = 'zz-probe-stats-ful@probe.invalid';
     r := r || pg_temp.line('A3', 'a fulfillment operator cannot', 'REFUSED 42501',
            pg_temp.as_email('authenticated', 'zz-probe-stats-ful@probe.invalid', 'select count(*)::text from public.admin_album_stats()'));
     r := r || pg_temp.line('A4', 'the owner can', '1',
@@ -184,6 +188,10 @@ begin
   begin
     T := pg_temp.mk_user('team');
     insert into public.operator_roles (email, role) values ('zz-probe-stats-team@probe.invalid', 'fulfillment');
+    -- 0058: a Team role needs a Google sign-in with that email.
+    insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at)
+    select 'zz-probe-' || u.id, u.id, jsonb_build_object('sub', u.id, 'email', u.email, 'email_verified', true), 'google', now(), now()
+      from auth.users u where u.email = 'zz-probe-stats-team@probe.invalid';
     perform pg_temp.mk_album(T, 'Family', '[]', '[]');
     -- And one on the real owner account (rolled back with everything else).
     perform pg_temp.mk_album(id, 'Family', '[]', '[]') from auth.users where email = 'archgarcia@gmail.com';

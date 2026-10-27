@@ -91,6 +91,10 @@ begin
   end if;
   H := pg_temp.mk_user('h'); O := pg_temp.mk_user('o'); OWN := pg_temp.mk_user('own'); G := pg_temp.mk_user('g');
   insert into public.operator_roles (email, role) values ('zz-probe-eaown@probe.invalid', 'owner');
+  -- 0058: a Team role needs a Google sign-in with that email.
+  insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at)
+  select 'zz-probe-' || u.id, u.id, jsonb_build_object('sub', u.id, 'email', u.email, 'email_verified', true), 'google', now(), now()
+    from auth.users u where u.email = 'zz-probe-eaown@probe.invalid';
 
   ev := pg_temp.do_as(H, 'authenticated',
           $q$insert into public.event_bookings (user_id, event_type, event_date, venue, guest_count, host_name, mobile)

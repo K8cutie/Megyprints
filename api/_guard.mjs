@@ -1,8 +1,12 @@
-// Shared abuse guard for the paid Anthropic proxies (theme-quotes; theme-keywords
-// was deleted along with the sunset clipart picker, its only caller).
+// Shared abuse guard for the paid Anthropic proxy (photo-quotes; client-error
+// and delete-account use it too). theme-keywords was deleted along with the sunset clipart
+// picker; theme-quotes was deleted 2026-10-27 — it needed no sign-in and had no
+// daily cap, and the app no longer called it. A new endpoint that spends money
+// must check the sign-in AND keep a cap in the database, like photo-quotes
+// (api/paidEndpoints.spec.mjs fails otherwise); this guard alone is not enough.
 //
-// These endpoints are PUBLIC and UNAUTHENTICATED by design — the album builder
-// has no login — yet every reaching call spends money on a Haiku request. That
+// The proxies this was written for were PUBLIC and UNAUTHENTICATED — the album
+// builder has no login — yet every reaching call spent money on a Haiku request. That
 // is exactly the shape an abuser scripts: hammer the URL from a loop and run up
 // the bill, or POST a giant body to waste tokens. This module is the first line
 // of defence. It is deliberately dependency-free and cheap so it can sit in

@@ -30,11 +30,13 @@ begin
   select u.id into v_a from auth.users u
    where not exists (select 1 from public.orders o where o.user_id = u.id and o.status = 'pending_payment' and o.payment_status = 'unpaid')
      and not exists (select 1 from public.operator_roles r where lower(r.email) = lower(u.email))
+     and not exists (select 1 from public.owner_accounts w where w.user_id = u.id)  -- 0058: owners go by account
    order by u.created_at limit 1;
   select u.id into v_b from auth.users u
    where u.id <> v_a
      and not exists (select 1 from public.orders o where o.user_id = u.id and o.status = 'pending_payment' and o.payment_status = 'unpaid')
      and not exists (select 1 from public.operator_roles r where lower(r.email) = lower(u.email))
+     and not exists (select 1 from public.owner_accounts w where w.user_id = u.id)  -- 0058: owners go by account
    order by u.created_at limit 1;
   if v_a is null or v_b is null then raise exception 'Need two fixture customers without unpaid orders.'; end if;
   delete from public.tester_code_tries where user_id in (v_a, v_b);

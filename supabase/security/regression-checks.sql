@@ -362,5 +362,65 @@ begin
   raise notice 'PASS: the tester code is checked by signed-in customers only, kept private, and only the database applies it';
 end $$;
 
+-- ── GUARD 13: owners go by account, not by the email in the login (0058) ────
+-- New sign-ups are not asked to confirm their email, so the email in a login
+-- proves nothing. Owners are account ids in owner_accounts; a Team role needs a
+-- Google sign-in with that email; an owner account can't be deleted.
+do $$
+declare bad text;
+begin
+  if to_regclass('public.owner_accounts') is null or to_regprocedure('public.is_owner()') is null then
+    raise exception 'REGRESSION (owners): owner_accounts / is_owner() missing: 0058 was never applied here';
+  end if;
+  if not (select relrowsecurity from pg_class where oid = 'public.owner_accounts'::regclass)
+     or has_table_privilege('anon', 'public.owner_accounts', 'SELECT')
+     or has_table_privilege('authenticated', 'public.owner_accounts', 'SELECT')
+     or has_table_privilege('authenticated', 'public.owner_accounts', 'INSERT') then
+    raise exception 'REGRESSION (owners): customers can read or add to the owner list';
+  end if;
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.owner_accounts'::regclass and contype = 'f'
+                    and confrelid = 'auth.users'::regclass and confdeltype = 'r') then
+    raise exception 'REGRESSION (owners): an owner account can be deleted (owner_accounts must be ON DELETE RESTRICT)';
+  end if;
+  select string_agg(x, ', ') into bad from (
+    select 'function ' || p.proname as x
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname in ('public', 'storage') and p.prokind = 'f'
+       and p.prosrc ilike '%jwt()%' and p.prosrc ilike '%email%'
+    union all
+    select 'policy ' || tablename || ' "' || policyname || '"'
+      from pg_policies
+     where schemaname in ('public', 'storage') and coalesce(qual, '') || coalesce(with_check, '') ilike '%jwt()%'
+  ) s;
+  if bad is not null then
+    raise exception 'REGRESSION (owners): decided by the email in the login again: %', bad;
+  end if;
+  if (select prosrc from pg_proc where oid = 'public.operator_role()'::regprocedure) not like '%is_owner()%'
+     or (select prosrc from pg_proc where oid = 'public.operator_role()'::regprocedure) not like '%''google''%' then
+    raise exception 'REGRESSION (owners): operator_role() no longer asks is_owner() and a Google sign-in';
+  end if;
+  raise notice 'PASS: owners go by account, a Team role needs Google, an owner account cannot be deleted';
+end $$;
+
+-- ── GUARD 14: a memory row or a scan doesn't keep a video (0059) ───────────
+-- Anyone can make a memory row or add a scan, so only orders keep a video.
+do $$
+begin
+  if to_regprocedure('public.finish_orphan_clip_purge(text[])') is null then
+    raise exception 'REGRESSION (videos): finish_orphan_clip_purge() missing: 0059 was never applied here';
+  end if;
+  if (select prosrc from pg_proc where oid = 'public.clip_still_needed(text,uuid,timestamptz,uuid)'::regprocedure) ilike '%qr_memories%'
+     or (select prosrc from pg_proc where oid = 'public.orphan_clip_files(integer)'::regprocedure) ilike '%qr_memories%' then
+    raise exception 'REGRESSION (videos): a memory row keeps a video again (free video hosting for any account)';
+  end if;
+  if has_function_privilege('authenticated', 'public.finish_orphan_clip_purge(text[])', 'EXECUTE')
+     or has_function_privilege('anon', 'public.finish_orphan_clip_purge(text[])', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.orphan_clip_files(integer)', 'EXECUTE') then
+    raise exception 'REGRESSION (videos): customers can run the video cleanup';
+  end if;
+  raise notice 'PASS: only orders keep a memory video; the cleanup is the server''s alone';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;

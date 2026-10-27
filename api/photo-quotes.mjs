@@ -45,7 +45,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ipOf, rejectIfAbusive } from './_guard.mjs';
-import { clean, MAX_QUOTE_CHARS } from './theme-quotes.mjs';
+import { clean, MAX_QUOTE_CHARS } from './_quoteFilter.mjs';
 
 const KEY = process.env.ANTHROPIC_API_KEY || '';
 const MODEL = process.env.PHOTO_QUOTES_MODEL || 'claude-haiku-5-5';

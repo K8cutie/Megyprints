@@ -16,8 +16,10 @@
 //      paid), removes <id>.pdf and <id>-cover.pdf, then the memory videos the
 //      database says may go (order_clip_files_to_purge), then records it
 //      (finish_order_file_purge);
-//   3. removes videos uploaded early (when /order opened) for a checkout that
-//      never finished (orphan_clip_files).
+//   3. removes videos no order needs — uploaded early (when /order opened) for
+//      a checkout that never finished, or by an account that never orders
+//      (orphan_clip_files) — then their memory rows (finish_orphan_clip_purge,
+//      0059).
 //
 // Receipts (payment-proofs) are kept on purpose: they're the evidence if a
 // customer says they paid. Nothing on the customer's phone is touched, so a
@@ -178,6 +180,11 @@ export default async function handler(req, res) {
     try {
       await removeAll(admin, CLIP_BUCKET, names);
       orphans += names.length;
+      // Their memory rows go too (0059): the database drops only rows whose
+      // file is really gone.
+      const codes = stray.filter((c) => names.includes(c?.object_name)).map((c) => c.code);
+      const { error: finishErr } = await admin.rpc('finish_orphan_clip_purge', { p_codes: codes });
+      if (finishErr) throw new Error(`orphan rows: ${finishErr.message}`);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error(`[expire-orders] orphans: ${message}`);

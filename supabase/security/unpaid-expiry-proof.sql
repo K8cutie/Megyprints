@@ -12,8 +12,9 @@
 --    E. a memory video is offered for removal only when nothing could still
 --       need it (each guard gets its own case, with its own customer, because
 --       the paid-order guard is per customer);
---    F. videos uploaded for a checkout that never finished are found, and
---       only those;
+--    F. videos no order needs are found, and only those — a memory row or a
+--       scan no longer keeps one (0059: anyone can make those); their memory
+--       rows go once the files are gone;
 --    G. a memory row goes only once its file is really gone;
 --    H. a phone learns which of its codes are on its own PAID orders only;
 --    I. a closed order takes no new print files, receipts or "I've sent";
@@ -333,20 +334,20 @@ begin
     orr := pg_temp.mk_claimed(RR, null, '{zzqxrrrr}');
     r := r || pg_temp.line('E6', '...but a paid order from long before the upload doesn''t protect it', 'zzqxrrrr.mp4', pg_temp.clips_of(orr));
 
-    -- scanned
+    -- scanned, but no order needs it (0059: anyone can add a scan)
     perform pg_temp.mk_clip('zzqxdddd.mp4', A);
     insert into public.qr_memories (code, user_id, destination, kind) values ('zzqxdddd', A, 'https://probe.invalid/m/zzqxdddd.mp4', 'clip');
     update public.qr_memories set scan_count = 3 where code = 'zzqxdddd';
-    r := r || pg_temp.line('E7', 'someone has scanned it: kept', '', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxdddd}')));
+    r := r || pg_temp.line('E7', 'scanned, but no order needs it: may go (0059)', 'zzqxdddd.mp4', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxdddd}')));
 
     -- another account uploaded the file
     perform pg_temp.mk_clip('zzqxeeee.mp4', B);
     r := r || pg_temp.line('E8', 'another account uploaded the file: kept', '', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxeeee}')));
 
-    -- the memory row is another account's
+    -- the memory row is another account's (0059: a second account could make it)
     perform pg_temp.mk_clip('zzqxffff.mp4', A);
     insert into public.qr_memories (code, user_id, destination, kind) values ('zzqxffff', B, 'https://probe.invalid/m/zzqxffff.mp4', 'clip');
-    r := r || pg_temp.line('E9', 'the memory row belongs to another account: kept', '', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxffff}')));
+    r := r || pg_temp.line('E9', 'the memory row belongs to another account: may go (0059)', 'zzqxffff.mp4', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxffff}')));
 
     -- uploaded but never given a memory row
     perform pg_temp.mk_clip('zzqxgggg.mp4', A);
@@ -411,11 +412,24 @@ begin
     perform pg_temp.mk_clip('zzqxyoun.mp4', S, now() - interval '2 days');   -- too young
     perform pg_temp.mk_clip('zzqxpold.mp4', S, now() - interval '40 days');  -- before 0042
     perform pg_temp.mk_clip('zzqxpaid.mp4', Q, now() - interval '8 days');   -- Q paid an order since
+    perform pg_temp.mk_clip('zzqxscan.mp4', S, now() - interval '8 days');   -- its memory row was scanned (0059)
+    insert into public.qr_memories (code, user_id, destination, kind) values ('zzqxscan', S, 'https://probe.invalid/m/zzqxscan.mp4', 'clip');
+    update public.qr_memories set scan_count = 9 where code = 'zzqxscan';
+    perform pg_temp.mk_clip('zzqxlink.mp4', S, now() - interval '8 days');   -- a LINK memory has its code (0059)
+    insert into public.qr_memories (code, user_id, destination, kind) values ('zzqxlink', S, 'https://probe.invalid/somewhere', 'link');
     perform pg_temp.mk_order(Q, null, '{}', 'paid', 'paid', now() - interval '3 days', now() - interval '3 days');
     got := pg_temp.do_as(null, 'service_role', $q$select coalesce(string_agg(object_name, ',' order by object_name), '') from public.orphan_clip_files(1000) where object_name like 'zzqx%'$q$, 'value');
-    r := r || pg_temp.line('F1', 'only the 8-day-old video no order, memory or paid order needs', 'zzqxorph.mp4', got);
+    r := r || pg_temp.line('F1', 'only the 8-day-old videos no order or paid order needs, memory row or not', 'zzqxlink.mp4,zzqxorph.mp4,zzqxrowd.mp4,zzqxscan.mp4', got);
     r := r || pg_temp.line('F2', 'a signed-in customer cannot list them', 'REFUSED 42501',
            pg_temp.do_as(S, 'authenticated', 'select public.orphan_clip_files(10)'));
+    got := pg_temp.do_as(null, 'service_role', $q$select public.finish_orphan_clip_purge('{zzqxrowd,zzqxscan,zzqxlink}')::text$q$, 'value');
+    r := r || pg_temp.line('F3', 'files still there: no memory row goes', '0', got);
+    perform pg_temp.do_as(null, 'service_role', $q$delete from storage.objects where bucket_id = 'memory-clips' and name in ('zzqxrowd.mp4', 'zzqxscan.mp4', 'zzqxlink.mp4')$q$);
+    got := pg_temp.do_as(null, 'service_role', $q$select public.finish_orphan_clip_purge('{zzqxrowd,zzqxscan,zzqxlink,zzqxlive}')::text$q$, 'value');
+    r := r || pg_temp.line('F4', 'files gone: their two video memory rows go', '2', got);
+    r := r || pg_temp.line('F5', '...the link memory and the live order''s row stay', 'zzqxlink', (select coalesce(string_agg(code, ',' order by code), '') from public.qr_memories where code in ('zzqxrowd', 'zzqxscan', 'zzqxlink', 'zzqxlive')));
+    r := r || pg_temp.line('F6', 'a signed-in customer cannot drop memory rows', 'REFUSED 42501',
+           pg_temp.do_as(S, 'authenticated', $q$select public.finish_orphan_clip_purge('{zzqxorph}')$q$));
     raise exception using errcode = 'MPOK0';
   exception when sqlstate 'MPOK0' then null;
   end;
