@@ -32,6 +32,8 @@ import { slotPhotoDomBox } from './slotPhotoFit';
 import { applyMask, isMaskId, textureOverlayCss } from './masks';
 import { lookCss, isLookId } from './looks';
 import CoverEditor from './CoverEditor';
+import TesterPageStamp from './TesterPageStamp';
+import { useTesterStamp } from './useTesterStamp';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
 import { chooserListSizes, CHOOSER_TITLE } from './chooserFit';
@@ -311,7 +313,7 @@ function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onT
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode, asPrinted }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode, asPrinted, testerStamp }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -351,6 +353,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
    *  "Tap to add text" showing only on hover or keyboard focus. It showed a
    *  pink "Tap to add" panel on 18 of 20 spreads (1-star testers round 2, PPR2-1). */
   asPrinted?: boolean;
+  /** The testers' "For Testing purposes" stamp over the page (testingPhase):
+   *  screen only, so only the views a tester looks at pass it. */
+  testerStamp?: readonly [string, string] | null;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -749,6 +754,9 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           }} />
         );
       })()}
+      {/* The cover's spine is on its left; a page's binding is on its inner edge. */}
+      {testerStamp && <TesterPageStamp lines={testerStamp} pageW={singleW}
+        side={coverMode || bindingEdge(pageIndex) === 'left' ? 'right' : 'left'} />}
     </>
   );
 }
@@ -756,6 +764,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError, orderRequested = false, onOrderRequestTaken, turnAnimation = import.meta.env.MODE !== 'test' }: BuilderPreviewProps) {
   const total = pages.length;
   const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId, deletePages } = useBuilderContext();
+  const testerStamp = useTesterStamp(pages);
 
   // "Megy finishes it" — count the caption boxes still sitting empty (unfilled
   // invitations, deleted quotes, legacy empties). The chooser CTA in the
@@ -1124,14 +1133,14 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     if (f.kind === 'page' && pages[f.index]) {
       return (
         <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-          <PageView page={pages[f.index]} photos={photos} singleW={singleW} H={H} pageIndex={f.index} asPrinted />
+          <PageView page={pages[f.index]} photos={photos} singleW={singleW} H={H} pageIndex={f.index} asPrinted testerStamp={testerStamp} />
         </div>
       );
     }
     if (f.kind === 'cover' && coverFront) {
       return (
         <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-          <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
+          <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode testerStamp={testerStamp} />
           <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
           <div aria-hidden="true" style={BOOK.hinge} />
         </div>
@@ -1210,7 +1219,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           <div className="flex flex-col items-center gap-3">
             <div className="relative" style={bookSlide}>
               <div style={BOOK.closed(singleW, H, fitScale)} data-testid="preview-cover">
-                <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
+                <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode testerStamp={testerStamp} />
                 <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
                 <div aria-hidden="true" style={BOOK.hinge} />
               </div>
@@ -1233,7 +1242,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               <div aria-hidden="true" style={BOOK.edges(singleW, H, fitScale)} />
               <div className="relative bg-white" style={{ width: singleW, height: H, isolation: 'isolate' }} data-testid="preview-single-page">
                 <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-                  <PageView key={currentPage.id} page={currentPage} photos={photos} singleW={singleW} H={H} pageIndex={currentIndex} asPrinted
+                  <PageView key={currentPage.id} page={currentPage} photos={photos} singleW={singleW} H={H} pageIndex={currentIndex} asPrinted testerStamp={testerStamp}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: currentIndex, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: currentIndex, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: currentIndex, slot })} />
@@ -1274,7 +1283,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               {/* Left Page — the inside of the front cover across from page 1 */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
                 {spreadLeftPage ? (
-                  <PageView key={spreadLeftPage.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted
+                  <PageView key={spreadLeftPage.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted testerStamp={testerStamp}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
@@ -1286,7 +1295,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                   inside of the back cover across from a last left-hand page. */}
               <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
                 {spreadRightPage ? (
-                  <PageView key={spreadRightPage.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted
+                  <PageView key={spreadRightPage.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted testerStamp={testerStamp}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex + 1, slot })} />

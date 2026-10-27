@@ -2258,6 +2258,10 @@ export function useBuilderState(): BuilderActions {
       setAlbumSizeState(size);
       setCoverFrontPage((c) => ({ ...c, size }));
     }
+    // When this album was made, saved on its pages so a reload or another
+    // phone shows the same time: the testers' stamp (testingPhase).
+    const madeAt = Date.now();
+    newPages = newPages.map((p) => ({ ...p, madeAt }));
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
     return { made: true, ...(memories ? { memories } : {}) };

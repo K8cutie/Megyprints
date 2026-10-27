@@ -9,16 +9,16 @@
    A one-time nonce rides along so a crafted link can't sign the user into
    someone else's account (login CSRF). On the web / old TWA nothing here runs.
    ══════════════════════════════════════════════════════════════════════════ */
-import { Capacitor } from '@capacitor/core';
 import type { Provider } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { googleRefusedNotice } from './accountErrors';
 import { showAuthNotice } from './authNotice';
+import { isNativeShell } from './nativeShell';
 
 const RETURN_PAGE = 'https://megyprints.vercel.app/auth-native.html';
 const NONCE_KEY = 'megy-native-auth-nonce';
 
-export const isNativeShell = (): boolean => Capacitor.isNativePlatform();
+export { isNativeShell };
 
 /** Where an emailed link (reset password, finish sign-up) brings the person
  *  back. The site root: Supabase always allows its own Site URL host. In the
