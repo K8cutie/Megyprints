@@ -12,20 +12,24 @@
    - SCREEN ONLY: the page views draw it over the page (TesterPageStamp). It is
      not in the album: not in print files, sheets, the cover file or a share,
      not editable, not undoable.
-   - ONE switch: set SHOW_TESTER_STAMP to false before applying for
-     production. The website never shows it, only the Android app, where
-     everyone is a tester today. No name or email on it: testers post
-     screenshots in public Facebook comments.
+   - ONE switch: set TESTING_PHASE to false before applying for production.
+     The website never shows it, only the Android app, where everyone is a
+     tester today. No name or email on it: testers post screenshots in public
+     Facebook comments.
+
+   The same switch turns on the sample photos (lib/samplePhotos): a tester
+   with fewer than 40 photos fills the album with Megy's samples.
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** Turn off before the app goes to production. */
-export const SHOW_TESTER_STAMP = true;
+/** The Android app is on Google Play's test track: the tester stamp and the
+ *  sample photos. Turn off before the app goes to production. */
+export const TESTING_PHASE = true;
 
 /** The owner's words, as he wrote them. */
 export const TESTER_STAMP_LABEL = 'For Testing purposes';
 
 /** The stamp shows only in the Android app, and only while the switch is on. */
-export function showTesterStamp(inApp: boolean, switchOn: boolean = SHOW_TESTER_STAMP): boolean {
+export function showTesterStamp(inApp: boolean, switchOn: boolean = TESTING_PHASE): boolean {
   return switchOn && inApp;
 }
 

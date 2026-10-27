@@ -892,6 +892,10 @@ export interface BuilderActions {
    *  the device's photo store, so the cover still has it after the app is
    *  closed (coverPhoto). Resolves once it is on the cover. */
   setCoverPhoto: (file: File) => Promise<void>;
+  /** COVER: one of the album's photos on the cover, as a tap on it in the
+   *  cover step puts it (testing phase: the sample album's cover), and the
+   *  title in a colour, as the cover editor's colours set it. */
+  setCoverToPhoto: (photoId: string, opts?: { titleColor?: string }) => void;
   /** COVER-only: reposition/zoom an image background (focal point + zoom). */
   setBackgroundCrop: (crop: { focusX?: number; focusY?: number; zoom?: number }) => void;
   /** COVER-only: move a bound caption off its template slot (panel fractions). */
@@ -3352,6 +3356,17 @@ export function useBuilderState(): BuilderActions {
     setCoverFrontPage((p) => recolorPage(p, hex));
   }, []);
 
+  const setCoverToPhoto = useCallback((photoId: string, opts?: { titleColor?: string }) => {
+    const photo = uploadedPhotosRef.current.find((p) => p.id === photoId);
+    if (!photo) return;
+    const titleColor = opts?.titleColor;
+    setCoverFrontPage((p) => ({
+      ...p,
+      background: { type: 'image', image: photo.previewUrl, photoId: photo.id, opacity: 100 },
+      ...(titleColor ? { textElements: (p.textElements ?? []).map((t) => (t.boxIndex === 0 ? { ...t, color: titleColor } : t)) } : {}),
+    }));
+  }, []);
+
   const setCoverPhoto = useCallback(async (picked: File) => {
     // An iPhone photo (HEIC) becomes a JPEG first (Chrome can't show a HEIC);
     // one that can't be opened leaves the cover as it is.
@@ -3968,6 +3983,7 @@ export function useBuilderState(): BuilderActions {
     setPageColor,
     applyPageColorToAllPages,
     setCoverPhoto,
+    setCoverToPhoto,
     setBackgroundCrop,
     setBoxTextOffset,
     updateBackgroundTransform,
