@@ -26,6 +26,7 @@ import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
 import MegyMascot from '../components/MegyMascot';
 import PhotoCheckCard from './PhotoCheckCard';
+import PickManyHint from './PickManyHint';
 import { useSettleGuard, noteScreenTap, tooSoonAfterScreenTap } from '../lib/settleGuard';
 import { useModalDialog } from '../lib/useModalDialog';
 import { splitBold } from './boldText';
@@ -799,6 +800,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                 })}
               </div>
             )}
+            {/* Right under the photo buttons: how to pick many in the app's picker. */}
+            {wizardStep === 'upload_photos' && <PickManyHint />}
             {/* One way on per screen (WizardEngine.showsNext): no Next where
                 the card's own button is the way on — "Let's Get Started →",
                 the sizes, "Generate Album →" (an unguarded Next with zero
