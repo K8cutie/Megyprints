@@ -1,27 +1,24 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Operator roles — owner (full access) vs fulfillment (status only).
-   Owners are the hardcoded ADMIN_EMAILS; fulfillment operators are assigned in
-   the operator_roles table from the Team tab. RLS + the DB functions in
-   migration 0007 are the real enforcement; this just drives the UI.
+   The database decides (operator_role(), migration 0058): the built-in owners
+   by ACCOUNT (owner_accounts), Team members from the operator_roles table when
+   they sign in with Google with that email. The email in the login is not
+   proof on its own — new sign-ups are not asked to confirm theirs. RLS + the
+   DB functions are the real enforcement; this just drives the UI.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { supabase, supabaseConfigured } from './supabase';
-import { ADMIN_EMAILS } from './templateSettings';
 
 export type Role = 'owner' | 'fulfillment';
 export interface OperatorRole { email: string; role: Role; }
 
-/** Resolve the current user's role: hardcoded owners win, otherwise look up the
- *  operator_roles table (RLS lets a user read their own row). null = no access. */
+/** The signed-in account's role, as the database decides it. `email` is only
+ *  "is someone signed in"; it is not compared. null = no access. */
 export async function resolveRole(email?: string | null): Promise<Role | null> {
-  if (!email) return null;
-  const e = email.trim().toLowerCase();
-  if (ADMIN_EMAILS.some((a) => a.toLowerCase() === e)) return 'owner';
-  if (!supabaseConfigured) return null;
-  const { data, error } = await supabase
-    .from('operator_roles').select('role').eq('email', e).maybeSingle();
+  if (!email || !supabaseConfigured) return null;
+  const { data, error } = await supabase.rpc('operator_role');
   if (error) { console.warn('resolveRole failed:', error.message); return null; }
-  return (data?.role as Role) ?? null;
+  return data === 'owner' || data === 'fulfillment' ? data : null;
 }
 
 /** All team members (owner only — RLS enforces). */

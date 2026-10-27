@@ -40,6 +40,7 @@ begin
   select u.id into v_user from auth.users u
    where not exists (select 1 from public.orders o where o.user_id = u.id and o.status = 'pending_payment' and o.payment_status = 'unpaid')
      and not exists (select 1 from public.operator_roles r where lower(r.email) = lower(u.email))
+     and not exists (select 1 from public.owner_accounts w where w.user_id = u.id)  -- 0058: owners go by account
    limit 1;
   if v_user is null then raise exception 'No fixture customer without unpaid orders.'; end if;
   perform set_config('proof.user', v_user::text, true);

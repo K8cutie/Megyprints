@@ -57,7 +57,7 @@ export default function TeamPanel() {
           {busy ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />} Add
         </button>
       </div>
-      <p className="text-xs text-light mb-5">The teammate must sign up with this email before they can log in.</p>
+      <p className="text-xs text-light mb-5">Your teammate must sign in with Google, using this email. Signing in with a password will not open this console.</p>
       {err && <p className="text-xs text-red-600 mb-3">{err}</p>}
 
       {/* Built-in owners */}

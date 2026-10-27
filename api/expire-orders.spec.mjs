@@ -35,6 +35,7 @@ const freshDb = () => ({
   orphans: { data: [{ code: 'zzorphan', object_name: 'zzorphan.mp4' }], error: null },
   removeErr: () => null,
   finishErr: () => null,
+  orphanRowsErr: () => null,
 });
 
 const adminClient = () => ({
@@ -47,6 +48,10 @@ const adminClient = () => ({
     if (name === 'claim_order_file_purge') return { data: db.claim(args.p_order_id), error: null };
     if (name === 'orphan_clip_files') return next(db.orphans);
     if (name === 'order_clip_files_to_purge') return db.clips[args.p_order_id] ?? { data: [], error: null };
+    if (name === 'finish_orphan_clip_purge') {
+      const err = db.orphanRowsErr(args.p_codes);
+      return err ? { data: null, error: err } : { data: args.p_codes.length, error: null };
+    }
     if (name === 'finish_order_file_purge') {
       const err = db.finishErr(args.p_order_id);
       return err ? { data: null, error: err } : { data: true, error: null };
@@ -147,6 +152,7 @@ describe('a night', () => {
       'rpc:finish_order_file_purge:ord-b',
       'rpc:orphan_clip_files',
       'remove:memory-clips:zzorphan.mp4',
+      'rpc:finish_orphan_clip_purge:zzorphan',
     ]);
   });
   it('an order the claim refuses (reopened since the list) is skipped: nothing of it removed', async () => {
@@ -163,6 +169,27 @@ describe('a night', () => {
     expect(res.code).toBe(500);
     expect(res.body.errors).toEqual([{ order_id: null, error: 'orphan list: down' }]);
     expect(log).not.toContain('remove:memory-clips:zzorphan.mp4');
+  });
+  it('unfinished-checkout videos: their memory rows go after the files, for exactly those codes (0059)', async () => {
+    db.orphans = { data: [{ code: 'zzaaaa', object_name: 'zzaaaa.mp4' }, { code: 'zzbbbb', object_name: 'zzbbbb.mov' }], error: null };
+    const res = await call();
+    expect(res.code).toBe(200);
+    const at = log.indexOf('remove:memory-clips:zzaaaa.mp4,zzbbbb.mov');
+    expect(at).toBeGreaterThan(-1);
+    expect(log[at + 1]).toBe('rpc:finish_orphan_clip_purge:zzaaaa,zzbbbb');
+  });
+  it('the videos failing to go: their memory rows are kept', async () => {
+    db.removeErr = (bucket, names) => (bucket === 'memory-clips' && names.includes('zzorphan.mp4') ? { message: 'storage down' } : null);
+    const res = await call();
+    expect(res.code).toBe(500);
+    expect(log.some((l) => l.startsWith('rpc:finish_orphan_clip_purge'))).toBe(false);
+  });
+  it('the memory rows failing to go: reported, and the sweep stops', async () => {
+    db.orphanRowsErr = () => ({ message: 'rows down' });
+    const res = await call();
+    expect(res.code).toBe(500);
+    expect(res.body.errors).toEqual([{ order_id: null, error: 'orphan rows: rows down' }]);
+    expect(log.filter((l) => l.startsWith('rpc:orphan_clip_files'))).toHaveLength(1);
   });
   it('no unfinished-checkout videos: no removal call', async () => {
     db.orphans = { data: [], error: null };

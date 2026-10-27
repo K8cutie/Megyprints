@@ -155,7 +155,7 @@ export default function Admin() {
         <p className="text-lg font-semibold text-dark">Not authorized</p>
         <p className="text-sm mt-2 text-medium">This console is for Megy Prints operators only.</p>
         <p className="text-xs mt-4 text-light">
-          Signed in as <b>{user.email ?? '(no email)'}</b>. Ask an owner ({ADMIN_EMAILS.join(' / ')}) to add you in Team.
+          Signed in as <b>{user.email ?? '(no email)'}</b>. Ask an owner ({ADMIN_EMAILS.join(' / ')}) to add you in Team, then sign in with Google using that email.
         </p>
         <Link to="/" className="inline-block mt-5 text-sm text-blush-pink">← Back to site</Link>
       </div>
