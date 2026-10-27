@@ -1,0 +1,356 @@
+10-27 22:02:57.395  9558  9558 I yprints.app.dev: Late-enabling -Xcheck:jni
+10-27 22:02:59.096  9558  9558 I yprints.app.dev: Using CollectorTypeCC GC.
+10-27 22:02:59.357  9558  9558 W yprints.app.dev: Unexpected CPU variant for x86: x86_64.
+10-27 22:02:59.357  9558  9558 W yprints.app.dev: Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+10-27 22:03:00.704  9558  9558 D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10199; state: ENABLED
+10-27 22:03:00.707  9558  9558 D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10199; state: ENABLED
+10-27 22:03:00.777  9558  9558 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+10-27 22:03:00.777  9558  9558 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.sidecar.jar
+10-27 22:03:00.793  9558  9558 W ziparchive: Unable to open '/data/app/~~earaALsNQ0QuhC0W-zPSzA==/com.megyprints.app.dev-97-hMfubSAZu1l647cN83g==/base.dm': No such file or directory
+10-27 22:03:00.794  9558  9558 W ziparchive: Unable to open '/data/app/~~earaALsNQ0QuhC0W-zPSzA==/com.megyprints.app.dev-97-hMfubSAZu1l647cN83g==/base.dm': No such file or directory
+10-27 22:03:05.306  9558  9558 D nativeloader: Configuring clns-6 for other apk /data/app/~~earaALsNQ0QuhC0W-zPSzA==/com.megyprints.app.dev-97-hMfubSAZu1l647cN83g==/base.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~earaALsNQ0QuhC0W-zPSzA==/com.megyprints.app.dev-97-hMfubSAZu1l647cN83g==/lib/x86_64:/data/app/~~earaALsNQ0QuhC0W-zPSzA==/com.megyprints.app.dev-97-hMfubSAZu1l647cN83g==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.megyprints.app.dev
+10-27 22:03:05.458  9558  9558 V GraphicsEnvironment: Currently set values for:
+10-27 22:03:05.458  9558  9558 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+10-27 22:03:05.458  9558  9558 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+10-27 22:03:05.466  9558  9558 V GraphicsEnvironment: ANGLE GameManagerService for com.megyprints.app.dev: false
+10-27 22:03:05.467  9558  9558 V GraphicsEnvironment: com.megyprints.app.dev is not listed in per-application setting
+10-27 22:03:05.481  9558  9558 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+10-27 22:03:05.695  9558  9558 W SoLoader: Initializing SoLoader: 0
+10-27 22:03:05.705  9558  9558 W SoLoader: Recording new base apk path: /data/app/~~earaALsNQ0QuhC0W-zPSzA==/com.megyprints.app.dev-97-hMfubSAZu1l647cN83g==/base.apk
+10-27 22:03:05.705  9558  9558 W SoLoader: Previously recorded 0 base apk paths.
+10-27 22:03:05.731  9558  9558 I SoLoader: Preparing SO source: DirectorySoSource[root = /vendor/lib64 flags = 2]
+10-27 22:03:05.731  9558  9558 I SoLoader: Preparing SO source: DirectorySoSource[root = /system/lib64 flags = 2]
+10-27 22:03:05.731  9558  9558 I SoLoader: Preparing SO source: DirectApkSoSource[root = [/data/app/~~earaALsNQ0QuhC0W-zPSzA==/com.megyprints.app.dev-97-hMfubSAZu1l647cN83g==/base.apk!/lib/x86_64]]
+10-27 22:03:05.836  9558  9558 I SoLoader: Preparing SO source: ApplicationSoSource[DirectorySoSource[root = /data/app/~~earaALsNQ0QuhC0W-zPSzA==/com.megyprints.app.dev-97-hMfubSAZu1l647cN83g==/lib/x86_64 flags = 0]]
+10-27 22:03:05.836  9558  9558 I SoLoader: init finish: 4 SO sources prepared
+10-27 22:03:05.837  9558  9558 W SoLoader: SoLoader initialized: 8
+10-27 22:03:06.886  9558  9558 D jni_lib_merge: Entering merged library JNI_OnLoad.
+10-27 22:03:06.886  9558  9558 D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+10-27 22:03:06.886  9558  9558 D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x7de52643d7d0
+10-27 22:03:06.886  9558  9558 D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x7de52669abb0
+10-27 22:03:06.886  9558  9558 D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 0x7de5266ac810
+10-27 22:03:06.886  9558  9558 D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 0x7de52675ef60
+10-27 22:03:06.886  9558  9558 D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 0x7de526a71d60
+10-27 22:03:06.886  9558  9558 D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 0x7de526a84ca0
+10-27 22:03:06.887  9558  9558 D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 0x7de526aa8460
+10-27 22:03:06.887  9558  9558 D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 0x7de526ab3cc0
+10-27 22:03:06.887  9558  9558 D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 0x7de526b30130
+10-27 22:03:06.887  9558  9558 D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 0x7de526c85140
+10-27 22:03:06.887  9558  9558 D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 0x7de526c9b690
+10-27 22:03:06.887  9558  9558 D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 0x7de526caab40
+10-27 22:03:06.887  9558  9558 D jni_lib_merge: About to register 12 actual methods.
+10-27 22:03:07.596  9558  9558 D jni_lib_merge: Entering merged library JNI_OnLoad.
+10-27 22:03:07.596  9558  9558 D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+10-27 22:03:07.596  9558  9558 D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x7de52643d7d0
+10-27 22:03:07.597  9558  9558 D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x7de52669abb0
+10-27 22:03:07.597  9558  9558 D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 0x7de5266ac810
+10-27 22:03:07.597  9558  9558 D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 0x7de52675ef60
+10-27 22:03:07.597  9558  9558 D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 0x7de526a71d60
+10-27 22:03:07.597  9558  9558 D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 0x7de526a84ca0
+10-27 22:03:07.598  9558  9558 D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 0x7de526aa8460
+10-27 22:03:07.598  9558  9558 D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 0x7de526ab3cc0
+10-27 22:03:07.599  9558  9558 D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 0x7de526b30130
+10-27 22:03:07.599  9558  9558 D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 0x7de526c85140
+10-27 22:03:07.600  9558  9558 D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 0x7de526c9b690
+10-27 22:03:07.600  9558  9558 D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 0x7de526caab40
+10-27 22:03:07.600  9558  9558 D jni_lib_merge: About to register 12 actual methods.
+10-27 22:03:08.330  9558  9585 D libEGL  : loaded /vendor/lib64/egl/libEGL_emulation.so
+10-27 22:03:08.363  9558  9585 D libEGL  : loaded /vendor/lib64/egl/libGLESv1_CM_emulation.so
+10-27 22:03:08.366  9558  9585 D libEGL  : loaded /vendor/lib64/egl/libGLESv2_emulation.so
+10-27 22:03:08.575  9558  9558 D AppCompatDelegate: Checking for metadata for AppLocalesMetadataHolderService : Service not found
+10-27 22:03:08.923  9558  9558 D jni_lib_merge: Entering merged library JNI_OnLoad.
+10-27 22:03:08.923  9558  9558 D jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+10-27 22:03:08.923  9558  9558 D jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: 0x7de51cc51280
+10-27 22:03:08.923  9558  9558 D jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: 0x7de51cc7d600
+10-27 22:03:08.924  9558  9558 D jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: 0x7de51cc7f3a0
+10-27 22:03:08.924  9558  9558 D jni_lib_merge: About to register 3 actual methods.
+10-27 22:03:09.503  9558  9558 W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Schedule
+10-27 22:03:09.503  9558  9558 W unknown:BridgelessReact: ReactHost{0}.attachSurface(surfaceId = 0)
+10-27 22:03:09.505  9558  9593 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask()
+10-27 22:03:09.506  9558  9593 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Start
+10-27 22:03:09.506  9558  9593 W unknown:BridgelessReact: ReactHost{0}.getJSBundleLoader()
+10-27 22:03:09.507  9558  9593 W unknown:BridgelessReact: ReactHost{0}.isMetroRunning()
+10-27 22:03:09.510  9558  9592 D TrafficStats: tagSocket(6) with statsTag=0xffffffff, statsUid=-1
+10-27 22:03:09.519  9558  9594 D TrafficStats: tagSocket(81) with statsTag=0xffffffff, statsUid=-1
+10-27 22:03:09.745  9558  9558 W yprints.app.dev: Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (unsupported, reflection, allowed)
+10-27 22:03:09.797  9558  9558 W unknown:BridgelessReact: ReactHost{0}.onHostResume(activity)
+10-27 22:03:09.797  9558  9558 W unknown:ReactNative: Packager connection already open, nooping.
+10-27 22:03:09.829  9558  9558 D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10199; state: DISABLED
+10-27 22:03:09.836  9558  9558 W OpenGLRenderer: Unknown dataspace 0
+10-27 22:03:09.860  9558  9558 I Choreographer: Skipped 255 frames!  The application may be doing too much work on its main thread.
+10-27 22:03:09.916  9558  9583 W OpenGLRenderer: Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+10-27 22:03:09.916  9558  9583 W OpenGLRenderer: Failed to initialize 101010-2 format, error = EGL_SUCCESS
+10-27 22:03:10.210  9558  9583 I Gralloc4: mapper 4.x is not supported
+10-27 22:03:10.259  9558  9583 E OpenGLRenderer: Unable to match the desired swap behavior.
+10-27 22:03:10.347  9558  9578 I OpenGLRenderer: Davey! duration=4705ms; Flags=1, FrameTimelineVsyncId=752747, IntendedVsync=1673342484891, Vsync=1677592484721, InputEventId=0, HandleInputStart=1677602111407, AnimationStart=1677602194007, PerformTraversalsStart=1677602478807, DrawStart=1678001769907, FrameDeadline=1673359151557, FrameInterval=1677600322507, FrameStartTime=16666666, SyncQueued=1678005300707, SyncStart=1678014574207, IssueDrawCommandsStart=1678015428707, SwapBuffers=1678019511007, FrameCompleted=1678057586207, DequeueBufferDuration=18200, QueueBufferDuration=1005400, GpuCompleted=1678057337607, SwapBuffersCompleted=1678057586207, DisplayPresentTime=0, CommandSubmissionCompleted=1678019511007, 
+10-27 22:03:10.361  9558  9558 W unknown:BridgelessReact: ReactHost{0}.raiseSoftException(onWindowFocusChange(hasFocus = "true")): Tried to access onWindowFocusChange while context is not ready
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: Unhandled SoftException
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: com.facebook.react.bridge.ReactNoCrashSoftException: raiseSoftException(onWindowFocusChange(hasFocus = "true")): Tried to access onWindowFocusChange while context is not ready
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.raiseSoftException(ReactHostImpl.kt:906)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.raiseSoftException$default(ReactHostImpl.kt:897)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.onWindowFocusChange(ReactHostImpl.kt:679)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at com.facebook.react.ReactDelegate.onWindowFocusChanged(ReactDelegate.kt:226)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at com.facebook.react.ReactActivityDelegate.onWindowFocusChanged(ReactActivityDelegate.java:237)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at expo.modules.ReactActivityDelegateWrapper$onWindowFocusChanged$1.invokeSuspend(ReactActivityDelegateWrapper.kt:322)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at expo.modules.ReactActivityDelegateWrapper$onWindowFocusChanged$1.invoke(Unknown Source:8)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at expo.modules.ReactActivityDelegateWrapper$onWindowFocusChanged$1.invoke(Unknown Source:4)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at expo.modules.ReactActivityDelegateWrapper$launchLifecycleScopeWithLock$1.invokeSuspend(ReactActivityDelegateWrapper.kt:469)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at kotlinx.coroutines.internal.DispatchedContinuationKt.resumeCancellableWith(DispatchedContinuation.kt:375)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at kotlinx.coroutines.intrinsics.CancellableKt.startCoroutineCancellable(Cancellable.kt:26)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at kotlinx.coroutines.CoroutineStart.invoke(CoroutineStart.kt:358)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at kotlinx.coroutines.AbstractCoroutine.start(AbstractCoroutine.kt:134)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at kotlinx.coroutines.BuildersKt__Builders_commonKt.launch(Builders.common.kt:53)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at kotlinx.coroutines.BuildersKt.launch(Unknown Source:1)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at kotlinx.coroutines.BuildersKt__Builders_commonKt.launch$default(Builders.common.kt:44)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at kotlinx.coroutines.BuildersKt.launch$default(Unknown Source:1)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at expo.modules.ReactActivityDelegateWrapper.launchLifecycleScopeWithLock(ReactActivityDelegateWrapper.kt:467)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at expo.modules.ReactActivityDelegateWrapper.launchLifecycleScopeWithLock$default(ReactActivityDelegateWrapper.kt:463)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at expo.modules.ReactActivityDelegateWrapper.onWindowFocusChanged(ReactActivityDelegateWrapper.kt:320)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at com.facebook.react.ReactActivity.onWindowFocusChanged(ReactActivity.java:161)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at androidx.appcompat.view.WindowCallbackWrapper.onWindowFocusChanged(WindowCallbackWrapper.java:124)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at com.android.internal.policy.DecorView.onWindowFocusChanged(DecorView.java:1788)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.view.View.dispatchWindowFocusChanged(View.java:15933)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.view.ViewGroup.dispatchWindowFocusChanged(ViewGroup.java:1509)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.view.ViewRootImpl.dispatchFocusEvent(ViewRootImpl.java:4059)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.view.ViewRootImpl.handleWindowFocusChanged(ViewRootImpl.java:3963)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.view.ViewRootImpl.-$$Nest$mhandleWindowFocusChanged(Unknown Source:0)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.view.ViewRootImpl$ViewRootHandler.handleMessageImpl(ViewRootImpl.java:5954)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.view.ViewRootImpl$ViewRootHandler.handleMessage(ViewRootImpl.java:5862)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.os.Looper.loopOnce(Looper.java:205)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.os.Looper.loop(Looper.java:294)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at android.app.ActivityThread.main(ActivityThread.java:8177)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at java.lang.reflect.Method.invoke(Native Method)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:552)
+10-27 22:03:10.379  9558  9558 E unknown:ReactHost: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:971)
+10-27 22:03:10.690  9558  9594 W yprints.app.dev: Verification of java.lang.String okhttp3.internal.http.HttpHeaders.readQuotedString(okio.Buffer) took 237.794ms (365.86 bytecodes/s) (3432B approximate peak alloc)
+10-27 22:03:10.709  9558  9594 W unknown:BridgelessReact: ReactHost{0}.isMetroRunning(): Async result = true
+10-27 22:03:10.715  9558  9593 W unknown:BridgelessReact: ReactHost{0}.loadJSBundleFromMetro()
+10-27 22:03:10.968  9558  9558 D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10199; state: ENABLED
+10-27 22:03:12.088  9558  9583 E OpenGLRenderer: Unable to match the desired swap behavior.
+10-27 22:03:12.191  9558  9577 I OpenGLRenderer: Davey! duration=733ms; Flags=1, FrameTimelineVsyncId=753523, IntendedVsync=1679192490207, Vsync=1679442490182, InputEventId=0, HandleInputStart=1679473927307, AnimationStart=1679473945407, PerformTraversalsStart=1679473974007, DrawStart=1679831037707, FrameDeadline=1679209156873, FrameInterval=1679452758507, FrameStartTime=16666665, SyncQueued=1679833389707, SyncStart=1679834731107, IssueDrawCommandsStart=1679834794907, SwapBuffers=1679920896607, FrameCompleted=1679927247607, DequeueBufferDuration=43600, QueueBufferDuration=213700, GpuCompleted=1679927247607, SwapBuffersCompleted=1679921429907, DisplayPresentTime=0, CommandSubmissionCompleted=1679920896607, 
+10-27 22:03:13.537  9558  9583 D EGL_emulation: app_time_stats: avg=452.44ms min=11.03ms max=1330.49ms count=3
+10-27 22:03:15.487  9558  9583 D EGL_emulation: app_time_stats: avg=73.96ms min=4.88ms max=1197.55ms count=25
+10-27 22:03:15.628  9558  9604 D ProfileInstaller: Installing profile for com.megyprints.app.dev
+10-27 22:03:16.506  9558  9583 D EGL_emulation: app_time_stats: avg=14.34ms min=1.08ms max=52.65ms count=33
+10-27 22:03:17.522  9558  9583 D EGL_emulation: app_time_stats: avg=14.71ms min=1.01ms max=79.87ms count=40
+10-27 22:03:18.534  9558  9583 D EGL_emulation: app_time_stats: avg=20.08ms min=0.91ms max=133.25ms count=35
+10-27 22:03:19.536  9558  9583 D EGL_emulation: app_time_stats: avg=31.69ms min=1.23ms max=535.08ms count=26
+10-27 22:03:19.950  9558  9572 I yprints.app.dev: Background young concurrent copying GC freed 13505(500KB) AllocSpace objects, 0(0B) LOS objects, 0% free, 10MB/10MB, paused 823us,132us total 267.977ms
+10-27 22:03:20.158  9558  9594 W unknown:BridgelessReact: ReactHost{0}.loadJSBundleFromMetro(): Creating BundleLoader
+10-27 22:03:20.160  9558  9593 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating BridgelessReactContext
+10-27 22:03:20.184  9558  9558 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@df2fa85
+10-27 22:03:20.186  9558  9593 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+10-27 22:03:20.339  9558  9594 D TrafficStats: tagSocket(104) with statsTag=0xffffffff, statsUid=-1
+10-27 22:03:21.204  9558  9593 I ExpoModulesCore: ✅ AppContext was initialized
+10-27 22:03:21.273  9558  9593 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+10-27 22:03:21.274  9558  9593 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): DevSupportManager.onNewReactContextCreated()
+10-27 22:03:21.279  9558  9558 W unknown:ReactNative: Packager connection already open, nooping.
+10-27 22:03:21.279  9558  9593 W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Execute
+10-27 22:03:21.279  9558  9558 W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostResume()
+10-27 22:03:21.294  9558  9558 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+10-27 22:03:28.407  9558  9605 W BridgelessReactContext: [WARNING] Bridgeless doesn't support CatalystInstance. Accessing an API that's not part of the new architecture is not encouraged usage.
+10-27 22:03:28.498  9558  9605 I ExpoModulesCore: ✅ JSI interop was installed
+10-27 22:03:28.503  9558  9605 I ExpoModulesCore: ✅ Constants were exported
+10-27 22:03:29.240  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+10-27 22:03:29.251  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.uimanager.LayoutShadowNode
+10-27 22:03:29.262  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager
+10-27 22:03:29.264  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager
+10-27 22:03:29.272  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class expo.modules.kotlin.views.GroupViewManagerWrapper
+10-27 22:03:29.277  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.host.TabsHostViewManager
+10-27 22:03:29.280  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager
+10-27 22:03:29.281  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.header.subview.StackHeaderSubviewViewManager
+10-27 22:03:29.286  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager
+10-27 22:03:29.288  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.scrollviewmarker.ScrollViewMarkerViewManager
+10-27 22:03:29.290  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class org.reactnative.maskedview.RNCMaskedViewManager
+10-27 22:03:29.292  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager
+10-27 22:03:29.294  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.modals.formsheet.FormSheetContentWrapperViewManager
+10-27 22:03:29.297  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager
+10-27 22:03:29.298  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+10-27 22:03:29.309  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewShadowNode
+10-27 22:03:29.312  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.safearea.SafeAreaViewManager
+10-27 22:03:29.314  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager
+10-27 22:03:29.315  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.host.StackHostViewManager
+10-27 22:03:29.316  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager
+10-27 22:03:29.321  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.screen.StackScreenViewManager
+10-27 22:03:29.324  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager
+10-27 22:03:29.328  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.header.config.StackHeaderConfigViewManager
+10-27 22:03:29.333  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.modals.formsheet.FormSheetHostViewManager
+10-27 22:03:29.337  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.screen.TabsScreenViewManager
+10-27 22:03:29.996  9558  9605 W yprints.app.dev: Verification of void com.facebook.react.views.debuggingoverlay.DebuggingOverlayManager.<clinit>() took 224.400ms (40.11 bytecodes/s) (1560B approximate peak alloc)
+10-27 22:03:29.998  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.debuggingoverlay.DebuggingOverlayManager
+10-27 22:03:30.002  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+10-27 22:03:30.006  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+10-27 22:03:30.011  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+10-27 22:03:30.017  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+10-27 22:03:30.024  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+10-27 22:03:30.029  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+10-27 22:03:30.033  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+10-27 22:03:30.050  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+10-27 22:03:30.085  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+10-27 22:03:30.125  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+10-27 22:03:30.134  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+10-27 22:03:30.204  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+10-27 22:03:30.218  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+10-27 22:03:30.242  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+10-27 22:03:30.276  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.SelectableTextViewManager
+10-27 22:03:30.292  9558  9605 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.virtual.view.ReactVirtualViewManager
+10-27 22:03:30.596  9558  9572 I yprints.app.dev: NativeAlloc concurrent copying GC freed 34831(10MB) AllocSpace objects, 4(144KB) LOS objects, 49% free, 8182KB/15MB, paused 398us,59us total 1.971s
+10-27 22:03:31.292  9558  9606 I WebViewFactory: Loading com.google.android.webview version 113.0.5672.136 (code 567263637)
+10-27 22:03:31.298  9558  9606 W ziparchive: Unable to open '/data/app/~~NA55qmz3riDCGBOkhQEa6w==/com.google.android.trichromelibrary_567263637-91k_Pm44L23hejNFLCl57Q==/TrichromeLibrary.dm': No such file or directory
+10-27 22:03:31.299  9558  9606 W ziparchive: Unable to open '/data/app/~~NA55qmz3riDCGBOkhQEa6w==/com.google.android.trichromelibrary_567263637-91k_Pm44L23hejNFLCl57Q==/TrichromeLibrary.dm': No such file or directory
+10-27 22:03:31.350  9558  9606 W yprints.app.dev: Entry not found
+10-27 22:03:31.388  9558  9606 D nativeloader: Configuring clns-7 for other apk /data/app/~~NA55qmz3riDCGBOkhQEa6w==/com.google.android.trichromelibrary_567263637-91k_Pm44L23hejNFLCl57Q==/TrichromeLibrary.apk. target_sdk_version=34, uses_libraries=ALL, library_path=/data/app/~~UQPOk37GPHqqhMEVw2NNWQ==/com.google.android.webview-yOPaC240rkbm5hlypTIB0w==/lib/x86_64:/data/app/~~UQPOk37GPHqqhMEVw2NNWQ==/com.google.android.webview-yOPaC240rkbm5hlypTIB0w==/WebViewGoogle.apk!/lib/x86_64:/data/app/~~NA55qmz3riDCGBOkhQEa6w==/com.google.android.trichromelibrary_567263637-91k_Pm44L23hejNFLCl57Q==/TrichromeLibrary.apk!/lib/x86_64, permitted_path=/data:/mnt/expand
+10-27 22:03:31.468  9558  9606 D nativeloader: Configuring clns-8 for other apk /data/app/~~UQPOk37GPHqqhMEVw2NNWQ==/com.google.android.webview-yOPaC240rkbm5hlypTIB0w==/WebViewGoogle.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app/~~UQPOk37GPHqqhMEVw2NNWQ==/com.google.android.webview-yOPaC240rkbm5hlypTIB0w==/lib/x86_64:/data/app/~~UQPOk37GPHqqhMEVw2NNWQ==/com.google.android.webview-yOPaC240rkbm5hlypTIB0w==/WebViewGoogle.apk!/lib/x86_64:/data/app/~~NA55qmz3riDCGBOkhQEa6w==/com.google.android.trichromelibrary_567263637-91k_Pm44L23hejNFLCl57Q==/TrichromeLibrary.apk!/lib/x86_64, permitted_path=/data:/mnt/expand
+10-27 22:03:31.874  9558  9605 D CompatibilityChangeReporter: Compat change id reported: 289878283; UID 10199; state: ENABLED
+10-27 22:03:31.879  9558  9605 I ReactNativeJS: Running "main" with {"rootTag":1,"initialProps":{},"fabric":true}
+10-27 22:03:32.778  9558  9605 V AsyncStorageExpoMigration: No scoped database found
+10-27 22:03:33.959  9558  9606 W yprints.app.dev: Accessing hidden method Landroid/os/Trace;->isTagEnabled(J)Z (unsupported, reflection, allowed)
+10-27 22:03:33.960  9558  9606 W yprints.app.dev: Accessing hidden method Landroid/os/Trace;->traceBegin(JLjava/lang/String;)V (unsupported, reflection, allowed)
+10-27 22:03:33.960  9558  9606 W yprints.app.dev: Accessing hidden method Landroid/os/Trace;->traceEnd(J)V (unsupported, reflection, allowed)
+10-27 22:03:33.960  9558  9606 W yprints.app.dev: Accessing hidden method Landroid/os/Trace;->asyncTraceBegin(JLjava/lang/String;I)V (unsupported, reflection, allowed)
+10-27 22:03:33.961  9558  9606 W yprints.app.dev: Accessing hidden method Landroid/os/Trace;->asyncTraceEnd(JLjava/lang/String;I)V (unsupported, reflection, allowed)
+10-27 22:03:34.048  9558  9606 I cr_WVCFactoryProvider: Loaded version=113.0.5672.136 minSdkVersion=29 isBundle=false multiprocess=true packageId=2
+10-27 22:03:34.437  9558  9645 I cr_VariationsUtils: Failed reading seed file "/data/user/0/com.megyprints.app.dev/app_webview/variations_seed_new"
+10-27 22:03:34.438  9558  9645 I cr_VariationsUtils: Failed reading seed file "/data/user/0/com.megyprints.app.dev/app_webview/variations_seed"
+10-27 22:03:34.440  9558  9645 I cr_VariationsUtils: Requesting new seed from IVariationsSeedServer
+10-27 22:03:34.519  9558  9606 I cr_LibraryLoader: Successfully loaded native library
+10-27 22:03:34.529  9558  9606 I cr_CachingUmaRecorder: Flushed 8 samples from 8 histograms.
+10-27 22:03:34.813  9558  9662 D TrafficStats: tagSocket(121) with statsTag=0xffffffff, statsUid=-1
+10-27 22:03:34.845  9558  9663 D TrafficStats: tagSocket(123) with statsTag=0xffffffff, statsUid=-1
+10-27 22:03:36.687  9558  9572 I yprints.app.dev: NativeAlloc concurrent copying GC freed 45009(2417KB) AllocSpace objects, 3(124KB) LOS objects, 49% free, 6784KB/13MB, paused 2.075ms,53us total 188.802ms
+10-27 22:03:37.229  9558  9678 D TrafficStats: tagSocket(111) with statsTag=0xffffffff, statsUid=-1
+10-27 22:03:37.611  9558  9583 D EGL_emulation: app_time_stats: avg=9098.48ms min=219.40ms max=25128.92ms count=3
+10-27 22:03:37.630  9558  9580 I OpenGLRenderer: Davey! duration=735ms; Flags=0, FrameTimelineVsyncId=760389, IntendedVsync=1704625816973, Vsync=1704625816973, InputEventId=0, HandleInputStart=1704639435907, AnimationStart=1704639471307, PerformTraversalsStart=1704929701707, DrawStart=1704938656807, FrameDeadline=1704642483639, FrameInterval=1704639417507, FrameStartTime=16666666, SyncQueued=1704966305007, SyncStart=1704967233907, IssueDrawCommandsStart=1704967387707, SwapBuffers=1705351198807, FrameCompleted=1705362132607, DequeueBufferDuration=22100, QueueBufferDuration=523000, GpuCompleted=1705362132607, SwapBuffersCompleted=1705353159907, DisplayPresentTime=0, CommandSubmissionCompleted=1705351198807, 
+10-27 22:03:57.925  9558  9583 D EGL_emulation: app_time_stats: avg=1185.35ms min=3.89ms max=19896.48ms count=17
+10-27 22:03:58.066  9558  9558 D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10199; state: ENABLED
+10-27 22:03:58.069  9558  9558 W yprints.app.dev: Accessing hidden field Landroid/widget/ScrollView;->mScroller:Landroid/widget/OverScroller; (unsupported, reflection, allowed)
+10-27 22:03:58.559  9558  9558 W unknown:DraweeEventTracker: 1f3214e: Draw requested for a non-attached controller 8ff226f. DraweeHolder{controllerAttached=false, holderAttached=false, drawableVisible=true, events=[ON_SET_HIERARCHY, ON_DRAWABLE_HIDE, ON_SET_CONTROLLER, ON_DRAWABLE_SHOW, ON_HOLDER_ATTACH, ON_ATTACH_CONTROLLER, ON_DRAWABLE_HIDE, ON_DETACH_CONTROLLER, ON_DRAWABLE_SHOW, ON_ATTACH_CONTROLLER, ON_HOLDER_DETACH, ON_DETACH_CONTROLLER]}
+10-27 22:03:59.720  9558  9583 D EGL_emulation: app_time_stats: avg=43.95ms min=0.80ms max=1100.42ms count=32
+10-27 22:04:16.163  9558  9558 D CompatibilityChangeReporter: Compat change id reported: 163400105; UID 10199; state: ENABLED
+10-27 22:04:16.165  9558  9558 I ImeTracker: com.megyprints.app.dev:71f03cea: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+10-27 22:04:16.167  9558  9558 D InputMethodManager: showSoftInput() view=com.facebook.react.views.textinput.ReactEditText{fe31698 VFED..CL. .F.P..ID 63,348-1017,485 #42 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+10-27 22:04:16.180  9558  9583 D EGL_emulation: app_time_stats: avg=968.17ms min=14.56ms max=16190.47ms count=17
+10-27 22:04:16.192  9558  9558 I ImeTracker: com.megyprints.app.dev:83942e4a: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+10-27 22:04:16.192  9558  9558 D InputMethodManager: showSoftInput() view=com.facebook.react.views.textinput.ReactEditText{fe31698 VFED..CL. .F.P.... 63,348-1017,485 #42 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+10-27 22:04:17.613  9558  9583 D EGL_emulation: app_time_stats: avg=477.81ms min=440.19ms max=502.61ms count=3
+10-27 22:04:18.055  9558  9558 D InsetsController: show(ime(), fromIme=true)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: Build configuration failed!
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: java.lang.IllegalArgumentException: Must pass in a valid surface control if only instrument surface; 
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at com.android.internal.jank.InteractionJankMonitor$Configuration.validate(InteractionJankMonitor.java:1259)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at com.android.internal.jank.InteractionJankMonitor$Configuration.<init>(InteractionJankMonitor.java:1217)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at com.android.internal.jank.InteractionJankMonitor$Configuration.<init>(Unknown Source:0)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at com.android.internal.jank.InteractionJankMonitor$Configuration$Builder.build(InteractionJankMonitor.java:1197)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at com.android.internal.jank.InteractionJankMonitor.begin(InteractionJankMonitor.java:611)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.view.inputmethod.ImeTracker$ImeJankTracker.onRequestAnimation(ImeTracker.java:717)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.view.InsetsController$InternalAnimationControlListener$2.onAnimationStart(InsetsController.java:448)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.animation.Animator$AnimatorListener.onAnimationStart(Animator.java:695)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.animation.Animator$AnimatorCaller$$ExternalSyntheticLambda0.call(Unknown Source:4)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.animation.Animator.callOnList(Animator.java:669)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.animation.Animator.notifyListeners(Animator.java:608)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.animation.Animator.notifyStartListeners(Animator.java:625)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.animation.ValueAnimator.startAnimation(ValueAnimator.java:1334)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.animation.ValueAnimator.start(ValueAnimator.java:1149)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.animation.ValueAnimator.start(ValueAnimator.java:1173)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.view.InsetsController$InternalAnimationControlListener.onReady(InsetsController.java:470)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.view.InsetsAnimationThreadControlRunner.lambda$new$0(InsetsAnimationThreadControlRunner.java:129)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.view.InsetsAnimationThreadControlRunner.$r8$lambda$3zGKYd3XPzPnvMO2hiF8a88M6T0(Unknown Source:0)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.view.InsetsAnimationThreadControlRunner$$ExternalSyntheticLambda2.run(Unknown Source:6)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.os.Handler.handleCallback(Handler.java:958)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.os.Handler.dispatchMessage(Handler.java:99)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.os.Looper.loopOnce(Looper.java:205)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.os.Looper.loop(Looper.java:294)
+10-27 22:04:18.174  9558  9733 D InteractionJankMonitor: 	at android.os.HandlerThread.run(HandlerThread.java:67)
+10-27 22:04:18.380  9558  9558 I ImeTracker: com.megyprints.app.dev:83942e4a: onShown
+10-27 22:04:19.123  9558  9583 D EGL_emulation: app_time_stats: avg=53.30ms min=9.62ms max=512.38ms count=28
+10-27 22:04:20.622  9558  9583 D EGL_emulation: app_time_stats: avg=499.50ms min=498.68ms max=500.82ms count=3
+10-27 22:04:21.622  9558  9583 D EGL_emulation: app_time_stats: avg=500.13ms min=498.78ms max=501.47ms count=2
+10-27 22:04:23.121  9558  9583 D EGL_emulation: app_time_stats: avg=499.48ms min=498.19ms max=500.14ms count=3
+10-27 22:04:24.620  9558  9583 D EGL_emulation: app_time_stats: avg=499.82ms min=498.48ms max=500.77ms count=3
+10-27 22:04:25.622  9558  9583 D EGL_emulation: app_time_stats: avg=500.60ms min=500.16ms max=501.04ms count=2
+10-27 22:04:26.638  9558  9583 D EGL_emulation: app_time_stats: avg=507.93ms min=499.66ms max=516.20ms count=2
+10-27 22:04:28.138  9558  9583 D EGL_emulation: app_time_stats: avg=500.10ms min=499.53ms max=500.57ms count=3
+10-27 22:04:29.637  9558  9583 D EGL_emulation: app_time_stats: avg=499.65ms min=498.90ms max=500.30ms count=3
+10-27 22:04:30.638  9558  9583 D EGL_emulation: app_time_stats: avg=499.90ms min=499.63ms max=500.18ms count=2
+10-27 22:04:31.724  9558  9558 I ImeTracker: com.megyprints.app.dev:3738bd59: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+10-27 22:04:31.724  9558  9558 D InputMethodManager: showSoftInput() view=com.facebook.react.views.textinput.ReactEditText{fc7cad6 VFED..CL. .F.P..ID 63,592-1017,729 #48 aid=1073741825} flags=0 reason=SHOW_SOFT_INPUT
+10-27 22:04:31.728  9558  9583 D EGL_emulation: app_time_stats: avg=363.41ms min=90.93ms max=500.09ms count=3
+10-27 22:04:31.729  9558  9558 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=ImeCallback=ImeOnBackInvokedCallback@114605586 Callback=android.window.IOnBackInvokedCallback$Stub$Proxy@fd38974
+10-27 22:04:31.736  9558  9558 I ImeTracker: com.megyprints.app.dev:47a73fcc: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+10-27 22:04:31.736  9558  9558 D InputMethodManager: showSoftInput() view=com.facebook.react.views.textinput.ReactEditText{fc7cad6 VFED..CL. .F.P.... 63,592-1017,729 #48 aid=1073741825} flags=0 reason=SHOW_SOFT_INPUT
+10-27 22:04:31.760  9558  9558 D InsetsController: show(ime(), fromIme=true)
+10-27 22:04:31.761  9558  9558 I ImeTracker: com.megyprints.app.dev:5851ed41: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+10-27 22:04:31.765  9558  9558 D InsetsController: show(ime(), fromIme=true)
+10-27 22:04:31.766  9558  9558 I ImeTracker: com.megyprints.app.dev:3738bd59: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+10-27 22:04:31.774  9558  9558 D InsetsController: show(ime(), fromIme=true)
+10-27 22:04:31.774  9558  9558 I ImeTracker: com.megyprints.app.dev:47a73fcc: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+10-27 22:04:32.738  9558  9583 D EGL_emulation: app_time_stats: avg=504.32ms min=499.10ms max=509.53ms count=2
+10-27 22:04:34.154  9558  9583 D EGL_emulation: app_time_stats: avg=61.56ms min=14.85ms max=500.26ms count=23
+10-27 22:04:35.170  9558  9583 D EGL_emulation: app_time_stats: avg=338.65ms min=21.40ms max=499.59ms count=3
+10-27 22:04:36.670  9558  9583 D EGL_emulation: app_time_stats: avg=499.93ms min=499.71ms max=500.15ms count=3
+10-27 22:04:38.171  9558  9583 D EGL_emulation: app_time_stats: avg=500.14ms min=499.61ms max=500.78ms count=3
+10-27 22:04:39.687  9558  9583 D EGL_emulation: app_time_stats: avg=505.12ms min=499.05ms max=516.08ms count=3
+10-27 22:04:40.687  9558  9583 D EGL_emulation: app_time_stats: avg=500.00ms min=498.63ms max=501.37ms count=2
+10-27 22:04:41.688  9558  9583 D EGL_emulation: app_time_stats: avg=500.61ms min=499.95ms max=501.26ms count=2
+10-27 22:04:42.688  9558  9583 D EGL_emulation: app_time_stats: avg=499.83ms min=498.56ms max=501.09ms count=2
+10-27 22:04:44.187  9558  9583 D EGL_emulation: app_time_stats: avg=499.50ms min=498.92ms max=500.23ms count=3
+10-27 22:04:45.209  9558  9558 W RemoteInputConnectionImpl: getSurroundingText on inactive InputConnection
+10-27 22:04:45.229  9558  9558 D InsetsController: show(ime(), fromIme=true)
+10-27 22:04:45.229  9558  9558 I ImeTracker: com.megyprints.app.dev:e3217ae3: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+10-27 22:04:45.255  9558  9583 D EGL_emulation: app_time_stats: avg=355.92ms min=86.69ms max=499.28ms count=3
+10-27 22:04:45.258  9558  9558 D InsetsController: show(ime(), fromIme=true)
+10-27 22:04:45.258  9558  9558 I ImeTracker: com.megyprints.app.dev:87a8bba9: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+10-27 22:04:46.471  9558  9583 D EGL_emulation: app_time_stats: avg=405.12ms min=216.68ms max=499.62ms count=3
+10-27 22:04:47.487  9558  9583 D EGL_emulation: app_time_stats: avg=507.91ms min=500.82ms max=515.00ms count=2
+10-27 22:04:48.488  9558  9583 D EGL_emulation: app_time_stats: avg=500.29ms min=500.15ms max=500.43ms count=2
+10-27 22:04:49.488  9558  9583 D EGL_emulation: app_time_stats: avg=500.10ms min=499.10ms max=501.09ms count=2
+10-27 22:04:50.988  9558  9583 D EGL_emulation: app_time_stats: avg=499.97ms min=499.57ms max=500.73ms count=3
+10-27 22:04:52.487  9558  9583 D EGL_emulation: app_time_stats: avg=499.61ms min=499.47ms max=499.76ms count=3
+10-27 22:04:53.488  9558  9583 D EGL_emulation: app_time_stats: avg=500.23ms min=499.85ms max=500.60ms count=2
+10-27 22:04:55.004  9558  9583 D EGL_emulation: app_time_stats: avg=505.20ms min=499.35ms max=516.03ms count=3
+10-27 22:04:56.004  9558  9583 D EGL_emulation: app_time_stats: avg=499.92ms min=499.49ms max=500.35ms count=2
+10-27 22:04:57.504  9558  9583 D EGL_emulation: app_time_stats: avg=499.92ms min=499.76ms max=500.06ms count=3
+10-27 22:04:58.495  9558 10001 D TrafficStats: tagSocket(138) with statsTag=0xffffffff, statsUid=-1
+10-27 22:04:58.506  9558  9583 D EGL_emulation: app_time_stats: avg=200.35ms min=12.32ms max=499.55ms count=5
+10-27 22:04:59.523  9558  9583 D EGL_emulation: app_time_stats: avg=16.62ms min=14.86ms max=18.31ms count=61
+10-27 22:05:01.004  9558  9583 D EGL_emulation: app_time_stats: avg=52.85ms min=14.38ms max=500.17ms count=28
+10-27 22:05:02.520  9558  9583 D EGL_emulation: app_time_stats: avg=505.41ms min=499.55ms max=516.43ms count=3
+10-27 22:05:04.026  9558  9583 D EGL_emulation: app_time_stats: avg=501.76ms min=484.17ms max=517.55ms count=3
+10-27 22:05:05.522  9558  9583 D EGL_emulation: app_time_stats: avg=498.50ms min=495.82ms max=499.87ms count=3
+10-27 22:05:06.523  9558  9583 D EGL_emulation: app_time_stats: avg=500.29ms min=499.38ms max=501.21ms count=2
+10-27 22:05:08.022  9558  9583 D EGL_emulation: app_time_stats: avg=499.27ms min=497.60ms max=500.48ms count=3
+10-27 22:05:09.025  9558  9583 D EGL_emulation: app_time_stats: avg=501.43ms min=500.80ms max=502.06ms count=2
+10-27 22:05:10.040  9558  9583 D EGL_emulation: app_time_stats: avg=507.34ms min=498.06ms max=516.63ms count=2
+10-27 22:05:11.540  9558  9583 D EGL_emulation: app_time_stats: avg=499.74ms min=498.91ms max=500.53ms count=3
+10-27 22:05:13.038  9558  9583 D EGL_emulation: app_time_stats: avg=499.16ms min=497.74ms max=500.13ms count=3
+10-27 22:05:14.040  9558  9583 D EGL_emulation: app_time_stats: avg=500.75ms min=500.42ms max=501.07ms count=2
+10-27 22:05:15.041  9558  9583 D EGL_emulation: app_time_stats: avg=500.39ms min=500.26ms max=500.51ms count=2
+10-27 22:05:16.057  9558  9583 D EGL_emulation: app_time_stats: avg=507.61ms min=498.16ms max=517.07ms count=2
+10-27 22:05:17.059  9558  9583 D EGL_emulation: app_time_stats: avg=500.86ms min=499.24ms max=502.49ms count=2
+10-27 22:05:17.777  9558  9558 I ImeTracker: com.megyprints.app.dev:d5e57154: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT
+10-27 22:05:17.817  9558  9558 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=ImeCallback=ImeOnBackInvokedCallback@114605586 Callback=android.window.IOnBackInvokedCallback$Stub$Proxy@f415700
+10-27 22:05:17.820  9558  9558 I ImeTracker: com.megyprints.app.dev:5d4d8120: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT
+10-27 22:05:17.834  9558  9558 E ImeBackDispatcher: Ime callback not found. Ignoring unregisterReceivedCallback. callbackId: 114605586
+10-27 22:05:18.083  9558  9583 D EGL_emulation: app_time_stats: avg=43.71ms min=1.70ms max=712.30ms count=19
+10-27 22:05:18.097  9558  9558 I ImeTracker: com.megyprints.app.dev:1876a241: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+10-27 22:05:18.099  9558  9558 I ImeTracker: com.megyprints.app.dev:d5e57154: onHidden
+10-27 22:05:28.377  9558  9558 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::1@0@com.megyprints.app.dev>
+10-27 22:05:31.757  9558  9583 D EGL_emulation: app_time_stats: avg=791.44ms min=1.67ms max=13401.57ms count=17
+10-27 22:05:32.274  9558  9558 W unknown:DraweeEventTracker: 1f3214e: Draw requested for a non-attached controller 8ff226f. DraweeHolder{controllerAttached=false, holderAttached=false, drawableVisible=true, events=[ON_HOLDER_ATTACH, ON_ATTACH_CONTROLLER, ON_DRAWABLE_HIDE, ON_DETACH_CONTROLLER, ON_DRAWABLE_SHOW, ON_ATTACH_CONTROLLER, ON_HOLDER_DETACH, ON_DETACH_CONTROLLER, ON_ATTACH_CONTROLLER, ON_HOLDER_ATTACH, ON_DRAWABLE_HIDE, ON_DETACH_CONTROLLER, ON_DRAWABLE_SHOW, ON_ATTACH_CONTROLLER, ON_DRAWABLE_HIDE, ON_DETACH_CONTROLLER, ON_DRAWABLE_SHOW, ON_ATTACH_CONTROLLER, ON_HOLDER_DETACH, ON_DETACH_CONTROLLER]}
+10-27 22:05:32.292  9558  9572 W yprints.app.dev: Cleared Reference was only reachable from finalizer (only reported once)
+10-27 22:05:33.439  9558  9583 D EGL_emulation: app_time_stats: avg=52.70ms min=1.97ms max=1132.49ms count=30
+10-27 22:05:47.005  9558  9583 D EGL_emulation: app_time_stats: avg=797.96ms min=14.31ms max=13298.28ms count=17
+10-27 22:05:48.006  9558  9583 D EGL_emulation: app_time_stats: avg=16.65ms min=14.09ms max=19.63ms count=60
+10-27 22:06:03.821  9558  9583 D EGL_emulation: app_time_stats: avg=718.81ms min=15.13ms max=15099.14ms count=22
+10-27 22:06:04.822  9558  9583 D EGL_emulation: app_time_stats: avg=6.65ms min=1.18ms max=24.18ms count=59
+10-27 22:06:20.414  9558  9583 D EGL_emulation: app_time_stats: avg=1113.63ms min=15.17ms max=15375.17ms count=14
+10-27 22:06:25.591  9558  9583 D EGL_emulation: app_time_stats: avg=224.78ms min=1.99ms max=4698.72ms count=22
+10-27 22:06:26.608  9558  9583 D EGL_emulation: app_time_stats: avg=16.88ms min=9.54ms max=31.42ms count=60
+10-27 22:07:15.643  9558  9558 W unknown:BridgelessReact: ReactHost{0}.onHostPause(activity)
+10-27 22:07:15.646  9558  9558 W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostPause()
+10-27 22:07:15.650  9558  9558 W unknown:BridgelessReact: ReactHost{0}.onHostResume(activity)
+10-27 22:07:15.655  9558  9558 W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostResume()
+10-27 22:07:15.657  9558  9592 D TrafficStats: tagSocket(6) with statsTag=0xffffffff, statsUid=-1
+10-27 22:07:15.760  9558  9583 D EGL_emulation: app_time_stats: avg=3775.55ms min=1.90ms max=48938.03ms count=13
+10-27 22:07:17.437  9558  9583 D EGL_emulation: app_time_stats: avg=50.76ms min=9.73ms max=1132.09ms count=33

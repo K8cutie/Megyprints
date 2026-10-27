@@ -1,0 +1,24 @@
+Megy Prints 2.0 (dev) - logcat check on emulator-5558 (pwa_test AVD, read-only), 2026-10-28
+Package: com.megyprints.app.dev, versionName 2.0.0, versionCode 100
+
+Run 1: debug APK (megyprints-2.0-dev-debug.apk), JavaScript from Metro on port 8081 (adb reverse)
+  Walked: start screen -> Sign in -> made-up nobody@example.com + made-up password -> error shown
+          -> back -> Shared code check (13/13 match, Hermes) -> Load today's prices (live server)
+          -> megyprints-dev://albums while signed out (went to Sign in)
+  "FATAL EXCEPTION" lines in the whole log:            0
+  "E AndroidRuntime" lines in the whole log:           0
+  crash buffer (logcat -b crash):                      empty
+  App errors seen (not crashes):
+    - ReactNoCrashSoftException "onWindowFocusChange while context is not ready" once at start
+      (React Native logs this when the window gets focus before the JS is loaded; app kept running)
+    - OpenGLRenderer "Unable to match the desired swap behavior" (emulator graphics, harmless)
+    - ImeBackDispatcher / FrameTracker keyboard-animation notes (system, harmless)
+  App-only log: 18-logcat-debug-app-only.txt
+
+Run 2: release APK (megyprints-2.0-dev-release.apk), JavaScript inside the APK, Metro link removed
+  Walked: start screen -> Shared code check (13/13 match, Hermes, album made in 22 ms)
+  "FATAL EXCEPTION" lines:                             0
+  "E AndroidRuntime" lines:                            0
+  crash buffer:                                        empty
+  App errors seen: "Not starting debugger" (normal for a release build), OpenGLRenderer swap note
+  App-only log: 20-logcat-release-app-only.txt
