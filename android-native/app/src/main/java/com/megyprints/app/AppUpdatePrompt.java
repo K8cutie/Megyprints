@@ -3,6 +3,7 @@ package com.megyprints.app;
 import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
@@ -23,21 +24,25 @@ import com.google.android.play.core.install.model.AppUpdateType;
  * Tells the person when a new version of the app is ready (Google Play In-App Updates,
  * flexible flow).
  *
- * 1.4.0: testers stayed on old versions, because Play doesn't always update tester apps on
- * its own. From now on the app tells them when a new version is ready.
+ * 1.4.0: so each new version reaches testers soon after it is out. Google turned down
+ * production on 2026-10-26 partly because testers saw no app updates.
  *
  * When the app comes on screen and Play has a newer version, Google's own sheet asks to
  * download it; the person can say no, and is not asked again until the next launch. The
- * download runs while they keep using the app. Once it is in, a box says "A new version of
- * Megy Prints is ready." with "Restart to update" and "Later". The app never restarts without
- * that tap: the person may be in the middle of an album.
+ * download runs while they keep using the app. Once it is in, the next time the app comes
+ * back on screen (from the photo picker, the sign-in tab, Home, or a new launch) a box says
+ * "A new version of Megy Prints is ready." with "Restart to update" and "Later". The box never
+ * pops up while they are in the app, where a tap meant for the album could land on it, and
+ * the app never restarts without that tap: the person may be in the middle of an album.
+ * "Later" (or Back) holds for 4 hours; a tap outside the box does nothing.
  *
  * Only a phone that installed the app from Play can get an update. Anywhere else (debug
  * builds, the emulator, a sideloaded APK) the check fails, and this does nothing but log.
  *
- * To see the box on the emulator: gradlew.bat assembleDebug -PfakeAppUpdate=true. That
- * debug build uses Play's FakeAppUpdateManager and plays the person saying yes and the
- * download finishing. A release build can't: FAKE_APP_UPDATE is always false there.
+ * To see the box on the emulator: gradlew.bat assembleDebug -PfakeAppUpdate=true, open the
+ * app, wait 5 seconds, then go Home and back into the app. That debug build uses Play's
+ * FakeAppUpdateManager and plays the person saying yes and the download finishing. A release
+ * build can't: FAKE_APP_UPDATE is always false there.
  */
 final class AppUpdatePrompt {
 
@@ -52,7 +57,7 @@ final class AppUpdatePrompt {
 
     private boolean onScreen;
     private boolean askedThisLaunch;
-    private boolean laterThisLaunch;
+    private long laterAtMs = UpdateDecision.NEVER;
     private AlertDialog readyDialog;
 
     /** Call from onCreate: a result launcher registered after onStart throws. */
@@ -72,7 +77,8 @@ final class AppUpdatePrompt {
 
     /**
      * One check does both jobs: on launch it may ask about a new version, and on every return
-     * it shows the "ready" box if the download finished while the app was away (Google's advice).
+     * it shows the "ready" box if the download has finished (Google's advice). Coming back on
+     * screen is the only time the box shows: a natural pause, with no finger mid-tap.
      */
     void onResume() {
         onScreen = true;
@@ -96,13 +102,16 @@ final class AppUpdatePrompt {
     }
 
     private void onUpdateInfo(AppUpdateInfo info) {
+        // The answer can come after onPause (the listener lives until onStop): both rules check
+        // onScreen, so nothing opens on top of the photo picker or the sign-in tab, and the one
+        // ask for this launch is kept for the next onResume.
         int status = info.installStatus();
-        if (UpdateDecision.shouldShowReadyDialog(status, onScreen, readyDialog != null, laterThisLaunch)) {
+        if (UpdateDecision.shouldShowReadyDialog(status, onScreen, readyDialog != null, laterAtMs, SystemClock.elapsedRealtime())) {
             showReadyDialog();
             return;
         }
         boolean flexibleAllowed = info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE);
-        if (UpdateDecision.shouldStartFlow(info.updateAvailability(), flexibleAllowed, status, askedThisLaunch)) {
+        if (UpdateDecision.shouldStartFlow(info.updateAvailability(), flexibleAllowed, status, onScreen, askedThisLaunch)) {
             startFlow(info);
         }
     }
@@ -127,23 +136,30 @@ final class AppUpdatePrompt {
     }
 
     private void onInstallState(InstallState state) {
-        int status = state.installStatus();
-        Log.i(TAG, "Install status " + status);
-        // Off screen (say, in the photo picker), onResume shows the box on the way back.
-        if (UpdateDecision.shouldShowReadyDialog(status, onScreen, readyDialog != null, laterThisLaunch)) {
-            showReadyDialog();
-        }
+        // Log only. When the download finishes the person is usually tapping in the album
+        // editor; a box that pops up under their finger could restart the app by mistake.
+        // onResume shows it the next time the app comes back on screen.
+        Log.i(TAG, "Install status " + state.installStatus());
     }
 
     private void showReadyDialog() {
-        readyDialog = new AlertDialog.Builder(activity)
+        // UpdateDialog: "Restart to update" is the one filled button, in Megy Prints terracotta.
+        readyDialog = new AlertDialog.Builder(activity, R.style.UpdateDialog)
             .setMessage(R.string.update_ready)
             .setPositiveButton(R.string.update_restart, (d, which) -> restartToUpdate())
-            .setNegativeButton(R.string.update_later, (d, which) -> laterThisLaunch = true)
-            .setOnCancelListener((d) -> laterThisLaunch = true) // Back, or a tap outside the box, means Later
+            .setNegativeButton(R.string.update_later, (d, which) -> later())
+            .setOnCancelListener((d) -> later()) // Back means Later
             .setOnDismissListener((d) -> readyDialog = null)
-            .show();
+            .create();
+        // Only the two buttons (or Back) decide: a stray tap outside the box is not "Later".
+        readyDialog.setCanceledOnTouchOutside(false);
+        readyDialog.show();
         Log.i(TAG, "Showed: new version is ready");
+    }
+
+    private void later() {
+        laterAtMs = SystemClock.elapsedRealtime();
+        Log.i(TAG, "Later: the box waits 4 hours");
     }
 
     private void restartToUpdate() {

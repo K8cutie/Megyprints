@@ -218,8 +218,13 @@ until the next application (2026-11-09 at the earliest):
 **The update prompt (from 1.4.0)** uses Google Play In-App Updates. The real prompt
 appears only on phones that installed the app from Play, and only when a higher
 version is published on their track, so testers first see it when 1.5.0 is out.
+First Google's own sheet asks to download the new version. Once the download is
+in, the next time the app comes back on screen, a box says "A new version of Megy
+Prints is ready." with "Restart to update" and "Later" ("Later" waits 4 hours).
+Don't ask testers to try it on 1.4.0: there is nothing to see until 1.5.0.
 To see it on the emulator, build debug with `gradlew.bat assembleDebug
--PfakeAppUpdate=true` (a pretend update; release builds can't use it).
+-PfakeAppUpdate=true` (a pretend update; release builds can't use it), open the
+app, wait 5 seconds, then go Home and back into the app.
 
 **Build from a worktree** (the signing files stay in the main checkout, gitignored):
 hard-link (`mklink /H`, never copy) the main checkout's

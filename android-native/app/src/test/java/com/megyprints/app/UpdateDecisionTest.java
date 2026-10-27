@@ -12,7 +12,10 @@ import org.junit.Test;
 public class UpdateDecisionTest {
 
     private static final boolean ALLOWED = true;
+    private static final boolean ON_SCREEN = true;
     private static final boolean NOT_ASKED = false;
+    private static final long NOW = 50_000_000L; // SystemClock.elapsedRealtime, some time after boot
+    private static final long NO_LATER = UpdateDecision.NEVER;
 
     @Test
     public void numbersMatchGooglePlay() {
@@ -27,46 +30,53 @@ public class UpdateDecisionTest {
 
     @Test
     public void asksWhenANewVersionIsOut() {
-        assertTrue(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, InstallStatus.UNKNOWN, NOT_ASKED));
+        assertTrue(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, InstallStatus.UNKNOWN, ON_SCREEN, NOT_ASKED));
+    }
+
+    @Test
+    public void doesNotAskWhenNotOnScreen() {
+        // The check came back after they left for the photo picker or the sign-in tab:
+        // Google's sheet must not open on top of it. The next onResume asks.
+        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, InstallStatus.UNKNOWN, false, NOT_ASKED));
     }
 
     @Test
     public void asksOnlyOncePerLaunch() {
         // They said no: not again until the next launch.
-        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, InstallStatus.UNKNOWN, true));
+        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, InstallStatus.UNKNOWN, ON_SCREEN, true));
     }
 
     @Test
     public void doesNotAskWithoutANewVersion() {
-        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.UNKNOWN, ALLOWED, InstallStatus.UNKNOWN, NOT_ASKED));
-        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_NOT_AVAILABLE, ALLOWED, InstallStatus.UNKNOWN, NOT_ASKED));
-        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS, ALLOWED, InstallStatus.UNKNOWN, NOT_ASKED));
+        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.UNKNOWN, ALLOWED, InstallStatus.UNKNOWN, ON_SCREEN, NOT_ASKED));
+        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_NOT_AVAILABLE, ALLOWED, InstallStatus.UNKNOWN, ON_SCREEN, NOT_ASKED));
+        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS, ALLOWED, InstallStatus.UNKNOWN, ON_SCREEN, NOT_ASKED));
     }
 
     @Test
     public void doesNotAskWhenPlayDoesNotAllowTheFlexibleFlow() {
-        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, false, InstallStatus.UNKNOWN, NOT_ASKED));
+        assertFalse(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, false, InstallStatus.UNKNOWN, ON_SCREEN, NOT_ASKED));
     }
 
     @Test
     public void doesNotAskWhileADownloadIsUnderWay() {
         int[] underWay = { InstallStatus.PENDING, InstallStatus.DOWNLOADING, InstallStatus.DOWNLOADED, InstallStatus.INSTALLING };
         for (int status : underWay) {
-            assertFalse("install status " + status, UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, status, NOT_ASKED));
+            assertFalse("install status " + status, UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, status, ON_SCREEN, NOT_ASKED));
         }
     }
 
     @Test
     public void asksAgainAfterAFailedOrCanceledDownloadOnTheNextLaunch() {
-        assertTrue(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, InstallStatus.FAILED, NOT_ASKED));
-        assertTrue(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, InstallStatus.CANCELED, NOT_ASKED));
+        assertTrue(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, InstallStatus.FAILED, ON_SCREEN, NOT_ASKED));
+        assertTrue(UpdateDecision.shouldStartFlow(UpdateAvailability.UPDATE_AVAILABLE, ALLOWED, InstallStatus.CANCELED, ON_SCREEN, NOT_ASKED));
     }
 
     // "A new version of Megy Prints is ready."
 
     @Test
     public void saysReadyOnceDownloaded() {
-        assertTrue(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, true, false, false));
+        assertTrue(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, ON_SCREEN, false, NO_LATER, NOW));
     }
 
     @Test
@@ -76,23 +86,43 @@ public class UpdateDecisionTest {
             InstallStatus.INSTALLED, InstallStatus.FAILED, InstallStatus.CANCELED,
         };
         for (int status : notYet) {
-            assertFalse("install status " + status, UpdateDecision.shouldShowReadyDialog(status, true, false, false));
+            assertFalse("install status " + status, UpdateDecision.shouldShowReadyDialog(status, ON_SCREEN, false, NO_LATER, NOW));
         }
     }
 
     @Test
     public void waitsUntilTheAppIsOnScreen() {
         // In the photo picker, say: the box comes when they are back.
-        assertFalse(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, false, false, false));
+        assertFalse(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, false, false, NO_LATER, NOW));
     }
 
     @Test
     public void neverTwoBoxesAtOnce() {
-        assertFalse(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, true, true, false));
+        assertFalse(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, ON_SCREEN, true, NO_LATER, NOW));
     }
 
     @Test
-    public void laterHoldsUntilTheNextLaunch() {
-        assertFalse(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, true, false, true));
+    public void laterHoldsForFourHours() {
+        assertEquals(4L * 60 * 60 * 1000, UpdateDecision.LATER_WAIT_MS);
+        long laterAt = NOW;
+        // Back from the photo picker a minute later, or nearly 4 hours later: still quiet.
+        assertFalse(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, ON_SCREEN, false, laterAt, laterAt + 60_000));
+        assertFalse(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, ON_SCREEN, false, laterAt, laterAt + UpdateDecision.LATER_WAIT_MS - 1));
+    }
+
+    @Test
+    public void laterEndsAfterFourHoursEvenIfTheAppWasNeverClosed() {
+        // Back on the first screen only moves the app to the background, so the same screen can
+        // live for days. The downloaded update must not wait that long without a word.
+        long laterAt = NOW;
+        assertTrue(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, ON_SCREEN, false, laterAt, laterAt + UpdateDecision.LATER_WAIT_MS));
+        assertTrue(UpdateDecision.shouldShowReadyDialog(InstallStatus.DOWNLOADED, ON_SCREEN, false, laterAt, laterAt + 3L * 24 * 60 * 60 * 1000));
+    }
+
+    @Test
+    public void laterHoldsOnlyAfterItWasTapped() {
+        assertFalse(UpdateDecision.laterHolds(NO_LATER, NOW));
+        assertFalse(UpdateDecision.laterHolds(NO_LATER, 0));
+        assertTrue(UpdateDecision.laterHolds(NOW, NOW));
     }
 }
