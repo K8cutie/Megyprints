@@ -51,6 +51,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/albumMinimum.ts',
   'src/pages/builder/binding.ts',
   'src/pages/builder/blankPages.ts',
+  'src/pages/builder/bleedGeometry.ts',
   'src/pages/builder/bookFeel.ts',
   'src/pages/builder/chooserFit.ts',
   'src/pages/builder/coverGeometry.ts',
@@ -61,6 +62,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/lastPagePhoto.ts',
   'src/pages/builder/layouts.ts',
   'src/pages/builder/lookAlikes.ts',
+  'src/pages/builder/maskShapes.ts',
   'src/pages/builder/orderReadiness.ts',
   'src/pages/builder/pageNormalize.ts',
   'src/pages/builder/pagePhotoKey.ts',
@@ -70,6 +72,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/photoAnalyzer.ts',
   'src/pages/builder/previewPaging.ts',
   'src/pages/builder/printSheet.ts',
+  'src/pages/builder/printSize.ts',
   'src/pages/builder/quoteBank.ts',
   'src/pages/builder/rectTemplates.ts',
   'src/pages/builder/retiredSizes.ts',
@@ -96,6 +99,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/types.ts',
   'src/pages/builder/useEndOfAlbumPrompt.ts',
   'src/pages/builder/varietyTracker.ts',
+  'src/pages/builder/wordArtRules.ts',
 ] as const;
 
 /** npm packages a shared file may import. Each must run the same in a

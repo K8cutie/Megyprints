@@ -398,6 +398,124 @@ Native Google sign-in needs these steps first, all in the owner's accounts:
 
 ---
 
+## Page renderer notes (2026-10-28, Phase 5 groundwork)
+
+The riskiest part of 2.0 was done early: the app draws an album page itself
+(`mobile/src/render`, react-native-skia), and a test holds it, pixel by
+pixel, to the picture the website's print renderer makes of the same page.
+
+### What draws a page
+
+- `pagePlan.ts`: what goes where, from the page data, without drawing. It
+  follows `printPipeline.ts drawPrintPage` step by step, and every number
+  comes from shared website code: print size (`printSize.ts`), the template
+  adapted to the page, margins with the spine keep-out (`binding.ts`), a
+  moved frame (`slotGeometry.ts`), masks (`maskShapes.ts`), the caption
+  margin and alignment (`wordArtRules.ts`), washes (`gradient.ts`). Anything
+  the app can't draw yet is listed in `plan.notDrawn`, never drawn as
+  something else.
+- `drawPage.ts`: the drawing, with the canvas rules where Skia's defaults
+  differ (bilinear, no mipmaps, photo edges not smoothed; smoothed clips;
+  miter limit 10; shadows as blur sigma = shadowBlur / 2; the border stroke
+  follows the clip path like `ctx.stroke()`). Bleed: `bleedGeometry.ts
+  mirrorOps`, the same mirrored strips as the website.
+- `pageText.ts`: words with Skia Paragraph (HarfBuzz shaping), the website's
+  own wrap (`wrapTextLines`) with a Skia measurer, and Chromium's placement:
+  - **word by word**: Chromium's canvas (default `fontKerning: auto`) shapes
+    each word and space on its own, so kerning across a space is never
+    applied. Playfair Display has such pairs: "Our first beach day" at 80 px
+    is 687.92 px in Chromium, 684.88 shaped whole, 687.92 word by word. All
+    7 bundled faces now measure exactly as Chromium does;
+  - **'middle' from the font file** (`fontMetrics.ts`): OS/2 typo ascender /
+    descender scaled to the font size, rounded to 1/64 px, as Blink does.
+    Matches Chromium's own number for every face and size tried;
+  - **glyph row**: Skia Paragraph draws glyphs `round(ascent)` px below the
+    top it is painted at (not the baseline `getLineMetrics` reports).
+    Calibrated against Skia's `drawText`: 112 of 112 font/size cases.
+- `fontTable.ts`: 3 of the 74 fonts for now (Playfair Display 400/700/400
+  italic, DM Sans 400/700, Dancing Script 400/700) as TTF files from the
+  `@expo-google-fonts` packages (OFL), the same families and weights the
+  website asks Google Fonts for.
+
+### The golden check
+
+- `tools/golden/goldenPages.ts`: 24 pages. 7 from the website's generator,
+  seeded (mulberry32, the generator specs' seed 0x5eed: 4 on 8x8, 3 on 6x4),
+  17 by hand: zoom and pan, a pan held at the photo's edge, circle / heart /
+  star / hexagon / arch / scallop / cut-corner / wavy / pinking / stamp /
+  leaf masks, linear and radial washes, page colours, polaroid, double,
+  rounded and dashed frames, a photo in a caption box, captions (left,
+  right, wrapping to 2 lines, underlined, italic, bold, shadow), a quote in a
+  photo frame, a free title with an outline. Photos are synthetic
+  (`syntheticPhotos.ts`: corner squares, grid, ring, block digits, fine
+  stripes), never real ones.
+- `tools/golden/renderWeb.mjs`: the website's `renderPageCanvasForPrint`
+  (the picture each print-file page is shrunk from: 300 DPI, bleed, words
+  in) in headless Chromium 1228 (playwright-core 1.61.1, GPU off), with the
+  app's font files loaded into it. Writes `tools/golden/web/` (not in git).
+- `mobile/test/goldenPages.test.ts`: the app's renderer, headless in Node
+  (react-native-skia's CanvasKit build: `LoadSkiaWeb` + `JsiSkApi`, CPU
+  surfaces), every page compared. It re-runs renderWeb.mjs itself when the
+  website's print code (printPipeline.ts and everything it imports), the
+  golden pages or the fonts changed since the last pictures
+  (`tools/golden/sources.cjs`).
+- Bars, chosen by measuring (`mobile/test/golden/compare.ts`): outside the
+  words at most 0.5% of pixels differ at pixelmatch 0.05 with edges counted
+  (real pages 0.000 to 0.061%; a photo moved 1/4 px: 0.79% or more); words
+  break into the same lines, each line within 1 px of Chromium's width, each
+  text box within 0.5 px of where the website puts it. A mutation test
+  proves a 1/4 px photo move, a 1 px wider frame and a caption 1 px lower
+  each fail.
+- First run: `cd tools/golden && npm ci`, then `cd mobile && npm test`
+  (about 2 minutes; the app draws a page in 0.2 to 0.9 s).
+
+### Results (2026-10-28)
+
+All 24 pages pass. Photo pages: 0.000 to 0.061% of pixels differ (the rest
+is the one blended pixel at each sharp stripe edge of a downscaled photo,
+up to 15 of 255 levels apart: Chromium's Skia and CanvasKit round bilinear
+weights differently). Text pages: 0.075 to 0.355% of the page, 0.21 to
+1.44% inside the text boxes, every text box within 0.36 px of the website's
+(most within 0.12). Those word pixels are letter edges: Chromium on Windows
+draws letters with DirectWrite (which grid-fits them), Skia with FreeType.
+
+### Not drawn yet (listed in `plan.notDrawn`)
+
+Texture backgrounds, photo/picture backgrounds, QR codes (slot and caption
+box), graphics/ornaments (slot, caption box, free-placed), stickers, theme
+corner art, soft-edge and textured-edge masks, colour looks, the cover
+(front, spine, back), and every font but the three above.
+
+### Found on the way (website, not changed here)
+
+- **Oval and Rounded masks print as plain rectangles.** The preview
+  (`slotShapeStyle.ts`) and the editor draw them, but `printPipeline.ts
+  applySlotClip` has no case for 'oval' or 'rounded'. The app copies print
+  (so it matches today's print files); fixing print is a website change.
+- **A path-shape mask (hexagon, scallop…) gets no border line in print**:
+  `ctx.clip(new Path2D(...))` leaves no current path for `ctx.stroke()`.
+  Masked slots have border width 0 anyway, so nothing prints wrong today.
+- **Georgia** (the default text font) is a Microsoft font; Android phones
+  don't have it, so a print file made on an Android phone already uses the
+  phone's serif. For the app: bundle Gelasio (same letter widths, OFL).
+- The website's real fonts come from Google Fonts as variable woff2 files;
+  the check uses the static TTF files on both sides. Same designs; widths
+  could differ slightly between the two file kinds.
+
+### Not proven
+
+- **On a phone.** The renderer only ran headless (CanvasKit, CPU). On the
+  phone, react-native-skia draws offscreen on the GPU; the Phase 5 plan's
+  "golden-page diff on the device" still has to be done (a debug screen
+  that draws the golden pages and pulls the PNGs). The APK has not been
+  rebuilt with react-native-skia yet.
+- **Against Android Chrome.** The website pictures are Chromium on Windows.
+  Customers' print files are mostly made in Chrome on Android (FreeType
+  letters), which may sit even closer to the app's text.
+- Only 8x8 and 6x4 (6x6, 8x6, 6x8 not in the set yet).
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

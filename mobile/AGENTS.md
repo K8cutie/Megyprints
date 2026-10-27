@@ -29,6 +29,12 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   line there to turn one back on.
 - **Server values** come from `.env.local` (not in git; `.env.example` has the
   names). Never commit them, never put real account passwords anywhere.
+- **Page renderer** (`src/render`, react-native-skia): album pages drawn the
+  way the website's print renderer draws them. `test/goldenPages.test.ts`
+  compares it pixel by pixel with the website's own pictures (made by
+  `../tools/golden/renderWeb.mjs` in headless Chromium; run `npm ci` in
+  `../tools/golden` once). Never loosen its bars to pass: the numbers and
+  why are in `test/golden/compare.ts` and the plan's "Page renderer notes".
 - **Gate before a commit:** `npm run check` here (TypeScript + jest), and from
   the repo root `npx tsc -b && npx vitest run` when `../src` changed.
 - Words a customer sees: plain English, say what you get, one filled

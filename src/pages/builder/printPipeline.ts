@@ -8,7 +8,8 @@ import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoRect } from './slotPhotoFit';
 import { applyMask, isMaskId, archRy, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha } from './masks';
 import { applyLookPixels, isLookId } from './looks';
-import { ALBUM_SIZES, CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
+import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
+import { PRINT_DPI, getPrintMultiplier, getPrintDimensions } from './printSize';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
@@ -25,33 +26,9 @@ import { withBleed, bleedPx, drawMirroredEdges } from './printBleed';
 import { loadFontFaces } from './fonts';
 import { rgbaToPng } from '../../lib/rgbaPng';
 
-/** Print resolution in DPI (dots per inch) */
-export const PRINT_DPI = 300;
-
-/** Multiplier for 300 DPI export relative to UI canvas.
- *  UI dimensions come from the SAME getCanvasDimensions the Fabric editor uses
- *  — this file used to carry its own hand-copied size switch (stale values,
- *  '9x9' missing entirely), which the structural audit flagged as the #1
- *  drift copy in the repo. Never re-introduce a local size table here. */
-export function getPrintMultiplier(albumSize: AlbumSizePreset): number {
-  const uiSize = getCanvasDimensions(albumSize);
-  const printSize = getPrintDimensions(albumSize);
-  // Use the larger dimension to determine scale
-  const scale = Math.max(
-    printSize.width / uiSize.width,
-    printSize.height / uiSize.height,
-  );
-  return Math.ceil(scale);
-}
-
-/** Print dimensions in pixels at 300 DPI.
- *  ALBUM_SIZES already stores the print pixel size at 300 DPI
- *  (e.g. an 8" side = 8 × 300 = 2400px), so we return it directly. */
-export function getPrintDimensions(albumSize: AlbumSizePreset) {
-  const config = ALBUM_SIZES.find((s) => s.preset === albumSize);
-  if (!config) return { width: 2400, height: 2400 };
-  return { width: config.width, height: config.height };
-}
+// The print size (PRINT_DPI, getPrintDimensions, getPrintMultiplier) lives in
+// printSize.ts, which the 2.0 app shares; re-exported here as before.
+export { PRINT_DPI, getPrintMultiplier, getPrintDimensions };
 
 /* ── SHARP WORDS (owner, 2026-10-21: "the cover page and the text — its print
    out looks low resolution") ──
@@ -217,6 +194,23 @@ export async function renderPageForPrint(
 
   // ── Method 2: Manual canvas compositing (fallback) ──
   return renderPageManually(page, photos, albumSize, pageIndex, bakeWords, bindingIn);
+}
+
+/** An interior page as the print file's picture is made from it, before it is
+ *  shrunk and JPEG'd: 300 DPI, its bleed mirrored on every edge, its words
+ *  drawn in (the same drawing as `bakeWords`). The 2.0 app's golden check
+ *  (tools/golden) compares the app's own page drawing against exactly this,
+ *  pixel by pixel. Nothing on the website calls it. */
+export async function renderPageCanvasForPrint(options: {
+  page: AlbumPage;
+  photos: UploadedPhoto[];
+  albumSize: AlbumSizePreset;
+  pageIndex?: number;
+  bindingIn?: number;
+}): Promise<HTMLCanvasElement> {
+  const { page, photos, albumSize, pageIndex = 0, bindingIn } = options;
+  const trim = await drawPrintPage(page, photos, albumSize, pageIndex, false, true, bindingIn);
+  return withBleed(trim, bleedPx(PRINT_DPI));
 }
 
 /** An interior page for the print file: the picture with its bleed, shrunk to
