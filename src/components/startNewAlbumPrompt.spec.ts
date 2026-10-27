@@ -4,6 +4,8 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+const APP = vi.hoisted(() => ({ native: false }));
+vi.mock('../lib/nativeShell', () => ({ isNativeShell: () => APP.native }));
 import StartNewAlbumPrompt from './StartNewAlbumPrompt';
 import { albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
 
@@ -17,7 +19,7 @@ import { albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement;
 let root: Root;
-beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
+beforeEach(() => { APP.native = false; host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const draft = (over: Partial<LocalDraftSummary> = {}): LocalDraftSummary =>
@@ -70,5 +72,49 @@ describe('wired in (source guards)', () => {
   it('the thank-you screen\'s Create Another starts a new album', () => {
     const order = readFileSync(resolve(__dirname, '../pages/Order.tsx'), 'utf8');
     expect(order).toMatch(/onClick=\{\(\) => \{ startFreshAlbum\(user\?\.id\); navigate\('\/builder'\); \}\} data-testid="order-create-another"/);
+  });
+});
+
+/* THE NEXT DAY OF THE TEST, signed out (owner, 2026-10-28: "The resume will
+   confuse testers"): Start Creating with yesterday's sample album in progress
+   offered "Continue my album", which opens yesterday's album, date and
+   "You're done" photo. In the Android app the way on is "Make today's
+   sample album", as on "Welcome back". */
+describe("yesterday's sample album in progress (the Android app, testing)", () => {
+  const yesterday = () => new Date(Date.now() - 24 * 3600e3).getTime();
+  const show = (d: LocalDraftSummary, signedIn: boolean, withSample = true) => {
+    const h = { onContinue: vi.fn(), onStartNew: vi.fn(), onStartTodaysSample: vi.fn(), onClose: vi.fn() };
+    // A new box each time: it reads "in the app" once, as it opens.
+    act(() => root.render(null));
+    act(() => root.render(createElement(StartNewAlbumPrompt, { draft: d, signedIn, ...h, ...(withSample ? {} : { onStartTodaysSample: undefined }) })));
+    const q = (id: string) => host.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
+    return { h, q };
+  };
+  const sampleDraft = (made: number) => draft({ title: 'Sample Album · Oct 28', photoCount: 40, sampleMadeAt: made });
+
+  it("the big button makes today's sample album; the note says what happens to the old one", () => {
+    APP.native = true;
+    const { h, q } = show(sampleDraft(yesterday()), false);
+    expect(q('start-new-continue').textContent).toBe("Make today's sample album");
+    expect(q('start-new-continue').className).toContain('bg-peach');
+    expect(q('start-new-note').textContent).toBe('The old sample album is replaced on this device.');
+    act(() => q('start-new-continue').click());
+    expect(h.onStartTodaysSample).toHaveBeenCalledTimes(1);
+    expect(h.onContinue).not.toHaveBeenCalled();
+    expect(show(sampleDraft(yesterday()), true).q('start-new-note').textContent).toBe('The old sample album stays in Your Projects.');
+  });
+
+  it("today's sample album, their own album, or the website: Continue my album, as always", () => {
+    APP.native = true;
+    expect(show(sampleDraft(Date.now()), false).q('start-new-continue').textContent).toBe('Continue my album');
+    expect(show(draft(), false).q('start-new-continue').textContent).toBe('Continue my album');
+    expect(show(sampleDraft(yesterday()), false, false).q('start-new-continue').textContent).toBe('Continue my album');
+    APP.native = false;
+    expect(show(sampleDraft(yesterday()), false).q('start-new-continue').textContent).toBe('Continue my album');
+  });
+
+  it("Home wires it: today's sample album is a new album, made at once", () => {
+    const home = readFileSync(resolve(__dirname, '../pages/Home.tsx'), 'utf8');
+    expect(home).toMatch(/onStartTodaysSample=\{\(\) => \{ requestSampleAlbum\(\); startNew\(\); \}\}/);
   });
 });

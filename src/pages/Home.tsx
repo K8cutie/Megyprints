@@ -16,6 +16,7 @@ import { useAuth } from '../lib/authContext';
 import { startFreshAlbum } from '../lib/albumSession';
 import { readLocalDraftSummary, albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
 import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
+import { requestSampleAlbum } from '../lib/samplePhotos';
 import { HOME_FEATURES, HOW_IT_WORKS, type HomeFeatureKey } from './homeCopy';
 import { AlbumsCard, EventsCard } from './home/HomeCards';
 
@@ -306,6 +307,7 @@ export default function Home() {
         <StartNewAlbumPrompt draft={inProgress} signedIn={!!user}
           onContinue={() => { setInProgress(null); navigate('/builder'); }}
           onStartNew={startNew}
+          onStartTodaysSample={() => { requestSampleAlbum(); startNew(); }}
           onClose={() => setInProgress(null)} />
       )}
 
