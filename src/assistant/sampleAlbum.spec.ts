@@ -29,6 +29,7 @@ vi.mock('../lib/storeSettings', async (importOriginal) => ({
 import Builder from '../pages/Builder';
 import { WIZARD_STORAGE_KEY } from './wizard';
 import { readAlbumTheme } from '../lib/albumTheme';
+import { sampleAlbumPhotos, sampleDayNumber, sampleCoverPhoto, SAMPLE_END_OF_DAY_NAMES } from '../lib/samplePhotos';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const GIF = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
@@ -61,6 +62,7 @@ function stepOne(title: string, photos: Photo[] = []) {
       return { intentType: intent.type, success: true, message: '' };
     }),
     setCoverToPhoto: vi.fn(),
+    putPhotoOnLastPage: vi.fn(),
     resizeAsk: null, setResizeAsk: vi.fn(),
     setPhase: vi.fn((p: string) => { ctx.phase = p; }), setWizardStep: vi.fn((w: string) => { ctx.wizardStep = w; }),
     setAlbumTitle: vi.fn((t: string) => { ctx.albumTitle = t; }), goToPage: vi.fn(),
@@ -131,7 +133,7 @@ describe('Step 1 in the Android app: "Make a sample album"', () => {
     expect(make()?.textContent).toBe('Make a sample album');
   });
 
-  it('one tap: named "Sample Album", occasion Family, 40 samples in, a sample on the cover, the album made, its pages open', async () => {
+  it("one tap: named \"Sample Album\", occasion Family, today's 40 samples in, a sample on the cover, the album made, today's end-of-day photo on its last page, its pages open", async () => {
     await open();
     await tapMake();
     expect(ctx.setAlbumTitle).toHaveBeenCalledWith('Sample Album');
@@ -142,10 +144,15 @@ describe('Step 1 in the Android app: "Make a sample album"', () => {
     expect(files).toHaveLength(40);
     expect(new Set(files.map((f) => f.name)).size).toBe(40);
     expect(files.every((f) => /^megy-sample-\d{2}\.jpg$/.test(f.name))).toBe(true);
+    // Today's sample album: a different 40 each day.
+    expect(files.map((f) => f.name)).toEqual(sampleAlbumPhotos(sampleDayNumber(new Date())));
     expect(fetched).toHaveLength(40);
-    // The family in the garden goes on the cover, then the album is made.
-    const coverId = ctx.uploadedPhotos.find((p) => p.name === 'megy-sample-03.jpg')!.id;
-    expect(ctx.setCoverToPhoto).toHaveBeenCalledWith(coverId, { titleColor: '#FFFFFF' });
+    // A sample on the cover (the family in the garden when today has it), then the album is made.
+    expect(ctx.setCoverToPhoto).toHaveBeenCalledWith(sampleCoverPhoto(ctx.uploadedPhotos)!.id, { titleColor: '#FFFFFF' });
+    // Today's end-of-day photo onto the last page, once the album is made.
+    const endOfDay = ctx.uploadedPhotos.find((p) => SAMPLE_END_OF_DAY_NAMES.includes(p.name))!;
+    expect(ctx.putPhotoOnLastPage).toHaveBeenCalledWith(endOfDay.id);
+    expect(ctx.putPhotoOnLastPage.mock.invocationCallOrder[0]).toBeGreaterThan(ctx.dispatch.mock.invocationCallOrder[ctx.dispatch.mock.calls.findIndex(([i]) => (i as { type: string }).type === 'generate_album')]);
     expect(calls('generate_album')).toHaveLength(1);
     expect(ctx.setCoverToPhoto.mock.invocationCallOrder[0]).toBeLessThan(ctx.dispatch.mock.invocationCallOrder[ctx.dispatch.mock.calls.findIndex(([i]) => (i as { type: string }).type === 'generate_album')]);
     expect(ctx.wizardStep).toBe('review_pages');

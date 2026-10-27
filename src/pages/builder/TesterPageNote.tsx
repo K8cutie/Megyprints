@@ -3,9 +3,9 @@ import { splitBold } from '../../assistant/boldText';
 
 /* A sample album's card over a page (lib/samplePhotos): "Welcome to the Megy
    Prints app test!" on page 1, "You're done with today's test!" on the last
-   page in Preview. Drawn OVER the page on screen, near its top, sized to the
-   page, like the tester stamp: taps go through it and the print pipeline
-   never sees it. */
+   page in Preview. Drawn OVER the page on screen, low on it (faces are mostly
+   higher up), just above the tester stamp, sized to the page, like the stamp:
+   taps go through it and the print pipeline never sees it. */
 export default function TesterPageNote({ note, pageW }: {
   note: SampleAlbumNote;
   /** The page's width on screen, in px. */
@@ -13,8 +13,8 @@ export default function TesterPageNote({ note, pageW }: {
 }) {
   const font = Math.max(11, Math.min(17, Math.round(pageW * 0.042)));
   const inset = Math.max(8, Math.round(pageW * 0.05));
-  // Below the page's own corner buttons (the photo's delete, top right).
-  const top = Math.max(inset, Math.round(pageW * 0.14));
+  // Above the tester stamp in the bottom corner (about 11% of the page).
+  const bottom = Math.max(inset * 3, Math.round(pageW * 0.15));
   return (
     <div
       role="note"
@@ -22,7 +22,7 @@ export default function TesterPageNote({ note, pageW }: {
       className="font-sans print:hidden"
       style={{
         position: 'absolute',
-        top,
+        bottom,
         left: inset,
         right: inset,
         zIndex: 50,

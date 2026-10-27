@@ -12,13 +12,26 @@
    (add_photos), so the photo check, face detection and the time order all
    run on them. Each carries a "taken" time on one day out (park → beach → a
    birthday → grandparents → dinner → friends), so they sit in that order.
+
+   78 of them (owner, 2026-10-28: "increase the sample photo pool so the
+   youre done shows something different every day. its a 14 day test"):
+   64 everyday photos and 14 "end of the day" ones. Each day's sample album
+   takes 39 everyday photos picked for that day and that day's end-of-day
+   photo, which goes on the last page, under "You're done with today's
+   test!". Over any 14 days in a row, no two days look the same.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { TESTING_PHASE } from './testingPhase';
 import { createLimiter } from './limit';
 
-/** How many sample photos there are: enough for a whole album and then some. */
-export const SAMPLE_PHOTO_COUNT = 48;
+/** How many sample photos there are: the everyday ones, then the 14 end-of-day ones. */
+export const SAMPLE_PHOTO_COUNT = 78;
+
+/** Everyday photos: megy-sample-01 … 64. */
+export const SAMPLE_EVERYDAY_COUNT = 64;
+
+/** Days in the test: one end-of-day photo for each. */
+export const SAMPLE_TEST_DAYS = 14;
 
 /** "megy-sample-07.jpg": the file in public/sample-photos and the photo's
  *  name in the album (the same name twice is skipped as already added). */
@@ -27,6 +40,12 @@ export const samplePhotoName = (n: number): string => `megy-sample-${String(n).p
 /** Every sample, in the order of the day. */
 export const SAMPLE_PHOTO_NAMES: readonly string[] =
   Array.from({ length: SAMPLE_PHOTO_COUNT }, (_, i) => samplePhotoName(i + 1));
+
+/** The everyday photos (01 … 64). */
+export const SAMPLE_EVERYDAY_NAMES: readonly string[] = SAMPLE_PHOTO_NAMES.slice(0, SAMPLE_EVERYDAY_COUNT);
+
+/** The end-of-day photos (65 … 78): "taken" after every everyday one. */
+export const SAMPLE_END_OF_DAY_NAMES: readonly string[] = SAMPLE_PHOTO_NAMES.slice(SAMPLE_EVERYDAY_COUNT);
 
 /** The offer shows only in the Android app, and only while the switch is on. */
 export function showSamplePhotos(inApp: boolean, switchOn: boolean = TESTING_PHASE): boolean {
@@ -38,7 +57,8 @@ export function showSamplePhotos(inApp: boolean, switchOn: boolean = TESTING_PHA
  *  Fewer when fewer are left; none when nothing is short. */
 export function pickSamplePhotos(short: number, inAlbum: Iterable<string>): string[] {
   const have = new Set(inAlbum);
-  const left = SAMPLE_PHOTO_NAMES.filter((name) => !have.has(name));
+  // Everyday photos only: the end-of-day ones belong to the sample album's last page.
+  const left = SAMPLE_EVERYDAY_NAMES.filter((name) => !have.has(name));
   const want = Math.min(Math.max(0, Math.floor(short)), left.length);
   return Array.from({ length: want }, (_, i) => left[Math.floor((i * left.length) / want)]);
 }
@@ -46,6 +66,41 @@ export function pickSamplePhotos(short: number, inAlbum: Iterable<string>): stri
 /* Step 1's "Make a sample album" (owner, 2026-10-28: "Generate a sample album
    feature is added on step 1 using those sample photos"): one tap and a
    tester has a whole album, stamped, without a photo of their own. */
+
+/** Today, as a number that goes up by one at the phone's midnight. */
+export function sampleDayNumber(now: Date): number {
+  return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86_400_000);
+}
+
+/** A small seeded shuffle: the same day always picks the same photos. */
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** The day's end-of-day photo, for its last page: a different one each day for 14 days. */
+export function sampleEndOfDayPhoto(day: number): string {
+  return SAMPLE_END_OF_DAY_NAMES[((day % SAMPLE_TEST_DAYS) + SAMPLE_TEST_DAYS) % SAMPLE_TEST_DAYS];
+}
+
+/** The day's sample album: 39 everyday photos picked for the day (in the
+ *  day's order), then its end-of-day photo. 40 photos, a whole album. */
+export function sampleAlbumPhotos(day: number, count = 40): string[] {
+  const rand = seeded(day * 2654435761);
+  const pool = [...SAMPLE_EVERYDAY_NAMES];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const everyday = pool.slice(0, Math.min(count - 1, pool.length)).sort();
+  return [...everyday, sampleEndOfDayPhoto(day)];
+}
 
 /** The sample album's name when the tester hasn't typed one. It shows in the
  *  album's header, so a screenshot says it is the sample album. */

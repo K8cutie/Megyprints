@@ -104,7 +104,9 @@ describe('the card on a page', () => {
     expect(text(q('tester-page-note-body'))).toBe('Tap Next page until you reach the last page, then tap Done — Preview my album.');
     expect([...q('tester-page-note-body')!.querySelectorAll('strong')].map((s) => s.textContent)).toEqual(['Next page', 'Done — Preview my album']);
     expect(note.style.pointerEvents).toBe('none');
-    expect(note.style.top).not.toBe('');
+    // Low on the page, above the stamp: faces are mostly higher up.
+    expect(note.style.bottom).not.toBe('');
+    expect(note.style.top).toBe('');
   });
 
   it('page 1 in the pages (phone and computer) asks for the welcome card, only on page 1', () => {

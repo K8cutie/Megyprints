@@ -5,6 +5,7 @@ import exifr from 'exifr';
 import {
   SAMPLE_PHOTO_COUNT, SAMPLE_PHOTO_NAMES, samplePhotoName, showSamplePhotos, pickSamplePhotos,
   addSamplesLabel, fetchSamplePhotos, sampleCoverPhoto, SAMPLE_COVER_NAME, SAMPLE_ALBUM_NAME, SAMPLE_ALBUM_OCCASION,
+  SAMPLE_EVERYDAY_NAMES, SAMPLE_END_OF_DAY_NAMES, SAMPLE_TEST_DAYS, sampleDayNumber, sampleEndOfDayPhoto, sampleAlbumPhotos,
 } from './samplePhotos';
 import { isAlbumNameReady } from './albumName';
 import { isAlbumThemeReady } from './albumTheme';
@@ -35,10 +36,10 @@ function jpegSize(buf: Buffer): { w: number; h: number } {
 }
 
 describe('the sample photo files', () => {
-  it('48 of them, named megy-sample-01.jpg … megy-sample-48.jpg, and nothing else in the folder', () => {
-    expect(SAMPLE_PHOTO_COUNT).toBe(48);
+  it('78 of them, named megy-sample-01.jpg … megy-sample-78.jpg, and nothing else in the folder', () => {
+    expect(SAMPLE_PHOTO_COUNT).toBe(78);
+    expect(SAMPLE_PHOTO_NAMES[77]).toBe('megy-sample-78.jpg');
     expect(SAMPLE_PHOTO_NAMES[0]).toBe('megy-sample-01.jpg');
-    expect(SAMPLE_PHOTO_NAMES[47]).toBe('megy-sample-48.jpg');
     expect(readdirSync(DIR).sort()).toEqual([...SAMPLE_PHOTO_NAMES].sort());
   });
 
@@ -47,7 +48,7 @@ describe('the sample photo files', () => {
   });
 
   it('phone-sized: JPEGs at most 1600 px on the long side and under 450 KB each', () => {
-    let total = 0;
+    const sizes: number[] = [];
     for (const name of SAMPLE_PHOTO_NAMES) {
       const buf = file(name);
       expect(buf[0] === 0xff && buf[1] === 0xd8, name).toBe(true);
@@ -55,10 +56,12 @@ describe('the sample photo files', () => {
       expect(Math.max(w, h), name).toBeLessThanOrEqual(1600);
       expect(Math.min(w, h), name).toBeGreaterThanOrEqual(900);
       expect(buf.length, name).toBeLessThan(450 * 1024);
-      total += buf.length;
+      sizes.push(buf.length);
     }
-    // A whole 40-photo album from samples is about 12 MB over 4G.
-    expect(total).toBeLessThan(16 * 1024 * 1024);
+    // A tester downloads one album's 40, never the folder: even the 40
+    // biggest are under 14 MB over 4G.
+    const biggest40 = [...sizes].sort((a, b) => b - a).slice(0, 40).reduce((a, b) => a + b, 0);
+    expect(biggest40).toBeLessThan(14 * 1024 * 1024);
   });
 
   it('both shapes, so every album size gets the full-page photos its 7 video memories need', () => {
@@ -143,7 +146,6 @@ describe("the sample album's cover", () => {
   const ph = (name: string, leftOut = false) => ({ id: name, name, leftOut });
   it('the family in the garden when it is in the album', () => {
     expect(SAMPLE_COVER_NAME).toBe('megy-sample-03.jpg');
-    expect(pickSamplePhotos(40, [])).toContain(SAMPLE_COVER_NAME);
     expect(sampleCoverPhoto([ph('megy-sample-01.jpg'), ph('megy-sample-03.jpg')])?.name).toBe('megy-sample-03.jpg');
   });
   it('else the first sample, else the first photo; never a left-out one', () => {
@@ -193,5 +195,62 @@ describe('getting the samples', () => {
   it('one that fails fails the batch (nothing is half added)', async () => {
     const failing = (async (url: string) => new Response('', { status: url.endsWith('09.jpg') ? 404 : 200 })) as unknown as typeof fetch;
     await expect(fetchSamplePhotos(['megy-sample-03.jpg', 'megy-sample-09.jpg'], '/', failing)).rejects.toThrow('megy-sample-09.jpg');
+  });
+});
+
+describe('a different sample album every day of the test', () => {
+  const TODAY = sampleDayNumber(new Date(2026, 9, 28, 9, 0));
+  const fourteen = Array.from({ length: SAMPLE_TEST_DAYS }, (_, k) => TODAY + k);
+
+  it('64 everyday photos and 14 end-of-day ones, each end-of-day one "taken" after every everyday one', async () => {
+    expect(SAMPLE_EVERYDAY_NAMES).toHaveLength(64);
+    expect(SAMPLE_END_OF_DAY_NAMES).toHaveLength(14);
+    expect(SAMPLE_TEST_DAYS).toBe(14);
+    const when = async (n: string) => ((await exifr.parse(file(n), ['DateTimeOriginal']))!.DateTimeOriginal as Date).getTime();
+    const latestEveryday = Math.max(...await Promise.all(SAMPLE_EVERYDAY_NAMES.map(when)));
+    for (const n of SAMPLE_END_OF_DAY_NAMES) expect(await when(n), n).toBeGreaterThan(latestEveryday);
+  });
+
+  it("the day changes at the phone's midnight, not before", () => {
+    expect(sampleDayNumber(new Date(2026, 9, 28, 0, 0))).toBe(TODAY);
+    expect(sampleDayNumber(new Date(2026, 9, 28, 23, 59))).toBe(TODAY);
+    expect(sampleDayNumber(new Date(2026, 9, 29, 0, 0))).toBe(TODAY + 1);
+    // Across a month's end, too.
+    expect(sampleDayNumber(new Date(2026, 10, 1, 8, 0))).toBe(TODAY + 4);
+  });
+
+  it("each day: 40 different photos, 39 everyday ones in the day's order, then that day's end-of-day photo", () => {
+    for (const day of fourteen) {
+      const album = sampleAlbumPhotos(day);
+      expect(album).toHaveLength(40);
+      expect(new Set(album).size).toBe(40);
+      expect(album.slice(0, 39).every((n) => SAMPLE_EVERYDAY_NAMES.includes(n))).toBe(true);
+      expect(album.slice(0, 39)).toEqual([...album.slice(0, 39)].sort());
+      expect(album[39]).toBe(sampleEndOfDayPhoto(day));
+      expect(SAMPLE_END_OF_DAY_NAMES).toContain(album[39]);
+    }
+  });
+
+  it('over 14 days in a row, 14 different end-of-day photos (the "You’re done" page), whatever day the test starts', () => {
+    for (const start of [TODAY, TODAY + 3, TODAY + 13, 0, -5]) {
+      const days = Array.from({ length: 14 }, (_, k) => sampleEndOfDayPhoto(start + k));
+      expect(new Set(days).size, `starting on day ${start}`).toBe(14);
+    }
+  });
+
+  it('the rest of the album changes from day to day too; the same day always gives the same album', () => {
+    expect(sampleAlbumPhotos(TODAY)).toEqual(sampleAlbumPhotos(TODAY));
+    const sets = fourteen.map((d) => sampleAlbumPhotos(d).slice(0, 39).join());
+    expect(new Set(sets).size).toBe(14);
+    // Next day: a real change, not one photo.
+    const today = new Set(sampleAlbumPhotos(TODAY));
+    const tomorrow = sampleAlbumPhotos(TODAY + 1);
+    expect(tomorrow.filter((n) => !today.has(n)).length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('"Add 25 sample photos" (an album with photos of its own) never takes an end-of-day photo', () => {
+    const picks = pickSamplePhotos(40, []);
+    expect(picks.some((n) => SAMPLE_END_OF_DAY_NAMES.includes(n))).toBe(false);
+    expect(pickSamplePhotos(100, [])).toHaveLength(64);
   });
 });

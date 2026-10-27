@@ -32,6 +32,7 @@ import { isLookId, type LookId } from './looks';
 import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
 import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
+import { withPhotoOnLastPage } from './lastPagePhoto';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
@@ -896,6 +897,9 @@ export interface BuilderActions {
    *  cover step puts it (testing phase: the sample album's cover), and the
    *  title in a colour, as the cover editor's colours set it. */
   setCoverToPhoto: (photoId: string, opts?: { titleColor?: string }) => void;
+  /** One of the album's photos onto its last page, trading places with the
+   *  photo there (testing phase: the sample album's "end of the day" photo). */
+  putPhotoOnLastPage: (photoId: string) => void;
   /** COVER-only: reposition/zoom an image background (focal point + zoom). */
   setBackgroundCrop: (crop: { focusX?: number; focusY?: number; zoom?: number }) => void;
   /** COVER-only: move a bound caption off its template slot (panel fractions). */
@@ -3367,6 +3371,12 @@ export function useBuilderState(): BuilderActions {
     }));
   }, []);
 
+  const putPhotoOnLastPage = useCallback((photoId: string) => {
+    const index = uploadedPhotosRef.current.findIndex((p) => p.id === photoId);
+    if (index < 0) return;
+    setAlbumPages((prev) => withPhotoOnLastPage(prev, index));
+  }, []);
+
   const setCoverPhoto = useCallback(async (picked: File) => {
     // An iPhone photo (HEIC) becomes a JPEG first (Chrome can't show a HEIC);
     // one that can't be opened leaves the cover as it is.
@@ -3984,6 +3994,7 @@ export function useBuilderState(): BuilderActions {
     applyPageColorToAllPages,
     setCoverPhoto,
     setCoverToPhoto,
+    putPhotoOnLastPage,
     setBackgroundCrop,
     setBoxTextOffset,
     updateBackgroundTransform,
