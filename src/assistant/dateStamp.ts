@@ -107,19 +107,42 @@ const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y
 
 type Box = { x: number; y: number; width: number; height: number };
 type StampSlot = Box & { kind?: string; shape?: string };
+type FreeText = { boxIndex?: number; x: number; y: number; width?: number; text: string; fontSize?: number };
+type StampPage = {
+  slotFills?: readonly (number | null)[];
+  slotGeometries?: readonly (SlotGeometryOverride | null | undefined)[];
+  slotMasks?: readonly (string | null)[];
+  textElements?: readonly FreeText[];
+};
+type StampTemplate = { slots: readonly StampSlot[]; textSlots?: readonly Box[] };
+
+/** The box a free text takes up, as every renderer draws it (wordArt.ts). */
+function freeTextRect(t: FreeText): Rect {
+  const fs = t.fontSize || 24;
+  const w = t.width || t.text.length * fs * CHAR_W;
+  const lines = Math.max(1, Math.ceil((t.text.length * fs * CHAR_W) / Math.max(1, w)));
+  return { x: t.x, y: t.y, w, h: lines * fs * TEXT_LINE_HEIGHT };
+}
+
+/** The page's frames and caption boxes in design px, where the renderers put them. */
+function pageRects(template: StampTemplate, page: StampPage, margin: TemplateMargin, canvas: { width: number; height: number }) {
+  const W = canvas.width, H = canvas.height;
+  const safeX = W * margin.left, safeY = H * margin.top;
+  const safeW = W * (1 - margin.left - margin.right), safeH = H * (1 - margin.top - margin.bottom);
+  const toPx = (b: Box): Rect => ({ x: safeX + b.x * safeW, y: safeY + b.y * safeH, w: b.width * safeW, h: b.height * safeH });
+  return {
+    slots: template.slots.map((s, i) => toPx(resolveSlotBox(s, page.slotGeometries?.[i] ?? null))),
+    textBoxes: (template.textSlots ?? []).map(toPx),
+  };
+}
 
 /** The corner spot for `text` on this page, in design px, or null when no
  *  corner of a plain photo is free. Pure: the caller hands it the template,
  *  the page's margin (binding-aware), the canvas and the page's inches. */
 export function placeDateStamp(args: {
   text: string;
-  page: {
-    slotFills?: readonly (number | null)[];
-    slotGeometries?: readonly (SlotGeometryOverride | null | undefined)[];
-    slotMasks?: readonly (string | null)[];
-    textElements?: readonly { boxIndex?: number; x: number; y: number; width?: number; text: string; fontSize?: number }[];
-  };
-  template: { slots: readonly StampSlot[]; textSlots?: readonly Box[] } | null | undefined;
+  page: StampPage;
+  template: StampTemplate | null | undefined;
   margin: TemplateMargin;
   canvas: { width: number; height: number };
   inches: { w: number; h: number };
@@ -128,20 +151,8 @@ export function placeDateStamp(args: {
   if (!template || !text) return null;
   const W = canvas.width, H = canvas.height;
   const pxPerIn = W / inches.w;
-  const safeX = W * margin.left, safeY = H * margin.top;
-  const safeW = W * (1 - margin.left - margin.right), safeH = H * (1 - margin.top - margin.bottom);
-  const toPx = (b: Box): Rect => ({ x: safeX + b.x * safeW, y: safeY + b.y * safeH, w: b.width * safeW, h: b.height * safeH });
-
-  const slots = template.slots.map((s, i) => toPx(resolveSlotBox(s, page.slotGeometries?.[i] ?? null)));
-  const textBoxes = (template.textSlots ?? []).map(toPx);
-  const freeTexts: Rect[] = (page.textElements ?? [])
-    .filter((t) => t.boxIndex == null)
-    .map((t) => {
-      const fs = t.fontSize || 24;
-      const w = t.width || t.text.length * fs * CHAR_W;
-      const lines = Math.max(1, Math.ceil((t.text.length * fs * CHAR_W) / Math.max(1, w)));
-      return { x: t.x, y: t.y, w, h: lines * fs * TEXT_LINE_HEIGHT };
-    });
+  const { slots, textBoxes } = pageRects(template, page, margin, canvas);
+  const freeTexts: Rect[] = (page.textElements ?? []).filter((t) => t.boxIndex == null).map(freeTextRect);
 
   // Plain photos only, biggest first: a circle or a heart has no corner.
   const candidates = template.slots
@@ -208,4 +219,51 @@ export function dateStampFor(
       })
     : null;
   return { text, style };
+}
+
+/* ── A video memory added after the stamp ──
+   "Add a video memory" puts its QR in the photo corner farthest from a face,
+   bottom right when there is none: the same corner the stamp takes first.
+   White text over a QR can stop it scanning. So when a page's layout changes
+   under its stamp (a memory added, its QR moved to another corner), a stamp
+   now on the QR, another frame's art or a caption box moves to a free corner.
+   A stamp the customer moved somewhere clear stays where they put it. */
+
+/** Every date stamp's id starts with this (useBuilderState.addTextElement). */
+export const DATE_STAMP_ID = 'date-stamp-';
+export const isDateStamp = (t: { id?: string }) => !!t.id?.startsWith(DATE_STAMP_ID);
+
+/** The page's texts with its stamps clear of the QR (see above). The same
+ *  array when nothing had to move. */
+export function keepStampsOffQr<T extends FreeText & { id: string }>(
+  page: Omit<StampPage, 'textElements'> & { templateId?: string; size?: string; textElements: readonly T[] },
+  pageIndex: number,
+  albumSize: AlbumSizePreset,
+): readonly T[] {
+  const texts: readonly T[] = page.textElements;
+  if (!texts.some(isDateStamp)) return texts;
+  const template = page.templateId ? getTemplateById(page.templateId) : undefined;
+  if (!template) return texts;
+  const size = (page.size as AlbumSizePreset | undefined) ?? albumSize;
+  const margin = marginForTemplate(template, template.margin, size, pageIndex);
+  const canvas = getCanvasDimensions(size);
+  const { slots, textBoxes } = pageRects(template, page, margin, canvas);
+  // Not a photo: a QR or a frame's art. A stamp is never drawn over these.
+  const blockers = [...slots.filter((_, i) => template.slots[i].kind === 'qr' || template.slots[i].kind === 'ornament'), ...textBoxes];
+  let moved = false;
+  const out = texts.map((t): T => {
+    if (!isDateStamp(t) || t.boxIndex != null) return t;
+    if (!blockers.some((b) => overlaps(freeTextRect(t), b))) return t;
+    const spot = placeDateStamp({
+      text: t.text,
+      page: { ...page, textElements: texts.filter((o) => o !== t) },
+      template, margin, canvas,
+      inches: ALBUM_INCHES[size] ?? ALBUM_INCHES['8x8'],
+    });
+    if (!spot) return t;
+    moved = true;
+    // Its new spot and size; the customer's colour and shadow stay.
+    return { ...t, x: spot.x, y: spot.y, width: spot.width, fontSize: spot.fontSize, alignment: spot.alignment };
+  });
+  return moved ? out : texts;
 }
