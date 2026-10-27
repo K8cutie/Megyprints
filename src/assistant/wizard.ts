@@ -52,8 +52,13 @@ export const WIZARD_ORDER: WizardStep[] = [
   'welcome',
   'pick_theme',   // unskippable — the album's name + the occasion (seeds the AI quotes)
   'pick_size',
-  'design_cover',
+  /* Photos BEFORE the cover (tester, 2026-10-27: "why can I only submit one
+     photo?"). With the cover first, the first photo picker a customer met was
+     the cover's, which takes one photo. Now the first picker takes them all,
+     and the cover offers those photos to tap. The album is made on the cover
+     step ("Make my album →"). */
   'upload_photos',
+  'design_cover',
   'review_pages',
   'add_text',
   'finalize',
@@ -72,8 +77,8 @@ export const STEP_META: Record<WizardStep, { title: string; description: string;
   welcome: { title: 'Welcome', description: 'Meet Megy and learn the basics', emoji: '👋' },
   pick_theme: { title: 'Name & occasion', description: 'The album’s name, and what it is about — seeds the quotes', emoji: '💌' },
   pick_size: { title: 'Album Size', description: 'Choose your album dimensions', emoji: '📐' },
-  design_cover: { title: 'Cover', description: 'Design the front·spine·back cover', emoji: '📔' },
-  upload_photos: { title: 'Photos', description: 'Upload, then generate', emoji: '📸' },
+  design_cover: { title: 'Cover', description: 'Pick a photo and a title for the front cover', emoji: '📔' },
+  upload_photos: { title: 'Photos', description: 'Add your photos', emoji: '📸' },
   review_pages: { title: 'Review', description: 'Fine-tune each page', emoji: '🔍' },
   add_text: { title: 'Text', description: 'Add captions and quotes', emoji: '✍️' },
   finalize: { title: 'Finalize', description: 'Preview and order', emoji: '📦' },
@@ -104,9 +109,34 @@ export function isStepOneReady(albumTitle: string | null | undefined, theme: str
  *  empty upload step, and a pale cream button there read as a dead end. */
 /** The upload step's way on while short of the 40-photo minimum ("Add 26 more photos"). */
 const ADD_MORE = /^Add \d+ more photos?$/;
-/** Step 4 with a made album: the way on, and the choice to start the pages over. */
+/** The photos step with a made album: the way on, and the choice to start the pages over. */
 export const KEEP_PAGES = 'Keep my pages →';
 export const REMAKE_ALBUM = 'Make the album again';
+/** The photos step's way on once 40 photos are in: the cover comes next. */
+export const TO_COVER = 'Next: pick your cover →';
+/** The cover step's way on (CoverEditor's filled button), see coverStepNext. */
+export const MAKE_ALBUM = 'Make my album →';
+export const COVER_TO_PAGES = 'Continue to my pages →';
+export const COVER_TO_PHOTOS = 'Next: add your photos →';
+
+/** A REAL (non-empty) album exists (WizardEngine.hasBuiltAlbum). Exported so
+ *  the cover editor's button and Megy's words read the album the same way. */
+export function albumIsBuilt(pages: BuilderActions['albumPages']): boolean {
+  return pages.length >= 40 && pages.some(
+    (p) => (p.slotFills?.some((f) => f != null) ?? false) || p.photos.length > 0,
+  );
+}
+
+/** Where the cover step's filled button goes. The cover comes after the
+ *  photos, so it is where the album is made. An album already made goes back
+ *  to its pages and is never made again by it (that would wipe the customer's
+ *  edits and memories). Short of 40 photos (a journey saved before the photos
+ *  came first, or photos left out since) it goes to the photos. */
+export function coverStepNext(albumMade: boolean, photosIn: number): { label: string; go: 'pages' | 'photos' | 'make' } {
+  if (albumMade) return { label: COVER_TO_PAGES, go: 'pages' };
+  if (photosShortBy(photosIn) > 0) return { label: COVER_TO_PHOTOS, go: 'photos' };
+  return { label: MAKE_ALBUM, go: 'make' };
+}
 
 export function isPrimaryAction(action: string): boolean {
   return action.includes('→') || action.includes('Now') || action === 'Upload Photos' || ADD_MORE.test(action);
@@ -153,16 +183,16 @@ export class WizardEngine {
     // A REAL album exists → review.
     if (this.hasBuiltAlbum()) return 'review_pages';
 
-    // Cover done (or skipped) → the combined upload + generate step.
+    // Photos in (or skipped) → the cover, where the album is made.
     // (The Style step — background / border / frame — was removed 2026-09-14:
     // pages are plain white, and Studio holds the per-page tools.)
-    if (this.state.completed.includes('design_cover') || this.state.skipped.includes('design_cover')) {
-      return 'upload_photos';
+    if (this.state.completed.includes('upload_photos') || this.state.skipped.includes('upload_photos')) {
+      return 'design_cover';
     }
 
-    // Picked size but haven't passed the cover step yet → design the cover
+    // Picked size but haven't passed the photos step yet → add the photos
     if (this.state.completed.includes('pick_size')) {
-      return 'design_cover';
+      return 'upload_photos';
     }
 
     // Default: welcome on a first visit; then the NAME + OCCASION step until it
@@ -180,10 +210,7 @@ export class WizardEngine {
      completed[] flags were lost — while preventing a freshly reset album
      (exactly 40 EMPTY pages) from dumping the user onto Review. */
   hasBuiltAlbum(): boolean {
-    const pages = this.builder.albumPages;
-    return pages.length >= 40 && pages.some(
-      (p) => (p.slotFills?.some((f) => f != null) ?? false) || p.photos.length > 0,
-    );
+    return albumIsBuilt(this.builder.albumPages);
   }
 
   /* ── Reconcile FORWARD to reality ──
@@ -238,6 +265,14 @@ export class WizardEngine {
       if (target !== next) { this.state.step = target; return; }
       // Once: after ← Previous the step being left can already be complete.
       if (!this.state.completed.includes(this.state.step)) this.state.completed.push(this.state.step);
+      // A made album goes on from its photos to its pages ("Keep my pages →",
+      // "Make the album again"): the cover step sits between them, but it is
+      // where an album is MADE, and this one is made.
+      if (next === 'design_cover' && this.hasBuiltAlbum()) {
+        if (!this.state.completed.includes(next)) this.state.completed.push(next);
+        this.state.step = 'review_pages';
+        return;
+      }
       this.state.step = next;
     }
   }
@@ -270,12 +305,12 @@ export class WizardEngine {
      every screen instead of what the screen asked. So Next shows only where
      it IS the way on. On Welcome "Let's Get Started →" is; on the size step
      the sizes are (Next skipped the choice and kept 8×8) until one was picked;
-     on the upload step Generate is, until an album is built. Step 1's Next
-     stays: it is the way on there, and the panel turns a tap before the step
-     is answered into a pointer at what is missing. Welcome has nothing to go
-     back to, so no ← Previous at all rather than a greyed one.
-     After that: the cover editor has its own "← Back" and "Continue to
-     photos →", so Megy shows neither. Review moves on by "Next page" under
+     on the upload step "Next: pick your cover →" is, until an album is built.
+     Step 1's Next stays: it is the way on there, and the panel turns a tap
+     before the step is answered into a pointer at what is missing. Welcome
+     has nothing to go back to, so no ← Previous at all rather than a greyed
+     one. After that: the cover editor has its own "← Back" and "Make my
+     album →" (coverStepNext), so Megy shows neither. Review moves on by "Next page" under
      the page; Megy's Next there skipped every page to Step 6. Preview & Order
      is the last step, and a greyed Next there was the same dead tap. */
   showsPrevious(): boolean {
@@ -310,10 +345,11 @@ export class WizardEngine {
       case 'welcome': return true; // Auto-complete
       case 'pick_theme': return this.stepOneReady(); // Name + occasion — never skipped
       case 'pick_size': return false; // Must click a size in wizard
-      case 'design_cover': return true; // Optional — always proceedable
-      // Combined upload + generate: "complete" only once the album is generated,
-      // so Next can't skip past generation.
-      case 'upload_photos': return builder.albumPages.length >= 40;
+      // The cover step makes the album: "complete" only once it is made, so
+      // nothing can skip past making it.
+      case 'design_cover': return this.hasBuiltAlbum();
+      // The photos are in once 40 are going in (the albumMinimum gate).
+      case 'upload_photos': return photosShortBy(photosGoingIn(builder.uploadedPhotos)) === 0;
       case 'review_pages': return this.state.completed.includes('review_pages');
       case 'add_text': return this.state.completed.includes('add_text');
       case 'finalize': return builder.phase === 'preview';
@@ -384,41 +420,47 @@ export class WizardEngine {
         };
       }
 
-      case 'design_cover':
+      case 'design_cover': {
+        // Same words as the cover editor's filled button (coverStepNext).
+        const next = coverStepNext(this.hasBuiltAlbum(), photosGoingIn(builder.uploadedPhotos));
         return {
-          title: "Step 3: Design Your Cover 📔",
-          body: `Give your ${builder.albumSize} album a cover — the front (title, subtitle, hero photo), the spine text, and the back. It prints as one wrap around the book. The hero photo goes on after you upload your photos, but you can set the title and style now. This step is optional — tap **Continue to photos** to skip it and design the cover later from the Preview screen.`,
+          title: "Step 4: Pick Your Cover 📔",
+          body: next.go === 'photos'
+            ? `Add your photos first: tap **${COVER_TO_PHOTOS.replace(' →', '')}**. Then pick 1 of them for the front cover.`
+            : `Pick **1 photo** for the front cover: tap one of your photos, or choose one from your phone. The album's name is the title, and you can change it under **Text**.${next.go === 'make' ? ` Then tap **${MAKE_ALBUM.replace(' →', '')}**.` : ''}`,
           /* The cover editor renders on the center stage (phase 'cover'); its own
-             Continue/Back drive the wizard, so no panel actions here. */
+             ← Back and filled button drive the wizard, so no panel actions here. */
           actions: [],
-          tips: ["The spine width is set automatically from your page count at checkout", "You can revisit the cover any time from the Preview screen"],
+          tips: ["The spine shows your title. Its width is set from your page count at checkout", "You can change the cover any time from the Preview screen"],
         };
+      }
 
       case 'upload_photos': {
         // The photos that go in: ones left out by Megy's photo check don't count.
         const photoCount = photosGoingIn(builder.uploadedPhotos);
-        // HARD GATE (albumMinimum): no Generate until 40 photos are going in.
-        // The way on is then "Add N more photos" — never a dead Generate.
+        // HARD GATE (albumMinimum): no way on to the cover (where the album is
+        // made) until 40 photos are going in. The way on is then "Add N more
+        // photos" — never a dead button.
         const short = photosShortBy(photoCount);
         // Already made: keeping the pages is the way on. "Generate Album →"
         // (the filled button) used to lay every page out again without a word,
         // wiping placed video memories and edits (1-star testers round 3).
         if (short === 0 && this.hasBuiltAlbum()) {
           return {
-            title: `Step 4: Photos Uploaded (${photoCount}) 📸`,
+            title: `Step 3: Photos Uploaded (${photoCount}) 📸`,
             body: `Your album is made. **Keep my pages** to carry on with it, or **make the album again** to lay out every page from your photos from scratch.`,
             actions: ["Upload More Photos", KEEP_PAGES, REMAKE_ALBUM],
             tips: ["Making the album again replaces your layout changes, the text you wrote and any video memories you placed. Megy asks first"],
           };
         }
         return {
-          title: photoCount > 0 ? `Step 4: Photos Uploaded (${photoCount}) 📸` : "Step 4: Upload Your Photos 📸",
+          title: photoCount > 0 ? `Step 3: Photos Uploaded (${photoCount}) 📸` : "Step 3: Upload Your Photos 📸",
           body: photoCount === 0
             ? `Upload your photos and I'll arrange them into pages. Albums need at least **${MIN_ALBUM_PHOTOS} photos**, one for every page — and you can add as many more as you like.`
             : short > 0
               ? `You have **${photoCount}** ${photoWord(photoCount)}. Albums need at least **${MIN_ALBUM_PHOTOS}**, one for every page: add **${short} more** to make your album.`
-              : `Great! You have **${photoCount}** photos ready. Upload more or let's generate your album!`,
-          actions: photoCount === 0 ? ["Upload Photos"] : short > 0 ? [addMoreLabel(short)] : ["Upload More Photos", "Generate Album →"],
+              : `Great! You have **${photoCount}** photos ready. Add more, or go on to pick your cover.`,
+          actions: photoCount === 0 ? ["Upload Photos"] : short > 0 ? [addMoreLabel(short)] : ["Upload More Photos", TO_COVER],
           tips: [
             // Android app: the Files picker has no photo cap but hides "Select all" in its ⋮ menu.
             ...(Capacitor.isNativePlatform() ? ["📂 Lots of photos? In the picker tap ☰ → Images → open a folder → ⋮ → Select all"] : []),
@@ -505,7 +547,8 @@ export class WizardEngine {
     };
     const { state } = engine;
     state.step = isWizardStep(saved.step) ? saved.step : engine.detectStep();
-    if (WIZARD_ORDER.indexOf(state.step) > WIZARD_ORDER.indexOf('upload_photos') && !engine.hasBuiltAlbum()) {
+    // Review and after need a BUILT album; the cover step is where it is made.
+    if (WIZARD_ORDER.indexOf(state.step) > WIZARD_ORDER.indexOf('design_cover') && !engine.hasBuiltAlbum()) {
       state.step = engine.detectStep();
     }
     if (!engine.stepOneReady()) {

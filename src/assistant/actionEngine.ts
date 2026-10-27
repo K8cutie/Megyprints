@@ -50,6 +50,13 @@ function askResize(
   };
 }
 
+/** The background an album is (re)made with: a PAGE's, never the cover's.
+ *  With the cover editor open (the cover step, or "Edit cover"), currentPage
+ *  IS the cover, and its photo would go on every page. */
+function pagesBackground(builder: BuilderActions) {
+  return builder.albumPages?.[builder.currentPageIndex ?? 0]?.background;
+}
+
 /** STUDIO pages are kept through a reshuffle — say so. */
 function studioNote(builder: BuilderActions): string {
   const n = (builder.albumPages ?? []).filter((p) => p.studio).length;
@@ -72,7 +79,8 @@ export class ActionEngine {
           // background picked before generating (incl. a custom upload) survives.
           // Awaited so the reply (and the callers' toasts) land AFTER the album
           // exists — the "making your album" screen covers the wait.
-          await this.builder.generateAlbum(this.builder.currentPage?.background);
+          // The album is made from the cover step ("Make my album →").
+          await this.builder.generateAlbum(pagesBackground(this.builder));
           return { intentType: intent.type, success: true, message: `Album generated! Your photos have been arranged across all pages.${studioNote(this.builder)}` };
         }
 
@@ -176,7 +184,7 @@ export class ActionEngine {
             const plan = memoriesAcrossSize(this.builder.albumPages, this.builder.uploadedPhotos ?? [], this.builder.albumSize, size);
             const reason = intent.payload?.reason === 'size_hidden' ? 'size_hidden' as const : undefined;
             if (plan.lost.some((q) => !agreed.includes(q.code))) return askResize(this.builder, intent.type, size, plan, reason);
-            const made = await this.builder.generateAlbum(this.builder.currentPage?.background, { size, ...(agreed.length ? { confirmedLost: agreed } : {}) });
+            const made = await this.builder.generateAlbum(pagesBackground(this.builder), { size, ...(agreed.length ? { confirmedLost: agreed } : {}) });
             // The builder measured the photos again and its plan says more:
             // ask with ITS numbers.
             if (made?.made === false) return askResize(this.builder, intent.type, size, made.memories, reason);
@@ -401,8 +409,7 @@ export class ActionEngine {
           // The chosen theme owns the look, so the current background is preserved
           // as-is. randomize=true keeps the photo sequence but repackages it into
           // random templates + slot counts, so layouts differ on every click.
-          const keepBg = this.builder.currentPage.background;
-          await this.builder.generateAlbum(keepBg, { randomize: true });
+          await this.builder.generateAlbum(pagesBackground(this.builder), { randomize: true });
 
           return { intentType: intent.type, success: true, message: `Fresh layout! Every page rearranged — click again for another look.${studioNote(this.builder)}` };
         }
