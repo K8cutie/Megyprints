@@ -24,6 +24,9 @@ whose notes list it.
 | 2026-10-27 | Tester | "I can't send more than 1 photo" | Photos come before the cover, so the first picker takes all your photos (#201) | 2026-10-27 | 1.2.0 |
 | 2026-10-27 | Tester | (same report) | A box on the photo step: press and hold, or ⋮ → Select all (#202) | 2026-10-27 | 1.2.0 |
 | 2026-10-27 | Tester | (same report) | The photo picker opens in the Camera folder, so ⋮ → Select all takes the whole roll. Before, it opened on Recent, where Select all took only the newest 64 pictures, screenshots too | with 1.3.0 | 1.3.0 |
+| 2026-10-28 | For testers | — | Album pages in the app show "For Testing purposes" and when the album was made (#206) | 2026-10-28 | 1.4.0 |
+| 2026-10-28 | For testers | — | "Make a sample album" on Step 1, and sample photos to make up the 40-photo minimum, a different sample album each test day (#207) | 2026-10-28 | 1.4.0 |
+| 2026-10-28 | For testers | — | The app says when a new version is ready: "Restart to update" | with 1.4.0 | 1.4.0 |
 
 ## App versions on the Alpha track
 
@@ -32,3 +35,4 @@ whose notes list it.
 | 1.1.0 | 2 | 2026-10-01 | Native shell: no 100-photo limit, Google sign-in in a Chrome tab |
 | 1.2.0 | 3 | 2026-10-27 | Version only; notes list the website fixes above (#204) |
 | 1.3.0 | 4 | 2026-10-27 | Photo picker opens in the Camera folder |
+| 1.4.0 | 5 | 2026-10-28 | The app tells you when a new version is ready |

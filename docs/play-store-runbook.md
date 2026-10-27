@@ -213,6 +213,13 @@ until the next application (2026-11-09 at the earliest):
 |---|---|---|
 | 1.2.0 | 3 | None (version only); notes list the website fixes since Oct 2 |
 | 1.3.0 | 4 | Photo picker opens in the Camera folder (`MegyWebChromeClient`) |
+| 1.4.0 | 5 | The app tells you when a new version is ready: "Restart to update" (`AppUpdatePrompt`) |
+
+**The update prompt (from 1.4.0)** uses Google Play In-App Updates. The real prompt
+appears only on phones that installed the app from Play, and only when a higher
+version is published on their track, so testers first see it when 1.5.0 is out.
+To see it on the emulator, build debug with `gradlew.bat assembleDebug
+-PfakeAppUpdate=true` (a pretend update; release builds can't use it).
 
 **Build from a worktree** (the signing files stay in the main checkout, gitignored):
 hard-link (`mklink /H`, never copy) the main checkout's
