@@ -35,6 +35,7 @@ const freshDb = () => ({
   user: { id: 'user-1' },
   userErr: null,
   preflight: { data: { albums: 1, memories: 2, orders: 2, videos: 2, blocking: [] }, error: null },
+  isOwner: { data: false, error: null },
   orders: [
     { id: 'ord-pending', status: 'pending_payment', user_id: 'user-1' },
     { id: 'ord-delivered', status: 'delivered', user_id: 'user-1' },
@@ -52,6 +53,7 @@ const userClient = () => ({
   rpc: async (name) => {
     log.push(`rpc:${name}`);
     if (name === 'account_deletion_preflight') return db.preflight;
+    if (name === 'is_owner') return db.isOwner;
     if (name === 'my_memory_clip_names') return db.clips;
     if (name === 'delete_own_account') return db.deleteResult;
     return { data: null, error: { message: `unexpected rpc ${name}` } };
@@ -134,6 +136,7 @@ describe('happy path', () => {
     expect(res.body).toEqual({ deleted_albums: 1, deleted_memories: 2, anonymized_orders: 2, deleted_videos: 2 });
     expect(log).toEqual([
       'rpc:account_deletion_preflight',
+      'rpc:is_owner',
       'orders',
       'event_bookings',
       'rpc:my_memory_clip_names',
@@ -178,7 +181,7 @@ describe('happy path', () => {
     const res = await call();
     expect(res.code).toBe(200);
     expect(clientKeys).toEqual(['anon-test']);
-    expect(log).toEqual(['rpc:account_deletion_preflight', 'orders', 'event_bookings', 'rpc:my_memory_clip_names', 'rpc:delete_own_account']);
+    expect(log).toEqual(['rpc:account_deletion_preflight', 'rpc:is_owner', 'orders', 'event_bookings', 'rpc:my_memory_clip_names', 'rpc:delete_own_account']);
     expect(res.body.deleted_videos).toBe(0);
   });
 
@@ -341,6 +344,24 @@ describe('a customer the database would refuse loses nothing', () => {
     expect(removals()).toEqual([]);
     expect(log).toEqual(['rpc:account_deletion_preflight']);
     expect(clientKeys).toEqual(['anon-test']);
+  });
+
+  it('a shop owner account (0058) → 409, no file touched, the account stays', async () => {
+    db.isOwner = { data: true, error: null };
+    const res = await call();
+    expect(res.code).toBe(409);
+    expect(res.body.error).toBe(mod.OWNER_ACCOUNT_MESSAGE);
+    expect(removals()).toEqual([]);
+    expect(log).toEqual(['rpc:account_deletion_preflight', 'rpc:is_owner']);
+    expect(clientKeys).toEqual(['anon-test']);
+  });
+
+  it('the owner check failing → 500, nothing removed, nothing deleted', async () => {
+    db.isOwner = { data: null, error: { message: 'Could not find the function public.is_owner' } };
+    const res = await call();
+    expect(res.code).toBe(500);
+    expect(removals()).toEqual([]);
+    expect(log).not.toContain('rpc:delete_own_account');
   });
 
   it('preflight itself fails → 500, nothing removed, nothing deleted', async () => {

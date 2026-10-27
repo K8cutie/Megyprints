@@ -103,6 +103,10 @@ function bearer(req) {
   return m ? m[1] : '';
 }
 
+/** What a shop owner reads when they try to delete their own account (0058). */
+export const OWNER_ACCOUNT_MESSAGE =
+  'This is a shop owner account, so it cannot be deleted from the app. Deleting it would lock the shop out of its own console.';
+
 /** The refusal delete_own_account() gives, word for word, so the customer reads
  *  the same sentence whichever check stops them. Orders are checked first
  *  there, so they're named first here; a booking (0043) has its own sentence. */
@@ -168,6 +172,16 @@ export default async function handler(req, res) {
     const blocking = Array.isArray(pre?.blocking) ? pre.blocking : [];
     if (blocking.length) {
       res.status(409).json({ error: blockedMessage(blocking) });
+      return;
+    }
+    // A shop owner's account is never deleted here (0058): owner rights are
+    // tied to the account, so deleting it would lock the shop out of its own
+    // console. The database refuses too (owner_accounts, on delete restrict),
+    // but only after the files below were gone — so ask first.
+    const { data: owner, error: ownerErr } = await asUser.rpc('is_owner');
+    if (ownerErr) throw new Error(ownerErr.message);
+    if (owner === true) {
+      res.status(409).json({ error: OWNER_ACCOUNT_MESSAGE });
       return;
     }
 
