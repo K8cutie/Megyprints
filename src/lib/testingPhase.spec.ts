@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { albumMadeAt, showTesterStamp, stampTime, testerStampLines, SHOW_TESTER_STAMP, TESTER_STAMP_LABEL } from './testingPhase';
+import { albumMadeAt, showTesterStamp, stampTime, testerStampLines, TESTING_PHASE, TESTER_STAMP_LABEL } from './testingPhase';
 
 /* ══════════════════════════════════════════════════════════════════════════
    "FOR TESTING PURPOSES" AND WHEN THE ALBUM WAS MADE (owner, 2026-10-28:
@@ -52,6 +52,6 @@ describe('who sees it', () => {
   });
 
   it('is switched on during the test track (one line to turn off for production)', () => {
-    expect(SHOW_TESTER_STAMP).toBe(true);
+    expect(TESTING_PHASE).toBe(true);
   });
 });

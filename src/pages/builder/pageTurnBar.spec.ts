@@ -131,8 +131,9 @@ describe('Back to preview, wired (source guards)', () => {
     expect(src('MobileReview.tsx')).toMatch(/onBackToPreview=\{actions\.previewSeen && onBackToPreview \? handleBack : undefined\}/);
     expect(src('../Builder.tsx')).toMatch(/onBackToPreview=\{\(\) => \{ void actions\.dispatch\(\{ type: 'preview_album', payload: \{ stay: true \}/);
   });
-  it('the Preview opens on page 1 from Done, on the same page from Back to preview', () => {
-    expect(src('../../assistant/actionEngine.ts')).toMatch(/if \(!intent\.payload\?\.stay\) this\.builder\.goToPage\(0\);/);
+  it('the Preview opens on page 1 from Done (a sample album in the app: on its last page), on the same page from Back to preview', () => {
+    // sampleAlbumNotes.spec runs it: page 1 for any other album, the last page for a sample album.
+    expect(src('../../assistant/actionEngine.ts')).toMatch(/if \(!intent\.payload\?\.stay\) \{\s*const last = showSampleAlbumNotes\(isNativeShell\(\), this\.builder\.uploadedPhotos\);\s*this\.builder\.goToPage\(last \? Math\.max\(0, this\.builder\.albumPages\.length - 1\) : 0\);/);
   });
   it('"previewed" is set by opening the Preview, and a new album clears it', () => {
     const s = src('useBuilderState.ts');

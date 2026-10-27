@@ -27,6 +27,9 @@ import AlbumThemeStep from './AlbumThemeStep';
 import MegyMascot from '../components/MegyMascot';
 import PhotoCheckCard from './PhotoCheckCard';
 import PickManyHint from './PickManyHint';
+import SamplePhotosOffer from './SamplePhotosOffer';
+import SampleAlbumOffer from './SampleAlbumOffer';
+import { useSampleAlbum } from './useSampleAlbum';
 import { useSettleGuard, noteScreenTap, tooSoonAfterScreenTap } from '../lib/settleGuard';
 import { useModalDialog } from '../lib/useModalDialog';
 import { splitBold } from './boldText';
@@ -322,6 +325,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   // "Make the album again?" (RemakeAlbumAsk): open while the question is asked.
   const [remakeAsk, setRemakeAsk] = useState(false);
   const showToast = (msg: string, ms = 2000) => { setToast(msg); setTimeout(() => setToast(null), ms); };
+  // Testing phase: Step 1's "Make a sample album" (lib/samplePhotos).
+  const sampleAlbum = useSampleAlbum(builder, albumTheme, setAlbumTheme, (m) => showToast(m, 6000));
   // A new occasion on a made album: Megy's quotes switch to it, and she says so.
   useEffect(() => {
     if (!requoteFor) return;
@@ -802,6 +807,18 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             )}
             {/* Right under the photo buttons: how to pick many in the app's picker. */}
             {wizardStep === 'upload_photos' && <PickManyHint />}
+            {/* Testing phase: a whole album from sample photos, before any of their own. */}
+            {wizardStep === 'pick_theme' && (sampleAlbum.stage !== 'idle' || (builder.uploadedPhotos.length === 0 && !albumIsMade(builder.albumPages))) && (
+              <SampleAlbumOffer stage={sampleAlbum.stage} onMake={() => { void sampleAlbum.start(); }} />
+            )}
+            {/* Testing phase: fewer than 40 photos → make up the rest with samples. */}
+            {wizardStep === 'upload_photos' && (
+              <SamplePhotosOffer short={photosShortBy(livePhotos.length)} photoNames={builder.uploadedPhotos.map((p) => p.name)}
+                onAdd={async (files) => {
+                  const res = await builder.dispatch({ type: 'add_photos', payload: { files }, rawMessage: 'add sample photos' });
+                  showToast(res.message);
+                }} />
+            )}
             {/* One way on per screen (WizardEngine.showsNext): no Next where
                 the card's own button is the way on — "Let's Get Started →",
                 the sizes, "Generate Album →" (an unguarded Next with zero
