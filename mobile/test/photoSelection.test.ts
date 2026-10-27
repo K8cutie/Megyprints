@@ -6,6 +6,7 @@ import {
   isSelected,
   keepOnly,
   nothingSelected,
+  photosToAdd,
   selectedIds,
   setMany,
   toggle,
@@ -98,5 +99,35 @@ describe('picking photos in the grid', () => {
     expect(picked).toHaveLength(n);
     expect(countSelected(day, many, blocked)).toBe(400);
     expect(Date.now() - t0).toBeLessThan(1000);
+  });
+});
+
+describe('"Add" after Select all, while photos are still loading', () => {
+  const phone = Array.from({ length: 2517 }, (_, i) => ({ id: `content://media/external/images/media/${i + 1}` }));
+  const firstPage = phone.slice(0, 120);
+  const none = () => new Set<string>();
+
+  it('adds every photo on the phone, not only the ones loaded when Add was tapped', async () => {
+    let finish: (list: typeof phone) => void = () => {};
+    const loading = new Promise<typeof phone>((r) => { finish = r; });
+    const result = photosToAdd(everythingSelected(), firstPage, () => loading, none);
+    finish(phone); // the other pages arrive after the tap
+    const added = await result;
+    expect(added).toHaveLength(2517);
+    expect(added[2516].id).toBe(phone[2516].id);
+  });
+
+  it('still leaves out the photos tapped off, and the ones already in the album', async () => {
+    const sel = setMany(everythingSelected(), [phone[0].id, phone[5].id], false);
+    const inAlbum = (list: readonly string[]) => new Set(list.filter((id) => id.endsWith('/2000') || id.endsWith('/2001')));
+    const added = await photosToAdd(sel, firstPage, async () => phone, inAlbum);
+    expect(added).toHaveLength(2517 - 4);
+    expect(added.map((p) => p.id)).not.toContain(phone[1999].id);
+  });
+
+  it('picked one by one: adds exactly those, without waiting for loading', async () => {
+    const sel = setMany(nothingSelected(), [phone[3].id, phone[7].id], true);
+    const never = () => new Promise<typeof phone>(() => {});
+    expect((await photosToAdd(sel, firstPage, never, none)).map((p) => p.id)).toEqual([phone[3].id, phone[7].id]);
   });
 });

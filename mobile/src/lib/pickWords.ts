@@ -18,3 +18,7 @@ export const LIMITED_HOW = 'To show all your photos: open Settings, then Permiss
 export const ALREADY_IN = 'That photo is already in your album.';
 export const TAP_TO_PICK = 'Tap the photos you want, or Select all.';
 export const ALL_IN_ALBUM = 'Every photo here is already in your album.';
+
+/** Your photos, when the album saved on the phone could not be opened (it is
+ *  kept aside, never written over). */
+export const COULD_NOT_OPEN = 'The photos you picked before could not be opened. Please pick your photos again.';

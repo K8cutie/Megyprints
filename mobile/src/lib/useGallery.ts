@@ -30,27 +30,34 @@ export interface GalleryValue {
   ask: () => Promise<void>;
   chooseMore: () => Promise<void>;
   reload: () => void;
-  /** Resolves once every page has loaded (at once if it already has). */
-  whenLoaded: () => Promise<void>;
+  /** Resolves once every page has loaded (at once if it already has), with
+   *  the whole list: the `photos` a screen rendered with may be older. */
+  whenLoaded: () => Promise<GalleryPhoto[]>;
 }
 
 const granted = (a: PhotoAccess | null) => a?.state === 'all' || a?.state === 'limited';
 
 export function useGallery(): GalleryValue {
   const [access, setAccess] = useState<PhotoAccess | null>(null);
-  const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
+  const [photos, setShownPhotos] = useState<GalleryPhoto[]>([]);
+  // The latest list, for whenLoaded (state is only seen at the next render).
+  const latest = useRef<GalleryPhoto[]>([]);
+  const setPhotos = (list: GalleryPhoto[]) => {
+    latest.current = list;
+    setShownPhotos(list);
+  };
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadingFirst, setLoadingFirst] = useState(true);
   const [failed, setFailed] = useState(false);
   const run = useRef(0);
-  const waiters = useRef<(() => void)[]>([]);
+  const waiters = useRef<((photos: GalleryPhoto[]) => void)[]>([]);
   const loadingRef = useRef(false);
 
   const settle = () => {
     loadingRef.current = false;
     const w = waiters.current;
     waiters.current = [];
-    w.forEach((f) => f());
+    w.forEach((f) => f(latest.current));
   };
 
   const shown = useRef(0);
@@ -140,7 +147,10 @@ export function useGallery(): GalleryValue {
     if (granted(a)) void load();
   }, [load]);
 
-  const whenLoaded = useCallback(() => (loadingRef.current ? new Promise<void>((resolve) => { waiters.current.push(resolve); }) : Promise.resolve()), []);
+  const whenLoaded = useCallback(
+    () => (loadingRef.current ? new Promise<GalleryPhoto[]>((resolve) => { waiters.current.push(resolve); }) : Promise.resolve(latest.current)),
+    [],
+  );
 
   return useMemo(
     () => ({ access, photos, loadingMore, loadingFirst, failed, ask, chooseMore, reload: () => { void load(); }, whenLoaded }),

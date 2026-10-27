@@ -19,6 +19,9 @@ export interface FilesPick {
   photos: DraftPhoto[];
   /** Plain words about anything left out ('' when nothing was). */
   note: string;
+  /** Files the app now keeps access to. Any that do not end up in the album
+   *  (could not be opened, or already in it) are given back: accessToGiveBack. */
+  kept: string[];
 }
 
 /** Picked files + what the native module read → album photos and a note. */
@@ -51,7 +54,16 @@ export function filesToPhotos(assets: readonly DocumentPickerAsset[], infos: rea
   }
   const parts = [leftOutNote(videos, others, photos.length > 0)];
   if (unreadable > 0) parts.push(`${unreadable} photo${unreadable > 1 ? 's' : ''} could not be opened`);
-  return { photos, note: parts.filter(Boolean).join(' · ') };
+  return { photos, note: parts.filter(Boolean).join(' · '), kept: infos.filter((i) => i.kept).map((i) => i.uri) };
+}
+
+/** The kept files that are not in the album: their access is given back, as
+ *  Android keeps access to only 512 files per app. Also used when a photo
+ *  leaves the album: given back only if no photo in the album still uses it. */
+export function accessToGiveBack(kept: readonly string[], album: readonly DraftPhoto[]): string[] {
+  if (kept.length === 0) return [];
+  const inAlbum = new Set(album.map((p) => p.uri));
+  return kept.filter((uri) => !inAlbum.has(uri));
 }
 
 /** Opens Android's file picker for photos (many at once). Null = closed

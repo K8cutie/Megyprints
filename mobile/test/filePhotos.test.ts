@@ -1,5 +1,5 @@
 import type { DocumentPickerAsset } from 'expo-document-picker';
-import { filesToPhotos } from '../src/lib/filePhotos';
+import { accessToGiveBack, filesToPhotos } from '../src/lib/filePhotos';
 import type { PickedFileInfo } from '../modules/photo-files';
 
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
@@ -58,5 +58,33 @@ describe('"Choose from Files": picked files → album photos', () => {
     const { photos, note } = filesToPhotos([photo, pdf, broken, noType], [info(photo), info(broken, { readable: false }), info(noType)]);
     expect(photos.map((p) => p.name)).toEqual(['a.jpg', 'c.heic']);
     expect(note).toBe('1 file left out: not a photo (JPG, PNG or HEIC) · 1 photo could not be opened');
+  });
+});
+
+describe('access to Files photos is given back when they are not in the album', () => {
+  it('says which files the app kept access to', () => {
+    const a = doc('IMG_1.jpg', 'image/jpeg', 1);
+    const b = doc('IMG_2.jpg', 'image/jpeg', 2);
+    const bad = doc('IMG_3.jpg', 'image/jpeg', 3);
+    const pick = filesToPhotos([a, b, bad], [info(a), info(b, { kept: false }), info(bad, { readable: false })], 1);
+    expect(pick.photos.map((p) => p.uri)).toEqual([a.uri, b.uri]);
+    expect(pick.kept).toEqual([a.uri, bad.uri]);
+  });
+
+  it('gives back the ones that did not go in (could not be opened, or already in the album)', () => {
+    const a = doc('IMG_1.jpg', 'image/jpeg', 1);
+    const bad = doc('IMG_3.jpg', 'image/jpeg', 3);
+    const dup = doc('IMG_4.jpg', 'image/jpeg', 4);
+    const pick = filesToPhotos([a, bad, dup], [info(a), info(bad, { readable: false }), info(dup)], 1);
+    // dup was in the album already from the grid (same photo number, other address): only a went in.
+    const album = [pick.photos[0]];
+    expect(accessToGiveBack(pick.kept, album)).toEqual([bad.uri, dup.uri]);
+  });
+
+  it('a photo taken out and picked again from Files keeps its access', () => {
+    const a = doc('IMG_1.jpg', 'image/jpeg', 1);
+    const pick = filesToPhotos([a], [info(a)], 1);
+    expect(accessToGiveBack([a.uri], pick.photos)).toEqual([]);
+    expect(accessToGiveBack([a.uri], [])).toEqual([a.uri]);
   });
 });

@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   THE ALBUM BEING MADE, kept on the phone (AsyncStorage, see draftStore).
+   THE ALBUM BEING MADE, kept on the phone (a file, see draftStore, draftFile).
 
    Photos are NOT copied into the app. Each one is kept as a pointer to where
    it already is on the phone (its content:// address), with its size and the
@@ -52,23 +52,24 @@ export interface AlbumDraft {
 export const DRAFT_VERSION = 1 as const;
 export const emptyDraft = (): AlbumDraft => ({ version: DRAFT_VERSION, photos: [], updatedAt: 0 });
 
-/* The same photo can come in two ways: from the grid (its MediaStore
-   address, content://media/external/images/media/123) or from Files when
+/* The same photo can come in several ways: from the grid (its MediaStore
+   address, content://media/external/images/media/123, or on Android 10
+   content://media/external_primary/images/media/123), or from Files when
    Files shows the phone's Images (content://com.android.providers.media.
-   documents/document/image%3A123). Both carry Android's number for the photo,
-   so both get the key 'media:123' and the photo goes in once. Other Files
-   addresses (Downloads, Drive…) are keyed by their own address. */
+   documents/document/image%3A123) or its Downloads (content://com.android.
+   providers.downloads.documents/document/msf%3A123). All of them carry
+   Android's number for the photo, so all get the key 'media:123' and the
+   photo goes in once. Other Files addresses (browsing the phone's storage,
+   Drive…) are keyed by their own address. */
 const MEDIA_ITEM = /^content:\/\/media\/external(?:_primary)?\/images\/media\/(\d+)$/;
 const MEDIA_DOCUMENT = /^content:\/\/com\.android\.providers\.media\.documents\/document\/image(?:%3A|:)(\d+)$/i;
+const DOWNLOADS_DOCUMENT = /^content:\/\/com\.android\.providers\.downloads\.documents\/document\/msf(?:%3A|:)(\d+)$/i;
 
-/** Android's number for a photo (its MediaStore id), from either address. */
+/** Android's number for a photo (its MediaStore id), from any of those addresses. */
 export function mediaStoreId(uri: string): string | null {
-  const m = MEDIA_ITEM.exec(uri) ?? MEDIA_DOCUMENT.exec(uri);
+  const m = MEDIA_ITEM.exec(uri) ?? MEDIA_DOCUMENT.exec(uri) ?? DOWNLOADS_DOCUMENT.exec(uri);
   return m ? m[1] : null;
 }
-
-/** The grid's address for a MediaStore photo number. */
-export const galleryUri = (id: string) => `content://media/external/images/media/${id}`;
 
 /** One key per photo, however it was picked. */
 export function photoKey(source: PhotoSource, uri: string): string {
@@ -76,13 +77,15 @@ export function photoKey(source: PhotoSource, uri: string): string {
   return id ? `media:${id}` : `${source}:${uri}`;
 }
 
-/** The grid addresses of the album's photos (to mark them "In album"). */
-export function galleryUrisIn(photos: readonly DraftPhoto[]): Set<string> {
+/** The grid photos (by their ids) that are in the album already, to mark
+ *  them "In album". Compared by key (Android's photo number), never by the
+ *  whole address: Android 10 gives the grid ".../external_primary/..." ids,
+ *  and a photo may have come in through Files. */
+export function idsInAlbum(gridIds: readonly string[], photos: readonly DraftPhoto[]): Set<string> {
   const out = new Set<string>();
-  for (const p of photos) {
-    const id = mediaStoreId(p.uri);
-    if (id) out.add(galleryUri(id));
-  }
+  if (photos.length === 0) return out;
+  const keys = new Set(photos.map((p) => p.key));
+  for (const id of gridIds) if (keys.has(photoKey('gallery', id))) out.add(id);
   return out;
 }
 
@@ -159,13 +162,13 @@ function readPhoto(raw: unknown): DraftPhoto | null {
   return photo;
 }
 
-/** The saved draft, checked. Anything unreadable gives an empty album
- *  rather than a crash; unreadable photos are dropped one by one. */
-export function parseDraft(text: string | null | undefined): AlbumDraft {
-  if (!text) return emptyDraft();
+/** The saved draft, checked; null when the text is not a saved album at
+ *  all (broken, or from another version). Unreadable photos are dropped one
+ *  by one. */
+export function readDraft(text: string): AlbumDraft | null {
   let raw: unknown;
-  try { raw = JSON.parse(text); } catch { return emptyDraft(); }
-  if (!raw || typeof raw !== 'object' || (raw as { version?: unknown }).version !== DRAFT_VERSION) return emptyDraft();
+  try { raw = JSON.parse(text); } catch { return null; }
+  if (!raw || typeof raw !== 'object' || (raw as { version?: unknown }).version !== DRAFT_VERSION) return null;
   const list = (raw as { photos?: unknown }).photos;
   const photos: DraftPhoto[] = [];
   const seen = new Set<string>();
@@ -174,6 +177,13 @@ export function parseDraft(text: string | null | undefined): AlbumDraft {
     if (p && !seen.has(p.key)) { seen.add(p.key); photos.push(p); }
   }
   return { version: DRAFT_VERSION, photos: inTimeOrder(photos), updatedAt: num((raw as { updatedAt?: unknown }).updatedAt) ?? 0 };
+}
+
+/** The saved draft, checked. Anything unreadable gives an empty album
+ *  rather than a crash (draftStore tells "nothing saved" and "could not be
+ *  read" apart with readDraft). */
+export function parseDraft(text: string | null | undefined): AlbumDraft {
+  return (text ? readDraft(text) : null) ?? emptyDraft();
 }
 
 /** What is saved. The key is left out: it is rebuilt from source + uri. */

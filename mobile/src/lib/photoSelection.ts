@@ -2,7 +2,7 @@
    WHICH PHOTOS ARE PICKED, in the pick-photos grid.
 
    Two shapes, so "Select all" costs nothing even with 20,000 photos and
-   still covers photos that are still loading:
+   still covers photos that are still loading (photosToAdd waits for them):
      • { mode: 'some', ids }    the photos tapped on (or whole days);
      • { mode: 'all', except }  everything, minus the ones tapped off.
    Photos already in the album ("blocked") are never picked again.
@@ -94,4 +94,23 @@ export function keepOnly(sel: Selection, present: ReadonlySet<string>): Selectio
 export function allPicked(sel: Selection, allIds: readonly string[], blocked: ReadonlySet<string> = NONE): boolean {
   const pickable = allIds.reduce((n, id) => (blocked.has(id) ? n : n + 1), 0);
   return pickable > 0 && countSelected(sel, allIds, blocked) === pickable;
+}
+
+/**
+ * The photos "Add" puts in the album. With Select all, it first waits for
+ * every page of the phone's photos (`whenLoaded` gives the whole list), so
+ * photos that were still loading when Add was tapped go in too; the list the
+ * screen rendered with is not used then, as it may be missing them.
+ * `inAlbum` gives the photos (of a list) already in the album: never added again.
+ */
+export async function photosToAdd<P extends { id: string }>(
+  sel: Selection,
+  shown: readonly P[],
+  whenLoaded: () => Promise<readonly P[]>,
+  inAlbum: (ids: readonly string[]) => ReadonlySet<string>,
+): Promise<P[]> {
+  const list = sel.mode === 'all' ? await whenLoaded() : shown;
+  const ids = list.map((p) => p.id);
+  const chosen = new Set(selectedIds(sel, ids, inAlbum(ids)));
+  return list.filter((p) => chosen.has(p.id));
 }

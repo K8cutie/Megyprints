@@ -2,7 +2,7 @@ import { addMoreLabel, MIN_ALBUM_PHOTOS } from '@web/pages/builder/albumMinimum'
 import {
   addPhotos,
   emptyDraft,
-  galleryUrisIn,
+  idsInAlbum,
   inTimeOrder,
   mediaStoreId,
   parseDraft,
@@ -67,18 +67,40 @@ describe('the album draft: photos kept on the phone, in time order', () => {
     const r = addPhotos(emptyDraft(), [f, g]);
     expect([r.added, r.alreadyIn]).toEqual([1, 1]);
     // The grid marks it "In album" whichever way it came in.
-    expect([...galleryUrisIn(r.draft.photos)]).toEqual(['content://media/external/images/media/1']);
+    expect([...idsInAlbum(['content://media/external/images/media/1', 'content://media/external/images/media/2'], r.draft.photos)])
+      .toEqual(['content://media/external/images/media/1']);
   });
 
-  it("reads Android's photo number from both kinds of address, and only those", () => {
+  it('Android 10: the grid ids ".../external_primary/..." still show "In album"', () => {
+    // On Android 10 the grid's ids are content://media/external_primary/images/media/<n>.
+    const grid = ['content://media/external_primary/images/media/1000012345', 'content://media/external_primary/images/media/7'];
+    const fromGrid = addPhotos(emptyDraft(), [photo(1000012345)]).draft;
+    expect([...idsInAlbum(grid, fromGrid.photos)]).toEqual([grid[0]]);
+    // And a photo saved with that Android 10 address matches the grid's usual one too.
+    const a10 = grid[1];
+    const saved = addPhotos(emptyDraft(), [{ ...photo(7), uri: a10, key: photoKey('gallery', a10) }]).draft;
+    expect([...idsInAlbum(['content://media/external/images/media/7'], saved.photos)]).toEqual(['content://media/external/images/media/7']);
+    expect(idsInAlbum(grid, []).size).toBe(0);
+  });
+
+  it('a photo picked through the Downloads of Files is the same photo as in the grid', () => {
+    const dl = 'content://com.android.providers.downloads.documents/document/msf%3A31';
+    const f: DraftPhoto = { ...photo(31), source: 'files', uri: dl, key: photoKey('files', dl) };
+    expect(f.key).toBe('media:31');
+    const r = addPhotos(emptyDraft(), [photo(31), f]);
+    expect([r.added, r.alreadyIn]).toEqual([1, 1]);
+  });
+
+  it("reads Android's photo number from the addresses that carry it, and only those", () => {
     expect(mediaStoreId('content://media/external/images/media/1000002512')).toBe('1000002512');
     expect(mediaStoreId('content://media/external_primary/images/media/7')).toBe('7');
     expect(mediaStoreId('content://com.android.providers.media.documents/document/image%3A1000002512')).toBe('1000002512');
-    expect(mediaStoreId('content://com.android.providers.downloads.documents/document/msf%3A31')).toBeNull();
+    expect(mediaStoreId('content://com.android.providers.downloads.documents/document/msf%3A31')).toBe('31');
+    expect(mediaStoreId('content://com.android.providers.downloads.documents/document/raw%3A%2Fstorage%2Fx.jpg')).toBeNull();
     expect(mediaStoreId('content://media/external/video/media/5')).toBeNull();
-    // A photo from Downloads or Drive is keyed by its own address.
-    const dl = 'content://com.android.providers.downloads.documents/document/msf%3A31';
-    expect(photoKey('files', dl)).toBe(`files:${dl}`);
+    // A photo found by browsing the phone's storage, or from Drive, is keyed by its own address.
+    const storage = 'content://com.android.externalstorage.documents/document/primary%3ADCIM%2FCamera%2FIMG_1.jpg';
+    expect(photoKey('files', storage)).toBe(`files:${storage}`);
   });
 
   it('takes photos out (they stay on the phone)', () => {
@@ -116,7 +138,7 @@ describe('the album draft: photos kept on the phone, in time order', () => {
     expect(d.photos[1]).toMatchObject({ width: 0, capturedAt: null, name: '' });
   });
 
-  it('a saved photo takes about 200 bytes, so a big album fits in one saved value', () => {
+  it('a saved photo takes about 220 bytes and holds no picture data', () => {
     const d = addPhotos(emptyDraft(), range(0, 2000)).draft;
     const bytes = serializeDraft(d).length;
     expect(bytes / 2000).toBeLessThan(260);

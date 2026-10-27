@@ -16,8 +16,10 @@ import { releasePickedFiles } from '../../modules/photo-files';
 import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
 import { useDraft } from '../lib/draftStore';
+import { accessToGiveBack } from '../lib/filePhotos';
 import { formatCount } from '../lib/photoDays';
 import { photoStep, type DraftPhoto } from '../lib/photoDraft';
+import { COULD_NOT_OPEN } from '../lib/pickWords';
 import { colors, space } from '../lib/theme';
 
 const COLUMNS = 3;
@@ -26,7 +28,7 @@ const GAP = 3;
 const UNDO_MS = 10_000;
 
 export default function YourPhotos() {
-  const { draft, loading, add, remove, clear } = useDraft();
+  const { draft, loading, add, remove, clear, peek, couldNotOpen, closeCouldNotOpen } = useDraft();
   const [undo, setUndo] = useState<DraftPhoto | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { width } = useWindowDimensions();
@@ -35,10 +37,14 @@ export default function YourPhotos() {
 
   const undoing = useRef<DraftPhoto | null>(null);
 
-  // A Files photo's kept access is given back once it is really gone (Undo time is over).
+  // A Files photo's kept access is given back once it is really gone (Undo
+  // time is over), and only if no photo in the album uses it again (it may
+  // have been picked from Files again in the meantime).
   const letGo = useCallback((p: DraftPhoto | null) => {
-    if (p?.source === 'files') void releasePickedFiles([p.uri]).catch(() => 0);
-  }, []);
+    if (p?.source !== 'files') return;
+    const back = accessToGiveBack([p.uri], peek().photos);
+    if (back.length) void releasePickedFiles(back).catch(() => 0);
+  }, [peek]);
 
   useEffect(() => () => {
     clearTimeout(undoTimer.current);
@@ -96,6 +102,14 @@ export default function YourPhotos() {
   const header = (
     <View style={styles.header}>
       <Text style={styles.title} testID="photo-count">Your photos: {formatCount(step.count)}</Text>
+      {couldNotOpen && (
+        <View style={styles.lost} testID="could-not-open">
+          <Text style={styles.lostText}>{COULD_NOT_OPEN}</Text>
+          <Pressable accessibilityRole="button" onPress={closeCouldNotOpen} hitSlop={8} style={styles.lostClose}>
+            <Text style={styles.lostCloseText}>OK</Text>
+          </Pressable>
+        </View>
+      )}
       <Text style={styles.message}>{step.message}</Text>
       {step.count > 0 && (
         <View style={styles.orderRow}>
@@ -165,6 +179,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center',
   },
   removeText: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', lineHeight: 22 },
+  lost: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: '#FBEDE6', borderRadius: 12, borderWidth: 1, borderColor: '#EBC9B8', padding: space.md },
+  lostText: { flex: 1, fontSize: 15, lineHeight: 21, color: colors.text },
+  lostClose: { paddingHorizontal: space.sm, paddingVertical: space.xs },
+  lostCloseText: { fontSize: 16, fontWeight: '800', color: colors.accent },
   startAgainText: { fontSize: 14, color: colors.muted, textDecorationLine: 'underline' },
   bar: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card, padding: space.md, gap: space.sm },
   undo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.text, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: 10 },

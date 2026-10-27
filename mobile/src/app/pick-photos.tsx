@@ -15,15 +15,16 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { photoWord } from '@web/pages/builder/albumMinimum';
+import { releasePickedFiles } from '../../modules/photo-files';
 import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
 import { useDraft } from '../lib/draftStore';
-import { pickFromFiles } from '../lib/filePhotos';
+import { accessToGiveBack, pickFromFiles } from '../lib/filePhotos';
 import { photosForAlbum, type GalleryPhoto } from '../lib/gallery';
 import { formatCount, gridRows, groupByDay, type Day, type GridRow } from '../lib/photoDays';
-import { galleryUrisIn, pickerProgress } from '../lib/photoDraft';
+import { idsInAlbum, pickerProgress } from '../lib/photoDraft';
 import { ALLOW_PHOTOS, ALREADY_IN, ASK_LINE, CHOOSE_MORE, FILES, FILES_INSTEAD, FILES_WORKS, LIMITED_HOW, LIMITED_TITLE, SETTINGS_HOW, TAP_TO_PICK, ALL_IN_ALBUM } from '../lib/pickWords';
-import { allPicked, countSelected, everythingSelected, groupState, isSelected, keepOnly, nothingSelected, selectedIds, setMany, toggle, type Selection } from '../lib/photoSelection';
+import { allPicked, countSelected, everythingSelected, groupState, isSelected, keepOnly, nothingSelected, photosToAdd, setMany, toggle, type Selection } from '../lib/photoSelection';
 import { colors, space } from '../lib/theme';
 import { useGallery } from '../lib/useGallery';
 
@@ -32,7 +33,7 @@ const GAP = 2;
 
 export default function PickPhotos() {
   const gallery = useGallery();
-  const { draft, loading: draftLoading, add } = useDraft();
+  const { draft, loading: draftLoading, add, peek } = useDraft();
   const [selection, setSelection] = useState<Selection>(nothingSelected);
   const [adding, setAdding] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -40,9 +41,10 @@ export default function PickPhotos() {
   const { width } = useWindowDimensions();
   const cell = Math.floor((width - GAP * (COLUMNS - 1)) / COLUMNS);
 
-  // Photos already in the album, however they were added (grid or Files).
-  const blocked = useMemo(() => galleryUrisIn(draft.photos), [draft.photos]);
   const ids = useMemo(() => gallery.photos.map((p) => p.id), [gallery.photos]);
+  // Photos already in the album, however they were added (grid or Files),
+  // matched by Android's photo number (photoDraft.idsInAlbum).
+  const blocked = useMemo(() => idsInAlbum(ids, draft.photos), [ids, draft.photos]);
   const rows = useMemo(() => gridRows(groupByDay(gallery.photos), COLUMNS), [gallery.photos]);
   const picked = useMemo(() => countSelected(selection, ids, blocked), [selection, ids, blocked]);
   const everything = useMemo(() => allPicked(selection, ids, blocked), [selection, ids, blocked]);
@@ -76,10 +78,15 @@ export default function PickPhotos() {
   const addPicked = async () => {
     setAdding(true);
     try {
-      if (selection.mode === 'all') await gallery.whenLoaded();
-      const chosen = new Set(selectedIds(selection, ids, blocked));
-      const photos = await photosForAlbum(gallery.photos.filter((p) => chosen.has(p.id)));
-      add(photos);
+      // Select all waits for photos still loading and adds them too.
+      const chosen = await photosToAdd(selection, gallery.photos, gallery.whenLoaded, (list) => idsInAlbum(list, peek().photos));
+      const result = add(await photosForAlbum(chosen));
+      if (result.alreadyIn > 0) {
+        Alert.alert(
+          result.added ? `Added ${formatCount(result.added)} ${photoWord(result.added)}` : 'No photos added',
+          `${formatCount(result.alreadyIn)} ${photoWord(result.alreadyIn)} already in your album`,
+        );
+      }
       goBack();
     } catch (e) {
       console.warn('Could not add the photos', e);
@@ -93,6 +100,9 @@ export default function PickPhotos() {
       const pick = await pickFromFiles();
       if (!pick) return;
       const result = add(pick.photos);
+      // Files that did not go in (could not be opened, already in the album)
+      // give their kept access back.
+      void releasePickedFiles(accessToGiveBack(pick.kept, peek().photos)).catch(() => 0);
       const told = [pick.note, result.alreadyIn ? `${result.alreadyIn} ${photoWord(result.alreadyIn)} already in your album` : ''].filter(Boolean).join(' · ');
       if (told) Alert.alert(result.added ? `Added ${result.added} ${photoWord(result.added)}` : 'No photos added', told);
       if (result.added) goBack();

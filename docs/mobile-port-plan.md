@@ -417,8 +417,12 @@ album** → **Your photos** → **Pick photos**.
     Android's photo index without opening any file (`Query.exeForMetadata`):
     a first page of 120, then pages of 1,000. **Select all** is a flag ("all,
     except these"), so it is instant at any size and covers photos still
-    loading. Thumbnails are `expo-image` (Glide makes the small version from
-    the photo where it is).
+    loading: **Add** after Select all waits for the last page and adds those
+    photos too (`photoSelection.photosToAdd`). Thumbnails are `expo-image`
+    (Glide makes the small version from the photo where it is).
+  - **In album** is matched by Android's photo number, never by the whole
+    address: Android 10 gives the grid `.../external_primary/images/media/<n>`
+    ids (`photoDraft.idsInAlbum`).
 - **Photo access, in plain words.** Before Android's own question the app
   says "Megy Prints needs to see your photos so you can pick them for your
   album." with **Allow access to photos** (filled) and **Choose from Files
@@ -445,17 +449,33 @@ album** → **Your photos** → **Pick photos**.
   app and drops the oldest past that, so a very large Files-only album could
   lose its oldest photos' access (Phase 3+: the "photos missing" bar and
   `photoRelink` find them again).
-  - The same photo picked from the grid and from Files is **one** photo: both
-    addresses carry Android's number for it (`photoKey` → `media:<n>`).
+  - The same photo picked from the grid and from Files is **one** photo: the
+    grid's address, Files' Images address and Files' Downloads address
+    (`msf:<n>`) all carry Android's number for it (`photoKey` → `media:<n>`).
+    A photo found by browsing the phone's storage in Files has no number and
+    is keyed by its own address, so picking the same photo that way AND from
+    the grid still adds it twice (not fixed).
+  - Files picks that do not go in (could not be opened, already in the album)
+    give their kept access back at once, and a photo taken out gives it back
+    after Undo only if no photo in the album still uses that address.
 - **Size and time taken**, for each picked photo: width and height as shown
   (turned photos swapped) and when it was taken (see "Time taken" below).
 - **HEIC** (iPhone photos): kept by address like any photo; Android shows them
   itself (Android 9+). No conversion in the app.
-- **The album draft** (`mobile/src/lib/photoDraft.ts`, `draftStore.tsx`): the
-  picked photos, oldest first, saved on the phone (AsyncStorage key
-  `megy-2.0-album-draft-v1`) after every change, so closing the app keeps
-  them. About 200 bytes a photo; Android's AsyncStorage reads one value up to
-  about 2 MB, so one album holds roughly 8,000 photos.
+- **The album draft** (`mobile/src/lib/photoDraft.ts`, `draftStore.tsx`,
+  `draftFile.ts`): the picked photos, oldest first, saved on the phone after
+  every change, so closing the app keeps them. About 220 bytes a photo, in
+  **one file in the app's own folder** (`album-draft-v1.json`, through
+  `expo-file-system`), not AsyncStorage: Android's AsyncStorage saves a value
+  over 2 MB but can't read it back (CursorWindow), which is about 9,500
+  photos, and Select all has no cap. A save writes a second file and moves it
+  over the first, so the saved album is always a whole one. A saved album that
+  can't be read is moved aside (`album-draft-v1.unreadable.json`), never
+  written over, and Your photos says "The photos you picked before could not
+  be opened. Please pick your photos again." `test/draftStore.test.ts` saves
+  and opens 12,000 photos. (The first Phase 2 test build kept the album in
+  AsyncStorage key `megy-2.0-album-draft-v1`; it is read once if there is no
+  file yet, and never written again.)
 - **Your photos** (`mobile/src/app/photos.tsx`): "Your photos: N", the photos
   in album order, × to take one out (with **Undo** for 10 seconds), "Take out
   all photos" (asks first). **The 40-photo minimum is the website's own rule
@@ -470,8 +490,10 @@ album** → **Your photos** → **Pick photos**.
 **Libraries** (installed with `npx expo install`, SDK 58 versions):
 `expo-media-library` 58.0.12 (the new `Query` API), `expo-image` 58.0.17,
 `expo-document-picker` 58.0.4, `@shopify/flash-list` 2.3.2 (no native code).
-`@react-native-async-storage/async-storage` 2.2.0 was already there. The
-native module needs `androidx.exifinterface` 1.4.1, the version
+`@react-native-async-storage/async-storage` 2.2.0 was already there.
+`expo-file-system` 58.0.12 (for the album file) was already in the APK as a
+part of `expo`; it is now listed in `package.json` so the app can import it
+(no native change). The native module needs `androidx.exifinterface` 1.4.1, the version
 `expo-media-library` already uses.
 
 ### Time taken: what the app reads, and where EXIF would be better
