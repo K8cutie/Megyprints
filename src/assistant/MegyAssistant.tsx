@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useBuilderContext } from '../pages/builder/BuilderContext';
 import { parseIntent } from './intentParser';
-import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, KEEP_PAGES, REMAKE_ALBUM, saveWizardForAlbum, forgetWizardForAlbum, wizardForAlbum } from './wizard';
+import { WIZARD_STORAGE_KEY, WIZARD_ORDER, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, KEEP_PAGES, REMAKE_ALBUM, TO_COVER, saveWizardForAlbum, forgetWizardForAlbum, wizardForAlbum } from './wizard';
 import { analyzePhotos, recommendSizeForRatio, ratioLabel } from '../pages/builder/photoAnalyzer';
 import RichBackgroundDesigner from '../pages/builder/BackgroundDesigner';
 import { DENSITY_BY_SIZE, DENSITY_LABELS, MIN_ALBUM_PAGES } from '../pages/builder/densities';
@@ -200,6 +200,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     builder.setWizardStep(wizardStep);
     const targetPhase = phaseForStep(wizardStep);
     if (builder.phase !== targetPhase) builder.setPhase(targetPhase);
+    // The cover editor is the screen: on a phone Megy folds up so it shows.
+    // (← Previous on the pages, tapped in her open card, lands on the cover.)
+    if (wizardStep === 'design_cover') setMobileExpanded(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizardStep]);
 
@@ -251,7 +254,14 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const showPrevious = engine.showsPrevious();
   const showNext = engine.showsNext();
   useEffect(() => {
-    if (wizardRef.current.reconcileOnChange()) setWizardStep(wizardRef.current.state.step);
+    const eng = wizardRef.current;
+    if (eng.reconcileOnChange()) { setWizardStep(eng.state.step); return; }
+    // An album opened from Your Projects (or a resume, or the newer copy from
+    // another device) on the cover step, not made yet: loading it opens the
+    // pages screen, but the cover is where it waits to be made (the cover
+    // comes after the photos). Without this the cover editor was gone and
+    // Megy's cover card had no button: stuck.
+    if (eng.state.step === 'design_cover' && builder.phase === 'edit' && !eng.hasBuiltAlbum()) builder.setPhase('cover');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [builder.phase, albumBuilt]);
 
@@ -363,7 +373,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       const made = albumIsMade(builder.albumPages) && !!onPlaceOrder;
       setIsThinking(false);
       setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', intent, timestamp: new Date(),
-        content: made ? 'Opening your order: the album, then checkout.' : 'Make your album first: add your photos and tap Generate Album. Then you can order it.' }]);
+        content: made ? 'Opening your order: the album, then checkout.' : 'Make your album first: add your photos, pick a cover and tap Make my album. Then you can order it.' }]);
       if (made) onPlaceOrder?.();
       return;
     }
@@ -419,17 +429,24 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         break;
       case 'upload_photos':
         if (action === KEEP_PAGES) {
-          // A made album: carry on with the pages as they are.
+          // A made album: carry on with the pages as they are (advance() goes
+          // past the cover step for a made album).
           wizardRef.current.advance();
           setWizardStep(wizardRef.current.state.step);
         } else if (action === REMAKE_ALBUM) {
           setRemakeAsk(true); // asks first: it replaces every page (RemakeAlbumAsk)
-        } else if (action.includes('Generate')) {
-          // The 40-photo gate (albumMinimum): the card only offers Generate at
+        } else if (action === TO_COVER) {
+          // The 40-photo gate (albumMinimum): the card only offers the cover at
           // 40+, but a photo left out a moment ago must not slip through.
           const have = photosGoingIn(builder.uploadedPhotos);
           if (photosShortBy(have) > 0) { showToast(tooFewToMakeMessage(have)); break; }
-          // The upload step doubles as Generate — build the album, then jump to Review.
+          wizardRef.current.advance();
+          setWizardStep(wizardRef.current.state.step);
+        } else if (action.includes('Generate')) {
+          // "Make it again" (RemakeAlbumAsk) on a made album. The same gate.
+          const have = photosGoingIn(builder.uploadedPhotos);
+          if (photosShortBy(have) > 0) { showToast(tooFewToMakeMessage(have)); break; }
+          // Lay the album out again, then on to its pages.
           void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then((r) => showToast(r.success ? 'Album generated!' : r.message));
           wizardRef.current.advance();
           setWizardStep(wizardRef.current.state.step);

@@ -346,7 +346,8 @@ describe('every way to change the size runs the same change_size', () => {
   const src = (p: string) => readFileSync(resolve(__dirname, p), 'utf8');
   it('only the action engine rebuilds an album at a new size', () => {
     const files = ['useBuilderState.ts', 'BuilderSetup.tsx', 'BuilderEdit.tsx', 'MobileReview.tsx', '../Builder.tsx', '../../assistant/MegyAssistant.tsx', '../../assistant/actionEngine.ts'];
-    const callers = files.filter((f) => /\.generateAlbum\([^)]*\bsize\b/.test(src(f)));
+    // (One level of parentheses inside the call: generateAlbum(pagesBackground(…), { size }).)
+    const callers = files.filter((f) => /\.generateAlbum\((?:[^()]|\([^()]*\))*\bsize\b/.test(src(f)));
     expect(callers).toEqual(['../../assistant/actionEngine.ts']);
   });
   it('Setup\'s grid (and its switch away from a hidden size), the wizard\'s size step, "Switch to …" and "Best fit" all dispatch change_size', () => {

@@ -19,7 +19,11 @@ const h = vi.hoisted(() => ({ ctx: null as unknown }));
 vi.mock('../pages/builder/BuilderContext', () => ({ useBuilderContext: () => h.ctx }));
 vi.mock('../pages/builder/BuilderEdit', () => ({ default: () => null }));
 vi.mock('../pages/builder/MobileReview', () => ({ default: () => null }));
-vi.mock('../pages/builder/CoverEditor', () => ({ default: () => null }));
+// The cover step, as far as this walk needs it: its ← Back (to the photos).
+vi.mock('../pages/builder/CoverEditor', async () => {
+  const { createElement: el } = await import('react');
+  return { default: ({ onBack }: { onBack?: () => void }) => el('button', { onClick: onBack }, '← Back') };
+});
 vi.mock('../pages/builder/LayoutPicker', () => ({ default: () => null }));
 vi.mock('../pages/builder/BuilderBackGuard', () => ({ default: () => null }));
 vi.mock('../components/SoftAuthGate', () => ({ default: () => null }));
@@ -44,7 +48,7 @@ function madeAlbum() {
 }
 function builderAtStep4() {
   const { uploadedPhotos, albumPages } = madeAlbum();
-  return {
+  const ctx = {
     phase: 'edit', wizardStep: 'upload_photos', albumTitle: 'Quinn HK Trip R3', albumSize: '8x8',
     selectedTemplate: 'classic', photosPerPage: undefined, uploadedPhotos, albumPages,
     currentPageIndex: 0, currentPage: albumPages[0], selectedTextId: null, selectedPhotoId: null,
@@ -53,11 +57,14 @@ function builderAtStep4() {
     getAlbumId: () => 'album-1', getCloudConflict: () => null,
     manualSave: vi.fn(async () => true),
     dispatch: vi.fn(async () => ({ success: true, message: '' })),
-    setPhase: vi.fn(), setWizardStep: vi.fn(), setAlbumTitle: vi.fn(), goToPage: vi.fn(),
+    // The screen follows the step, so the walk back reaches the cover's ← Back.
+    setPhase: vi.fn((p: string) => { ctx.phase = p; }), setWizardStep: vi.fn((w: string) => { ctx.wizardStep = w; }),
+    setAlbumTitle: vi.fn(), goToPage: vi.fn(),
     getPageSnapshot: () => undefined, saveDraftNow: vi.fn(), reset: vi.fn(), loadAlbum: vi.fn(),
     setBoxText: vi.fn(), updateTextElement: vi.fn(), setQrFill: vi.fn(),
     finishBoxesWithQuotes: vi.fn(async () => ({ filled: 0, remaining: 0 })), setLayoutPickerOpen: vi.fn(),
   };
+  return ctx;
 }
 
 let host: HTMLDivElement;
@@ -75,22 +82,30 @@ beforeEach(async () => {
   Object.defineProperty(window, 'innerHeight', { value: 844, configurable: true, writable: true });
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} disconnect() {} unobserve() {} };
-  // Came back from Review to Step 4 (← Previous): the album is made.
+  // Came back from Review to the photos (Step 3): the album is made.
   localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify({
-    step: 'upload_photos', completed: ['welcome', 'pick_theme', 'pick_size', 'design_cover', 'upload_photos'], skipped: [], isFirstTime: false, dismissed: false,
+    step: 'upload_photos', completed: ['welcome', 'pick_theme', 'pick_size', 'upload_photos', 'design_cover'], skipped: [], isFirstTime: false, dismissed: false,
   }));
   ctx = builderAtStep4();
   h.ctx = ctx;
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
-  await act(async () => {
-    root.render(createElement(MemoryRouter, { initialEntries: ['/builder'] },
-      createElement(Routes, null, createElement(Route, { path: '/builder', element: createElement(Builder) }))));
-  });
-  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
-  // The made album opens on Review; the testers went back with "← Previous".
-  const prev = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === '← Previous');
-  await act(async () => { prev!.click(); });
-  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  // The stub's screen lives in ctx, so each move renders again.
+  const render = async () => {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, { initialEntries: ['/builder'] },
+        createElement(Routes, null, createElement(Route, { path: '/builder', element: createElement(Builder) }))));
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  };
+  await render();
+  // The made album opens on Review; the testers went back with "← Previous"
+  // (to the cover, which comes after the photos) and the cover's "← Back".
+  for (const label of ['← Previous', '← Back']) {
+    const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.trim() === label);
+    await act(async () => { b!.click(); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    await render();
+  }
 });
 afterEach(async () => { await act(async () => { root.unmount(); }); host.remove(); vi.restoreAllMocks(); });
 
@@ -102,7 +117,7 @@ const tap = async (el: Element | null) => {
 };
 const generated = () => (ctx.dispatch.mock.calls as unknown as Array<[{ type: string }]>).filter(([i]) => i.type === 'generate_album').length;
 
-describe('Step 4 with a made album', () => {
+describe('the photos step (Step 3) with a made album', () => {
   it('"Keep my pages →" is the way on; no "Generate Album →" that rebuilds without a word', () => {
     expect(button('Keep my pages →')).not.toBeNull();
     expect(button('Make the album again')).not.toBeNull();
