@@ -1,0 +1,57 @@
+Applications Memory Usage (in Kilobytes):
+Uptime: 1888141 Realtime: 1888141
+
+** MEMINFO in pid 9712 [com.megyprints.app.dev] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap   229535   229496        8       37   230764   249720   222266    22892
+  Dalvik Heap    21096    21056       12      169    21884    31445    15723    15722
+ Dalvik Other     7530     6456        8        6     8784                           
+        Stack     3464     3464        0        0     3468                           
+       Ashmem       18        0        0        0      404                           
+    Other dev        7        0        4        0      328                           
+     .so mmap     3463      316      684       17    38932                           
+    .jar mmap     3427        0      952        0    39728                           
+    .apk mmap    36531     1236    30940        0    57620                           
+    .ttf mmap      176        0        0        0     1420                           
+    .dex mmap       54        4        0        0      944                           
+    .oat mmap      168        0       92        0     2048                           
+    .art mmap     8403     5956     1652      118    22224                           
+   Other mmap      325        8       40        0     2272                           
+      Unknown    59257    59252        0        0    59600                           
+        TOTAL   373801   327244    34392      347   490420   281165   237989    38614
+ 
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    28664                          44108
+         Native Heap:   229496                         230764
+                Code:    34236                         142836
+               Stack:     3464                           3468
+            Graphics:        0                              0
+       Private Other:    65776
+              System:    12165
+             Unknown:                                   69244
+ 
+           TOTAL PSS:   373801            TOTAL RSS:   490420       TOTAL SWAP PSS:      347
+ 
+ Objects
+               Views:      901         ViewRootImpl:        1
+         AppContexts:        5           Activities:        1
+              Assets:       20        AssetManagers:        0
+       Local Binders:       24        Proxy Binders:       39
+       Parcel memory:       18         Parcel count:       72
+    Death Recipients:        0             WebViews:        0
+ 
+ SQL
+         MEMORY_USED:       88
+  PAGECACHE_OVERFLOW:       29          MALLOC_SIZE:       46
+ 
+ DATABASES
+      pgsz     dbsz   Lookaside(b) cache hits cache misses cache size  Dbname
+PER CONNECTION STATS
+         4       20             34    25    31     4  /data/user/0/com.megyprints.app.dev/databases/RKStorage
+POOL STATS
+     cache hits  cache misses    cache size  Dbname
+             25            32            57  /data/user/0/com.megyprints.app.dev/databases/RKStorage
