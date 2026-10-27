@@ -18,7 +18,10 @@
 --    G. a memory row goes only once its file is really gone;
 --    H. a phone learns which of its codes are on its own PAID orders only;
 --    I. a closed order takes no new print files, receipts or "I've sent";
---    J. memory_codes is the database's, never the client's.
+--    J. memory_codes is the database's, never the client's;
+--    K. a FREE tester order keeps videos 30 days, or for good once the shop
+--       prints it; a paying customer's replaced video stays; a customer
+--       can't backdate a memory row (0059).
 --
 --  Same method as account-deletion-proof.sql: one transaction that ENDS BY
 --  RAISING (the report is the error message), made-up accounts
@@ -121,6 +124,22 @@ begin
   return v_id;
 end $$;
 
+-- A FREE tester order (0057): the code is on and this account checked it, so
+-- orders_tester_code_trg takes it.
+create or replace function pg_temp.mk_tester_order(p_user uuid, p_codes text[], p_status text, p_created timestamptz)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.orders (user_id, album_snapshot, album_size, status, payment_status, tester_code,
+                             ship_name, ship_phone, ship_address, ship_zip, ship_region, ship_province,
+                             ship_city, ship_barangay, ship_street, created_at, updated_at)
+  values (p_user, pg_temp.snap(p_codes), '8x8', p_status::public.order_status, 'paid', 'ZZPROOF7',
+          'Zz Probe', '+639000000000', '1 Probe Street, Probe City', '0000', 'NCR', 'Metro Manila',
+          'Probe City', 'Probe', '1 Probe St', p_created, p_created)
+  returning id into v_id;
+  return v_id;
+end $$;
+
 -- A cancelled order the endpoint has claimed.
 create or replace function pg_temp.mk_claimed(p_user uuid, p_album uuid, p_codes text[])
 returns uuid language plpgsql as $$
@@ -150,7 +169,7 @@ end $$;
 
 do $proof$
 declare
-  A uuid; B uuid; C uuid; D uuid; E uuid; P uuid; Q uuid; RR uuid; S uuid;
+  A uuid; B uuid; C uuid; D uuid; E uuid; P uuid; Q uuid; RR uuid; S uuid; T1 uuid; T2 uuid; T3 uuid; R2 uuid; R3 uuid;
   alb_a uuid; alb_p uuid;
   o1 uuid; o2 uuid; o3 uuid; ob_paidpending uuid; ob_reopen uuid; o4 uuid; o5 uuid; o_paid uuid; o_paidcan uuid; o_cust uuid;
   oa uuid; og uuid; oh uuid; ou uuid; op uuid; oq uuid; orr uuid;
@@ -305,15 +324,27 @@ begin
     oa := pg_temp.mk_claimed(A, alb_a, '{zzqxaaaa}');
     r := r || pg_temp.line('E1', 'only on this claimed order: both of its files may go', 'zzqxaaaa.mov,zzqxaaaa.mp4', pg_temp.clips_of(oa));
 
-    -- a pending order (anyone's) still carries it
+    -- someone else's order waiting for payment (0059: "I've sent" keeps one open)
     perform pg_temp.mk_clip('zzqxbbbb.mp4', A);
     perform pg_temp.mk_order(D, null, '{zzqxbbbb}', 'pending_payment', 'unpaid', now(), now());
-    r := r || pg_temp.line('E2', 'a live order still carries the code: kept', '', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxbbbb}')));
+    r := r || pg_temp.line('E2', 'someone else''s unpaid order carries the code: may go (0059)', 'zzqxbbbb.mp4', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxbbbb}')));
+    -- the uploader's own order waiting for payment
+    perform pg_temp.mk_clip('zzqxbown.mp4', A);
+    perform pg_temp.mk_order(A, null, '{zzqxbown}', 'pending_payment', 'unpaid', now(), now());
+    r := r || pg_temp.line('E2b', 'the uploader''s own unpaid order carries it: kept', '', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxbown}')));
+    -- someone else's PAID order
+    perform pg_temp.mk_clip('zzqxbpad.mp4', A);
+    perform pg_temp.mk_order(D, null, '{zzqxbpad}', 'paid', 'paid', now(), now());
+    r := r || pg_temp.line('E2c', 'someone else''s PAID order carries it: kept', '', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxbpad}')));
 
-    -- a cancelled order inside its 3 days (could still be reopened) carries it
+    -- someone else's cancelled order inside its 3 days
     perform pg_temp.mk_clip('zzqxbbcc.mp4', A);
     perform pg_temp.mk_order(D, null, '{zzqxbbcc}', 'cancelled', 'unpaid', now() - interval '2 days', now() - interval '1 day');
-    r := r || pg_temp.line('E3', 'a cancelled order that could still be reopened carries it: kept', '', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxbbcc}')));
+    r := r || pg_temp.line('E3', 'someone else''s cancelled order carries it: may go (0059)', 'zzqxbbcc.mp4', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxbbcc}')));
+    -- the uploader's own cancelled order inside its 3 days (could still be reopened)
+    perform pg_temp.mk_clip('zzqxbocc.mp4', A);
+    perform pg_temp.mk_order(A, null, '{zzqxbocc}', 'cancelled', 'unpaid', now() - interval '2 days', now() - interval '1 day');
+    r := r || pg_temp.line('E3b', 'the uploader''s own reopenable cancelled order carries it: kept', '', pg_temp.clips_of(pg_temp.mk_claimed(A, null, '{zzqxbocc}')));
 
     -- the same album has a paid order whose copy lacks the code (lag)
     alb_p := pg_temp.mk_album(P);
@@ -430,6 +461,40 @@ begin
     r := r || pg_temp.line('F5', '...the link memory and the live order''s row stay', 'zzqxlink', (select coalesce(string_agg(code, ',' order by code), '') from public.qr_memories where code in ('zzqxrowd', 'zzqxscan', 'zzqxlink', 'zzqxlive')));
     r := r || pg_temp.line('F6', 'a signed-in customer cannot drop memory rows', 'REFUSED 42501',
            pg_temp.do_as(S, 'authenticated', $q$select public.finish_orphan_clip_purge('{zzqxorph}')$q$));
+    raise exception using errcode = 'MPOK0';
+  exception when sqlstate 'MPOK0' then null;
+  end;
+
+  -- ── K. Tester orders, replaced videos, memory times (0059) ────────────────
+  begin
+    -- Here "before 0042" is 90 days ago, so 40-60 day old fixtures count.
+    create or replace function public.clip_purge_since() returns timestamptz
+      language sql stable set search_path = '' as $f$ select now() - interval '90 days' $f$;
+    update public.store_settings set tester_code = 'ZZPROOF7', tester_code_on = true where id = 1;
+    T1 := pg_temp.mk_user('t1'); T2 := pg_temp.mk_user('t2'); T3 := pg_temp.mk_user('t3'); R2 := pg_temp.mk_user('r2'); R3 := pg_temp.mk_user('r3');
+    insert into public.tester_code_tries (user_id, ok, at) values (T1, true, now()), (T2, true, now()), (T3, true, now());
+    -- T1: a FREE tester order, paid 45 days ago, never printed
+    perform pg_temp.mk_clip('zzqxkold.mp4', T1, now() - interval '60 days');
+    perform pg_temp.mk_tester_order(T1, '{zzqxkold}', 'paid', now() - interval '45 days');
+    -- T2: the same, but the shop printed it
+    perform pg_temp.mk_clip('zzqxkprt.mp4', T2, now() - interval '60 days');
+    perform pg_temp.mk_tester_order(T2, '{zzqxkprt}', 'in_production', now() - interval '45 days');
+    -- T3: a tester order 9 days old (the red team's free-order trick): kept, but only for 30 days
+    perform pg_temp.mk_clip('zzqxknew.mp4', T3, now() - interval '10 days');
+    perform pg_temp.mk_tester_order(T3, '{}', 'paid', now() - interval '9 days');
+    -- R2: a paying customer replaced a video on My Memories with another file type;
+    -- the memory is 40 days old, the order 39, the album copy lacks the code
+    insert into public.qr_memories (code, user_id, destination, kind, created_at)
+      values ('zzqxrepl', R2, 'https://probe.invalid/m/zzqxrepl.webm', 'clip', now() - interval '40 days');
+    perform pg_temp.mk_order(R2, null, '{}', 'delivered', 'paid', now() - interval '39 days', now() - interval '39 days');
+    perform pg_temp.mk_clip('zzqxrepl.webm', R2, now() - interval '10 days');
+    got := pg_temp.do_as(null, 'service_role', $q$select coalesce(string_agg(object_name, ',' order by object_name), '') from public.orphan_clip_files(1000) where object_name like 'zzqxk%' or object_name like 'zzqxrep%'$q$, 'value');
+    r := r || pg_temp.line('K1', 'only the never-printed tester order older than 30 days lets its video go', 'zzqxkold.mp4', got);
+    -- R3: a customer sends a memory row dated 2020
+    r := r || pg_temp.line('K2', 'a customer adds a memory row with an old date', 'ALLOWED',
+           pg_temp.do_as(R3, 'authenticated', $q$insert into public.qr_memories (code, user_id, destination, kind, created_at) values ('zzqxback', auth.uid(), 'https://probe.invalid/x', 'link', '2020-01-01')$q$));
+    r := r || pg_temp.line('K3', '...the database dates it now', 'true',
+           (select (created_at > now() - interval '1 minute')::text from public.qr_memories where code = 'zzqxback'));
     raise exception using errcode = 'MPOK0';
   exception when sqlstate 'MPOK0' then null;
   end;

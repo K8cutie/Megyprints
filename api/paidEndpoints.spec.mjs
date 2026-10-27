@@ -10,7 +10,10 @@ import { join } from 'node:path';
    its limits in the database (an rpc), not only in memory. */
 
 const dir = __dirname;
-const deployed = readdirSync(dir).filter((f) => /\.(m?js|ts)$/.test(f) && !f.startsWith('_') && !f.endsWith('.spec.mjs'));
+// Subfolders deploy too (api/x/y.mjs → /api/x/y); "_" names (files or folders) don't.
+const deployed = readdirSync(dir, { recursive: true })
+  .map((f) => String(f).replace(/\\/g, '/'))
+  .filter((f) => /\.(m?js|ts)$/.test(f) && !f.split('/').some((part) => part.startsWith('_')) && !f.endsWith('.spec.mjs'));
 
 describe('endpoints that spend money', () => {
   it('/api/theme-quotes stays gone', () => {

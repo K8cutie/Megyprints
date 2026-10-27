@@ -8,8 +8,8 @@
 --    C. a DIFFERENT account whose login says megyprints@gmail.com gets
 --       nothing an owner gets (the hole 0058 closes): no orders, no prices,
 --       no settings, no print files, no status changes, no Team;
---    D. a Team role needs a Google sign-in with that exact email and no
---       password sign-in on the account;
+--    D. a Team role needs an account MADE by a Google sign-in with that
+--       exact, verified email, and no password sign-in on it;
 --    E. an owner account can't be deleted; a customer's still can;
 --    F. nothing in the database decides on the login email any more.
 --
@@ -62,7 +62,7 @@ returns text language sql as $$
 $$;
 
 -- A made-up account with the given sign-ins ('google', 'email').
-create or replace function pg_temp.mk_user(p_email text, p_providers text[], p_google_email text default null)
+create or replace function pg_temp.mk_user(p_email text, p_providers text[], p_google_email text default null, p_verified boolean default true)
 returns uuid language plpgsql as $$
 declare v uuid := gen_random_uuid(); p text;
 begin
@@ -71,7 +71,7 @@ begin
   foreach p in array p_providers loop
     insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at)
     values (case when p = 'email' then v::text else 'zz-probe-' || gen_random_uuid()::text end, v,
-            jsonb_build_object('sub', v::text, 'email', case when p = 'google' then coalesce(p_google_email, p_email) else p_email end, 'email_verified', true),
+            jsonb_build_object('sub', v::text, 'email', case when p = 'google' then coalesce(p_google_email, p_email) else p_email end, 'email_verified', p_verified),
             p, now(), now());
   end loop;
   return v;
@@ -89,7 +89,7 @@ declare
   orders_all text;
   pdfs_all   text;
   fake   uuid := gen_random_uuid();
-  g uuid; pw uuid; linked uuid; other uuid; cust uuid;
+  g uuid; pw uuid; linked uuid; other uuid; cust uuid; unver uuid; late uuid;
 begin
   select o.user_id, u.email into owner, owner_email
     from public.owner_accounts o join auth.users u on u.id = o.user_id order by o.created_at, o.user_id limit 1;
@@ -100,11 +100,10 @@ begin
   begin
     select count(*)::text into want from auth.users u
      where lower(u.email) in ('archgarcia@gmail.com', 'megyprints@gmail.com')
-       and exists (select 1 from auth.identities i where i.user_id = u.id and i.provider = 'google'
-                     and lower(i.identity_data ->> 'email') = lower(u.email));
+       and public.google_born_email(u.id) = lower(u.email);
     select count(*)::text into got from public.owner_accounts o join auth.users u on u.id = o.user_id
      where lower(u.email) in ('archgarcia@gmail.com', 'megyprints@gmail.com');
-    r := r || pg_temp.line('A1', 'the built-in owners who sign in with Google are the owners', want, got);
+    r := r || pg_temp.line('A1', 'the built-in owners whose accounts Google made are the owners', want, got);
     cust := pg_temp.mk_user('zz-probe-own-cust@probe.invalid', '{email}');
     r := r || pg_temp.line('A2', 'a customer cannot read the owner list', 'REFUSED 42501',
            pg_temp.as_login(cust, 'zz-probe-own-cust@probe.invalid', 'authenticated', 'select count(*)::text from public.owner_accounts'));
@@ -113,6 +112,8 @@ begin
     r := r || pg_temp.line('A4', 'a customer cannot add themselves', 'REFUSED 42501',
            pg_temp.as_login(cust, 'zz-probe-own-cust@probe.invalid', 'authenticated',
              'insert into public.owner_accounts (user_id) values (auth.uid())', 'try'));
+    r := r || pg_temp.line('A5', 'a customer cannot ask whose email Google proved', 'REFUSED 42501',
+           pg_temp.as_login(cust, 'zz-probe-own-cust@probe.invalid', 'authenticated', 'select public.google_born_email(auth.uid())'));
     raise exception using errcode = 'MPOK0';
   exception when sqlstate 'MPOK0' then null;
   end;
@@ -173,11 +174,17 @@ begin
       ('zz-probe-own-g@probe.invalid', 'fulfillment'),
       ('zz-probe-own-pw@probe.invalid', 'fulfillment'),
       ('zz-probe-own-ln@probe.invalid', 'fulfillment'),
-      ('zz-probe-own-o@probe.invalid', 'owner');
+      ('zz-probe-own-o@probe.invalid', 'owner'),
+      ('zz-probe-own-uv@probe.invalid', 'fulfillment'),
+      ('zz-probe-own-late@probe.invalid', 'fulfillment');
     g      := pg_temp.mk_user('zz-probe-own-g@probe.invalid', '{google}');
     pw     := pg_temp.mk_user('zz-probe-own-pw@probe.invalid', '{email}');
     linked := pg_temp.mk_user('zz-probe-own-ln@probe.invalid', '{email,google}');
     other  := pg_temp.mk_user('zz-probe-own-oth@probe.invalid', '{google}', 'zz-probe-own-oth@probe.invalid');
+    unver  := pg_temp.mk_user('zz-probe-own-uv@probe.invalid', '{google}', null, false);
+    late   := pg_temp.mk_user('zz-probe-own-late@probe.invalid', '{google}');
+    -- An account made an hour before its Google sign-in (another sign-in made it; Google was joined on later).
+    update auth.users set created_at = now() - interval '1 hour' where id = late;
     r := r || pg_temp.line('D1', 'Google sign-in with the Team email: the role', 'fulfillment',
            pg_temp.as_login(g, 'zz-probe-own-g@probe.invalid', 'authenticated', 'select public.operator_role()'));
     r := r || pg_temp.line('D2', '...and the Team''s order list', orders_all,
@@ -190,6 +197,10 @@ begin
            pg_temp.as_login(gen_random_uuid(), 'zz-probe-own-g@probe.invalid', 'authenticated', 'select public.operator_role()'));
     r := r || pg_temp.line('D6', 'Google sign-in with another email: nothing', '<null>',
            pg_temp.as_login(other, 'zz-probe-own-g@probe.invalid', 'authenticated', 'select public.operator_role()'));
+    r := r || pg_temp.line('D9', 'Google says the email is not verified: nothing', '<null>',
+           pg_temp.as_login(unver, 'zz-probe-own-uv@probe.invalid', 'authenticated', 'select public.operator_role()'));
+    r := r || pg_temp.line('D10', 'Google joined onto an older account: nothing', '<null>',
+           pg_temp.as_login(late, 'zz-probe-own-late@probe.invalid', 'authenticated', 'select public.operator_role()'));
     r := r || pg_temp.line('D7', 'a Team member is not on the owner list', 'false',
            pg_temp.as_login(g, 'zz-probe-own-g@probe.invalid', 'authenticated', 'select public.is_owner()::text'));
     r := r || pg_temp.line('D8', 'a Team member sees no order rows directly', '0',
@@ -226,12 +237,13 @@ begin
     select 'function ' || p.proname as x
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname in ('public', 'storage') and p.prokind = 'f'
-       and p.prosrc ilike '%jwt()%' and p.prosrc ilike '%email%'
+       and ((p.prosrc ilike '%jwt()%' and p.prosrc ilike '%email%')
+            or p.prosrc ilike '%auth.email()%' or p.prosrc ilike '%request.jwt.claim%')
     union all
     select 'policy ' || tablename || ' "' || policyname || '"'
       from pg_policies
      where schemaname in ('public', 'storage')
-       and coalesce(qual, '') || coalesce(with_check, '') ilike '%jwt()%') s;
+       and (coalesce(qual, '') || coalesce(with_check, '')) ~* '(jwt\(\)|auth\.email\(\)|request\.jwt\.claim)') s;
   r := r || pg_temp.line('F1', 'no function or policy reads the login email', '', got);
 
   fails := (length(r) - length(replace(r, ' FAIL |', ''))) / length(' FAIL |');
