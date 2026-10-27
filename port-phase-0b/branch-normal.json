@@ -1,0 +1,527 @@
+{
+ "label": "branch",
+ "mode": "normal",
+ "port": 5762,
+ "steps": [
+  {
+   "what": "platform",
+   "platform": "android",
+   "native": true
+  },
+  {
+   "what": "step1",
+   "blobImgsShown": 0,
+   "blobImgsLoaded": 0,
+   "blobImgsBroken": 0,
+   "canvases": [],
+   "notes": [],
+   "stamps": [],
+   "saysForTesting": false,
+   "sampleAlbumOffer": 1,
+   "samplePhotosOffer": 0,
+   "buttons": [
+    "8×8\" Square Square Great for travel & everyday memories",
+    "6×4\" Landscape Landscape Compact landscape for panoramas",
+    "8×6\" Landscape Landscape Roomy landscape for scenery & prints",
+    "6×8\" Portrait Portrait Tall portrait for people & keepsakes",
+    "11.5×8\" Landscape Landscape Wide format for events & weddings",
+    "8.5×11\" Portrait Portrait Classic portrait for portraits & families",
+    "Wedding",
+    "Baptism",
+    "Birthday",
+    "Baby",
+    "Graduation",
+    "Family",
+    "Vacation",
+    "Something else",
+    "Make a sample album",
+    "← Previous",
+    "Next →"
+   ]
+  },
+  {
+   "what": "photos step (empty)",
+   "blobImgsShown": 0,
+   "blobImgsLoaded": 0,
+   "blobImgsBroken": 0,
+   "canvases": [],
+   "notes": [],
+   "stamps": [],
+   "saysForTesting": false,
+   "sampleAlbumOffer": 0,
+   "samplePhotosOffer": 1,
+   "buttons": [
+    "Add photos",
+    "Change layout",
+    "Page colour",
+    "Next page",
+    "Upload Photos",
+    "Add 40 sample photos",
+    "← Previous"
+   ]
+  },
+  {
+   "what": "picked",
+   "inputs": 3,
+   "files": 12
+  },
+  {
+   "what": "after pick",
+   "phase": "edit",
+   "page": 0,
+   "pages": 40,
+   "photos": 12,
+   "withUrl": 12,
+   "blobUrls": 12,
+   "measured": 12,
+   "checked": 12,
+   "facesTried": 11,
+   "leftOut": 0,
+   "sampleNames": 0,
+   "syntheticNames": 12,
+   "title": "Walk test album",
+   "filledSlotsAll": 0,
+   "pageFills": 0,
+   "screen": {
+    "blobImgsShown": 0,
+    "blobImgsLoaded": 0,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [],
+    "saysForTesting": false,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Next page",
+     "1 · Big & bold",
+     "2 · Dynamic pair",
+     "3 · Nice balance",
+     "4 · Collage",
+     "✨ Surprise",
+     "Add 28 more photos"
+    ]
+   }
+  },
+  {
+   "what": "after samples",
+   "phase": "edit",
+   "page": 0,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 18,
+   "leftOut": 0,
+   "sampleNames": 28,
+   "syntheticNames": 12,
+   "title": "Walk test album",
+   "filledSlotsAll": 0,
+   "pageFills": 0,
+   "screen": {
+    "blobImgsShown": 0,
+    "blobImgsLoaded": 0,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [],
+    "saysForTesting": false,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Next page",
+     "1 · Big & bold",
+     "2 · Dynamic pair",
+     "3 · Nice balance",
+     "4 · Collage",
+     "✨ Surprise",
+     "Upload More Photos",
+     "Next: pick your cover →",
+     "← Previous"
+    ]
+   },
+   "idb": {
+    "count": 40,
+    "withBlob": 40
+   }
+  },
+  {
+   "what": "cover step",
+   "blobImgsShown": 10,
+   "blobImgsLoaded": 10,
+   "blobImgsBroken": 0,
+   "canvases": [],
+   "notes": [],
+   "stamps": [],
+   "saysForTesting": false,
+   "sampleAlbumOffer": 0,
+   "samplePhotosOffer": 0,
+   "buttons": [
+    "Background",
+    "Text",
+    "Show all 40 photos",
+    "Or choose a photo from your phone",
+    "← Back",
+    "Make my album →",
+    "Restart Wizard — start over",
+    "✕"
+   ]
+  },
+  {
+   "what": "album made",
+   "phase": "edit",
+   "page": 0,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 40,
+   "leftOut": 0,
+   "sampleNames": 28,
+   "syntheticNames": 12,
+   "title": "Walk test album",
+   "filledSlotsAll": 40,
+   "pageFills": 1,
+   "screen": {
+    "blobImgsShown": 1,
+    "blobImgsLoaded": 1,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [
+     "For Testing purposes Oct 28, 2026, 6:36 AM"
+    ],
+    "saysForTesting": true,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Add a video memory",
+     "Next page",
+     "Restart Wizard — start over",
+     "✕",
+     "Change layout",
+     "← Previous"
+    ]
+   }
+  },
+  {
+   "what": "flip 1",
+   "phase": "edit",
+   "page": 1,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 40,
+   "leftOut": 0,
+   "sampleNames": 28,
+   "syntheticNames": 12,
+   "title": "Walk test album",
+   "filledSlotsAll": 40,
+   "pageFills": 1,
+   "screen": {
+    "blobImgsShown": 1,
+    "blobImgsLoaded": 1,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [
+     "For Testing purposes Oct 28, 2026, 6:36 AM"
+    ],
+    "saysForTesting": true,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Add a video memory",
+     "Previous page",
+     "Next page",
+     "Restart Wizard — start over",
+     "✕",
+     "Change layout",
+     "← Previous"
+    ]
+   }
+  },
+  {
+   "what": "flip 2",
+   "phase": "edit",
+   "page": 2,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 40,
+   "leftOut": 0,
+   "sampleNames": 28,
+   "syntheticNames": 12,
+   "title": "Walk test album",
+   "filledSlotsAll": 40,
+   "pageFills": 1,
+   "screen": {
+    "blobImgsShown": 1,
+    "blobImgsLoaded": 1,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [
+     "For Testing purposes Oct 28, 2026, 6:36 AM"
+    ],
+    "saysForTesting": true,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Add a video memory",
+     "Previous page",
+     "Next page",
+     "Restart Wizard — start over",
+     "✕",
+     "Change layout",
+     "← Previous"
+    ]
+   }
+  },
+  {
+   "what": "flip 3",
+   "phase": "edit",
+   "page": 3,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 40,
+   "leftOut": 0,
+   "sampleNames": 28,
+   "syntheticNames": 12,
+   "title": "Walk test album",
+   "filledSlotsAll": 40,
+   "pageFills": 1,
+   "screen": {
+    "blobImgsShown": 1,
+    "blobImgsLoaded": 1,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [
+     "For Testing purposes Oct 28, 2026, 6:36 AM"
+    ],
+    "saysForTesting": true,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "⋯",
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Previous page",
+     "Next page",
+     "Restart Wizard — start over",
+     "✕",
+     "Change layout",
+     "← Previous"
+    ]
+   }
+  },
+  {
+   "what": "idb before reload",
+   "count": 40,
+   "withBlob": 40
+  },
+  {
+   "what": "after reload screen",
+   "blobImgsShown": 1,
+   "blobImgsLoaded": 1,
+   "blobImgsBroken": 0,
+   "canvases": [],
+   "notes": [],
+   "stamps": [
+    "For Testing purposes Oct 28, 2026, 6:36 AM"
+   ],
+   "saysForTesting": true,
+   "sampleAlbumOffer": 0,
+   "samplePhotosOffer": 0,
+   "buttons": [
+    "⋯",
+    "Add photos",
+    "Change layout",
+    "Page colour",
+    "Previous page",
+    "Next page",
+    "Restart Wizard — start over",
+    "✕",
+    "Change layout",
+    "← Previous"
+   ]
+  },
+  {
+   "what": "after reload",
+   "waited": true,
+   "phase": "edit",
+   "page": 3,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 40,
+   "leftOut": 0,
+   "sampleNames": 28,
+   "syntheticNames": 12,
+   "title": "Walk test album",
+   "filledSlotsAll": 40,
+   "pageFills": 1,
+   "screen": {
+    "blobImgsShown": 1,
+    "blobImgsLoaded": 1,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [
+     "For Testing purposes Oct 28, 2026, 6:36 AM"
+    ],
+    "saysForTesting": true,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "⋯",
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Previous page",
+     "Next page",
+     "Restart Wizard — start over",
+     "✕",
+     "Change layout",
+     "← Previous"
+    ]
+   },
+   "idb": {
+    "count": 40,
+    "withBlob": 40
+   },
+   "samePages": true,
+   "samePhotoNames": true,
+   "sameFills": true
+  },
+  {
+   "what": "flip after reload",
+   "phase": "edit",
+   "page": 4,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 40,
+   "leftOut": 0,
+   "sampleNames": 28,
+   "syntheticNames": 12,
+   "title": "Walk test album",
+   "filledSlotsAll": 40,
+   "pageFills": 1,
+   "screen": {
+    "blobImgsShown": 1,
+    "blobImgsLoaded": 1,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [
+     "For Testing purposes Oct 28, 2026, 6:36 AM"
+    ],
+    "saysForTesting": true,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "⋯",
+     "⋯",
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Previous page",
+     "Next page",
+     "Restart Wizard — start over",
+     "✕",
+     "Change layout",
+     "← Previous"
+    ]
+   }
+  },
+  {
+   "what": "page with a picked photo (after reload)",
+   "pageIndex": 28,
+   "pagesWithPicked": 12,
+   "onPage": [
+    "synthetic-03.jpg"
+   ],
+   "screen": {
+    "blobImgsShown": 1,
+    "blobImgsLoaded": 1,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [
+     "For Testing purposes Oct 28, 2026, 6:36 AM"
+    ],
+    "saysForTesting": true,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "⋯",
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Previous page",
+     "Next page",
+     "Restart Wizard — start over",
+     "✕",
+     "Change layout",
+     "← Previous"
+    ]
+   }
+  }
+ ],
+ "errors": [],
+ "shots": [
+  "branch-normal-01-step1.png",
+  "branch-normal-02-step1-filled.png",
+  "branch-normal-03-size.png",
+  "branch-normal-04-photos-empty.png",
+  "branch-normal-05-photos-12.png",
+  "branch-normal-06-photos-40.png",
+  "branch-normal-07-cover.png",
+  "branch-normal-08-page1.png",
+  "branch-normal-09-page2.png",
+  "branch-normal-10-page3.png",
+  "branch-normal-11-page4.png",
+  "branch-normal-12-after-reload-raw.png",
+  "branch-normal-13-after-reload.png",
+  "branch-normal-14-after-reload-next.png",
+  "branch-normal-15-picked-photo-page.png"
+ ]
+}

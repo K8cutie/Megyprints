@@ -1,0 +1,26 @@
+== sample: main failed=None branch failed=None  errors main=0 branch=0
+  steps main=10 branch=10, steps with a difference: 0
+  screenshots:
+    sample-01-step1.png: 0.00% pixels differ, box None
+    sample-02-page1-welcome.png: 1.08% pixels differ, box (277, 1024, 675, 1512)
+    sample-03-page2.png: 0.28% pixels differ, box (32, 1024, 237, 1512)
+    sample-04-lastpage-edit.png: 0.01% pixels differ, box (226, 1024, 237, 1040)
+    sample-05-preview-last.png: 0.01% pixels differ, box (231, 1074, 241, 1088)
+== normal: main failed=None branch failed=None  errors main=0 branch=0
+  steps main=16 branch=16, steps with a difference: 0
+  screenshots:
+    normal-01-step1.png: 0.00% pixels differ, box None
+    normal-02-step1-filled.png: 0.00% pixels differ, box None
+    normal-03-size.png: 0.00% pixels differ, box None
+    normal-04-photos-empty.png: 0.00% pixels differ, box None
+    normal-05-photos-12.png: 0.08% pixels differ, box (621, 393, 661, 426)
+    normal-06-photos-40.png: 0.00% pixels differ, box None
+    normal-07-cover.png: 0.00% pixels differ, box None
+    normal-08-page1.png: 0.01% pixels differ, box (665, 1024, 676, 1040)
+    normal-09-page2.png: 0.01% pixels differ, box (226, 1024, 237, 1040)
+    normal-10-page3.png: 0.01% pixels differ, box (665, 1024, 676, 1040)
+    normal-11-page4.png: 26.21% pixels differ, box (32, 410, 714, 1126)
+    normal-12-after-reload-raw.png: 26.21% pixels differ, box (32, 410, 714, 1126)
+    normal-13-after-reload.png: 26.21% pixels differ, box (32, 410, 714, 1126)
+    normal-14-after-reload-next.png: 30.68% pixels differ, box (66, 410, 748, 1126)
+    normal-15-picked-photo-page.png: 0.29% pixels differ, box (84, 733, 676, 1096)

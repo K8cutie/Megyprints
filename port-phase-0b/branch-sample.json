@@ -1,0 +1,216 @@
+{
+ "label": "branch",
+ "mode": "sample",
+ "port": 5762,
+ "steps": [
+  {
+   "what": "platform",
+   "platform": "android",
+   "native": true
+  },
+  {
+   "what": "step1",
+   "blobImgsShown": 0,
+   "blobImgsLoaded": 0,
+   "blobImgsBroken": 0,
+   "canvases": [],
+   "notes": [],
+   "stamps": [],
+   "saysForTesting": false,
+   "sampleAlbumOffer": 1,
+   "samplePhotosOffer": 0,
+   "buttons": [
+    "8×8\" Square Square Great for travel & everyday memories",
+    "6×4\" Landscape Landscape Compact landscape for panoramas",
+    "8×6\" Landscape Landscape Roomy landscape for scenery & prints",
+    "6×8\" Portrait Portrait Tall portrait for people & keepsakes",
+    "11.5×8\" Landscape Landscape Wide format for events & weddings",
+    "8.5×11\" Portrait Portrait Classic portrait for portraits & families",
+    "Wedding",
+    "Baptism",
+    "Birthday",
+    "Baby",
+    "Graduation",
+    "Family",
+    "Vacation",
+    "Something else",
+    "Make a sample album",
+    "← Previous",
+    "Next →"
+   ]
+  },
+  {
+   "what": "tapped Make a sample album"
+  },
+  {
+   "what": "album made",
+   "phase": "edit",
+   "page": 0,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 3,
+   "leftOut": 0,
+   "sampleNames": 40,
+   "syntheticNames": 0,
+   "title": "Sample Album",
+   "filledSlotsAll": 40,
+   "pageFills": 1
+  },
+  {
+   "what": "page 1 screen",
+   "blobImgsShown": 1,
+   "blobImgsLoaded": 1,
+   "blobImgsBroken": 0,
+   "canvases": [],
+   "notes": [
+    "Welcome to the Megy Prints app test!"
+   ],
+   "stamps": [
+    "For Testing purposes Oct 28, 2026, 6:32 AM"
+   ],
+   "saysForTesting": true,
+   "sampleAlbumOffer": 0,
+   "samplePhotosOffer": 0,
+   "buttons": [
+    "Add photos",
+    "Change layout",
+    "Page colour",
+    "Add a video memory",
+    "Next page",
+    "Restart Wizard — start over",
+    "✕",
+    "Change layout",
+    "← Previous"
+   ]
+  },
+  {
+   "what": "idb",
+   "count": 40,
+   "withBlob": 40
+  },
+  {
+   "what": "page 2",
+   "phase": "edit",
+   "page": 1,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 15,
+   "leftOut": 0,
+   "sampleNames": 40,
+   "syntheticNames": 0,
+   "title": "Sample Album",
+   "filledSlotsAll": 40,
+   "pageFills": 1,
+   "screen": {
+    "blobImgsShown": 1,
+    "blobImgsLoaded": 1,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [],
+    "stamps": [
+     "For Testing purposes Oct 28, 2026, 6:32 AM"
+    ],
+    "saysForTesting": true,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "Add photos",
+     "Change layout",
+     "Page colour",
+     "Add a video memory",
+     "Previous page",
+     "Next page",
+     "Restart Wizard — start over",
+     "✕",
+     "Change layout",
+     "← Previous"
+    ]
+   }
+  },
+  {
+   "what": "next page taps",
+   "taps": 39
+  },
+  {
+   "what": "last page (edit)",
+   "phase": "edit",
+   "page": 39,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 40,
+   "leftOut": 0,
+   "sampleNames": 40,
+   "syntheticNames": 0,
+   "title": "Sample Album",
+   "filledSlotsAll": 40,
+   "pageFills": 1
+  },
+  {
+   "what": "preview opened",
+   "phase": "preview",
+   "page": 39,
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "blobUrls": 40,
+   "measured": 40,
+   "checked": 40,
+   "facesTried": 40,
+   "leftOut": 0,
+   "sampleNames": 40,
+   "syntheticNames": 0,
+   "title": "Sample Album",
+   "filledSlotsAll": 40,
+   "pageFills": 1,
+   "screen": {
+    "blobImgsShown": 1,
+    "blobImgsLoaded": 1,
+    "blobImgsBroken": 0,
+    "canvases": [],
+    "notes": [
+     "You're done with today's test!"
+    ],
+    "stamps": [
+     "For Testing purposes Oct 28, 2026, 6:32 AM"
+    ],
+    "saysForTesting": true,
+    "sampleAlbumOffer": 0,
+    "samplePhotosOffer": 0,
+    "buttons": [
+     "Edit pages",
+     "Order",
+     "See it as an open book",
+     "Previous page",
+     "Order this album",
+     "Restart Wizard — start over",
+     "✕",
+     "Preview Full Album",
+     "← Edit pages",
+     "Save to Cloud",
+     "Place Order →",
+     "← Previous"
+    ]
+   }
+  }
+ ],
+ "errors": [],
+ "shots": [
+  "branch-sample-01-step1.png",
+  "branch-sample-02-page1-welcome.png",
+  "branch-sample-03-page2.png",
+  "branch-sample-04-lastpage-edit.png",
+  "branch-sample-05-preview-last.png"
+ ]
+}
