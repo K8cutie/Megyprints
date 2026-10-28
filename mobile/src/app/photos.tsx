@@ -202,6 +202,10 @@ export default function YourPhotos() {
       <FlashList
         data={draft.photos}
         numColumns={COLUMNS}
+        // Off: photos added from the picker land BEFORE the ones on screen
+        // (time order), and keeping those in view left the grid blank until
+        // it was scrolled (seen on the emulator: 6 photos, then 244 more).
+        maintainVisibleContentPosition={{ disabled: true }}
         keyExtractor={(p) => p.key}
         ListHeaderComponent={header}
         contentContainerStyle={styles.list}

@@ -989,10 +989,70 @@ Orientation 6, and the golden Display P3 photo.
   animation, and its stop ended the turn. Now only the animation's own end ends
   it, and the pages a turn shows are drawn first. A screen recording shows the
   leaf lifting at the spine and landing over about 0.8 s (37 frames).
-- No JavaScript error in the log; 133 MB PSS after paging through the album.
+- No JavaScript error in the log; 133 MB PSS after paging through the album (44 photos;
+  see below for 250).
+
+### Seen on the emulator after the review fixes (2026-10-29)
+
+My own `pwa_test` emulator (Android 14, port 5564, read-only, its old photos hidden),
+the release APK built in my own short folder `C:\m3p` (x86_64 only), with the
+project's public Supabase URL and anon key in `mobile/.env.local` (signed out: no
+account used). 250 made-up photos (Python PIL: shapes, colours and a big number, no
+people; 3000x4000, every 12th one 4000x3000; EXIF DateTimeOriginal over 2026-10-20..22)
+pushed to `DCIM/Camera` and media-scanned.
+
+- Name → Size (8x8) → Photos: 6 picked first, the step says "add 34 more" with
+  "Add 34 more photos" as the only button (no way on); then "Select all 250 photos" →
+  250 → "Next: pick your cover →" → Cover (photo 3, title edited to "Family Trip 2026
+  in Bohol", drawn on the cover as typed) → "Make my album →" ("Making your album /
+  Looking at your photos…" caught fading out) → the Preview on the front cover →
+  page 1 alone, then "See it as an open book" with page 1 on the right of "Inside of
+  the front cover" → 12 page turns (a frame mid-turn caught) → pages 100-101 of 106
+  show photos 236-241, taken on the last day.
+- **Memory** (`dumpsys meminfo`, TOTAL PSS): 229.6 MB after "Make my album" (250
+  photos, 106 pages), 253.0 MB after 24 pages, 263.3 MB after 100 pages; on the second
+  build 230.9 MB after making and 266.2 MB after 20 single-page turns. No FATAL, no
+  OutOfMemory, no JavaScript error and no Glide error in logcat for either walk (the
+  only app lines at error level are Android's own keyboard-animation timeouts).
+- Force-stop and open again: "Continue my album" opens the same album (106 pages,
+  the same pages). Right after turning pages it opened on the cover: the page the
+  book was on is saved with the builder's quiet timer (up to about 15-30 s), the album
+  itself when the Preview opens. 20 s after the last turn it opened on that page (21).
+- **A photo deleted from the phone while the app was closed** (photo 6, on page 1):
+  page 1 shows an empty page and the Preview says "1 photo on page 1 isn't on this
+  phone any more…" with "Add the photos". The photo put back on the phone (a new
+  address) and picked again: "Keep my pages →", and page 1 shows it again in its own
+  place, 106 pages as before.
+- "Start a new album", signed out: "Starting a new one deletes this album from this
+  phone. Sign in first to keep it."
+- **Airplane mode on** (`cmd connectivity airplane-mode enable`, ping unreachable):
+  a new album (84 photos of one day, "Select" on the day) named, sized (all five sizes
+  offered: the owner's list could not be read, so none is hidden), covered and made:
+  42 pages.
+- **Back through the steps**, on that album: Preview → Cover ("Continue to my pages
+  →") → Photos (the made album's step: "Keep my pages →", "Add more photos", "Make the
+  album again"). Photo 167, the first in the list, taken out, then "Keep my pages →":
+  pages 1, 2 and 3 still show photos 174, 186 and 198, as before (before the fix every
+  page moved by one photo). Back to Size: 8×6 tapped → "Make it 8×6" Landscape?" with
+  the website's words → "Lay it out again" → "Album size changed to 8×6. Every page is
+  laid out again for the new shape." Back to Name: the name and occasion are kept.
+  Forward again to the Preview: the 8x6 album, 40 pages (photo 167 left out).
+- At the end of the album, "Done" goes to the start screen, and Android back there
+  leaves the app (it used to open "Your cover").
+- **Found and fixed on the emulator:** after adding 244 photos to 6 already on the
+  Photos step, the grid stayed blank until scrolled (FlashList kept the 6 in view while
+  the 244 older photos were put before them). Its keep-in-view is off now; on the
+  second build the grid shows photos 1-12 at once. The step's words for 40+ photos are
+  now the website's ("You have 250 photos ready. Add more, or go on to pick your
+  cover."), not "enough for a 40-page album".
 
 ### Not done, not proven
 
+- The size question uses the website's words, which mention "Studio pages" (a website
+  editor the app does not have yet).
+- After "Continue my album" the Preview is the only screen in the stack: there is no
+  way back to the Photos or Size step of a made album except "Add the photos" when a
+  photo is missing (editing is Phase 4).
 - **No local Supabase ran.** Docker Desktop was running on this PC but its engine
   did not answer (`docker version` hung for over 6 minutes); it was not restarted
   (shared with other sessions). So the signed-in save and the website opening it are

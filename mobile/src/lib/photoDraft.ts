@@ -12,7 +12,6 @@
    website can never disagree about it.
    ══════════════════════════════════════════════════════════════════════════ */
 import { addMoreLabel, MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, photoWord } from '@web/pages/builder/albumMinimum';
-import { MIN_ALBUM_PAGES } from '@web/pages/builder/densities';
 import { formatCount } from './photoDays';
 import { orderTime } from './photoTime';
 
@@ -242,7 +241,9 @@ export function photoStepFor(count: number): PhotoStep {
   }
   return {
     count, short, canGoOn: true, main: 'next', mainLabel: NEXT, secondLabel: ADD_MORE_PHOTOS,
-    message: `You have ${formatCount(count)} photos. That is enough for a ${MIN_ALBUM_PAGES}-page album. Add more, or go on.`,
+    // The website's words for this step (wizard.ts upload_photos), without
+    // "Great!": a 250-photo album is longer than 40 pages, so no page count.
+    message: `You have ${formatCount(count)} photos ready. Add more, or go on to pick your cover.`,
   };
 }
 
