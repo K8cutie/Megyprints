@@ -36,6 +36,12 @@
    textFit and albumSyncRecord as they are; and canvasMeasurer.native (the
    app has no browser canvas: its builder measures words with its own).
 
+   Phase 3 added what the app's steps decide with, so they are the website's
+   rules and words, not copies: assistant/rebuildQuestion (what a size change
+   or "Make the album again" replaces, asked first) with assistant/types,
+   the step words and made-album rules moved into assistant/wizardSteps, and
+   sizeOffer (the sizes a customer may pick, split out of albumSizeOptions).
+
    A TWIN: a file listed as name.native.ts stands in for name.ts in the app.
    The app's bundler (Metro) and type check (tsconfig moduleSuffixes) pick
    the .native.ts file, so a listed file may import name.ts (the website's,
@@ -44,6 +50,8 @@
 
 /** Repo-relative paths, in plain sort order. */
 export const SHARED_MODULES = [
+  'src/assistant/rebuildQuestion.ts',
+  'src/assistant/types.ts',
   'src/assistant/wizardSteps.ts',
   'src/lib/accountErrors.ts',
   'src/lib/albumCloud.ts',
@@ -109,6 +117,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/quoteBank.ts',
   'src/pages/builder/rectTemplates.ts',
   'src/pages/builder/retiredSizes.ts',
+  'src/pages/builder/sizeOffer.ts',
   'src/pages/builder/slotGeometry.ts',
   'src/pages/builder/slotPhotoFit.ts',
   'src/pages/builder/slotSwap.ts',

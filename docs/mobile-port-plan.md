@@ -772,6 +772,306 @@ test files; with what was on the emulator already, 2,517 photos.
 
 ---
 
+## Phase 3 notes (2026-10-29): make the album, see it as a book
+
+Branch `feat/port-phase-3`, stacked on `feat/port-phase-3a-shared-builder`
+(#220, held) and `feat/port-renderer-on-phone` (#219, stacked on #216, held), with
+`origin/main` merged. The first commit changed no website file; the review fixes
+(below) moved four website rules into shared files with no change to what the
+website does, so the branch holds website changes of its own too, and with those of
+#213, #220 and #216 it is a DRAFT under the same HOLD (nothing that changes code the
+website runs is merged before the Nov 9 re-apply).
+
+### What was built (all in `mobile/` and `tools/`)
+
+- **The website's own album builder runs the app's album.** One `useBuilderState`
+  for the whole app (`src/builder/BuilderProvider.tsx`), on the app's platform
+  (`src/builder/appPlatform.ts`). The screens call the steps in
+  `src/builder/albumFlow.ts`, which are calls on the builder (setAlbumTitle,
+  setAlbumSize, addPhotos, setCoverToPhoto, setBoxText, generateAlbum): nothing in
+  the app lays out a page.
+- **The platform pieces** (shared/platform.ts):
+  - `deviceStore`: one file per name in the app's documents, written to a second
+    file and moved over the first with expo-file-system's synchronous calls
+    (`writeSync`, `moveSync`, `textSync`), so a value is saved, whole, before
+    `setItem` returns. Reads are kept in memory after the first.
+    `sessionStore`: memory (this visit only).
+  - `photos` / photo store (`src/builder/appPhotos.ts`): the Phase 2 photos by
+    their content:// address, never copied. The store keeps a small index
+    (address, name, bytes, size, colour space) in the device store. Reading a photo
+    back asks the phone whether it is still there (`inspectPhotos`, the file's
+    header only, one native call for all photos asked at once), so a photo deleted
+    while the app was closed shows as missing when the album opens
+    (`urlNeedsReload` is always true: every address is checked on open). HEIC goes
+    in by its address (Android decodes it): nothing is converted. The file size the
+    gallery index does not give is read from the phone before the photos go in, so
+    two different photos with one name (chat apps) are never taken for one photo
+    picked twice (the builder knows a photo by name AND size).
+  - Colour: every photo's colour space is written down as it comes in
+    (`needsSrgb`), for the print step. Pages on screen are drawn from small
+    upright sRGB copies (`drawableCopy`, Android's ImageDecoder: EXIF rotation,
+    HEIC, `setTargetColorSpace(SRGB)`, at most 1280 px) in the app's cache, made
+    again when the phone clears it.
+  - `faces`: none (no on-device face library in the app yet): photos are centred,
+    as on the website when it finds no face. `photoCheck`: not available.
+  - `textMeasurer`: the page renderer's Skia fonts (`src/builder/textMeasurer.ts`),
+    once loaded (expo-asset); null before, so nothing is said about a caption's fit.
+  - `lifecycle`: AppState (the photo index is written when the app leaves, with
+    the album). `quotes`: the website's quote pool on the device store, curated
+    lines only (no AI call). `cloud`: the app's own Supabase client and sign-in,
+    through the website's one albums write (`albumCloud` useAlbumSyncWith).
+- **Screens**, the website's order and words: Name and occasion (AlbumThemeStep's
+  words, unskippable, the "Next" says what is missing instead of being greyed) →
+  Size (the website's sizes with layouts, less the owner's switched-off ones read
+  with the app's client, fail open; BuilderSetup's lines) → Photos (Phase 2, its
+  way on is now the website's "Next: pick your cover →") → Cover (CoverEditor's
+  words: the album's photos, a tap puts one on the cover, the title, "Too long for
+  the front cover" with "Make it fit (size N)") → "Make my album →" → "Making your
+  album" (GeneratingOverlay's words) → Preview.
+- **Preview**: the closed book's front cover first, then one page at a time, or
+  "See it as an open book" (page 1 on the right across from the inside of the front
+  cover, then 2 | 3…), turned with the buttons or a swipe, with the website's page
+  turn (pageTurn.ts planTurn, drawn with React Native's Animated: the leaf hinged
+  at the spine, front then back). Where a turn goes and the counter/caption are
+  the website's shared previewPaging.ts. The pages a turn would show are drawn
+  ahead of time, and a turn waits (at most 1.5 s) for its leaf's pages. At the end:
+  "Done" (ordering is not in the app yet, and the screen says so).
+- **Every page and the cover are drawn by the page renderer** (`src/render`, PR
+  #216/#219) from the builder's own page data, at screen size, saved as JPEGs in
+  the cache under a name made from everything on the page. The renderer gained the
+  **cover**: `planPage({ coverMode })` plans the front cover the way print does
+  (`printPipeline renderPageLayers(coverFront, …, true)`): no binding keep-out, the
+  photo cover-fitted at its focal point and zoom (`bgCoverFit`), a boxed title moved
+  by its offset, the cover's float shadow (`wordArtShadow` onCover); and photo
+  backgrounds (an album photo named by `photoId`).
+- **Saved**: on the phone (the builder's draft in the device store, the Phase 2
+  draft file, the photo index); in the account when signed in (the Preview saves it
+  with the builder's `manualSave`, and the builder's own autosave runs as on the
+  website).
+
+### Proven
+
+- **Album parity** (`mobile/test/albumParity.test.ts`, website half
+  `tools/parity/webAlbums.spec.ts`, run again on every test run): three customers
+  (40 photos 8x8 Wedding; 57 photos 6x8 Vacation, 4 without a time; 120 photos 8x6
+  "Lola's 80th"), made by the website's builder on its own device pieces (vitest +
+  jsdom; only IndexedDB, the EXIF reader, face-api and the account made up, as the
+  website's specs do) and by the app's path (the app's platform and steps, photos
+  from the Phase 2 draft). **40/40, 41/41 and 63/63 pages identical in every field**
+  (template, every photo in every frame and caption box, captions, frames, pans,
+  background), the same cover photo and title, the same occasion. A control: the
+  same photos with another seed differ on most pages, so "the same" is not vacuous.
+- **Caption fit** (`mobile/test/textMeasurer.test.ts`, website half
+  `tools/golden/fitWeb.mjs`: the website's textFit in headless Chromium with the same
+  font files): 252 captions (the golden pages' and 216 made to need shrinking, every
+  bundled font and style, sizes 18 to 48; two cover titles). **251 of 252 give the
+  same box, fit, "fits at" size and room**; 1 differs by one size step ("happy day"
+  in DM Sans bold 42 px measures 0.005 px inside the box in Skia, over it in
+  Chromium on Windows: the website says size 41, the app 42). 4,255 words and lines
+  measured: worst 0.145 px from Chromium.
+- **Account** (`mobile/test/accountSave.test.ts`, a made-up Supabase with an albums
+  table in memory): signed out, nothing is written; signed in, the website's albums
+  row (title, size, occasion, pages, cover, photos as facts only: no content://
+  address in it); a second device signed in to the same account opens it by id
+  (the builder's loadAlbum) with the same pages, the same photo facts, every photo
+  missing there, the same cover and occasion; a later change saves onto the same row
+  on its version. The phone's restart: the same album opens again from the files,
+  and a photo deleted while closed shows as missing.
+- The cover plan (`mobile/test/coverPlan.test.ts`): the title sits in the box the
+  website's textFit measures the cover title in (coverMode, every size), moved by its
+  offset; the photo is cover-fitted with `bgCoverFit`; a picture that is not an album
+  photo is listed, never faked; without coverMode the same page plans differently.
+- The words (`mobile/test/albumWords.test.ts`): every phrase the app reuses is still
+  in the website's file for the same step.
+
+### Review fixes (2026-10-29)
+
+A review of the first commit walked the app and found that going BACK from the
+Preview could break a made album. Fixed, each with a jest test on the real shared
+builder and the app's platform (`mobile/test/madeAlbumChanges.test.ts`,
+`previewWords.test.ts`, `builderPieces.test.ts`, `albumWords.test.ts`):
+
+- **Taking a photo out after the album is made moved every later photo.** Pages
+  point at photos by their place in the builder's list (slotFills), and the app
+  called `removePhoto`, which only shortens the list (no website screen calls it).
+  39 of 41 pages showed other photos, and the saved album then read as broken and
+  was deleted on the next start. Now, once any page or the cover holds a photo, a
+  photo taken out is LEFT OUT (`leaveOutPhotos`, the website's way: every place
+  stays), and put back it comes back (`keepPhotos`). Test: every frame shows the
+  same photo, and the album opens again after a restart.
+- **The Photos step of a made album is the website's**: "Keep my pages →" (back to
+  the book) or "Make the album again" (asked first, `RemakeAlbumAsk`'s words and
+  `remakeLosesMessage`), with a line that photos taken out or added change the pages
+  only when the album is made again. Photos added after making used to wait
+  silently forever.
+- **A size tap on a made album** used to set the size alone (the old layout squashed
+  onto the new shape: the website's 1-star bug of 2026-10-04). Now it is the
+  website's change_size: asked first with `rebuildQuestion`'s words, then
+  `generateAlbum({ size })` lays every page out again. The late "owner switched this
+  size off" answer no longer changes a made album's size by itself.
+- **A photo missing on this phone, picked again, goes back in its own place**
+  (photoRelink): the app used to compare the draft's size (none for gallery photos)
+  with the builder's real bytes, take the photo out and add the copy at the end. The
+  photo store no longer keeps a photo the phone says it can't open (`readable:
+  false`); such a pick is counted and named.
+- **The Photos step counts what went in**: the same photo picked twice goes in once
+  and a photo the phone can't open doesn't go in, so with 40 picked and one repeat
+  the cover step used to send the customer back to a Photos step that still said 40.
+  Now the step says why ("1 photo is already in your album…") and shows "Add 1 more
+  photo".
+- **The Preview** saves to the account once per album made (and once after signing
+  in), not every time it opens (re-saving an unchanged album moved its "last
+  changed" time and could make a website tab ask "edited on another device?" for
+  nothing); it writes the album on the phone at once (`saveDraftNow`) before saying
+  "Saved on this phone"; it shows the website's questions when the album was changed
+  on another device or deleted there (`AlbumConflictBar`'s words); it names photos
+  this phone no longer has and offers "Add the photos" (`photoPresence
+  missingPhotos`); and it says one plain line instead of font names or raw errors.
+- **"Start a new album"** said the album was "put away"; signed out it is deleted.
+  Now the website's words (`StartNewAlbumPrompt`): "Starting a new one deletes this
+  album from this phone. Sign in first to keep it." Signed out, the kept access to
+  photos picked from Files is given back too.
+- **Back button**: "Done" goes back to the start screen with nothing under it
+  (Android back then leaves the app instead of opening the cover step); back does
+  nothing while the album is being made; going to the Preview from a step returns to
+  the Preview already open instead of stacking a second one.
+- **The cover title's "too long" check** is shown only when the title's font is in
+  the app: the website's default, Cinzel, is not, and measuring in the phone's serif
+  was a guess. The caption-fit parity (251 of 252) covers the three bundled fonts
+  only.
+- **Shared, not copied** (website files, no change to what the website does):
+  `albumIsBuilt`, `coverStepNext` and the step words moved from `wizard.ts` into the
+  shared `assistant/wizardSteps.ts` (wizard.ts re-exports them);
+  `pages/builder/sizeOffer.ts` is the pure half of `albumSizeOptions.ts` (the sizes
+  a customer may pick, given the owner's switched-off list); `assistant/rebuildQuestion.ts`
+  and `assistant/types.ts` are on the shared list. `useBuilderState` reads the saved
+  draft once for its owner check instead of on every render.
+- Smaller: pictures drawn ahead are no longer "prefetched" into expo-image (Android's
+  Glide can't load file://, it only logged 129 errors); a page drawn before is shown
+  from its file after a restart (what it found is kept beside it), old page pictures
+  are pruned, the cover picture waits for a pause in typing, and the decoded photos
+  (now at most 6, about 5 MB each) are let go when the book or cover is left and when
+  the app goes to the background. The words under the Photos grid now say photos
+  with no date go near the end of the album (a 4th parity scenario has 5 such photos
+  in the middle of the roll: the same 40 pages on both sides, all 5 on the album's
+  last fifth).
+- **Not changed:** every app start still asks the phone about every photo once
+  (`urlNeedsReload` is always true): a 250-photo album is one native call, but each
+  photo's header is opened.
+
+### Seen on the emulator (2026-10-29)
+
+My own `pwa_test` emulator (Android 14, x86_64, port 5574), the release APK
+built in my own short folder `C:\m3p`, no `.env.local` (so the app reached no
+server: signed out). 44 test photos made from the website's
+`public/sample-photos` with EXIF times added, one stored on its side with EXIF
+Orientation 6, and the golden Display P3 photo.
+
+- Start → Make an album → Name: "Next" tapped first says "Name your album and
+  choose an occasion to continue." and marks both; then "Our Boracay Trip" +
+  Vacation → "Our Boracay Trip · Vacation. Tap Next." → Size (8x8 picked, the
+  five sizes with their photos-per-page and lines) → Photos (44 picked from the
+  grid; "Next: pick your cover →") → Cover: the front cover drawn by the renderer
+  with the title and its float shadow, then with the tapped photo cover-fitted;
+  "Not drawn in the app yet: font "Cinzel"…" shown → "Make my album →" →
+  Preview on the front cover (the making screen took under a second and was not
+  caught in a screenshot) → page 1 (a right page: binding keep-out on its left)
+  → "See it as an open book": inside of the front cover | page 1 → … → pages
+  38-39 → page 40 | inside of the back cover, with "Done" and "Ordering from the
+  app comes in a later version."
+- The photo stored on its side shows upright (page 40). The Display P3 photo's
+  red patch reads (239, 0, 21) on the screen: the website's sRGB (240, 0, 21),
+  not the raw (220, 40, 40).
+- The app killed (`am force-stop`) and opened again: "Continue my album" opens
+  the same album on the page it was on.
+- **Found and fixed on the emulator:** the first build's page turn ended almost at
+  once: a page finishing drawing re-rendered the screen, which stopped the
+  animation, and its stop ended the turn. Now only the animation's own end ends
+  it, and the pages a turn shows are drawn first. A screen recording shows the
+  leaf lifting at the spine and landing over about 0.8 s (37 frames).
+- No JavaScript error in the log; 133 MB PSS after paging through the album (44 photos;
+  see below for 250).
+
+### Seen on the emulator after the review fixes (2026-10-29)
+
+My own `pwa_test` emulator (Android 14, port 5564, read-only, its old photos hidden),
+the release APK built in my own short folder `C:\m3p` (x86_64 only), with the
+project's public Supabase URL and anon key in `mobile/.env.local` (signed out: no
+account used). 250 made-up photos (Python PIL: shapes, colours and a big number, no
+people; 3000x4000, every 12th one 4000x3000; EXIF DateTimeOriginal over 2026-10-20..22)
+pushed to `DCIM/Camera` and media-scanned.
+
+- Name → Size (8x8) → Photos: 6 picked first, the step says "add 34 more" with
+  "Add 34 more photos" as the only button (no way on); then "Select all 250 photos" →
+  250 → "Next: pick your cover →" → Cover (photo 3, title edited to "Family Trip 2026
+  in Bohol", drawn on the cover as typed) → "Make my album →" ("Making your album /
+  Looking at your photos…" caught fading out) → the Preview on the front cover →
+  page 1 alone, then "See it as an open book" with page 1 on the right of "Inside of
+  the front cover" → 12 page turns (a frame mid-turn caught) → pages 100-101 of 106
+  show photos 236-241, taken on the last day.
+- **Memory** (`dumpsys meminfo`, TOTAL PSS): 229.6 MB after "Make my album" (250
+  photos, 106 pages), 253.0 MB after 24 pages, 263.3 MB after 100 pages; on the second
+  build 230.9 MB after making and 266.2 MB after 20 single-page turns. No FATAL, no
+  OutOfMemory, no JavaScript error and no Glide error in logcat for either walk (the
+  only app lines at error level are Android's own keyboard-animation timeouts).
+- Force-stop and open again: "Continue my album" opens the same album (106 pages,
+  the same pages). Right after turning pages it opened on the cover: the page the
+  book was on is saved with the builder's quiet timer (up to about 15-30 s), the album
+  itself when the Preview opens. 20 s after the last turn it opened on that page (21).
+- **A photo deleted from the phone while the app was closed** (photo 6, on page 1):
+  page 1 shows an empty page and the Preview says "1 photo on page 1 isn't on this
+  phone any more…" with "Add the photos". The photo put back on the phone (a new
+  address) and picked again: "Keep my pages →", and page 1 shows it again in its own
+  place, 106 pages as before.
+- "Start a new album", signed out: "Starting a new one deletes this album from this
+  phone. Sign in first to keep it."
+- **Airplane mode on** (`cmd connectivity airplane-mode enable`, ping unreachable):
+  a new album (84 photos of one day, "Select" on the day) named, sized (all five sizes
+  offered: the owner's list could not be read, so none is hidden), covered and made:
+  42 pages.
+- **Back through the steps**, on that album: Preview → Cover ("Continue to my pages
+  →") → Photos (the made album's step: "Keep my pages →", "Add more photos", "Make the
+  album again"). Photo 167, the first in the list, taken out, then "Keep my pages →":
+  pages 1, 2 and 3 still show photos 174, 186 and 198, as before (before the fix every
+  page moved by one photo). Back to Size: 8×6 tapped → "Make it 8×6" Landscape?" with
+  the website's words → "Lay it out again" → "Album size changed to 8×6. Every page is
+  laid out again for the new shape." Back to Name: the name and occasion are kept.
+  Forward again to the Preview: the 8x6 album, 40 pages (photo 167 left out).
+- At the end of the album, "Done" goes to the start screen, and Android back there
+  leaves the app (it used to open "Your cover").
+- **Found and fixed on the emulator:** after adding 244 photos to 6 already on the
+  Photos step, the grid stayed blank until scrolled (FlashList kept the 6 in view while
+  the 244 older photos were put before them). Its keep-in-view is off now; on the
+  second build the grid shows photos 1-12 at once. The step's words for 40+ photos are
+  now the website's ("You have 250 photos ready. Add more, or go on to pick your
+  cover."), not "enough for a 40-page album".
+
+### Not done, not proven
+
+- The size question uses the website's words, which mention "Studio pages" (a website
+  editor the app does not have yet).
+- After "Continue my album" the Preview is the only screen in the stack: there is no
+  way back to the Photos or Size step of a made album except "Add the photos" when a
+  photo is missing (editing is Phase 4).
+- **No local Supabase ran.** Docker Desktop was running on this PC but its engine
+  did not answer (`docker version` hung for over 6 minutes); it was not restarted
+  (shared with other sessions). So the signed-in save and the website opening it are
+  proven with unit tests on the real `serializeAlbum` / `saveAlbumRowWith` /
+  `deserializeAlbum` / `loadAlbum` against a made-up Supabase, not against a real
+  database or the real website.
+- **The cover's picture is not held to the website's by a golden page**: the
+  website's golden hook (`renderPageCanvasForPrint`) has no cover switch; adding one
+  is a one-line website change (it would inherit the HOLD). The cover title's default
+  font, **Cinzel**, is not in the app (drawn in the phone's serif; the preview says
+  so). Spine and back are not drawn.
+- Not drawn yet (listed under the book when a page has one): textures, stickers,
+  QR codes, graphics/ornaments, corner art, soft and textured edges, colour looks,
+  71 of the website's 74 fonts (Georgia, the default caption font, included).
+- No face finding and no photo check in the app; no AI quote lines (curated only).
+- Not on a real phone; one emulator (Android 14, x86_64). No editing, no ordering.
+
+---
+
 ## Page renderer notes (2026-10-28, Phase 5 groundwork)
 
 The riskiest part of 2.0 was done early: the app draws an album page itself

@@ -12,7 +12,6 @@
    website can never disagree about it.
    ══════════════════════════════════════════════════════════════════════════ */
 import { addMoreLabel, MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, photoWord } from '@web/pages/builder/albumMinimum';
-import { MIN_ALBUM_PAGES } from '@web/pages/builder/densities';
 import { formatCount } from './photoDays';
 import { orderTime } from './photoTime';
 
@@ -220,7 +219,13 @@ export const ADD_MORE_PHOTOS = 'Add more photos';
 
 /** The words and the way on, from the website's 40-photo rule. */
 export function photoStep(photos: readonly DraftPhoto[]): PhotoStep {
-  const count = photosGoingIn(photos);
+  return photoStepFor(photosGoingIn(photos));
+}
+
+/** The same, for `count` photos going in (the album builder's count, which
+ *  can be lower than the photos picked: the same photo picked twice goes in
+ *  once, and one the phone can't open doesn't go in). */
+export function photoStepFor(count: number): PhotoStep {
   const short = photosShortBy(count);
   if (count === 0) {
     return {
@@ -236,7 +241,9 @@ export function photoStep(photos: readonly DraftPhoto[]): PhotoStep {
   }
   return {
     count, short, canGoOn: true, main: 'next', mainLabel: NEXT, secondLabel: ADD_MORE_PHOTOS,
-    message: `You have ${formatCount(count)} photos. That is enough for a ${MIN_ALBUM_PAGES}-page album. Add more, or go on.`,
+    // The website's words for this step (wizard.ts upload_photos), without
+    // "Great!": a 250-photo album is longer than 40 pages, so no page count.
+    message: `You have ${formatCount(count)} photos ready. Add more, or go on to pick your cover.`,
   };
 }
 

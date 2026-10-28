@@ -7,6 +7,7 @@ import android.graphics.ColorSpace
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import androidx.exifinterface.media.ExifInterface
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
@@ -60,6 +61,151 @@ class PhotoFilesModule : Module() {
     AsyncFunction("srgbCopy") Coroutine { source: String, target: String ->
       withContext(Dispatchers.IO) { srgbCopy(source, target) }
     }
+
+    AsyncFunction("inspect") Coroutine { uris: List<String> ->
+      withContext(Dispatchers.IO) { uris.map { inspectOne(it) } }
+    }
+
+    AsyncFunction("drawableCopy") Coroutine { source: String, target: String, maxSide: Int ->
+      withContext(Dispatchers.IO) { drawableCopy(source, target, maxSide) }
+    }
+  }
+
+  /**
+   * Is the photo still on the phone, and what is it? Reads only the file's
+   * header (no pixels): its size as shown (EXIF rotation applied), its file
+   * size in bytes (the website knows a photo again by its name and bytes), the
+   * colour space it was saved in (Android 8+), so the album knows which
+   * photos must be turned into sRGB before a print page is drawn. Never
+   * takes or changes any access: a photo the app can no longer open is
+   * simply `readable: false` (deleted, or its access was taken back).
+   */
+  private fun inspectOne(address: String): Map<String, Any?> {
+    val uri = Uri.parse(address)
+    var readable = false
+    var width = 0
+    var height = 0
+    var colorSpace: String? = null
+    var needsSrgb = false
+    try {
+      resolver.openInputStream(uri)?.use { stream ->
+        readable = true
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeStream(stream, null, bounds)
+        width = bounds.outWidth.coerceAtLeast(0)
+        height = bounds.outHeight.coerceAtLeast(0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          val cs = bounds.outColorSpace
+          colorSpace = cs?.name
+          needsSrgb = cs != null && cs != ColorSpace.get(ColorSpace.Named.SRGB)
+        }
+      }
+    } catch (_: Exception) {
+    }
+    var rotation = 0
+    var bytes = 0L
+    if (readable) {
+      try {
+        resolver.openInputStream(uri)?.use { rotation = ExifInterface(it).rotationDegrees }
+      } catch (_: Exception) {
+      }
+      try {
+        resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+          val i = c.getColumnIndex(OpenableColumns.SIZE)
+          if (c.moveToFirst() && i >= 0 && !c.isNull(i)) bytes = c.getLong(i)
+        }
+      } catch (_: Exception) {
+      }
+      if (bytes <= 0L) {
+        try {
+          resolver.openAssetFileDescriptor(uri, "r")?.use { bytes = it.length.coerceAtLeast(0L) }
+        } catch (_: Exception) {
+        }
+      }
+    }
+    val turned = rotation % 180 == 90
+    return mapOf(
+      "uri" to address,
+      "readable" to readable,
+      "size" to bytes.toDouble(),
+      "width" to if (turned) height else width,
+      "height" to if (turned) width else height,
+      "colorSpace" to colorSpace,
+      "needsSrgb" to needsSrgb
+    )
+  }
+
+  /**
+   * A small copy of the photo for drawing on screen: at most `maxSide` px on
+   * its longest side, turned upright (EXIF), in sRGB, written as a JPEG to
+   * the file:// address `target` (the app's cache: it can be made again at
+   * any time, and the album keeps only the photo's own address). Android 9+
+   * decodes with ImageDecoder, which applies the EXIF rotation, opens HEIC
+   * and converts colours; older phones get BitmapFactory with the rotation
+   * applied by hand and no colour conversion (`converted: false`).
+   */
+  private fun drawableCopy(source: String, target: String, maxSide: Int): Map<String, Any?> {
+    val uri = Uri.parse(source)
+    val path = Uri.parse(target).path ?: throw IllegalArgumentException("not a file address: $target")
+    var width = 0
+    var height = 0
+    var saved: ColorSpace? = null
+    val bitmap: Bitmap
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      val srgb = ColorSpace.get(ColorSpace.Named.SRGB)
+      bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
+        width = info.size.width
+        height = info.size.height
+        saved = info.colorSpace
+        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        decoder.setTargetColorSpace(srgb)
+        val longest = maxOf(width, height)
+        if (maxSide in 1 until longest) {
+          val s = maxSide.toDouble() / longest
+          decoder.setTargetSize(maxOf(1, Math.round(width * s).toInt()), maxOf(1, Math.round(height * s).toInt()))
+        }
+      }
+    } else {
+      val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+      var sample = 1
+      val longest = maxOf(bounds.outWidth, bounds.outHeight)
+      while (maxSide > 0 && longest / (sample * 2) >= maxSide) sample *= 2
+      val decoded = resolver.openInputStream(uri)?.use {
+        BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+      } ?: throw IllegalStateException("could not open $source")
+      val rotation = try {
+        resolver.openInputStream(uri)?.use { ExifInterface(it).rotationDegrees } ?: 0
+      } catch (_: Exception) {
+        0
+      }
+      bitmap = if (rotation != 0) {
+        val m = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
+        Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true).also { if (it !== decoded) decoded.recycle() }
+      } else decoded
+      val turned = rotation % 180 == 90
+      width = if (turned) bounds.outHeight else bounds.outWidth
+      height = if (turned) bounds.outWidth else bounds.outHeight
+    }
+    val outWidth = bitmap.width
+    val outHeight = bitmap.height
+    try {
+      File(path).parentFile?.mkdirs()
+      FileOutputStream(File(path)).use { out ->
+        if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)) throw IllegalStateException("could not write $target")
+      }
+    } finally {
+      bitmap.recycle()
+    }
+    val was = saved
+    return mapOf(
+      "width" to width,
+      "height" to height,
+      "outWidth" to outWidth,
+      "outHeight" to outHeight,
+      "colorSpace" to was?.name,
+      "converted" to (was != null && was != ColorSpace.get(ColorSpace.Named.SRGB))
+    )
   }
 
   private fun describeOne(address: String): Map<String, Any?> {

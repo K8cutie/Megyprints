@@ -34,7 +34,10 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   its Kotlin, run prebuild and Gradle again. Jest has no native modules: its
   JS side (`index.ts`) works without the native half.
 - **Photos are never copied into the app.** The album keeps each photo's
-  content:// address on the phone (see the Phase 2 notes in the plan).
+  content:// address on the phone (see the Phase 2 notes in the plan). Pages
+  on screen are drawn from small upright sRGB copies in the app's cache
+  (`modules/photo-files` drawableCopy), which the phone may clear: they are
+  made again from the photo's address.
 - **Server values** come from `.env.local` (not in git; `.env.example` has the
   names). Never commit them, never put real account passwords anywhere.
 - **Page renderer** (`src/render`, react-native-skia): album pages drawn the
@@ -50,6 +53,16 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   phone"). Run it again after changing `src/render`: CanvasKit in Node is
   not the phone's Skia (the native paragraph builder has no `dispose()`,
   for one).
+- **The album builder** (`src/builder`, Phase 3): the website's own
+  `useBuilderState` (shared code) runs the album, once for the whole app
+  (`BuilderProvider.tsx`), on the app's platform (`appPlatform.ts`: a
+  file-per-name store saved before `setItem` returns, photos by their
+  address on the phone, the Skia caption measurer, the app's Supabase).
+  Screens call the steps in `albumFlow.ts`, never the album rules
+  themselves. `test/albumParity.test.ts` runs the website's builder
+  (`../tools/parity`, vitest + jsdom) and the app's on the same photos and
+  requires the same album; `test/textMeasurer.test.ts` holds the caption fit
+  to the website's in Chromium (`../tools/golden/fitWeb.mjs`).
 - **Gate before a commit:** `npm run check` here (TypeScript + jest), and from
   the repo root `npx tsc -b && npx vitest run` when `../src` changed.
 - Words a customer sees: plain English, say what you get, one filled
