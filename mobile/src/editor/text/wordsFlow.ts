@@ -20,7 +20,9 @@ import { getTemplateById } from '@web/pages/builder/pageTemplates';
 import { captionBoxSize, captionFits, type Box, type CaptionStyle, type Fit, type Measurer } from '@web/pages/builder/textFit';
 import { contrastOutline, WORDART_OUTLINE_WIDTH } from '@web/pages/builder/wordArtRules';
 import { DEFAULT_TEXT_FONT } from '@web/pages/builder/fontCatalog';
+import { bundledFace } from '../../render/fontTable';
 import type { Target } from '../hitTest';
+import { catalogFace, fontSource } from './fonts/fontSources';
 import { SIZE_MAX, SIZE_MIN, SIZE_STEP } from './words';
 
 /** MobileTextEditor's BoxTextContent: what the editor opens with and saves. */
@@ -163,10 +165,25 @@ export function fitBoxFor(page: AlbumPage, target: WordsTarget, albumSize: Album
   return captionBoxSize(page, target.boxIndex, albumSize, pageIndex, { coverMode });
 }
 
-/** MobileTextEditor's fit: the renderers' own wrap, measured on the phone. */
+/** MobileTextEditor's fit: the renderers' own wrap, measured on the phone.
+ *  Not while the words' font is one from the internet that is not on the
+ *  phone yet (offline, or still being fetched for an album made on the
+ *  website): measured in the phone's stand-in font, the answer and the size
+ *  "Make it fit" offers would be a guess. The editor asks again when the
+ *  font arrives (useFontStoreVersion). Georgia, which no phone has, is
+ *  measured in the stand-in the page is drawn in. */
 export function fitOf(s: Pick<EditorState, 'text' | 'fontSize' | 'fontFamily' | 'bold' | 'italic'>, box: Box | null, m: Measurer | null): Fit | null {
   if (!box || !m) return null;
+  const face = catalogFace(s.fontFamily);
+  if (face && fontSource(face) === 'google' && bundledFace(face) === null) return null;
   return captionFits(s.text, { fontSize: s.fontSize, fontFamily: s.fontFamily, bold: s.bold, italic: s.italic }, box, m);
+}
+
+/** The words as they were opened, unchanged: Done (or back) saves nothing,
+ *  so it adds no step to Undo that changes nothing. */
+export function sameWords(a: BoxTextContent, b: BoxTextContent): boolean {
+  const keys: (keyof BoxTextContent)[] = ['text', 'fontSize', 'fontFamily', 'color', 'bold', 'italic', 'underline', 'alignment', 'outlineColor', 'outlineWidth', 'shadow'];
+  return keys.every((k) => (a[k] ?? null) === (b[k] ?? null));
 }
 
 /* ── Taps ── */

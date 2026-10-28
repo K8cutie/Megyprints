@@ -22,7 +22,14 @@
    builder, while the builder's cover scope is on: turned on when this screen
    is on top, back to the pages when it is left (useFocusEffect, as the cover
    step does). No Undo or Redo here: the cover is not in the album's history,
-   as on the website. Warnings, from the website's rules (coverChecks.ts): a
+   as on the website. Each cover change still saves an empty step in the
+   album's history (the website's setters do), so the Edit pages Undo starts
+   afresh after a cover change (undoBar.coverChanged).
+
+   Moving the photo, zooming it and moving the title follow the finger live
+   (CoverStage `live`: drawn over the cover picture) and send the album ONE
+   change when the finger lets go, as a photo on the pages does; the live
+   view stays until the cover is drawn with it. Warnings, from the website's rules (coverChecks.ts): a
    blank cover, a title too long, a title colour that wouldn't show.
 
    Not here yet: the spine beside the cover (the website's SpineStrip and its
@@ -36,13 +43,15 @@ import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, TextInput, useWind
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fontName } from '@web/pages/builder/fontCatalog';
 import { textColorName } from '@web/pages/builder/textColors';
-import { ALBUM_SIZES, type AlbumPage } from '@web/pages/builder/types';
+import { ALBUM_SIZES, bgCoverFit, type AlbumPage } from '@web/pages/builder/types';
+import { getCanvasDimensions } from '@web/pages/builder/layouts';
+import { WORDART_SHADOW } from '@web/pages/builder/wordArtRules';
 import { Button } from '../../components/Button';
 import { Thumb } from '../../components/Thumb';
 import { useBuilder } from '../../builder/BuilderProvider';
 import { COVER_PHOTOS_SHOWN, coverPhotoId, coverPhotos } from '../../builder/albumFlow';
 import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../../builder/screenWords';
-import { usePagePicture } from '../../builder/usePagePicture';
+import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
 import { colors, space } from '../../lib/theme';
 import { BLANK_COVER_MESSAGE, coverBlank, titleInkNeeded, titleTooLong } from './coverChecks';
 import {
@@ -51,22 +60,22 @@ import {
   shownCoverPhotos, titleBoxOf, titleMovable, TITLE_SIZE, toggleTitleBold, toggleTitleItalic, toggleTitleShadow, typeTitle,
   zoomCoverPhoto, ZOOM_RANGE, type Align,
 } from './coverEdits';
-import { CoverStage, type DragPhase, type DragWhat } from './CoverStage';
+import { coverChanged } from '../undoBar';
+import { CoverStage, type DragPhase, type DragWhat, type LiveCover } from './CoverStage';
 import { PageColourPicker, TextColourPicker } from '../text/ColourPickers';
 import { FontListSheet } from '../text/FontPicker';
 import { fontStore } from '../text/fonts/appFonts';
 import { catalogFace } from '../text/fonts/fontSources';
 import { Slider } from './Slider';
-import { throttle } from './throttle';
 import * as W from './words';
 
 type Tab = 'background' | 'text';
 const COLUMNS = 5;
 const GAP = 6;
-/** A drag sends the album a change at most this often (and the cover is drawn again). */
-const DRAG_MS = 100;
 /** The cover picture is drawn again at most this often while it changes. */
 const DRAW_MS = 300;
+/** The live view never stays longer than this after the finger is up. */
+const SETTLE_MAX_MS = 2500;
 
 /** `value` as of at most DRAW_MS ago: while the cover keeps changing (typing,
  *  dragging), one picture per DRAW_MS, the last change always drawn. */
@@ -156,6 +165,10 @@ export default function CoverScreen() {
   }, [setEditScope]));
 
   const cover = builder.coverFront;
+  // A cover change ends the Edit pages Undo there (its history gets an empty
+  // step for each one: undoBar.ts).
+  const coverOnOpen = useRef(cover);
+  useEffect(() => { if (cover !== coverOnOpen.current) coverChanged(); }, [cover]);
   const title = coverTitleOf(cover);
   const hasPhoto = coverHasPhoto(cover);
   const crop = coverCrop(cover);
@@ -163,6 +176,10 @@ export default function CoverScreen() {
   const [showAll, setShowAll] = useState(false);
   const [fontsOpen, setFontsOpen] = useState(false);
   const [sizeLive, setSizeLive] = useState<number | null>(null);
+  // The zoom slider's value while it moves (and until the cover is drawn with it).
+  const [zoomLive, setZoomLive] = useState<{ z: number; settling: string | null } | null>(null);
+  // A slider has the finger: the controls don't scroll meanwhile.
+  const [sliding, setSliding] = useState(false);
 
   // ── The cover as print draws it, as large as leaves room for the controls ──
   const size = ALBUM_SIZES.find((s) => s.preset === builder.albumSize) ?? ALBUM_SIZES[1];
@@ -174,42 +191,44 @@ export default function CoverScreen() {
   const picture = usePagePicture(text, {
     page: drawn, pageIndex: 0, albumSize: builder.albumSize, photos: builder.uploadedPhotos,
     width: Math.min(1400, Math.round(coverW * PixelRatio.get())), coverMode: true,
-  });
+  }, PRIORITY.editing);
   // While a changed cover is drawn, the last picture stays on show.
   const lastUri = useRef<string | null>(null);
   if (picture.uri) lastUri.current = picture.uri;
   const shownUri = picture.uri ?? lastUri.current;
 
   // ── Dragging on the cover: the title, or the photo in its frame ──
-  const drag = useRef<{ what: DragWhat; from: { offsetX: number; offsetY: number; focusX: number; focusY: number } } | null>(null);
-  const [liveTitle, setLiveTitle] = useState<{ dx: number; dy: number } | null>(null);
-  const send = useMemo(() => throttle((what: DragWhat, dx: number, dy: number) => {
-    const d = drag.current;
-    if (!d) return;
-    if (what === 'title') moveCoverTitle(latest.current, d.from, dx, dy);
-    else panCoverPhoto(latest.current, d.from, dx, dy);
-  }, DRAG_MS), []);
-  useEffect(() => () => send.cancel(), [send]);
+  // Nothing goes to the album while the finger moves (CoverStage draws it
+  // live); one change when it lets go. `uri` is the picture on show then: the
+  // live view steps aside once a newer one is.
+  type From = { offsetX: number; offsetY: number; focusX: number; focusY: number };
+  const drag = useRef<{ what: DragWhat; from: From } | null>(null);
+  const [live, setLive] = useState<{ what: DragWhat; dx: number; dy: number; from: From; settling: string | null } | null>(null);
   const onDrag = (what: DragWhat, phase: DragPhase, dx: number, dy: number) => {
     if (phase === 'start') {
       const t = coverTitleOf(latest.current.coverFront);
       const c = coverCrop(latest.current.coverFront);
-      drag.current = { what, from: { offsetX: t.offsetX, offsetY: t.offsetY, focusX: c.focusX, focusY: c.focusY } };
-      if (what === 'title') setLiveTitle({ dx: 0, dy: 0 });
+      const from = { offsetX: t.offsetX, offsetY: t.offsetY, focusX: c.focusX, focusY: c.focusY };
+      drag.current = { what, from };
+      setLive({ what, dx: 0, dy: 0, from, settling: null });
       return;
     }
-    if (what === 'title') setLiveTitle(phase === 'end' ? null : { dx, dy });
-    if (phase === 'move') send.call(what, dx, dy);
-    else { send.flush(what, dx, dy); drag.current = null; }
+    const d = drag.current;
+    if (!d) return;
+    if (phase === 'move') { setLive({ what, dx, dy, from: d.from, settling: null }); return; }
+    drag.current = null;
+    const moved = Math.abs(dx) > 1e-4 || Math.abs(dy) > 1e-4;
+    const sent = moved && (what === 'title' ? moveCoverTitle(latest.current, d.from, dx, dy) : panCoverPhoto(latest.current, d.from, dx, dy));
+    setLive(sent ? { what, dx, dy, from: d.from, settling: shownUri ?? '' } : null);
   };
 
   // The title's box on the cover: where it is, or where the finger has it.
   const box = titleBoxOf(cover);
   const movable = titleMovable(cover);
   const titleRect = box && movable ? (() => {
-    const from = drag.current?.what === 'title' ? drag.current.from : null;
-    const ox = from && liveTitle ? box.clampX(from.offsetX + liveTitle.dx) : title.offsetX;
-    const oy = from && liveTitle ? box.clampY(from.offsetY + liveTitle.dy) : title.offsetY;
+    const from = live?.what === 'title' ? live.from : null;
+    const ox = from && live ? box.clampX(from.offsetX + live.dx) : title.offsetX;
+    const oy = from && live ? box.clampY(from.offsetY + live.dy) : title.offsetY;
     return { x: box.baseX + ox, y: box.baseY + oy, w: box.w, h: box.h };
   })() : null;
 
@@ -227,6 +246,52 @@ export default function CoverScreen() {
     if (face && fontStore.status(face) === 'missing') void fontStore.ensure(titleFont);
   }, [titleFont]);
 
+  // The live view goes once the cover is drawn with the change (or after a while).
+  useEffect(() => {
+    if (live?.settling == null) return;
+    if (picture.uri && picture.uri !== live.settling) { setLive(null); return; }
+    const t = setTimeout(() => setLive(null), SETTLE_MAX_MS);
+    return () => clearTimeout(t);
+  }, [live, picture.uri]);
+  useEffect(() => {
+    if (zoomLive?.settling == null) return;
+    if (picture.uri && picture.uri !== zoomLive.settling) { setZoomLive(null); return; }
+    const t = setTimeout(() => setZoomLive(null), SETTLE_MAX_MS);
+    return () => clearTimeout(t);
+  }, [zoomLive, picture.uri]);
+
+  // What the finger shows, drawn over the cover picture (CoverStage live).
+  const liveView: LiveCover | null = (() => {
+    const movingPhoto = live?.what === 'photo' || zoomLive != null;
+    const movingTitle = live?.what === 'title';
+    if (!movingPhoto && !movingTitle) return null;
+    let photo: LiveCover['photo'] = null;
+    if (movingPhoto) {
+      const id = (cover.background as { photoId?: string } | undefined)?.photoId;
+      const p = id ? builder.uploadedPhotos.find((u) => u.id === id) : undefined;
+      if (p?.previewUrl && p.width > 0 && p.height > 0) {
+        const fx = live?.what === 'photo' ? Math.max(0, Math.min(1, live.from.focusX - live.dx)) : crop.focusX;
+        const fy = live?.what === 'photo' ? Math.max(0, Math.min(1, live.from.focusY - live.dy)) : crop.focusY;
+        const r = bgCoverFit(p.width, p.height, coverW, coverH, zoomLive?.z ?? crop.zoom, fx, fy);
+        photo = { uri: p.previewUrl, x: r.x, y: r.y, w: r.width, h: r.height };
+      }
+    }
+    // The title's words over a moving photo, or in the box the finger moves.
+    const rect = titleRect ?? (box ? { x: box.baseX + title.offsetX, y: box.baseY + title.offsetY, w: box.w, h: box.h } : null);
+    const k = coverW / getCanvasDimensions(builder.albumSize).width;
+    const ui = fontStore.uiFont(title.fontFamily, title.bold, title.italic);
+    const titleView = rect && title.text.trim() && (photo || movingTitle) ? {
+      rect, text: title.text, ghost: movingTitle,
+      style: {
+        fontFamily: ui.fontFamily, fontWeight: ui.fontWeight, fontStyle: ui.fontStyle, color: title.color,
+        fontSize: Math.max(6, title.fontSize * k), lineHeight: Math.max(8, title.fontSize * k * 1.2), textAlign: title.alignment,
+        textDecorationLine: title.underline ? 'underline' as const : 'none' as const,
+        ...(title.shadow ? { textShadowColor: WORDART_SHADOW.color, textShadowOffset: { width: WORDART_SHADOW.offsetX * k, height: WORDART_SHADOW.offsetY * k }, textShadowRadius: WORDART_SHADOW.blur * k } : {}),
+      },
+    } : null;
+    return photo || titleView ? { photo, title: titleView } : null;
+  })();
+
   // ── What the website warns about ──
   const blank = coverBlank(cover);
   const tooLong = titleTooLong(cover, builder.albumSize, platform.textMeasurer());
@@ -242,6 +307,7 @@ export default function CoverScreen() {
         <CoverStage
           uri={shownUri} busy={!picture.uri && !!shownUri} failed={picture.error ? PAGE_NOT_SHOWN : null}
           width={coverW} height={coverH} titleRect={titleRect} hasPhoto={hasPhoto} onDrag={onDrag} label={W.FRONT_COVER}
+          live={liveView}
         />
         <Text style={styles.caption}>{W.FRONT_COVER}</Text>
         {picture.notDrawn.length > 0 && <Text style={styles.small} testID="cover-not-drawn">{NOT_DRAWN_LINE}</Text>}
@@ -258,7 +324,7 @@ export default function CoverScreen() {
         ))}
       </View>
 
-      <ScrollView style={styles.controls} contentContainerStyle={styles.controlsBody} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.controls} contentContainerStyle={styles.controlsBody} keyboardShouldPersistTaps="handled" scrollEnabled={!sliding}>
         {tab === 'background' ? (
           <>
             {photos.length > 0 && (
@@ -295,8 +361,11 @@ export default function CoverScreen() {
                     <Text style={styles.linkText}>{W.RESET}</Text>
                   </Pressable>
                 </View>
-                <Slider value={crop.zoom} min={ZOOM_RANGE.min} max={ZOOM_RANGE.max} step={ZOOM_RANGE.step} label={W.ZOOM}
-                  onSlide={(z) => zoomCoverPhoto(latest.current, z)} onDone={(z) => zoomCoverPhoto(latest.current, z)} testID="cover-zoom-slider" />
+                {/* Live while the finger slides (drawn over the cover), one change when it lets go. */}
+                <Slider value={zoomLive?.z ?? crop.zoom} min={ZOOM_RANGE.min} max={ZOOM_RANGE.max} step={ZOOM_RANGE.step} label={W.ZOOM}
+                  onSlide={(z) => setZoomLive({ z, settling: null })}
+                  onDone={(z) => { const sent = zoomCoverPhoto(latest.current, z); setZoomLive(sent ? { z, settling: shownUri ?? '' } : null); }}
+                  onActive={setSliding} testID="cover-zoom-slider" />
                 <Text style={styles.small}>{W.DRAG_HINT}</Text>
               </View>
             )}
@@ -361,7 +430,7 @@ export default function CoverScreen() {
             {/* One change when the finger lets go: each size change is a
                 change of the cover title, drawn again. */}
             <Slider value={title.fontSize} min={TITLE_SIZE.min} max={TITLE_SIZE.max} step={1} label={W.SIZE}
-              onSlide={setSizeLive} onDone={(px) => { setSizeLive(null); setTitleSize(latest.current, px); }} testID="cover-title-size-slider" />
+              onSlide={setSizeLive} onDone={(px) => { setSizeLive(null); setTitleSize(latest.current, px); }} onActive={setSliding} testID="cover-title-size-slider" />
           </>
         )}
       </ScrollView>

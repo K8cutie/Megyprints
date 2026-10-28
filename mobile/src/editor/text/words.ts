@@ -35,9 +35,11 @@ export const FONTS_LABEL = 'Fonts';
 
 /* ── Fonts that come from the internet the first time (app only) ── */
 export const GETTING_FONT = 'Getting the font…';
-/** Offline, or the font could not be downloaded: the words keep their font. */
-export const fontOffline = (font: string, kept: string) =>
-  `No internet: ${font} can't be downloaded now. Your words stay in ${kept}. Try again when you are online.`;
+/** Offline, or the font could not be downloaded: the words keep their font.
+ *  'failed' is online but no font (the server said no, it took too long). */
+export const fontOffline = (font: string, kept: string, reason: 'offline' | 'failed' = 'offline') => (reason === 'failed'
+  ? `We could not get ${font} right now. Your words stay in ${kept}. Try again later.`
+  : `No internet: ${font} can't be downloaded now. Your words stay in ${kept}. Try again when you are online.`);
 export const FONT_NEEDS_INTERNET = 'Needs the internet the first time';
 
 /* ── TextColorPicker.tsx ── */
@@ -46,10 +48,10 @@ export const ANY_COLOR = 'Any color';
 export const YOUR_OWN_COLOR = 'Your own color';
 /** "Any color" opens the phone's own colour picker on the website (an
  *  <input type="color">); the app's is a sheet of shades and a colour code. */
-export const ANY_COLOR_HINT = 'Tap a shade, or type a colour code like #3A6EA5.';
-export const COLOR_CODE = 'Colour code';
-export const USE_THIS_COLOR = 'Use this colour';
-export const NOT_A_COLOR_CODE = 'That is not a colour code. It looks like #3A6EA5.';
+export const ANY_COLOR_HINT = 'Tap a shade to use it.';
+export const COLOR_CODE = 'Have a color code?';
+export const USE_THIS_COLOR = 'Use this color';
+export const NOT_A_COLOR_CODE = 'That is not a color code. It looks like #3A6EA5.';
 
 /* ── PageColorPicker.tsx (PageColorSheet) and MobileReview.tsx ── */
 export const PAGE_COLOUR = 'Page colour';

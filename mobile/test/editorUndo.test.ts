@@ -27,10 +27,14 @@ import { SCENARIOS } from '../../tools/parity/scenarios';
 import type { AppPlatform } from '../src/builder/appPlatform';
 import { hitTest } from '../src/editor/hitTest';
 import { editThePages } from '../src/editor/scope';
-import { lastEditorVisit, rememberVisit, startOnOpen, undoShown } from '../src/editor/undoBar';
+import { coverChanged, lastEditorVisit, MOST_STEPS, nothingChanged, rememberVisit, startOnOpen, undoShown } from '../src/editor/undoBar';
+import { addPickedPhotos } from '../src/editor/photos/intake';
+import { addPhotos as addToDraft, emptyDraft, type DraftPhoto } from '../src/lib/photoDraft';
+import type { PhotoHeader } from '../src/builder/appPhotos';
+import type { AlbumPage } from '@web/pages/builder/types';
 import { isolateRegistry, registerEditorPart, selectedActionsFor } from '../src/editor/registry';
 import '../src/editor/parts';
-import { act, builder, centre, ctxOn, fills, firstPhoto, madeAlbum, tapOn, useEditorBench } from './editorHarness';
+import { act, builder, centre, ctxOn, fills, firstPhoto, madeAlbum, settle, tapOn, useEditorBench } from './editorHarness';
 
 useEditorBench();
 
@@ -261,5 +265,100 @@ describe('undo and redo: the website\'s history, through the editor', () => {
     await tapOn(platform, t);
     await removeSelected(platform);
     expect(fills(builder(), 1)[t.index]).toBeNull();
+  });
+});
+
+describe('undo after the review: photos that came in, cover changes, steps that change nothing', () => {
+  const header = (uri: string, i: number): PhotoHeader => ({ uri, readable: true, size: 3_000_000 + i, width: 4000, height: 3000, colorSpace: null, needsSrgb: false });
+  const inspect = async (uris: string[]) => uris.map((u, i) => header(u, i));
+  const newPhotos = (names: string[]): DraftPhoto[] => addToDraft(emptyDraft(), names.map((name, i) => ({
+    key: `k:undo-${name}`, source: 'gallery' as const, uri: `content://media/external/images/media/${9700 + i}`, name, width: 4000, height: 3000,
+    capturedAt: Date.UTC(2026, 9, 21, 9, i), modifiedAt: null, addedAt: i,
+  })), 1).draft.photos;
+
+  /** What the screen's Undo or Redo button does (EditPagesScreen step): one
+   *  step, and more while a step changed nothing on the pages, never past the start. */
+  async function press(dir: 'undo' | 'redo', start: readonly AlbumPage[]) {
+    const b0 = builder();
+    const before = { pages: b0.albumPages, pagesJson: JSON.stringify(b0.albumPages), photos: b0.uploadedPhotos };
+    await act(async () => { if (dir === 'undo') builder().undo(); else builder().redo(); });
+    for (let left = MOST_STEPS - 1; left > 0; left--) {
+      const b = builder();
+      const more = dir === 'undo' ? b.canUndo && b.albumPages !== start : b.canRedo;
+      if (!more || !nothingChanged(before, { pages: b.albumPages, photos: b.uploadedPhotos })) break;
+      await act(async () => { if (dir === 'undo') builder().undo(); else builder().redo(); });
+    }
+  }
+
+  it('photos added from the phone mid-edit: Undo never takes them out (the start moves to where they came in)', async () => {
+    const platform = await madeAlbum(sc);
+    await act(async () => { editThePages(builder()); });
+    let start = startOnOpen(builder().albumPages, null);
+    await act(async () => { builder().goToPage(3); });
+    await tapOn(platform, firstPhoto(platform));
+    await removeSelected(platform); // a page edit before the photos come in
+    const count = builder().uploadedPhotos.length;
+    let r = { line: null as string | null, cameIn: false };
+    await act(async () => { r = await addPickedPhotos(builder(), newPhotos(['A.jpg', 'B.jpg', 'C.jpg']), new Set(), inspect); });
+    await settle();
+    expect(r).toEqual({ line: '3 photos added.', cameIn: true });
+    expect(builder().uploadedPhotos.length).toBe(count + 3);
+    // What the screen does then (ctx.restartUndo): Undo starts here.
+    start = builder().albumPages;
+    expect(undoShown(builder().canUndo, builder().albumPages, start)).toBe(false);
+    // Before the fix: one Undo here took the 3 photos out again.
+    await act(async () => { builder().goToPage(5); });
+    const before5 = fills(builder(), 5);
+    await tapOn(platform, firstPhoto(platform));
+    await removeSelected(platform);
+    expect(undoShown(builder().canUndo, builder().albumPages, start)).toBe(true);
+    await press('undo', start);
+    expect(fills(builder(), 5)).toEqual(before5);
+    expect(builder().uploadedPhotos.length).toBe(count + 3); // still in the album
+    expect(undoShown(builder().canUndo, builder().albumPages, start)).toBe(false); // can't go past them
+  });
+
+  it('a cover change: the editor\'s Undo starts afresh, so no press lands on the cover\'s empty steps', async () => {
+    const platform = await madeAlbum(sc);
+    await act(async () => { editThePages(builder()); });
+    rememberVisit(null);
+    const start = startOnOpen(builder().albumPages, lastEditorVisit());
+    await act(async () => { builder().goToPage(2); });
+    await tapOn(platform, firstPhoto(platform));
+    await removeSelected(platform);
+    rememberVisit({ start, leftOn: builder().albumPages }); // off to the cover screen
+    // Nothing changed on the cover: the same start when the editor is back.
+    expect(startOnOpen(builder().albumPages, lastEditorVisit())).toBe(start);
+    await act(async () => { builder().setEditScope('coverFront'); });
+    await act(async () => { builder().setPageColor('#1F75FE'); });
+    await act(async () => { builder().setEditScope('interior'); });
+    coverChanged(); // what the cover screen says on a change
+    const again = startOnOpen(builder().albumPages, lastEditorVisit());
+    expect(again).toBe(builder().albumPages);
+    expect(undoShown(builder().canUndo, builder().albumPages, again)).toBe(false);
+    rememberVisit(null);
+  });
+
+  it('a step that changes nothing on the pages is stepped over: one press, one change', async () => {
+    const platform = await madeAlbum(sc);
+    await act(async () => { editThePages(builder()); });
+    const start = startOnOpen(builder().albumPages, null);
+    await act(async () => { builder().goToPage(3); });
+    const before = fills(builder(), 3);
+    await tapOn(platform, firstPhoto(platform));
+    await removeSelected(platform);
+    const removed = fills(builder(), 3);
+    // Three empty steps (cover changes under the cover scope, the website's way).
+    await act(async () => { builder().setEditScope('coverFront'); });
+    for (const hex of ['#1F75FE', '#EE204D', '#1CAC78']) await act(async () => { builder().setPageColor(hex); });
+    await act(async () => { builder().setEditScope('interior'); });
+    expect(undoShown(builder().canUndo, builder().albumPages, start)).toBe(true);
+    await press('undo', start); // one press: the photo is back
+    expect(fills(builder(), 3)).toEqual(before);
+    expect(builder().albumPages).toBe(start);
+    expect(undoShown(builder().canUndo, builder().albumPages, start)).toBe(false);
+    await press('redo', start); // one press: out again
+    expect(fills(builder(), 3)).toEqual(removed);
+    expect(nothingChanged({ pages: start, pagesJson: JSON.stringify(start), photos: builder().uploadedPhotos }, { pages: [...start], photos: builder().uploadedPhotos })).toBe(true);
   });
 });

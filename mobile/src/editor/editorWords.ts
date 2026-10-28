@@ -54,3 +54,17 @@ export const REMOVE_PHOTO = 'Remove photo';
 
 /** Close a sheet (SlotChooser, RemoveGraphicModal: their × is "Close"). */
 export const CLOSE = 'Close';
+
+/* ── The app's own: what TalkBack says for each thing on the page (the
+   website's page is made of elements a screen reader reads as they are;
+   the app's page is one picture, so each thing on it gets a name). ── */
+export const A11Y = {
+  photo: (n: number) => `Photo ${n}`,
+  boxPhoto: 'Photo in a caption box',
+  words: (text: string) => `Words: ${text.trim() || 'empty'}`,
+  emptySlot: (options: readonly string[]) => (options.length ? `Empty frame. Add: ${options.join(', ')}` : 'Empty frame'),
+  emptyBox: (options: readonly string[]) => (options.length ? `Empty caption box. Add: ${options.join(', ')}` : 'Empty caption box'),
+  qr: 'Video memory QR code',
+  graphic: 'Graphic',
+  sticker: 'Sticker',
+} as const;

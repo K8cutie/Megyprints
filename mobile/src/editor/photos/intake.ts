@@ -13,7 +13,10 @@
    here, even an album opened from the account whose photos are not on the
    Photos step's list. Then the honest count is said (the website's words:
    words.ts addedLine), and the "Add a photo" sheet opens again if it was the
-   way there.
+   way there. When any photo came in, the editor's Undo starts again from
+   here (ctx.restartUndo): the website's undo steps hold the photo list as it
+   was and adding photos saves no step, so an Undo past this point would
+   take the photos out again.
    ══════════════════════════════════════════════════════════════════════════ */
 import type { BuilderActions } from '@web/pages/builder/useBuilderState';
 import type { InspectPhotos } from '../../builder/appPhotos';
@@ -53,14 +56,15 @@ export function resetIntake(): void {
 type AddBuilder = Pick<BuilderActions, 'uploadedPhotos' | 'albumPages' | 'coverFront' | 'addPhotos'>;
 
 /** Puts the photos picked on the trip into the builder (see the top of this
- *  file) and returns the line to say (null: nothing new). */
-export async function addPickedPhotos(builder: AddBuilder, draft: readonly DraftPhoto[], before: ReadonlySet<string>, inspect?: InspectPhotos): Promise<string | null> {
+ *  file): the line to say (null: nothing new), and whether any photo came in
+ *  (added, or put back in its places). */
+export async function addPickedPhotos(builder: AddBuilder, draft: readonly DraftPhoto[], before: ReadonlySet<string>, inspect?: InspectPhotos): Promise<{ line: string | null; cameIn: boolean }> {
   const fresh = draft.filter((p) => !before.has(p.key));
-  if (!fresh.length) return null;
+  if (!fresh.length) return { line: null, cameIn: false };
   const nothingOut = { removePhoto: () => {}, leaveOutPhotos: () => {}, keepPhotos: () => {} };
   const r = await syncPhotos({
     uploadedPhotos: builder.uploadedPhotos, albumPages: builder.albumPages, coverFront: builder.coverFront,
     addPhotos: builder.addPhotos, ...nothingOut,
   }, fresh, inspect);
-  return addedLine(r);
+  return { line: addedLine(r), cameIn: r.added + r.restored > 0 };
 }

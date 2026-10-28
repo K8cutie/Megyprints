@@ -97,8 +97,9 @@ registerEditorPart({
     { id: 'filter', label: FILTER, kinds: ['photo'], order: 40, onPress: (t, ctx) => ctx.openSheet(FILTER_SHEET, { slot: t.index }) },
     {
       // The website's phone editor: the trash button on every photo (PageView
-      // onRemoveFromSlot → clearSlot). One undo step.
-      id: 'remove', label: REMOVE_PHOTO, kinds: ['photo'], order: 900, danger: true,
+      // onRemoveFromSlot → clearSlot). One undo step. Second in the row, so it
+      // is on screen on a narrow phone (the row scrolls sideways).
+      id: 'remove', label: REMOVE_PHOTO, kinds: ['photo'], order: 15, danger: true,
       onPress(target, ctx) { ctx.builder.clearSlot(target.index); },
     },
   ],

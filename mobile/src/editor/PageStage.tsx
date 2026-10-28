@@ -9,6 +9,11 @@
    Everything over the picture is drawn from the same targets the tap is
    tested against (hitTest.ts), scaled to the screen, so what is outlined is
    exactly what a tap there picks.
+
+   TalkBack: the page is one picture, so each thing on it also gets a named,
+   invisible button in its own box (`reach`): a TalkBack double tap on one
+   does what a tap there does (onActivate → the screen's runTap). They let
+   every finger touch through to the page, so taps and swipes work as before.
    ══════════════════════════════════════════════════════════════════════════ */
 import { useMemo, useRef, type ReactNode } from 'react';
 import { ActivityIndicator, PanResponder, StyleSheet, Text, View, type ViewInstance, type ViewStyle } from 'react-native';
@@ -61,7 +66,10 @@ function EmptyHint({ t, k, options, roll }: { t: Target; k: number; options: str
 
 export interface EmptyHintInfo { target: Target; options: string[]; roll: string | null }
 
-export function PageStage({ uri, busy, failed, width, height, pageWidth, hints, selected, overlay, note, onTap, onSwipe }: {
+/** A thing on the page for TalkBack: its name, and whether it is selected. */
+export interface ReachInfo { target: Target; label: string; selected: boolean }
+
+export function PageStage({ uri, busy, failed, width, height, pageWidth, hints, selected, overlay, note, onTap, onSwipe, reach = [], onActivate }: {
   /** The page's picture (file://), or null while it is first drawn. */
   uri: string | null;
   /** A newer picture is being drawn (the old one stays on show). */
@@ -79,6 +87,9 @@ export function PageStage({ uri, busy, failed, width, height, pageWidth, hints, 
   note: string | null;
   onTap: (x: number, y: number) => void;
   onSwipe: (dir: 'forward' | 'back') => void;
+  /** Everything on the page, named for TalkBack (see the top of this file). */
+  reach?: ReachInfo[];
+  onActivate?: (target: Target) => void;
 }) {
   const k = width / Math.max(1, pageWidth);
   const on = useRef({ onTap, onSwipe, k });
@@ -112,7 +123,7 @@ export function PageStage({ uri, busy, failed, width, height, pageWidth, hints, 
   }), []);
 
   return (
-    <View ref={stage} onLayout={measure} style={[styles.stage, { width, height }]} {...finger.panHandlers} testID="edit-page" accessibilityLabel="The page">
+    <View ref={stage} onLayout={measure} style={[styles.stage, { width, height }]} {...finger.panHandlers} testID="edit-page">
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         {uri ? (
           <Image source={{ uri }} style={{ width, height }} contentFit="fill" transition={0} cachePolicy="memory-disk" />
@@ -125,6 +136,19 @@ export function PageStage({ uri, busy, failed, width, height, pageWidth, hints, 
         {hints.map((h) => <EmptyHint key={h.target.key} t={h.target} k={k} options={h.options} roll={h.roll} />)}
         {selected && <View style={[targetStyle(selected, k), styles.selected]} testID={`edit-selected-${selected.key}`} />}
       </View>
+      {/* TalkBack's buttons, one per thing on the page, top-most last (as the
+          tap picks). Invisible, and never in a finger's way. */}
+      {reach.length > 0 && (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill} testID="edit-page-reach">
+          {reach.map((r) => (
+            <View key={r.target.key} pointerEvents="none" style={targetStyle(r.target, k)}
+              accessible accessibilityRole="button" accessibilityLabel={r.label} accessibilityState={{ selected: r.selected }}
+              accessibilityActions={[{ name: 'activate' }]}
+              onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'activate') onActivate?.(r.target); }}
+              testID={`edit-reach-${r.target.key}`} />
+          ))}
+        </View>
+      )}
       {overlay ? <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>{overlay}</View> : null}
       {note ? (
         <View pointerEvents="none" style={styles.noteWrap}>

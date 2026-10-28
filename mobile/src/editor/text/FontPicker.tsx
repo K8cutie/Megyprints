@@ -43,15 +43,28 @@ export function useFontPick(store: FontStore, onReady: (family: string) => void)
   const [offline, setOffline] = useState<string | null>(null);
   const ready = useRef(onReady);
   ready.current = onReady;
+  // Only the LAST pick counts, and only while the list is still there: a slow
+  // font from the internet that arrives after the customer picked another one
+  // (or closed the list) changes nothing.
+  const seq = useRef(0);
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
   const pick = (family: string, current: string) => {
+    const id = ++seq.current;
     setOffline(null);
     const face = catalogFace(family);
-    if (face && store.status(face) === 'missing') setFetching(family);
-    void store.ensure(family).then((r) => {
-      setFetching(null);
-      if (r.ok) ready.current(family);
-      else setOffline(fontOffline(fontName(family), fontName(current)));
-    });
+    setFetching(face && store.status(face) === 'missing' ? family : null);
+    void store.ensure(family)
+      .catch(() => ({ ok: false as const, reason: 'failed' as const }))
+      .then((r) => {
+        if (!live.current || id !== seq.current) return;
+        setFetching(null);
+        if (r.ok) ready.current(family);
+        else setOffline(fontOffline(fontName(family), fontName(current), r.reason));
+      });
   };
   return { fetching, offline, pick };
 }

@@ -17,7 +17,12 @@
    the website's Undo and Redo (the album's 20-step history in
    useBuilderState; the cover is not in it, as on the website; Undo stops
    at the album as the editor found it, kept over a trip to the Preview and
-   back: undoBar.ts).
+   back, and starts again where photos came in or the cover was changed; a
+   step that changes nothing on the pages is stepped over: undoBar.ts).
+
+   Saved on the phone 2 s after the last change, as well as when the editor
+   is left (the builder's own timers wait 15-30 s), so an app killed while
+   editing keeps what was done.
 
    While this screen is on top the builder edits the album's pages, never
    the cover: the cover step below it in the stack keeps its cover scope
@@ -32,20 +37,22 @@ import { useSettleGuard } from '@web/lib/settleGuard';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
-import { usePagePicture } from '../builder/usePagePicture';
+import { PRIORITY, usePagePicture } from '../builder/usePagePicture';
 import { colors, space } from '../lib/theme';
-import { BACK_TO_PREVIEW, DONE_PREVIEW, EDIT_PAGES, NEXT_PAGE, pageLine, PREVIOUS_PAGE, REDO, ROLL_LABELS, UNDO } from './editorWords';
+import { A11Y, BACK_TO_PREVIEW, DONE_PREVIEW, EDIT_PAGES, NEXT_PAGE, pageLine, PREVIOUS_PAGE, REDO, ROLL_LABELS, UNDO } from './editorWords';
 import { EMPTY_KINDS, hitTest, pageTargets, type Target } from './hitTest';
-import { PageStage, type EmptyHintInfo } from './PageStage';
+import { PageStage, type EmptyHintInfo, type ReachInfo } from './PageStage';
 import { addChoicesFor, bannersFor, onRegistryChange, overlayComponents, registryVersion, runTap, selectedActionsFor, sheetById, stripTiles, toolsFor, type EditorContext } from './registry';
 import { editThePages } from './scope';
 import { selectedTarget, selectTarget } from './selection';
 import { renderedLines } from './textLines';
-import { lastEditorVisit, rememberVisit, startOnOpen, undoShown } from './undoBar';
+import { lastEditorVisit, MOST_STEPS, nothingChanged, rememberVisit, startOnOpen, undoShown } from './undoBar';
 import './parts';
 
 /** How long a line over the page stays (the website's guard line). */
 const NOTE_MS = 2600;
+/** Saved on the phone this long after the last change. */
+const SAVE_AFTER_MS = 2000;
 const TILE = 48;
 const TILE_GAP = 8;
 
@@ -96,6 +103,44 @@ export default function EditPagesScreen() {
       latest.current.saveDraftNow();
     };
   }, []));
+  // Photos came in (added from the phone, or missing ones put back): Undo
+  // starts again here, so it can never take them out (undoBar.ts).
+  const restartUndo = useCallback(() => setStart(latest.current.albumPages), []);
+
+  // Undo and Redo: the builder's own, one step; a step that changes nothing
+  // on the pages (a cover change's empty step) is stepped over, one step at
+  // a time once the album has taken the last one, never past the start.
+  const [historyTick, setHistoryTick] = useState(0);
+  const stepping = useRef<{ dir: 'undo' | 'redo'; before: { pages: typeof pages; pagesJson: string; photos: typeof builder.uploadedPhotos }; left: number } | null>(null);
+  const step = useCallback((dir: 'undo' | 'redo') => {
+    const b = latest.current;
+    stepping.current = { dir, before: { pages: b.albumPages, pagesJson: JSON.stringify(b.albumPages), photos: b.uploadedPhotos }, left: MOST_STEPS - 1 };
+    if (dir === 'undo') b.undo(); else b.redo();
+    setHistoryTick((t) => t + 1);
+  }, []);
+  useEffect(() => {
+    const s = stepping.current;
+    if (!s) return;
+    const b = latest.current;
+    const more = s.dir === 'undo' ? b.canUndo && b.albumPages !== startRef.current : b.canRedo;
+    if (s.left > 0 && more && nothingChanged(s.before, { pages: b.albumPages, photos: b.uploadedPhotos })) {
+      s.left--;
+      if (s.dir === 'undo') b.undo(); else b.redo();
+      setHistoryTick((t) => t + 1);
+      return;
+    }
+    stepping.current = null;
+  }, [historyTick]);
+  const undo = useCallback(() => step('undo'), [step]);
+  const redo = useCallback(() => step('redo'), [step]);
+
+  // On the phone 2 s after the last change too (not only when left).
+  const firstSave = useRef(true);
+  useEffect(() => {
+    if (firstSave.current) { firstSave.current = false; return; }
+    const t = setTimeout(() => latest.current.saveDraftNow(), SAVE_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [builder.albumPages, builder.coverFront, builder.uploadedPhotos]);
 
   // ── The page's size on screen: as large as the space between the bars ──
   const [area, setArea] = useState({ w: 0, h: 0 });
@@ -109,7 +154,7 @@ export default function EditPagesScreen() {
   // drawn, the last picture of it stays on show.
   const px = Math.min(1400, Math.round((screenW - space.md * 2) * PixelRatio.get()));
   const req = page ? { page, pageIndex: index, albumSize: builder.albumSize, photos: builder.uploadedPhotos, width: px } : null;
-  const picture = usePagePicture(text, req);
+  const picture = usePagePicture(text, req, PRIORITY.editing);
   const lastShown = useRef<{ index: number; uri: string } | null>(null);
   if (picture.uri) lastShown.current = { index, uri: picture.uri };
   const shownUri = picture.uri ?? (lastShown.current?.index === index ? lastShown.current.uri : null);
@@ -138,6 +183,7 @@ export default function EditPagesScreen() {
     openSheet: (id, params) => setSheet({ id, params }),
     closeSheet: () => setSheet(null),
     say,
+    restartUndo,
   } : null;
 
   const onTap = (x: number, y: number) => {
@@ -165,8 +211,8 @@ export default function EditPagesScreen() {
   const canUndo = undoShown(builder.canUndo, builder.albumPages, start);
   const header = useMemo(() => ({
     title: EDIT_PAGES,
-    headerRight: () => <HeaderUndo canUndo={canUndo} canRedo={builder.canRedo} undo={builder.undo} redo={builder.redo} />,
-  }), [canUndo, builder.canRedo, builder.undo, builder.redo]);
+    headerRight: () => <HeaderUndo canUndo={canUndo} canRedo={builder.canRedo} undo={undo} redo={redo} />,
+  }), [canUndo, builder.canRedo, undo, redo]);
 
   if (!page || !ctx || !plan) {
     return (
@@ -184,6 +230,20 @@ export default function EditPagesScreen() {
     if (!choices.length) return [];
     const roll = t.kind === 'emptyBox' ? dealtBoxRoll(page, t.index) : null;
     return [{ target: t, options: choices.map((c) => c.short), roll: roll && choices.some((c) => c.id === roll) ? ROLL_LABELS[roll] : null }];
+  });
+  // Every thing on the page, named for TalkBack (PageStage reach).
+  let photoN = 0;
+  const reach: ReachInfo[] = targets.map((t) => {
+    const optionsOf = () => addChoicesFor(t.kind).map((c) => c.short);
+    const label = t.kind === 'photo' ? A11Y.photo(++photoN)
+      : t.kind === 'boxPhoto' ? A11Y.boxPhoto
+        : t.kind === 'boxText' || t.kind === 'freeText' ? A11Y.words(page.textElements?.find((e) => e.id === t.textId)?.text ?? '')
+          : t.kind === 'slotText' ? A11Y.words(page.slotTexts?.[t.index]?.text ?? '')
+            : t.kind === 'emptySlot' ? A11Y.emptySlot(optionsOf())
+              : t.kind === 'emptyBox' ? A11Y.emptyBox(optionsOf())
+                : t.kind === 'slotQr' || t.kind === 'boxQr' ? A11Y.qr
+                  : t.kind === 'sticker' ? A11Y.sticker : A11Y.graphic;
+    return { target: t, label, selected: selected?.key === t.key };
   });
   const actions = selected ? selectedActionsFor(selected, ctx) : [];
   const allTools = toolsFor(ctx);
@@ -211,6 +271,8 @@ export default function EditPagesScreen() {
             overlay={overlays.length ? overlays.map((O, i) => <O key={i} ctx={ctx} scale={shownW / plan.width} width={shownW} height={shownH} />) : undefined}
             onTap={onTap}
             onSwipe={(dir) => (dir === 'forward' ? turn(goNext) : turn(goPrev))()}
+            reach={reach}
+            onActivate={(t) => runTap(t, ctx)}
           />
         )}
         <Text style={styles.notDrawn} numberOfLines={2} testID="edit-not-drawn">{picture.notDrawn.length > 0 ? NOT_DRAWN_LINE : ''}</Text>

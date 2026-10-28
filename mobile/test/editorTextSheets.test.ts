@@ -27,6 +27,7 @@ import { PageColourSheet } from '../src/editor/text/PageColourSheet';
 import { PHOTO_QUOTES_URL, type PhotoQuoteDeps } from '../src/editor/text/photoQuotes';
 import { forgetResume, takeResume } from '../src/editor/text/resumeQuote';
 import { createFontStore, type FontStoreDeps } from '../src/editor/text/fonts/fontStore';
+import { fitOf } from '../src/editor/text/wordsFlow';
 import * as words from '../src/editor/text/words';
 import { PageText } from '../src/render/pageText';
 import { forgetAddedFonts } from '../src/render/fontTable';
@@ -313,6 +314,92 @@ describe('the text editor', () => {
     await press('text-make-fit');
     expect(textOf(all((i) => i.props.testID === 'text-size')[0])).toBe(String(size));
     expect(has('text-too-long')).toBe(false);
+  });
+});
+
+describe('the text editor, after the review', () => {
+  /** A font store whose Lora download waits until the test lets it go. */
+  function slowFonts() {
+    let letGo: (() => void) | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ttf = new Uint8Array(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'node_modules', '@expo-google-fonts/dm-sans/400Regular/DMSans_400Regular.ttf')));
+    const files = new Map<string, Uint8Array>();
+    const deps: FontStoreDeps = {
+      fetchText: async () => {
+        await new Promise<void>((r) => { letGo = r; });
+        return "@font-face {\n  font-style: normal;\n  font-weight: 400;\n  src: url(https://fonts.gstatic.com/s/lora/a.ttf) format('truetype');\n}";
+      },
+      fetchBytes: async () => ttf,
+      files: { read: (n) => files.get(n) ?? null, write: (n, b) => { files.set(n, b); }, uri: (n) => `file:///f/${n}`, list: () => [...files.keys()] },
+      registerUi: async () => {},
+      addToRenderer: async () => {},
+    };
+    return { store: createFontStore(deps), arrive: async () => { await act(async () => { letGo?.(); for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0)); }); } };
+  }
+
+  it('a slow font from the internet that arrives after another font was picked changes nothing', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    const slow = slowFonts();
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: slow.store });
+    await type('text-editor-input', 'Hello');
+    await press('text-font-open');
+    await press('font-Lora'); // from the internet: "Getting the font…"
+    expect(textOf()).toContain(words.GETTING_FONT);
+    await press('font-Playfair'); // in the app: used at once
+    expect(textOf()).not.toContain(words.GETTING_FONT);
+    await slow.arrive(); // Lora arrives late
+    await press('text-editor-done');
+    expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)?.fontFamily).toBe('"Playfair Display", Georgia, serif');
+  });
+
+  it('Android back closes an open panel first, then keeps the words typed (saves them, as Done)', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    const log = await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    const back = async () => {
+      const modal = all((i) => i.props.testID === 'text-editor' && typeof i.props.onRequestClose === 'function')[0];
+      await act(async () => { modal.props.onRequestClose(); });
+    };
+    await type('text-editor-input', 'Kept by the back button');
+    await press('text-font-open');
+    expect(has('text-font-panel')).toBe(true);
+    await back();
+    expect(has('text-font-panel')).toBe(false);
+    expect(log.closed).toBe(0);
+    await press('text-color-open');
+    await back();
+    expect(has('text-color-panel')).toBe(false);
+    expect(log.closed).toBe(0);
+    await back();
+    expect(log.closed).toBe(1);
+    expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)?.text).toBe('Kept by the back button');
+  });
+
+  it('Done with nothing changed saves nothing, so Undo gets no step that changes nothing', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await type('text-editor-input', 'First words');
+    await press('text-editor-done');
+    const pages = builder().albumPages;
+    await act(async () => { sheetRoot!.unmount(); });
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await press('text-editor-done');
+    expect(builder().albumPages).toBe(pages); // not even a new pages object
+    await act(async () => { builder().undo(); });
+    expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)).toBeUndefined(); // the one Undo takes the words off
+  });
+
+  it('"Too long for this box" waits for a font from the internet that is not on the phone yet', async () => {
+    const Sk = await headlessSkia();
+    const m = skiaTextMeasurer(new PageText(Sk, fontFiles()));
+    const box = { w: 300, h: 60 };
+    const long = 'The castle lights came on and none of us wanted this happy day to end so we stayed a little longer';
+    const base = { text: long, fontSize: 40, bold: false, italic: false };
+    expect(fitOf({ ...base, fontFamily: '"Lora", Georgia, serif' }, box, m)).toBeNull(); // Lora: not fetched
+    expect(fitOf({ ...base, fontFamily: '"Playfair Display", Georgia, serif' }, box, m)?.fits).toBe(false); // in the app
+    expect(fitOf({ ...base, fontFamily: 'Georgia, "Times New Roman", serif' }, box, m)?.fits).toBe(false); // no phone has it: the stand-in the page uses
   });
 });
 

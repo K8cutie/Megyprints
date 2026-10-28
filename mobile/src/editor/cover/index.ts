@@ -17,7 +17,6 @@
      CoverStage.tsx   the cover picture and the finger (move the title, move
                       the photo in its frame)
      Slider.tsx       zoom and size (the website's range inputs)
-     throttle.ts      a drag sends at most one change every 100 ms
      words.ts         the website's words (test/editorCover.test.ts)
    The colour pickers and the font list are the words part's
    (../text/ColourPickers.tsx, ../text/FontPicker.tsx): one look, and fonts
@@ -30,11 +29,15 @@
    Edit pages screen puts the scope back to 'interior' whenever it is focused.
    ══════════════════════════════════════════════════════════════════════════ */
 import { router } from 'expo-router';
+import { pushGuard } from '../../lib/useOncePerVisit';
 import { registerEditorPart } from '../registry';
 import { COVER_TILE } from './words';
 
 /** The cover screen's route (src/app/edit-cover.tsx). */
 export const COVER_ROUTE = '/edit-cover';
+
+/** A quick double tap on the tile opens one cover screen, not two. */
+const oncePush = pushGuard();
 
 registerEditorPart({
   id: 'cover',
@@ -43,7 +46,7 @@ registerEditorPart({
     label: COVER_TILE,
     order: 10,
     onPress() {
-      router.push(COVER_ROUTE);
+      oncePush(() => router.push(COVER_ROUTE));
     },
   }],
 });

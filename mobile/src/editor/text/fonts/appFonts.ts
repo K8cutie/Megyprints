@@ -62,6 +62,10 @@ const deps: FontStoreDeps = {
       new File(folder(), name).writeSync(bytes);
     },
     uri: (name) => new File(folder(), name).uri,
+    remove(name) {
+      const f = new File(folder(), name);
+      if (f.exists) f.delete();
+    },
     list() {
       try {
         return folder().list().filter((f): f is File => f instanceof File).map((f) => f.name);

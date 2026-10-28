@@ -291,7 +291,7 @@ describe('Replace photo, Remove photo and "Add a photo"', () => {
     await tapOn(platform, t);
     ctx = ctxNow(platform);
     const actions = selectedActionsFor(ctx.selected!, ctx);
-    expect(actions.map((a) => a.id)).toEqual(['replace', 'swap', 'mask', 'filter', 'remove']);
+    expect(actions.map((a) => a.id)).toEqual(['replace', 'remove', 'swap', 'mask', 'filter']); // Remove second: on screen on a narrow phone
     const remove = actions.find((a) => a.id === 'remove')!;
     expect(remove.label).toBe('Remove photo');
     expect(remove.danger).toBe(true);
@@ -494,15 +494,18 @@ describe('photos added from the phone while editing', () => {
     const leftOutBefore = builder().uploadedPhotos.filter((p) => p.leftOut).length;
     // The Photos step's list holds only the new photos (an album opened from the account).
     let line: string | null = null;
-    await act(async () => { line = await addPickedPhotos(builder(), picked(['NEW_1.jpg', 'NEW_2.jpg']), new Set(), inspect); });
+    let cameIn = false;
+    await act(async () => { ({ line, cameIn } = await addPickedPhotos(builder(), picked(['NEW_1.jpg', 'NEW_2.jpg']), new Set(), inspect)); });
     await settle();
     expect(line).toBe('2 photos added.');
+    expect(cameIn).toBe(true);
     expect(builder().uploadedPhotos.length).toBe(before + 2);
     expect(builder().uploadedPhotos.filter((p) => p.leftOut).length).toBe(leftOutBefore);
     // Nothing new on the list: nothing to say.
     const again = picked(['NEW_1.jpg']);
-    await act(async () => { line = await addPickedPhotos(builder(), again, new Set(again.map((p) => p.key)), inspect); });
+    await act(async () => { ({ line, cameIn } = await addPickedPhotos(builder(), again, new Set(again.map((p) => p.key)), inspect)); });
     expect(line).toBeNull();
+    expect(cameIn).toBe(false);
     expect(words.addedLine({ added: 1, restored: 0, skipped: 1, unreadable: 0 })).toBe('1 photo added · 1 already in your album.');
     expect(words.addedLine({ added: 0, restored: 2, skipped: 0, unreadable: 1 })).toBe("2 photos put back in their places · 1 photo couldn't be opened on this phone.");
   });
@@ -543,9 +546,9 @@ describe('what the photos part adds to the screen', () => {
       await tapOn(platform, t);
       ctx = ctxNow(platform, { sheets });
       const buttons = selectedActionsFor(ctx.selected!, ctx);
-      expect(buttons.map((b) => b.label)).toEqual(['Replace photo', 'Swap photo', 'Mask', 'Filter', 'Remove photo']);
-      buttons[2].onPress(ctx.selected!, ctx);
+      expect(buttons.map((b) => b.label)).toEqual(['Replace photo', 'Remove photo', 'Swap photo', 'Mask', 'Filter']);
       buttons[3].onPress(ctx.selected!, ctx);
+      buttons[4].onPress(ctx.selected!, ctx);
       expect(sheets.slice(-2)).toEqual([{ id: 'photos:mask', params: { slot: t.index } }, { id: 'photos:filter', params: { slot: t.index } }]);
       // A tap on a photo is the screen's (it selects); the first ones say how to move it.
       const said: string[] = [];

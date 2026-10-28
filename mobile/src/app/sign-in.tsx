@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { useAuth } from '../lib/auth';
 import { supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
+import { forgetResume } from '../editor/text/resumeQuote';
 
 /** Sign in with the email and password of a Megy Prints account (the same
  *  account as on the website). */
@@ -18,6 +19,11 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Left without signing in (back, or another way): the editor's "Write a
+  // line" does not carry on by itself later (resumeQuote.ts). Only the way
+  // straight back from a sign-in made here does.
+  const signedInHere = useRef(false);
+  useEffect(() => () => { if (!signedInHere.current) forgetResume(); }, []);
 
   // A message about what was typed before goes away as soon as it changes.
   const editEmail = (text: string) => { setEmail(text); setError(null); };
@@ -29,6 +35,7 @@ export default function SignIn() {
     const result = await signIn(email, password);
     setBusy(false);
     if (result.ok) {
+      signedInHere.current = true;
       if (back === '1' && router.canGoBack()) router.back();
       else router.replace('/albums');
     }

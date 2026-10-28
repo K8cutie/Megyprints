@@ -7,7 +7,9 @@
    `onSlide` is called while the finger moves, at most every SLIDE_MS (each
    call is an album change, and a cover picture drawn again); `onDone` once
    when it lets go, with the final value. The slider shows the finger's value
-   while it moves, whatever the album says. */
+   while it moves, whatever the album says. `onActive` says when a finger is
+   on it, so a screen can stop its scrolling meanwhile (Android's scroll view
+   would otherwise take a slide that wobbles up or down). */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { colors } from '../../lib/theme';
@@ -21,7 +23,7 @@ export function snap(v: number, min: number, max: number, step: number): number 
   return Number(Math.min(max, min + n * step).toFixed(6));
 }
 
-export function Slider({ value, min, max, step, label, onSlide, onDone, testID }: {
+export function Slider({ value, min, max, step, label, onSlide, onDone, onActive, testID }: {
   value: number;
   min: number;
   max: number;
@@ -30,13 +32,14 @@ export function Slider({ value, min, max, step, label, onSlide, onDone, testID }
   label: string;
   onSlide?: (v: number) => void;
   onDone: (v: number) => void;
+  onActive?: (on: boolean) => void;
   testID?: string;
 }) {
   const [width, setWidth] = useState(0);
   const [live, setLive] = useState<number | null>(null);
   const shown = live ?? value;
-  const on = useRef({ onSlide, onDone, width, min, max, step });
-  on.current = { onSlide, onDone, width, min, max, step };
+  const on = useRef({ onSlide, onDone, onActive, width, min, max, step });
+  on.current = { onSlide, onDone, onActive, width, min, max, step };
   const last = useRef<{ at: number; timer: ReturnType<typeof setTimeout> | null; pending: number | null }>({ at: 0, timer: null, pending: null });
   useEffect(() => () => { if (last.current.timer) clearTimeout(last.current.timer); }, []);
 
@@ -66,6 +69,7 @@ export function Slider({ value, min, max, step, label, onSlide, onDone, testID }
     if (l.timer) { clearTimeout(l.timer); l.timer = null; }
     l.pending = null;
     setLive(null);
+    on.current.onActive?.(false);
     on.current.onDone(v);
   };
 
@@ -74,7 +78,7 @@ export function Slider({ value, min, max, step, label, onSlide, onDone, testID }
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderTerminationRequest: () => false,
-    onPanResponderGrant: (e) => { startX.current = e.nativeEvent.locationX; slide(valueAt(startX.current)); },
+    onPanResponderGrant: (e) => { on.current.onActive?.(true); startX.current = e.nativeEvent.locationX; slide(valueAt(startX.current)); },
     onPanResponderMove: (_e, g) => slide(valueAt(startX.current + g.dx)),
     onPanResponderRelease: (_e, g) => done(valueAt(startX.current + g.dx)),
     onPanResponderTerminate: (_e, g) => done(valueAt(startX.current + g.dx)),

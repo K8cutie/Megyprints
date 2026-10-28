@@ -7,14 +7,19 @@
    drawn by the app's page renderer (the page a tap would make:
    relayPageOnTemplate, shared). A layout that can't hold every photo or
    caption asks first where they go (LeftoverQuestion).
+
+   An album size can have 50+ layouts: the grid is a list that draws only the
+   pictures near the screen (FlatList), after the page being edited
+   (PRIORITY.thumbnail), and a picture not drawn yet when it scrolls away or
+   the sheet closes is never drawn (usePagePicture drops it).
    ══════════════════════════════════════════════════════════════════════════ */
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, FlatList, PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import { ALBUM_SIZES, type PageTemplate } from '@web/pages/builder/types';
 import { relayPageOnTemplate } from '@web/pages/builder/useBuilderState';
 import { memoriesOn } from '@web/pages/builder/generateAlbum';
-import { usePagePicture } from '../../builder/usePagePicture';
+import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
 import { Button } from '../../components/Button';
 import { colors, space } from '../../lib/theme';
 import { EditorSheet } from '../core/EditorSheet';
@@ -29,7 +34,7 @@ const GAP = 12;
 function LayoutThumb({ ctx, t, width, height }: { ctx: EditorContext; t: PageTemplate; width: number; height: number }) {
   const page = useMemo(() => relayPageOnTemplate(ctx.page, t), [ctx.page, t]);
   const px = Math.min(600, Math.round(width * PixelRatio.get()));
-  const picture = usePagePicture(ctx.text, { page, pageIndex: ctx.pageIndex, albumSize: ctx.builder.albumSize, photos: ctx.builder.uploadedPhotos, width: px });
+  const picture = usePagePicture(ctx.text, { page, pageIndex: ctx.pageIndex, albumSize: ctx.builder.albumSize, photos: ctx.builder.uploadedPhotos, width: px }, PRIORITY.thumbnail);
   return (
     <View style={[styles.thumb, { width, height }]}>
       {picture.uri
@@ -41,7 +46,7 @@ function LayoutThumb({ ctx, t, width, height }: { ctx: EditorContext; t: PageTem
 
 export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
   const [asking, setAsking] = useState<LayoutAsk | null>(null);
-  const { width: screenW } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const layouts = layoutChoices(ctx);
   const current = ctx.page.templateId;
   // A video memory only ever sits on a full-page photo: say why there are no more.
@@ -60,30 +65,43 @@ export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
     close();
   };
 
+  const memoryNote = hasMemory ? <Text style={styles.note} testID="photos-layout-memory">{LAYOUT_MEMORY_NOTE}</Text> : null;
+  const onlyCurrent = layouts.length === 1 && layouts[0].id === current && !hasMemory;
   return (
-    <EditorSheet title={LAYOUT_TITLE} onClose={close} scroll testID="photos-layout-sheet">
-      {hasMemory && !asking && <Text style={styles.note} testID="photos-layout-memory">{LAYOUT_MEMORY_NOTE}</Text>}
+    <EditorSheet title={LAYOUT_TITLE} onClose={close} scroll={!!asking || layouts.length === 0} testID="photos-layout-sheet">
       {asking ? (
         <Leftover ask={asking} onNewPage={() => apply('new-page')} onLeaveOut={() => apply('leave-out')} onBack={() => setAsking(null)} />
       ) : layouts.length === 0 ? (
-        <Text style={styles.none}>{LAYOUT_NONE}</Text>
-      ) : (
         <>
-          <View style={styles.grid}>
-            {layouts.map((t) => {
-              const isCurrent = t.id === current;
-              return (
-                <Pressable key={t.id} accessibilityRole="button" accessibilityLabel={isCurrent ? `${t.name}, current layout` : t.name}
-                  accessibilityState={{ selected: isCurrent }} onPress={() => choose(t)} testID={`photos-layout-${t.id}`}
-                  style={({ pressed }) => [styles.tile, isCurrent && styles.tileNow, pressed && styles.pressed]}>
-                  <LayoutThumb ctx={ctx} t={t} width={tileW} height={tileH} />
-                  <Text numberOfLines={1} style={[styles.name, isCurrent && styles.nameNow]}>{isCurrent ? LAYOUT_CURRENT : t.name}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {layouts.length === 1 && layouts[0].id === current && !hasMemory && <Text style={styles.none}>{LAYOUT_NONE}</Text>}
+          {memoryNote}
+          <Text style={styles.none}>{LAYOUT_NONE}</Text>
         </>
+      ) : (
+        <FlatList
+          data={layouts}
+          keyExtractor={(t) => t.id}
+          numColumns={COLUMNS}
+          style={{ maxHeight: Math.round(screenH * 0.62) }}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.list}
+          initialNumToRender={6}
+          maxToRenderPerBatch={4}
+          windowSize={3}
+          ListHeaderComponent={memoryNote ?? undefined}
+          ListFooterComponent={onlyCurrent ? <Text style={styles.none}>{LAYOUT_NONE}</Text> : undefined}
+          testID="photos-layout-grid"
+          renderItem={({ item: t }) => {
+            const isCurrent = t.id === current;
+            return (
+              <Pressable accessibilityRole="button" accessibilityLabel={isCurrent ? `${t.name}, current layout` : t.name}
+                accessibilityState={{ selected: isCurrent }} onPress={() => choose(t)} testID={`photos-layout-${t.id}`}
+                style={({ pressed }) => [styles.tile, isCurrent && styles.tileNow, pressed && styles.pressed]}>
+                <LayoutThumb ctx={ctx} t={t} width={tileW} height={tileH} />
+                <Text numberOfLines={1} style={[styles.name, isCurrent && styles.nameNow]}>{isCurrent ? LAYOUT_CURRENT : t.name}</Text>
+              </Pressable>
+            );
+          }}
+        />
       )}
     </EditorSheet>
   );
@@ -117,7 +135,8 @@ function Leftover({ ask, onNewPage, onLeaveOut, onBack }: { ask: LayoutAsk; onNe
 const styles = StyleSheet.create({
   note: { fontSize: 14, lineHeight: 20, color: colors.muted },
   none: { fontSize: 14, color: colors.muted, textAlign: 'center', padding: space.md },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
+  list: { gap: GAP },
+  row: { gap: GAP },
   tile: { borderRadius: 12, borderWidth: 2, borderColor: colors.border, backgroundColor: colors.card, padding: 4, alignItems: 'center' },
   tileNow: { borderColor: colors.accent, backgroundColor: '#FFF1EA' },
   pressed: { opacity: 0.85 },

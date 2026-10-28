@@ -23,6 +23,7 @@ import {
   parseFontCss, uiAlias, WEBSITE_STYLES, type StyleKey,
 } from '../src/editor/text/fonts/fontSources';
 import { createFontStore, familiesOn, type DownloadedFont, type FontStoreDeps } from '../src/editor/text/fonts/fontStore';
+import { fontOffline } from '../src/editor/text/words';
 import { addDrawnFonts, BUNDLED_FONTS, drawnFonts, drawnFontsVersion, fontNotDrawn, forgetAddedFonts, hasExactFont } from '../src/render/fontTable';
 import { PageText } from '../src/render/pageText';
 import { planPage } from '../src/render/pagePlan';
@@ -203,6 +204,43 @@ describe('the font store', () => {
     expect(await store.ensure('Lora')).toEqual({ ok: false, reason: 'offline' });
     expect(files.size).toBe(0);
     expect(log.renderer).toHaveLength(0);
+  });
+
+  it('online but no font (the server said no, it took too long): says so without blaming the internet', async () => {
+    const { deps } = fakes();
+    const store = createFontStore({ ...deps, fetchText: async () => { throw new Error('HTTP 503'); } });
+    expect(await store.ensure('Lora')).toEqual({ ok: false, reason: 'failed' });
+    const slow = createFontStore({ ...deps, fetchText: async () => { const e = new Error('Aborted'); e.name = 'AbortError'; throw e; } });
+    expect(await slow.ensure('Lora')).toEqual({ ok: false, reason: 'failed' });
+    expect(fontOffline('Lora', 'Georgia', 'failed')).toBe('We could not get Lora right now. Your words stay in Georgia. Try again later.');
+    expect(fontOffline('Lora', 'Georgia')).toBe("No internet: Lora can't be downloaded now. Your words stay in Georgia. Try again when you are online.");
+  });
+
+  it('a damaged saved file is not used: deleted, said, and the next pick downloads the font again', async () => {
+    const first = fakes();
+    await createFontStore(first.deps).ensure('Lora');
+    const removed: string[] = [];
+    const again = fakes({ files: first.files });
+    let refuse = true;
+    const store = createFontStore({
+      ...again.deps,
+      files: { ...again.deps.files, remove: (n) => { removed.push(n); first.files.delete(n); } },
+      addToRenderer: async (fonts) => { if (refuse) throw new Error('could not read the font file'); again.log.renderer.push(...fonts); },
+    });
+    expect(await store.ensure('Lora')).toEqual({ ok: false, reason: 'failed' });
+    expect(store.status('Lora')).toBe('missing'); // not stuck on "Getting the font…"
+    expect(removed.sort()).toEqual(['lora-400.ttf', 'lora-400i.ttf', 'lora-700.ttf', 'lora-700i.ttf']);
+    refuse = false;
+    expect(await store.ensure('Lora')).toEqual({ ok: true }); // downloaded again
+    expect(again.log.css).toHaveLength(1);
+  });
+
+  it('a downloaded file the renderer refuses is never saved', async () => {
+    const { deps, files } = fakes();
+    const store = createFontStore({ ...deps, addToRenderer: async () => { throw new Error('could not read the font file'); } });
+    expect(await store.ensure('Lora')).toEqual({ ok: false, reason: 'failed' });
+    expect(files.size).toBe(0);
+    expect(store.status('Lora')).toBe('missing');
   });
 
   it('next time the font is on the phone: no network, into the renderer at start', async () => {

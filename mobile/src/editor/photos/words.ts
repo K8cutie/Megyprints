@@ -39,7 +39,10 @@ export const STUDIO_FIXED = 'Back to Megy’s layout. Your photos stayed where t
 export const LAYOUT_TITLE = 'Choose a layout';
 export const LAYOUT_CURRENT = '✓ Current';
 export const LAYOUT_NONE = 'No other layouts fit this page.';
-export const LAYOUT_MEMORY_NOTE = 'This page has a video memory, so it stays one full photo with the QR in the corner. To use a layout with more photos, tap the QR and remove the video first.';
+/** The website's line ends "To use a layout with more photos, tap the QR and
+ *  remove the video first." The app can't change a video memory yet (a tap
+ *  on the QR only outlines it), so its own words say what is true here. */
+export const LAYOUT_MEMORY_NOTE = 'This page has a video memory, so it stays one full photo with the QR in the corner. To use a layout with more photos, remove the video on the website first.';
 
 /** LayoutPicker.tsx LeftoverQuestion: a layout that can't hold every photo
  *  (or caption) on the page asks first where they go. */
@@ -96,6 +99,6 @@ export const PAGES_TITLE = 'Pages';
 export const ADD_PAGE = 'Add a page';
 export const ADD_PAGE_DESC = 'A new page after this one. Then choose its layout.';
 export const deletePageLabel = (pageIndex: number) => `Delete page ${pageIndex + 1}`;
-export const DELETE_PAGE_DESC = 'Its photos stay in your photos, ready to place again.';
+export const DELETE_PAGE_DESC = 'Its words go with it. Its photos stay in your photos, ready to place again.';
 /** Said like blankPagesBody (blankPages.ts): the 40-page floor. */
 export const CANT_DELETE_PAGE = `Albums need at least ${MIN_ALBUM_PAGES} pages, so a page can't be deleted.`;

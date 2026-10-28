@@ -1361,6 +1361,96 @@ under `expo` to the top, same version and checksum). Then, so it is one editor:
   the test), the missing-photos line and its trip, the words against the website's
   source.
 
+### Review fixes (2026-10-30)
+
+A review of the joined editor found two high and twelve medium problems, plus some
+low ones. All app-side: nothing under `../src` changed (no website code before
+Nov 9).
+
+- **Undo took photos out of the album (high).** Adding photos saves no undo step
+  (the website's `addPhotos`), but every step holds the photo list as it was, so an
+  Undo past an earlier page edit took the new photos out again, or made missing photos
+  missing again, and the photo picker then refused them as "already in your album".
+  Now, when photos come in from the editor (added, or put back in their places), the
+  editor's Undo starts again from there (`ctx.restartUndo`, `intake.ts` `cameIn`). Undo
+  can't step back past them. Test: page edit, then add photos, then another edit, then
+  Undo: the photos stay and Undo stops there.
+- **Undo presses that did nothing (medium).** Every cover change saves an empty step of
+  the pages (`setBoxText`, `setPageColor` and `setPageBackground` push whatever the
+  scope). Now a cover change ends the editor's Undo there (`undoBar.coverChanged`, said
+  by the cover screen; `startOnOpen` then starts afresh). Any step that still changes
+  nothing on the pages is stepped over: one press always changes something, up to 20
+  steps, never past the start. The text editor's Done with nothing changed saves
+  nothing, so it adds no empty step.
+- **A slow font changed the words after another font was picked (medium).**
+  `useFontPick` now uses only the latest pick, and only while its list is still open.
+- **Screens hidden under the editor kept drawing (medium).** The Preview and the cover
+  step ask for no picture while another screen is on top (`useIsFocused`). Page
+  pictures now go through a queue (`builder/pictureQueue.ts`, with tests): the page
+  being edited first, then pages on screen, then layout thumbnails, then pages drawn
+  ahead. A picture nobody waits for any more is dropped before it is drawn, and one
+  asked for twice is drawn once.
+- **Change layout drew up to 56 pictures at once (medium).** The grid is a `FlatList`
+  that draws only the tiles near the screen. Tiles that scroll away, or a sheet that
+  closes, drop their waiting pictures.
+- **A sideways swipe over a selected photo moved it (medium).** A quick sideways flick
+  (at least 0.6 px/ms, under 350 ms; `pageFlick`) turns the page and stores nothing,
+  even where the photo could move. A slow drag still moves the photo. The photo is put
+  down when the page turns.
+- **Moving the cover photo or title was jerky (medium).** While the finger is down the
+  album is not changed. The photo (placed by the shared `bgCoverFit`) and the title's
+  words follow the finger live over the cover picture, and one change is sent when it
+  lifts. The zoom slider works the same way. The live view stays until the new cover
+  picture is shown. The sliders stop the controls scrolling while a finger is on them.
+- **Android back in the text editor (medium).** Back closes an open font or colour
+  panel first. With none open it keeps the words (saves them, as Done). ✕ still closes
+  without saving, as on the website.
+- **TalkBack could reach nothing on the page (medium).** Each thing on the page gets an
+  invisible, named button in its own box ("Photo 2", "Words: …", "Empty frame. Add:
+  Photo, Quote, Text", …). A TalkBack double tap does what a tap there does. Fingers go
+  through them to the page as before.
+- **The layout sheet told the customer to tap the QR (medium).** The app can't change a
+  video memory yet, so on a memory page the second sentence is the app's own: "To use a
+  layout with more photos, remove the video on the website first."
+- **Smaller fixes.**
+  - "Write a line" carries on after sign-in only on the way straight back from that
+    sign-in: leaving the sign-in screen without signing in forgets it.
+  - "Remove photo" is second in the photo's buttons, so it is on screen on a narrow
+    phone.
+  - "Delete page" says the page's words go with it.
+  - "Any color" uses the website's spelling, "color", and puts the code under a quiet
+    "Have a color code?" line.
+  - A font that can't be had while online says "We could not get … right now", not "No
+    internet".
+  - A saved font file the renderer refuses is deleted and reported, not left stuck on
+    "Getting the font…". A download is saved only after the renderer accepts it.
+  - "Too long for this box" waits for a font from the internet that is not on the phone
+    yet. Georgia, which no phone has, is still measured in the stand-in the page is
+    drawn in.
+  - Page pictures are pruned during a session too: every 60 new pictures, by count
+    (1200 → 800) and by size (200 MB → 120 MB).
+  - A double tap on "Edit pages", "Edit cover" or the "Cover" tile opens one screen.
+  - The editor saves on the phone 2 s after the last change.
+- **Kept on purpose:** the pinch's lowest zoom is 1 (the photo always covers its frame).
+  A photo zoomed below 1 on the website comes up to 1 at the first pinch, as
+  `test/editorPhotosFraming.test.ts` pins. The website's slider goes down to 0.1, which
+  leaves gaps in print.
+- **Not fixed (website code, after Nov 9):**
+  - The website's setters still push empty undo steps under the cover scope, and its
+    `addPhotos` still saves no step. The app works around both.
+  - Logic the app repeats from website `.tsx` files that are not shared can drift:
+    CoverEditor's title defaults and box clamp, MobileTextEditor's opening content and
+    save shape, `lib/photoQuotes`' `pagePhotoUrls` (the app's copy has no
+    HEIC-converting skip), and PropertiesPanel's zoom top. They should become shared
+    `.ts` modules in the held website draft.
+- **Still not done:**
+  - Placed stickers can only be removed, not moved.
+  - There is no "⋯" to choose something else for a box Megy dealt.
+  - The cover's "Too long for the front cover" waits until the title's font is on the
+    phone, so offline it says nothing.
+  - A selected photo can be moved and zoomed only by finger (TalkBack can select it and
+    use its buttons, not move it).
+
 ### Not done, not proven (editor core)
 
 - Not walked on an emulator or a phone in this step (the parts' verify step does

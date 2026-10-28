@@ -25,7 +25,7 @@
    another device too, or deleted there: the website's question, its words.
    Photos this phone no longer has are named, with the way to put them back.
    ══════════════════════════════════════════════════════════════════════════ */
-import { router } from 'expo-router';
+import { router, useIsFocused } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, Easing, PanResponder, PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -39,7 +39,8 @@ import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { accountSaveDue, markAccountSaved } from '../builder/accountSave';
 import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
-import { forgetPhotoPictures, preparePagePicture, usePagePicture } from '../builder/usePagePicture';
+import { forgetPhotoPictures, preparePagePicture, PRIORITY, usePagePicture } from '../builder/usePagePicture';
+import { useOncePerVisit } from '../lib/useOncePerVisit';
 import type { PageRequest } from '../builder/pageImages';
 import { EDIT_PAGES } from '../editor/editorWords';
 import { COVER_ROUTE } from '../editor/cover';
@@ -70,10 +71,14 @@ function faceRequest(face: TurnFace, { W, pages, cover, photos, albumSize }: Pic
   return null;
 }
 
-/** One side of a leaf: a page as it prints, the front cover, or the inside of a cover. */
+/** One side of a leaf: a page as it prints, the front cover, or the inside of a cover.
+ *  Drawn only while the Preview is the screen on top: under "Edit pages" or
+ *  the cover editor it keeps its last picture and asks for no new one, so
+ *  every edit there draws the page once, for the screen the customer sees. */
 function Face({ face, W, H, pages, cover, photos, albumSize, text, onNotDrawn }: FaceProps) {
-  const req = faceRequest(face, { W, pages, cover, photos, albumSize });
-  const picture = usePagePicture(text, req);
+  const focused = useIsFocused();
+  const req = focused ? faceRequest(face, { W, pages, cover, photos, albumSize }) : null;
+  const picture = usePagePicture(text, req, PRIORITY.shown);
   const key = face.kind === 'page' ? `p${face.index}` : face.kind;
   useEffect(() => { if (req) onNotDrawn?.(key, picture.notDrawn); }, [key, picture.notDrawn.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   if (face.kind === 'inside') {
@@ -143,6 +148,8 @@ export default function Preview() {
   const { session } = useAuth();
   const { clear: clearDraft } = useDraft();
   const { width: screenW, height: screenH } = useWindowDimensions();
+  const focused = useIsFocused();
+  const once = useOncePerVisit();
   const pages = builder.albumPages;
   const total = pages.length;
   const [openBook, setOpenBook] = useState(false);
@@ -229,7 +236,8 @@ export default function Preview() {
   // The pages a turn either way would show, drawn ahead of time (after the
   // ones on screen: pictures are drawn one at a time, in the order asked).
   useEffect(() => {
-    if (!text || total === 0) return;
+    // Not while another screen is on top (the editor): nothing is drawn ahead for a book no one sees.
+    if (!text || total === 0 || !focused) return;
     const ahead: TurnFace[] = [];
     if (onCover) ahead.push({ kind: 'page', index });
     else if (view === 'page') ahead.push({ kind: 'page', index: index + 1 }, { kind: 'page', index: index - 1 });
@@ -241,12 +249,14 @@ export default function Preview() {
     }
     // faceProps changes with the album; the pages' keys cover it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, index, view, onCover, total, singleW, pages, builder.coverFront]);
-  const editPages = () => {
+  }, [text, index, view, onCover, total, singleW, pages, builder.coverFront, focused]);
+  // A quick double tap opens one editor, not two (useOncePerVisit).
+  const editPages = once(() => {
     setCoverAt(null);
     builder.goToPage(index);
     router.push('/edit-pages');
-  };
+  });
+  const editCover = once(() => router.push(COVER_ROUTE));
   const noteNotDrawn = (key: string, list: string[]) => setNotDrawn((m) => (m[key]?.join('|') === list.join('|') ? m : { ...m, [key]: list }));
   const face = (f: TurnFace) => <Face face={f} {...faceProps} />;
 
@@ -302,7 +312,7 @@ export default function Preview() {
           </Pressable>
           {/* The website's "Edit cover", beside the closed book. */}
           {onCover && (
-            <Pressable accessibilityRole="button" onPress={() => router.push(COVER_ROUTE)} style={styles.toggle} testID="preview-edit-cover">
+            <Pressable accessibilityRole="button" onPress={editCover} style={styles.toggle} testID="preview-edit-cover">
               <Text style={styles.toggleText}>{EDIT_COVER}</Text>
             </Pressable>
           )}

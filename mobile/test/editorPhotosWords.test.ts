@@ -54,7 +54,13 @@ describe("the photos part uses the website's words", () => {
     expect(web.layout).toContain(`>${words.LAYOUT_TITLE}</span>`);
     expect(web.layout).toContain(`'${words.LAYOUT_CURRENT}'`);
     expect(web.layout).toContain(`>${words.LAYOUT_NONE}</p>`);
-    expect(web.layout).toContain(words.LAYOUT_MEMORY_NOTE);
+    // The memory note: the website's first sentence; the app's own second one
+    // names no control the app lacks (a tap on a QR only outlines it there).
+    const [first, second] = words.LAYOUT_MEMORY_NOTE.split(/(?<=\.) /);
+    expect(web.layout).toContain(first);
+    expect(web.layout).toContain('To use a layout with more photos, tap the QR and remove the video first.');
+    expect(second).toBe('To use a layout with more photos, remove the video on the website first.');
+    expect(words.LAYOUT_MEMORY_NOTE).not.toMatch(/tap the QR/i);
     // The question, piece by piece as the website writes it…
     for (const piece of [
       '“{t.name}” holds {holds} {holds === 1 ? \'photo\' : \'photos\'}.',

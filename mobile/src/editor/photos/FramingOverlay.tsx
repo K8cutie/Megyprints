@@ -10,7 +10,11 @@
    to the page's own tap (hitTest → runTap), so a tap on the selected photo
    does what any tap on it does (a second tap puts it down: index.ts). A
    sideways swipe that could not move the photo turns the page, as the page
-   itself does (previewPaging swipeTurn).
+   itself does (previewPaging swipeTurn), and so does a quick sideways flick
+   even when the photo could move (pageFlick): a selected full-page photo is
+   most of the page, and a customer flicking to the next page must not move
+   the photo instead. The photo is put down when the page turns. A slow
+   drag moves the photo.
 
    While the finger works, the photo is shown here, drawn the way the page
    renderer will draw it (photoRect: slotPhotoRect, clipped to the photo's
@@ -35,6 +39,19 @@ import { baseSize, frameCell, FramingGesture, photoRect, storedFraming, type Fra
 const SHOWN_DELAY_MS = 180;
 /** The preview never stays longer than this after the finger is up. */
 const SETTLE_MAX_MS = 2500;
+/** A flick: at least this fast sideways when the finger lifts (px per ms)… */
+export const FLICK_VX = 0.6;
+/** …and over within this long. */
+export const FLICK_MS = 350;
+
+/** A quick, mostly sideways one-finger flick that turns the page, even over
+ *  a photo that could move that way. */
+export function pageFlick(travel: { dx: number; dy: number } | null, vx: number, ms: number): 'forward' | 'back' | null {
+  if (!travel || ms > FLICK_MS || Math.abs(vx) < FLICK_VX) return null;
+  const turn = swipeTurn(travel.dx, travel.dy);
+  // The flick goes the way the finger travelled.
+  return turn && Math.sign(vx) === Math.sign(travel.dx) ? turn : null;
+}
 
 const touchesOf = (e: GestureResponderEvent): TouchPoint[] =>
   (e.nativeEvent.touches?.length ? e.nativeEvent.touches : [e.nativeEvent]).map((t) => ({ x: t.pageX, y: t.pageY }));
@@ -53,6 +70,7 @@ export function FramingOverlay({ ctx, scale }: OverlayProps) {
   const [live, setLive] = useState<Framing | null>(null);
   const gesture = useRef<FramingGesture | null>(null);
   const tapAt = useRef<{ x: number; y: number } | null>(null);
+  const downAt = useRef(0);
 
   // The preview steps aside once the page it changed is on show.
   const settle = useRef<{ timers: ReturnType<typeof setTimeout>[]; off: () => void } | null>(null);
@@ -75,7 +93,15 @@ export function FramingOverlay({ ctx, scale }: OverlayProps) {
   const pointOf = (e: GestureResponderEvent, box: { x: number; y: number }, k: number) =>
     ({ x: box.x + e.nativeEvent.locationX / k, y: box.y + e.nativeEvent.locationY / k });
 
-  const finish = (tapAllowed: boolean) => {
+  const turnPage = (turn: 'forward' | 'back') => {
+    const { ctx: c } = latest.current;
+    const to = c.pageIndex + (turn === 'forward' ? 1 : -1);
+    if (to < 0 || to >= c.builder.albumPages.length) return;
+    c.select(null);
+    c.builder.goToPage(to);
+  };
+
+  const finish = (tapAllowed: boolean, vx = 0) => {
     const L = latest.current;
     const g = gesture.current;
     gesture.current = null;
@@ -86,6 +112,15 @@ export function FramingOverlay({ ctx, scale }: OverlayProps) {
       if (hit) runTap(hit, L.ctx);
       return;
     }
+    const travel = g.oneFingerTravel;
+    // A quick sideways flick turns the page; the photo stays as it was
+    // (nothing of the flick is stored: one finger stores only when it lifts).
+    const flick = tapAllowed ? pageFlick(travel, vx, Date.now() - downAt.current) : null;
+    if (flick) {
+      setLive(null);
+      turnPage(flick);
+      return;
+    }
     const before = L.ctx.page;
     const changes = g.end();
     // Nothing left to store (a pinch back to where it was, or stored as a
@@ -94,10 +129,8 @@ export function FramingOverlay({ ctx, scale }: OverlayProps) {
     // the page's own shape) turns the page, as anywhere else on it.
     if (!L.t || !changes.length) {
       setLive(null);
-      const travel = g.oneFingerTravel;
       const turn = travel ? swipeTurn(travel.dx, travel.dy) : null;
-      const to = L.ctx.pageIndex + (turn === 'forward' ? 1 : -1);
-      if (turn && to >= 0 && to < L.ctx.builder.albumPages.length) L.ctx.builder.goToPage(to);
+      if (turn) turnPage(turn);
       return;
     }
     storeFraming(L.ctx, L.t.index, changes);
@@ -126,6 +159,7 @@ export function FramingOverlay({ ctx, scale }: OverlayProps) {
       const L = latest.current;
       endSettle();
       gesture.current = null;
+      downAt.current = Date.now();
       if (!L.t) return;
       tapAt.current = pointOf(e, L.t.box, L.scale);
       if (!L.cell || !L.img) return;
@@ -141,7 +175,7 @@ export function FramingOverlay({ ctx, scale }: OverlayProps) {
       if (changes.length) storeFraming(L.ctx, L.t.index, changes);
       if (!g.isTap) setLive({ zoom: g.live.zoom, pan: { ...g.live.pan } });
     },
-    onPanResponderRelease: () => latest.current.finish(true),
+    onPanResponderRelease: (_e, gs) => latest.current.finish(true, gs.vx),
     onPanResponderTerminate: () => latest.current.finish(false),
     // A pinch's second finger may land on the page: this view keeps the gesture.
     onPanResponderTerminationRequest: () => false,

@@ -21,8 +21,23 @@
    between (another album opened, the album made again) starts afresh, so
    Undo can never land on another album's pages or an album not made yet.
    Redo is shown whenever the builder has one.
+
+   Two things the website's history does that an Undo button must not show:
+     • Photos added while editing are not a step (addPhotos saves none), but
+       every step holds the photo list as it was, so an Undo past them would
+       take them out of the album (and the photo picker then says they are
+       already in it). When photos come in, the editor's Undo starts again
+       there (restartHere): it can never step back past them.
+     • Every cover change saves a step of the PAGES that changes nothing
+       (setBoxText, setPageColor, setPageBackground push a snapshot whatever
+       the scope; the snapshot has no cover), and a cover drag or the title
+       makes many. A cover change ends the editor's Undo there too
+       (coverChanged: the next time the editor is on top it starts afresh),
+       so no Undo press lands on those empty steps. Any step that still
+       changes nothing on the pages is stepped over (nothingChanged), up to
+       the 20 the history holds, never past the start.
    ══════════════════════════════════════════════════════════════════════════ */
-import type { AlbumPage } from '@web/pages/builder/types';
+import type { AlbumPage, UploadedPhoto } from '@web/pages/builder/types';
 
 type Pages = readonly AlbumPage[];
 
@@ -30,20 +45,46 @@ export function undoShown(canUndo: boolean, pages: Pages, start: Pages): boolean
   return canUndo && pages !== start;
 }
 
-/** Where the editor left off: the start it had, and the pages it was left on. */
-export interface EditorVisit { start: Pages; leftOn: Pages }
+/** Changes whenever the cover is changed (coverChanged). A start kept from
+ *  before a cover change is not used again. */
+let coverEpoch = 0;
+export function coverChanged(): void {
+  coverEpoch++;
+}
+export function coverChanges(): number {
+  return coverEpoch;
+}
+
+/** Where the editor left off: the start it had, the pages it was left on,
+ *  and the cover changes up to then. */
+export interface EditorVisit { start: Pages; leftOn: Pages; cover?: number }
 
 /** The start of the editor's Undo when it opens on `pages`: the last visit's
- *  start when nothing changed the pages since it was left, else `pages`. */
+ *  start when nothing changed the pages (or the cover) since it was left,
+ *  else `pages`. */
 export function startOnOpen(pages: Pages, last: EditorVisit | null): Pages {
-  return last && last.leftOn === pages ? last.start : pages;
+  return last && last.leftOn === pages && (last.cover ?? coverEpoch) === coverEpoch ? last.start : pages;
 }
+
+/** An Undo or Redo step that changed nothing a customer sees on the pages
+ *  (the same pages, or pages with the same content, and the same photos):
+ *  the editor takes the next one too. */
+export function nothingChanged(
+  before: { pages: Pages; pagesJson: string; photos: readonly UploadedPhoto[] },
+  now: { pages: Pages; photos: readonly UploadedPhoto[] },
+): boolean {
+  if (now.photos !== before.photos && now.photos.length !== before.photos.length) return false;
+  return now.pages === before.pages || JSON.stringify(now.pages) === before.pagesJson;
+}
+
+/** The most steps one press of Undo or Redo takes (the website keeps 20). */
+export const MOST_STEPS = 20;
 
 /** The last visit, kept for the app's one album builder while the app runs
  *  (the screen unmounts when it is left). */
 let lastVisit: EditorVisit | null = null;
 export function rememberVisit(visit: EditorVisit | null): void {
-  lastVisit = visit;
+  lastVisit = visit ? { cover: coverEpoch, ...visit } : null;
 }
 export function lastEditorVisit(): EditorVisit | null {
   return lastVisit;

@@ -13,7 +13,7 @@
    the app has: measured in the phone's own font instead, its answer would be
    a guess (the website's cover default, Cinzel, is not in the app yet).
    ══════════════════════════════════════════════════════════════════════════ */
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AlbumPage } from '@web/pages/builder/types';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
@@ -90,10 +90,14 @@ export default function AlbumCover() {
   const size = ALBUM_SIZES.find((s) => s.preset === builder.albumSize) ?? ALBUM_SIZES[1];
   const coverW = Math.min(screenW - space.lg * 2, 300);
   const coverH = Math.round((coverW * size.height) / size.width);
-  const picture = usePagePicture(text, {
+  // Drawn only while this step is on top: it stays mounted under the Preview
+  // and the editors, and must not draw the cover again for every change made
+  // there (its last picture stays).
+  const focused = useIsFocused();
+  const picture = usePagePicture(text, focused ? {
     page: cover, pageIndex: 0, albumSize: builder.albumSize, photos: builder.uploadedPhotos,
     width: Math.round(coverW * 2), coverMode: true,
-  });
+  } : null);
 
   const cell = Math.floor((screenW - space.lg * 2 - GAP * (COLUMNS - 1)) / COLUMNS);
 

@@ -3,8 +3,11 @@
    (once). The app's sign-in is a screen of its own, so the picker closes,
    remembers the box here, and the editor opens it again on that box, writing
    at once, when the customer comes back signed in (ResumeQuote, a banner
-   with nothing to show, in index.ts). Coming back still signed out, or on
-   another page, does nothing; the wish is kept for a few minutes only. */
+   with nothing to show, in index.ts). Only on the way straight back from
+   that sign-in: the sign-in screen forgets the wish when it is left without
+   signing in (sign-in.tsx), so a later sign-in made another way never sends
+   the page's photos to the paid endpoint without a tap. Coming back on
+   another page does nothing; the wish is kept for a few minutes only. */
 import type { WordsTarget } from './wordsFlow';
 
 const KEEP_MS = 10 * 60 * 1000;

@@ -61,6 +61,11 @@ export interface EditorContext {
   closeSheet(): void;
   /** A short line over the page for a moment (the website's guard line). */
   say(message: string): void;
+  /** Photos came into the album here (added from the phone, missing ones put
+   *  back): the editor's Undo starts again from the album as it is now, so it
+   *  can never take them out (the website's undo steps hold the photo list
+   *  as it was, and adding photos saves no step). */
+  restartUndo?(): void;
 }
 
 export interface TapRule {

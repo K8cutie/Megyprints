@@ -66,6 +66,7 @@ jest.mock('../src/editor/text/fonts/appFonts', () => {
 jest.mock('../src/builder/usePagePicture', () => ({
   usePagePicture: () => ({ uri: 'file:///cache/megy-pages/cover.jpg', notDrawn: mockBench.notDrawn, missing: 0, error: null }),
   forgetPhotoPictures: () => {},
+  PRIORITY: { editing: 3, shown: 2, thumbnail: 1, ahead: 0 },
 }));
 
 // After the mocks: the screen and its pieces.

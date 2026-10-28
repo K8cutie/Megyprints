@@ -21,7 +21,10 @@ export function IntakeBanner({ ctx }: { ctx: EditorContext }) {
       void (async () => {
         let line: string | null = null;
         try {
-          line = await addPickedPhotos(latest.current.builder, peek().photos, before, inspectPhotos);
+          const r = await addPickedPhotos(latest.current.builder, peek().photos, before, inspectPhotos);
+          line = r.line;
+          // Undo must never take these photos out again (intake.ts).
+          if (r.cameIn) latest.current.restartUndo?.();
         } catch (e) {
           console.warn('Could not add the photos', e);
         }

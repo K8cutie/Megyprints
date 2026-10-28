@@ -94,6 +94,7 @@ function AnyColour({ value, onPick }: { value: string; onPick: (hex: string) => 
           </Pressable>
         ))}
       </View>
+      <Text style={styles.codeLine}>{COLOR_CODE}</Text>
       <View style={styles.codeRow}>
         <TextInput value={code} onChangeText={(t) => { setCode(t); setBad(false); }} autoCapitalize="characters" autoCorrect={false}
           accessibilityLabel={COLOR_CODE} placeholder="#3A6EA5" style={styles.code} maxLength={7} testID="any-color-code" onSubmitEditing={use} />
@@ -164,6 +165,7 @@ const styles = StyleSheet.create({
   rainbowBit: { flex: 1 },
   anyText: { fontSize: 14, fontWeight: '700', color: colors.text },
   anyPanel: { marginTop: space.sm, padding: space.sm, borderRadius: 12, backgroundColor: colors.background, gap: 4 },
+  codeLine: { fontSize: 12, color: colors.muted, marginTop: 4 },
   hint: { fontSize: 12, color: colors.muted, marginBottom: 4 },
   shades: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', width: 6 * 48, alignSelf: 'center' },
   shade: { width: 40, height: 40, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(0,0,0,0.15)' },

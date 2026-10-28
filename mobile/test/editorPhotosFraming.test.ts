@@ -23,6 +23,7 @@ import { getPrintDimensions } from '@web/pages/builder/printSize';
 import { panRoom, slotPhotoRect } from '@web/pages/builder/slotPhotoFit';
 import { printSharpness } from '@web/pages/builder/slotGeometry';
 import { planPage, type PhotoItem } from '../src/render/pagePlan';
+import { pageFlick } from '../src/editor/photos/FramingOverlay';
 import { FramingGesture, frameCell, heldPan, photoRect, softAt, storedFraming, TAP_SLOP, ZOOM_MAX, ZOOM_MIN, type FrameCell, type FramingChange } from '../src/editor/photos/framing';
 
 const PHOTOS = 400;
@@ -173,6 +174,19 @@ describe('a swipe that could not move the photo', () => {
     two.touches([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
     two.touches([{ x: -80, y: 0 }]);
     expect(two.oneFingerTravel).toBeNull();
+  });
+});
+
+describe('a quick sideways flick over a selected photo turns the page (FramingOverlay pageFlick)', () => {
+  it('fast and short turns the page, even where the photo could move; a slow drag moves the photo', () => {
+    expect(pageFlick({ dx: -120, dy: 10 }, -1.2, 180)).toBe('forward');
+    expect(pageFlick({ dx: 120, dy: -8 }, 0.9, 250)).toBe('back');
+    expect(pageFlick({ dx: -120, dy: 10 }, -0.2, 180)).toBeNull(); // slow: a move
+    expect(pageFlick({ dx: -120, dy: 10 }, -1.2, 900)).toBeNull(); // long: a move
+    expect(pageFlick({ dx: -30, dy: 2 }, -1.5, 120)).toBeNull(); // too short to be a swipe
+    expect(pageFlick({ dx: -80, dy: 90 }, -1.5, 120)).toBeNull(); // mostly up or down
+    expect(pageFlick({ dx: -120, dy: 0 }, 1.0, 150)).toBeNull(); // lifted moving the other way
+    expect(pageFlick(null, -2, 100)).toBeNull(); // two fingers
   });
 });
 

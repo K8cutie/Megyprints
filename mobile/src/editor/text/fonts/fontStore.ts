@@ -49,6 +49,8 @@ export interface FontStoreDeps {
     /** file:// address of a saved file, for the phone's text views. */
     uri(name: string): string;
     list(): string[];
+    /** Deletes a saved file (a damaged one). Optional: tests may leave it out. */
+    remove?(name: string): void;
   };
   /** The phone's text views: a saved file under a name. */
   registerUi(alias: string, uri: string): Promise<void>;
@@ -57,7 +59,17 @@ export interface FontStoreDeps {
 }
 
 export type FontStatus = 'bundled' | 'phone' | 'ready' | 'missing' | 'loading';
-export type EnsureResult = { ok: true } | { ok: false; reason: 'offline' };
+/** 'offline': no internet (or a Wi-Fi sign-in page instead of the font);
+ *  'failed': online, but the font could not be had right now (the server
+ *  said no, it took too long, a saved file was damaged). */
+export type EnsureResult = { ok: true } | { ok: false; reason: 'offline' | 'failed' };
+
+/** What a thrown fetch means: a server answer or a timeout is not "no internet". */
+function whyFailed(e: unknown): 'offline' | 'failed' {
+  const err = e as { name?: string; message?: string } | null;
+  if (err?.name === 'AbortError' || /^HTTP \d/.test(err?.message ?? '')) return 'failed';
+  return 'offline';
+}
 
 interface FaceState {
   status: 'missing' | 'loading' | 'ready';
@@ -108,10 +120,14 @@ export function createFontStore(deps: FontStoreDeps): FontStore {
 
   /** Puts saved files to use: the renderer first (pages, measuring, print),
    *  then the text views. Resolves once the renderer has them; the text views
-   *  follow (`uiReady`), and the editor re-reads when they do. */
-  async function use(face: string, files: { style: StyleKey; bytes: Uint8Array }[]): Promise<{ uiReady: Promise<void> }> {
+   *  follow (`uiReady`), and the editor re-reads when they do. `keep` runs
+   *  once the renderer took the files (a download is saved only then, so a
+   *  file the renderer refuses is never kept). Throws when the renderer
+   *  refuses them. */
+  async function use(face: string, files: { style: StyleKey; bytes: Uint8Array }[], keep?: () => void): Promise<{ uiReady: Promise<void> }> {
     if (!files.length) return { uiReady: Promise.resolve() };
     await deps.addToRenderer(files.map((f) => toRenderer(face, f.style, f.bytes)));
+    keep?.();
     const s = stateOf(face);
     s.status = 'ready';
     s.styles = [...new Set([...s.styles, ...files.map((f) => f.style)])];
@@ -138,27 +154,45 @@ export function createFontStore(deps: FontStoreDeps): FontStore {
     return out;
   }
 
+  /** A saved file the renderer refused (cut off, damaged): deleted, so the
+   *  next pick downloads it again instead of failing on it every start. */
+  function forget(face: string): void {
+    for (const style of WEBSITE_STYLES[face] ?? ['400']) {
+      try { deps.files.remove?.(fontFileName(face, style)); } catch { /* left; refused again next time */ }
+    }
+  }
+
   async function download(face: string): Promise<EnsureResult> {
     const have = saved(face);
     if (have.length) {
       // Saved on an earlier visit: no network needed.
-      await (await use(face, have)).uiReady;
-      return { ok: true };
+      try {
+        await (await use(face, have)).uiReady;
+        return { ok: true };
+      } catch {
+        forget(face);
+        return { ok: false, reason: 'failed' };
+      }
     }
+    let got: { style: StyleKey; bytes: Uint8Array }[];
     try {
       const refs = parseFontCss(await deps.fetchText(googleCssUrl(face)));
-      if (!refs.length) return { ok: false, reason: 'offline' };
-      const got: { style: StyleKey; bytes: Uint8Array }[] = [];
+      if (!refs.length) return { ok: false, reason: 'failed' };
+      got = [];
       for (const r of refs) {
         const bytes = await deps.fetchBytes(r.url);
         if (!looksLikeFont(bytes)) return { ok: false, reason: 'offline' };
         got.push({ style: r.style, bytes });
       }
-      for (const g of got) deps.files.write(fontFileName(face, g.style), g.bytes);
-      await (await use(face, got)).uiReady;
+    } catch (e) {
+      return { ok: false, reason: whyFailed(e) };
+    }
+    try {
+      const keep = () => { for (const g of got) deps.files.write(fontFileName(face, g.style), g.bytes); };
+      await (await use(face, got, keep)).uiReady;
       return { ok: true };
     } catch {
-      return { ok: false, reason: 'offline' };
+      return { ok: false, reason: 'failed' };
     }
   }
 
@@ -179,7 +213,7 @@ export function createFontStore(deps: FontStoreDeps): FontStore {
       if (on) return on;
       stateOf(face).status = 'loading';
       changed();
-      const job = download(face).then((r) => {
+      const job = download(face).catch((): EnsureResult => ({ ok: false, reason: 'failed' })).then((r) => {
         running.delete(face);
         if (!r.ok) stateOf(face).status = 'missing';
         changed();

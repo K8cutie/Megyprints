@@ -16,8 +16,8 @@
        colour that wouldn't show on the cover's colour;
      • where the title is and how far it moves: the website's box, the same
        box the hit test and the renderer use, kept on the cover;
-     • the small pieces: what a finger on the cover drags, the throttle, the
-       slider's steps, the photos shown before "Show all".
+     • the small pieces: what a finger on the cover drags, the slider's
+       steps, the photos shown before "Show all".
    ══════════════════════════════════════════════════════════════════════════ */
 import type { AlbumPage } from '@web/pages/builder/types';
 import { getPrintDimensions } from '@web/pages/builder/printSize';
@@ -35,7 +35,6 @@ import {
 } from '../src/editor/cover/coverEdits';
 import { dragTarget } from '../src/editor/cover/CoverStage';
 import { snap } from '../src/editor/cover/Slider';
-import { throttle } from '../src/editor/cover/throttle';
 import { act, builder, madeAlbum, useEditorBench } from './editorHarness';
 
 useEditorBench();
@@ -353,25 +352,6 @@ describe('the small pieces', () => {
     expect(dragTarget(0.5, 0.3, title, true)).toBe('photo');
     expect(dragTarget(0.5, 0.3, title, false)).toBeNull();
     expect(dragTarget(0.5, 0.7, null, true)).toBe('photo');
-  });
-
-  it('a drag sends at most one change per interval, the last one always, and the final one at once when it lets go', () => {
-    jest.useFakeTimers();
-    try {
-      let now = 0;
-      const sent: number[] = [];
-      const t = throttle((v: number) => { sent.push(v); }, 100, () => now);
-      t.call(1); // the first goes at once
-      now = 30; t.call(2);
-      now = 60; t.call(3);
-      expect(sent).toEqual([1]);
-      now = 100; jest.advanceTimersByTime(100);
-      expect(sent).toEqual([1, 3]); // the last one waiting
-      now = 150; t.call(4);
-      now = 160; t.flush(5); // let go: the final value now, nothing left waiting
-      jest.advanceTimersByTime(500);
-      expect(sent).toEqual([1, 3, 5]);
-    } finally { jest.useRealTimers(); }
   });
 
   it('the slider keeps to its steps and range', () => {

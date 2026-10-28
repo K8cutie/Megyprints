@@ -4,7 +4,11 @@
    font · the size (14 to 80, 2 at a time) · the colour · Outline / Shadow ·
    left, center, right. "Done" saves through the website's own action for
    these words (wordsFlow.saveWords: setBoxText, setSlotText or
-   updateTextElement); ✕ closes without saving.
+   updateTextElement); ✕ closes without saving, as on the website. Android's
+   back closes an open font or colour panel first; with none open it keeps
+   the words (saves them, as Done), so the usual "back to hide the keyboard,
+   back again" never throws typed words away. Nothing changed: nothing is
+   saved (no Undo step that changes nothing).
 
    A caption box's editor says, as you type, when the words won't fit the
    box (the box clips them in print), with "Make it fit (size N)" when a
@@ -33,7 +37,7 @@ import {
   tooLong, TYPE_YOUR_TEXT, UNDERLINE,
 } from './words';
 import {
-  bigger, contentOf, editorStateOf, fitBoxFor, fitOf, initialContent, saveWords, smaller,
+  bigger, contentOf, editorStateOf, fitBoxFor, fitOf, initialContent, sameWords, saveWords, smaller,
   type EditorState, type WordsTarget,
 } from './wordsFlow';
 
@@ -48,7 +52,8 @@ export function TextEditorSheet({ ctx, params, close }: SheetProps<TextEditorPar
   useFontStoreVersion(store);
   const { builder, page, pageIndex, platform } = ctx;
   const { target } = params;
-  const [s, setS] = useState<EditorState>(() => editorStateOf(initialContent(page, target)));
+  const [opened] = useState<EditorState>(() => editorStateOf(initialContent(page, target)));
+  const [s, setS] = useState<EditorState>(opened);
   const set = (patch: Partial<EditorState>) => setS((v) => ({ ...v, ...patch }));
   const [fontOpen, setFontOpen] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
@@ -62,8 +67,14 @@ export function TextEditorSheet({ ctx, params, close }: SheetProps<TextEditorPar
   const onPickFont = (family: string) => pick(family, s.fontFamily);
 
   const save = () => {
-    saveWords(builder, page, pageIndex, target, contentOf(s));
+    const content = contentOf(s);
+    if (!sameWords(content, contentOf(opened))) saveWords(builder, page, pageIndex, target, content);
     close();
+  };
+  // Android back: an open panel first, then keep the words (as Done).
+  const back = () => {
+    if (fontOpen || colorOpen) { setFontOpen(false); setColorOpen(false); return; }
+    save();
   };
 
   const ui = store.uiFont(s.fontFamily, s.bold, s.italic);
@@ -80,7 +91,7 @@ export function TextEditorSheet({ ctx, params, close }: SheetProps<TextEditorPar
   };
 
   return (
-    <Modal animationType="slide" onRequestClose={close} statusBarTranslucent navigationBarTranslucent testID="text-editor">
+    <Modal animationType="slide" onRequestClose={back} statusBarTranslucent navigationBarTranslucent testID="text-editor">
       <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
         <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.head}>
