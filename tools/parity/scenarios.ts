@@ -27,6 +27,11 @@ export interface ScenarioPhoto {
   height: number;
   /** ms, or null (no time in the photo). */
   capturedAt: number | null;
+  /** A photo with no time in it: when its file was last changed (ms), which
+   *  the app's Photos step sorts it by (photoTime.orderTime). Only the app's
+   *  draft reads it; the album (generateAlbum, both sides) puts every photo
+   *  with no time in a group at the end. */
+  fileTime?: number | null;
 }
 
 export interface Scenario {
@@ -57,8 +62,10 @@ const SHAPES = [
 ];
 
 /** A roll of `n` photos over a few outings (gaps of hours between them, as
- *  generateAlbum's moments split), some without a time. */
-function roll(seed: number, n: number, undated = 0): ScenarioPhoto[] {
+ *  generateAlbum's moments split), some without a time: the last `undated`,
+ *  and the ones at `undatedAt` (in the middle of the roll: screenshots and
+ *  saved chat photos, their file time where they fall in the roll). */
+function roll(seed: number, n: number, undated = 0, undatedAt: readonly number[] = []): ScenarioPhoto[] {
   const r = rng(seed);
   let t = Date.UTC(2026, 8, 12, 1, 0);
   const out: ScenarioPhoto[] = [];
@@ -69,7 +76,8 @@ function roll(seed: number, n: number, undated = 0): ScenarioPhoto[] {
       name: `IMG_2026${String(1000 + i)}.jpg`,
       size: 1_500_000 + Math.floor(r() * 3_000_000),
       width: shape.w, height: shape.h,
-      capturedAt: i >= n - undated ? null : t,
+      capturedAt: i >= n - undated || undatedAt.includes(i) ? null : t,
+      ...(undatedAt.includes(i) ? { fileTime: t } : {}),
     });
   }
   return out;
@@ -79,6 +87,7 @@ export const SCENARIOS: Scenario[] = [
   { name: '40 photos, 8x8, Wedding', title: "Maria's Wedding", occasion: 'Wedding', size: '8x8', seed: 1, photos: roll(11, 40), cover: 'IMG_20261003.jpg' },
   { name: '57 photos, 6x8, Vacation, 4 with no time', title: 'Our Boracay Trip', occasion: 'Vacation', size: '6x8', seed: 7, photos: roll(22, 57, 4), cover: 'IMG_20261010.jpg' },
   { name: '120 photos, 8x6, Family reunion', title: 'Dela Cruz Reunion 2026', occasion: "Lola's 80th", size: '8x6', seed: 42, photos: roll(33, 120), cover: 'IMG_20261050.jpg' },
+  { name: '48 photos, 8x8, Birthday, 5 with no time in the middle of the roll', title: "Ana's 7th Birthday", occasion: 'Birthday', size: '8x8', seed: 3, photos: roll(44, 48, 0, [6, 14, 15, 29, 40]), cover: 'IMG_20261002.jpg' },
 ];
 
 /** What the two sides are compared on: everything the album's pages and

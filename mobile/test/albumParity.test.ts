@@ -69,11 +69,12 @@ function phoneFor(sc: Scenario) {
   });
 }
 
-/** The Photos step's draft: what the gallery index gives (no file size). */
+/** The Photos step's draft: what the gallery index gives (no file size; a
+ *  photo with no time in it has its file's time). */
 function draftFor(sc: Scenario): DraftPhoto[] {
   const picked: DraftPhoto[] = sc.photos.map((p, i) => ({
     key: `media:${5000 + i}`, source: 'gallery', uri: uriOf(i), name: p.name,
-    width: p.width, height: p.height, capturedAt: p.capturedAt, modifiedAt: null, addedAt: 1_000 + i,
+    width: p.width, height: p.height, capturedAt: p.capturedAt, modifiedAt: p.fileTime ?? null, addedAt: 1_000 + i,
   }));
   return addPhotos(emptyDraft(), picked, 2_000).draft.photos;
 }
@@ -151,6 +152,23 @@ describe("the app's builder path makes the website's album", () => {
       expect(album).toEqual(w);
     }, 120_000);
   }
+
+  it('photos with no time: the Photos step shows them where their file time falls, the album puts them near the end (as on the website)', async () => {
+    const sc = SCENARIOS.find((s) => /in the middle of the roll/.test(s.name))!;
+    const undated = new Set(sc.photos.filter((p) => p.capturedAt == null).map((p) => p.name));
+    // The Photos step: in the middle (the words under the grid say so).
+    const draftOrder = draftFor(sc).map((p) => p.name);
+    const lastDated = Math.max(...draftOrder.map((n, i) => (undated.has(n) ? -1 : i)));
+    expect(draftOrder.some((n, i) => undated.has(n) && i < lastDated)).toBe(true);
+    // The album (generateAlbum: a group after the dated photos, its pages
+    // mixed in with the last few): every one on the album's last fifth.
+    const { album } = await appAlbum(sc);
+    const pageOf = new Map(album.pages.flatMap((p, i) => p.slots.filter((n): n is string => !!n).map((n) => [n, i] as const)));
+    const lastFifth = album.pages.length - Math.ceil(album.pages.length / 5);
+    for (const n of undated) expect(pageOf.get(n)).toBeGreaterThanOrEqual(lastFifth);
+    // The words under the Photos step's grid say so.
+    expect(fs.readFileSync(path.join(REPO_ROOT, 'mobile', 'src', 'app', 'photos.tsx'), 'utf8')).toContain('photos with no date taken go near the end');
+  }, 120_000);
 
   it('can tell two albums apart: another seed gives another album (so "the same" above means something)', async () => {
     const sc = SCENARIOS[0];

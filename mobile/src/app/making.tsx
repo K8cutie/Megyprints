@@ -1,28 +1,39 @@
 /* "MAKING YOUR ALBUM" (the website's GeneratingOverlay, its words): shown
    while the builder lays out every page (generateAlbum, shared code), then
    on to the Preview. A whole album takes a few seconds, and a silent wait
-   reads as a hang (owner, 2026-09-12). */
-import { router } from 'expo-router';
+   reads as a hang (owner, 2026-09-12).
+   Android's back button does nothing while the album is being made (leaving
+   mid-way left the making running, and its end then replaced whatever screen
+   was on top); once it fails, back works again. */
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { GENERATING_COPY, makeAlbum } from '../builder/albumFlow';
+import { useGoToPreview } from '../builder/useGoToPreview';
 import { colors, space } from '../lib/theme';
 
 export default function Making() {
   const { builder } = useBuilder();
   const started = useRef(false);
   const [failed, setFailed] = useState<string | null>(null);
+  const goToPreview = useGoToPreview();
+  const here = useRef(true);
+  useEffect(() => () => { here.current = false; }, []);
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => !failed);
+    return () => sub.remove();
+  }, [failed]);
 
   const start = () => {
     setFailed(null);
     void makeAlbum(builder)
       .then((made) => {
-        if (made) router.replace('/preview');
+        if (!here.current) return;
+        if (made) goToPreview('replace');
         else setFailed('The album could not be made. Go back and try again.');
       })
-      .catch((e: unknown) => setFailed(e instanceof Error ? e.message : String(e)));
+      .catch(() => { if (here.current) setFailed('The album could not be made. Try again.'); });
   };
 
   useEffect(() => {

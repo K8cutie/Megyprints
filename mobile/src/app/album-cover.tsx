@@ -8,9 +8,14 @@
    page). The front cover is drawn by the app's page renderer the way print
    draws it (coverMode). While this screen is open the builder edits the
    cover (its cover scope), as while the website's cover editor is open.
+
+   The title's "too long" check is shown only when the title's font is one
+   the app has: measured in the phone's own font instead, its answer would be
+   a guess (the website's cover default, Cinzel, is not in the app yet).
    ══════════════════════════════════════════════════════════════════════════ */
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
+import type { AlbumPage } from '@web/pages/builder/types';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,12 +24,36 @@ import { ALBUM_SIZES } from '@web/pages/builder/types';
 import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
 import { useBuilder } from '../builder/BuilderProvider';
-import { albumMade, chooseCover, COVER_PHOTOS_SHOWN, coverPhotoId, coverPhotos, coverStepNext, coverTitle, photosShort, saveStep, setCoverTitleText } from '../builder/albumFlow';
-import { usePagePicture } from '../builder/usePagePicture';
+import { albumMade, chooseCover, COVER_PHOTOS_SHOWN, coverPhotoId, coverPhotos, coverStepNext, coverTitle, photosIn, saveStep, setCoverTitleText } from '../builder/albumFlow';
+import { NOT_DRAWN_LINE } from '../builder/screenWords';
+import { forgetPhotoPictures, usePagePicture } from '../builder/usePagePicture';
+import { useGoToPreview } from '../builder/useGoToPreview';
+import { bundledFace, familyFaces } from '../render/fontTable';
 import { colors, space } from '../lib/theme';
 
 const COLUMNS = 4;
 const GAP = 6;
+/** The cover picture waits this long after the last key typed in the title. */
+const TYPING_MS = 350;
+
+/** The cover as of TYPING_MS after it last changed: one picture per pause in
+ *  typing, not one per key (each is a whole cover drawn and saved). */
+function useSettledCover(cover: AlbumPage): AlbumPage {
+  const [settled, setSettled] = useState(cover);
+  useEffect(() => {
+    if (settled === cover) return;
+    const t = setTimeout(() => setSettled(cover), TYPING_MS);
+    return () => clearTimeout(t);
+  }, [cover, settled]);
+  return settled;
+}
+
+/** The title's own font is one the app has (so it is measured as printed). */
+function titleFontInApp(cover: AlbumPage): boolean {
+  const family = cover.textElements?.find((t) => t.boxIndex === 0)?.fontFamily;
+  const first = familyFaces(family)[0];
+  return !!first && bundledFace(first) !== null;
+}
 
 export default function AlbumCover() {
   const { builder, platform, text } = useBuilder();
@@ -37,6 +66,9 @@ export default function AlbumCover() {
     setEditScope('coverFront');
     return () => setEditScope('interior');
   }, [setEditScope]);
+  // The decoded photos go when the cover step is left (they are a few MB each).
+  useEffect(() => () => forgetPhotoPictures(), []);
+  const goToPreview = useGoToPreview();
 
   const photos = useMemo(() => coverPhotos(builder.uploadedPhotos).filter((p) => !!p.previewUrl), [builder.uploadedPhotos]);
   const onCover = coverPhotoId(builder);
@@ -48,15 +80,16 @@ export default function AlbumCover() {
   }, [photos, showAll, onCover]);
 
   const title = coverTitle(builder);
-  const fit = coverTitleFit(builder.coverFront, builder.albumSize, platform.textMeasurer());
-  const next = coverStepNext(albumMade(builder.albumPages), photosShort(builder));
+  const fit = titleFontInApp(builder.coverFront) ? coverTitleFit(builder.coverFront, builder.albumSize, platform.textMeasurer()) : null;
+  const next = coverStepNext(albumMade(builder.albumPages), photosIn(builder));
+  const cover = useSettledCover(builder.coverFront);
 
   // The front cover as print draws it, fitted to the screen.
   const size = ALBUM_SIZES.find((s) => s.preset === builder.albumSize) ?? ALBUM_SIZES[1];
   const coverW = Math.min(screenW - space.lg * 2, 300);
   const coverH = Math.round((coverW * size.height) / size.width);
   const picture = usePagePicture(text, {
-    page: builder.coverFront, pageIndex: 0, albumSize: builder.albumSize, photos: builder.uploadedPhotos,
+    page: cover, pageIndex: 0, albumSize: builder.albumSize, photos: builder.uploadedPhotos,
     width: Math.round(coverW * 2), coverMode: true,
   });
 
@@ -64,7 +97,7 @@ export default function AlbumCover() {
 
   const goOn = () => {
     if (next.go === 'photos') { saveStep(platform.deviceStore, 'photos'); router.push('/photos'); return; }
-    if (next.go === 'pages') { router.push('/preview'); return; }
+    if (next.go === 'pages') { goToPreview(); return; }
     router.push('/making');
   };
 
@@ -82,7 +115,7 @@ export default function AlbumCover() {
           )}
         </View>
         <Text style={styles.caption}>Front cover</Text>
-        {picture.notDrawn.length > 0 && <Text style={styles.notDrawn}>Not drawn in the app yet: {picture.notDrawn.join(', ')}.</Text>}
+        {picture.notDrawn.length > 0 && <Text style={styles.notDrawn} testID="cover-not-drawn">{NOT_DRAWN_LINE}</Text>}
 
         <Text style={styles.label}>Your photos, best ones first. Tap one.</Text>
         <View style={styles.grid}>

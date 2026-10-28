@@ -220,7 +220,13 @@ export const ADD_MORE_PHOTOS = 'Add more photos';
 
 /** The words and the way on, from the website's 40-photo rule. */
 export function photoStep(photos: readonly DraftPhoto[]): PhotoStep {
-  const count = photosGoingIn(photos);
+  return photoStepFor(photosGoingIn(photos));
+}
+
+/** The same, for `count` photos going in (the album builder's count, which
+ *  can be lower than the photos picked: the same photo picked twice goes in
+ *  once, and one the phone can't open doesn't go in). */
+export function photoStepFor(count: number): PhotoStep {
   const short = photosShortBy(count);
   if (count === 0) {
     return {

@@ -151,6 +151,23 @@ describe('the photo store: where each photo is, never a copy', () => {
     expect(phone.calls[0]).toHaveLength(4);
   });
 
+  it('does not keep a photo the phone says it can\'t open (deleted, or access taken back)', async () => {
+    const p = toPickedPhoto(draftPhoto(9));
+    const store = createPhotoStore(memoryStore(), madeUpPhone({}).inspect, { saveDelayMs: 0 });
+    expect(await store.store(p, 'photo-9')).toBeNull();
+    expect(store.records()).toEqual([]);
+  });
+
+  it('uses what the phone just said about a photo (no second ask)', async () => {
+    const header: PhotoHeader = { uri: 'content://media/external/images/media/10', readable: true, size: 2_345_678, width: 0, height: 0, colorSpace: 'Display P3', needsSrgb: true };
+    const p = toPickedPhoto(draftPhoto(10), header.size, header);
+    const phone = madeUpPhone({ [p.uri]: {} });
+    const store = createPhotoStore(memoryStore(), phone.inspect, { saveDelayMs: 0 });
+    expect(await store.store(p, 'photo-10')).toMatchObject({ id: 'photo-10', size: 2_345_678 });
+    expect(phone.calls).toEqual([]);
+    expect(store.records()[0]).toMatchObject({ colorSpace: 'Display P3', needsSrgb: true });
+  });
+
   it('only takes the phone\'s own photos (a website File has no address)', async () => {
     const store = createPhotoStore(memoryStore(), madeUpPhone({}).inspect);
     expect(await store.store({ name: 'a.jpg', size: 1, type: 'image/jpeg' })).toBeNull();

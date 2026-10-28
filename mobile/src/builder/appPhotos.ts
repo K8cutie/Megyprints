@@ -42,6 +42,9 @@ export interface AppPickedPhoto extends PickedPhoto {
   readonly height: number;
   /** When it was taken (ms), or null. */
   readonly capturedAt: number | null;
+  /** What the phone said about it just now (syncPhotos asked), so the photo
+   *  store does not ask again. */
+  readonly header?: PhotoHeader;
 }
 
 export function isAppPickedPhoto(p: unknown): p is AppPickedPhoto {
@@ -59,7 +62,7 @@ const TYPE_BY_NAME: [RegExp, string][] = [
  *  `bytes`: the file's size when the phone's index didn't give one (the
  *  builder knows a photo by its name AND size: two different photos with the
  *  same name, as chat apps make, must not look like one picked twice). */
-export function toPickedPhoto(p: DraftPhoto, bytes?: number): AppPickedPhoto {
+export function toPickedPhoto(p: DraftPhoto, bytes?: number, header?: PhotoHeader): AppPickedPhoto {
   const type = p.mimeType || TYPE_BY_NAME.find(([re]) => re.test(p.name))?.[1] || 'image/jpeg';
   return {
     name: p.name || p.uri.split('/').pop() || 'photo.jpg',
@@ -69,6 +72,7 @@ export function toPickedPhoto(p: DraftPhoto, bytes?: number): AppPickedPhoto {
     width: p.width,
     height: p.height,
     capturedAt: p.capturedAt,
+    ...(header ? { header } : {}),
   };
 }
 
@@ -109,7 +113,8 @@ function batched(inspect: InspectPhotos) {
     waiting = [];
     let headers: PhotoHeader[] | null = null;
     try { headers = await inspect([...new Set(batch.map((b) => b.uri))]); } catch { headers = null; }
-    for (const b of batch) b.resolve(headers ? headers.find((h) => h.uri === b.uri) ?? null : undefined);
+    const byUri = new Map((headers ?? []).map((h) => [h.uri, h]));
+    for (const b of batch) b.resolve(headers ? byUri.get(b.uri) ?? null : undefined);
   };
   /** The header; null = the phone doesn't have it; undefined = couldn't ask. */
   return (uri: string) => new Promise<PhotoHeader | null | undefined>((resolve) => {
@@ -145,8 +150,9 @@ export function createPhotoStore(store: KeyValueStore, inspect: InspectPhotos, {
     async store(photo, id) {
       if (!isAppPickedPhoto(photo)) return null;
       const key = id ?? `phone-${index.size}-${Date.now().toString(36)}`;
-      const header = await ask(photo.uri);
-      if (header === null) return null; // the phone can't open it
+      const header = photo.header ?? await ask(photo.uri);
+      // The phone can't open it (not there, or no longer allowed): not kept.
+      if (header === null || header?.readable === false) return null;
       const known = photo.width > 0 && photo.height > 0;
       const record: StoreRecord = {
         id: key, uri: photo.uri, name: photo.name, type: photo.type, size: photo.size,

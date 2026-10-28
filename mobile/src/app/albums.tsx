@@ -37,7 +37,7 @@ export default function Albums() {
     return (
       <View style={styles.center}>
         <Text style={styles.heading}>No albums yet</Text>
-        <Text style={styles.muted}>Albums you make on the Megy Prints website show here. Making albums in this app comes in a later test version.</Text>
+        <Text style={styles.muted}>Albums you make in this app or on the Megy Prints website show here while you are signed in.</Text>
       </View>
     );
   }

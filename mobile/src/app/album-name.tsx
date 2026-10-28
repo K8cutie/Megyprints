@@ -55,7 +55,7 @@ export default function AlbumName() {
           returnKeyType="done"
           testID="album-name"
         />
-        <Text style={styles.hint}>It's how you'll find this album again in My albums.</Text>
+        <Text style={styles.hint}>It's how you'll find this album again in My albums when you are signed in.</Text>
 
         <Text style={styles.question}>Pick the occasion. Megy writes the quotes on your pages to match it. You can change it later, but not skip it.</Text>
         <View style={[styles.chips, nudged && !themeReady && styles.chipsMissing]} accessibilityRole="radiogroup">

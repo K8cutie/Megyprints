@@ -10,7 +10,15 @@
    Each turn plays the website's page turn (the leaf hinged at the spine).
 
    Every page is drawn by the app's page renderer from the builder's own page
-   data (usePagePicture). What it can't draw yet is listed under the book.
+   data (usePagePicture). When something on a page is drawn more simply than
+   it prints, one plain line under the book says so.
+
+   Saving: the album is on the phone (written when the Preview opens, so
+   "Saved on this phone" is true). Signed in, a newly made album goes to the
+   account once (accountSave.ts); after that the builder's own autosave
+   sends changes only (its "nothing changed: no write" rule). Changed on
+   another device too, or deleted there: the website's question, its words.
+   Photos this phone no longer has are named, with the way to put them back.
    ══════════════════════════════════════════════════════════════════════════ */
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -18,13 +26,18 @@ import { ActivityIndicator, Animated, Easing, PanResponder, PixelRatio, Pressabl
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ALBUM_SIZES } from '@web/pages/builder/types';
+import { conflictMessage, DELETED_ELSEWHERE_MESSAGE } from '@web/lib/albumSyncRecord';
+import { missingPhotos } from '@web/lib/photoPresence';
 import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, swipeTurn, turnBack, turnForward, spreadStart, type PreviewPosition, type PreviewView, type Turn } from '@web/pages/builder/previewPaging';
 import { planTurn, type TurnFace, type TurnPlan } from '@web/pages/builder/pageTurn';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
-import { preparePagePicture, usePagePicture } from '../builder/usePagePicture';
+import { accountSaveDue, markAccountSaved } from '../builder/accountSave';
+import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
+import { forgetPhotoPictures, preparePagePicture, usePagePicture } from '../builder/usePagePicture';
 import type { PageRequest } from '../builder/pageImages';
 import { useAuth } from '../lib/auth';
+import { useDraft } from '../lib/draftStore';
 import { colors, space } from '../lib/theme';
 import type { PageText } from '../render/pageText';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '@web/pages/builder/types';
@@ -67,7 +80,7 @@ function Face({ face, W, H, pages, cover, photos, albumSize, text, onNotDrawn }:
       {picture.uri ? (
         <Image source={{ uri: picture.uri }} style={{ width: W, height: H }} contentFit="fill" transition={0} cachePolicy="memory-disk" />
       ) : picture.error ? (
-        <Text style={styles.insideText}>This page could not be drawn: {picture.error}</Text>
+        <Text style={styles.insideText}>{PAGE_NOT_SHOWN}</Text>
       ) : (
         <ActivityIndicator color={colors.accent} />
       )}
@@ -118,8 +131,9 @@ function TurnLayer({ plan, W, H, spineX, face, onDone }: { plan: TurnPlan; W: nu
 }
 
 export default function Preview() {
-  const { builder, text } = useBuilder();
+  const { builder, platform, text } = useBuilder();
   const { session } = useAuth();
+  const { clear: clearDraft } = useDraft();
   const { width: screenW, height: screenH } = useWindowDimensions();
   const pages = builder.albumPages;
   const total = pages.length;
@@ -133,18 +147,33 @@ export default function Preview() {
   const seq = useRef(0);
   const [notDrawn, setNotDrawn] = useState<Record<string, string[]>>({});
 
-  // The album goes to the account once it is made (signed in); on the phone it is saved already.
-  const [cloud, setCloud] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  // On the phone now (the builder's own write, not its 30 s timer); signed
+  // in, a newly made album goes to the account once (accountSave.ts).
   const signedIn = !!session;
+  const madeAt = pages[0]?.madeAt ?? 0;
   useEffect(() => {
+    builder.saveDraftNow();
     if (!signedIn || total === 0) return;
-    let live = true;
-    setCloud('saving');
-    void builder.manualSave().then((ok) => { if (live) setCloud(ok ? 'saved' : 'error'); }).catch(() => { if (live) setCloud('error'); });
-    return () => { live = false; };
-    // Once per opening of the preview.
+    const albumId = builder.getAlbumId();
+    if (!accountSaveDue(platform.deviceStore, albumId, madeAt)) return;
+    void builder.manualSave().then((ok) => { if (ok) markAccountSaved(platform.deviceStore, albumId, madeAt); }).catch(() => {});
+    // Once per album made (madeAt), and when the customer signs in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signedIn]);
+  }, [signedIn, madeAt]);
+  // Made again (from the Photos step): the book opens on its cover again.
+  const firstMade = useRef(madeAt);
+  useEffect(() => {
+    if (madeAt !== firstMade.current) { firstMade.current = madeAt; setCoverAt(0); }
+  }, [madeAt]);
+  // The decoded photos go when the book is left (they are a few MB each).
+  useEffect(() => () => forgetPhotoPictures(), []);
+  const [asking, setAsking] = useState(false);
+  const answer = async (fn: () => Promise<unknown> | void, after?: () => void) => {
+    if (asking) return;
+    setAsking(true);
+    try { await fn(); after?.(); } finally { setAsking(false); }
+  };
+  const missing = missingPhotos(pages, builder.uploadedPhotos, builder.coverFront);
 
   // Sizes: one page (upright) or two side by side, fitted to the screen.
   const size = ALBUM_SIZES.find((s) => s.preset === builder.albumSize) ?? ALBUM_SIZES[1];
@@ -253,14 +282,35 @@ export default function Preview() {
           </Pressable>
         )}
         {missingHere.length > 0 && (
-          <Text style={styles.notDrawn} testID="preview-not-drawn">Not drawn in the app yet: {missingHere.join(', ')}.</Text>
+          <Text style={styles.notDrawn} testID="preview-not-drawn">{NOT_DRAWN_LINE}</Text>
         )}
-        <Text style={styles.saved} testID="preview-saved">
-          {cloud === 'saved' ? 'Saved on this phone and in your account.'
-            : cloud === 'saving' ? 'Saved on this phone. Saving to your account…'
-              : cloud === 'error' ? 'Saved on this phone. It could not be saved to your account just now: it will try again.'
-                : 'Saved on this phone. Sign in to keep it in your account too.'}
-        </Text>
+        {missing.count > 0 && (
+          <View style={styles.ask} testID="preview-missing-photos">
+            <Text style={styles.askText}>{missingOnPhoneMessage(missing)}</Text>
+            <Button label="Add the photos" kind="plain" onPress={() => router.push('/photos')} testID="preview-missing-add" />
+          </View>
+        )}
+        {signedIn && builder.cloudGone ? (
+          <View style={styles.ask} testID="preview-deleted-elsewhere">
+            <Text style={styles.askText}>{DELETED_ELSEWHERE_MESSAGE}</Text>
+            <Button label="Keep it as a new album" busy={asking} onPress={() => { void answer(builder.saveAsNewAlbum); }} testID="preview-keep-new" />
+            <Button label="Let it go" kind="plain" onPress={() => { void answer(builder.letDeletedAlbumGo, () => { clearDraft(); router.dismissAll(); }); }} testID="preview-let-go" />
+          </View>
+        ) : signedIn && builder.cloudConflict ? (
+          <View style={styles.ask} testID="preview-conflict">
+            <Text style={styles.askText}>{conflictMessage(builder.cloudConflict.updatedAt)}</Text>
+            <Button label="Open the other device's version" busy={asking} onPress={() => { void answer(builder.openNewerVersion); }} testID="preview-open-other" />
+            <Button label="Keep this device's version" kind="plain" onPress={() => { void answer(builder.keepThisVersion); }} testID="preview-keep-this" />
+          </View>
+        ) : (
+          <Text style={styles.saved} testID="preview-saved">
+            {!signedIn ? 'Saved on this phone. Sign in to keep it in your account too.'
+              : builder.cloudSaveStatus === 'saving' ? 'Saved on this phone. Saving to your account…'
+                : builder.cloudSaveStatus === 'error' ? 'Saved on this phone. It could not be saved to your account just now: it will try again.'
+                  : builder.cloudSaveStatus === 'saved' ? 'Saved on this phone and in your account.'
+                    : 'Saved on this phone. Changes go to your account by themselves.'}
+          </Text>
+        )}
         {end && <Text style={styles.endNote}>Ordering from the app comes in a later version. Your album stays saved.</Text>}
       </ScrollView>
       <SafeAreaView edges={['bottom']} style={styles.bar}>
@@ -268,7 +318,7 @@ export default function Preview() {
           {canTurnBack(pos) && <Button label={`‹ Previous ${word}`} kind="plain" onPress={back} style={styles.turnButton} testID="preview-prev" />}
           {canTurnForward(pos)
             ? <Button label={`Next ${word} ›`} onPress={forward} style={styles.turnButton} testID="preview-next" />
-            : <Button label="Done" onPress={() => router.replace('/')} style={styles.turnButton} testID="preview-done" />}
+            : <Button label="Done" onPress={() => { if (router.canDismiss()) router.dismissAll(); else router.replace('/'); }} style={styles.turnButton} testID="preview-done" />}
         </View>
       </SafeAreaView>
     </View>
@@ -292,6 +342,8 @@ const styles = StyleSheet.create({
   toggleText: { fontSize: 14, fontWeight: '700', color: colors.text },
   notDrawn: { fontSize: 13, color: colors.muted, textAlign: 'center', paddingHorizontal: space.md },
   saved: { fontSize: 13, color: colors.muted, textAlign: 'center' },
+  ask: { alignSelf: 'stretch', gap: space.sm, backgroundColor: '#FFF1EA', borderWidth: 1, borderColor: '#EBC3AE', borderRadius: 12, padding: space.md },
+  askText: { fontSize: 15, lineHeight: 21, color: '#7A3A1E' },
   endNote: { fontSize: 14, color: colors.text, textAlign: 'center', paddingHorizontal: space.md },
   bar: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card, padding: space.md },
   turnRow: { flexDirection: 'row', gap: space.sm },

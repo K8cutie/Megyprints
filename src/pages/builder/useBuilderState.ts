@@ -3688,7 +3688,10 @@ export function useBuilderState(): BuilderActions {
      (Kraken, 2026-10-05). B gets a fresh album; A's stays in A's account,
      and its photos stay on the device (reset keeps an account's photos).
      Before paint, so B never sees A's album. */
-  const draftOwnerRef = useRef<string | null>(getInitialState(platform).accountId ?? null);
+  // Read once: useRef's argument runs on EVERY render, and getInitialState
+  // parses the whole saved draft (and drops one it finds broken).
+  const draftOwnerRef = useRef<string | null | undefined>(undefined);
+  if (draftOwnerRef.current === undefined) draftOwnerRef.current = getInitialState(platform).accountId ?? null;
   useLayoutEffect(() => {
     if (!user?.id) return;
     const owner = draftOwnerRef.current;

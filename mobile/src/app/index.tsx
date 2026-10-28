@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { releasePickedFiles } from '../../modules/photo-files';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
-import { albumInProgress, resumeRoute } from '../builder/albumFlow';
+import { albumInProgress, resumeRoute, startNewNote } from '../builder/albumFlow';
 import { useAuth } from '../lib/auth';
 import { useDraft } from '../lib/draftStore';
 import { colors, space } from '../lib/theme';
@@ -17,12 +18,17 @@ export default function Start() {
   const inProgress = albumInProgress(builder, draft.photos.length);
 
   const startNew = () => {
+    // Signed out the album is deleted (reset forgets it): the access kept to
+    // photos picked with "Choose from Files" is given back too (Android keeps
+    // at most 512 such grants per app). Signed in it stays in the account,
+    // and so does its access to its photos.
+    if (!session) void releasePickedFiles(draft.photos.filter((p) => p.source === 'files').map((p) => p.uri)).catch(() => 0);
     builder.reset();
     clear();
     router.push('/album-name');
   };
   const askStartNew = () => {
-    Alert.alert('Start a new album?', 'The album you are making is put away. Your photos stay on your phone.', [
+    Alert.alert('Start a new album?', startNewNote(!!session, builder.uploadedPhotos.length + draft.photos.length > 0), [
       { text: 'Keep my album', style: 'cancel' },
       { text: 'Start a new album', style: 'destructive', onPress: startNew },
     ]);

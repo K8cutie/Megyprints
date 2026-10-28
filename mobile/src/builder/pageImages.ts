@@ -108,8 +108,12 @@ export async function drawPageImage(Sk: Skia, text: PageText, req: PageRequest, 
   return { image, plan, missing };
 }
 
-/** Keeps the last few photo pictures decoded (each is a few MB). */
-export function photoImageCache(load: (uri: string) => Promise<SkImage | null>, keep = 16): PhotoImages & { clear(): void } {
+/** Keeps the last few photo pictures decoded (a 1280 px copy is about 5 MB).
+ *  Nothing is let go while a page is being drawn (a page can hold more
+ *  photos than `keep`, and a picture let go mid-draw would be drawn after it
+ *  is gone): the caller trims after each page, and clears when the pages
+ *  are off screen. */
+export function photoImageCache(load: (uri: string) => Promise<SkImage | null>, keep = 6): PhotoImages & { trim(): void; clear(): void; size(): number } {
   const cache = new Map<string, Promise<SkImage | null>>();
   return {
     image(uri) {
@@ -121,16 +125,19 @@ export function photoImageCache(load: (uri: string) => Promise<SkImage | null>, 
       }
       const p = load(uri).catch(() => null);
       cache.set(uri, p);
+      return p;
+    },
+    trim() {
       while (cache.size > keep) {
         const [oldest, img] = cache.entries().next().value as [string, Promise<SkImage | null>];
         cache.delete(oldest);
         void img.then((i) => i?.dispose());
       }
-      return p;
     },
     clear() {
       for (const p of cache.values()) void p.then((i) => i?.dispose());
       cache.clear();
     },
+    size: () => cache.size,
   };
 }
