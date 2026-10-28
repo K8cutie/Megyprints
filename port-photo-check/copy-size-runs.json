@@ -1,0 +1,67 @@
+{
+ "note": "Same emulator session, same dev build and pictures; only FACE_COPY_SCALE changed. Two more runs at 2x gave peaks of 521.5 and 542.6 MB and the same verdicts.",
+ "runs": [
+  {
+   "when": "2026-10-28T14:06:23.986Z",
+   "faceCopyScale": 1,
+   "facesCounted": 237,
+   "eyesJudged": 42,
+   "picturesEyesShut": [
+    "megy-sample-26.jpg",
+    "pc-sblur-52-5px.jpg"
+   ],
+   "mlKitMedianMs": 251,
+   "mlKitP95Ms": 369,
+   "facePassMsPerPhoto": 270,
+   "memoryPeakPssMB": 392,
+   "memoryAfterPssMB": 305.1
+  },
+  {
+   "when": "2026-10-28T14:10:27.814Z",
+   "faceCopyScale": 1.5,
+   "facesCounted": 236,
+   "eyesJudged": 140,
+   "picturesEyesShut": [
+    "megy-sample-04.jpg",
+    "megy-sample-16.jpg",
+    "megy-sample-26.jpg",
+    "megy-sample-27.jpg",
+    "megy-sample-41.jpg",
+    "megy-sample-46.jpg",
+    "megy-sample-47.jpg",
+    "megy-sample-54.jpg",
+    "megy-sample-59.jpg",
+    "megy-sample-64.jpg",
+    "pc-sblur-41-2p5px.jpg"
+   ],
+   "mlKitMedianMs": 380,
+   "mlKitP95Ms": 510,
+   "facePassMsPerPhoto": 398,
+   "memoryPeakPssMB": 468.8,
+   "memoryAfterPssMB": 322.9
+  },
+  {
+   "when": "2026-10-28T13:51:48.195Z",
+   "faceCopyScale": 2,
+   "facesCounted": 235,
+   "eyesJudged": 202,
+   "picturesEyesShut": [
+    "megy-sample-16.jpg",
+    "megy-sample-26.jpg",
+    "megy-sample-39.jpg",
+    "megy-sample-41.jpg",
+    "megy-sample-46.jpg",
+    "megy-sample-51.jpg",
+    "megy-sample-54.jpg",
+    "megy-sample-64.jpg",
+    "pc-sblur-41-2p5px.jpg",
+    "pc-sblur-52-5px.jpg"
+   ],
+   "mlKitMedianMs": 462,
+   "mlKitP95Ms": 836,
+   "facePassMsPerPhoto": 527,
+   "memoryPeakPssMB": 550,
+   "memoryAfterPssMB": 309.7
+  }
+ ]
+}
