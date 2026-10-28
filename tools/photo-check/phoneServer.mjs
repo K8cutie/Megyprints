@@ -86,6 +86,15 @@ if (push) {
 adb('shell', 'pm', 'grant', APP, 'android.permission.READ_MEDIA_IMAGES');
 adb('reverse', `tcp:${DEVICE_PORT}`, `tcp:${PORT}`);
 adb('reverse', 'tcp:8081', `tcp:${METRO}`);
+// An emulator's dev app asks the PC straight (10.0.2.2:8081), not through
+// adb reverse, so with Metro on another PC port it finds no code ("Unable
+// to load script"). Point the app at its own localhost:8081 (the reverse
+// above) instead: React Native's "debug_http_host" dev setting.
+if (METRO !== 8081) {
+  const prefs = `shared_prefs/${APP}_preferences.xml`;
+  const xml = '<?xml version="1.0" encoding="utf-8" standalone="yes" ?><map><string name="debug_http_host">localhost:8081</string></map>';
+  adb('shell', `run-as ${APP} sh -c 'mkdir -p shared_prefs && echo "${xml.replace(/"/g, '\\"')}" > ${prefs}'`);
+}
 
 const done = new Promise((resolve, reject) => {
   const server = http.createServer((req, res) => {

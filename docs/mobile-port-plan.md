@@ -836,6 +836,78 @@ photoCheck: checks.photoCheck`.
   P3/Adobe RGB photos (the copy is decoded to sRGB, as the browser does, but
   none were in the test set), HEIC photos, photos of 108 or 200 MP.
 
+#### Phone and website, side by side (tools/photo-check, run 2026-10-28)
+
+The same 138 pictures through the website's own code (headless Chromium,
+face-api.js) and the app's (dev build on the x86_64 emulator, Android 14,
+2.5 GB): 60 made-up pictures (20 scenes, one of them 50 MP; 10 blurred
+copies; 4 with an EXIF turn; 10 near copies; 8 blurred and 8 near copies of
+sample photos) and the website's 78 sample photos (people, many faces). No
+personal photos. Full numbers: `tools/photo-check/out/report.json` after a
+run (not kept in git).
+
+- **Blur and repeats: the same answers as the website, every one.**
+  Sharpness within 0.15 % on every picture (median ratio 1.000). Fingerprint
+  identical on 136 of 138; the 50 MP picture and its near copy differ in 4
+  of 64 bits (decoded at half size first), which changed no verdict. On
+  the three test albums (made-up, samples with their copies, all 138):
+  the same blurry photos (9 of 138), the same 28 sets of repeats, the same
+  call on every pair of photos (9,453 pairs), and the same "leave out"
+  suggestions (32 photos), with and without the eye test. The verdicts
+  the app worked out and showed on its own screen are the website's.
+- **Faces: ML Kit finds more of the real faces.** The website's finder saw
+  144 faces big enough to judge, the phone 237. The phone found 138 of the
+  website's 144 (96 %); the 99 faces only the phone found are, on the
+  contact sheet, real people in group photos that the website's small
+  model misses; the website found 6 the phone did not (one is an
+  upside-down face, sample 47). Same number of faces on 65 % of pictures,
+  same "has a face or not" on 88 %. The boxes are drawn differently (median
+  overlap 0.54), which the rules do not mind (they read the box height).
+- **Closed eyes: the same verdict on 134 of 138 pictures (97 %), but not
+  on the same shut photos.** Each side calls 2 pictures shut, and they are
+  4 different pictures. The website: sample 08 (a boy laughing, eyes
+  squeezed shut: ML Kit scored one eye 0.02 and the other 0.44, and the
+  face is under 100 px wide, so it is not read) and sample 47 (a laughing
+  face upside down: ML Kit found no face). The phone: sample 26 (a girl
+  looking down at candles, lids down: the website read open) and a 5 px
+  blurred copy of sample 52 (the website found no face; the photo is
+  already in the blurry list). Looking at them: the website is right on
+  the two laughing photos, the phone on the girl looking down. Of the 138
+  faces both found, the phone judged the eyes on 28 (the rest are under
+  100 px or not scored); 27 agree, 1 differs. In this test the eye
+  differences changed no "leave out" suggestion.
+- **Face centring**: the same "face or no face" decision on 78 % of
+  pictures (both none 40, both found 67, phone only 26, website only 5;
+  most "phone only" are the extra real faces). Where both found faces,
+  the centring points are a median 0.05 of the picture apart (70 % within
+  0.1).
+- **Speed per photo** (emulator, dev build, Hermes; the PC was running
+  other work too, so these are for comparing, not phone numbers):
+  blur and repeats median 370 ms (227 ms decoding on Android's threads,
+  135 ms of maths on the JavaScript thread), slowest 5 % 772 ms (the 50 MP
+  pictures); faces and eyes median 374 ms (slowest 5 % 487 ms); face
+  centring from scratch 348 ms, and 0 ms after the face pass (the faces are
+  kept). All 138: 60 s blur, 55 s faces.
+- **Picking is not held up**: while the check runs, a gallery page read
+  (what the photo grid does as you scroll) takes a median 24 ms (21 ms with
+  nothing running; slowest 5 % 64 ms, longest 108 ms), and the screen's
+  50 ms timer runs late by at most 76 ms (blur pass) and 45 ms (faces).
+  The first try, through the wrapper library, made gallery reads wait up
+  to 315 ms, and its small copy was not the browser's (sharpness 0.63 to
+  2.1 times the website's).
+- **Memory**: the app at 89 MB (PSS) before, 406 MB at the most while
+  checking (517 MB RSS), 304 MB 30 s after the last photo (ML Kit's model
+  let go). Not yet tried on a 2 GB phone with other apps open.
+- The website on this PC, for reference: blur and repeats 27 ms a photo;
+  the whole check with faces 2.2 s (face-api on the CPU here; the real
+  website uses WebGL where it can).
+- To run it again: `cd tools/photo-check && node makePictures.mjs && node
+  runWeb.mjs && node phoneServer.mjs --serial emulator-<port> --metro
+  <Metro's PC port> && node compare.mjs && node sheets.mjs`. With Metro on
+  a PC port other than 8081, phoneServer.mjs points the emulator's dev app
+  at its own localhost:8081 (adb reverse): an emulator otherwise asks the
+  PC's 10.0.2.2:8081 and shows "Unable to load script".
+
 ---
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)

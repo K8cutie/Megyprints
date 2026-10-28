@@ -235,8 +235,10 @@ const wrapperFile = path.join(OUT, 'phone-wrapper.json');
 if (fs.existsSync(wrapperFile)) {
   const wr = JSON.parse(fs.readFileSync(wrapperFile, 'utf8'));
   const WR = new Map(wr.rows.map((r) => [r.file, r]));
-  const rs = files.filter((f) => WR.get(f)?.basic).map((f) => WR.get(f).basic.sharp / Math.max(1e-9, W.get(f).check.sharp));
-  const hb = files.filter((f) => WR.get(f)?.basic).map((f) => R.hamming(W.get(f).check.hash, WR.get(f).basic.hash));
+  // Only pictures made at the same size then (scene 20 was 12 MP before it became 50 MP).
+  const same = files.filter((f) => WR.get(f)?.basic && WR.get(f).width === M.get(f).width && WR.get(f).height === M.get(f).height);
+  const rs = same.map((f) => WR.get(f).basic.sharp / Math.max(1e-9, W.get(f).check.sharp));
+  const hb = same.map((f) => R.hamming(W.get(f).check.hash, WR.get(f).basic.hash));
   wrapperRun = { when: wr.when, sharpRatio: { median: r3(q(rs, 0.5)), min: r3(Math.min(...rs)), max: r3(Math.max(...rs)) }, hashBits: { median: q(hb, 0.5), max: Math.max(...hb) }, galleryReads: wr.gallery ?? null, screenWaits: wr.lag };
 }
 
