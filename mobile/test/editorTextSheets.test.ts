@@ -117,7 +117,7 @@ describe('the quote picker', () => {
     expect(ep.requests).toHaveLength(0);
     await press('photo-quote-sign-in-button');
     expect(log.closed).toBe(1);
-    expect(router.push).toHaveBeenCalledWith({ pathname: '/sign-in', params: { back: '1' } });
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/sign-in', params: { then: 'back' } });
     expect(takeResume(3, false)).toBeNull(); // still signed out: nothing
     expect(takeResume(4, true)).toBeNull(); // another page: nothing
     expect(takeResume(3, true)).toEqual({ kind: 'box', boxIndex: 0 });

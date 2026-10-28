@@ -121,7 +121,7 @@ function Picker({ ctx, params, close, signedIn }: SheetProps<QuotePickerParams> 
     askToResume({ pageIndex, target });
     close();
     // Back here once signed in (sign-in.tsx), where the picker opens again.
-    router.push({ pathname: '/sign-in', params: { back: '1' } });
+    router.push({ pathname: '/sign-in', params: { then: 'back' } });
   };
 
   // ── The bank (only while DEAL_BANK_QUOTES is on) ──

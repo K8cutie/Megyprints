@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   grayscale, tileSharpness, dHash, hamming, eyeAspectRatio, eyesClosedIn,
   isBlurry, medianSharpness, photoQuality, findRepeats, suggestLeaveOut,
-  nextCheckJob, checkIsReady, checkProgress,
-  BLUR_ABS, REPEAT_BITS, type CheckablePhoto, type PhotoCheck,
+  nextCheckJob, checkIsReady, checkProgress, checkCopySize, basicCheck, checkFrom, faceVerdict,
+  BLUR_ABS, REPEAT_BITS, CHECK_LONG_SIDE, type CheckablePhoto, type PhotoCheck,
 } from './photoCheck';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -114,6 +114,47 @@ describe('closed eyes (68-point landmarks)', () => {
 
   it('any one clear face with shut eyes counts', () => {
     expect(eyesClosedIn([face(5, 5, 200), face(0.5, 0.5, 150)], 1000)).toBe(true);
+  });
+});
+
+/* ── One photo, from its small copy (what photoCheckRunner and the 2.0 app
+   both do with the pixels) ──────────────────────────────────────────────── */
+
+describe('one photo, from its small copy', () => {
+  it('the small copy is CHECK_LONG_SIDE on the long side, rounded, never bigger than the photo', () => {
+    expect(checkCopySize(4032, 3024)).toEqual({ w: CHECK_LONG_SIDE, h: 600 });
+    expect(checkCopySize(3000, 4000)).toEqual({ w: 600, h: CHECK_LONG_SIDE });
+    expect(checkCopySize(1365, 2048)).toEqual({ w: 533, h: 800 }); // 533.2 → 533
+    expect(checkCopySize(640, 480)).toEqual({ w: 640, h: 480 });   // small: as it is
+    expect(checkCopySize(0, 0)).toEqual({ w: 1, h: 1 });           // unmeasured: never 0
+  });
+
+  it('basicCheck = grayscale → tileSharpness + dHash, faces left for the face pass', () => {
+    const w = 64, h = 48;
+    const rgba = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < w * h; i++) {
+      const x = i % w, y = Math.floor(i / w);
+      rgba[i * 4] = (x * 37 + y * 11) % 256; rgba[i * 4 + 1] = (x * 5 + y * 53) % 256; rgba[i * 4 + 2] = (x ^ y) * 4 % 256; rgba[i * 4 + 3] = 255;
+    }
+    const gray = grayscale(rgba, w, h);
+    expect(basicCheck(rgba, w, h)).toEqual({ v: 1, sharp: tileSharpness(gray, w, h), hash: dHash(gray, w, h), faces: null, eyesClosed: false });
+    // The app hands in a plain Uint8Array (its decoder's bytes): same answer.
+    expect(basicCheck(new Uint8Array(rgba), w, h)).toEqual(basicCheck(rgba, w, h));
+    // The app runs the steps one by one and finishes with checkFrom: same answer.
+    expect(checkFrom(tileSharpness(gray, w, h), dHash(gray, w, h))).toEqual(basicCheck(rgba, w, h));
+  });
+
+  it('faceVerdict counts faces large enough to judge and asks the closed-eyes rule', () => {
+    const lm = (shut: boolean) => Array.from({ length: 68 }, (_, i) => {
+      if (i < 36 || i > 47) return { x: 0, y: 0 };
+      const k = (i - 36) % 6, lid = shut ? 0.5 : 5;
+      return [{ x: 0, y: 0 }, { x: 10, y: -lid }, { x: 20, y: -lid }, { x: 30, y: 0 }, { x: 20, y: lid }, { x: 10, y: lid }][k];
+    });
+    expect(faceVerdict([], 600)).toEqual({ faces: 0, eyesClosed: false });
+    expect(faceVerdict([{ boxHeight: 100, landmarks: lm(false) }, { boxHeight: 20, landmarks: lm(true) }], 600)).toEqual({ faces: 1, eyesClosed: false });
+    expect(faceVerdict([{ boxHeight: 100, landmarks: lm(true) }], 600)).toEqual({ faces: 1, eyesClosed: true });
+    // A face with no landmarks still counts as a face, but its eyes can't be judged.
+    expect(faceVerdict([{ boxHeight: 100, landmarks: [] }], 600)).toEqual({ faces: 1, eyesClosed: false });
   });
 });
 

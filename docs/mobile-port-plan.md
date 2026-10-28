@@ -358,10 +358,11 @@ there. Each job makes its own worktree:
 
 ```bash
 git -C "C:/megy-prints-flashdrive/V1/Megyprints-Clean" fetch origin
-git -C "C:/megy-prints-flashdrive/V1/Megyprints-Clean" worktree add -b feat/port-<phase> "C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-<phase>" origin/main
+git -C "C:/megy-prints-flashdrive/V1/Megyprints-Clean" worktree add -b feat/port-<phase> "C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-<phase>" origin/native-2.0
 ```
 
-then `npm ci` in the new worktree.
+then `npm ci` in the new worktree. (2.0 branches start from `native-2.0`
+since 2026-10-29: see "Working on 2.0" at the end.)
 
 **Where the app lives.** In this repo, in its own folder (`mobile/`, made in
 Phase 1), so it can import the shared files from `src/` directly (Metro's
@@ -769,6 +770,228 @@ test files; with what was on the emulator already, 2,517 photos.
   above).
 - Grid grouping by EXIF for photos without an index time (see above).
 - A real phone (not just the emulator) and a phone with 10,000+ photos.
+
+### The photo check and face centring on the phone (2026-10-28, review fixes the same evening)
+
+`mobile/src/lib/phonePhotoCheck.ts` `createPhoneChecks()` gives the app's
+`photoCheck` (PhotoChecker) and `faces` (FaceFinder). Phase 3's app
+platform plugs them in where it now has "not available yet":
+`const checks = createPhoneChecks();` then `faces: checks.faces,
+photoCheck: checks.photoCheck`.
+
+**Where it runs today: only in the dev app's test screen**
+(`mobile/src/app/photo-check-lab.tsx`, dev builds only). It is ready to
+plug in, but the album flow does not use it yet: Phase 3's
+`appPlatform.ts` (branch `feat/port-phase-3`) still has
+`photoCheck.available: () => false` and a `detectFaceCenter` that answers
+null. When Phase 3 lands: put `createPhoneChecks()` into `appPlatform`
+with a test, then repeat the timing and memory runs from the real Photos
+step and "Make my album" (the face pass and face centring share one cache
+only while `StoredPhoto.url` is the same address as the photo's preview
+address, which Phase 3's `appPhotos.ts` keeps today).
+
+- **Blur and repeats**: the app's native module (`mobile/modules/photo-pixels`)
+  makes each photo's 800 px small copy the way the website's browser does
+  (Chrome's createImageBitmap 'medium': whole decode, Skia's halvings,
+  blended; checked against Chrome itself, ±1 per pixel), and the shared
+  photoCheck functions measure it (`grayscale`, `tileSharpness`, `dHash`,
+  finished with the shared `checkFrom`, the same steps as `basicCheck`).
+  Photos over 24 MP are first decoded at half size (memory), so for them the
+  copy is close to, not exactly, the browser's: the test set has one 50 MP
+  picture and its near copy to measure that.
+- **Faces and closed eyes**: Google ML Kit (`com.google.mlkit:face-detection`
+  16.1.7, model inside the app) on a copy TWICE the small copy's size
+  (1600 px on the long side; `faceModel.ts` `FACE_COPY_SCALE`, never bigger
+  than the photo itself), made the quick way (the decoder's own shrink and
+  Android's scaling: ML Kit is a different model anyway, so it does not
+  need the browser's exact pixels, and no whole photo is held for it),
+  called by the same native module (a wrapper library held up Expo's
+  shared module thread and needed a JPEG copy per photo). Each face is
+  brought back to the small copy's pixels and becomes the box and eye
+  points the shared rules read (`phoneFaces.ts`). Different model,
+  different answers: the numbers are under "Phone and website, side by
+  side" below.
+- **Why twice the size (review fix, 2026-10-28)**: ML Kit's guide asks for
+  faces of at least 100 × 100 px before it reads them well. On the 800 px
+  copy only the biggest faces are that big, so the phone judged the eyes on
+  just 42 of the 237 faces it found (18 %; the website judges every face it
+  counts, 144 of 144): shut eyes in group photos and bursts were mostly not
+  looked at. On the 1600 px copy it judges 202 of 235 (86 %). The cost, on
+  the emulator, in one session (same pictures, same build):
+
+  | ML Kit's copy | Eyes judged on | Pictures "eyes shut" | ML Kit per photo (median / slowest 5 %) | App memory at the most |
+  |---|---|---|---|---|
+  | 800 px (1×) | 42 of 237 faces (18 %) | 2 | 251 / 369 ms | 392 MB |
+  | 1200 px (1.5×) | 140 of 236 (59 %) | 11 | 380 / 510 ms | 469 MB |
+  | **1600 px (2×, in use)** | **202 of 235 (86 %)** | **10** | **462 / 836 ms** | **521–550 MB (3 runs)** |
+
+  So about 0.2 s more per photo (in the background, while the customer
+  does other things) and about 150 MB more memory while the face pass runs.
+  Not yet tried on a 2 GB phone. If that is too much: `FACE_COPY_SCALE =
+  1.5` is a one-line change (59 % of faces judged), or, to keep the 1×
+  memory, judge eyes on a bigger crop of each small face only (more native
+  code; not built).
+- **Closed eyes, the phone's rule**: both eyes under ML Kit's open chance
+  `EYE_SHUT_BELOW` (0.1), and only on faces at least `MIN_EYE_FACE_PX`
+  (100 px) on their smaller side IN ML KIT'S COPY (a face of 50 px in the
+  small copy: 8.3 % of a landscape photo's height, about the website's
+  `MIN_FACE_SHARE` of 8 %). Smaller faces still count as faces. **Both
+  numbers were chosen on the same 138 test pictures the comparison below
+  reports on** (in the earlier run, on the 800 px copy): the agreement
+  figures are not a test of them, and there is no separate set of photos
+  with known shut eyes to test them on (the rules here allow only made-up
+  pictures and the website's sample photos). Closed eyes matter in three
+  places, all shared rules: a photo with shut eyes is kept off the extra
+  full pages; it loses half its `photoQuality`, which picks the keeper in a
+  set of repeats and orders the cover photos (`CoverEditor`); and
+  `generateAlbum` treats it as a weak photo. So where the phone says
+  "shut" and the website says "open", the phone can keep a different shot
+  of a burst, offer it later on the cover, and give it a smaller place.
+- **For the owner: laughing faces.** With the eyes now judged on most
+  faces, the phone calls 10 test pictures "eyes shut" where the website
+  calls 2 (none the same). Looking at each face, the eyes in the phone's 10
+  ARE shut or nearly shut: people laughing with their eyes squeezed, or
+  looking down (two of the 10 are blurred copies of sample photos). The
+  website's finder reads most of those as open. So the
+  2.0 app follows the rule ("both eyes shut") more closely than the website
+  does, and will give laughing photos a smaller place more often than the
+  website does. If laughing faces should not count as "eyes shut", that is
+  a change to the shared rule, for both.
+- **A failed face pass never stops the check**: if ML Kit fails on a photo
+  (an error, the phone short of memory), that photo just has no eye test
+  (faces stays unknown) and the builder marks its face pass done, as on the
+  website, whose face finder answers "no faces" when it fails. Before this
+  fix, one failure on a photo in a set of repeats left the Photos step on
+  "Megy is checking your photos… N of N" for the rest of the visit.
+- **Face centring**: the same ML Kit faces through the shared
+  `faceCentre.faceGroupCentre` (split out of `faceDetection.ts`, unchanged).
+- **After the app is closed and opened again**, a face pass still to do
+  decodes each remaining photo for its blur answer again (about 0.3 s a
+  photo on the emulator) before looking for faces, because the blur answers
+  are kept in memory only. The website's face pass always does this. To
+  skip it: save the blur answers per photo address on the phone (in a file
+  beside the album draft, `draftFile.ts`), or, after Nov 9, let
+  `PhotoChecker.check` take the photo's known blur answer. Not done.
+- **App size: the face finder adds about 13 MB on a phone.** Measured from
+  ML Kit's own package (`face-detection-16.1.7.aar`): for an arm64 phone,
+  its native code is 8.5 MB and its model files 4.3 MB, stored uncompressed
+  in the app, so about 12.8 MB more on the phone; compressed for the
+  download, about 3.4 MB + 3.4 MB, so about 7 MB more to download. One
+  model file, `contours.tfl` (1.1 MB), is never used (contours are off).
+  Its Java code (0.6 MB before shrinking) and the libraries it brings are
+  not counted. Not measured: a release build before and after. Choices for
+  the owner before the store: keep the model inside the app (works with no
+  connection, bigger app) or use `play-services-mlkit-face-detection`
+  (smaller app; Google Play services downloads the model on the phone, so
+  until it has, the check finds no faces). Either way, ship an AAB so each
+  phone gets only its own processor's code (the x86_64 copy, 9.7 MB, is for
+  the PC's emulator only).
+- **Privacy, before the app ships with this module**: the photos never
+  leave the phone. But ML Kit brings Google's usage-log uploader
+  (`com.google.android.datatransport`, "cct", with the INTERNET permission
+  and its own service), and Google's ML Kit terms say the on-device APIs
+  send Google anonymous usage and performance numbers with device and app
+  details. So before any store or tester build has ML Kit:
+  1. **Play Data safety form**: add what ML Kit collects (Google's "ML Kit
+     data disclosure" page lists it).
+  2. **Privacy page** (`src/pages/Privacy.tsx`, "Service providers we rely
+     on"): add "Google ML Kit: finds faces on your phone; your photos are
+     never sent". Not added yet: no app that customers have uses ML Kit
+     (the Play testers' app is the 1.x shell).
+  3. Optional, for no uploads at all: remove ML Kit's uploader service with a
+     manifest `tools:node="remove"` in a config plugin, and run
+     `tools/photo-check` again to see ML Kit still works. Not tried.
+- **Not proven yet**: a real phone (only the x86_64 emulator), a 2 GB
+  phone with other apps open, a store (release) build's speed and size
+  (the test screen runs only in dev builds), the check inside the real
+  album flow (Phase 3), P3/Adobe RGB photos (the copy is decoded to sRGB,
+  as the browser does, but none were in the test set), HEIC photos, photos
+  of 108 or 200 MP, and the eye rule on photos it was not tuned on.
+
+#### Phone and website, side by side (tools/photo-check, run 2026-10-28)
+
+The same 138 pictures through the website's own code (headless Chromium,
+face-api.js) and the app's (dev build on the x86_64 emulator, Android 14,
+2.5 GB; ML Kit on the 1600 px copy): 60 made-up pictures (20 scenes, one
+of them 50 MP; 10 blurred copies; 4 with an EXIF turn; 10 near copies; 8
+blurred and 8 near copies of sample photos) and the website's 78 sample
+photos (people, many faces). No personal photos. Full numbers:
+`tools/photo-check/out/report.json` after a run (not kept in git). Three
+runs of the same build gave the same verdicts; the speeds and memory
+below are from the first.
+
+- **Blur and repeats: the same answers as the website, every one.**
+  Sharpness within 0.15 % on every picture (median ratio 1.000). Fingerprint
+  identical on 136 of 138; the 50 MP picture and its near copy differ in 4
+  of 64 bits (decoded at half size first), which changed no verdict. On
+  the three test albums (made-up, samples with their copies, all 138):
+  the same blurry photos (9 of 138), the same 28 sets of repeats, the same
+  call on every pair of photos (9,453 pairs), and the same "leave out"
+  suggestions (32 photos), with and without the eye test. The verdicts
+  the app worked out and showed on its own screen are the website's.
+- **Faces: ML Kit finds more of the real faces.** The website's finder saw
+  144 faces big enough to judge, the phone 235. The phone found 137 of the
+  website's 144 (95 %). The 98 faces only the phone found are all on one
+  sheet (`tools/photo-check/out/phone-only-faces.png`, made by
+  `sheets.mjs`); looked at one by one, 97 are real faces the website's
+  small model misses (mostly smaller faces in group photos, faces turned
+  sideways or partly hidden), and 1 is doubtful (a heavily blurred copy of
+  sample 52, the box on the top of a head). The website found 7 the phone
+  did not (one is an upside-down face, sample 47). Same number of faces on
+  65 % of pictures, same "has a face or not" on 88 %. The boxes are drawn
+  differently (median overlap 0.55), which the rules do not mind (they
+  read the box height).
+- **Closed eyes: eyes judged on 202 of the phone's 235 faces (86 %; the
+  website judges all of its 144).** Of the 137 faces both found, the phone
+  judged 136: both say open on 127, the phone says shut on 8, the website
+  on 1. By picture: the same verdict on 126 of 138 (91 %), but on none of
+  the shut ones: the phone calls 10 pictures shut (samples 16, 26, 39, 41,
+  46, 51, 54, 64 and blurred copies of 41 and 52), the website 2 (samples
+  08 and 47). Looking at each face (`out/eyes-sheet.png`): in the phone's
+  10 the eyes are shut or nearly shut (laughing with eyes squeezed, or
+  looking down), which the website's finder reads as open; the website is
+  right on its 2 (sample 08, a boy laughing, which ML Kit scores 0.01 and
+  0.41; sample 47, a laughing face upside down, where ML Kit finds no
+  face). In this test the eye differences changed no "leave out"
+  suggestion. Remember the line (0.1) and the 100 px rule were chosen on
+  these pictures. Other lines, on faces of 100 px or more (pictures called
+  shut / same verdict as the website): 0.05 → 7 / 93.5 %, **0.1 → 10 /
+  91.3 % (in use)**, 0.15 → 17 / 86.2 %, 0.2 → 21 / 83.3 %, 0.3 → 23 /
+  81.9 %. The earlier run, with ML Kit on the 800 px copy, agreed on 97 %
+  of pictures only because it looked at so few eyes (42 of 237 faces).
+- **Face centring**: the same "face or no face" decision on 78 % of
+  pictures (both none 41, both found 67, phone only 25, website only 5;
+  most "phone only" are the extra real faces). Where both found faces,
+  the centring points are a median 0.05 of the picture apart (66 % within
+  0.1).
+- **Speed per photo** (emulator, dev build, Hermes; the PC was running
+  other work too, so these are for comparing, not phone numbers):
+  blur and repeats median 282 ms (163 ms decoding on Android's threads,
+  125 ms of maths on the JavaScript thread), slowest 5 % 595 ms (the 50 MP
+  pictures); faces and eyes median 462 ms (slowest 5 % 839 ms); face
+  centring from scratch 401 ms, and 0 ms after the face pass (the faces are
+  kept). All 138: 51 s blur, 73 s faces.
+- **Picking is not held up**: while the check runs, a gallery page read
+  (what the photo grid does as you scroll) takes a median 19 ms in the
+  blur pass and 15 ms in the face pass (24 ms with nothing running;
+  slowest 5 % 52 ms, longest 83 ms), and the screen's 50 ms timer runs
+  late by at most 83 ms (blur pass) and 28 ms (faces). The first try,
+  through the wrapper library, made gallery reads wait up to 315 ms, and
+  its small copy was not the browser's (sharpness 0.63 to 2.1 times the
+  website's).
+- **Memory**: the app at 92 MB (PSS) before, 550 MB at the most while
+  checking (662 MB RSS; most of it in the face pass, see the table above),
+  310 MB 30 s after the last photo (ML Kit's model let go). Not yet tried
+  on a 2 GB phone with other apps open.
+- The website on this PC, for reference: blur and repeats 27 ms a photo;
+  the whole check with faces 2.2 s (face-api on the CPU here; the real
+  website uses WebGL where it can).
+- To run it again: `cd tools/photo-check && node makePictures.mjs && node
+  runWeb.mjs && node phoneServer.mjs --serial emulator-<port> --metro
+  <Metro's PC port> && node compare.mjs && node sheets.mjs`. With Metro on
+  a PC port other than 8081, phoneServer.mjs points the emulator's dev app
+  at its own localhost:8081 (adb reverse): an emulator otherwise asks the
+  PC's 10.0.2.2:8081 and shows "Unable to load script".
 
 ---
 
@@ -1782,6 +2005,215 @@ same pixelmatch code. **All 45 pages pass.**
 
 ---
 
+## Phase 5 notes (2026-10-29): the checkout screens
+
+Built against a **test album** (48 of `public/sample-photos`, made into pages
+by the shared album maker with a fixed seed: 40 pages, 48 photos), because
+the album steps (Phase 3) were not in `main` yet. The start screen has
+"Checkout with a test album". **It writes nothing**: no order, no upload, no
+tester-code check.
+
+### What the screens do
+
+- **Your order** (`src/app/order.tsx`): the cover (its photo only, see below),
+  "N pages inside", paper, cover (only the covers the press can make, shared
+  `printSheet`), size from the design, name, phone (tidied to
+  "+63 917 123 4567" when you leave the box), the delivery address, the
+  order summary with the price, "Free" shipping, "Included with your album",
+  the QR note, the tester code box and **Place order**. The website's words
+  throughout (`src/pages/Order.tsx`).
+- **Address**: Province → City / Municipality → Barangay, each a full-screen
+  list you can search by typing ("binan" finds Biñan), then the street and
+  ZIP. The website's lists (`public/psgc/`, read from the website, about
+  2.8 MB, too big to put in the app) and its rules: no Region box (worked out
+  from the city), picking a level clears the ones under it, the street is
+  never cut (its count shows near 120 and a longer one is said), the ZIP box
+  keeps 4 digits. A box before its turn is never greyed: it says what to
+  choose first and opens that, through the same checks (a list still loading
+  waits; a list that didn't load, offline for example, is tried again
+  instead of opening empty).
+- **Price**: the live price list (`public_price_schedule()`, read only, tried
+  again after 3 s, 6 s … a minute) through the shared `pricing.ts`. No list,
+  no price: "Prices didn't load — tap to try again". A tap always answers
+  with "Loading price…", even while a try the app started by itself is
+  still on its way (the tap then waits for that try).
+- **Tester code**: "Have a tester code?" → "Type your code" → "Tester code
+  MEGYTEST: free", the real price crossed out, ₱0 to pay, "Place order ·
+  free with tester code". In this build only the code's shape is checked:
+  `check_tester_code` counts tries in the database (a write), so it is not
+  called. So here **any code of 4 to 24 letters or numbers shows free**, not
+  only MEGYTEST (the website refuses a wrong one with "That code doesn't
+  work. Check the spelling."). The form says so under the code ("Test
+  version: this code was not checked with the shop. Here, any code of 4 to
+  24 letters and numbers shows as free."), and the test panel says it again.
+  The shop's check is called only on the write path, against a local
+  Supabase.
+- **"This album already has an order"**: the website's notice at the top,
+  with its "Open order MP-…" button (outlined in the app: Place order is the
+  one filled button on the form; the website fills both), and the same
+  button first and filled in the "Place a second order for it?" question,
+  before the outlined "Yes, place a second order". The question takes Place
+  order's place while it is open, so there is one filled button. The
+  website's button opens its Orders page; the app has no
+  Orders screen until Phase 6, and opening the website in the phone's
+  browser does not work: the browser is not signed in, and the website sends
+  a signed-out visitor from `/orders` to its home page (seen on the
+  emulator, `ProtectedRoute`), so the order is lost. So the app opens that
+  order itself (`openOrderView`): while nobody has paid it, **its** payment
+  step ("Order MP-… is placed. Pay by bank transfer to finish.", "put MP-…
+  in the note", its own last day to pay, and "I've sent" plans
+  `submit_payment_proof` for that order's id, sent nothing in this
+  version); once the payment was sent (or for a tester-code order), where it
+  is, in the shared `orderTracker`'s words ("Payment sent — we're confirming
+  it"). "Back to your order" returns to the form as it was.
+  **The total on that payment step is the order's `quoted_amount`**, the
+  total the database saved as the order was placed (0055). `orders.amount`
+  is NULL on every order waiting for payment (the insert policy in 0002/0003
+  pins it; only the shop sets it, on confirming), so it can't be used; the
+  app reads `amount` only as a fallback (`askedToPay` in `openOrder.ts`).
+  An order placed before 0055 has no saved total: it still gets its payment
+  step (the QR, its number, its last day), with no number made up: "This
+  order is older, so its total is not saved here. Message us and we will
+  tell you how much to send." and a "Message us" button that opens the
+  website's contact page. (Such orders close by themselves after 7 days, so
+  by the time the app ships there should be none.) The website's Orders
+  page reads `amount` for its "Send ₱X" line, so it shows no number for a
+  waiting order: a website gap, left for after Nov 9.
+- **Place order** runs the website's checks in its order (cover, name,
+  phone, address, sign-in, "this album already has an order", 40 photos),
+  then the bar (shared `placeProgress`: start, preparing, cover, page by
+  page, sending with a moving band, checking, saving, finishing; the screen
+  is kept on with `expo-keep-awake`), then **stops** and shows the test
+  panel: every step Place order would take and the exact data (the
+  `orders` row, the `qr_memories` rows, the files).
+- **Payment step** (after "See the payment step"): "Send ₱X", the GoTyme
+  InstaPay QR (the website's picture), account ending 2370, the four steps,
+  "Attach the transfer receipt (JPG, PNG or PDF)" (the website's words;
+  Android's picker on pictures and PDFs, checked with the website's rules:
+  JPG, PNG, WebP or PDF, 8 MB), the
+  reference box (bad ones said, not cleaned quietly), "I've sent ₱X" → the
+  test panel shows the receipt upload and `submit_payment_proof` it would
+  send. No order is placed, so there is no order number: as the website
+  does without one, it leaves out "Order … is placed" and "put … in the
+  note". Because no order is behind this QR, a band across it says "Test
+  only. Do not pay." and the test note says "Do not send money: there is no
+  order." (the website never shows the QR without an order).
+- **Not signed in**: the website's "You must be signed in to check out"
+  and a Sign in button. Sign in opened from checkout (`/sign-in?then=back`)
+  comes back to the order; once signed in, the message and the button go
+  (the website's `shownError`). From anywhere else sign-in opens My albums.
+
+### Same as the website: how it is proven (jest, `mobile/test/checkout*`)
+
+| What | How | Numbers |
+|---|---|---|
+| The order row | The website's own `createOrderFromAlbum` runs with a stand-in database that writes down the insert; the app's row must be equal, key order included (byte for byte) | 5 albums/addresses/codes, 19–20 keys, ~17 KB each: identical |
+| The files and the order of the writes | The website's upload and RPC functions run against the stand-in, which writes down each upload's whole options object | cover PDF, (videos), pages PDF, each with the same options; `claim_tester_order` for a tester order; receipt (type and `cacheControl: '0'`) + `submit_payment_proof` for 4 receipts: identical |
+| The address lists | The website's `psgc.ts` runs on the real files next to the app's | 84 provinces, 1,655 cities, 42,011 barangays: identical |
+| The checks | `handleProceedToPayment` and the 40-photo lines are cut out of `Order.tsx` and run on Node | 549 mixes of name, phone, address, cover, sign-in, open order, short album: same answer and words |
+| The price | The price lines are cut out of `Order.tsx` and run on Node; the database's saved totals (0055) | 2,688 albums (576 with a "was" price): identical; 6 database totals match |
+| The screen | The real screen, walked in jest (testing-library): empty form, long street, MEGYTEST to the panel, paid order to the payment step, not signed in and back, an order waiting (the shape the database holds: `amount` NULL, `quoted_amount` set), an older order with no saved total, prices not loaded, address lists offline | the panel's row equals the website's row for the same typed details |
+
+**Mirrors, until the website files are split (after Nov 9).** Four website
+files hold rules checkout needs but also call the website's Supabase client
+(or a Vite-only value), so the app can't import them: `orders.ts` (the order
+row), `payment.ts`, `testerCode.ts`, `psgc.ts`. Splitting them changes code
+the website runs, which waits for the re-apply. Until then the app keeps a
+copy of the pure part (`mobile/src/lib/checkout/`), and the tests above run
+the website's function beside it and fail on any difference. After Nov 9:
+move the pure half of each into a shared file, list it in
+`sharedModules.ts`, and make the app's copy a re-export.
+
+### Not done here (and what each needs)
+
+- **The real album** (needs Phase 3): checkout takes a `CheckoutAlbum`
+  (`orderPayload.ts`); Phase 3 hands over its album and the account's
+  albums row instead of the test album. The album must be saved to the
+  account first (the website saves it on the way to checkout).
+- **The cover thumbnail draws only the cover photo**: words and colours need
+  the page renderer (held PRs #216/#219).
+- **The print files** (needs the renderer + a PDF writer on the phone): the
+  cover wrap PDF and the pages PDF. Press sheets and the "Sheets as JPEG" zip
+  are made later on the admin Orders page from the uploaded PDFs, not at
+  checkout.
+- **The write path**: the insert, the uploads (create-only), the memory rows,
+  `claim_tester_order`, `check_tester_code`, the receipt and
+  `submit_payment_proof`. Each step is already data (the plan in the test
+  panel); test it against a local Supabase, never the live one.
+- **Not in the app yet**: memory videos (so no hosting-term or HD picker:
+  the included term, standard quality), event albums, the order number on
+  the payment step (it comes from the insert), keeping the form after the
+  app closes (`checkoutSession`), "same as your last order", an Orders
+  screen ("Open order" shows only that one order: its payment step or where
+  it is; cancelling an unpaid order is on the website's Orders page),
+  focusing the first box to fix (it scrolls there).
+
+### What was seen on the emulator (2026-10-28, after the review fixes)
+
+`pwa_test` (Android 14, x86_64), port 5566, release APKs built in `C:\m4c`
+from a29f9b3. Two builds: the PR code as it is, and a **walk build**: the
+same code plus stand-ins for the outside (stand-in accounts that sign in on
+the phone with no network call, for emails ending in `@example.test`,
+because there is no local Supabase and the live project must not be signed
+in to; one logcat line for every `fetch` the app makes; and a stand-in
+"order waiting" for two of those accounts). Evidence: `pr-evidence` @
+`2d8887d`, folder `port-checkout-screens/walk2/` (`results.txt` lists every
+screenshot; the first walk, before the review fixes, is in
+`port-checkout-screens/` @ `e0cc049`).
+
+- **Price**: read from the live list: P1,288 (was P1,710) softcover.
+- **Address**: Laguna > Biñan City ("binan" finds it) > Canlalay, and Metro
+  Manila > Quezon City > Bagong Pag-asa (the order row says "National
+  Capital Region (NCR)"). A 120-character street is read back from the
+  screen whole and goes whole into the order row; at 124 it is kept and the
+  count turns red.
+- **MEGYTEST**: signed out, "Sign in first, then type the code."; signed in,
+  free, P0, the test-order button and the note that any 4 to 24 letter or
+  number code shows free in this version.
+- **Place order**: the bar page by page ("Making page 3 of 40…"), then the
+  test panel; the order row alone is 17,157 bytes (compact JSON). The
+  payment step, Android's picker with a made-up receipt picture, the
+  reference, and "I've sent" with its panel (the receipt upload carries
+  `cacheControl: "0"`).
+- **"This album already has an order"**: the filled "Open order MP-…" opens
+  that order's payment step in the app (its amount, "Order MP-… is placed",
+  "put MP-… in the note"; "I've sent" plans `submit_payment_proof` for that
+  order's id), first in the second-order question too; for an order whose
+  payment was sent it says "Payment sent — we're confirming it". The first
+  try (opening the website's `/orders?order=<id>` in Chrome) landed on the
+  website's home page, because the browser is not signed in.
+  **Corrected (2026-10-29 review):** the stand-in waiting order in this walk
+  (and in jest) had `amount: 1288`, a shape the database can't hold
+  (`amount` is NULL on every waiting order). With a real order the app went
+  to "where it is" ("We confirm transfers…") with no QR and no way to pay.
+  Fixed: the app reads `quoted_amount` (see above); the stand-ins now use
+  the real shape (`amount: null, quoted_amount: 1288`).
+- **Nothing was written**: the fetch log has only reads (the website's
+  address files, `public_price_schedule`, the albums list, "this album
+  already has an order?"). Android's own per-app byte counters
+  (`dumpsys netstats`, read just before and after each step) show the phone
+  sent 277 bytes during Place order with MEGYTEST, 158 bytes during a paid
+  Place order and 79 bytes during "I've sent" with a 44 KB receipt picked:
+  the size of background connection traffic, against a 17 KB order row.
+- **Correction to the first walk**: its notes said a packet capture showed
+  3,740 bytes going to the Supabase host. In this run the emulator's
+  `-tcpdump` capture saw only boot-time ARP and IPv6 packets (on this AVD
+  the app's traffic goes over the netsim Wi-Fi path), so that number is not
+  confirmed; the per-app counters above replace it.
+- Not seen: a real account, any write, the real album, a real phone.
+- Small gap seen: the payment step of an order placed earlier still said
+  "Please pay within 7 days"; the website's Orders page says "Please pay by
+  <date>" from the order's own date. **Fixed (2026-10-29):** that step now
+  says "Please pay by November 2, 2026. After that this order closes by
+  itself, and your album stays saved." (the Orders page's words, `payByOn`
+  in `openOrder.ts`, Manila time). jest runs the website's own `payByDate`
+  in Manila time beside it on 2,000+ dates (both years, the day and year
+  edges): identical. The payment step after Place order keeps the website's
+  "Please pay within 7 days…" line (there is no order date yet). Seen in
+  jest only, not on the emulator.
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
@@ -1833,3 +2265,34 @@ replaced):
 - The 1.x frame, gone in 2.0: `nativeShell` (Capacitor), and through it
   `useSampleAlbumNotes` and `useTesterStamp`.
 - Website styling only: `utils` (Tailwind class names, clsx).
+
+---
+
+## Working on 2.0 (the native-2.0 branch)
+
+Decided by the owner on 2026-10-29. Until the Play production re-apply on
+Nov 9, 2.0 work does not touch main (the live website). 2.0 is built on its
+own long-lived branch, `native-2.0`.
+
+- **Every 2.0 PR targets `native-2.0`, not main.** Start a 2.0 worktree from
+  `origin/native-2.0` (not `origin/main`). A 2.0 PR is merged into
+  native-2.0 as soon as it is proven (gates pass, walked), even when it
+  changes website code.
+- **Merge main into native-2.0 regularly** (whenever main gets a website
+  change, and before each round of 2.0 merges), with a merge commit:
+  `git merge --no-ff origin/main`. Never rebase native-2.0 and never
+  force-push it: open PRs and worktrees are built on its commits.
+- **One PR from native-2.0 into main, after Nov 9**, merged only after a
+  full walk of the website (every customer step and the admin pages, on a
+  phone-sized screen and as the Android app). Nothing from native-2.0 goes
+  into main before then.
+- **CI on native-2.0** (`.github/workflows/ci.yml`) runs two jobs on every
+  PR into native-2.0 and every push to it: `verify` (the website: unit
+  tests, typecheck, build; the same gate main has) and `mobile` (the app:
+  `npm ci` at the root and in `mobile/`, tools/golden's packages and headless
+  Chromium, then `npm run check` in `mobile/`: tsc and every jest test,
+  including the golden pixel test). `mobile` never runs for main and is not
+  a required check.
+- The local gates stay the same: website `npx tsc -b && npx vitest run &&
+  npm run build`; app `npm ci && npm run check` in `mobile/` (the golden
+  test needs `npm ci` in `tools/golden` first).

@@ -8,12 +8,14 @@ import { colors, space } from '../lib/theme';
 import { forgetResume } from '../editor/text/resumeQuote';
 
 /** Sign in with the email and password of a Megy Prints account (the same
- *  account as on the website). */
+ *  account as on the website). Opened from checkout or the editor's quotes
+ *  (then=back), it goes back there once signed in, as the website's sign-in
+ *  box keeps you on the page; from anywhere else it opens My albums. */
 export default function SignIn() {
   const { signIn } = useAuth();
-  // Opened from a screen that carries on once signed in (the editor's "Write
-  // a line for this photo"): back to it, not to My albums.
-  const { back } = useLocalSearchParams<{ back?: string }>();
+  // Opened from a screen that carries on once signed in (checkout, or the
+  // editor's "Write a line for this photo"): then=back goes back to it.
+  const { then } = useLocalSearchParams<{ then?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -36,7 +38,7 @@ export default function SignIn() {
     setBusy(false);
     if (result.ok) {
       signedInHere.current = true;
-      if (back === '1' && router.canGoBack()) router.back();
+      if (then === 'back' && router.canGoBack()) router.back();
       else router.replace('/albums');
     }
     else setError(result.error ?? 'Sign-in did not work. Try again.');
