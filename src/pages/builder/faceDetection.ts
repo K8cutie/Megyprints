@@ -16,6 +16,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import * as faceapi from 'face-api.js';
+import { faceGroupCentre } from './faceCentre';
 
 let modelsLoaded = false;
 let loadPromise: Promise<void> | null = null;
@@ -105,33 +106,9 @@ export async function detectFaceCenter(imageUrl: string): Promise<{ x: number; y
       new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }),
     );
 
-    if (!detections || detections.length === 0) {
-      return null; // No face — will fall back to center-crop
-    }
-
-    let centerX: number;
-    let centerY: number;
-
-    if (detections.length === 1) {
-      // Single face: center on it
-      const f = detections[0];
-      centerX = (f.box.x + f.box.width / 2) / img.width;
-      centerY = (f.box.y + f.box.height / 2) / img.height;
-    } else {
-      // Multiple faces: find bounding box of ALL faces, center on the middle
-      const minX = Math.min(...detections.map((d) => d.box.x));
-      const minY = Math.min(...detections.map((d) => d.box.y));
-      const maxX = Math.max(...detections.map((d) => d.box.x + d.box.width));
-      const maxY = Math.max(...detections.map((d) => d.box.y + d.box.height));
-
-      centerX = ((minX + maxX) / 2) / img.width;
-      centerY = ((minY + maxY) / 2) / img.height;
-    }
-
-    return {
-      x: Math.max(0, Math.min(1, centerX)),
-      y: Math.max(0, Math.min(1, centerY)),
-    };
+    // 0 faces → null (center-crop); 1 → that face; 2+ → the middle of the
+    // group (faceCentre.ts, shared with the 2.0 app).
+    return faceGroupCentre((detections ?? []).map((d) => d.box), img.width, img.height);
   } catch (err) {
     console.warn('[FaceDetection] Detection failed:', err);
     return null;

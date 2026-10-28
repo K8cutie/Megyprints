@@ -27,12 +27,18 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   Worklets, Gesture Handler) are not in the APK. Importing one crashes the
   app on the phone; `test/nativeLibraries.test.ts` fails first. Delete the
   line there to turn one back on.
-- **The app's own native code** lives in `modules/` (today `modules/photo-files`:
+- **The app's own native code** lives in `modules/`: `modules/photo-files`
   keeps access to photos picked with "Choose from Files" and reads their size
-  and EXIF time; `srgbCopy` turns a Display P3 / Adobe RGB photo into sRGB
-  for a print page). Expo autolinking builds every folder there; after changing
-  its Kotlin, run prebuild and Gradle again. Jest has no native modules: its
-  JS side (`index.ts`) works without the native half.
+  and EXIF time, and its `srgbCopy` turns a Display P3 / Adobe RGB photo into
+  sRGB for a print page; `modules/photo-pixels` makes the photo check's small
+  copy the way the website's browser does and runs Google ML Kit's face finder
+  on a copy up to twice that size (`src/lib/phonePhotoCheck.ts`; compared with
+  the website by `../tools/photo-check`). ML Kit sends Google anonymous usage
+  numbers (never the photos) and adds about 13 MB to the app: see
+  `src/lib/faceModel.ts` before shipping it. Expo autolinking builds every
+  folder there; after changing its Kotlin, run prebuild and Gradle again.
+  Jest has no native modules: its JS side (`index.ts`) works without the
+  native half.
 - **Photos are never copied into the app.** The album keeps each photo's
   content:// address on the phone (see the Phase 2 notes in the plan). Pages
   on screen are drawn from small upright sRGB copies in the app's cache

@@ -1,0 +1,27 @@
+// The app's small native module for Megy's photo check (see ../index.ts):
+// a small copy of a photo made the way the website's browser makes it, and
+// Google ML Kit's face finder on it. Built from source by Expo autolinking
+// (every folder under mobile/modules).
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.megyprints'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.megyphotopixels"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // The same version expo-media-library and modules/photo-files use: one copy.
+  implementation "androidx.exifinterface:exifinterface:1.4.1"
+  // ML Kit face detection with its model inside the app ("bundled": no
+  // Google Play download, works with no network). Pinned, not "16.+".
+  implementation "com.google.mlkit:face-detection:16.1.7"
+}

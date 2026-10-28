@@ -35,6 +35,8 @@
    draftAlbum (draftAlbumRow) and useAlbumSync (albumCloud); pageColors,
    textFit and albumSyncRecord as they are; and canvasMeasurer.native (the
    app has no browser canvas: its builder measures words with its own).
+   The phone's photo check added pages/builder/faceCentre (the face-group
+   centre, split out of faceDetection, which needs face-api).
 
    Phase 3 added what the app's steps decide with, so they are the website's
    rules and words, not copies: assistant/rebuildQuestion (what a size change
@@ -94,6 +96,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/coverGeometry.ts',
   'src/pages/builder/coverPhoto.ts',
   'src/pages/builder/densities.ts',
+  'src/pages/builder/faceCentre.ts',
   'src/pages/builder/fontCatalog.ts',
   'src/pages/builder/generateAlbum.ts',
   'src/pages/builder/gradient.ts',
