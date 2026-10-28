@@ -21,6 +21,7 @@ import { ImageFormat } from '@shopify/react-native-skia/lib/commonjs/skia/types'
 import { drawableCopy } from '../../modules/photo-files';
 import type { PageText } from '../render/pageText';
 import { drawPageImage, hashText, pageKey, photoImageCache, PHOTO_MAX_SIDE, type PageRequest } from './pageImages';
+import { pagePictureShown } from './pageShown';
 
 const PAGES_FOLDER = 'megy-pages';
 const PHOTOS_FOLDER = 'megy-photo-copies';
@@ -153,10 +154,10 @@ export function usePagePicture(text: PageText | null, req: PageRequest | null): 
     if (!key || !req || !text) return;
     let live = true;
     const hit = known.get(key);
-    if (hit) { setState({ ...hit, error: null }); return; }
+    if (hit) { setState({ ...hit, error: null }); pagePictureShown(req.page); return; }
     setState((s) => ({ ...s, uri: null }));
     pagePicture(text, req)
-      .then((p) => { if (live) setState({ ...p, error: null }); })
+      .then((p) => { if (live) { setState({ ...p, error: null }); pagePictureShown(req.page); } })
       .catch((e: unknown) => { if (live) setState({ uri: null, notDrawn: [], missing: 0, error: e instanceof Error ? e.message : String(e) }); });
     return () => { live = false; };
     // `key` covers everything in `req` that is drawn.

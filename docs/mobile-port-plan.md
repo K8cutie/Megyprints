@@ -1137,7 +1137,67 @@ tests).
 
 ### Part 1: photos, layouts, pages (`src/editor/photos`)
 
-(Written by the part's job.)
+Branch `feat/port-phase-4-editor-photos` (on `feat/port-phase-4-editor`). Every
+change is one call to the website's own useBuilderState with the arguments its
+editor uses (`actions.ts`); nothing in `../src` changed.
+
+- **Move and zoom** (`framing.ts`, `FramingOverlay.tsx`): a selected photo moves
+  with one finger and zooms with two, in slotPhotoFit's one fit (the renderer
+  calls the same `slotPhotoRect`), the pan held to the photo's overflow (pushed
+  past the edge it stops there and comes back the moment the finger turns), the
+  zoom between 1 (the cover fit) and 10 (the website's zoom slider's top).
+  Stored with `setSlotOffset` (design px) / `setSlotScale`: one undo step per
+  move and per pinch, each stored the moment that finger work ends, so no Undo
+  ever changes nothing. A zoom that prints soft says `SOFT_MESSAGE`
+  (printSharpness). The overlay takes a touch only where the selected photo is
+  on top, keeps a pinch's second finger, and hands a plain tap to the page's
+  own tap. While the finger works the photo is drawn over the page picture;
+  it steps aside when the changed page is on show (`builder/pageShown.ts`, said
+  by `usePagePicture`), so it never jumps back.
+- **Swap photo**, then a tap on another photo or an empty frame, on this page or
+  after turning pages: `fillSlot`, which swaps the frames (framing travels) or
+  moves into an empty one (slotSwap `placePhoto`), with the website's
+  `swapNotice` line. A line over the page says a swap is waiting, with Cancel;
+  a tap on the photo itself or leaving the editor calls it off. (A drag of one
+  photo onto another is not built: a drag moves the photo in its frame.)
+- **Replace photo** and **Add Photo** ("Add to this box" on an empty frame):
+  MobileReview's "Add a photo" sheet, every album photo tagged "This page" /
+  "Page 3", a pick → `fillSlot` + `swapNotice`; a caption box's photo → the same
+  sheet → `setTextSlotPhoto`. "Upload more photos" and the **Add photos** tool go
+  to the app's photo picker; on the way back only the photos picked on that trip
+  go in (`intake.ts`: `syncPhotos` with nothing taken out, so an album opened from
+  the account keeps every photo), the website's honest count is said, and the
+  sheet opens again. **Remove photo** → `clearSlot`.
+- **Mask** and **Filter** (StudioPhone's words): the shapes and colour looks by
+  name, the current one ticked, `setSlotMask` / `setSlotLook` with the edge
+  warning. The renderer does not draw soft edges, textured edges or colour looks
+  yet (the renderer job): the page says "drawn more simply" for those.
+- **Change layout** (`LayoutSheet.tsx`, LayoutPicker's words): "✓ Current"
+  first, then `availableTemplatesForCurrentPage` (layoutChoicesForPage: the 16%
+  crop budget per frame, same photo count first), each a picture of this page on
+  that layout drawn by the page renderer (`relayPageOnTemplate`); a layout that
+  can't hold every photo or caption asks first (new page / take out), then
+  `applyPageLayout`.
+- **Pages** ("Add or delete pages", the app's own: the website does it in
+  Megy's chat, whose lines it says): `addPage` (then the new page's layouts),
+  `deletePage` of the page on screen, never under 40 pages (said, not offered).
+- **Lines over the page**: "✎ This page is yours" + "Megy, fix this page"
+  (`resetStudioPage`), and the blank pages reminder in the website's words
+  (blankPages.ts): "5 pages are blank", "Delete 5 blank pages" (`deletePages`,
+  the last ones, never under 40), "Edit the blank pages" (the next one).
+- **Not the website's on a phone, said plainly**: the SlotChooser offers Add
+  Photo / Add Quote / Your Text; QR left the boxes on the website on 2026-10-02
+  (video memories are Phase 6), so the app offers none there either.
+- Tests: `editorPhotosFraming` (the frame and the fit held to `planPage` /
+  drawPage on every layout of every size, left and right pages; the gesture),
+  `editorPhotos` (every action on the real shared builder: the calls recorded,
+  the album compared with slotSwap / layoutChoicesForPage / blankPagePlan /
+  planPage, Undo), `editorPhotosScreens` (the overlay, sheets and lines
+  rendered and used through their own touch handlers), `editorPhotosWords`
+  (each phrase held to the website's file).
+- Not proven: not walked on an emulator or a phone (the verify step); the
+  layout pictures and the move preview are drawn only on a phone (Skia,
+  expo-image), so jest checks their numbers, not their pixels.
 
 ### Part 2: words, fonts, colours, quotes, page colours (`src/editor/text`)
 
