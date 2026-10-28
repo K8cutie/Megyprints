@@ -1,9 +1,9 @@
 {
- "when": "2026-10-28T08:15:46.143Z",
+ "when": "2026-10-28T12:32:40.428Z",
  "wrapperRun": {
   "when": "2026-10-28T07:26:59.758Z",
   "sharpRatio": {
-   "median": 1.324,
+   "median": 1.326,
    "min": 0.629,
    "max": 2.108
   },
@@ -48,8 +48,42 @@
  },
  "pictures": {
   "compared": 138,
+  "madeUp": 44,
+  "samples": 78,
+  "sampleCopies": 16,
   "missing": [],
   "sizeMismatch": []
+ },
+ "onScreen": {
+  "photos": 138,
+  "blurry": {
+   "phone": 9,
+   "website": 9,
+   "sameAsWebsite": true
+  },
+  "repeatSets": {
+   "phone": 28,
+   "website": 28,
+   "sameAsWebsite": true
+  },
+  "eyesShut": {
+   "phone": 2,
+   "website": 2,
+   "both": 0
+  },
+  "leaveOut": {
+   "phone": 32,
+   "website": 32,
+   "sameAsWebsite": true
+  },
+  "sameAsThisTool": true
+ },
+ "memory": {
+  "peakPssMB": 405.6,
+  "peakRssMB": 517,
+  "lastPssMB": 304.1,
+  "firstPssMB": 89.1,
+  "how": "adb shell dumpsys meminfo every 2 s (MB = KB / 1024)"
  },
  "measurements": {
   "sharpRatio": {
@@ -61,13 +95,14 @@
   },
   "hashBits": {
    "median": 0,
-   "max": 0,
-   "zero": 100,
-   "atMost3": 100
+   "max": 4,
+   "zero": 98.6,
+   "atMost3": 98.6
   },
   "worstSharp": [
    {
     "file": "megy-sample-18.jpg",
+    "megapixels": 1.7,
     "webSharp": 779.7,
     "phoneSharp": 778.6,
     "ratio": 0.999,
@@ -75,6 +110,7 @@
    },
    {
     "file": "megy-sample-22.jpg",
+    "megapixels": 1.7,
     "webSharp": 545.9,
     "phoneSharp": 545.1,
     "ratio": 0.999,
@@ -82,6 +118,7 @@
    },
    {
     "file": "megy-sample-66.jpg",
+    "megapixels": 1.7,
     "webSharp": 392.5,
     "phoneSharp": 391.9,
     "ratio": 0.999,
@@ -89,6 +126,7 @@
    },
    {
     "file": "megy-sample-45.jpg",
+    "megapixels": 1.7,
     "webSharp": 1336.7,
     "phoneSharp": 1334.9,
     "ratio": 0.999,
@@ -96,6 +134,7 @@
    },
    {
     "file": "megy-sample-31.jpg",
+    "megapixels": 1.7,
     "webSharp": 506.3,
     "phoneSharp": 505.7,
     "ratio": 0.999,
@@ -103,6 +142,14 @@
    }
   ],
   "worstHash": [
+   {
+    "file": "pc-scene-20.jpg",
+    "hashBits": 4
+   },
+   {
+    "file": "pc-near-20.jpg",
+    "hashBits": 4
+   },
    {
     "file": "pc-scene-01.jpg",
     "hashBits": 0
@@ -114,14 +161,25 @@
    {
     "file": "pc-turned-01-o6.jpg",
     "hashBits": 0
+   }
+  ],
+  "worstSharpPct": 0.144,
+  "overLimit": [
+   {
+    "file": "pc-scene-20.jpg",
+    "megapixels": 49.9,
+    "webSharp": 300.8,
+    "phoneSharp": 300.4,
+    "ratio": 0.999,
+    "hashBits": 4
    },
    {
-    "file": "pc-scene-02.jpg",
-    "hashBits": 0
-   },
-   {
-    "file": "pc-blur-02-2px.jpg",
-    "hashBits": 0
+    "file": "pc-near-20.jpg",
+    "megapixels": 49.9,
+    "webSharp": 377.4,
+    "phoneSharp": 377.3,
+    "ratio": 1,
+    "hashBits": 4
    }
   ]
  },
@@ -915,71 +973,115 @@
  },
  "faces": {
   "picturesCompared": 138,
-  "faceCountSame": 66.7,
+  "faceCountSame": 65.2,
   "hasFaceSame": 87.7,
-  "eyesClosedSame": 84.1,
+  "eyesClosedSame": 97.1,
   "eyesClosedPictures": {
-   "bothOpen": 116,
+   "bothOpen": 134,
    "bothClosed": 0,
    "webOnly": 2,
-   "phoneOnly": 20
+   "phoneOnly": 2
   },
   "boxes": {
    "web": 144,
-   "phone": 235,
+   "phone": 237,
    "matched": 138,
    "webFoundByPhone": 95.8,
-   "phoneFoundByWeb": 58.7,
-   "medianIoU": 0.534
+   "phoneFoundByWeb": 58.2,
+   "medianIoU": 0.537
   },
   "eyesOnMatchedFaces": {
-   "bothOpen": 116,
+   "bothOpen": 27,
    "bothClosed": 0,
-   "webOnly": 1,
-   "phoneOnly": 21,
-   "phoneUnscored": 0
+   "webOnly": 0,
+   "phoneOnly": 1,
+   "phoneNotJudged": 110
   },
   "websitePicturesShut": 2,
   "phoneShutLines": [
    {
     "line": 0.05,
-    "picturesShut": 10,
-    "agreeWithWebsite": 91.3
+    "minFacePx": 0,
+    "picturesShut": 12,
+    "agreeWithWebsite": 89.9,
+    "inUse": false
    },
    {
     "line": 0.1,
-    "picturesShut": 20,
-    "agreeWithWebsite": 84.1
+    "minFacePx": 0,
+    "picturesShut": 17,
+    "agreeWithWebsite": 86.2,
+    "inUse": false
    },
    {
     "line": 0.15,
-    "picturesShut": 24,
-    "agreeWithWebsite": 81.2
+    "minFacePx": 0,
+    "picturesShut": 21,
+    "agreeWithWebsite": 83.3,
+    "inUse": false
    },
    {
     "line": 0.2,
-    "picturesShut": 29,
-    "agreeWithWebsite": 77.5
-   },
-   {
-    "line": 0.25,
-    "picturesShut": 31,
-    "agreeWithWebsite": 76.1
+    "minFacePx": 0,
+    "picturesShut": 25,
+    "agreeWithWebsite": 80.4,
+    "inUse": false
    },
    {
     "line": 0.3,
-    "picturesShut": 33,
-    "agreeWithWebsite": 74.6
-   },
-   {
-    "line": 0.4,
-    "picturesShut": 38,
-    "agreeWithWebsite": 71
+    "minFacePx": 0,
+    "picturesShut": 31,
+    "agreeWithWebsite": 76.1,
+    "inUse": false
    },
    {
     "line": 0.5,
+    "minFacePx": 0,
     "picturesShut": 40,
-    "agreeWithWebsite": 71
+    "agreeWithWebsite": 71,
+    "inUse": false
+   },
+   {
+    "line": 0.05,
+    "minFacePx": 100,
+    "picturesShut": 2,
+    "agreeWithWebsite": 97.1,
+    "inUse": false
+   },
+   {
+    "line": 0.1,
+    "minFacePx": 100,
+    "picturesShut": 2,
+    "agreeWithWebsite": 97.1,
+    "inUse": true
+   },
+   {
+    "line": 0.15,
+    "minFacePx": 100,
+    "picturesShut": 5,
+    "agreeWithWebsite": 94.9,
+    "inUse": false
+   },
+   {
+    "line": 0.2,
+    "minFacePx": 100,
+    "picturesShut": 7,
+    "agreeWithWebsite": 93.5,
+    "inUse": false
+   },
+   {
+    "line": 0.3,
+    "minFacePx": 100,
+    "picturesShut": 8,
+    "agreeWithWebsite": 92.8,
+    "inUse": false
+   },
+   {
+    "line": 0.5,
+    "minFacePx": 100,
+    "picturesShut": 10,
+    "agreeWithWebsite": 91.3,
+    "inUse": false
    }
   ],
   "differences": [
@@ -994,59 +1096,6 @@
      false
     ],
     "eyes": []
-   },
-   {
-    "file": "megy-sample-04.jpg",
-    "faces": [
-     5,
-     5
-    ],
-    "closed": [
-     false,
-     true
-    ],
-    "eyes": [
-     {
-      "webEar": [
-       0.298,
-       0.307
-      ],
-      "phoneOpen": [
-       0.988,
-       0.992
-      ]
-     },
-     {
-      "webEar": [
-       0.245,
-       0.25
-      ],
-      "phoneOpen": [
-       0.995,
-       0.909
-      ]
-     },
-     {
-      "webEar": [
-       0.251,
-       0.295
-      ],
-      "phoneOpen": [
-       0.999,
-       0.997
-      ]
-     },
-     {
-      "webEar": [
-       0.161,
-       0.199
-      ],
-      "phoneOpen": [
-       0.007,
-       0.048
-      ]
-     }
-    ]
    },
    {
     "file": "megy-sample-06.jpg",
@@ -1065,8 +1114,8 @@
        0.242
       ],
       "phoneOpen": [
-       0.148,
-       0.195
+       0.256,
+       0.149
       ]
      }
     ]
@@ -1102,7 +1151,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": [
      {
@@ -1111,7 +1160,7 @@
        0.263
       ],
       "phoneOpen": [
-       0.768,
+       0.831,
        0.992
       ]
      },
@@ -1131,8 +1180,8 @@
        0.263
       ],
       "phoneOpen": [
-       0.995,
-       0.985
+       0.994,
+       0.986
       ]
      }
     ]
@@ -1154,8 +1203,8 @@
        0.233
       ],
       "phoneOpen": [
-       0.831,
-       0.276
+       0.863,
+       0.285
       ]
      },
      {
@@ -1164,8 +1213,41 @@
        0.281
       ],
       "phoneOpen": [
-       0.997,
+       0.998,
        0.996
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-13.jpg",
+    "faces": [
+     2,
+     3
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.361,
+       0.258
+      ],
+      "phoneOpen": [
+       0.998,
+       0.995
+      ]
+     },
+     {
+      "webEar": [
+       0.307,
+       0.282
+      ],
+      "phoneOpen": [
+       0.997,
+       0.999
       ]
      }
     ]
@@ -1187,8 +1269,8 @@
        0.396
       ],
       "phoneOpen": [
-       0.993,
-       0.285
+       0.995,
+       0.19
       ]
      },
      {
@@ -1197,8 +1279,8 @@
        0.246
       ],
       "phoneOpen": [
-       0.996,
-       0.994
+       0.995,
+       0.993
       ]
      },
      {
@@ -1207,8 +1289,8 @@
        0.319
       ],
       "phoneOpen": [
-       0.99,
-       0.989
+       0.992,
+       0.987
       ]
      }
     ]
@@ -1230,8 +1312,8 @@
        0.315
       ],
       "phoneOpen": [
-       0.988,
-       0.949
+       0.991,
+       0.951
       ]
      },
      {
@@ -1240,8 +1322,8 @@
        0.265
       ],
       "phoneOpen": [
-       0.67,
-       0.211
+       0.768,
+       0.285
       ]
      },
      {
@@ -1250,8 +1332,8 @@
        0.234
       ],
       "phoneOpen": [
-       0.362,
-       0.382
+       0.344,
+       0.555
       ]
      }
     ]
@@ -1264,7 +1346,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": [
      {
@@ -1273,7 +1355,7 @@
        0.257
       ],
       "phoneOpen": [
-       0.043,
+       0.03,
        0.029
       ]
      }
@@ -1296,8 +1378,8 @@
        0.281
       ],
       "phoneOpen": [
-       0.024,
-       0.433
+       0.06,
+       0.195
       ]
      },
      {
@@ -1306,8 +1388,8 @@
        0.302
       ],
       "phoneOpen": [
-       0.086,
-       0.149
+       0.083,
+       0.279
       ]
      }
     ]
@@ -1330,7 +1412,7 @@
       ],
       "phoneOpen": [
        0.998,
-       0.998
+       0.997
       ]
      },
      {
@@ -1339,8 +1421,8 @@
        0.329
       ],
       "phoneOpen": [
-       0.12,
-       0.086
+       0.24,
+       0.092
       ]
      }
     ]
@@ -1374,8 +1456,8 @@
        0.437
       ],
       "phoneOpen": [
-       0.295,
-       0.99
+       0.268,
+       0.988
       ]
      },
      {
@@ -1384,8 +1466,8 @@
        0.265
       ],
       "phoneOpen": [
-       0.479,
-       0.18
+       0.581,
+       0.195
       ]
      },
      {
@@ -1394,7 +1476,7 @@
        0.246
       ],
       "phoneOpen": [
-       0.027,
+       0.026,
        0.005
       ]
      }
@@ -1417,8 +1499,8 @@
        0.217
       ],
       "phoneOpen": [
-       0.221,
-       0.987
+       0.479,
+       0.986
       ]
      }
     ]
@@ -1464,8 +1546,8 @@
        0.194
       ],
       "phoneOpen": [
-       0.176,
-       0.021
+       0.083,
+       0.016
       ]
      },
      {
@@ -1474,8 +1556,8 @@
        0.276
       ],
       "phoneOpen": [
-       0.706,
-       0.057
+       0.725,
+       0.058
       ]
      },
      {
@@ -1484,8 +1566,8 @@
        0.175
       ],
       "phoneOpen": [
-       0.026,
-       0.895
+       0.025,
+       0.773
       ]
      }
     ]
@@ -1507,8 +1589,8 @@
        0.308
       ],
       "phoneOpen": [
-       0.998,
-       0.992
+       0.997,
+       0.991
       ]
      }
     ]
@@ -1521,7 +1603,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": [
      {
@@ -1530,8 +1612,8 @@
        0.386
       ],
       "phoneOpen": [
-       0.048,
-       0.058
+       0.033,
+       0.075
       ]
      }
     ]
@@ -1544,7 +1626,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": [
      {
@@ -1553,8 +1635,8 @@
        0.29
       ],
       "phoneOpen": [
-       0.706,
-       0.297
+       0.759,
+       0.46
       ]
      },
      {
@@ -1563,8 +1645,8 @@
        0.215
       ],
       "phoneOpen": [
-       0.012,
-       0.075
+       0.023,
+       0.086
       ]
      }
     ]
@@ -1582,49 +1664,6 @@
     "eyes": []
    },
    {
-    "file": "megy-sample-41.jpg",
-    "faces": [
-     3,
-     3
-    ],
-    "closed": [
-     false,
-     true
-    ],
-    "eyes": [
-     {
-      "webEar": [
-       0.234,
-       0.264
-      ],
-      "phoneOpen": [
-       0.025,
-       0.092
-      ]
-     },
-     {
-      "webEar": [
-       0.251,
-       0.266
-      ],
-      "phoneOpen": [
-       0.022,
-       0.002
-      ]
-     },
-     {
-      "webEar": [
-       0.255,
-       0.339
-      ],
-      "phoneOpen": [
-       0.033,
-       0.415
-      ]
-     }
-    ]
-   },
-   {
     "file": "megy-sample-43.jpg",
     "faces": [
      2,
@@ -1637,22 +1676,22 @@
     "eyes": [
      {
       "webEar": [
-       0.354,
-       0.266
-      ],
-      "phoneOpen": [
-       0.902,
-       0.59
-      ]
-     },
-     {
-      "webEar": [
        0.313,
        0.476
       ],
       "phoneOpen": [
-       0.469,
-       0.9
+       0.28,
+       0.846
+      ]
+     },
+     {
+      "webEar": [
+       0.354,
+       0.266
+      ],
+      "phoneOpen": [
+       0.868,
+       0.662
       ]
      }
     ]
@@ -1677,7 +1716,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": []
    },
@@ -1689,7 +1728,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": [
      {
@@ -1698,8 +1737,8 @@
        0.26
       ],
       "phoneOpen": [
-       0.632,
-       0.987
+       0.686,
+       0.99
       ]
      },
      {
@@ -1708,8 +1747,8 @@
        0.233
       ],
       "phoneOpen": [
-       0.003,
-       0.026
+       0.005,
+       0.024
       ]
      },
      {
@@ -1719,7 +1758,7 @@
       ],
       "phoneOpen": [
        0.996,
-       0.662
+       0.671
       ]
      }
     ]
@@ -1737,18 +1776,6 @@
     "eyes": []
    },
    {
-    "file": "megy-sample-48.jpg",
-    "faces": [
-     1,
-     1
-    ],
-    "closed": [
-     false,
-     true
-    ],
-    "eyes": []
-   },
-   {
     "file": "megy-sample-49.jpg",
     "faces": [
      0,
@@ -1756,7 +1783,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": []
    },
@@ -1780,7 +1807,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": [
      {
@@ -1789,8 +1816,8 @@
        0.608
       ],
       "phoneOpen": [
-       0.935,
-       0.19
+       0.796,
+       0.285
       ]
      }
     ]
@@ -1803,42 +1830,9 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": []
-   },
-   {
-    "file": "megy-sample-54.jpg",
-    "faces": [
-     2,
-     2
-    ],
-    "closed": [
-     false,
-     true
-    ],
-    "eyes": [
-     {
-      "webEar": [
-       0.259,
-       0.333
-      ],
-      "phoneOpen": [
-       0.03,
-       0.954
-      ]
-     },
-     {
-      "webEar": [
-       0.232,
-       0.232
-      ],
-      "phoneOpen": [
-       0.019,
-       0.005
-      ]
-     }
-    ]
    },
    {
     "file": "megy-sample-57.jpg",
@@ -1857,8 +1851,8 @@
        0.252
       ],
       "phoneOpen": [
-       0.999,
-       0.563
+       0.997,
+       0.539
       ]
      }
     ]
@@ -1880,64 +1874,8 @@
        0.323
       ],
       "phoneOpen": [
-       0.991,
+       0.993,
        0.986
-      ]
-     }
-    ]
-   },
-   {
-    "file": "megy-sample-59.jpg",
-    "faces": [
-     1,
-     1
-    ],
-    "closed": [
-     false,
-     true
-    ],
-    "eyes": [
-     {
-      "webEar": [
-       0.242,
-       0.2
-      ],
-      "phoneOpen": [
-       0.008,
-       0.062
-      ]
-     }
-    ]
-   },
-   {
-    "file": "megy-sample-64.jpg",
-    "faces": [
-     2,
-     2
-    ],
-    "closed": [
-     false,
-     true
-    ],
-    "eyes": [
-     {
-      "webEar": [
-       0.23,
-       0.309
-      ],
-      "phoneOpen": [
-       0.9,
-       0.993
-      ]
-     },
-     {
-      "webEar": [
-       0.197,
-       0.207
-      ],
-      "phoneOpen": [
-       0.001,
-       0.01
       ]
      }
     ]
@@ -1959,8 +1897,8 @@
        0.263
       ],
       "phoneOpen": [
-       0.971,
-       0.149
+       0.984,
+       0.211
       ]
      }
     ]
@@ -1982,7 +1920,7 @@
        0.231
       ],
       "phoneOpen": [
-       0.902,
+       0.9,
        0.987
       ]
      },
@@ -1993,7 +1931,7 @@
       ],
       "phoneOpen": [
        0.996,
-       0.99
+       0.986
       ]
      }
     ]
@@ -2015,8 +1953,8 @@
        0.31
       ],
       "phoneOpen": [
-       0.99,
-       0.987
+       0.992,
+       0.988
       ]
      },
      {
@@ -2026,7 +1964,7 @@
       ],
       "phoneOpen": [
        0.992,
-       0.986
+       0.985
       ]
      }
     ]
@@ -2051,7 +1989,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": [
      {
@@ -2061,7 +1999,7 @@
       ],
       "phoneOpen": [
        0.997,
-       0.995
+       0.992
       ]
      }
     ]
@@ -2079,22 +2017,22 @@
     "eyes": [
      {
       "webEar": [
-       0.242,
-       0.298
-      ],
-      "phoneOpen": [
-       0.995,
-       0.993
-      ]
-     },
-     {
-      "webEar": [
        0.219,
        0.259
       ],
       "phoneOpen": [
-       0.995,
+       0.994,
        0.992
+      ]
+     },
+     {
+      "webEar": [
+       0.242,
+       0.298
+      ],
+      "phoneOpen": [
+       0.994,
+       0.993
       ]
      }
     ]
@@ -2116,7 +2054,7 @@
        0.342
       ],
       "phoneOpen": [
-       0.987,
+       0.984,
        0.993
       ]
      },
@@ -2126,8 +2064,8 @@
        0.246
       ],
       "phoneOpen": [
-       0.988,
-       0.993
+       0.992,
+       0.986
       ]
      },
      {
@@ -2137,7 +2075,7 @@
       ],
       "phoneOpen": [
        0.998,
-       0.986
+       0.99
       ]
      }
     ]
@@ -2171,8 +2109,8 @@
        0.279
       ],
       "phoneOpen": [
-       0.867,
-       0.986
+       0.871,
+       0.987
       ]
      },
      {
@@ -2182,7 +2120,7 @@
       ],
       "phoneOpen": [
        0.617,
-       0.771
+       0.895
       ]
      },
      {
@@ -2191,8 +2129,51 @@
        0.225
       ],
       "phoneOpen": [
-       0.479,
-       0.563
+       0.504,
+       0.327
+      ]
+     }
+    ]
+   },
+   {
+    "file": "pc-sblur-15-4px.jpg",
+    "faces": [
+     3,
+     4
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.31,
+       0.386
+      ],
+      "phoneOpen": [
+       0.865,
+       0.902
+      ]
+     },
+     {
+      "webEar": [
+       0.226,
+       0.263
+      ],
+      "phoneOpen": [
+       0.823,
+       0.442
+      ]
+     },
+     {
+      "webEar": [
+       0.175,
+       0.24
+      ],
+      "phoneOpen": [
+       0.721,
+       0.819
       ]
      }
     ]
@@ -2205,7 +2186,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": []
    },
@@ -2222,49 +2203,6 @@
     "eyes": []
    },
    {
-    "file": "pc-sblur-41-2p5px.jpg",
-    "faces": [
-     3,
-     3
-    ],
-    "closed": [
-     false,
-     true
-    ],
-    "eyes": [
-     {
-      "webEar": [
-       0.242,
-       0.261
-      ],
-      "phoneOpen": [
-       0.005,
-       0
-      ]
-     },
-     {
-      "webEar": [
-       0.244,
-       0.313
-      ],
-      "phoneOpen": [
-       0.868,
-       0.087
-      ]
-     },
-     {
-      "webEar": [
-       0.217,
-       0.252
-      ],
-      "phoneOpen": [
-       0.154,
-       0.152
-      ]
-     }
-    ]
-   },
-   {
     "file": "pc-sblur-52-5px.jpg",
     "faces": [
      0,
@@ -2272,7 +2210,7 @@
     ],
     "closed": [
      false,
-     false
+     true
     ],
     "eyes": []
    },
@@ -2315,8 +2253,8 @@
        0.283
       ],
       "phoneOpen": [
-       0.221,
-       0.149
+       0.23,
+       0.18
       ]
      },
      {
@@ -2325,8 +2263,8 @@
        0.281
       ],
       "phoneOpen": [
-       0.24,
-       0.795
+       0.603,
+       0.623
       ]
      }
     ]
@@ -2351,7 +2289,7 @@
     ],
     "closed": [
      false,
-     true
+     false
     ],
     "eyes": [
      {
@@ -2360,7 +2298,7 @@
        0.362
       ],
       "phoneOpen": [
-       0.997,
+       0.998,
        0.994
       ]
      }
@@ -2383,8 +2321,8 @@
        0.297
       ],
       "phoneOpen": [
-       0.996,
-       0.988
+       0.997,
+       0.989
       ]
      }
     ]
@@ -2416,8 +2354,8 @@
        0.25
       ],
       "phoneOpen": [
-       0.998,
-       0.998
+       0.997,
+       0.994
       ]
      },
      {
@@ -2442,7 +2380,7 @@
   "sameDecision": 77.5,
   "distance": {
    "median": 0.047,
-   "p90": 0.212,
+   "p90": 0.211,
    "within005": 52.2,
    "within01": 70.1
   }
@@ -2453,68 +2391,68 @@
    "dev": true
   },
   "blurAndRepeats": {
-   "medianMs": 285.3,
-   "p95Ms": 564.8,
-   "decodeMedianMs": 159.7,
-   "jsMedianMs": 125.3
+   "medianMs": 369.8,
+   "p95Ms": 772,
+   "decodeMedianMs": 226.8,
+   "jsMedianMs": 135.3
   },
   "facesAndEyes": {
-   "medianMs": 392.3,
-   "p95Ms": 657.4,
-   "decodeAndMlKitMedianMs": 392.1
+   "medianMs": 373.6,
+   "p95Ms": 486.5,
+   "decodeAndMlKitMedianMs": 373.3
   },
   "faceCentringCold": {
-   "medianMs": 388.7,
-   "p95Ms": 599.3
+   "medianMs": 347.8,
+   "p95Ms": 498.3
   },
   "faceCentringAgain": {
    "medianMs": 0,
    "sameAnswer": true
   },
   "totals": {
-   "basicMs": 48650.3618999999,
-   "facesMs": 61534.322100000456,
-   "centreMs": 58583.51339999959,
+   "basicMs": 59702.42859999975,
+   "facesMs": 54864.384499999695,
+   "centreMs": 49071.93979999982,
    "photos": 138
   },
   "screenWaits": {
    "basic": {
-    "samples": 729,
-    "p50": 16.61409999988973,
-    "p95": 37.18140000011772,
-    "max": 68.17819999996573
+    "samples": 895,
+    "p50": 16.559700000099838,
+    "p95": 37.95599999977276,
+    "max": 75.77330000000075
    },
    "faces": {
-    "samples": 923,
-    "p50": 16.658299999311566,
-    "p95": 18.422199999913573,
-    "max": 28.463400000706315
+    "samples": 822,
+    "p50": 16.649699999950826,
+    "p95": 19.017800000030547,
+    "max": 45.016400000080466
    }
   },
   "galleryReads": {
    "idle": {
-    "reads": 12,
-    "p50": 19.55779999960214,
-    "p95": 28.538900000043213,
-    "max": 28.538900000043213
+    "reads": 13,
+    "p50": 21.03040000004694,
+    "p95": 27.778799999970943,
+    "max": 27.778799999970943
    },
    "basic": {
-    "reads": 145,
-    "p50": 17.500099999830127,
-    "p95": 48.25540000014007,
-    "max": 63.28880000021309
+    "reads": 173,
+    "p50": 24.101600000169128,
+    "p95": 63.832200000062585,
+    "max": 108.349900000263
    },
    "faces": {
-    "reads": 187,
-    "p50": 16.719399999827147,
-    "p95": 26.208499999716878,
-    "max": 35.23509999923408
+    "reads": 163,
+    "p50": 25.949599999934435,
+    "p95": 40.96589999971911,
+    "max": 88.92189999995753
    }
   },
   "websiteOnThisPC": {
-   "basicMedianMs": 27.3,
-   "fullCheckMedianMs": 1949.5,
-   "centreMedianMs": 1087.8,
+   "basicMedianMs": 27,
+   "fullCheckMedianMs": 2190.9,
+   "centreMedianMs": 1249.7,
    "faceApiBackend": "cpu"
   }
  }

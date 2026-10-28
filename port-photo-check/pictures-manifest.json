@@ -489,18 +489,18 @@
  },
  {
   "file": "pc-scene-20.jpg",
-  "width": 4080,
-  "height": 3060,
+  "width": 8160,
+  "height": 6120,
   "group": "synthetic",
   "kind": "scene",
   "base": null,
   "capturedAt": 1789186200000,
-  "bytes": 2230214
+  "bytes": 8267389
  },
  {
   "file": "pc-near-20.jpg",
-  "width": 4080,
-  "height": 3060,
+  "width": 8160,
+  "height": 6120,
   "group": "synthetic",
   "kind": "near",
   "base": "pc-scene-20.jpg",
@@ -511,7 +511,7 @@
    "b": 1.08
   },
   "capturedAt": 1789186220000,
-  "bytes": 2246937
+  "bytes": 8311317
  },
  {
   "file": "megy-sample-01.jpg",
