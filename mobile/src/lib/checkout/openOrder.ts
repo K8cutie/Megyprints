@@ -8,6 +8,7 @@
    the website's (src/pages/Order.tsx).
    ══════════════════════════════════════════════════════════════════════════ */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { UNPAID_ORDER_DAYS } from '@web/lib/orderExpiry';
 
 export interface OpenOrder {
   id: string;
@@ -47,6 +48,26 @@ export function placedOn(iso: string): string {
   if (Number.isNaN(t)) return '';
   const d = new Date(t + 8 * 3_600_000);
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+/** The last day to pay an order placed at `iso`: "November 1, 2026", in
+ *  Manila time, as the website's Orders page says it on a phone in the
+ *  Philippines (shared payByDate: the order's own date + UNPAID_ORDER_DAYS,
+ *  toLocaleDateString('en-PH', { day, month: 'long', year })). Written out
+ *  like placedOn, so the phone says the same whatever date data its
+ *  JavaScript has. '' when the date can't be read. */
+export function payByOn(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const d = new Date(t + UNPAID_ORDER_DAYS * 86_400_000 + 8 * 3_600_000);
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+}
+
+/** The line under the QR on an order already placed: the website's Orders
+ *  page words (src/pages/MyOrders.tsx), with that order's own last day. */
+export function payByLine(iso: string): string {
+  const day = payByOn(iso);
+  return `${day ? `Please pay by ${day}.` : `Please pay within ${UNPAID_ORDER_DAYS} days.`} After that this order closes by itself, and your album stays saved.`;
 }
 
 /** The box at the top of checkout. */

@@ -766,9 +766,16 @@ screenshot; the first walk, before the review fixes, is in
   the app's traffic goes over the netsim Wi-Fi path), so that number is not
   confirmed; the per-app counters above replace it.
 - Not seen: a real account, any write, the real album, a real phone.
-- Small gap seen: the payment step of an order placed earlier still says
+- Small gap seen: the payment step of an order placed earlier still said
   "Please pay within 7 days"; the website's Orders page says "Please pay by
-  <date>" from the order's own date. Fix: use the shared `payByDate` there.
+  <date>" from the order's own date. **Fixed (2026-10-29):** that step now
+  says "Please pay by November 2, 2026. After that this order closes by
+  itself, and your album stays saved." (the Orders page's words, `payByOn`
+  in `openOrder.ts`, Manila time). jest runs the website's own `payByDate`
+  in Manila time beside it on 2,000+ dates (both years, the day and year
+  edges): identical. The payment step after Place order keeps the website's
+  "Please pay within 7 days…" line (there is no order date yet). Seen in
+  jest only, not on the emulator.
 
 ---
 

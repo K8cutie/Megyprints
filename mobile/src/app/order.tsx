@@ -39,7 +39,7 @@ import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
-import { openOrderForAlbum, openOrderView, openOrderWords, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
+import { openOrderForAlbum, openOrderView, openOrderWords, payByLine, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, ORDER_ID, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { PAYEE, PAYEE_QR_URL, paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../lib/checkout/payment';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
@@ -398,7 +398,7 @@ interface PaySummary { albumLine: string; breakdown: { label: string; amount: nu
  *  once there is one. Without it (this version places nothing) those lines
  *  are left out, as the website does. */
 function Payment({ amount, order, summary, onBack }: {
-  amount: number; order: Pick<OpenOrder, 'id' | 'order_number'> | null; summary?: PaySummary; onBack: () => void;
+  amount: number; order: Pick<OpenOrder, 'id' | 'order_number' | 'created_at'> | null; summary?: PaySummary; onBack: () => void;
 }) {
   const [qrMissing, setQrMissing] = useState(false);
   const [receipt, setReceipt] = useState<PickedReceipt | null>(null);
@@ -470,7 +470,8 @@ function Payment({ amount, order, summary, onBack }: {
 
         <Button label={`I've sent ${amountLabel}`} onPress={sentIt} testID="pay-sent" />
         <Text style={[styles.tiny, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>
-        <Text style={[styles.tiny, styles.center]} testID="pay-within">{PAY_WITHIN_MESSAGE}</Text>
+        {/* An order already placed: its own last day, as the website's Orders page says it. */}
+        <Text style={[styles.tiny, styles.center]} testID="pay-within">{order?.created_at ? payByLine(order.created_at) : PAY_WITHIN_MESSAGE}</Text>
 
         {summary && (
           <Pressable accessibilityRole="button" onPress={() => setShowSummary((v) => !v)}>

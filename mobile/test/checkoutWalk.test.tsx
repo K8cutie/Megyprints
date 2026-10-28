@@ -256,6 +256,8 @@ describe('the checkout screen, walked', () => {
     await playBar();
     jest.useRealTimers();
     await fireEvent.press(await screen.findByText('See the payment step'));
+    // No order placed yet: the line under the website's QR after Place order (no date to give).
+    expect(screen.getByTestId('pay-within')).toHaveTextContent('Please pay within 7 days. After that this order closes by itself. Your album stays saved, and you can order it again.');
     mockPicked.asset = { uri: 'file:///cache/big.png', name: 'big.png', size: 9 * 1024 * 1024, mimeType: 'image/png' };
     await fireEvent.press(screen.getByText('Attach the transfer receipt (JPG, PNG or PDF)'));
     expect(await screen.findByText('That file is over 8 MB. A screenshot of the receipt is enough.')).toBeOnTheScreen();
@@ -297,6 +299,8 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByTestId('pay-order-placed')).toHaveTextContent('Order MP-2026-ABC1234 is placed. Pay by bank transfer to finish.');
     expect(screen.getByText('3. Send exactly ₱1,288 and put MP-2026-ABC1234 in the note if your app asks.')).toBeOnTheScreen();
     expect(screen.queryByText('Order summary')).toBeNull(); // the form's price is not that order's
+    // ITS last day to pay (placed Oct 26 in Manila + 7 days), as the website's Orders page says it.
+    expect(screen.getByTestId('pay-within')).toHaveTextContent('Please pay by November 2, 2026. After that this order closes by itself, and your album stays saved.');
     await fireEvent.changeText(screen.getByTestId('pay-reference'), '2026091012345678');
     await fireEvent.press(screen.getByText("I've sent ₱1,288"));
     await fireEvent.press(screen.getByTestId('test-panel-toggle'));

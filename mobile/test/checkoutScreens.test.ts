@@ -14,7 +14,8 @@ import path from 'node:path';
 import { forward, PLACE_AT, pagesAt } from '@web/lib/placeProgress';
 import { albumPhotoCount, photosShortBy } from '@web/pages/builder/albumMinimum';
 import { fixtureCheckoutAlbum, fixturePhotos } from '../src/lib/checkout/fixtureAlbum';
-import { openOrderView, openOrderWords, placedOn, secondOrderQuestion, type OpenOrder } from '../src/lib/checkout/openOrder';
+import { payByDate, UNPAID_ORDER_DAYS } from '@web/lib/orderExpiry';
+import { openOrderView, openOrderWords, payByLine, payByOn, placedOn, secondOrderQuestion, type OpenOrder } from '../src/lib/checkout/openOrder';
 import { barPercent, KEEP_OPEN_NOTE, placeFrames } from '../src/lib/checkout/placeRun';
 import { receiptLabel, toReceipt } from '../src/lib/checkout/receipt';
 
@@ -106,6 +107,28 @@ describe('"This album already has an order": the website\'s words', () => {
     expect(openOrderWords(sent).body.startsWith("You don't need a new one.")).toBe(true);
     expect(secondOrderQuestion(waiting)).toBe('This album already has order MP-2026-ABC1234 waiting for payment. Place a second order for it?');
     expect(secondOrderQuestion(sent)).toBe('This album already has order MP-2026-ABC1234 with its payment sent. Place a second order for it?');
+  });
+
+  it("the last day to pay an order already placed reads as the website's Orders page says it, on a phone in the Philippines", () => {
+    // The website's own payByDate, run in Manila time (it uses the phone's own time zone).
+    const before = process.env.TZ;
+    process.env.TZ = 'Asia/Manila';
+    try {
+      const isos = ['2026-10-25T17:30:00Z', '2026-10-26T03:00:00Z', '2026-12-24T15:59:59Z', '2026-12-24T16:00:00Z',
+        '2026-12-31T16:00:00Z', '2026-01-01T00:00:00Z', '2026-02-21T20:00:00Z', '2028-02-22T18:00:00Z', '2026-10-29T08:12:45.123456+00:00'];
+      for (let t = Date.UTC(2026, 0, 1); t < Date.UTC(2028, 0, 1); t += 7 * 3_600_000 + 13 * 60_000) isos.push(new Date(t).toISOString());
+      for (const iso of isos) expect(payByOn(iso)).toBe(payByDate(iso));
+      expect(isos.length).toBeGreaterThan(2000);
+    } finally {
+      if (before === undefined) delete process.env.TZ; else process.env.TZ = before;
+    }
+    expect(payByOn('2026-10-25T17:30:00Z')).toBe('November 2, 2026');
+    expect(payByOn('not a date')).toBe('');
+    // The Orders page's words around it.
+    const MY_ORDERS_SRC = readFileSync(path.join(WEB, 'src/pages/MyOrders.tsx'), 'utf8');
+    expect(MY_ORDERS_SRC).toContain('{payBy ? <>Please pay by <b className="text-dark">{payBy}</b>.</> : <>Please pay within {UNPAID_ORDER_DAYS} days.</>} After that this order closes by itself, and your album stays saved.');
+    expect(payByLine('2026-10-25T17:30:00Z')).toBe('Please pay by November 2, 2026. After that this order closes by itself, and your album stays saved.');
+    expect(payByLine('')).toBe(`Please pay within ${UNPAID_ORDER_DAYS} days. After that this order closes by itself, and your album stays saved.`);
   });
 
   it('"Open order" goes to that order\'s payment step only while it waits for a payment it can ask', () => {
