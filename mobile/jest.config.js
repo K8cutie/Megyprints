@@ -8,6 +8,9 @@ module.exports = {
   preset: 'jest-expo',
   roots: ['<rootDir>/test'],
   testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/'],
+  // Screen walks render whole screens; on CI's runner, while the golden test
+  // holds the CPU, the first one took over jest's 5 s default (run 40756278950).
+  testTimeout: 30000,
   moduleNameMapper: {
     '^@web/(.*)$': '<rootDir>/../src/$1',
     // The golden test pages are only in a -GoldenPages build (goldenPages.js).
