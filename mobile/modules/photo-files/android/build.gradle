@@ -1,0 +1,22 @@
+// The app's own small native module (see ../index.ts). Built from source by
+// Expo autolinking, which finds every folder under mobile/modules.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.megyprints'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.megyphotofiles"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // The same version expo-media-library uses, so the app has one copy.
+  implementation "androidx.exifinterface:exifinterface:1.4.1"
+}

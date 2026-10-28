@@ -673,6 +673,11 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               tail of the one that changed it (settleGuard). */}
           <div className="p-6 bg-white rounded-2xl border border-peach/20 shadow-xl" key={wizardKey}
             onClickCapture={(e) => { if (cardTooSoon()) { e.stopPropagation(); e.preventDefault(); } }}>
+            {/* Testing phase: a whole album from sample photos, before any of
+                their own — first on Step 1, above its name and occasions. */}
+            {wizardStep === 'pick_theme' && (sampleAlbum.stage !== 'idle' || (builder.uploadedPhotos.length === 0 && !albumIsMade(builder.albumPages))) && (
+              <SampleAlbumOffer stage={sampleAlbum.stage} onMake={() => { void sampleAlbum.start(); }} />
+            )}
             <h3 className="font-display text-xl font-semibold text-dark mb-2"><TypeText text={msg.title} /></h3>
             {wizardRef.current.state.step === 'pick_theme' ? (
               <AlbumThemeStep value={albumTheme} onChange={setAlbumTheme} onContinue={goNext}
@@ -807,10 +812,6 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             )}
             {/* Right under the photo buttons: how to pick many in the app's picker. */}
             {wizardStep === 'upload_photos' && <PickManyHint />}
-            {/* Testing phase: a whole album from sample photos, before any of their own. */}
-            {wizardStep === 'pick_theme' && (sampleAlbum.stage !== 'idle' || (builder.uploadedPhotos.length === 0 && !albumIsMade(builder.albumPages))) && (
-              <SampleAlbumOffer stage={sampleAlbum.stage} onMake={() => { void sampleAlbum.start(); }} />
-            )}
             {/* Testing phase: fewer than 40 photos → make up the rest with samples. */}
             {wizardStep === 'upload_photos' && (
               <SamplePhotosOffer short={photosShortBy(livePhotos.length)} photoNames={builder.uploadedPhotos.map((p) => p.name)}
