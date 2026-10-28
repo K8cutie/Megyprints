@@ -38,9 +38,10 @@ export default function Start() {
           </>
         )}
         <Button label="Shared code check" kind="plain" onPress={() => router.push('/shared-check')} testID="go-check" />
+        <Button label="Checkout with a test album" kind="plain" onPress={() => router.push('/order')} testID="go-order" />
       </View>
 
-      <Text style={styles.note}>Test version 2.0 (dev). You can pick the photos for an album. Making the pages and ordering come in later versions.</Text>
+      <Text style={styles.note}>Test version 2.0 (dev). You can pick the photos for an album, and see checkout with a test album (nothing is ordered). Making the pages comes in a later version.</Text>
     </SafeAreaView>
   );
 }

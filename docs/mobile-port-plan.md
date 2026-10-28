@@ -594,6 +594,103 @@ test files; with what was on the emulator already, 2,517 photos.
 
 ---
 
+## Phase 5 notes (2026-10-29): the checkout screens
+
+Built against a **test album** (48 of `public/sample-photos`, made into pages
+by the shared album maker with a fixed seed: 40 pages, 48 photos), because
+the album steps (Phase 3) were not in `main` yet. The start screen has
+"Checkout with a test album". **It writes nothing**: no order, no upload, no
+tester-code check.
+
+### What the screens do
+
+- **Your order** (`src/app/order.tsx`): the cover (its photo only, see below),
+  "N pages inside", paper, cover (only the covers the press can make, shared
+  `printSheet`), size from the design, name, phone (tidied to
+  "+63 917 123 4567" when you leave the box), the delivery address, the
+  order summary with the price, "Free" shipping, "Included with your album",
+  the QR note, the tester code box and **Place order**. The website's words
+  throughout (`src/pages/Order.tsx`).
+- **Address**: Province → City / Municipality → Barangay, each a full-screen
+  list you can search by typing ("binan" finds Biñan), then the street and
+  ZIP. The website's lists (`public/psgc/`, read from the website, about
+  2.8 MB, too big to put in the app) and its rules: no Region box (worked out
+  from the city), picking a level clears the ones under it, the street is
+  never cut (its count shows near 120 and a longer one is said), the ZIP box
+  keeps 4 digits. A box before its turn is never greyed: it says what to
+  choose first and opens that.
+- **Price**: the live price list (`public_price_schedule()`, read only, tried
+  again after 3 s, 6 s … a minute) through the shared `pricing.ts`. No list,
+  no price: "Prices didn't load — tap to try again".
+- **Tester code**: "Have a tester code?" → "Type your code" → "Tester code
+  MEGYTEST: free", the real price crossed out, ₱0 to pay, "Place order ·
+  free with tester code". In this build only the code's shape is checked:
+  `check_tester_code` counts tries in the database (a write), so it is not
+  called; the test panel says the code was not checked with the shop.
+- **Place order** runs the website's checks in its order (cover, name,
+  phone, address, sign-in, "this album already has an order", 40 photos),
+  then the bar (shared `placeProgress`: start, preparing, cover, page by
+  page, sending with a moving band, checking, saving, finishing; the screen
+  is kept on with `expo-keep-awake`), then **stops** and shows the test
+  panel: every step Place order would take and the exact data (the
+  `orders` row, the `qr_memories` rows, the files).
+- **Payment step** (after "See the payment step"): "Send ₱X", the GoTyme
+  InstaPay QR (the website's picture), account ending 2370, the four steps,
+  "Add a photo of your receipt" (Android's picker on pictures and PDFs,
+  checked with the website's rules: JPG, PNG, WebP or PDF, 8 MB), the
+  reference box (bad ones said, not cleaned quietly), "I've sent ₱X" → the
+  test panel shows the receipt upload and `submit_payment_proof` it would
+  send.
+
+### Same as the website: how it is proven (jest, `mobile/test/checkout*`)
+
+| What | How | Numbers |
+|---|---|---|
+| The order row | The website's own `createOrderFromAlbum` runs with a stand-in database that writes down the insert; the app's row must be equal, key order included (byte for byte) | 5 albums/addresses/codes, 19–20 keys, ~17 KB each: identical |
+| The files and the order of the writes | The website's upload and RPC functions run against the stand-in | cover PDF, (videos), pages PDF; `claim_tester_order` for a tester order; receipt + `submit_payment_proof` for 4 receipts: identical |
+| The address lists | The website's `psgc.ts` runs on the real files next to the app's | 84 provinces, 1,655 cities, 42,011 barangays: identical |
+| The checks | `handleProceedToPayment` and the 40-photo lines are cut out of `Order.tsx` and run on Node | 549 mixes of name, phone, address, cover, sign-in, open order, short album: same answer and words |
+| The price | The price lines are cut out of `Order.tsx` and run on Node; the database's saved totals (0055) | 2,688 albums (576 with a "was" price): identical; 6 database totals match |
+| The screen | The real screen, walked in jest (testing-library): empty form, long street, MEGYTEST to the panel, paid order to the payment step, not signed in, an order waiting, prices not loaded | the panel's row equals the website's row for the same typed details |
+
+**Mirrors, until the website files are split (after Nov 9).** Four website
+files hold rules checkout needs but also call the website's Supabase client
+(or a Vite-only value), so the app can't import them: `orders.ts` (the order
+row), `payment.ts`, `testerCode.ts`, `psgc.ts`. Splitting them changes code
+the website runs, which waits for the re-apply. Until then the app keeps a
+copy of the pure part (`mobile/src/lib/checkout/`), and the tests above run
+the website's function beside it and fail on any difference. After Nov 9:
+move the pure half of each into a shared file, list it in
+`sharedModules.ts`, and make the app's copy a re-export.
+
+### Not done here (and what each needs)
+
+- **The real album** (needs Phase 3): checkout takes a `CheckoutAlbum`
+  (`orderPayload.ts`); Phase 3 hands over its album and the account's
+  albums row instead of the test album. The album must be saved to the
+  account first (the website saves it on the way to checkout).
+- **The cover thumbnail draws only the cover photo**: words and colours need
+  the page renderer (held PRs #216/#219).
+- **The print files** (needs the renderer + a PDF writer on the phone): the
+  cover wrap PDF and the pages PDF. Press sheets and the "Sheets as JPEG" zip
+  are made later on the admin Orders page from the uploaded PDFs, not at
+  checkout.
+- **The write path**: the insert, the uploads (create-only), the memory rows,
+  `claim_tester_order`, `check_tester_code`, the receipt and
+  `submit_payment_proof`. Each step is already data (the plan in the test
+  panel); test it against a local Supabase, never the live one.
+- **Not in the app yet**: memory videos (so no hosting-term or HD picker:
+  the included term, standard quality), event albums, the order number on
+  the payment step (it comes from the insert), keeping the form after the
+  app closes (`checkoutSession`), "same as your last order", the "Open
+  order" button (no Orders screen until Phase 6), focusing the first box to
+  fix (it scrolls there).
+- **Not seen on a device in this run**: no emulator was assigned. Proven by
+  the jest walk, a Metro + Hermes bundle of the whole app
+  (`npx expo export --platform android`), and a Gradle debug build.
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
