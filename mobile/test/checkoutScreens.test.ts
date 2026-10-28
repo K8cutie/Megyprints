@@ -15,7 +15,7 @@ import { forward, PLACE_AT, pagesAt } from '@web/lib/placeProgress';
 import { albumPhotoCount, photosShortBy } from '@web/pages/builder/albumMinimum';
 import { fixtureCheckoutAlbum, fixturePhotos } from '../src/lib/checkout/fixtureAlbum';
 import { payByDate, UNPAID_ORDER_DAYS } from '@web/lib/orderExpiry';
-import { openOrderView, openOrderWords, payByLine, payByOn, placedOn, secondOrderQuestion, type OpenOrder } from '../src/lib/checkout/openOrder';
+import { askedToPay, OPEN_ORDER_COLUMNS, openOrderView, openOrderWords, payByLine, payByOn, placedOn, secondOrderQuestion, type OpenOrder } from '../src/lib/checkout/openOrder';
 import { barPercent, KEEP_OPEN_NOTE, placeFrames } from '../src/lib/checkout/placeRun';
 import { receiptLabel, toReceipt } from '../src/lib/checkout/receipt';
 
@@ -131,17 +131,42 @@ describe('"This album already has an order": the website\'s words', () => {
     expect(payByLine('')).toBe(`Please pay within ${UNPAID_ORDER_DAYS} days. After that this order closes by itself, and your album stays saved.`);
   });
 
-  it('"Open order" goes to that order\'s payment step only while it waits for a payment it can ask', () => {
+  it('"Open order" goes to that order\'s payment step whenever nobody has paid it', () => {
     // The website's button text, and its payment-step lines once there is an order number.
     expect(ORDER_SRC).toContain('Open order {openOrder.order_number}');
     expect(ORDER_SRC).toContain('is placed. Pay by bank transfer to finish.');
     expect(ORDER_SRC).toContain('in the note if your app asks');
-    expect(openOrderView({ ...waiting, amount: 1288 })).toBe('pay');
-    expect(openOrderView({ ...sent, amount: 1288 })).toBe('status');           // paid: we're confirming it
-    expect(openOrderView({ ...waiting, amount: 1288, tester_code: 'MEGYTEST' })).toBe('status'); // nothing to pay
-    expect(openOrderView({ ...waiting, amount: null })).toBe('status');       // no amount to ask for
-    expect(openOrderView({ ...waiting, amount: 0 })).toBe('status');
-    expect(openOrderView({ ...waiting, status: 'paid', amount: 1288 })).toBe('status');
+    // A real waiting order: amount NULL, the asked total in quoted_amount (see below).
+    expect(openOrderView({ ...waiting, amount: null, quoted_amount: 1288 })).toBe('pay');
+    // An order placed before 0055 has no total saved: still its payment step (QR, number, last day), never "we're confirming it".
+    expect(openOrderView({ ...waiting, amount: null, quoted_amount: null })).toBe('pay');
+    expect(openOrderView(waiting)).toBe('pay');
+    expect(openOrderView({ ...sent, amount: null, quoted_amount: 1288 })).toBe('status');           // paid: we're confirming it
+    expect(openOrderView({ ...waiting, quoted_amount: 1288, tester_code: 'MEGYTEST' })).toBe('status'); // nothing to pay
+    expect(openOrderView({ ...waiting, status: 'paid', amount: 1288, quoted_amount: 1288 })).toBe('status');
+  });
+
+  it('the total asked is the one the database saved with the order (quoted_amount), since amount is NULL on every waiting order', () => {
+    const migration = (name: string) => readFileSync(path.join(WEB, 'supabase/migrations', name), 'utf8');
+    // The insert policy pins amount NULL; only the shop sets it, when it confirms the payment.
+    expect(migration('0003_rls_lockdown.sql')).toMatch(/for insert with check \([\s\S]*?and amount is null/);
+    // 0055 saves the asked total in quoted_amount as the order is placed, and nobody can change it after.
+    const q = migration('0055_order_quoted_total.sql');
+    expect(q).toContain('alter table public.orders add column if not exists quoted_amount integer;');
+    expect(q).toContain("new.quoted_amount := (q ->> 'total')::integer;");
+    expect(q).toContain('new.quoted_amount := old.quoted_amount;');
+    // Customers may read their own rows, every column (0026 table grant, RLS own rows).
+    expect(migration('0026_grants_and_contact_ratelimit.sql')).toContain('grant select, insert, update on public.orders to authenticated;');
+    // So the app asks for it.
+    expect(OPEN_ORDER_COLUMNS.split(', ')).toContain('quoted_amount');
+
+    expect(askedToPay({ amount: null, quoted_amount: 1288 })).toBe(1288);
+    expect(askedToPay({ amount: 1288, quoted_amount: null })).toBe(1288);   // set by the shop
+    expect(askedToPay({ amount: 1300, quoted_amount: 1288 })).toBe(1288);   // what the customer was asked
+    expect(askedToPay({ amount: null, quoted_amount: null })).toBeNull();   // placed before 0055: no total made up
+    expect(askedToPay({})).toBeNull();
+    expect(askedToPay({ amount: 0, quoted_amount: 0 })).toBeNull();
+    expect(askedToPay({ amount: Number.NaN, quoted_amount: -5 })).toBeNull();
   });
 });
 

@@ -4,8 +4,9 @@
    placed silently (1-star testers round 2, Q1).
 
    Read only: the same query as the website's openOrderForAlbum
-   (src/lib/myOrders.ts), this account's orders only, by id. The words are
-   the website's (src/pages/Order.tsx).
+   (src/lib/myOrders.ts), this account's orders only, by id, plus the
+   order's quoted_amount (the total its customer was asked to pay, for its
+   payment step). The words are the website's (src/pages/Order.tsx).
    ══════════════════════════════════════════════════════════════════════════ */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { UNPAID_ORDER_DAYS } from '@web/lib/orderExpiry';
@@ -14,14 +15,18 @@ export interface OpenOrder {
   id: string;
   order_number: string;
   status: string;
-  /** What the customer was asked to pay (0055), for that order's payment step. */
+  /** Set by the shop when it confirms the payment. NULL on every order still
+   *  waiting for payment: the insert policy pins it NULL (0002/0003). */
   amount?: number | null;
+  /** The total the customer was asked to pay, worked out by the database as
+   *  the order was placed (0055). NULL on orders placed before 0055. */
+  quoted_amount?: number | null;
   created_at: string;
   payment_submitted_at: string | null;
   tester_code?: string | null;
 }
 
-export const OPEN_ORDER_COLUMNS = 'id, order_number, status, amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title, album_id, tester_code';
+export const OPEN_ORDER_COLUMNS = 'id, order_number, status, amount, quoted_amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title, album_id, tester_code';
 
 export async function openOrderForAlbum(client: Pick<SupabaseClient, 'from'>, userId: string, albumId: string): Promise<OpenOrder | null> {
   const { data, error } = await client
@@ -79,15 +84,27 @@ export function openOrderWords(o: OpenOrder): { headline: string; body: string; 
   };
 }
 
+/** What to ask this order's customer to send: the total the database saved
+ *  as the order was placed (quoted_amount, 0055), else the shop's amount.
+ *  null when neither is a peso amount above 0 (an order placed before 0055:
+ *  prices may have changed since, so no total is made up for it). */
+export function askedToPay(o: Pick<OpenOrder, 'amount' | 'quoted_amount'>): number | null {
+  for (const v of [o.quoted_amount, o.amount]) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+  }
+  return null;
+}
+
 /** Where "Open order MP-…" goes, in the app. The website's button opens its
  *  Orders page (/orders?order=<id>); the app has no Orders screen until
  *  Phase 6, and the phone's browser is not signed in (the website sends a
  *  signed-out visitor from /orders to its home page, so the order would be
- *  lost). So the app opens that order itself: its payment step while it waits
- *  for the payment (its own amount and number), else where it is. */
+ *  lost). So the app opens that order itself: its payment step while nobody
+ *  has paid it (the QR, its number, its last day, and its total when the
+ *  order has one), else where it is (payment sent, or a tester-code order). */
 export function openOrderView(o: OpenOrder): 'pay' | 'status' {
   const waiting = o.status === 'pending_payment' && !o.payment_submitted_at && !o.tester_code;
-  return waiting && typeof o.amount === 'number' && Number.isFinite(o.amount) && o.amount > 0 ? 'pay' : 'status';
+  return waiting ? 'pay' : 'status';
 }
 
 /** The question under Place order before a second order. */

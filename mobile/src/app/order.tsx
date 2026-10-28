@@ -21,7 +21,7 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { PAY_WITHIN_MESSAGE } from '@web/lib/orderExpiry';
 import { trackOf } from '@web/lib/orderTracker';
@@ -39,13 +39,14 @@ import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
-import { openOrderForAlbum, openOrderView, openOrderWords, payByLine, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
+import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, payByLine, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, ORDER_ID, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { PAYEE, PAYEE_QR_URL, paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../lib/checkout/payment';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
 import { checkoutPrice, peso, placeOrderLabel } from '../lib/checkout/price';
 import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedule';
 import { pickReceipt, receiptLabel, type PickedReceipt } from '../lib/checkout/receipt';
+import { siteFile } from '../lib/checkout/site';
 import { checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/checkout/testerCode';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
@@ -185,10 +186,12 @@ export default function OrderScreen() {
   };
   const placeSecond = () => { secondOk.current = true; setAskSecond(false); onPlace(); };
   // "Open order MP-…": that order, in the app (see openOrderView): its
-  // payment step while it waits for the payment, else where it is.
+  // payment step while nobody has paid it, else where it is. The question
+  // about a second order is closed: back on the form, Place order asks again.
   const openExistingOrder = () => {
     if (!openOrder) return;
     setShownOrder(openOrder);
+    setAskSecond(false);
     setStep('existing');
   };
 
@@ -222,7 +225,7 @@ export default function OrderScreen() {
 
   if (step === 'existing' && shownOrder) {
     if (openOrderView(shownOrder) === 'pay') {
-      return <Payment amount={shownOrder.amount ?? 0} order={shownOrder} onBack={() => setStep('form')} />;
+      return <Payment amount={askedToPay(shownOrder)} order={shownOrder} onBack={() => setStep('form')} />;
     }
     return <ExistingOrder order={shownOrder} onBack={() => setStep('form')} />;
   }
@@ -252,7 +255,8 @@ export default function OrderScreen() {
         <View style={styles.notice} testID="order-already-open">
           <Text style={styles.noticeHead}>{words.headline}</Text>
           <Text style={styles.noticeBody}>{words.body}</Text>
-          <Button label={words.button} onPress={openExistingOrder} testID="order-open-existing" />
+          {/* Outlined: Place order below is the one filled button on the form. */}
+          <Button label={words.button} kind="plain" onPress={openExistingOrder} testID="order-open-existing" />
         </View>
       )}
 
@@ -343,7 +347,7 @@ export default function OrderScreen() {
 
       {tooFew ? (
         <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn)}</Text></View>
-      ) : (
+      ) : askSecond && openOrder ? null : (
         <Button
           label={placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total })}
           busy={!price.ready && (prices.loading || prices.retrying)}
@@ -352,6 +356,8 @@ export default function OrderScreen() {
         />
       )}
 
+      {/* The question takes Place order's place: its filled button is the order
+          already there, the second order is outlined. */}
       {askSecond && openOrder && words && (
         <View style={styles.notice} testID="order-second-ask">
           <Text style={styles.noticeBody}>{secondOrderQuestion(openOrder)}</Text>
@@ -396,9 +402,11 @@ interface PaySummary { albumLine: string; breakdown: { label: string; amount: nu
 /** The payment step. `order` is an order already placed (opened from "this
  *  album already has an order"): its number is said, as the website says it
  *  once there is one. Without it (this version places nothing) those lines
- *  are left out, as the website does. */
+ *  are left out, as the website does. `amount` is null only for an order
+ *  that has no saved total (placed before the database saved it, 0055): the
+ *  step says so, and how to learn it, instead of making a total up. */
 function Payment({ amount, order, summary, onBack }: {
-  amount: number; order: Pick<OpenOrder, 'id' | 'order_number' | 'created_at'> | null; summary?: PaySummary; onBack: () => void;
+  amount: number | null; order: Pick<OpenOrder, 'id' | 'order_number' | 'created_at'> | null; summary?: PaySummary; onBack: () => void;
 }) {
   const [qrMissing, setQrMissing] = useState(false);
   const [receipt, setReceipt] = useState<PickedReceipt | null>(null);
@@ -407,7 +415,7 @@ function Payment({ amount, order, summary, onBack }: {
   const [refError, setRefError] = useState('');
   const [sent, setSent] = useState<PaymentSubmitPlan | null>(null);
   const [showSummary, setShowSummary] = useState(false);
-  const amountLabel = peso(amount);
+  const amountLabel = amount !== null ? peso(amount) : '';
 
   const addReceipt = async () => {
     setReceiptError('');
@@ -429,19 +437,27 @@ function Payment({ amount, order, summary, onBack }: {
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       <View style={styles.testNote}>
-        <Text style={styles.testNoteText}>{order
-          ? `Test version: this is how paying order ${order.order_number} looks. I've sent shows what it would send, and sends nothing.`
-          : 'Test version: no order was placed. This is how the payment step looks for this album.'}</Text>
+        <Text style={styles.testNoteText} testID="pay-test-note">{order
+          ? `Test version: this is how paying order ${order.order_number} looks. The "I've sent" button only shows what it would send. It sends nothing.`
+          : 'Test version: no order was placed. This is how the payment step looks for this album. Do not send money: there is no order.'}</Text>
       </View>
-      <Text style={[styles.h1, styles.center]}>Send {amountLabel}</Text>
+      <Text style={[styles.h1, styles.center]}>{amount !== null ? `Send ${amountLabel}` : `Pay order ${order?.order_number ?? ''}`}</Text>
       {order && <Text style={[styles.small, styles.center]} testID="pay-order-placed">Order {order.order_number} is placed. Pay by bank transfer to finish.</Text>}
 
       <View style={styles.card}>
         <View style={styles.qrBox}>
           <Text style={styles.payee}>{PAYEE.bank} · {PAYEE.rail}</Text>
           {!qrMissing ? (
-            <Image source={{ uri: PAYEE_QR_URL }} style={styles.qr} contentFit="contain" onError={() => setQrMissing(true)}
-              accessibilityLabel={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} />
+            <View>
+              <Image source={{ uri: PAYEE_QR_URL }} style={styles.qr} contentFit="contain" onError={() => setQrMissing(true)}
+                accessibilityLabel={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} />
+              {/* No order behind it: a band across the code, so nobody pays for nothing. */}
+              {!order && (
+                <View style={styles.qrBand} testID="pay-qr-test-band">
+                  <Text style={styles.qrBandText}>Test only. Do not pay.</Text>
+                </View>
+              )}
+            </View>
           ) : (
             <View style={[styles.qr, styles.qrMissing]}>
               <Text style={styles.small}>The QR code isn't available right now — message us and we'll send the account details.</Text>
@@ -449,13 +465,20 @@ function Payment({ amount, order, summary, onBack }: {
           )}
           <Text style={styles.strong}>{PAYEE.name}</Text>
           <Text style={styles.small}>Account ending in {PAYEE.accountLast4}</Text>
-          <Text style={styles.payAmount}>{amountLabel}</Text>
+          {amount !== null ? (
+            <Text style={styles.payAmount}>{amountLabel}</Text>
+          ) : (
+            <View style={styles.noTotal} testID="pay-no-total">
+              <Text style={[styles.small, styles.center]}>This order is older, so its total is not saved here. Message us and we will tell you how much to send.</Text>
+              <Button label="Message us" kind="plain" onPress={() => { void Linking.openURL(siteFile('contact')); }} testID="pay-message-us" />
+            </View>
+          )}
         </View>
 
         <View style={styles.steps}>
           <Text style={styles.small}>1. Open your bank or e-wallet app (GCash, Maya, BPI, BDO, UnionBank…).</Text>
           <Text style={styles.small}>2. Choose Scan QR / InstaPay and scan the code above.</Text>
-          <Text style={styles.small}>3. Send exactly {amountLabel}{order ? ` and put ${order.order_number} in the note if your app asks` : ''}.</Text>
+          <Text style={styles.small}>3. {amount !== null ? `Send exactly ${amountLabel}` : 'Send the total we tell you'}{order ? ` and put ${order.order_number} in the note if your app asks` : ''}.</Text>
           <Text style={styles.small}>4. Attach your receipt below — it speeds up confirmation.</Text>
         </View>
         <Text style={styles.tiny}>Your app may charge a small InstaPay fee. We don't add any.</Text>
@@ -468,7 +491,7 @@ function Payment({ amount, order, summary, onBack }: {
             autoComplete="off" autoCorrect={false} placeholder="e.g. 2026091012345678" maxLength={64} error={refError} testID="pay-reference" />
         </View>
 
-        <Button label={`I've sent ${amountLabel}`} onPress={sentIt} testID="pay-sent" />
+        <Button label={amount !== null ? `I've sent ${amountLabel}` : "I've sent the payment"} onPress={sentIt} testID="pay-sent" />
         <Text style={[styles.tiny, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>
         {/* An order already placed: its own last day, as the website's Orders page says it. */}
         <Text style={[styles.tiny, styles.center]} testID="pay-within">{order?.created_at ? payByLine(order.created_at) : PAY_WITHIN_MESSAGE}</Text>
@@ -509,10 +532,11 @@ function Payment({ amount, order, summary, onBack }: {
  *  and the shop is confirming it, or it is a tester-code order. */
 function ExistingOrder({ order, onBack }: { order: OpenOrder; onBack: () => void }) {
   const track = trackOf(order);
+  const total = askedToPay(order);
   return (
     <ScrollView contentContainerStyle={styles.page} testID="order-existing">
       <Text style={styles.h1}>Order {order.order_number}</Text>
-      <Text style={styles.small}>Placed {placedOn(order.created_at)}{typeof order.amount === 'number' && !track.test ? ` · ${peso(order.amount)}` : ''}</Text>
+      <Text style={styles.small}>Placed {placedOn(order.created_at)}{total !== null && !track.test ? ` · ${peso(total)}` : ''}</Text>
       <View style={styles.card}>
         <Text style={styles.strong} testID="order-existing-headline">{track.headline}</Text>
         {!track.test && <Text style={styles.small}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>}
@@ -594,6 +618,9 @@ const styles = StyleSheet.create({
   payee: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: colors.muted, textTransform: 'uppercase' },
   qr: { width: 224, height: 224, borderRadius: 8, backgroundColor: colors.card, marginVertical: space.sm },
   qrMissing: { backgroundColor: '#F7F1EC', alignItems: 'center', justifyContent: 'center', padding: space.md },
+  qrBand: { position: 'absolute', left: -space.sm, right: -space.sm, top: '42%', paddingVertical: 10, backgroundColor: '#FFF6E5', borderWidth: 1, borderColor: '#8A5A12', borderRadius: 8, alignItems: 'center' },
+  qrBandText: { fontSize: 16, fontWeight: '800', color: '#8A5A12' },
+  noTotal: { gap: space.sm, alignSelf: 'stretch', marginTop: space.xs },
   payAmount: { fontSize: 26, fontWeight: '800', color: colors.accent, marginTop: space.xs },
   steps: { gap: 4 },
   receiptBox: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: space.sm },

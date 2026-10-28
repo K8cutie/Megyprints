@@ -258,6 +258,9 @@ describe('the checkout screen, walked', () => {
     await fireEvent.press(await screen.findByText('See the payment step'));
     // No order placed yet: the line under the website's QR after Place order (no date to give).
     expect(screen.getByTestId('pay-within')).toHaveTextContent('Please pay within 7 days. After that this order closes by itself. Your album stays saved, and you can order it again.');
+    // No order behind this QR: a band across it, and the note says not to send money.
+    expect(screen.getByTestId('pay-qr-test-band')).toHaveTextContent('Test only. Do not pay.');
+    expect(screen.getByTestId('pay-test-note')).toHaveTextContent('Test version: no order was placed. This is how the payment step looks for this album. Do not send money: there is no order.');
     mockPicked.asset = { uri: 'file:///cache/big.png', name: 'big.png', size: 9 * 1024 * 1024, mimeType: 'image/png' };
     await fireEvent.press(screen.getByText('Attach the transfer receipt (JPG, PNG or PDF)'));
     expect(await screen.findByText('That file is over 8 MB. A screenshot of the receipt is enough.')).toBeOnTheScreen();
@@ -286,12 +289,17 @@ describe('the checkout screen, walked', () => {
   });
 
   it('this album already has an order waiting: said at the top, "Open order" pays THAT order, and a second one is asked', async () => {
-    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', amount: 1288, created_at: '2026-10-25T17:30:00Z', payment_submitted_at: null, tester_code: null };
+    // The shape the database really holds for an order waiting for payment:
+    // amount NULL (the insert policy pins it), the asked total in quoted_amount (0055).
+    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', amount: null, quoted_amount: 1288, created_at: '2026-10-25T17:30:00Z', payment_submitted_at: null, tester_code: null };
     await openScreen();
     expect(await screen.findByText('This album already has an order waiting for payment: MP-2026-ABC1234, placed October 26.')).toBeOnTheScreen();
+    // The read asks for the asked total.
+    expect(rec.reads.find((r) => r.table === 'orders')?.columns).toContain('quoted_amount');
     // The read was this account's unpaid orders of this album.
     expect(rec.reads.find((r) => r.table === 'orders')?.filters).toEqual({ user_id: 'user-1', album_id: album.albumId, status: 'pending_payment' });
-    // The way to that order: a filled "Open order MP-…" (the website's words).
+    // The way to that order: "Open order MP-…" (the website's words), outlined:
+    // Place order is the one filled button on the form.
     expect(screen.getByTestId('order-open-existing')).toHaveTextContent('Open order MP-2026-ABC1234');
     await fireEvent.press(screen.getByTestId('order-open-existing'));
     // That order's payment step, in the app: ITS amount and number, as the website says them once there is a number.
@@ -301,6 +309,9 @@ describe('the checkout screen, walked', () => {
     expect(screen.queryByText('Order summary')).toBeNull(); // the form's price is not that order's
     // ITS last day to pay (placed Oct 26 in Manila + 7 days), as the website's Orders page says it.
     expect(screen.getByTestId('pay-within')).toHaveTextContent('Please pay by November 2, 2026. After that this order closes by itself, and your album stays saved.');
+    // A real order: no "do not pay" band on its QR; the note says plainly that I've sent sends nothing.
+    expect(screen.queryByTestId('pay-qr-test-band')).toBeNull();
+    expect(screen.getByTestId('pay-test-note')).toHaveTextContent('Test version: this is how paying order MP-2026-ABC1234 looks. The "I\'ve sent" button only shows what it would send. It sends nothing.');
     await fireEvent.changeText(screen.getByTestId('pay-reference'), '2026091012345678');
     await fireEvent.press(screen.getByText("I've sent ₱1,288"));
     await fireEvent.press(screen.getByTestId('test-panel-toggle'));
@@ -313,8 +324,10 @@ describe('the checkout screen, walked', () => {
     await fireEvent.press(screen.getByTestId('order-place'));
     expect(screen.getByText('This album already has order MP-2026-ABC1234 waiting for payment. Place a second order for it?')).toBeOnTheScreen();
     expect(screen.queryByTestId('order-placing')).toBeNull();
-    // The question offers the order first (filled), the second order after it (outlined).
+    // The question offers the order first (filled), the second order after it (outlined),
+    // in Place order's place: one filled button.
     expect(screen.getByTestId('order-second-open')).toHaveTextContent('Open order MP-2026-ABC1234');
+    expect(screen.queryByTestId('order-place')).toBeNull();
     await fireEvent.press(screen.getByTestId('order-second-open'));
     expect(screen.getByText('Send ₱1,288')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('pay-back'));
@@ -325,8 +338,34 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByTestId('order-placing')).toBeOnTheScreen();
   });
 
+  it('"Open order" on an older order with no saved total: its payment step still, with no total made up', async () => {
+    // Placed before the database saved totals (0055): amount and quoted_amount both NULL.
+    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', amount: null, quoted_amount: null, created_at: '2026-10-25T17:30:00Z', payment_submitted_at: null, tester_code: null };
+    const opened: string[] = [];
+    const { Linking } = jest.requireActual('react-native') as typeof import('react-native');
+    const spy = jest.spyOn(Linking, 'openURL').mockImplementation(async (url: string) => { opened.push(url); });
+    await openScreen();
+    await fireEvent.press(await screen.findByTestId('order-open-existing'));
+    // Its payment step, never "we confirm transfers" for an order nobody has paid.
+    expect(screen.queryByTestId('order-existing')).toBeNull();
+    expect(screen.getByText('Pay order MP-2026-ABC1234')).toBeOnTheScreen();
+    expect(screen.getByTestId('pay-order-placed')).toHaveTextContent('Order MP-2026-ABC1234 is placed. Pay by bank transfer to finish.');
+    expect(screen.queryByText(/₱/)).toBeNull(); // no total made up
+    expect(screen.getByTestId('pay-no-total')).toHaveTextContent('This order is older, so its total is not saved here. Message us and we will tell you how much to send.Message us');
+    expect(screen.getByText('3. Send the total we tell you and put MP-2026-ABC1234 in the note if your app asks.')).toBeOnTheScreen();
+    expect(screen.getByTestId('pay-within')).toHaveTextContent('Please pay by November 2, 2026. After that this order closes by itself, and your album stays saved.');
+    await fireEvent.press(screen.getByTestId('pay-message-us'));
+    expect(opened).toEqual(['https://megyprints.vercel.app/contact']);
+    await fireEvent.press(screen.getByText("I've sent the payment"));
+    await fireEvent.press(screen.getByTestId('test-panel-toggle'));
+    const sent = JSON.parse(String(screen.getByText(/"rpc": \{/).props.children));
+    expect(sent.rpc).toEqual({ name: 'submit_payment_proof', args: { p_order_id: 'o-1', p_reference: null, p_proof_path: null } });
+    expect(rec.rpcs.some((r) => r.name === 'submit_payment_proof')).toBe(false);
+    spy.mockRestore();
+  });
+
   it('"Open order" on an order whose payment was sent says where it is, with nothing to pay', async () => {
-    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', amount: 1288, created_at: '2026-10-25T17:30:00Z', payment_submitted_at: '2026-10-26T01:00:00Z', tester_code: null };
+    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', amount: null, quoted_amount: 1288, created_at: '2026-10-25T17:30:00Z', payment_submitted_at: '2026-10-26T01:00:00Z', tester_code: null };
     await openScreen();
     expect(await screen.findByText("This album already has an order — you sent the payment and we're confirming it: MP-2026-ABC1234, placed October 26.")).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('order-open-existing'));

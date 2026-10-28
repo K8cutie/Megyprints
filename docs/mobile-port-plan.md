@@ -638,20 +638,36 @@ tester-code check.
   The shop's check is called only on the write path, against a local
   Supabase.
 - **"This album already has an order"**: the website's notice at the top,
-  with its filled "Open order MP-…" button, and the same button first in the
-  "Place a second order for it?" question, before the outlined "Yes, place a
-  second order". The website's button opens its Orders page; the app has no
+  with its "Open order MP-…" button (outlined in the app: Place order is the
+  one filled button on the form; the website fills both), and the same
+  button first and filled in the "Place a second order for it?" question,
+  before the outlined "Yes, place a second order". The question takes Place
+  order's place while it is open, so there is one filled button. The
+  website's button opens its Orders page; the app has no
   Orders screen until Phase 6, and opening the website in the phone's
   browser does not work: the browser is not signed in, and the website sends
   a signed-out visitor from `/orders` to its home page (seen on the
   emulator, `ProtectedRoute`), so the order is lost. So the app opens that
-  order itself (`openOrderView`): while it waits for its payment, **its**
-  payment step (its own amount from the order row, "Order MP-… is placed.
-  Pay by bank transfer to finish.", "put MP-… in the note", and "I've sent"
-  plans `submit_payment_proof` for that order's id, sent nothing in this
+  order itself (`openOrderView`): while nobody has paid it, **its** payment
+  step ("Order MP-… is placed. Pay by bank transfer to finish.", "put MP-…
+  in the note", its own last day to pay, and "I've sent" plans
+  `submit_payment_proof` for that order's id, sent nothing in this
   version); once the payment was sent (or for a tester-code order), where it
   is, in the shared `orderTracker`'s words ("Payment sent — we're confirming
   it"). "Back to your order" returns to the form as it was.
+  **The total on that payment step is the order's `quoted_amount`**, the
+  total the database saved as the order was placed (0055). `orders.amount`
+  is NULL on every order waiting for payment (the insert policy in 0002/0003
+  pins it; only the shop sets it, on confirming), so it can't be used; the
+  app reads `amount` only as a fallback (`askedToPay` in `openOrder.ts`).
+  An order placed before 0055 has no saved total: it still gets its payment
+  step (the QR, its number, its last day), with no number made up: "This
+  order is older, so its total is not saved here. Message us and we will
+  tell you how much to send." and a "Message us" button that opens the
+  website's contact page. (Such orders close by themselves after 7 days, so
+  by the time the app ships there should be none.) The website's Orders
+  page reads `amount` for its "Send ₱X" line, so it shows no number for a
+  waiting order: a website gap, left for after Nov 9.
 - **Place order** runs the website's checks in its order (cover, name,
   phone, address, sign-in, "this album already has an order", 40 photos),
   then the bar (shared `placeProgress`: start, preparing, cover, page by
@@ -668,7 +684,9 @@ tester-code check.
   test panel shows the receipt upload and `submit_payment_proof` it would
   send. No order is placed, so there is no order number: as the website
   does without one, it leaves out "Order … is placed" and "put … in the
-  note".
+  note". Because no order is behind this QR, a band across it says "Test
+  only. Do not pay." and the test note says "Do not send money: there is no
+  order." (the website never shows the QR without an order).
 - **Not signed in**: the website's "You must be signed in to check out"
   and a Sign in button. Sign in opened from checkout (`/sign-in?then=back`)
   comes back to the order; once signed in, the message and the button go
@@ -683,7 +701,7 @@ tester-code check.
 | The address lists | The website's `psgc.ts` runs on the real files next to the app's | 84 provinces, 1,655 cities, 42,011 barangays: identical |
 | The checks | `handleProceedToPayment` and the 40-photo lines are cut out of `Order.tsx` and run on Node | 549 mixes of name, phone, address, cover, sign-in, open order, short album: same answer and words |
 | The price | The price lines are cut out of `Order.tsx` and run on Node; the database's saved totals (0055) | 2,688 albums (576 with a "was" price): identical; 6 database totals match |
-| The screen | The real screen, walked in jest (testing-library): empty form, long street, MEGYTEST to the panel, paid order to the payment step, not signed in and back, an order waiting, prices not loaded, address lists offline | the panel's row equals the website's row for the same typed details |
+| The screen | The real screen, walked in jest (testing-library): empty form, long street, MEGYTEST to the panel, paid order to the payment step, not signed in and back, an order waiting (the shape the database holds: `amount` NULL, `quoted_amount` set), an older order with no saved total, prices not loaded, address lists offline | the panel's row equals the website's row for the same typed details |
 
 **Mirrors, until the website files are split (after Nov 9).** Four website
 files hold rules checkout needs but also call the website's Supabase client
@@ -753,6 +771,12 @@ screenshot; the first walk, before the review fixes, is in
   payment was sent it says "Payment sent — we're confirming it". The first
   try (opening the website's `/orders?order=<id>` in Chrome) landed on the
   website's home page, because the browser is not signed in.
+  **Corrected (2026-10-29 review):** the stand-in waiting order in this walk
+  (and in jest) had `amount: 1288`, a shape the database can't hold
+  (`amount` is NULL on every waiting order). With a real order the app went
+  to "where it is" ("We confirm transfers…") with no QR and no way to pay.
+  Fixed: the app reads `quoted_amount` (see above); the stand-ins now use
+  the real shape (`amount: null, quoted_amount: 1288`).
 - **Nothing was written**: the fetch log has only reads (the website's
   address files, `public_price_schedule`, the albums list, "this album
   already has an order?"). Android's own per-app byte counters
