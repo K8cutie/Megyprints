@@ -143,8 +143,11 @@ const CACHE_KEY = 'megy-theme-quotes';
 const CACHE_MAX = 10;
 
 /** One device's quote pool (see createThemeQuotes). */
+/** A pool's functions are closures (createThemeQuotes), so each can be taken
+ *  off the pool and called on its own: the album builder does that with
+ *  ensureThemeQuotes (`this: void`, see shared/platform.ts). */
 export interface ThemeQuotes {
-  ensureThemeQuotes(theme: string, min: number, opts?: { budgetMs?: number }): Promise<string[]>;
+  ensureThemeQuotes(this: void, theme: string, min: number, opts?: { budgetMs?: number }): Promise<string[]>;
   fetchThemeQuotes(theme: string): Promise<QuoteSet>;
   moreThemeQuotes(theme: string): Promise<QuoteSet>;
   quotesForThemeNow(theme: string): string[];

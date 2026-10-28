@@ -7,8 +7,9 @@
    browser's localStorage and sessionStorage, the IndexedDB photo store,
    face-api, the HEIC converter, the EXIF date, the photo check, the tab's
    visibility, and since Phase 3a the canvas text measure, lib/quotes, the
-   window event for the occasion, and lib/supabase + the sign-in context +
-   lib/useAlbumSync for the account). The builder gets it through
+   window event for the occasion, and for the account: lib/supabase's saved
+   session and the album version read (lib/albumCloud, on lib/supabase), the
+   sign-in context and lib/useAlbumSync). The builder gets it through
    lib/defaultBuilderPlatform.
 
    Every piece calls the module it wraps AT CALL TIME, never when this file
@@ -39,6 +40,7 @@ import { announceAlbumTheme } from './albumTheme';
 import { supabase } from './supabase';
 import { useAuth } from './authContext';
 import { useAlbumSync } from './useAlbumSync';
+import { albumVersionWith, signedInUserIdWith } from './albumCloud';
 
 const NOT_A_FILE = 'Website photos must be Files: the browser pieces were handed something else.';
 /** The File a website photo is; throws a plain error for anything else. */
@@ -118,8 +120,9 @@ export const browserBuilderPlatform: BuilderPlatform = {
   },
   occasionChanged: (occasion) => announceAlbumTheme(occasion),
   cloud: {
-    // A getter: the client is read when the builder asks, never kept.
-    get client() { return supabase; },
+    // lib/supabase is read when the builder asks, never kept.
+    signedInUserId: () => signedInUserIdWith(supabase),
+    albumVersion: (albumId) => albumVersionWith(supabase, albumId),
     useUser: () => useAuth().user,
     useAlbumSync: () => useAlbumSync(),
   },

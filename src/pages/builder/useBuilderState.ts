@@ -3629,18 +3629,17 @@ export function useBuilderState(): BuilderActions {
       : stored && draftHasContent(stored)
         ? albumDataFromDraft(stored as StoredDraft, currentAlbumTheme())
         : null;
-    // getSession reads the saved session directly, so this is right even while
-    // the auth context is still loading (it is, on the fresh-start mount).
-    void account.client.auth.getSession().then(async ({ data }) => {
-      const session = data.session;
+    // The saved session is read directly, so this is right even while the
+    // auth context is still loading (it is, on the fresh-start mount).
+    void account.signedInUserId().then(async (signedIn) => {
       // 1. Its latest version goes to the account before we let go. The cloud
       //    copy is only refreshed every 10 min or on leaving, so the draft on
       //    this device can be newer — and it is the album the customer will
       //    come back to.
-      if (session && leaving && (!discardedAccount || discardedAccount === session.user.id)) {
+      if (signedIn && leaving && (!discardedAccount || discardedAccount === signedIn)) {
         // Only onto the version this device had: a newer one saved on another
         // device is not overwritten by the copy being put away.
-        await saveToCloud(session.user.id, leaving, { quiet: true, rec: leavingRec });
+        await saveToCloud(signedIn, leaving, { quiet: true, rec: leavingRec });
       }
       // 2. Its photos. This used to wipe the WHOLE photo store — which every
       //    saved album on the device shares — so each "Start Creating" or
@@ -3648,7 +3647,7 @@ export function useBuilderState(): BuilderActions {
       //    Only a draft that never touched an account loses its photos now.
       //    (Nothing leaks into the new album: rehydration only looks up the
       //    ids in uploadedPhotos, which is emptied below.)
-      await idbPhotos.deleteMany(photosToForget({ photoIds: discardedPhotoIds, accountId: discardedAccount }, !!session));
+      await idbPhotos.deleteMany(photosToForget({ photoIds: discardedPhotoIds, accountId: discardedAccount }, !!signedIn));
     }).catch(() => { /* can't tell who is signed in → keep everything */ });
     draftAccountRef.current = user?.id ?? null;
     albumIdRef.current = newAlbumId();
@@ -3824,15 +3823,15 @@ export function useBuilderState(): BuilderActions {
     try {
       const rec = syncRecFor(albumId);
       // One small read first: the version only.
-      const { data: head, error } = await account.client.from('albums').select('updated_at').eq('id', albumId).maybeSingle();
-      if (error) return; // offline: nothing to compare with
+      const head = await account.albumVersion(albumId);
+      if (head === 'offline') return; // nothing to compare with
       if (!head) {
         // Saved from here before, and now gone: deleted on another device.
         // Asked, not re-created. (Never saved: nothing to compare with.)
         if (rec?.base && albumIdRef.current === albumId) setCloudGone(true);
         return;
       }
-      if (rec?.base && rec.base === (head as { updated_at: string }).updated_at) return;
+      if (rec?.base && rec.base === head.updatedAt) return;
       const cloud = await albumSync.load(p.userId, albumId);
       if (!cloud?.updatedAt || albumIdRef.current !== albumId) return;
       const cloudKey = albumContentKey(toAlbumRow(cloud));

@@ -270,6 +270,28 @@ const readVersion = async (client: SupabaseClient, id: string) => {
   return (data as { updated_at: string } | null)?.updated_at ?? null;
 };
 
+/** One album's version as the builder asks it (BuilderCloud.albumVersion):
+ *  'offline' when the cloud couldn't be asked, null when there is no such
+ *  album (deleted on another device), else its updated_at. */
+export type AlbumVersion = { updatedAt: string } | null | 'offline';
+
+/** The album's version only: one small read before a whole album is loaded
+ *  (the builder's "did it move on on another device?"). Never throws for a
+ *  failed read: that is 'offline'. */
+export async function albumVersionWith(client: SupabaseClient, albumId: string): Promise<AlbumVersion> {
+  const { data, error } = await client.from('albums').select('updated_at').eq('id', albumId).maybeSingle();
+  if (error) return 'offline';
+  return data ? { updatedAt: (data as { updated_at: string }).updated_at } : null;
+}
+
+/** Who the client's saved sign-in says is signed in (the user id), or null.
+ *  auth.getSession reads the saved session directly, so it is right even
+ *  while a sign-in screen is still loading. Rejects when it can't be read. */
+export async function signedInUserIdWith(client: SupabaseClient): Promise<string | null> {
+  const { data } = await client.auth.getSession();
+  return data.session?.user.id ?? null;
+}
+
 /**
  * Save one album row for `userId`. Never overwrites blindly:
  *  - on a version (`base`): lands only on that version. Moved on: `conflict`.

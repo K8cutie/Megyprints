@@ -9,10 +9,13 @@
 
    The device underneath is the app's kind, made up in memory: a key-value
    store, photos kept by file:// URI, its own word measurer, the quote pool
-   built on that store (lib/themeQuotePool), and an account whose album rows
-   come from the shared useAlbumSyncWith (the ONE way an albums row is
-   written) on a made-up Supabase client. Then 40 photos go in and the album
-   is made: every photo placed, the draft kept in the device store.
+   built on that store (lib/themeQuotePool), and an account built the way the
+   app will build it: on a made-up Supabase client, the saved sign-in and the
+   version read from lib/albumCloud (signedInUserIdWith, albumVersionWith)
+   and the album rows from its useAlbumSyncWith (the ONE way an albums row is
+   written). The builder itself is never handed the client. Then 40 photos go
+   in and the album is made: every photo placed, the draft kept in the device
+   store.
 
    What this does not prove: it runs under Node with the React Native preset,
    not on Hermes on a phone, and draws nothing (the page drawer is
@@ -26,7 +29,7 @@ import { BuilderPlatformContext, type BuilderPlatform, type KeyValueStore, type 
 import { defaultBuilderPlatform } from '@web/lib/defaultBuilderPlatform';
 import { defaultMeasurer } from '@web/pages/builder/canvasMeasurer';
 import { createThemeQuotes } from '@web/lib/themeQuotePool';
-import { useAlbumSyncWith } from '@web/lib/albumCloud';
+import { albumVersionWith, signedInUserIdWith, useAlbumSyncWith } from '@web/lib/albumCloud';
 import { DRAFT_STORAGE_KEY } from '@web/lib/localDraftRules';
 import { MIN_ALBUM_PHOTOS } from '@web/pages/builder/albumMinimum';
 
@@ -66,7 +69,7 @@ function makePhone() {
       };
       return chain;
     },
-  } as unknown as BuilderPlatform['cloud']['client'];
+  } as unknown as Parameters<typeof useAlbumSyncWith>[0];
   const sizeOf = (name: string) => (Number(/\d+/.exec(name)?.[0] ?? 0) % 3 === 0 ? { width: 3000, height: 4000 } : { width: 4000, height: 3000 });
   const platform: BuilderPlatform = {
     deviceStore,
@@ -106,7 +109,8 @@ function makePhone() {
     quotes: createThemeQuotes({ store: deviceStore, endpoint: null }),
     occasionChanged: () => {},
     cloud: {
-      client,
+      signedInUserId: () => signedInUserIdWith(client),
+      albumVersion: (albumId) => albumVersionWith(client, albumId),
       useUser: () => null,
       useAlbumSync: () => useAlbumSyncWith(client),
     },

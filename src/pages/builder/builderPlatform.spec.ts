@@ -8,8 +8,8 @@ import { createRoot, type Root } from 'react-dom/client';
    The real useBuilderState, wrapped in a BuilderPlatformContext with a
    made-up device: its own key-value stores, photo store, photo intake, face
    finder, photo check and app lifecycle, all in memory; since Phase 3a also
-   its own text measurer, quote lines, occasion signal and account (a
-   made-up Supabase client, signed-in user and album rows). The builder's
+   its own text measurer, quote lines, occasion signal and account (its
+   saved sign-in, an album's version, signed-in user and album rows). The builder's
    default is the app's (none, defaultBuilderPlatform.native.ts), every
    browser piece the website uses (IndexedDB, face-api, the HEIC converter,
    the EXIF reader, the canvas text measure) is replaced by one that FAILS
@@ -26,14 +26,14 @@ import { createRoot, type Root } from 'react-dom/client';
 const touched: string[] = vi.hoisted(() => []);
 /** The made-up device's account: who its saved sign-in says is signed in
  *  (reset() asks it), who is signed in now, the album rows the builder saves
- *  and loads, and what it asks the Supabase client (the cloud itself is never
- *  reached). */
+ *  and loads, and which albums' versions it asks for (the cloud itself is
+ *  never reached). */
 const cloud = vi.hoisted(() => ({
-  session: null as null | { user: { id: string } },
+  signedIn: null as null | string,
   user: null as null | { id: string },
   saved: [] as Array<{ userId: string; data: { id?: string; occasion?: string | null } }>,
   loaded: [] as Array<[string, string | undefined]>,
-  queries: [] as Array<{ table: string; eqs: Array<[string, unknown]> }>,
+  versionsAsked: [] as string[],
 }));
 // The website's account modules and quote pool: tripwires. The builder takes
 // all of it from the device now (BuilderPlatform.cloud / .quotes), so none of
@@ -110,20 +110,6 @@ function makeDevice() {
     error: null,
     clearError: () => {},
   };
-  /** A made-up Supabase client: the saved sign-in, and the version read. */
-  const client = {
-    auth: { getSession: async () => ({ data: { session: cloud.session } }) },
-    from: (table: string) => {
-      const q = { table, eqs: [] as Array<[string, unknown]> };
-      cloud.queries.push(q);
-      const chain = {
-        select: () => chain,
-        eq: (k: string, v: unknown) => { q.eqs.push([k, v]); return chain; },
-        maybeSingle: async () => ({ data: null, error: null }),
-      };
-      return chain;
-    },
-  } as unknown as BuilderPlatform['cloud']['client'];
   let convertNow!: () => void;
   const converting = new Promise<void>((r) => { convertNow = r; });
   let leave: (() => void) | null = null;
@@ -183,7 +169,9 @@ function makeDevice() {
     quotes: { ensureThemeQuotes: async () => ['A line from this device'] },
     occasionChanged: (occasion) => { calls.occasions.push(occasion); },
     cloud: {
-      client,
+      signedInUserId: async () => cloud.signedIn,
+      // No such album in this made-up cloud.
+      albumVersion: async (albumId) => { cloud.versionsAsked.push(albumId); return null; },
       useUser: () => cloud.user,
       useAlbumSync: () => sync,
     },
@@ -240,11 +228,11 @@ beforeEach(() => {
   // The browser's own album and occasion: they must never open on this device.
   localStorage.setItem(DRAFT_STORAGE_KEY, draft('The browser album', [photo(0, 'blob:browser/p0')]));
   localStorage.setItem(ALBUM_THEME_KEY, 'Birthday');
-  cloud.session = null;
+  cloud.signedIn = null;
   cloud.user = null;
   cloud.saved.length = 0;
   cloud.loaded.length = 0;
-  cloud.queries.length = 0;
+  cloud.versionsAsked.length = 0;
   device = makeDevice();
 });
 afterEach(async () => {
@@ -356,7 +344,7 @@ describe('the album builder on a device of its own (no browser pieces)', () => {
   it('the occasion is kept on this device: the album saved to the account carries it, and a new album clears it', async () => {
     device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://kept/p0')]));
     device.store.setItem(ALBUM_THEME_KEY, 'Wedding');
-    cloud.session = { user: { id: 'user-1' } };
+    cloud.signedIn = 'user-1';
     await open();
     // A new album: the one being put away is saved to the account first.
     await act(async () => { builder.reset(); });
@@ -386,17 +374,17 @@ describe('the album builder on a device of its own (no browser pieces)', () => {
     expect(touched).toEqual([]); // never the browser's canvas
   });
 
-  it('the account is this device\'s: who is signed in, and its album rows read with its own client', async () => {
+  it('the account is this device\'s: who is signed in, an album\'s version and its album rows', async () => {
     device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://kept/p0')]));
     cloud.user = { id: 'user-1' };
     await open();
     expect(builder.user).toEqual({ id: 'user-1' });
     // Back in the app: did the album move on on another device? One small
-    // read of its version, with this device's client.
-    cloud.queries.length = 0;
+    // read of its version, asked of this device's account.
+    cloud.versionsAsked.length = 0;
     await act(async () => { device.comeBack(); });
     await settle();
-    expect(cloud.queries).toEqual([{ table: 'albums', eqs: [['id', 'album-device']] }]);
+    expect(cloud.versionsAsked).toEqual(['album-device']);
     // A saved album opened by id comes from this device's album rows.
     await act(async () => { await builder.loadAlbum('album-other'); });
     expect(cloud.loaded).toContainEqual(['user-1', 'album-other']);

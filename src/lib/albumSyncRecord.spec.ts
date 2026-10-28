@@ -55,6 +55,30 @@ describe('albumContentKey: the same album gives the same key however it travelle
   });
 });
 
+describe('albumContentKey on the website and in the 2.0 app (Phase 3a review)', () => {
+  const coverAt = (image: string) => serializeAlbum(album({
+    coverFront: { id: 'cover', background: { type: 'image', image }, textElements: [] },
+  }));
+  it("the website's key is exactly what it was before the app (saved records still match)", () => {
+    // Worked out with the rule as it was (blob: URLs only) for this album.
+    expect(albumContentKey(serializeAlbum(album()))).toBe('17e3gky2bf5');
+  });
+  it("the app's cover photo URI changing between opens doesn't count, and the key is the website's", () => {
+    const web = albumContentKey(coverAt('blob:http://localhost/1111'));
+    expect(albumContentKey(coverAt('file:///data/user/0/com.megyprints.app/files/photos/a.jpg'))).toBe(web);
+    expect(albumContentKey(coverAt('file:///data/user/0/com.megyprints.app/cache/b.jpg'))).toBe(web);
+    expect(albumContentKey(coverAt('content://media/external/images/media/42'))).toBe(web);
+  });
+  it('a URL anyone can open, or words that only start like one, still count', () => {
+    const web = albumContentKey(coverAt('blob:http://localhost/1111'));
+    expect(albumContentKey(coverAt('https://megyprints.com/sample-photos/megy-sample-03.jpg'))).not.toBe(web);
+    const caption = (text: string) => albumContentKey(serializeAlbum(album({
+      coverFront: { id: 'cover', background: { type: 'solid', solid: '#fff' }, textElements: [{ id: 't', text }] },
+    } as Partial<AlbumData>)));
+    expect(caption('file: our trip')).not.toBe(caption('file: our trip 2'));
+  });
+});
+
 describe('decideSync', () => {
   const rec: SyncRecord = { albumId: 'a1', base: 'v1', key: 'K1' };
   it('the cloud is still this copy\'s version: in sync', () => {

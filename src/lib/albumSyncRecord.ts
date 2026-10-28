@@ -98,11 +98,21 @@ export function rowContent(row: Record<string, unknown>): Record<string, unknown
   };
 }
 
+/** A URL only this device can open: the website's blob: URLs (new every
+ *  visit), and the 2.0 app's file:// and content:// URIs (its photo store or
+ *  picker can hand back a different one on a later open). A cover photo from
+ *  the photo store is kept in the cover page as one (withLiveCoverPhoto), but
+ *  the photo itself is known by its id (localPhotoId), so where it shows from
+ *  is not part of the album. */
+const DEVICE_URL = /^(blob:|file:\/\/|content:\/\/)/;
+
 /** JSON with object keys sorted (the database hands jsonb back in its own key
- *  order), and this-session-only blob: URLs reduced to "blob:" (a cover photo
- *  from this device's photo store gets a new one every visit). */
+ *  order), and device-only URLs (DEVICE_URL) all reduced to the one "blob:",
+ *  so the same album has the same key on every visit, and on the website and
+ *  the app. (Before the app, this reduced blob: URLs only: the website's keys
+ *  are unchanged.) */
 function stableJson(v: unknown): string {
-  if (typeof v === 'string') return JSON.stringify(v.startsWith('blob:') ? 'blob:' : v);
+  if (typeof v === 'string') return JSON.stringify(DEVICE_URL.test(v) ? 'blob:' : v);
   if (Array.isArray(v)) return `[${v.map((x) => (x === undefined || typeof x === 'function' ? 'null' : stableJson(x))).join(',')}]`;
   if (v && typeof v === 'object') {
     const o = v as Record<string, unknown>;

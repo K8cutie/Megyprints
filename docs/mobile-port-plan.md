@@ -214,12 +214,16 @@ New platform pieces (`src/shared/platform.ts`), website values in
   `createThemeQuotes` on its deviceStore).
 - `occasionChanged(occasion)`: tell the screens showing the occasion
   (website: the `megy-album-theme` window event).
-- `cloud`: `client` (the Supabase client: the saved session and the version
-  read), `useUser()` (who is signed in), `useAlbumSync()` (the album rows).
-  Every albums write still goes through ONE function, `saveAlbumRowWith` in
-  `lib/albumCloud` (on its version, never an upsert); the website's
-  `useAlbumSync` binds it to `lib/supabase`, the app calls
-  `useAlbumSyncWith(its client)`.
+- `cloud`: `signedInUserId()` (who the saved sign-in says is signed in),
+  `albumVersion(id)` (one album's `updated_at` only: `'offline'`, `null` for
+  no such album, or `{ updatedAt }`), `useUser()` (who is signed in) and
+  `useAlbumSync()` (the album rows). The builder is never handed the Supabase
+  client, so it can't read or write a table on its own. Both reads are in
+  `lib/albumCloud` (`signedInUserIdWith(client)`, `albumVersionWith(client,
+  id)`), and every albums write still goes through ONE function,
+  `saveAlbumRowWith` there (on its version, never an upsert). The website
+  binds all of them to `lib/supabase`; the app binds them to its own client
+  (`useAlbumSyncWith(its client)` and the two reads).
 
 The shared-code check allows a type-only import of `@supabase/supabase-js`
 (`SHARED_TYPE_ONLY_PACKAGES`: erased at build, the app has the same package
@@ -233,12 +237,68 @@ draft is kept in the device store.
 
 Not proven yet: the builder on Hermes on a phone (the test runs under Node);
 the quote pool's `\p{L}` pattern and the "saved at 2:41 PM" wording
-(`toLocaleTimeString`) on Hermes. The album content key (`albumSyncRecord`)
-reduces only `blob:` URLs, and a cover's own uploaded photo is kept in the
-cover page as a device URL (`background.image`: blob: on the website, a
-file:// URI in the app), so the same album can get different keys on the app
-and the website; the version check then asks which to keep rather than
-overwrite. Worth a platform rule in Phase 3b.
+(`toLocaleTimeString`) on Hermes.
+
+**Review fixes (2026-10-29).**
+- The album content key (`albumSyncRecord`) now reduces every URL only this
+  device can open (`blob:`, `file://`, `content://`) to the one `"blob:"`.
+  A cover's own photo is kept in the cover page as such a URL
+  (`background.image`; the photo itself is known by `localPhotoId`), so the
+  app's photo store handing back a different URI on a later open no longer
+  looks like a change, and the same album keys the same on the website and
+  the app. The website's keys are unchanged (pinned in
+  `albumSyncRecord.spec.ts`), so records already saved still match.
+- `cloud.client` is gone (see the `cloud` bullet above).
+- The pieces the builder calls on their own (every `photos.*` function,
+  `textMeasurer`, `occasionChanged`, `quotes.ensureThemeQuotes`) are typed
+  `this: void`: an object-literal method that uses `this` is a type error.
+  A class method is not caught: write them as arrow functions or closures.
+- `browserPlatform.spec.ts` checks the website's `textMeasurer()` is the
+  canvas measure `textFit` used (it was the one new piece no test covered),
+  and the two account reads.
+- `test-renderer` (used by `mobile/test/sharedBuilder.test.ts`) is in
+  `mobile/package.json`, at the 1.3.0 jest-expo pins.
+
+**For Phase 3b: the app's deviceStore must be saved when `setItem`
+returns.** The builder saves the album in progress when the app goes to the
+background (`lifecycle.onLeave` → `saveDraftNow`) and counts it safe once
+`setItem` returns, as localStorage guarantees. Android may close the app
+right after, so: expo-file-system's `writeSync` to a second file then
+`moveSync` over the first (`draftFile.ts`'s pattern made synchronous; SDK 58
+has `writeSync`, `moveSync` and `textSync`), or MMKV (not a dependency yet).
+Never an in-memory copy written later, never AsyncStorage (Android reads a
+value only up to about 2 MB, and the `megy-album-v5` draft can be bigger).
+
+**Open PRs that meet this branch** (checked with `git merge-tree` against
+every open PR on 2026-10-29). Whichever lands second follows the recipe.
+- **#158** (photos with no capture time, `claude/infallible-wu-5a5d9e`):
+  new conflicts in `draftAlbum.ts` and `useAlbumSync.ts`, because 3a moved
+  the code #158 edits. Move its `timeSource` edits to where that code is now:
+  `AlbumData` (the photo fields), `serializeAlbum` and `deserializeAlbum` in
+  `albumCloud.ts`; `StoredDraft` and `albumDataFromDraft` in
+  `draftAlbumRow.ts`. Keep 3a's thin `useAlbumSync.ts` and `draftAlbum.ts`
+  (if the merge keeps #158's lines there instead, they are dead code and
+  `timeSource` is lost from the cloud save and the draft row). In
+  `useBuilderState.ts`, do not import `readPhotoTime` from `./exif` (a
+  browser file; the shared-code check fails): widen
+  `platform.photos.captureTime` to return `{ capturedAt, timeSource }`, have
+  `lib/browserPlatform` call `readPhotoTime`, and give the app's twin and the
+  test devices (`builderPlatform.spec.ts`, `mobile/test/sharedBuilder.test.ts`)
+  `timeSource: 'file'` or `'exif'` as they really know it.
+- **#154** (date stamp, `claude/date-stamp-button`): `useBuilderState.ts`
+  conflicts as it already did with 0b. #154 adds an import of
+  `assistant/dateStamp`, which is not on the shared list and imports the
+  unlisted `wordArt`. Point `dateStamp.ts` at `pages/builder/wordArtRules`,
+  add `src/assistant/dateStamp.ts` to `SHARED_MODULES` and run
+  `npx vitest run src/shared` (it must use no browser API).
+- **#208** (sample album each day): merges with no conflict; its new imports
+  stay in the unshared `localDraft.ts`.
+- **#216 / #219** (page drawer): the `masks`/`wordArt` splits are
+  byte-identical. Only `sharedModules.ts` (keep both sides' lines, in sort
+  order) and this file conflict.
+- **#165** (photo shape) touches `useBuilderState.ts` and merges cleanly; its
+  new import (`pageTemplates`) is already shared. The other open PRs don't
+  touch shared files in a way the check would refuse.
 
 ## 5. Risks, each with its fix
 
