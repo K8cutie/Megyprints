@@ -35,6 +35,8 @@
    draftAlbum (draftAlbumRow) and useAlbumSync (albumCloud); pageColors,
    textFit and albumSyncRecord as they are; and canvasMeasurer.native (the
    app has no browser canvas: its builder measures words with its own).
+   The phone's photo check added pages/builder/faceCentre (the face-group
+   centre, split out of faceDetection, which needs face-api).
 
    A TWIN: a file listed as name.native.ts stands in for name.ts in the app.
    The app's bundler (Metro) and type check (tsconfig moduleSuffixes) pick
@@ -85,6 +87,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/coverGeometry.ts',
   'src/pages/builder/coverPhoto.ts',
   'src/pages/builder/densities.ts',
+  'src/pages/builder/faceCentre.ts',
   'src/pages/builder/fontCatalog.ts',
   'src/pages/builder/generateAlbum.ts',
   'src/pages/builder/gradient.ts',

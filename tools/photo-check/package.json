@@ -1,0 +1,17 @@
+{
+  "name": "megyprints-photo-check-compare",
+  "private": true,
+  "description": "Compares the 2.0 app's photo check and face finding (Android, ML Kit) with the website's (headless Chromium, face-api.js) on the same test pictures.",
+  "type": "module",
+  "scripts": {
+    "pictures": "node makePictures.mjs",
+    "web": "node runWeb.mjs",
+    "phone": "node phoneServer.mjs",
+    "compare": "node compare.mjs",
+    "sheets": "node sheets.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.7",
+    "playwright-core": "1.61.1"
+  }
+}

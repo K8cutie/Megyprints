@@ -135,6 +135,38 @@ export function eyesClosedIn(faces: { boxHeight: number; landmarks: Pt[] }[], im
   });
 }
 
+/* ── One photo, from its small copy ────────────────────────────────────────
+   What photoCheckRunner does with the pixels, as plain functions, so the
+   website and the 2.0 app (its own decoding and face finder) build the
+   same PhotoCheck the same way. */
+
+/** The small copy's size: CHECK_LONG_SIDE on the long side, never bigger
+ *  than the photo. `width`/`height` are the photo's measured size. */
+export function checkCopySize(width: number, height: number): { w: number; h: number } {
+  const scale = Math.min(1, CHECK_LONG_SIDE / Math.max(1, width, height));
+  return { w: Math.max(1, Math.round(width * scale)), h: Math.max(1, Math.round(height * scale)) };
+}
+
+/** Blur and fingerprint from the small copy's RGBA pixels. The face pass
+ *  fills in faces and eyesClosed later. */
+export function basicCheck(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number): PhotoCheck {
+  const gray = grayscale(rgba, w, h);
+  return { v: 1, sharp: tileSharpness(gray, w, h), hash: dHash(gray, w, h), faces: null, eyesClosed: false };
+}
+
+/** A face found on the small copy, as the closed-eyes rule reads it: its
+ *  box height and its 68 points (in the small copy's pixels). */
+export interface CheckFace {
+  boxHeight: number;
+  landmarks: Pt[];
+}
+
+/** The face pass's answer: faces large enough to judge, and shut eyes.
+ *  `h` = the small copy's height. */
+export function faceVerdict(faces: CheckFace[], h: number): { faces: number; eyesClosed: boolean } {
+  return { faces: faces.filter((f) => f.boxHeight >= h * MIN_FACE_SHARE).length, eyesClosed: eyesClosedIn(faces, h) };
+}
+
 /* ── Album-level rules ─────────────────────────────────────────────────── */
 
 export interface CheckablePhoto {

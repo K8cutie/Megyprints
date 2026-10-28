@@ -24,6 +24,7 @@ export default function RootLayout() {
           <Stack.Screen name="photos" options={{ title: 'Your photos' }} />
           <Stack.Screen name="pick-photos" options={{ title: 'Pick photos' }} />
           <Stack.Screen name="album-next" options={{ title: 'Your album' }} />
+          <Stack.Screen name="photo-check-lab" options={{ title: 'Photo check test' }} />
         </Stack>
       </DraftProvider>
     </AuthProvider>

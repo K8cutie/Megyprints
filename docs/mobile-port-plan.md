@@ -770,6 +770,39 @@ test files; with what was on the emulator already, 2,517 photos.
 - Grid grouping by EXIF for photos without an index time (see above).
 - A real phone (not just the emulator) and a phone with 10,000+ photos.
 
+### The photo check and face centring on the phone (2026-10-28)
+
+`mobile/src/lib/phonePhotoCheck.ts` `createPhoneChecks()` gives the app's
+`photoCheck` (PhotoChecker) and `faces` (FaceFinder). Phase 3's app
+platform plugs them in where it now has "not available yet":
+`const checks = createPhoneChecks();` then `faces: checks.faces,
+photoCheck: checks.photoCheck`.
+
+- **Blur and repeats**: the app's native module (`mobile/modules/photo-pixels`)
+  makes each photo's 800 px small copy the way the website's browser does
+  (Chrome's createImageBitmap 'medium': whole decode, Skia's halvings,
+  blended; checked against Chrome itself, ±1 per pixel), and the shared
+  photoCheck functions measure it. On 138 test pictures (60 made-up incl.
+  blurred, near and EXIF-turned copies, plus the 78 sample photos and 16
+  copies) sharpness matched to 0.1 %, fingerprints bit for bit, and the
+  blurry list, repeat sets and leave-out suggestions were the same as the
+  website's in every album tried.
+- **Faces and closed eyes**: Google ML Kit (`com.google.mlkit:face-detection`
+  16.1.7, model inside the app, no network) on the same small copy, called
+  by the same native module (a wrapper library held up Expo's shared module
+  thread and needed a JPEG copy per photo). Each face becomes the box and
+  eye points the shared rules read (`phoneFaces.ts`). Different model,
+  different answers: same "has a face" 88 %, same face count 67 % (ML Kit
+  finds more of the faces in group photos), same closed-eyes verdict 84 %
+  (ML Kit calls laughing and downcast eyes shut: 20 photos to the
+  website's 2, at its line of 0.1). `tools/photo-check` has the numbers and
+  the pictures of every difference.
+- **Face centring**: the same ML Kit faces through the shared
+  `faceCentre.faceGroupCentre` (split out of `faceDetection.ts`, unchanged).
+- **Not proven yet**: a real phone (only the x86_64 emulator), a store
+  (release) build's speed, P3/Adobe RGB photos (the copy is decoded to sRGB,
+  as the browser does, but none were in the test set), HEIC photos.
+
 ---
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)

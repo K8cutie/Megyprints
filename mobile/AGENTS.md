@@ -27,9 +27,12 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   Worklets, Gesture Handler) are not in the APK. Importing one crashes the
   app on the phone; `test/nativeLibraries.test.ts` fails first. Delete the
   line there to turn one back on.
-- **The app's own native code** lives in `modules/` (today `modules/photo-files`:
+- **The app's own native code** lives in `modules/`: `modules/photo-files`
   keeps access to photos picked with "Choose from Files" and reads their size
-  and EXIF time). Expo autolinking builds every folder there; after changing
+  and EXIF time; `modules/photo-pixels` makes the photo check's small copy the
+  way the website's browser does and runs Google ML Kit's face finder on it
+  (`src/lib/phonePhotoCheck.ts`; compared with the website by
+  `../tools/photo-check`). Expo autolinking builds every folder there; after changing
   its Kotlin, run prebuild and Gradle again. Jest has no native modules: its
   JS side (`index.ts`) works without the native half.
 - **Photos are never copied into the app.** The album keeps each photo's
