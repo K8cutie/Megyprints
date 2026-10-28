@@ -396,6 +396,202 @@ Native Google sign-in needs these steps first, all in the owner's accounts:
 - Phones: the default ABIs are `arm64-v8a` (phones) and `x86_64` (emulator);
   old 32-bit phones need `armeabi-v7a` added (`-Abis`).
 
+## Phase 2 notes (2026-10-28): pick photos
+
+### What Phase 2 built
+
+Branch `feat/port-phase-2` (on top of Phase 1). Start screen → **Make an
+album** → **Your photos** → **Pick photos**.
+
+- **Pick photos** (`mobile/src/app/pick-photos.tsx`): the phone's photos in a
+  grid, newest first, one block per day ("Today", "Yesterday", "Monday,
+  October 26"), each day with its own **Select** / **Unselect**, a big
+  **Select all 2,503 photos** / **Unselect all**, tap a photo to pick it, the
+  running count ("12 photos selected", and "Albums need at least 40 photos.
+  Pick 14 more."), and ONE filled button, **Add 12 photos**. With nothing
+  picked there is no button, only "Tap the photos you want, or Select all."
+  Photos already in the album say **In album**; tapping one says "That photo
+  is already in your album."
+  - Speed: the grid is one FlashList whose items are whole rows (a day
+    heading, or 4 photos), so only the rows on screen exist. Photos come from
+    Android's photo index without opening any file (`Query.exeForMetadata`):
+    a first page of 120, then pages of 1,000. **Select all** is a flag ("all,
+    except these"), so it is instant at any size and covers photos still
+    loading: **Add** after Select all waits for the last page and adds those
+    photos too (`photoSelection.photosToAdd`). Thumbnails are `expo-image`
+    (Glide makes the small version from the photo where it is).
+  - **In album** is matched by Android's photo number, never by the whole
+    address: Android 10 gives the grid `.../external_primary/images/media/<n>`
+    ids (`photoDraft.idsInAlbum`).
+- **Photo access, in plain words.** Before Android's own question the app
+  says "Megy Prints needs to see your photos so you can pick them for your
+  album." with **Allow access to photos** (filled) and **Choose from Files
+  instead**. After a "Don't allow": **Choose from Files** (filled) and **Ask
+  for photo access again**. Refused for good: **Choose from Files** and
+  **Open Settings**, with the steps.
+  - **Android 14+ "Select photos" (limited access):** the grid shows only the
+    chosen photos under a box: "Megy Prints can see only the photos you
+    chose.", **Choose more photos** (opens Android's chooser again; choices
+    add up), and how to allow all in Settings (**Open Settings**).
+  - Only photos are asked for: `READ_MEDIA_IMAGES` (+
+    `READ_MEDIA_VISUAL_USER_SELECTED`, and `READ_EXTERNAL_STORAGE` up to
+    Android 12). No videos, music, photo locations or write access:
+    `app.json` blocks them, and `test/photoSetup.test.ts` checks it.
+- **Choose from Files** (`mobile/src/lib/filePhotos.ts`): Android's document
+  picker, many at once, images only. Needs no permission.
+- **Photos are kept where they are, never copied.** A grid photo is kept as
+  its MediaStore address (`content://media/external/images/media/<n>`). A
+  Files photo is kept as the address Files gave; Files' addresses can be
+  read only while the app is open, so the app's own small native module
+  (`mobile/modules/photo-files`, Kotlin, built by Expo autolinking) **keeps
+  access** to each one (Android "persistable" access) and gives it back when
+  the photo leaves the album. Android keeps at most 512 such addresses per
+  app and drops the oldest past that, so a very large Files-only album could
+  lose its oldest photos' access (Phase 3+: the "photos missing" bar and
+  `photoRelink` find them again).
+  - The same photo picked from the grid and from Files is **one** photo: the
+    grid's address, Files' Images address and Files' Downloads address
+    (`msf:<n>`) all carry Android's number for it (`photoKey` → `media:<n>`).
+    A photo found by browsing the phone's storage in Files has no number and
+    is keyed by its own address, so picking the same photo that way AND from
+    the grid still adds it twice (not fixed).
+  - Files picks that do not go in (could not be opened, already in the album)
+    give their kept access back at once, and a photo taken out gives it back
+    after Undo only if no photo in the album still uses that address.
+- **Size and time taken**, for each picked photo: width and height as shown
+  (turned photos swapped) and when it was taken (see "Time taken" below).
+- **HEIC** (iPhone photos): kept by address like any photo; Android shows them
+  itself (Android 9+). No conversion in the app.
+- **The album draft** (`mobile/src/lib/photoDraft.ts`, `draftStore.tsx`,
+  `draftFile.ts`): the picked photos, oldest first, saved on the phone after
+  every change, so closing the app keeps them. About 220 bytes a photo, in
+  **one file in the app's own folder** (`album-draft-v1.json`, through
+  `expo-file-system`), not AsyncStorage: Android's AsyncStorage saves a value
+  over 2 MB but can't read it back (CursorWindow), which is about 9,500
+  photos, and Select all has no cap. A save writes a second file and moves it
+  over the first, so the saved album is always a whole one. A saved album that
+  can't be read is moved aside (`album-draft-v1.unreadable.json`), never
+  written over, and Your photos says "The photos you picked before could not
+  be opened. Please pick your photos again." `test/draftStore.test.ts` saves
+  and opens 12,000 photos. (The first Phase 2 test build kept the album in
+  AsyncStorage key `megy-2.0-album-draft-v1`; it is read once if there is no
+  file yet, and never written again.)
+- **Your photos** (`mobile/src/app/photos.tsx`): "Your photos: N", the photos
+  in album order, × to take one out (with **Undo** for 10 seconds), "Take out
+  all photos" (asks first). **The 40-photo minimum is the website's own rule
+  and words** (shared `albumMinimum.ts`): 0 photos → **Pick photos**; under 40
+  → **Add 26 more photos** (the website's `addMoreLabel`) and no way on; 40 or
+  more → **Next** (filled) and **Add more photos**. Next leads to a page that
+  says the album steps come in the next test version (Phase 3).
+- **Shared website code used:** `albumMinimum.ts` (+ `densities.ts`) for the
+  minimum and its words, `pickedFiles.ts` for what counts as a photo and the
+  "left out" words.
+
+**Libraries** (installed with `npx expo install`, SDK 58 versions):
+`expo-media-library` 58.0.12 (the new `Query` API), `expo-image` 58.0.17,
+`expo-document-picker` 58.0.4, `@shopify/flash-list` 2.3.2 (no native code).
+`@react-native-async-storage/async-storage` 2.2.0 was already there.
+`expo-file-system` 58.0.12 (for the album file) was already in the APK as a
+part of `expo`; it is now listed in `package.json` so the app can import it
+(no native change). The native module needs `androidx.exifinterface` 1.4.1, the version
+`expo-media-library` already uses.
+
+### Time taken: what the app reads, and where EXIF would be better
+
+- **Grid photos:** Android's index (`DATE_TAKEN`), which Android fills from
+  the photo's EXIF DateTimeOriginal. Android leaves it **empty** when the EXIF
+  has no time zone (`OffsetTimeOriginal`) and the file's date is more than a
+  day away from the EXIF time: typically old photos copied onto a new phone.
+  For those, when they are added, the app reads the EXIF itself
+  (`Asset.getExif`, `gallery.ts`), so they still go in the right place in the
+  album. Seen on the emulator: ten 2019 photos with no time zone, copied
+  "today", went to the front of the album, in 2019 order.
+- **EXIF would be better in the grid itself:** the grid groups by the index
+  only, so those copied photos show under the day they were copied, not the
+  day they were taken (reading every photo's EXIF while scrolling would be
+  too slow). They sort right once added.
+- **Files photos:** the native module reads EXIF DateTimeOriginal (or
+  DateTimeDigitized, as the website's EXIF reader does) and its time zone.
+- **No EXIF time at all** (screenshots, many saved chat photos): the file's
+  last-changed time. The website keeps such photos in a trailing group
+  instead; PR #158 (open) moves the website to this same fallback. Until
+  then, the same undated photos can sit in a different place on the website
+  and in the app.
+
+### Google Play: READ_MEDIA_IMAGES needs a declaration
+
+Google Play limits `READ_MEDIA_IMAGES` to apps whose core use needs broad
+photo access, and asks for a **Photo and video permissions declaration** in
+Play Console (App content) when an app asks for it. Making a photo album from
+many of your photos is this app's core use, so the declaration should say
+that (picking 40 to hundreds of photos at once, grouped by day, Select all).
+**If Google refuses, the Files path is the fallback**: it needs no permission
+and already works (`filePhotos.ts`); the grid would then be switched off (one
+`app.json` change: block `READ_MEDIA_IMAGES` and
+`READ_MEDIA_VISUAL_USER_SELECTED`) and **Choose from Files** becomes the way
+in. Android's own photo picker is a second fallback, but it picks at most
+about 100 photos a time.
+
+### What was seen on the emulator (2026-10-28)
+
+`pwa_test` (Android 14, 2 GB RAM, x86_64), port 5630, debug build + Metro and
+the release build. Test photos: 2,400 made-up pictures (gradients, shapes, a
+number and a date; EXIF time + time zone like a phone camera) spread over six
+months, 10 old photos (2019, no time zone, file dated today), 10 PNG
+screenshots, 3 turned photos (EXIF orientation 6) and the website's 3 HEIC
+test files; with what was on the emulator already, 2,517 photos.
+
+- Make an album → Your photos: 0, **Pick photos** → the plain-words screen →
+  Android's question with "Select photos and videos / Allow all / Don't
+  allow".
+- **Don't allow** → "Photo access was not allowed", **Choose from Files** →
+  picked 8 in Files (long-press, then taps) → Your photos: 8, in time order
+  (the 2019 photos first, by their EXIF, then the HEIC files by their EXIF
+  dates, then today's). After closing and reopening the app the 8 were still
+  there and still showed; `dumpsys activity permissions` listed all 8 Files
+  addresses as persisted.
+- **Ask for photo access again → Select photos** (picked 5) → the grid showed
+  the 5 under the limited-access box; **Choose more photos** opened Android's
+  chooser, 3 more → 8 shown (choices add up). Day **Select** picked all 8,
+  **Add 8 photos** → Your photos: 16, the gallery's 2019 photos in among the
+  Files ones by EXIF time. The same photo picked both ways was in twice
+  before `photoKey` was made one-per-photo; after the fix: 15.
+- **Allow all** (granted with `adb shell pm grant … READ_MEDIA_IMAGES`, the
+  same as Allow all in Settings): "2,120 photos on this phone (still opening
+  more)" while loading, then "2,517 photos on this phone", photos already in
+  the album marked "In album". **Select all 2,503 photos** → "2,503 photos
+  selected / Enough photos for an album." → **Add 2,503 photos** (spinner on
+  the button) → Your photos: 2,517 → **Next** → the Phase 3 page.
+- Take out (×) and **Undo** worked (the first try at 5 seconds ran out before
+  the tap; Undo now stays 10 seconds).
+- **Release build, fresh start** (`pm clear`): Make an album → Pick photos →
+  Allow access → Allow all: 2,120 photos showing 1.6 s after the tap, all
+  2,517 by 2.3 s. Today's **Select** (43), one tapped off → **Add 42
+  photos** → Your photos: 42, the 2019 photos first by their EXIF, then the
+  HEIC files, then today's → **Next**. "Take out all" asks first.
+- **Smoothness, 2,517 photos, release build, 20 fast flings**
+  (`dumpsys gfxinfo`): janky frames 2.8% (8.9% on a first run right after
+  loading), frame time 50th / 90th / 99th percentile 25 / 34 / 46 ms. The
+  same 20 flings in Android's own Files app, on the same photos and the same
+  emulator: 7.8% janky, 32 / 48 / 69 ms. So the grid is at least as smooth as
+  the system's own picker here. The emulator draws through the PC's graphics,
+  so these numbers are for comparing, not phone numbers. During a very fast
+  fling the rows and ticks draw at once and thumbnails show grey for a moment,
+  filling in within about a second after the list stops (each thumbnail is
+  made from the full photo; a real phone decodes JPEGs much faster).
+- Memory after scrolling the whole grid: 227 MB (PSS) on the 2 GB emulator.
+
+### Left for later (found in Phase 2)
+
+- **Megy's photo check** (blur, repeats, closed eyes) and the website's
+  "left out" photos are not in the app yet. The draft already has `leftOut`
+  and the minimum counts only photos going in, as on the website.
+- **Same order as the website for the same photos** is not proven yet; the
+  page plan in Phase 3 will compare them (and the undated-photo difference
+  above).
+- Grid grouping by EXIF for photos without an index time (see above).
+- A real phone (not just the emulator) and a phone with 10,000+ photos.
+
 ---
 
 ## Page renderer notes (2026-10-28, Phase 5 groundwork)

@@ -14,7 +14,13 @@
         "backgroundColor": "#B85C38",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.ACCESS_MEDIA_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -22,7 +28,17 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      "./plugins/withShortCmakeObjectPaths"
+      "./plugins/withShortCmakeObjectPaths",
+      [
+        "expo-media-library",
+        {
+          "granularPermissions": [
+            "photo"
+          ],
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      "expo-image"
     ],
     "experiments": {
       "tsconfigPaths": false
