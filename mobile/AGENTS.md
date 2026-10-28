@@ -48,14 +48,20 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   `npm ci` in `../tools/golden` once). Never loosen its bars to pass: the
   numbers and why are in `test/golden/compare.ts` and the plan's "Page
   renderer notes". A change that moves website print code into shared files
-  must print byte for byte the same: `node ../tools/golden/websiteSame.mjs <base ref>`.
+  must print byte for byte the same: `node ../tools/golden/websiteSame.mjs`
+  (compares with where the branch left main; a ref from before the change
+  can be given, never HEAD after committing it).
   **On a phone:** `scripts\build-android.ps1 -Variant release -GoldenPages`
   (a test build with the golden pages; never for customers), then
   `node scripts/golden-phone-run.cjs --device <serial>` and
-  `npm run golden:phone` (same bars; the plan's "Page renderer on the
+  `npm run golden:phone` (same bars, pages, covers and texture tiles, plus
+  a timing pass with a 12 MP photo; the plan's "Page renderer on the
   phone"). Run it again after changing `src/render`: CanvasKit in Node is
   not the phone's Skia (the native paragraph builder has no `dispose()`,
-  for one).
+  for one). No JavaScript loops over a photo's pixels in the renderer: do
+  pixel work in Skia (a runtime shader on a CPU surface, as
+  `sampling.ts` halves pictures), held byte for byte to a plain
+  JavaScript reference in the tests.
 - **Gate before a commit:** `npm run check` here (TypeScript + jest), and from
   the repo root `npx tsc -b && npx vitest run` when `../src` changed.
 - Words a customer sees: plain English, say what you get, one filled

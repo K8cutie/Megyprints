@@ -11,8 +11,10 @@
       draws every golden page with the phone's own Skia into the app's files
       folder (src/dev/goldenRun.ts);
    3. waits for report.json (the run's last file), showing its progress from
-      the phone's log;
-   4. pulls the folder into tools/golden/phone/, for `npm run golden:phone`.
+      the phone's log, and samples the app's memory (dumpsys meminfo, total
+      PSS) about every 2 s;
+   4. pulls the folder into tools/golden/phone/, for `npm run golden:phone`,
+      with memory.json (the highest memory seen, and every sample).
 
    The app's files folder is private: on an emulator image without Google
    Play (pwa_test) `adb root` opens it; a debug build is read with run-as.
@@ -76,9 +78,13 @@ async function main() {
 
   const t0 = Date.now();
   const LIMIT = 30 * 60 * 1000;
+  const memory = [];
   try {
     for (;;) {
-      await sleep(5000);
+      await sleep(2000);
+      const mem = tryAdb('shell', `dumpsys meminfo ${PKG}`) ?? '';
+      const pss = /TOTAL PSS:\s*(\d+)/.exec(mem) ?? /^\s*TOTAL\s+(\d+)/m.exec(mem);
+      if (pss) memory.push({ s: Math.round((Date.now() - t0) / 1000), pssMB: Math.round(Number(pss[1]) / 1024) });
       const ls = (() => { try { return shell(`ls ${REMOTE}/report.json`); } catch { return ''; } })();
       if (ls.includes('report.json')) break;
       if (Date.now() - t0 > LIMIT) throw new Error('The run did not finish in 30 minutes.');
@@ -100,6 +106,9 @@ async function main() {
       fs.writeFileSync(path.join(out, name), bytes);
     }
   }
+  const peak = memory.reduce((m, x) => Math.max(m, x.pssMB), 0);
+  fs.writeFileSync(path.join(out, 'memory.json'), JSON.stringify({ peakPssMB: peak, samples: memory }, null, 1));
+  console.log(`Highest memory seen: ${peak} MB (total PSS, ${memory.length} samples)`);
   const report = JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8'));
   const bad = report.pages.filter((p) => p.error);
   console.log(`${report.pages.length} pictures, ${bad.length} stopped, ${(report.totalMs / 1000).toFixed(1)} s on the phone. Next: npm run golden:phone`);

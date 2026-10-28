@@ -25,6 +25,23 @@ export interface WebLine {
   outlined: boolean; shadow: string | null;
 }
 
+/** A line print drew, and the size of the canvas it drew it on (the wrap,
+ *  or the cover's front page drawn on its own canvas). */
+export interface WebLineOn extends WebLine { canvas: [number, number] }
+
+/** Print's lines on a cover, all on the wrap (W x H): a line drawn on the
+ *  front page's own canvas is moved onto the front panel `front` (as the
+ *  page is). */
+export function coverWebLines(lines: WebLineOn[], W: number, H: number, front: { x: number; y: number; w: number; h: number } | null): WebLine[] {
+  return lines.map((l) => {
+    if (l.canvas[0] === W && l.canvas[1] === H) return l;
+    if (!front) throw new Error('a line drawn off the wrap, and the cover has no front page');
+    const kx = front.w / l.canvas[0], ky = front.h / l.canvas[1];
+    const [a, b, c, d, e, f] = l.m;
+    return { ...l, m: [a * kx, b * ky, c * kx, d * ky, e * kx + front.x, f * ky + front.y] as WebLine['m'] };
+  });
+}
+
 const normColor = (c: string) => c.trim().toLowerCase().replace(/\s+/g, '');
 
 /** How the app's lines differ from print's (empty: they agree). */

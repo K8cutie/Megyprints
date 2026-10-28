@@ -49,6 +49,7 @@ import { FRAME_PX, type BoxPhotoItem, type BoxTextItem, type CornerItem, type Fi
 import type { PageText, TextLook } from './pageText';
 import { makeTextureTile } from './textureTile';
 import { ChromeSampling, mipLevelFor } from './sampling';
+import { SurfacePool } from './surfaces';
 
 /** The page's photos, by album photo index (null = not loaded: drawn empty). */
 export type PhotoSource = (photoIndex: number) => SkImage | null;
@@ -77,16 +78,39 @@ export class PageDrawer {
   private readonly tiles = new Map<string, SkImage>();
   /** Pictures prepared the way Chrome samples them (premultiplied, halved). */
   private readonly sampling: ChromeSampling;
+  /** The surfaces every drawing is made on, kept for reuse (surfaces.ts
+   *  says why). The cover drawer draws on them too. */
+  readonly surfaces: SurfacePool;
+  /** How many drawings are under way (see drawing()). */
+  private depth = 0;
 
   constructor(private readonly Skia: Skia, private readonly text: PageText) {
-    this.sampling = new ChromeSampling(Skia);
+    this.surfaces = new SurfacePool(Skia);
+    this.sampling = new ChromeSampling(Skia, this.surfaces);
   }
 
-  /** Let go of the texture tiles and prepared pictures kept between pages. */
+  /** One drawing: a page, a cover, a picture put on a cover. The pictures
+   *  prepared for it (a photo's halved copies: 12 MB for a 12 MP photo's
+   *  first halving) are let go when the outermost drawing ends, so they
+   *  never pile up across an album's pages. A drawing started inside it
+   *  shares them (renderPrintPage's page, a cover's front page drawn with
+   *  and without its words). Every public drawing method runs in one. */
+  drawing<T>(fn: () => T): T {
+    this.depth++;
+    try {
+      return fn();
+    } finally {
+      this.depth--;
+      if (this.depth === 0) this.sampling.dispose();
+    }
+  }
+
+  /** Let go of the texture tiles, prepared pictures and surfaces kept between pages. */
   dispose(): void {
     this.tiles.forEach((t) => t.dispose());
     this.tiles.clear();
     this.sampling.dispose();
+    this.surfaces.dispose();
   }
 
   private textureTile(name: string, color: string | undefined, tilePx: number): SkImage {
@@ -145,8 +169,13 @@ export class PageDrawer {
       canvas.drawImageRectOptions(pic, this.rect(from), this.rect(dst), FilterMode.Nearest, MipmapMode.None, p);
     } else if (level) {
       p.setAntiAlias(false);
-      p.setShader(this.sampling.levelShader(pic, from, dst));
+      // The shader holds the picture: let go of it as soon as it has drawn
+      // (sampling.ts says why).
+      const shader = this.sampling.levelShader(pic, from, dst);
+      p.setShader(shader);
       canvas.drawRect(this.rect(dst), p);
+      p.setShader(null);
+      shader.dispose();
     } else {
       p.setAntiAlias(true);
       canvas.drawImageRectOptions(pic, this.rect(from), this.rect(dst), FilterMode.Linear, MipmapMode.None, p);
@@ -250,14 +279,12 @@ export class PageDrawer {
   private bakedPhoto(img: SkImage, fit: { x: number; y: number; w: number; h: number }, sw: number, sh: number, item: PhotoItem, assets: AssetSource, onMissing?: (src: string) => void): SkImage {
     const Sk = this.Skia;
     const tw = Math.max(1, Math.ceil(sw)), th = Math.max(1, Math.ceil(sh));
-    const surface = Sk.Surface.Make(tw, th);
-    if (!surface) throw new Error(`could not make a ${tw}×${th} drawing surface`);
-    const tc = surface.getCanvas();
-    tc.clear(Sk.Color('transparent'));
+    const d = this.surfaces.take(tw, th); // transparent
+    const tc = d.canvas;
     this.image(tc, img, { x: 0, y: 0, w: img.width(), h: img.height() }, fit, { decoded: true });
     if (item.look) {
-      surface.flush();
-      const drawn = surface.makeImageSnapshot();
+      d.surface.flush();
+      const drawn = d.surface.makeImageSnapshot();
       const looked = this.withLook(drawn, item.look);
       drawn.dispose();
       const p = Sk.Paint();
@@ -293,10 +320,7 @@ export class PageDrawer {
         this.image(tc, tex, { x: 0, y: 0, w: tex.width(), h: tex.height() }, box, { paint: p, decoded: true });
       }
     }
-    surface.flush();
-    const out = surface.makeImageSnapshot();
-    surface.dispose();
-    return out;
+    return this.surfaces.snapshot(d);
   }
 
   /** applyLookPixels: each pixel's colour (not premultiplied) through the
@@ -308,7 +332,9 @@ export class PageDrawer {
     const px = img.readPixels(0, 0, info);
     if (!(px instanceof Uint8Array)) throw new Error('could not read the photo back for its look');
     applyLookToPixels(px, ops); // lookRules.applyLookToPixel on each pixel, matrices built once
-    const out = this.Skia.Image.MakeImage(info, this.Skia.Data.fromBytes(px), w * 4);
+    const data = this.Skia.Data.fromBytes(px);
+    const out = this.Skia.Image.MakeImage(info, data, w * 4);
+    data.dispose(); // the picture keeps its own hold on the bytes
     if (!out) throw new Error('could not make the photo with its look');
     return out;
   }
@@ -510,68 +536,67 @@ export class PageDrawer {
    *  leaves out every word (a caption, a text in a photo frame, a free text)
    *  and draws the rest the same, like the website's drawPrintPage. */
   draw(canvas: SkCanvas, plan: PagePlan, photos: PhotoSource, { words = true, assets = () => null, onMissing }: DrawOptions = {}): void {
-    this.background(canvas, plan, photos, assets, onMissing);
-    for (const item of plan.items) {
-      switch (item.kind) {
-        case 'photo': this.photo(canvas, item, photos, assets, onMissing); break;
-        case 'boxText': if (words) this.boxText(canvas, item, plan.onCover); break;
-        case 'freeText': if (words) this.freeText(canvas, item, plan.onCover); break;
-        case 'boxPhoto': this.boxPhoto(canvas, item, photos); break;
-        case 'qr': this.qr(canvas, item, assets, onMissing); break;
-        case 'freeQr': this.freeQr(canvas, item, assets, onMissing); break;
-        case 'graphic':
-        case 'corner': this.graphic(canvas, item, assets, onMissing); break;
-        case 'freeGraphic': this.freeGraphic(canvas, item, assets, onMissing); break;
+    this.drawing(() => {
+      this.background(canvas, plan, photos, assets, onMissing);
+      for (const item of plan.items) {
+        switch (item.kind) {
+          case 'photo': this.photo(canvas, item, photos, assets, onMissing); break;
+          case 'boxText': if (words) this.boxText(canvas, item, plan.onCover); break;
+          case 'freeText': if (words) this.freeText(canvas, item, plan.onCover); break;
+          case 'boxPhoto': this.boxPhoto(canvas, item, photos); break;
+          case 'qr': this.qr(canvas, item, assets, onMissing); break;
+          case 'freeQr': this.freeQr(canvas, item, assets, onMissing); break;
+          case 'graphic':
+          case 'corner': this.graphic(canvas, item, assets, onMissing); break;
+          case 'freeGraphic': this.freeGraphic(canvas, item, assets, onMissing); break;
+        }
       }
-    }
+    });
   }
 
   /** The page at print size (no bleed) as a picture. The caller disposes it. */
   renderTrim(plan: PagePlan, photos: PhotoSource, options: DrawOptions = {}): SkImage {
-    const W = plan.width, H = plan.height;
-    const surface = this.Skia.Surface.Make(W, H);
-    if (!surface) throw new Error(`could not make a ${W}×${H} drawing surface`);
-    this.draw(surface.getCanvas(), plan, photos, options);
-    surface.flush();
-    const image = surface.makeImageSnapshot();
-    surface.dispose();
-    return image;
+    const d = this.surfaces.take(plan.width, plan.height);
+    this.draw(d.canvas, plan, photos, options);
+    return this.surfaces.snapshot(d);
   }
 
   /** printBleed drawMirroredEdges: `img`, already drawn at `box`, carries on
    *  outward by `m` on each side as its own mirror image. */
   mirrorEdges(canvas: SkCanvas, img: SkImage, box: Rect, m: Margins): void {
-    for (const op of mirrorOps(img.width(), img.height(), box, m)) {
-      canvas.save();
-      canvas.translate(op.flipX ? op.dx + op.dw : op.dx, op.flipY ? op.dy + op.dh : op.dy);
-      canvas.scale(op.flipX ? -1 : 1, op.flipY ? -1 : 1);
-      this.image(canvas, img, { x: op.sx, y: op.sy, w: op.sw, h: op.sh }, { x: 0, y: 0, w: op.dw, h: op.dh });
-      canvas.restore();
-    }
+    this.drawing(() => {
+      for (const op of mirrorOps(img.width(), img.height(), box, m)) {
+        canvas.save();
+        canvas.translate(op.flipX ? op.dx + op.dw : op.dx, op.flipY ? op.dy + op.dh : op.dy);
+        canvas.scale(op.flipX ? -1 : 1, op.flipY ? -1 : 1);
+        this.image(canvas, img, { x: op.sx, y: op.sy, w: op.sw, h: op.sh }, { x: 0, y: 0, w: op.dw, h: op.dh });
+        canvas.restore();
+      }
+    });
   }
 
   /** ctx.drawImage(img, x, y, w, h), for a drawing outside the page (the
    *  cover): `decoded` for a picture file (a photo), not for a canvas. */
   drawPicture(canvas: SkCanvas, img: SkImage, dst: Rect, decoded = false): void {
-    this.image(canvas, img, this.whole(img), dst, { decoded });
+    this.drawing(() => this.image(canvas, img, this.whole(img), dst, { decoded }));
   }
 
   /** The page as the print file's picture: drawn at print size, then its
    *  bleed mirrored round every edge (printBleed withBleed). The caller
    *  disposes the image. */
   renderPrintPage(plan: PagePlan, photos: PhotoSource, options: DrawOptions = {}): SkImage {
+    return this.drawing(() => this.printPage(plan, photos, options));
+  }
+
+  private printPage(plan: PagePlan, photos: PhotoSource, options: DrawOptions): SkImage {
     const W = plan.width, H = plan.height, b = plan.bleed;
     const trim = this.renderTrim(plan, photos, options);
-    const outSurface = this.Skia.Surface.Make(W + 2 * b, H + 2 * b);
-    if (!outSurface) throw new Error(`could not make a ${W + 2 * b}×${H + 2 * b} drawing surface`);
-    const out = outSurface.getCanvas();
+    const d = this.surfaces.take(W + 2 * b, H + 2 * b);
+    const out = d.canvas;
     out.drawRect(this.Skia.XYWHRect(0, 0, W + 2 * b, H + 2 * b), this.paint('#ffffff'));
     this.image(out, trim, { x: 0, y: 0, w: W, h: H }, { x: b, y: b, w: W, h: H });
     this.mirrorEdges(out, trim, { x: b, y: b, w: W, h: H }, { top: b, right: b, bottom: b, left: b });
-    outSurface.flush();
-    const image = outSurface.makeImageSnapshot();
     trim.dispose();
-    outSurface.dispose();
-    return image;
+    return this.surfaces.snapshot(d);
   }
 }

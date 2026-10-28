@@ -30,7 +30,7 @@
     -Abis arm64-v8a,x86_64   phones (arm64) and the PC emulator (x86_64); add armeabi-v7a for old 32-bit phones
     -BuildDir C:\megy2       the short folder
     -Fresh                   delete the short folder's android\ and node_modules\ first
-    -GoldenPages             a TEST build that carries the 45 golden pages (about 4 MB) for the debug
+    -GoldenPages             a TEST build that carries the golden pages and covers (about 10 MB) for the debug
                              screen "Golden pages" (Shared code check): the page renderer drawn by
                              the phone's own Skia (scripts\golden-phone-assets.cjs, src\dev\goldenRun.ts).
                              Never for a build that goes to customers.

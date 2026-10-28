@@ -25,13 +25,13 @@ import { CoverDrawer, appCoverWords } from '../../src/render/drawCover';
 import { AssetCache } from '../../src/render/assets';
 import { headlessSkia, fontFiles, imageFromFile, pixelsOf, readPng, writeImage, writeRgba, REPO_ROOT } from './headless';
 import { comparePage, pageFailures, PIXELMATCH, type PageComparison } from './compare';
-import { appWords, lineFailures, type WebLine, type TextItemLines } from './words';
+import { appWords, coverWebLines, lineFailures, type WebLineOn, type TextItemLines } from './words';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { goldenIsStale } = require('./webPictures.cjs') as { goldenIsStale: () => string | null };
 
 export interface Fingerprint { renderer: { hash: string; files: string[] }; tools: { hash: string }; fonts: string }
-export interface WebLineOn extends WebLine { canvas: [number, number] }
+export type { WebLineOn };
 export interface WebCase { name: string; file: string; bare: string | null; width: number; height: number; lines: WebLineOn[] }
 export interface WebTile { name: string; color: string | null; px: number; file: string }
 export interface Manifest { fingerprint: Fingerprint; chromium: string; photos: { file: string }[]; assets: { url: string; file: string }[]; cases: WebCase[]; covers: WebCase[]; tiles: WebTile[] }
@@ -165,17 +165,10 @@ export function check(name: string, plan?: PagePlan, options: { appWords?: boole
   return { cmp, lines, failures: pageFailures(cmp), ms: page.ms, img: page.img, words, missing: [...missing] };
 }
 
-/** Print's lines on a cover, all on the wrap: a line drawn on the front
- *  page's own canvas is moved onto the front panel (as the page is). */
-function coverWebLines(L: Loaded, plan: CoverPlan): WebLine[] {
+/** The cover's front panel (where print's front-page lines go on the wrap). */
+export function frontRect(plan: CoverPlan): { x: number; y: number; w: number; h: number } | null {
   const front = plan.steps.find((s) => s.kind === 'front');
-  return L.web.lines.map((l) => {
-    if (l.canvas[0] === L.W && l.canvas[1] === L.H) return l;
-    if (!front || front.kind !== 'front') throw new Error('a line drawn off the wrap, and the cover has no front page');
-    const kx = front.rect.w / l.canvas[0], ky = front.rect.h / l.canvas[1];
-    const [a, b, c, d, e, f] = l.m;
-    return { ...l, m: [a * kx, b * ky, c * kx, d * ky, e * kx + front.rect.x, f * ky + front.rect.y] as WebLine['m'] };
-  });
+  return front && front.kind === 'front' ? front.rect : null;
 }
 
 /** The app draws a cover (with and without its words) and it is compared. */
@@ -193,7 +186,7 @@ export function checkCover(name: string, plan?: CoverPlan, options: { appWords?:
   bareImg.dispose();
   const words = appCoverWords(p, G.text);
   const cmp = comparePage({ ref: L.ref, refBare: L.refBare, app: rgba, appBare: bare, W: L.W, H: L.H }, words.map((w) => w.zone), 0);
-  const lines = lineFailures(words.flatMap((w) => w.lines), coverWebLines(L, p));
+  const lines = lineFailures(words.flatMap((w) => w.lines), coverWebLines(L.web.lines, L.W, L.H, frontRect(p)));
   return { cmp, lines, failures: pageFailures(cmp), ms, img, words, missing: [...missing] };
 }
 

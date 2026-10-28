@@ -28,6 +28,7 @@
        darken twice); a shape's own opacity is its paint's.
    ══════════════════════════════════════════════════════════════════════════ */
 
+import { releaseSurface } from './surfaces';
 import type { SkCanvas, SkImage, SkPaint, SkRuntimeEffect, SkShader, Skia } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { ClipOp, PaintStyle, StrokeCap } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { textureDataUri, TEXTURE_TILE_PX } from '@web/pages/builder/textures';
@@ -267,6 +268,6 @@ export function makeTextureTile(Sk: Skia, name: string, color: string | undefine
   drawTextureSvg(Sk, surface.getCanvas(), svg, tilePx);
   surface.flush();
   const img = surface.makeImageSnapshot();
-  surface.dispose();
+  releaseSurface(surface); // not dispose() on the phone: surfaces.ts says why
   return img;
 }

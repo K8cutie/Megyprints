@@ -16,15 +16,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SkImage } from '@shopify/react-native-skia/lib/commonjs/skia/types';
+import { AlphaType, ColorType } from '@shopify/react-native-skia/lib/commonjs/skia/types';
+import { ChromeSampling, halve } from '../src/render/sampling';
 import type { PagePlan } from '../src/render/pagePlan';
 import type { CoverPlan } from '../src/render/coverPlan';
 import { PageDrawer } from '../src/render/drawPage';
 import { PageText } from '../src/render/pageText';
 import { BUNDLED_FONTS } from '../src/render/fontTable';
-import { fontFiles, fontPath, pixelsOf } from './golden/headless';
+import { fontFiles, fontPath, pixelsOf, REPO_ROOT } from './golden/headless';
 import { appWords } from './golden/words';
-import { G, WEB, caseNamed, check, checkCover, coverNamed, draw, finishGolden, goldenLists, recordMistake, setupGolden, type WebCase } from './golden/harness';
-import { runGoldenPages, type GoldenBundle, type PhoneReport, type ToSrgb } from '../src/dev/goldenRun';
+import { G, WEB, caseNamed, check, checkCover, coverNamed, draw, finishGolden, goldenLists, photoOf, recordMistake, setupGolden, type WebCase } from './golden/harness';
+import { runGoldenPages, CAMERA_PHOTO, type GoldenBundle, type PhoneReport, type ToSrgb } from '../src/dev/goldenRun';
+import { appCoverWords } from '../src/render/drawCover';
+import { makeTextureTile } from '../src/render/textureTile';
 
 const { golden } = goldenLists();
 const pageNames = golden.cases.map((c) => c.name);
@@ -242,13 +246,16 @@ describe('the check fails on each kind of small mistake in textures, QR codes, g
    -GoldenPages test build) must draw exactly what this check draws, so that
    comparing the phone's pictures with the website's tests the phone's Skia
    and nothing else. Run here with CanvasKit on five pages (a caption, a
-   frame, corner art over a texture, a QR chip, the Display P3 photo), its
-   pictures must be the ones check() draws, pixel for pixel, with the same
-   lines and boxes; and a photo the colour step converts is drawn a second
-   time with the converted file. */
+   frame, corner art over a texture, a QR chip, the Display P3 photo), a
+   cover file and two texture tiles, its pictures must be the ones check()
+   and checkCover() draw, pixel for pixel, with the same lines and boxes; a
+   photo the colour step converts is drawn a second time with the converted
+   file; and the timing pass runs (its 12 MP photo made and drawn). */
 describe("the phone's golden run draws what this check draws", () => {
   it('the same pictures, words and boxes, and a second picture after the colour step', async () => {
     const names = ['frame-double-dashed-radial', '64-caption-yellow', 'corners-64', 'qr-chip-64', 'photo-display-p3'];
+    const coverName = 'cover-64-soft-plain';
+    const tiles = G.manifest.tiles.slice(0, 2);
     const b64 = (file: string) => fs.readFileSync(file).toString('base64');
     const cases = G.set.cases.filter((c) => names.includes(c.name));
     const bundle: GoldenBundle = {
@@ -262,13 +269,18 @@ describe("the phone's golden run draws what this check draws", () => {
         const w = G.manifest.cases.find((x) => x.name === c.name) as WebCase;
         return { name: c.name, albumSize: c.albumSize, pageIndex: c.pageIndex, kind: c.kind, page: c.page, width: w.width, height: w.height, bare: !!w.bare };
       }),
+      covers: G.set.covers.filter((c) => c.name === coverName).map((c) => {
+        const w = G.manifest.covers.find((x) => x.name === c.name) as WebCase;
+        return { name: c.name, albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material, coverFront: c.coverFront, coverDesign: c.coverDesign, width: w.width, height: w.height };
+      }),
+      tiles,
     };
     const written = new Map<string, Uint8Array | string>();
     // A stand-in for the phone's srgbCopy: says the P3 file was converted (same bytes back).
     const toSrgb: ToSrgb = async ({ file, bytes }) => ({ colorSpace: file.endsWith('photo-8.png') ? 'Display P3' : 'sRGB IEC61966-2.1', converted: file.endsWith('photo-8.png'), bytes });
-    const report = await runGoldenPages(G.Sk, bundle, { write: async (n, c) => { written.set(n, c); } }, { toSrgb });
+    const report = await runGoldenPages(G.Sk, bundle, { write: async (n, c) => { written.set(n, c); } }, { toSrgb, timingPages: ['64-caption-yellow'] });
 
-    expect(report.pages.map((p) => p.file)).toEqual([...cases.map((c) => `${c.name}.png`), 'photo-display-p3.srgb.png']);
+    expect(report.pages.map((p) => p.file)).toEqual([...cases.map((c) => `${c.name}.png`), 'photo-display-p3.srgb.png', `${coverName}.png`]);
     expect(report.pages.every((p) => !p.error)).toBe(true);
     expect(report.pages.flatMap((p) => p.missing ?? [])).toEqual([]);
     expect(report.photos.filter((p) => p.converted).map((p) => p.file)).toEqual(['photos/photo-8.png']);
@@ -282,7 +294,7 @@ describe("the phone's golden run draws what this check draws", () => {
       return px;
     };
     const same = (a: Uint8Array, b: Uint8Array) => a.length === b.length && Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0;
-    for (const entry of report.pages) {
+    for (const entry of report.pages.filter((p) => p.kind !== 'cover')) {
       const L = caseNamed(entry.name);
       const full = draw(L.plan, { words: true });
       full.img.dispose();
@@ -297,7 +309,82 @@ describe("the phone's golden run draws what this check draws", () => {
         expect(same(pngPixels(entry.bareFile), bare.rgba)).toBe(true);
       }
     }
+    // The cover file, with and without its words, as checkCover draws it.
+    const coverEntry = report.pages.find((p) => p.kind === 'cover');
+    if (!coverEntry) throw new Error('the run drew no cover');
+    const C = coverNamed(coverName);
+    const coverPx = (words: boolean) => {
+      const img = G.covers.render(C.plan, photoOf, { words, assets: G.assets.get });
+      const px = pixelsOf(img);
+      img.dispose();
+      return px;
+    };
+    expect([coverEntry.width, coverEntry.height]).toEqual([C.W, C.H]);
+    expect(same(pngPixels(coverEntry.file), coverPx(true))).toBe(true);
+    expect(coverEntry.bareFile).toBe(`${coverName}.bare.png`);
+    expect(same(pngPixels(coverEntry.bareFile as string), coverPx(false))).toBe(true);
+    expect(coverEntry.words).toEqual(appCoverWords(C.plan, G.text));
+    expect(coverEntry.notDrawn).toEqual([]);
+    // The texture tiles, as makeTextureTile draws them.
+    expect(report.tiles?.map((t) => t.error ?? 'drawn')).toEqual(tiles.map(() => 'drawn'));
+    for (const [i, t] of tiles.entries()) {
+      const img = makeTextureTile(G.Sk, t.name, t.color ?? undefined, t.px);
+      expect(same(pngPixels(report.tiles?.[i].phoneFile as string), pixelsOf(img))).toBe(true);
+      img.dispose();
+    }
+    // The timing pass ran with a 12 MP photo.
+    expect(report.timing?.photo).toBe(`${CAMERA_PHOTO.width}x${CAMERA_PHOTO.height} JPEG`);
+    expect(report.timing?.pages.map((p) => [p.name, p.error ?? 'drawn'])).toEqual([['64-caption-yellow', 'drawn']]);
     const json = JSON.parse(written.get('report.json') as string) as PhoneReport;
-    expect(json.pages.length).toBe(6);
+    expect(json.pages.length).toBe(7);
+  }, 300_000);
+});
+
+/* The renderer halves a picture with a Skia shader (sampling.ts halveOnce),
+   where the first version ran a JavaScript loop (`halve`, kept as the
+   reference). On every picture file the golden pages draw halved (each test
+   photo, the Display P3 one and the 3200 px one included, each mask edge,
+   QR code, graphic, sticker and corner art), the Skia halving must give
+   the loop's bytes exactly, once and twice halved: so the speed-up cannot
+   move a golden number. */
+describe('the Skia halving prepares every golden picture file as the JavaScript loop did', () => {
+  it('each photo file, mask edge, QR code, graphic, sticker and corner art, halved once and twice, byte for byte', () => {
+    const info = (w: number, h: number) => ({ width: w, height: h, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Premul });
+    const read = (img: SkImage): Uint8Array => {
+      const px = img.readPixels(0, 0, info(img.width(), img.height()));
+      if (!(px instanceof Uint8Array)) throw new Error('no pixels');
+      return px;
+    };
+    const masks = fs.readdirSync(path.join(REPO_ROOT, 'public', 'masks')).filter((f) => f.endsWith('.png')).map((f) => {
+      const img = G.assets.get(`/masks/${f}`);
+      if (!img) throw new Error(`no mask edge ${f}`);
+      return { name: `/masks/${f}`, img };
+    });
+    // Every QR code, graphic, sticker and corner art the golden pages draw.
+    const named = new Map<string, string>();
+    for (const c of G.set.cases) {
+      for (const it of caseNamed(c.name).plan.items) {
+        if ((it.kind === 'qr' || it.kind === 'freeQr' || it.kind === 'graphic' || it.kind === 'corner' || it.kind === 'freeGraphic') && !named.has(it.src)) named.set(it.src, `${c.name} ${it.kind} ${named.size}`);
+      }
+    }
+    const graphics = [...named].map(([src, name]) => {
+      const img = G.assets.get(src);
+      if (!img) throw new Error(`no picture for ${name}`);
+      return { name, img };
+    });
+    const pictures = [...G.photos.map((img, i) => ({ name: G.manifest.photos[i].file, img })), ...masks, ...graphics];
+    expect(graphics.length).toBeGreaterThanOrEqual(8);
+    const sampling = new ChromeSampling(G.Sk);
+    const differ: string[] = [];
+    for (const { name, img } of pictures) {
+      let ref: { px: Uint8Array; w: number; h: number } = { px: read(img), w: img.width(), h: img.height() };
+      for (const level of [1, 2]) {
+        ref = halve(ref.px, ref.w, ref.h);
+        const got = sampling.decoded(img, level);
+        if (got.width() !== ref.w || got.height() !== ref.h || Buffer.compare(Buffer.from(read(got)), Buffer.from(ref.px)) !== 0) differ.push(`${name} level ${level}`);
+      }
+    }
+    sampling.dispose();
+    expect(differ).toEqual([]);
   }, 300_000);
 });

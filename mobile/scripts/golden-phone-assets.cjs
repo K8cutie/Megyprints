@@ -4,8 +4,9 @@
 
      node scripts/golden-phone-assets.cjs        (from mobile/)
 
-   Writes golden-phone/bundle.json (not in git): the 45 golden pages exactly
-   as the website drew them (tools/golden/web/pages.json), the test photo
+   Writes golden-phone/bundle.json (not in git): the golden pages and covers
+   exactly as the website drew them (tools/golden/web/pages.json), the
+   texture tiles to draw alone, the test photo
    files and the app's font files as base64 (their exact bytes: no Android
    resource step can re-encode a PNG or drop its colour profile), and what
    they were made from. build-android.ps1 -GoldenPages runs this and builds
@@ -135,11 +136,19 @@ function main() {
       if (!w) throw new Error(`${c.name} is in pages.json but not in manifest.json`);
       return { name: c.name, albumSize: c.albumSize, pageIndex: c.pageIndex, kind: c.kind, page: c.page, width: w.width, height: w.height, bare: !!w.bare };
     }),
+    // The golden cover files, drawn on the phone as CoverDrawer.render.
+    covers: (set.covers || []).map((c) => {
+      const w = (manifest.covers || []).find((x) => x.name === c.name);
+      if (!w) throw new Error(`${c.name} is in pages.json but not in manifest.json covers`);
+      return { name: c.name, albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material, coverFront: c.coverFront, coverDesign: c.coverDesign, width: w.width, height: w.height };
+    }),
+    // The texture tiles: the phone draws each alone (names only; the website's tile pictures stay on the computer).
+    tiles: (manifest.tiles || []).map((t) => ({ name: t.name, color: t.color, px: t.px, file: t.file })),
   };
   fs.mkdirSync(OUT, { recursive: true });
   const file = path.join(OUT, 'bundle.json');
   fs.writeFileSync(file, JSON.stringify(bundle));
-  console.log(`${bundle.cases.length} golden pages, ${bundle.photoFiles.length} photos, ${bundle.fonts.length} fonts: ${toPosix(path.relative(MOBILE, file))} (${(fs.statSync(file).size / 1024 / 1024).toFixed(1)} MB)`);
+  console.log(`${bundle.cases.length} golden pages, ${bundle.covers.length} covers, ${bundle.tiles.length} tiles, ${bundle.photoFiles.length} photos, ${bundle.fonts.length} fonts: ${toPosix(path.relative(MOBILE, file))} (${(fs.statSync(file).size / 1024 / 1024).toFixed(1)} MB)`);
   console.log(`App renderer fingerprint ${bundle.appRenderer.slice(0, 12)} (${appRendererFiles().length} files)`);
 }
 

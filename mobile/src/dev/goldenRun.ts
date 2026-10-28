@@ -1,23 +1,29 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   THE GOLDEN PAGES, DRAWN ON THE PHONE (a test build's debug screen only:
-   src/app/golden-pages.tsx).
+   THE GOLDEN PAGES AND COVERS, DRAWN ON THE PHONE (a test build's debug
+   screen only: src/app/golden-pages.tsx).
 
    The golden check (test/goldenPages.test.ts) proves the app's renderer
    against the website's print renderer, but it runs Skia's CanvasKit build
    in Node. A phone runs native Skia, built separately, with its own
    FreeType, its own shaping and its own rounding. So this draws the very
-   same 45 pages (the same page data, the same test photo files, the same
-   font files, bundled into the test build by scripts/golden-phone-assets.cjs)
-   with the phone's own Skia, the way a print page will be made on the
-   phone: PageDrawer.renderPrintPage, a CPU surface (Skia.Surface.Make), at
-   the print file's size, bleed included.
+   same golden pages and covers (the same page data, the same test photo
+   files, the same font files, bundled into the test build by
+   scripts/golden-phone-assets.cjs) with the phone's own Skia, the way a
+   print page will be made on the phone: PageDrawer.renderPrintPage, a CPU
+   surface (Skia.Surface.Make), at the print file's size, bleed included.
 
    For each page it writes NAME.png, and NAME.bare.png (the page without its
    words) when the page has words, plus report.json: the lines each text
    breaks into and how wide the phone's Skia measures them, each text's box,
-   what the plan could not draw, and how long each page took. The computer
-   then holds the phone's pictures to the website's with the same bars and
-   the same pixelmatch code as the Node check (test/goldenPhone.check.ts).
+   what the plan could not draw, and how long each page took. Then the same
+   for every golden cover file (CoverDrawer.render, the flat wrap at 300 DPI,
+   with and without its words), every texture tile alone (tile-NAME.png),
+   and a timing pass: the slowest kinds of page (colour looks, halved
+   photos, textured and soft edges, a full-page photo) drawn again with a
+   12 MP camera-sized photo (4032 x 3024, made on the phone and JPEG'd), to
+   see how long a real print page takes. The computer then holds the
+   phone's pictures to the website's with the same bars and the same
+   pixelmatch code as the Node check (test/goldenPhone.check.ts).
 
    A photo saved with a colour profile other than sRGB (the golden set has a
    Display P3 one) is drawn twice: as the file is (what the renderer does
@@ -30,13 +36,17 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import type { SkImage, Skia } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { ImageFormat } from '@shopify/react-native-skia/lib/commonjs/skia/types';
-import type { AlbumPage, AlbumSizePreset } from '@web/pages/builder/types';
+import { TileMode } from '@shopify/react-native-skia/lib/commonjs/skia/types';
+import type { AlbumPage, AlbumSizePreset, CoverDesign, CoverType, MaterialType } from '@web/pages/builder/types';
 import { planPage, type PagePlan } from '../render/pagePlan';
 import { PageDrawer } from '../render/drawPage';
 import { PageText, type FontFile } from '../render/pageText';
 import { BUNDLED_FONTS } from '../render/fontTable';
 import { appWords, type TextItemLines } from '../render/pageWords';
 import { AssetCache, fromBase64 } from '../render/assets';
+import { planCover, type CoverMeasure } from '../render/coverPlan';
+import { CoverDrawer, appCoverWords } from '../render/drawCover';
+import { makeTextureTile } from '../render/textureTile';
 
 /** What scripts/golden-phone-assets.cjs bundles into a test build. */
 export interface GoldenBundle {
@@ -52,7 +62,37 @@ export interface GoldenBundle {
   assetFiles?: { url: string; base64: string }[];
   fonts: { file: string; base64: string }[];
   cases: GoldenPhoneCase[];
+  /** The golden cover files (pages.json covers). */
+  covers?: GoldenPhoneCover[];
+  /** The texture tiles the website prepared (manifest.json tiles). */
+  tiles?: GoldenPhoneTile[];
 }
+
+export interface GoldenPhoneCover {
+  name: string;
+  albumSize: AlbumSizePreset;
+  pageCount: number;
+  cover: CoverType;
+  material: MaterialType;
+  coverFront?: AlbumPage;
+  coverDesign?: CoverDesign;
+  /** The website picture's size, px. */
+  width: number;
+  height: number;
+}
+
+export interface GoldenPhoneTile {
+  name: string;
+  color: string | null;
+  px: number;
+  /** The website's tile picture (tools/golden/web/...). */
+  file: string;
+}
+
+/** The pages the timing pass draws again with a 12 MP photo (when the bundle has them). */
+export const TIMING_PAGES = ['looks-four', 'looks-64', 'big-photo-small-frames', 'textured-edges', 'soft-edges', 'photo-background', 'gen-8x8-p0-t88-fb-solo'] as const;
+/** A phone camera's photo size (12 MP, 4:3). */
+export const CAMERA_PHOTO = { width: 4032, height: 3024 } as const;
 
 export interface GoldenPhoneCase {
   name: string;
@@ -77,6 +117,8 @@ export type ToSrgb = (file: { file: string; bytes: Uint8Array }) => Promise<{ co
 
 export interface PhonePage {
   name: string;
+  /** A golden page (default) or a cover file. */
+  kind?: 'page' | 'cover';
   /** '' = the photos as they are; 'srgb' = after the intake's colour conversion. */
   variant: '' | 'srgb';
   file: string;
@@ -102,6 +144,10 @@ export interface PhoneReport {
   totalMs: number;
   photos: { file: string; width: number; height: number; colorSpace?: string | null; converted?: boolean; srgbError?: string }[];
   pages: PhonePage[];
+  /** Each texture tile drawn alone. */
+  tiles?: { file: string; phoneFile: string; ms: number; error?: string }[];
+  /** The timing pass: pages drawn with a 12 MP photo in every photo slot (not compared). */
+  timing?: { photo: string; makeMs: number; pages: { name: string; drawMs: number; error?: string }[] };
 }
 
 // Base64 → bytes: the renderer's own (assets.ts), re-exported for the build test.
@@ -127,6 +173,37 @@ export interface RunOptions {
   onPage?: (done: number, total: number, name: string) => void;
   toSrgb?: ToSrgb;
   device?: Record<string, unknown>;
+  /** The timing pass's pages (default TIMING_PAGES; [] for none). */
+  timingPages?: readonly string[];
+}
+
+/** A camera-sized photo made on the device (no real photo): colour washes,
+ *  rings and a fine grid, JPEG'd and opened again, so it is a decoded
+ *  opaque picture like a phone photo. */
+function cameraPhoto(Sk: Skia, drawer: PageDrawer): SkImage {
+  const { width: W, height: H } = CAMERA_PHOTO;
+  const d = drawer.surfaces.take(W, H);
+  const c = d.canvas;
+  const wash = Sk.Paint();
+  wash.setShader(Sk.Shader.MakeLinearGradient(Sk.Point(0, 0), Sk.Point(W, H), ['#C8553D', '#F2D0A4', '#3E7CB1', '#2D2D2D'].map((x) => Sk.Color(x)), [0, 0.35, 0.7, 1], TileMode.Clamp));
+  c.drawRect(Sk.XYWHRect(0, 0, W, H), wash);
+  const line = Sk.Paint();
+  line.setColor(Sk.Color('rgba(20,20,20,0.6)'));
+  line.setAntiAlias(true);
+  for (let x = 0; x < W; x += 48) c.drawRect(Sk.XYWHRect(x, 0, 3, H), line);
+  for (let y = 0; y < H; y += 48) c.drawRect(Sk.XYWHRect(0, y, W, 3), line);
+  const ring = Sk.Paint();
+  ring.setAntiAlias(true);
+  for (let k = 0; k < 12; k++) {
+    ring.setColor(Sk.Color(k % 2 ? '#FFFBF7' : '#1F3A5F'));
+    c.drawCircle(W / 2, H / 2, 1400 - k * 110, ring);
+  }
+  const drawn = drawer.surfaces.snapshot(d);
+  const jpeg = drawn.encodeToBytes(ImageFormat.JPEG, 92);
+  drawn.dispose();
+  const img = Sk.Image.MakeImageFromEncoded(Sk.Data.fromBytes(jpeg));
+  if (!img) throw new Error('could not open the 12 MP photo again');
+  return img;
 }
 
 /** Draw every golden page with this Skia and write the pictures and report.json. */
@@ -222,13 +299,99 @@ export async function runGoldenPages(Sk: Skia, bundle: GoldenBundle, writer: Gol
     report.pages.push(entry);
   }
 
+  // The cover files: the flat wrap with and without its words.
+  const covers = new CoverDrawer(Sk, text, drawer);
+  const measure: CoverMeasure = (str, style, fontSize) => text.measure(str, { family: style.fontFamily, size: fontSize, bold: style.bold, italic: style.italic });
+  const coverList = (bundle.covers ?? []).filter((c) => !options.only || options.only.includes(c.name));
+  const photoAsIs = (i: number) => { const file = bundle.photos[i]?.image; return file == null ? null : images[file] ?? null; };
+  const total = jobs.length + coverList.length;
+  for (let j = 0; j < coverList.length; j++) {
+    const c = coverList[j];
+    options.onPage?.(jobs.length + j, total, c.name);
+    await pause();
+    const entry: PhonePage = { name: c.name, kind: 'cover', variant: '', file: `${c.name}.png`, bareFile: null, width: 0, height: 0, notDrawn: [], words: [], drawMs: 0, bareMs: null, encodeMs: 0 };
+    try {
+      const plan = planCover({ albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material, coverFront: c.coverFront, coverDesign: c.coverDesign, photoCount: bundle.photos.length, photoIds }, measure);
+      const missing = new Set<string>();
+      const named = { assets: assets.get, onMissing: (src: string) => { missing.add(src); } };
+      entry.notDrawn = plan.notDrawn;
+      entry.words = appCoverWords(plan, text);
+      let t = Date.now();
+      const img = covers.render(plan, photoAsIs, { words: true, ...named });
+      entry.drawMs = Date.now() - t;
+      entry.width = img.width();
+      entry.height = img.height();
+      t = Date.now();
+      const png = img.encodeToBytes(ImageFormat.PNG, 100);
+      img.dispose();
+      entry.encodeMs = Date.now() - t;
+      await writer.write(entry.file, png);
+      await pause();
+      t = Date.now();
+      const bare = covers.render(plan, photoAsIs, { words: false, ...named });
+      entry.bareMs = Date.now() - t;
+      entry.bareFile = `${c.name}.bare.png`;
+      const barePng = bare.encodeToBytes(ImageFormat.PNG, 100);
+      bare.dispose();
+      await writer.write(entry.bareFile, barePng);
+      entry.missing = [...missing];
+    } catch (err) {
+      entry.error = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    }
+    report.pages.push(entry);
+  }
+
+  // Each texture tile alone, as print prepares it before repeating it.
+  if (bundle.tiles?.length && !options.only) {
+    report.tiles = [];
+    for (const tile of bundle.tiles) {
+      const phoneFile = `tile-${tile.file.split('/').pop()}`;
+      const t = Date.now();
+      try {
+        const img = makeTextureTile(Sk, tile.name, tile.color ?? undefined, tile.px);
+        const ms = Date.now() - t;
+        const png = img.encodeToBytes(ImageFormat.PNG, 100);
+        img.dispose();
+        await writer.write(phoneFile, png);
+        report.tiles.push({ file: tile.file, phoneFile, ms });
+      } catch (err) {
+        report.tiles.push({ file: tile.file, phoneFile, ms: Date.now() - t, error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
+      }
+    }
+  }
+
+  // The timing pass: the slow kinds of page with a 12 MP photo in every slot.
+  const timingNames = (options.timingPages ?? TIMING_PAGES).filter((n) => cases.some((c) => c.name === n));
+  if (timingNames.length) {
+    options.onPage?.(total, total, 'timing: making a 12 MP photo');
+    await pause();
+    let t = Date.now();
+    const big = cameraPhoto(Sk, drawer);
+    report.timing = { photo: `${big.width()}x${big.height()} JPEG`, makeMs: Date.now() - t, pages: [] };
+    for (const name of timingNames) {
+      const c = cases.find((x) => x.name === name) as GoldenPhoneCase;
+      options.onPage?.(total, total, `timing: ${name}`);
+      await pause();
+      try {
+        const plan = planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: bundle.photos.length, photoIds });
+        t = Date.now();
+        const img = drawer.renderPrintPage(plan, () => big, { words: true, assets: assets.get });
+        report.timing.pages.push({ name, drawMs: Date.now() - t });
+        img.dispose();
+      } catch (err) {
+        report.timing.pages.push({ name, drawMs: 0, error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
+      }
+    }
+    big.dispose();
+  }
+
   images.forEach((img) => img.dispose());
   assets.dispose();
   drawer.dispose();
   converted.forEach((img) => img.dispose());
   report.totalMs = Date.now() - t0;
   await writer.write('report.json', JSON.stringify(report, null, 1));
-  options.onPage?.(jobs.length, jobs.length, '');
+  options.onPage?.(total, total, '');
   return report;
 }
 

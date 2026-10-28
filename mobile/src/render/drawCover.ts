@@ -58,7 +58,13 @@ export class CoverDrawer {
   }
 
   /** The wrap onto `canvas` (plan.width × plan.height). */
-  draw(canvas: SkCanvas, plan: CoverPlan, photos: PhotoSource, { words = true, assets = () => null, onMissing }: CoverDrawOptions = {}): void {
+  draw(canvas: SkCanvas, plan: CoverPlan, photos: PhotoSource, options: CoverDrawOptions = {}): void {
+    // One drawing for the whole wrap: the front page's photos are prepared
+    // once for its two drawings (with and without words), freed at the end.
+    this.pages.drawing(() => this.steps(canvas, plan, photos, options));
+  }
+
+  private steps(canvas: SkCanvas, plan: CoverPlan, photos: PhotoSource, { words = true, assets = () => null, onMissing }: CoverDrawOptions): void {
     for (const step of plan.steps) {
       switch (step.kind) {
         case 'fill': {
@@ -99,13 +105,10 @@ export class CoverDrawer {
   /** The wrap as a picture (the cover file's picture before it is JPEG'd).
    *  The caller disposes it. */
   render(plan: CoverPlan, photos: PhotoSource, options: CoverDrawOptions = {}): SkImage {
-    const surface = this.Skia.Surface.Make(plan.width, plan.height);
-    if (!surface) throw new Error(`could not make a ${plan.width}×${plan.height} drawing surface`);
-    this.draw(surface.getCanvas(), plan, photos, options);
-    surface.flush();
-    const image = surface.makeImageSnapshot();
-    surface.dispose();
-    return image;
+    // On the page drawer's surfaces (kept for reuse: surfaces.ts says why).
+    const d = this.pages.surfaces.take(plan.width, plan.height);
+    this.draw(d.canvas, plan, photos, options);
+    return this.pages.surfaces.snapshot(d);
   }
 }
 

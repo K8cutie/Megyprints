@@ -34,6 +34,7 @@
 
 import { generateAlbum } from '../../src/pages/builder/generateAlbum';
 import type { AlbumPage, AlbumSizePreset, TextElement, SlotText, CoverDesign, CoverType, MaterialType, QrFill, OrnamentFill, OrnamentTransform } from '../../src/pages/builder/types';
+import { COVERS } from '../../src/pages/builder/types';
 import { mulberry32 } from '../../src/test/mulberry32';
 import { PHOTO_SIZES, P3_PHOTO, P3_PHOTO_IMAGE, BIG_PHOTO, BIG_PHOTO_IMAGE, CORNER_BASE } from './syntheticPhotos';
 
@@ -453,7 +454,7 @@ export function buildGoldenSet(): GoldenSet {
   });
   const covers: GoldenCover[] = [
     {
-      name: 'cover-88-hard-photo', albumSize: '8x8', pageCount: 60, cover: 'hardcover', material: 'matte',
+      name: 'cover-88-hard-photo', albumSize: '8x8', pageCount: 60, cover: 'hardboundLeather', material: 'matte',
       checks: '8x8 hardcover: a photo cover (zoom 1.2, off-centre focus) carried round the turn-in, a white floating title, the spine in dark ink, the back lockup',
       coverFront: coverPage('8x8', 'cover-hero', {
         slotFills: [],
@@ -484,7 +485,7 @@ export function buildGoldenSet(): GoldenSet {
       }),
     },
     {
-      name: 'cover-64-hard-long-title', albumSize: '6x4', pageCount: 48, cover: 'hardcover', material: 'matte',
+      name: 'cover-64-hard-long-title', albumSize: '6x4', pageCount: 48, cover: 'hardboundLeather', material: 'matte',
       checks: '6x4 hardcover: a photo in the hero frame, a long title (shortened on the spine with "…"), a shadowed caption title',
       coverFront: coverPage('6x4', 'cover-hero', {
         slotFills: [4],
@@ -493,7 +494,7 @@ export function buildGoldenSet(): GoldenSet {
       }),
     },
     {
-      name: 'cover-88-hard-edge-words', albumSize: '8x8', pageCount: 80, cover: 'hardcover', material: 'glossy',
+      name: 'cover-88-hard-edge-words', albumSize: '8x8', pageCount: 80, cover: 'hardboundLeather', material: 'glossy',
       checks: '8x8 hardcover, glossy: a photo background, words right at the top and bottom edges (never repeated in the turn-in: print mirrors the front under its words), a sticker at the corner (mirrored with the front), a bold title in its box',
       coverFront: coverPage('8x8', 'cover-plain', {
         background: { type: 'image', photoId: 'p4', zoom: 1, focusX: 0.5, focusY: 0.5 },
@@ -506,7 +507,7 @@ export function buildGoldenSet(): GoldenSet {
       }),
     },
     {
-      name: 'cover-86-old-form', albumSize: '8x6', pageCount: 40, cover: 'hardcover', material: 'matte',
+      name: 'cover-86-old-form', albumSize: '8x6', pageCount: 40, cover: 'hardboundLeather', material: 'matte',
       checks: 'the old cover form (a draft from before cover pages): a front photo with an outlined title and subtitle, the spine line, a back photo with a blurb, the opt-in mark',
       coverDesign: {
         front: {
@@ -523,6 +524,11 @@ export function buildGoldenSet(): GoldenSet {
     },
   ];
 
+  // This file is bundled, never type-checked: a cover type an order can't
+  // carry (the first version had 'hardcover') would still print, as
+  // isHardcover() takes anything but 'softcover' as hard. So check here.
+  const coverTypes = new Set<string>(COVERS.map((c) => c.type));
+  for (const c of covers) if (!coverTypes.has(c.cover)) throw new Error(`golden cover ${c.name}: '${c.cover}' is not a cover type an order stores (${[...coverTypes].join(', ')})`);
   return { seed: GOLDEN_SEED, photos, cases: [...partA, ...partB, ...partC], covers };
 
 }

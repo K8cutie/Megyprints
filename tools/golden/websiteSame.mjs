@@ -3,7 +3,8 @@
    IS THE WEBSITE'S PRINT OUTPUT UNCHANGED? Byte for byte, on every golden
    page and cover.
 
-     cd tools/golden && node websiteSame.mjs <git-ref>      (default: HEAD)
+     cd tools/golden && node websiteSame.mjs [<git-ref>]
+         (default: where this branch left main, git merge-base HEAD origin/main)
 
    A change that moves website code into shared files for the 2.0 app (the
    cover layout, the looks, the soft edge, where a QR or a graphic sits) must
@@ -11,7 +12,13 @@
    the print files of every golden page and cover twice in the same headless
    Chromium: with the website's src/ as it is at <git-ref> (exported with
    git archive into a temp folder) and with the working copy's src/, and
-   compares them:
+   compares them. <git-ref> must be a commit from BEFORE the change: once
+   the change is committed, HEAD compares the code with itself and proves
+   nothing (the script says so and stops with exit code 2). The default,
+   the commit this branch left main at, compares the whole branch with
+   main as it was.
+
+   It compares:
      • each page's print-file JPEG and every sharp-words patch (its PNG bytes
        and where it goes), renderPageForPrint;
      • the same page with its words baked in (bakeWords: the smaller file);
@@ -33,7 +40,12 @@ const { REPO_ROOT, sha256 } = require('./sources.cjs');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.join(HERE, 'web');
 const ORIGIN = 'http://golden.test';
-const ref = process.argv[2] || 'HEAD';
+/** The commit to compare against: the one given, or where HEAD left origin/main. */
+function baseRef() {
+  if (process.argv[2]) return process.argv[2];
+  return execFileSync('git', ['-C', REPO_ROOT, 'merge-base', 'HEAD', 'origin/main']).toString().trim();
+}
+const ref = baseRef();
 
 /** The website's src/ at `ref`, in a temp folder. */
 function exportSrc() {
@@ -74,9 +86,23 @@ async function main() {
   const manifest = JSON.parse(fs.readFileSync(path.join(WEB, 'manifest.json'), 'utf8'));
   const set = JSON.parse(fs.readFileSync(path.join(WEB, 'pages.json'), 'utf8'));
   const base = exportSrc();
+  try {
+    await compareWith(base, manifest, set);
+  } finally {
+    // Even when something fails part-way: never leave the exported copy in %TEMP%.
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+}
+
+async function compareWith(base, manifest, set) {
   const before = await bundle(base);
   const after = await bundle(REPO_ROOT);
-  if (before === after) console.log(`Note: the two bundles are the same text (src/ at ${ref} = the working copy's print code).`);
+  if (before === after) {
+    console.error(`The website's print code at ${ref} is the same text as the working copy's: this would compare the code with itself and prove nothing. Give a commit from before the change (for example: node websiteSame.mjs origin/main).`);
+    process.exitCode = 2;
+    return;
+  }
+  console.log(`Comparing the print code at ${ref} (${execFileSync('git', ['-C', REPO_ROOT, 'rev-parse', '--short', ref]).toString().trim()}) with the working copy's (the two bundles differ).`);
 
   const browser = await chromium.launch({ headless: true, args: ['--disable-gpu', '--disable-accelerated-2d-canvas', '--disable-gpu-compositing'] });
   const context = await browser.newContext({ deviceScaleFactor: 1, viewport: { width: 800, height: 600 } });
@@ -123,13 +149,13 @@ async function main() {
     await compare(c.name, 'cover', { albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material, coverFront: c.coverFront, coverDesign: c.coverDesign, photos: set.photos });
   }
   await browser.close();
-  fs.rmSync(base, { recursive: true, force: true });
 
   const total = set.cases.length * 2 + set.covers.length;
   console.log(`\n${total - diffs.length} of ${total} print files byte-identical to the website's print code at ${ref} (${execFileSync('git', ['-C', REPO_ROOT, 'rev-parse', '--short', ref]).toString().trim()}).`);
   if (diffs.length) {
+    fs.mkdirSync(path.join(HERE, 'out'), { recursive: true });
     fs.writeFileSync(path.join(HERE, 'out', 'website-same.json'), JSON.stringify(diffs, null, 1));
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 

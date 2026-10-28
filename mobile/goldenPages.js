@@ -1,8 +1,8 @@
 /* ══════════════════════════════════════════════════════════════════════════
    THE GOLDEN PAGES IN A TEST BUILD (read by metro.config.js).
 
-   The debug screen src/app/golden-pages.tsx draws the 45 golden pages on the
-   phone. Their data, test photos and font files (about 8 MB) go into a build
+   The debug screen src/app/golden-pages.tsx draws the golden pages and
+   covers on the phone. Their data, test photos and font files (about 8 MB) go into a build
    only when it is made for that on purpose:
 
        scripts\build-android.ps1 -Variant release -GoldenPages
