@@ -1,0 +1,11 @@
+{
+  "upload": null,
+  "rpc": {
+    "name": "submit_payment_proof",
+    "args": {
+      "p_order_id": "00000000-0000-4000-8000-0000000000aa",
+      "p_reference": "2026102712345678",
+      "p_proof_path": null
+    }
+  }
+}

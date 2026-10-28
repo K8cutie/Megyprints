@@ -1,0 +1,4 @@
+10-28 12:49:29.058   561  1589 I ActivityTaskManager: START u0 {act=android.intent.action.VIEW dat=https://megyprints.vercel.app/... flg=0x10000000 cmp=com.android.chrome/com.google.android.apps.chrome.IntentDispatcher} with LAUNCH_MULTIPLE from uid 10199 (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+10-28 12:49:29.165   561  1595 I ActivityTaskManager: START u0 {act=android.intent.action.VIEW dat=https://megyprints.vercel.app/... flg=0x14002000 cmp=com.android.chrome/org.chromium.chrome.browser.ChromeTabbedActivity (has extras)} with LAUNCH_SINGLE_INSTANCE_PER_TASK from uid 10150 (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+    topResumedActivity=ActivityRecord{4706ab0 u0 com.android.chrome/org.chromium.chrome.browser.ChromeTabbedActivity t37}
+Chrome's address bar (uiautomator, com.android.chrome:id/url_bar): megyprints.vercel.app/orders?order=00000000-0000-4000-8000-0000000000aa

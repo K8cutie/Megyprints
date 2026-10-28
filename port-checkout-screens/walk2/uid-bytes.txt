@@ -1,0 +1,17 @@
+Walk build (a29f9b3 + stand-ins), emulator-5566, app uid 10199. Bytes from Android's own per-app counters (dumpsys netstats, after --poll), IP level, all networks.
+BEFORE Place order (tester code MEGYTEST):
+  uid 10199: sent 12403 bytes, received 408077 bytes
+AFTER it, on Stopped before sending:
+  uid 10199: sent 12680 bytes, received 408315 bytes   (sent +277)
+BEFORE Place order (paid, no code):
+  uid 10199: sent 13429 bytes, received 409098 bytes
+AFTER it, on Stopped before sending:
+  uid 10199: sent 13587 bytes, received 409217 bytes
+BEFORE I've sent (payment step, synthetic receipt picked, reference typed):
+  uid 10199: sent 15202 bytes, received 513080 bytes
+AFTER I've sent, the test panel showing the upload and submit_payment_proof:
+  uid 10199: sent 15281 bytes, received 513199 bytes
+
+What the phone sent while each step ran: Place order with MEGYTEST +277 bytes, Place order paid +158 bytes, I've sent +79 bytes.
+For scale: the order row alone is 17,157 bytes (compact JSON) and the synthetic receipt is 44,466 bytes. Neither left the phone.
+(The few hundred bytes are background connection traffic, such as TLS and keep-alive, on connections already open.)

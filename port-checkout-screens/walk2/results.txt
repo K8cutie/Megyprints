@@ -1,0 +1,87 @@
+2.0 native app: checkout screens, walked on my own emulator after the review fixes
+================================================================================
+
+Branch feat/port-checkout-screens @ a29f9b3 (review fixes 795e81d + "Open order" in the app).
+Emulator: pwa_test (Android 14, x86_64), port 5566, started and killed by this job.
+Release APKs built in C:\m4c (x86_64 only):
+  A  the exact PR code                    sha256 aa0dda36b6d6effac5a1419c7cfd187a62115f0af1d419e9b35aa164cd905fbf
+  B  the same code + walk stand-ins       sha256 75197a0b609b8662a3fba3f50dabc58eb4d1ef50e4b9b66696edfba9a7098242
+     (walk-harness.diff: stand-in accounts that sign in on the phone with no network call,
+      one logcat line for every fetch the app's code makes, and a stand-in "order waiting"
+      for two of the stand-in accounts. There is no local Supabase on this PC today: Docker
+      Desktop's engine does not answer. The live project must not be signed in to.)
+
+The test album is fixtureAlbum.ts: 48 sample photos from the website's public/sample-photos,
+40 pages. The receipt is a made-up picture (test-receipt-synthetic.png, "SYNTHETIC TEST IMAGE").
+Names, phone and reference numbers are made up.
+
+A. APK A, the exact PR code, signed out
+  01-start-screen.png
+  02-order-top-test-album-40-pages.png
+  03-address-boxes-and-live-price-1288.png        live price list: P1,288 (was P1,710)
+  04-province-list.png
+  05-province-search-lagu.png
+  06-city-search-binan-finds-binan.png            "binan" finds Biñan City
+  07-barangay-list-binan.png
+  08-laguna-binan-canlalay-street-120-whole.png   Laguna > Biñan City > Canlalay; street 120/120
+  09-megytest-signed-out-sign-in-first.png
+  10-empty-name-phone-said-scrolled-there.png
+  11-place-order-signed-out-must-sign-in.png
+
+B. APK B, stand-in account walk@example.test
+  12-stand-in-sign-in-walk-build.png
+  13-city-search-quezon.png
+  14-barangay-search-bagong-pag.png
+  15-street-over-120-kept-whole-count-124.png     a longer street is kept whole, the count turns red
+  16-qc-bagong-pag-asa-street-120-whole-zip-1105.png
+  17-megytest-free-note-any-code-shows-free.png   P0, and the new note: any 4-24 letter/number code shows free here
+  18-placing-bar-start.png
+  19-placing-bar-making-page-3-of-40.png
+  19b-placing-bar-later.png
+  20-tester-order-stopped-before-sending.png
+  21-tester-order-payload-json.png                (tester-order-payload.json, tester-order-summary.txt)
+  22-paid-order-stopped-before-sending.png
+  23-payment-step-send-1288-qr-no-order-number.png
+  24-android-picker-synthetic-receipt.png
+  25-synthetic-receipt-picked.png
+  26-receipt-and-reference.png
+  27-ive-sent-panel-upload-cachecontrol-and-rpc.png   the receipt upload now carries cacheControl "0" (payment-proof-plan.json)
+  28-payment-order-summary.png
+
+C. APK B, "this album already has an order" (stand-in orders, no network)
+  open@example.test: order MP-2026-WALK01 waiting for payment
+  29-order-waiting-notice-open-order-button.png   the filled "Open order MP-2026-WALK01"
+  30-open-order-pays-that-order-in-app.png        that order's payment step: its amount, "Order MP-... is placed", "put MP-... in the note"
+  31-open-order-ive-sent-plans-that-order-id.png  submit_payment_proof for that order's id (open-order-payment-plan.json), nothing sent
+  32-second-order-ask-open-order-first.png        the question: filled "Open order", outlined "Yes, place a second order"
+  33-second-ask-open-order-goes-to-that-order.png
+  34-yes-second-order-goes-on-stopped-before-sending.png
+  sent@example.test: order MP-2026-WALK02 with its payment sent
+  35-order-payment-sent-notice.png
+  36-open-order-payment-sent-status.png           "Payment sent — we're confirming it", nothing to pay
+
+D. Why "Open order" does not open the website (first try, build 795e81d)
+  x1-795e81d-open-order-opened-chrome.png         the button opened Chrome at /orders?order=<id> (open-order-intent.txt)
+  x2-795e81d-browser-signed-out-lands-on-home.png the browser is not signed in; the website's ProtectedRoute sends a
+                                                  signed-out visitor from /orders to its home page, so the order is lost.
+                                                  Fixed in a29f9b3: the app opens the order itself.
+
+NOTHING WAS SENT
+  network-log.txt: every fetch the app's code made in walk B and C. Only reads: the website's address
+    files (psgc/*.json), public_price_schedule (a POST with body "{}", the read-only price list the
+    website also calls), the albums list, and "this album already has an order?". No insert, no
+    upload, no other RPC.
+  uid-bytes.txt: Android's own per-app byte counters (dumpsys netstats, app uid 10199), read just
+    before and just after each step, in a second run of walk B:
+      Place order with MEGYTEST  +277 bytes sent
+      Place order paid           +158 bytes sent
+      I've sent (with receipt)   +79 bytes sent
+    The order row alone is 17,157 bytes (compact JSON); the receipt picture is 44,466 bytes.
+  network-log-bytes-check.txt: the fetch log of that second run (same reads only).
+  Logcat: no FATAL EXCEPTION and no JavaScript TypeError/ReferenceError in either APK.
+
+NOT PROVEN HERE
+  - A packet capture: the emulator's -tcpdump saw only boot-time ARP/IPv6 packets (72 packets); on this
+    AVD the traffic goes over the netsim Wi-Fi path, which that capture does not see. The per-app
+    counters above replace it.
+  - A real account, a real database write, a real phone, the real album (Phase 3), the print files.

@@ -1,0 +1,3 @@
+A build, Laguna address: street on screen 120 chars, same as typed: True
+Unit 12B Tower 3 The Residences at Greenfield, 123 Kalayaan Avenue corner Mabini Street, Purok 7, Phase 2, Block 9 Lot 1
+B build, Quezon City address: street on screen 120 chars, same as typed: True

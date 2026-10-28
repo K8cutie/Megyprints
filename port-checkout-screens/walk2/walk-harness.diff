@@ -1,0 +1,90 @@
+diff --git a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/auth.tsx b/C:/m4c/mobile/src/lib/auth.tsx
+index 32ef478..bea6b18 100644
+--- a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/auth.tsx
++++ b/C:/m4c/mobile/src/lib/auth.tsx
+@@ -28,6 +28,13 @@ interface AuthValue {
+ 
+ const AuthContext = createContext<AuthValue | null>(null);
+ 
++// WALK HARNESS (C:\m4c build only): stand-in accounts, no network.
++const walkStandin = (email: string) => {
++  const e = email.trim().toLowerCase();
++  const id = e.startsWith('open@') ? '00000000-0000-4000-8000-000000000002' : e.startsWith('sent@') ? '00000000-0000-4000-8000-000000000003' : '00000000-0000-4000-8000-000000000001';
++  return { user: { id, email: e } } as unknown as Session;
++};
++
+ /** Google sign-in is not in the app yet (docs/mobile-port-plan.md, Phase 1
+  *  notes). Until it is, the website's "Use Sign in with Google" would point
+  *  at a button that is not there, so the app leaves that sentence out (the
+@@ -83,6 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
+     async signIn(email, password) {
+       const problem = signInFormProblem(email, password);
+       if (problem) return { ok: false, error: problem };
++      if (email.trim().toLowerCase().endsWith('@example.test')) {
++        console.log(`[walk-auth] stand-in account ${email.trim().toLowerCase()} signed in on the phone; nothing sent`);
++        setSession(walkStandin(email));
++        return { ok: true };
++      }
+       if (!supabaseConfigured) {
+         return { ok: false, error: 'This test build was made without the Megy Prints server address, so it cannot sign in.' };
+       }
+@@ -95,6 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
+       }
+     },
+     async signOut() {
++      console.log('[walk-auth] stand-in signed out on the phone');
++      setSession(null);
+       await supabase.auth.signOut();
+     },
+   }), [loading, session]);
+diff --git a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/checkout/openOrder.ts b/C:/m4c/mobile/src/lib/checkout/openOrder.ts
+index b1200dd..518c816 100644
+--- a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/checkout/openOrder.ts
++++ b/C:/m4c/mobile/src/lib/checkout/openOrder.ts
+@@ -23,6 +23,15 @@ export interface OpenOrder {
+ export const OPEN_ORDER_COLUMNS = 'id, order_number, status, amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title, album_id, tester_code';
+ 
+ export async function openOrderForAlbum(client: Pick<SupabaseClient, 'from'>, userId: string, albumId: string): Promise<OpenOrder | null> {
++  // WALK HARNESS (C:\m4c build only): the second stand-in account has an order waiting (no network).
++  if (userId === '00000000-0000-4000-8000-000000000002') {
++    console.log('[walk-standin] order MP-2026-WALK01 waiting for payment, for stand-in account 0002 (no network)');
++    return { id: '00000000-0000-4000-8000-0000000000aa', order_number: 'MP-2026-WALK01', status: 'pending_payment', amount: 1288, created_at: '2026-10-27T02:00:00Z', payment_submitted_at: null, tester_code: null };
++  }
++  if (userId === '00000000-0000-4000-8000-000000000003') {
++    console.log('[walk-standin] order MP-2026-WALK02 with its payment sent, for stand-in account 0003 (no network)');
++    return { id: '00000000-0000-4000-8000-0000000000bb', order_number: 'MP-2026-WALK02', status: 'pending_payment', amount: 1288, created_at: '2026-10-27T02:00:00Z', payment_submitted_at: '2026-10-27T05:00:00Z', tester_code: null };
++  }
+   const { data, error } = await client
+     .from('orders')
+     .select(OPEN_ORDER_COLUMNS)
+diff --git a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/supabase.ts b/C:/m4c/mobile/src/lib/supabase.ts
+index f86ebd0..499f748 100644
+--- a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/supabase.ts
++++ b/C:/m4c/mobile/src/lib/supabase.ts
+@@ -13,6 +13,26 @@
+ import AsyncStorage from '@react-native-async-storage/async-storage';
+ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+ 
++// WALK HARNESS (C:\m4c build only): every fetch the app's code makes, to logcat.
++{
++  const realFetch = globalThis.fetch;
++  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
++    const u = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
++    const method = String(init?.method ?? (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET')).toUpperCase();
++    const body = init?.body;
++    const size = typeof body === 'string' ? body.length : body ? 'binary' : 0;
++    console.log(`[walk-net] ${method} ${u} body=${size}`);
++    try {
++      const res = await realFetch(input as RequestInfo, init);
++      console.log(`[walk-net] <- ${res.status} ${method} ${u.split('?')[0]}`);
++      return res;
++    } catch (e) {
++      console.log(`[walk-net] <- failed ${method} ${u.split('?')[0]} ${String(e)}`);
++      throw e;
++    }
++  }) as typeof fetch;
++}
++
+ const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+ const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+ 

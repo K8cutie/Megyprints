@@ -1,0 +1,12 @@
+panel data: 34,562 characters pretty-printed (the panel's '34 KB')
+the order row alone, compact JSON: 17,157 bytes, 20 keys
+  ship_name = 'Maria Clara Santos'
+  ship_phone = '+639981234567'
+  ship_region = 'National Capital Region (NCR)'
+  ship_province = 'Metro Manila'
+  ship_city = 'Quezon City'
+  ship_barangay = 'Bagong Pag-asa'
+  ship_zip = '1105'
+  tester_code = 'MEGYTEST'
+  ship_street: 120 characters, equal to the typed street: True
+files: [{'bucket': 'print-pdfs', 'path': '<order id>-cover.pdf', 'contentType': 'application/pdf'}, {'bucket': 'print-pdfs', 'path': '<order id>.pdf', 'contentType': 'application/pdf'}]

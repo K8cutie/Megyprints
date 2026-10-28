@@ -1,0 +1,17 @@
+10-28 13:19:38.038  9548  9578 I ReactNativeJS: [walk-auth] stand-in account walk@example.test signed in on the phone; nothing sent
+10-28 13:19:38.049  9548  9578 I ReactNativeJS: [walk-net] GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/albums?select=id%2Ctitle%2Calbum_size%2Cpages%2Cupdated_at&user_id=eq.00000000-0000-4000-8000-000000000001&order=updated_at.desc body=0
+10-28 13:19:39.574  9548  9578 I ReactNativeJS: [walk-net] <- 200 GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/albums
+10-28 13:19:45.403  9548  9578 I ReactNativeJS: [walk-net] GET https://megyprints.vercel.app/psgc/provinces.json body=0
+10-28 13:19:45.403  9548  9578 I ReactNativeJS: [walk-net] GET https://megyprints.vercel.app/psgc/regions.json body=0
+10-28 13:19:45.406  9548  9578 I ReactNativeJS: [walk-net] POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule body=2
+10-28 13:19:45.407  9548  9578 I ReactNativeJS: [walk-net] GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/orders?select=id%2Corder_number%2Cstatus%2Camount%2Ccreated_at%2Cpayment_submitted_at%2Calbum_size%2Cpage_count%2Ctracking%2Calbum_title%3Aalbum_snapshot-%3E%3Etitle%2Calbum_id%2Ctester_code&user_id=eq.00000000-0000-4000-8000-000000000001&album_id=eq.00000000-0000-4000-8000-00000000c0de&status=eq.pending_payment&order=created_at.desc&limit=1 body=0
+10-28 13:19:45.497  9548  9578 I ReactNativeJS: [walk-net] <- 200 POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule
+10-28 13:19:45.512  9548  9578 I ReactNativeJS: [walk-net] <- 200 GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/orders
+10-28 13:19:46.062  9548  9578 I ReactNativeJS: [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/regions.json
+10-28 13:19:46.135  9548  9578 I ReactNativeJS: [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/provinces.json
+10-28 13:20:20.543  9548  9578 I ReactNativeJS: [walk-net] GET https://megyprints.vercel.app/psgc/muncities.json body=0
+10-28 13:20:20.599  9548  9578 I ReactNativeJS: [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/muncities.json
+10-28 13:20:32.531  9548  9578 I ReactNativeJS: [walk-net] GET https://megyprints.vercel.app/psgc/brgy/13813.json body=0
+10-28 13:20:32.593  9548  9578 I ReactNativeJS: [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/brgy/13813.json
+10-28 13:22:07.458  9548  9578 I ReactNativeJS: [walk-net] GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/orders?select=id%2Corder_number%2Cstatus%2Camount%2Ccreated_at%2Cpayment_submitted_at%2Calbum_size%2Cpage_count%2Ctracking%2Calbum_title%3Aalbum_snapshot-%3E%3Etitle%2Calbum_id%2Ctester_code&user_id=eq.00000000-0000-4000-8000-000000000001&album_id=eq.00000000-0000-4000-8000-00000000c0de&status=eq.pending_payment&order=created_at.desc&limit=1 body=0
+10-28 13:22:08.228  9548  9578 I ReactNativeJS: [walk-net] <- 200 GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/orders
