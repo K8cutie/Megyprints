@@ -1,0 +1,37 @@
+Applications Memory Usage (in Kilobytes):
+Uptime: 2798728 Realtime: 2798728
+
+** MEMINFO in pid 10054 [com.megyprints.app.dev] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap   153601   153556       12       40   154852   179088   147907    25784
+  Dalvik Heap    14466     9472     4904       43    15356    21829    10915    10914
+ Dalvik Other     3694     2520       44        8     5056                           
+        Stack     1304     1304        0        0     1308                           
+       Ashmem       19        0        0        0      436                           
+    Other dev        6        0        4        0      256                           
+     .so mmap     3279      284      432       19    39748                           
+    .jar mmap     2167        0      248        0    35144                           
+    .apk mmap    32210     1264    26268        0    53936                           
+    .ttf mmap     7344        0     4696        0    11556                           
+    .dex mmap     6162        8     6104        0     7052                           
+    .oat mmap      760        0       92        0    14544                           
+    .art mmap     3087      780     1448      159    20868                           
+   Other mmap     3816        8     2704        0     7316                           
+      Unknown    20864    20860        0        0    21192                           
+        TOTAL   253048   190056    46956      269   388620   200917   158822    36698
+ 
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    11700                          36224
+         Native Heap:   153556                         154852
+                Code:    39400                         164236
+               Stack:     1304                           1308
+            Graphics:        0                              0
+       Private Other:    31052
+              System:    16036
+             Unknown:                                   32000
+ 
+           TOTAL PSS:   253048            TOTAL RSS:   388620       TOTAL SWAP PSS:      269

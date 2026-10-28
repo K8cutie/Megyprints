@@ -1,0 +1,56 @@
+{
+ "branch": "feat/port-phase-3",
+ "emulator": "pwa_test, Android 14, x86_64, port 5564, -read-only -gpu auto",
+ "apk": "release, bundled JS, built in C:\\m3p (x86_64), public Supabase URL+anon key, signed out",
+ "photos": "250 synthetic (PIL), 3000x4000 (every 12th 4000x3000), EXIF DateTimeOriginal 2026-10-20..22, no people",
+ "album_250": {
+  "pages": 106,
+  "size": "8x8",
+  "late_pages_shown": "100-101 with photos 236-241 (last day)"
+ },
+ "memory_total_pss_kb": {
+  "build1_after_make_250": 229644,
+  "build1_after_24_pages": 253048,
+  "build1_after_100_pages": 263304,
+  "build2_after_make_250": 230929,
+  "build2_after_20_single_page_turns": 266214
+ },
+ "logcat": {
+  "FATAL": 0,
+  "OutOfMemory": 0,
+  "ReactNativeJS_errors": 0,
+  "GlideExecutor_errors": 0
+ },
+ "airplane_mode_album": {
+  "photos": 84,
+  "pages": 42,
+  "made": true
+ },
+ "take_out_after_made": {
+  "taken_out": "photo 167 (first)",
+  "pages_1_3_before": [
+   174,
+   186,
+   198
+  ],
+  "pages_1_3_after": [
+   174,
+   186,
+   198
+  ]
+ },
+ "resize_made_album": {
+  "from": "8x8",
+  "to": "8x6",
+  "asked_first": true,
+  "pages_after": 40
+ },
+ "missing_photo": {
+  "deleted": "photo 6 on page 1",
+  "message_shown": true,
+  "relinked_in_place": true
+ },
+ "found_and_fixed_on_emulator": [
+  "Photos grid blank after adding 244 photos to 6 (FlashList maintainVisibleContentPosition) -> off; verified on second build"
+ ]
+}

@@ -1,0 +1,14 @@
+== build 1 walk: logcat from 10-28 07:27:47.449 to 10-28 07:52:46.624, 11522 lines
+FATAL: 0  OutOfMemory: 0  GlideExecutor: 0  'corrupted album state': 0
+ReactNativeJS lines other than 'Running main': 0
+Error-level lines from the app process:
+10-28 07:28:39.432 10054 10054 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::1@0@com.megyprints.app.dev>
+10-28 07:33:41.632 10054 10054 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::0@0@com.megyprints.app.dev>
+10-28 07:33:44.049 10054 10054 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::1@0@com.megyprints.app.dev>
+10-28 07:44:56.917 11463 11463 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::1@0@com.megyprints.app.dev>
+== build 2 walk: logcat from 10-28 07:53:18.064 to 10-28 07:57:53.296, 5556 lines
+FATAL: 0  OutOfMemory: 0  GlideExecutor: 0  'corrupted album state': 0
+ReactNativeJS lines other than 'Running main': 0
+Error-level lines from the app process:
+10-28 07:54:02.997 13135 13135 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::0@0@com.megyprints.app.dev>
+10-28 07:54:04.512 13135 13135 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::1@0@com.megyprints.app.dev>
