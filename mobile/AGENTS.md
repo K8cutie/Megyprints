@@ -27,6 +27,13 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   Worklets, Gesture Handler) are not in the APK. Importing one crashes the
   app on the phone; `test/nativeLibraries.test.ts` fails first. Delete the
   line there to turn one back on.
+- **The app's own native code** lives in `modules/` (today `modules/photo-files`:
+  keeps access to photos picked with "Choose from Files" and reads their size
+  and EXIF time). Expo autolinking builds every folder there; after changing
+  its Kotlin, run prebuild and Gradle again. Jest has no native modules: its
+  JS side (`index.ts`) works without the native half.
+- **Photos are never copied into the app.** The album keeps each photo's
+  content:// address on the phone (see the Phase 2 notes in the plan).
 - **Server values** come from `.env.local` (not in git; `.env.example` has the
   names). Never commit them, never put real account passwords anywhere.
 - **Gate before a commit:** `npm run check` here (TypeScript + jest), and from
