@@ -97,7 +97,9 @@ describe('wired in (source guards)', () => {
   });
 
   it('the page picture is still shrunk for the upload cap; the words are not', () => {
-    expect(pipeline).toMatch(/const MAX_SIDE = 1800;/);
+    // The number lives in printFileSpec.ts (shared with the 2.0 app).
+    expect(pipeline).toMatch(/const MAX_SIDE = PRINT_PAGE_MAX_SIDE;/);
+    expect(readFileSync(resolve(__dirname, 'printFileSpec.ts'), 'utf8')).toMatch(/export const PRINT_PAGE_MAX_SIDE = 1800;/);
     expect(pipeline).toMatch(/: await renderPageLayers\(page, photos, albumSize, pageIndex, false, bindingIn\);/);
   });
 

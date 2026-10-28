@@ -35,8 +35,9 @@ import { SHARED_MODULES, SHARED_NPM_PACKAGES } from './sharedModules';
 
 const ROOT = resolve(__dirname, '../..');
 
-/** Packages that only work in a browser (or only on the server for the web). */
-const WEB_ONLY_PACKAGES = ['fabric', 'pdf-lib', 'jspdf', 'pdfjs-dist', '@supabase', 'face-api.js', '@tensorflow', '@tensorflow-models', 'libheif-js', 'mp4-muxer', 'react-dom'];
+/** Packages that only work in a browser (or only on the server for the web).
+ *  pdf-lib is not one: it is plain JavaScript and shared (SHARED_NPM_PACKAGES). */
+const WEB_ONLY_PACKAGES = ['fabric', 'jspdf', 'pdfjs-dist', '@supabase', 'face-api.js', '@tensorflow', '@tensorflow-models', 'libheif-js', 'mp4-muxer', 'react-dom'];
 
 /** Banned when used as `name.x` or `name[x]`. A bare `typeof window` check is fine. */
 const BROWSER_OBJECTS = ['document', 'window', 'navigator'];

@@ -247,19 +247,19 @@ export class PageDrawer {
     return { family: s.fontFamily, size, bold: s.bold, italic: s.italic };
   }
 
-  private boxText(canvas: SkCanvas, item: BoxTextItem): void {
+  private boxText(canvas: SkCanvas, item: BoxTextItem, onCover: boolean): void {
     const look = this.look(item.style, item.fontSize);
     canvas.save();
     canvas.clipRect(this.rect(item.box), ClipOp.Intersect, true);
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.maxWidth);
     const top = firstLineCenter(lines.length, item.centerY, item.fontSize);
     const step = item.fontSize * TEXT_LINE_HEIGHT;
-    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, top + i * step, look, item.align, item.style, item.scale));
+    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, top + i * step, look, item.align, item.style, item.scale, 1, onCover));
     if (item.style.underline) this.text.underline(canvas, lines, item.anchorX, top, look, item.align, item.style.color || '#2D2D2D');
     canvas.restore();
   }
 
-  private freeText(canvas: SkCanvas, item: FreeTextItem): void {
+  private freeText(canvas: SkCanvas, item: FreeTextItem, onCover: boolean): void {
     const look = this.look(item.style, item.fontSize);
     const alpha = item.opacity / 100;
     canvas.save();
@@ -268,7 +268,7 @@ export class PageDrawer {
     canvas.scale(item.scaleX, item.scaleY);
     const step = item.fontSize * TEXT_LINE_HEIGHT;
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.boxWidth);
-    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, step / 2 + i * step, look, item.align, item.style, item.scale, alpha));
+    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, step / 2 + i * step, look, item.align, item.style, item.scale, alpha, onCover));
     if (item.style.underline) {
       const blockCenter = step / 2 + ((lines.length - 1) * step) / 2;
       this.text.underline(canvas, lines, item.anchorX, firstLineCenter(lines.length, blockCenter, item.fontSize), look, item.align, item.style.color || '#2D2D2D', alpha);
@@ -287,9 +287,54 @@ export class PageDrawer {
     if (plan.wash) canvas.drawRect(all, this.paint(plan.wash));
     for (const item of plan.items) {
       if (item.kind === 'photo') this.photo(canvas, item, photos);
-      else if (item.kind === 'boxText') { if (words) this.boxText(canvas, item); }
-      else if (item.kind === 'freeText') { if (words) this.freeText(canvas, item); }
+      else if (item.kind === 'boxText') { if (words) this.boxText(canvas, item, plan.onCover); }
+      else if (item.kind === 'freeText') { if (words) this.freeText(canvas, item, plan.onCover); }
       else this.boxPhoto(canvas, item, photos);
+    }
+  }
+
+  /** The page at print size, no bleed, as a picture (the caller disposes it). */
+  renderTrim(plan: PagePlan, photos: PhotoSource, options: DrawOptions = {}): SkImage {
+    const W = plan.width, H = plan.height;
+    const surface = this.Skia.Surface.Make(W, H);
+    if (!surface) throw new Error(`could not make a ${W}×${H} drawing surface`);
+    this.draw(surface.getCanvas(), plan, photos, options);
+    surface.flush();
+    const image = surface.makeImageSnapshot();
+    surface.dispose();
+    return image;
+  }
+
+  /** A page picture at print size with its bleed mirrored round every edge
+   *  (printBleed withBleed). The caller disposes both pictures. */
+  withBleed(trim: SkImage, plan: PagePlan): SkImage {
+    const W = plan.width, H = plan.height, b = plan.bleed;
+    const outSurface = this.Skia.Surface.Make(W + 2 * b, H + 2 * b);
+    if (!outSurface) throw new Error(`could not make a ${W + 2 * b}×${H + 2 * b} drawing surface`);
+    const out = outSurface.getCanvas();
+    out.drawRect(this.Skia.XYWHRect(0, 0, W + 2 * b, H + 2 * b), this.paint('#ffffff'));
+    this.image(out, trim, { x: 0, y: 0, w: W, h: H }, { x: b, y: b, w: W, h: H });
+    this.drawMirroredEdges(out, trim, { x: b, y: b, w: W, h: H }, { top: b, right: b, bottom: b, left: b });
+    outSurface.flush();
+    const image = outSurface.makeImageSnapshot();
+    outSurface.dispose();
+    return image;
+  }
+
+  /** A picture drawn the way the website's canvas drawImage draws it (see image()). */
+  drawPicture(canvas: SkCanvas, img: SkImage, src: Rect, dst: Rect): void {
+    this.image(canvas, img, src, dst);
+  }
+
+  /** The mirrored strips round a picture already drawn at `box` (printBleed
+   *  drawMirroredEdges): the bleed of a page, the turn-in round the cover. */
+  drawMirroredEdges(canvas: SkCanvas, src: SkImage, box: Rect, m: { top: number; right: number; bottom: number; left: number }): void {
+    for (const op of mirrorOps(src.width(), src.height(), box, m)) {
+      canvas.save();
+      canvas.translate(op.flipX ? op.dx + op.dw : op.dx, op.flipY ? op.dy + op.dh : op.dy);
+      canvas.scale(op.flipX ? -1 : 1, op.flipY ? -1 : 1);
+      this.image(canvas, src, { x: op.sx, y: op.sy, w: op.sw, h: op.sh }, { x: 0, y: 0, w: op.dw, h: op.dh });
+      canvas.restore();
     }
   }
 
@@ -297,30 +342,9 @@ export class PageDrawer {
    *  bleed mirrored round every edge (printBleed withBleed). The caller
    *  disposes the image. */
   renderPrintPage(plan: PagePlan, photos: PhotoSource, options: DrawOptions = {}): SkImage {
-    const W = plan.width, H = plan.height, b = plan.bleed;
-    const trimSurface = this.Skia.Surface.Make(W, H);
-    if (!trimSurface) throw new Error(`could not make a ${W}×${H} drawing surface`);
-    this.draw(trimSurface.getCanvas(), plan, photos, options);
-    trimSurface.flush();
-    const trim = trimSurface.makeImageSnapshot();
-
-    const outSurface = this.Skia.Surface.Make(W + 2 * b, H + 2 * b);
-    if (!outSurface) throw new Error(`could not make a ${W + 2 * b}×${H + 2 * b} drawing surface`);
-    const out = outSurface.getCanvas();
-    out.drawRect(this.Skia.XYWHRect(0, 0, W + 2 * b, H + 2 * b), this.paint('#ffffff'));
-    this.image(out, trim, { x: 0, y: 0, w: W, h: H }, { x: b, y: b, w: W, h: H });
-    for (const op of mirrorOps(W, H, { x: b, y: b, w: W, h: H }, { top: b, right: b, bottom: b, left: b })) {
-      out.save();
-      out.translate(op.flipX ? op.dx + op.dw : op.dx, op.flipY ? op.dy + op.dh : op.dy);
-      out.scale(op.flipX ? -1 : 1, op.flipY ? -1 : 1);
-      this.image(out, trim, { x: op.sx, y: op.sy, w: op.sw, h: op.sh }, { x: 0, y: 0, w: op.dw, h: op.dh });
-      out.restore();
-    }
-    outSurface.flush();
-    const image = outSurface.makeImageSnapshot();
+    const trim = this.renderTrim(plan, photos, options);
+    const image = this.withBleed(trim, plan);
     trim.dispose();
-    trimSurface.dispose();
-    outSurface.dispose();
     return image;
   }
 }

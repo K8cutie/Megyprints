@@ -10,12 +10,14 @@
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { setJpegDpi } from './jpegZip';
+import { SHEET_JPEG_DPI, SHEET_JPEG_QUALITY } from './pressSheetZip';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
-/** Print resolution of every picture: 12.5 × 19 in → 3750 × 5700 pixels. */
-export const SHEET_DPI = 300;
-const QUALITY = 0.95;
+/** Print resolution of every picture: 12.5 × 19 in → 3750 × 5700 pixels
+ *  (pressSheetZip.ts, shared with the 2.0 app, which draws the same pictures). */
+export const SHEET_DPI = SHEET_JPEG_DPI;
+const QUALITY = SHEET_JPEG_QUALITY;
 
 /** Each page of `pdf` as a JPEG at `dpi`, marked with that DPI so it opens
  *  at its real size. `onPage(done, total)` after each one. */

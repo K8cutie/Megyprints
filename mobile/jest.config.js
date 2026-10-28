@@ -15,5 +15,7 @@ module.exports = {
     // A website file that imports React gets the app's React (one copy).
     '^react$': here('node_modules/react'),
     '^react/(.*)$': here('node_modules/react/$1'),
+    // …and pdf-lib, the app's copy (as in Metro: sharedCode.js).
+    '^pdf-lib$': here('node_modules/pdf-lib'),
   },
 };

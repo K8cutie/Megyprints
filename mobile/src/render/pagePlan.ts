@@ -126,6 +126,8 @@ export interface PagePlan {
   items: PlanItem[];
   /** What is on the page that the app does not draw yet. */
   notDrawn: string[];
+  /** The front cover page (PlanInput.cover): its words float on the cover's shadow. */
+  onCover: boolean;
 }
 
 export interface PlanInput {
@@ -137,6 +139,11 @@ export interface PlanInput {
   photoCount: number;
   /** Binding allowance, inches (default: the editor's 3/8"). */
   bindingIn?: number;
+  /** The FRONT COVER page, as the website's cover wrap draws it (print's
+   *  coverMode): no spine keep-out, a caption moved by its own nudge
+   *  (offsetX / offsetY), and every word on the cover's floating shadow
+   *  (wordArtShadow onCover). */
+  cover?: boolean;
 }
 
 const DEFAULT_PAPER = '#FFFBF7';
@@ -184,7 +191,7 @@ function noteFont(t: { fontFamily?: string; bold?: boolean; italic?: boolean }, 
 }
 
 /** The page's plan: see the top of this file. */
-export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: PlanInput): PagePlan {
+export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn, cover = false }: PlanInput): PagePlan {
   const { width: W, height: H } = getPrintDimensions(albumSize);
   const { width: uiW, height: uiH } = getCanvasDimensions(albumSize);
   const scale = W / uiW;
@@ -194,7 +201,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
 
   const template = page.templateId ? getTemplateById(page.templateId) : null;
   const adapted = template ? adaptTemplateToOrientation(template, W, H) : null;
-  const m = adapted ? marginForTemplate(adapted, adapted.margin, albumSize, pageIndex, { bindingIn }) : null;
+  const m = adapted ? marginForTemplate(adapted, adapted.margin, albumSize, pageIndex, { noBinding: cover, bindingIn }) : null;
   const safe = m ? { x: W * m.left, y: H * m.top, w: W * (1 - m.left - m.right), h: H * (1 - m.top - m.bottom) } : null;
 
   // ── The template's slots ──
@@ -252,7 +259,10 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
     noteFont(text, notDrawn);
     const ts = text.boxIndex != null && adapted && safe ? adapted.textSlots?.[text.boxIndex] : undefined;
     if (ts && safe) {
-      const box = { x: safe.x + ts.x * safe.w, y: safe.y + ts.y * safe.h, w: ts.width * safe.w, h: ts.height * safe.h };
+      // COVER: the caption's own nudge off its box, as page fractions.
+      const offX = cover ? (text.offsetX ?? 0) * W : 0;
+      const offY = cover ? (text.offsetY ?? 0) * H : 0;
+      const box = { x: safe.x + ts.x * safe.w + offX, y: safe.y + ts.y * safe.h + offY, w: ts.width * safe.w, h: ts.height * safe.h };
       const align = resolveTextSlotAlign(text, ts);
       const pad = box.w * CAPTION_PAD_X;
       items.push({
@@ -288,6 +298,6 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
 
   return {
     albumSize, width: W, height: H, bleed: bleedPx(PRINT_DPI), designWidth: uiW, designHeight: uiH,
-    background: fill, wash, items, notDrawn,
+    background: fill, wash, items, notDrawn, onCover: cover,
   };
 }

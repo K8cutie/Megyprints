@@ -876,6 +876,132 @@ same pixelmatch code. **All 45 pages pass.**
 
 ---
 
+## Print files in the app (2026-10-28, Phase 5 core)
+
+The app makes, on the phone, the same files the website makes for an order,
+and writes them to its own folder (nothing is uploaded yet). Branch
+`feat/port-print-files`, stacked on `feat/port-renderer-on-phone` (#219).
+It touches website files (below), so it is **held until after Nov 9** like
+the branches under it.
+
+### What it makes, and from which code
+
+| File | On the website | In the app |
+|---|---|---|
+| `<order>.pdf`, the interior | the customer's phone at checkout (`generateAlbumPdf`, jsPDF) | `mobile/src/print/pagePicture.ts` + `printPdf.ts` (pdf-lib): each page drawn at 300 DPI by the app's renderer, bleed mirrored, shrunk to 1800 px and saved as a JPEG at 0.82, its words as see-through 300 DPI pictures (`wordPatches.ts`, the website's own code), page 1 marked as a right-hand page; past 45 MB, again with the words in the pictures (the website's rule) |
+| `<order>-cover.pdf`, the flat cover | the customer's phone at checkout, first (`generateCoverWrapPdf`) | `coverWrap.ts`: the same steps as `renderCoverWrapForPrint` (cover-as-pages): back colour and the Megy Prints mark, the front page drawn in cover mode, the front mirrored through the bleed or turn-in, the spine and its fitted title (`coverSpine.ts`, shared), one JPEG at 0.9 |
+| press sheets, cover sheet | the console, on the operator's click (`printSheetPdf.ts`) | the very same file, shared; labels drawn by `textPainter.ts` (Arimo, kerned like Chrome's canvas) |
+| "Sheets as JPEG" zip | the console (`pressSheetZip` + pdf.js) | `pressSheetZip.ts`, shared; sheets drawn by `sheetRaster.ts` (Skia), 300 DPI, quality 0.95, DPI written in each picture |
+
+- One page at a time: a page's photos are opened full size just before it
+  is drawn and let go after it (`makePrintFiles` takes an `OpenPhoto`;
+  `phonePhotos.ts` is the phone's: `srgbCopy` first, which also applies the
+  EXIF turn). The check counts every photo it hands out and fails if one is
+  not let go.
+- A page with something the app does not draw yet (`plan.notDrawn`: QR,
+  stickers, ornaments, textures, a picture background, a faked font style),
+  or a photo that can't be opened, stops it with the page named. The app
+  never prints a page without a part the customer put on it.
+- Fonts: Cinzel 400 and 700 joined the bundled fonts (the cover title's
+  default and the back's mark): 12 files now.
+- Files: `saveFiles.ts` writes them to `print/<order>/` in the app's
+  folder, under the console's names (`megyprints-<order>.pdf`, `-cover.pdf`,
+  `-sheets.pdf`, `-cover-sheet.pdf`, `-jpeg.zip`).
+
+### Website files changed (behaviour the same, held for Nov 9)
+
+Split so the app can import the pure part, the website file re-exporting it:
+`printFileSpec.ts` (the 1800 px / 0.82 / 0.9 / 8000 px / 45 MB numbers, out
+of `printPipeline.ts` and `generateAlbumPdf.ts`), `wordPatches.ts` (out of
+`printPipeline.ts`), `pressSheetWords.ts` and `pressSheetZip.ts` (out of
+`pressSheetFiles.ts`), `coverSpine.ts` (the spine and back derivation and the
+cover word wrap, out of `coverLayout.ts` and `printPipeline.ts`; the canvas
+measure stays in `coverLayout.ts`), `SHEET_JPEG_DPI` / `SHEET_JPEG_QUALITY`
+(out of `pressSheetJpeg.ts`). `printSheetPdf.ts` is shared as it is; pdf-lib
+joined the allowed packages (plain JavaScript; the console still loads it
+only on the operator's click, `pressSheetFiles.spec`).
+
+### The comparison (`npm run print:compare` in mobile/)
+
+Three seeded albums from the website's own generator and the synthetic
+photos (`tools/golden/printAlbums.ts`): 8x8 hardbound with 40 pages, 6x4
+softcover glossy with 40 pages, 11.5x8 hardbound with 41 pages (an odd
+count: a blank last side), each with captions, an outlined free title and a
+front cover page. The website makes its files in headless Chromium with its
+own code (`printWeb.mjs`); the app makes its files headless in Node with the
+code the phone runs. Then PyMuPDF (`printCompare.py`) reads both, and the
+golden page bars (`compare.ts`, in plain Node: `printPixels.mjs`) judge the
+pixels at 300 DPI.
+
+Results (2026-10-28, Chromium 149 with the GPU off, CanvasKit in Node):
+
+| | 8x8, 40 pages | 6x4, 40 pages | 11.5x8, 41 pages |
+|---|---|---|---|
+| PDF pages, website / app | interior 40/40, cover 1/1, sheet sides 20/20, cover sheet 1/1 | 40/40, 1/1, 6/6, 1/1 | 41/41, 1/1, 22/22, no cover sheet on either (the cover is 25.2 in: longer than the sheet) |
+| page boxes, page pictures (spot and pixel size), cut lines, fold marks, clips | the same to 0 pt | the same to 0.01 pt | the same to 0 pt |
+| see-through pictures (words, labels) | 4 / 4 interior, 4 / 4 cover, 84 / 84 sheets | 2/2, 5/5, 28/28 | 3/3, 4/4, 90/90 |
+| fonts on the pages, website / app | jsPDF's 14 per page on the checkout files / **none**; sheets none / none | same | same |
+| pixels, everything but words (golden bar 0.15%, tile 1%) | ≤ 0.003%, tile 0.00% | ≤ 0.008%, tile 0.07% | ≤ 0.72%, tile 33.7%: **known gap** (half shrink, below) |
+| page words (golden bars: ink 6%, block 40, 0.5 px) | ink ≤ 6.3%, block ≤ 29, ≤ 0.75 px | ≤ 6.7%, ≤ 38, ≤ 0.79 px | ≤ 4.2%, ≤ 33, ≤ 0.75 px |
+| | over a bar only on the cover: **known gap** (cover words) | same | same |
+| sheet labels (label bars: ink 35%, block 50, 1.5 px) | ≤ 28.4%, ≤ 41.7, ≤ 1.00 px | ≤ 28.4%, ≤ 33, ≤ 1.00 px | ≤ 28.4%, ≤ 40.4, ≤ 1.00 px |
+| zip | same 22 names in order, same HOW-TO-PRINT.txt, every picture 3750 × 5700 at 300 DPI; outside the labels ≤ 1.8%: **known gap** (nearest pixel) | same 8 names; ≤ 0.003% | same 23 names; ≤ 2.3%: **known gap** |
+| sizes, website / app (MB) | interior 2.0 / 2.0, cover 0.4 / 0.4, sheets 2.4 / 2.4, zip 17.9 / 17.7 | 1.4 / 1.4, 0.10 / 0.08, 1.5 / 1.4, 7.5 / 7.5 | 3.0 / 3.0, 0.8 / 0.8, 3.4 / 3.4, 24.2 / 23.7 |
+| time, website (Chromium, desktop) / app (CanvasKit in Node, desktop) | 10.5 s / 56 s | 6.7 s / 24 s | 11.8 s / 70 s |
+
+Every interior file is far under the 45 MB budget (the synthetic photos
+pack small: a real 40-page album's file is about 15 MB on the website).
+
+**The label bars are new and looser than the golden bars.** The sheet labels
+(order number, "pile 1 · pages 1–2", the 6 pt piece numbers) are the
+console's, drawn in Arial by Windows' DirectWrite there and in Arimo by
+FreeType in the app. The same shared code puts each label in the same spot
+(0.01 pt); only the letters inside differ. The first version of the app's
+label painter left out kerning (Chrome's canvas kerns: "MP-TEST-6X4 · sheet
+1 of 3 · front" is 901.21 px kerned, 904.43 px not, the same in Arial and
+Arimo), which moved labels up to 4.8 px; kerned, 1.0 px at most.
+
+**Known gaps** (held to ceilings just above what they measured, so worse
+fails; listed in the check and in `report.json`):
+- **Half shrink**: an 11.5x8 page picture is shrunk from 3526 to 1800 px
+  for the upload cap. Chrome's `imageSmoothingQuality: 'high'` smooths more
+  there than bilinear, by a filter not matched yet (tried: bilinear,
+  trilinear, box and tent mipmaps, area average). The app's picture is a
+  little sharper on the test photos' band of fine stripes: 0.24–0.72% of
+  pixels over the bar. 8.5x11 has the same scale (about 0.53). At the other
+  sizes (shrunk to 0.73 or more) plain bilinear is Chrome's to 0.000–0.007%
+  (cubic was 0.13–0.35%: the first version used it).
+- **Nearest pixel in the zip**: when a page picture is drawn at more than
+  4/3 of its pixels (8x8, 11.5x8), pdf.js draws it unsmoothed and so does
+  the app's sheet drawer; the two pick a different pixel column now and then
+  in the stripe band (≤ 2.3% of pixels). The sheet PDFs themselves match.
+- **Cover words**: the Megy Prints mark (Cinzel at 66% grey) has 6.0–6.7%
+  less ink than Chrome's (bar 6%), and a few cover lines sit 0.6–0.8 px off
+  by the ink-offset estimate (bar 0.5) with their 8×8 blocks within 40
+  levels; on the cover sheet the same pictures pass.
+
+### Not covered yet
+
+- **The phone itself.** Every number above is CanvasKit in Node. No print
+  file was made on the emulator or a phone yet: not the memory peak, not the
+  time, not `phonePhotos.ts` (sRGB copy and EXIF turn) or `saveFiles.ts`
+  (the app's folder). Time on a mid-range phone is likely several times the
+  desktop's 24–70 s per album.
+- **Memory of the zip.** `pressSheetZip` (shared) keeps every sheet picture
+  and the whole zip in memory: about twice the zip's size at the end (≈ 40
+  MB here, 100–200 MB for real photos). Fine on a desktop; on a phone the
+  fix is to write each picture to a file as it is made and build the zip
+  from the files.
+- **What the renderer does not draw yet** stops the files (not drawn as
+  something else): textures, stickers, QR codes, ornaments, a picture
+  background, corner art, faked font styles, the old CoverDesign cover.
+- **A real printed album** from the shop, checked by the owner (the plan's
+  Phase 5 check), and the checkout itself (upload, order rows): later steps.
+- The comparison's albums use the synthetic photos only: no EXIF rotation,
+  no JPEG or HEIC photo, no P3 photo in a print file.
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
