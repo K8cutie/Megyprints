@@ -1576,6 +1576,215 @@ same pixelmatch code. **All 45 pages pass.**
 
 ---
 
+## Phase 5 notes (2026-10-29): the checkout screens
+
+Built against a **test album** (48 of `public/sample-photos`, made into pages
+by the shared album maker with a fixed seed: 40 pages, 48 photos), because
+the album steps (Phase 3) were not in `main` yet. The start screen has
+"Checkout with a test album". **It writes nothing**: no order, no upload, no
+tester-code check.
+
+### What the screens do
+
+- **Your order** (`src/app/order.tsx`): the cover (its photo only, see below),
+  "N pages inside", paper, cover (only the covers the press can make, shared
+  `printSheet`), size from the design, name, phone (tidied to
+  "+63 917 123 4567" when you leave the box), the delivery address, the
+  order summary with the price, "Free" shipping, "Included with your album",
+  the QR note, the tester code box and **Place order**. The website's words
+  throughout (`src/pages/Order.tsx`).
+- **Address**: Province → City / Municipality → Barangay, each a full-screen
+  list you can search by typing ("binan" finds Biñan), then the street and
+  ZIP. The website's lists (`public/psgc/`, read from the website, about
+  2.8 MB, too big to put in the app) and its rules: no Region box (worked out
+  from the city), picking a level clears the ones under it, the street is
+  never cut (its count shows near 120 and a longer one is said), the ZIP box
+  keeps 4 digits. A box before its turn is never greyed: it says what to
+  choose first and opens that, through the same checks (a list still loading
+  waits; a list that didn't load, offline for example, is tried again
+  instead of opening empty).
+- **Price**: the live price list (`public_price_schedule()`, read only, tried
+  again after 3 s, 6 s … a minute) through the shared `pricing.ts`. No list,
+  no price: "Prices didn't load — tap to try again". A tap always answers
+  with "Loading price…", even while a try the app started by itself is
+  still on its way (the tap then waits for that try).
+- **Tester code**: "Have a tester code?" → "Type your code" → "Tester code
+  MEGYTEST: free", the real price crossed out, ₱0 to pay, "Place order ·
+  free with tester code". In this build only the code's shape is checked:
+  `check_tester_code` counts tries in the database (a write), so it is not
+  called. So here **any code of 4 to 24 letters or numbers shows free**, not
+  only MEGYTEST (the website refuses a wrong one with "That code doesn't
+  work. Check the spelling."). The form says so under the code ("Test
+  version: this code was not checked with the shop. Here, any code of 4 to
+  24 letters and numbers shows as free."), and the test panel says it again.
+  The shop's check is called only on the write path, against a local
+  Supabase.
+- **"This album already has an order"**: the website's notice at the top,
+  with its "Open order MP-…" button (outlined in the app: Place order is the
+  one filled button on the form; the website fills both), and the same
+  button first and filled in the "Place a second order for it?" question,
+  before the outlined "Yes, place a second order". The question takes Place
+  order's place while it is open, so there is one filled button. The
+  website's button opens its Orders page; the app has no
+  Orders screen until Phase 6, and opening the website in the phone's
+  browser does not work: the browser is not signed in, and the website sends
+  a signed-out visitor from `/orders` to its home page (seen on the
+  emulator, `ProtectedRoute`), so the order is lost. So the app opens that
+  order itself (`openOrderView`): while nobody has paid it, **its** payment
+  step ("Order MP-… is placed. Pay by bank transfer to finish.", "put MP-…
+  in the note", its own last day to pay, and "I've sent" plans
+  `submit_payment_proof` for that order's id, sent nothing in this
+  version); once the payment was sent (or for a tester-code order), where it
+  is, in the shared `orderTracker`'s words ("Payment sent — we're confirming
+  it"). "Back to your order" returns to the form as it was.
+  **The total on that payment step is the order's `quoted_amount`**, the
+  total the database saved as the order was placed (0055). `orders.amount`
+  is NULL on every order waiting for payment (the insert policy in 0002/0003
+  pins it; only the shop sets it, on confirming), so it can't be used; the
+  app reads `amount` only as a fallback (`askedToPay` in `openOrder.ts`).
+  An order placed before 0055 has no saved total: it still gets its payment
+  step (the QR, its number, its last day), with no number made up: "This
+  order is older, so its total is not saved here. Message us and we will
+  tell you how much to send." and a "Message us" button that opens the
+  website's contact page. (Such orders close by themselves after 7 days, so
+  by the time the app ships there should be none.) The website's Orders
+  page reads `amount` for its "Send ₱X" line, so it shows no number for a
+  waiting order: a website gap, left for after Nov 9.
+- **Place order** runs the website's checks in its order (cover, name,
+  phone, address, sign-in, "this album already has an order", 40 photos),
+  then the bar (shared `placeProgress`: start, preparing, cover, page by
+  page, sending with a moving band, checking, saving, finishing; the screen
+  is kept on with `expo-keep-awake`), then **stops** and shows the test
+  panel: every step Place order would take and the exact data (the
+  `orders` row, the `qr_memories` rows, the files).
+- **Payment step** (after "See the payment step"): "Send ₱X", the GoTyme
+  InstaPay QR (the website's picture), account ending 2370, the four steps,
+  "Attach the transfer receipt (JPG, PNG or PDF)" (the website's words;
+  Android's picker on pictures and PDFs, checked with the website's rules:
+  JPG, PNG, WebP or PDF, 8 MB), the
+  reference box (bad ones said, not cleaned quietly), "I've sent ₱X" → the
+  test panel shows the receipt upload and `submit_payment_proof` it would
+  send. No order is placed, so there is no order number: as the website
+  does without one, it leaves out "Order … is placed" and "put … in the
+  note". Because no order is behind this QR, a band across it says "Test
+  only. Do not pay." and the test note says "Do not send money: there is no
+  order." (the website never shows the QR without an order).
+- **Not signed in**: the website's "You must be signed in to check out"
+  and a Sign in button. Sign in opened from checkout (`/sign-in?then=back`)
+  comes back to the order; once signed in, the message and the button go
+  (the website's `shownError`). From anywhere else sign-in opens My albums.
+
+### Same as the website: how it is proven (jest, `mobile/test/checkout*`)
+
+| What | How | Numbers |
+|---|---|---|
+| The order row | The website's own `createOrderFromAlbum` runs with a stand-in database that writes down the insert; the app's row must be equal, key order included (byte for byte) | 5 albums/addresses/codes, 19–20 keys, ~17 KB each: identical |
+| The files and the order of the writes | The website's upload and RPC functions run against the stand-in, which writes down each upload's whole options object | cover PDF, (videos), pages PDF, each with the same options; `claim_tester_order` for a tester order; receipt (type and `cacheControl: '0'`) + `submit_payment_proof` for 4 receipts: identical |
+| The address lists | The website's `psgc.ts` runs on the real files next to the app's | 84 provinces, 1,655 cities, 42,011 barangays: identical |
+| The checks | `handleProceedToPayment` and the 40-photo lines are cut out of `Order.tsx` and run on Node | 549 mixes of name, phone, address, cover, sign-in, open order, short album: same answer and words |
+| The price | The price lines are cut out of `Order.tsx` and run on Node; the database's saved totals (0055) | 2,688 albums (576 with a "was" price): identical; 6 database totals match |
+| The screen | The real screen, walked in jest (testing-library): empty form, long street, MEGYTEST to the panel, paid order to the payment step, not signed in and back, an order waiting (the shape the database holds: `amount` NULL, `quoted_amount` set), an older order with no saved total, prices not loaded, address lists offline | the panel's row equals the website's row for the same typed details |
+
+**Mirrors, until the website files are split (after Nov 9).** Four website
+files hold rules checkout needs but also call the website's Supabase client
+(or a Vite-only value), so the app can't import them: `orders.ts` (the order
+row), `payment.ts`, `testerCode.ts`, `psgc.ts`. Splitting them changes code
+the website runs, which waits for the re-apply. Until then the app keeps a
+copy of the pure part (`mobile/src/lib/checkout/`), and the tests above run
+the website's function beside it and fail on any difference. After Nov 9:
+move the pure half of each into a shared file, list it in
+`sharedModules.ts`, and make the app's copy a re-export.
+
+### Not done here (and what each needs)
+
+- **The real album** (needs Phase 3): checkout takes a `CheckoutAlbum`
+  (`orderPayload.ts`); Phase 3 hands over its album and the account's
+  albums row instead of the test album. The album must be saved to the
+  account first (the website saves it on the way to checkout).
+- **The cover thumbnail draws only the cover photo**: words and colours need
+  the page renderer (held PRs #216/#219).
+- **The print files** (needs the renderer + a PDF writer on the phone): the
+  cover wrap PDF and the pages PDF. Press sheets and the "Sheets as JPEG" zip
+  are made later on the admin Orders page from the uploaded PDFs, not at
+  checkout.
+- **The write path**: the insert, the uploads (create-only), the memory rows,
+  `claim_tester_order`, `check_tester_code`, the receipt and
+  `submit_payment_proof`. Each step is already data (the plan in the test
+  panel); test it against a local Supabase, never the live one.
+- **Not in the app yet**: memory videos (so no hosting-term or HD picker:
+  the included term, standard quality), event albums, the order number on
+  the payment step (it comes from the insert), keeping the form after the
+  app closes (`checkoutSession`), "same as your last order", an Orders
+  screen ("Open order" shows only that one order: its payment step or where
+  it is; cancelling an unpaid order is on the website's Orders page),
+  focusing the first box to fix (it scrolls there).
+
+### What was seen on the emulator (2026-10-28, after the review fixes)
+
+`pwa_test` (Android 14, x86_64), port 5566, release APKs built in `C:\m4c`
+from a29f9b3. Two builds: the PR code as it is, and a **walk build**: the
+same code plus stand-ins for the outside (stand-in accounts that sign in on
+the phone with no network call, for emails ending in `@example.test`,
+because there is no local Supabase and the live project must not be signed
+in to; one logcat line for every `fetch` the app makes; and a stand-in
+"order waiting" for two of those accounts). Evidence: `pr-evidence` @
+`2d8887d`, folder `port-checkout-screens/walk2/` (`results.txt` lists every
+screenshot; the first walk, before the review fixes, is in
+`port-checkout-screens/` @ `e0cc049`).
+
+- **Price**: read from the live list: P1,288 (was P1,710) softcover.
+- **Address**: Laguna > Biñan City ("binan" finds it) > Canlalay, and Metro
+  Manila > Quezon City > Bagong Pag-asa (the order row says "National
+  Capital Region (NCR)"). A 120-character street is read back from the
+  screen whole and goes whole into the order row; at 124 it is kept and the
+  count turns red.
+- **MEGYTEST**: signed out, "Sign in first, then type the code."; signed in,
+  free, P0, the test-order button and the note that any 4 to 24 letter or
+  number code shows free in this version.
+- **Place order**: the bar page by page ("Making page 3 of 40…"), then the
+  test panel; the order row alone is 17,157 bytes (compact JSON). The
+  payment step, Android's picker with a made-up receipt picture, the
+  reference, and "I've sent" with its panel (the receipt upload carries
+  `cacheControl: "0"`).
+- **"This album already has an order"**: the filled "Open order MP-…" opens
+  that order's payment step in the app (its amount, "Order MP-… is placed",
+  "put MP-… in the note"; "I've sent" plans `submit_payment_proof` for that
+  order's id), first in the second-order question too; for an order whose
+  payment was sent it says "Payment sent — we're confirming it". The first
+  try (opening the website's `/orders?order=<id>` in Chrome) landed on the
+  website's home page, because the browser is not signed in.
+  **Corrected (2026-10-29 review):** the stand-in waiting order in this walk
+  (and in jest) had `amount: 1288`, a shape the database can't hold
+  (`amount` is NULL on every waiting order). With a real order the app went
+  to "where it is" ("We confirm transfers…") with no QR and no way to pay.
+  Fixed: the app reads `quoted_amount` (see above); the stand-ins now use
+  the real shape (`amount: null, quoted_amount: 1288`).
+- **Nothing was written**: the fetch log has only reads (the website's
+  address files, `public_price_schedule`, the albums list, "this album
+  already has an order?"). Android's own per-app byte counters
+  (`dumpsys netstats`, read just before and after each step) show the phone
+  sent 277 bytes during Place order with MEGYTEST, 158 bytes during a paid
+  Place order and 79 bytes during "I've sent" with a 44 KB receipt picked:
+  the size of background connection traffic, against a 17 KB order row.
+- **Correction to the first walk**: its notes said a packet capture showed
+  3,740 bytes going to the Supabase host. In this run the emulator's
+  `-tcpdump` capture saw only boot-time ARP and IPv6 packets (on this AVD
+  the app's traffic goes over the netsim Wi-Fi path), so that number is not
+  confirmed; the per-app counters above replace it.
+- Not seen: a real account, any write, the real album, a real phone.
+- Small gap seen: the payment step of an order placed earlier still said
+  "Please pay within 7 days"; the website's Orders page says "Please pay by
+  <date>" from the order's own date. **Fixed (2026-10-29):** that step now
+  says "Please pay by November 2, 2026. After that this order closes by
+  itself, and your album stays saved." (the Orders page's words, `payByOn`
+  in `openOrder.ts`, Manila time). jest runs the website's own `payByDate`
+  in Manila time beside it on 2,000+ dates (both years, the day and year
+  edges): identical. The payment step after Place order keeps the website's
+  "Please pay within 7 days…" line (there is no order date yet). Seen in
+  jest only, not on the emulator.
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

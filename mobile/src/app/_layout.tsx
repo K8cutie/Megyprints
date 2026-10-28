@@ -32,6 +32,7 @@ export default function RootLayout() {
             <Stack.Screen name="preview" options={{ title: 'Your album' }} />
             <Stack.Screen name="golden-pages" options={{ title: 'Golden pages' }} />
             <Stack.Screen name="photo-check-lab" options={{ title: 'Photo check test' }} />
+            <Stack.Screen name="order" options={{ title: 'Your order' }} />
           </Stack>
         </BuilderProvider>
       </DraftProvider>
