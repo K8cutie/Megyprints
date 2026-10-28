@@ -37,6 +37,7 @@ import { eventLinkForAlbum, eventDealState, coverOrderWithBooking, bookingsWaiti
 import { getMyBooking, listMyBookings, type EventBooking } from '../lib/eventBookings';
 import { amountToPay, claimTesterOrder, testerLine, TesterCodeGoneError, type TesterCode } from '../lib/testerCode';
 import TesterCodeBox from '../components/TesterCodeBox';
+import PlayFeedbackCard from '../components/PlayFeedbackCard';
 import PlaceOrderProgress from '../components/PlaceOrderProgress';
 import { PLACE_AT, forward, pagesAt, pagesLabel, videosAt, type PlaceProgress } from '../lib/placeProgress';
 import { keepScreenOn } from '../lib/keepScreenOn';
@@ -910,7 +911,11 @@ export default function Order() {
           {!track.cancelled && (
             <div className="bg-white rounded-2xl p-6 shadow-sm">
               {track.test
-                ? <p className="text-sm font-semibold text-dark" data-testid="order-test-note">This was a test order. Nothing is charged, and nothing will be printed or sent.</p>
+                ? <>
+                    <p className="text-sm font-semibold text-dark" data-testid="order-test-note">This was a test order. Nothing is charged, and nothing will be printed or sent.</p>
+                    {/* A tester just went through the whole app: where to say how it went. */}
+                    <div className="mt-3"><PlayFeedbackCard /></div>
+                  </>
                 : <OrderTracker track={track} />}
               <p className="mt-3 text-xs text-medium">You can check on this order any time in <Link to="/orders" className="underline font-semibold text-dark">Your orders</Link>.</p>
             </div>
