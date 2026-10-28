@@ -6,8 +6,10 @@
    renderTextElement / renderSlotText, wordArt.ts, printBleed.ts), with the
    same canvas rules where Skia's defaults differ:
      • a photo is drawn with bilinear sampling and no mipmaps (canvas
-       imageSmoothingQuality 'low'), and its own edges are not smoothed
-       (Chromium only smooths a drawn picture's edges when it is turned);
+       imageSmoothingQuality 'low'), and its own edges are smoothed only
+       when the drawing is turned off the page's axes (Chromium's rule:
+       a picture's edges are smoothed when the transform does not keep
+       them level, as in the template's turned slot);
      • clips are smoothed; a stroke keeps the canvas miter limit (10);
      • a shadow is the shape blurred with sigma = shadowBlur / 2, offset,
        under the shape (HTML canvas shadows);
@@ -16,13 +18,26 @@
        it gets no border line there either.
 
    It takes the Skia API as an argument, so the same code draws on the phone
-   (JSI Skia) and headless in Node (CanvasKit: the golden check).
+   (JSI Skia) and headless in Node (CanvasKit: the golden check). A print
+   page is drawn on a CPU surface (Skia.Surface.Make) on both: the same kind
+   of drawing the check proves, and no GPU texture size limit on the phone.
+
+   PHOTOS MUST ARRIVE AS sRGB. On the phone a Skia surface has no colour
+   space, so Skia draws a photo's numbers as they are: a photo saved with a
+   Display P3 or Adobe RGB profile would print duller than the website
+   prints it (Chrome turns every photo into sRGB as it draws it). Turning
+   photos into sRGB is the photo intake's job (Phase 2: decode with the
+   target colour space set to sRGB, keep that file); the golden set has a
+   photo with a Display P3 profile so the on-device golden run (a gate
+   before Phase 5) shows whether that was done. In Node, CanvasKit's surface
+   is sRGB and converts it, like Chrome.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { SkCanvas, SkImage, SkPaint, SkPath, Skia } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { ClipOp, FilterMode, MipmapMode, PaintStyle, StrokeCap, TileMode, BlurStyle } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { slotPhotoRect } from '@web/pages/builder/slotPhotoFit';
-import { archRy, isPathShape, maskPathD, starPoints } from '@web/pages/builder/maskShapes';
+import { archRy, heartCurves, isPathShape, maskPathD, starPoints } from '@web/pages/builder/maskShapes';
+import { PRINT_FRAME, type PrintFrameShadow } from '@web/pages/builder/printFrameSpec';
 import { mirrorOps } from '@web/pages/builder/bleedGeometry';
 import { wrapTextLines, firstLineCenter, TEXT_LINE_HEIGHT } from '@web/pages/builder/wordArtRules';
 import { FRAME_PX, type BoxPhotoItem, type BoxTextItem, type Fill, type FreeTextItem, type PagePlan, type PhotoItem, type Rect } from './pagePlan';
@@ -32,6 +47,11 @@ import type { PageText, TextLook } from './pageText';
 export type PhotoSource = (photoIndex: number) => SkImage | null;
 
 interface Shadow { color: string; blur: number; dx: number; dy: number }
+
+export interface DrawOptions {
+  /** Draw the page's words (default). false: the page under them. */
+  words?: boolean;
+}
 
 export class PageDrawer {
   constructor(private readonly Skia: Skia, private readonly text: PageText) {}
@@ -47,10 +67,13 @@ export class PageDrawer {
     return this.Skia.XYWHRect(r.x, r.y, r.w, r.h);
   }
 
-  /** ctx.drawImage(img, x, y, w, h): bilinear, no mipmaps, edges not smoothed. */
+  /** ctx.drawImage(img, x, y, w, h): bilinear, no mipmaps; the picture's
+   *  edges smoothed only when the canvas is turned off the page's axes. */
   private image(canvas: SkCanvas, img: SkImage, src: Rect, dst: Rect): void {
     const p = this.Skia.Paint();
-    p.setAntiAlias(false);
+    const m = canvas.getTotalMatrix().get();
+    const level = (m[1] === 0 && m[3] === 0) || (m[0] === 0 && m[4] === 0);
+    p.setAntiAlias(!level);
     canvas.drawImageRectOptions(img, this.rect(src), this.rect(dst), FilterMode.Linear, MipmapMode.None, p);
   }
 
@@ -91,12 +114,9 @@ export class PageDrawer {
         b.addCircle(x + w / 2, y + h / 2, Math.min(w, h) / 2);
         break;
       case 'heart': {
-        const cx = x + w / 2, cy = y + h / 2, s = Math.min(w, h) / 24;
-        b.moveTo(cx, cy + 7 * s);
-        b.cubicTo(cx, cy + 4 * s, cx - 9 * s, cy - 4 * s, cx - 9 * s, cy - 6 * s);
-        b.cubicTo(cx - 9 * s, cy - 10 * s, cx - 5 * s, cy - 12 * s, cx, cy - 7 * s);
-        b.cubicTo(cx + 5 * s, cy - 12 * s, cx + 9 * s, cy - 10 * s, cx + 9 * s, cy - 6 * s);
-        b.cubicTo(cx + 9 * s, cy - 4 * s, cx, cy + 4 * s, cx, cy + 7 * s);
+        const heart = heartCurves(x + w / 2, y + h / 2, Math.min(w, h));
+        b.moveTo(heart.start.x, heart.start.y);
+        for (const c of heart.curves) b.cubicTo(...c);
         break; // left open, as in canvas: the clip closes it
       }
       case 'star': {
@@ -152,13 +172,14 @@ export class PageDrawer {
     const { frame, slot } = item;
     const PX = FRAME_PX;
 
+    // The frame's numbers are print's own (printFrameSpec.ts), in design px.
+    const shadowOf = (s: PrintFrameShadow): Shadow => ({ color: s.color, blur: s.blur * PX, dx: 0, dy: s.offsetY * PX });
+
     // Mat (matte / polaroid), behind the photo, outside its clip.
     if (frame.decorated && (frame.style === 'matte' || frame.style === 'polaroid')) {
-      const pad = 8 * PX;
-      const bottomPad = (frame.style === 'polaroid' ? 28 : 8) * PX;
-      const shadow: Shadow = frame.style === 'polaroid'
-        ? { color: 'rgba(0,0,0,0.22)', blur: 16 * PX, dx: 0, dy: 6 * PX }
-        : { color: 'rgba(0,0,0,0.18)', blur: 6 * PX, dx: 0, dy: 0 };
+      const pad = PRINT_FRAME.mat.pad * PX;
+      const bottomPad = (frame.style === 'polaroid' ? PRINT_FRAME.mat.polaroidBottom : PRINT_FRAME.mat.pad) * PX;
+      const shadow = shadowOf(frame.style === 'polaroid' ? PRINT_FRAME.polaroidShadow : PRINT_FRAME.matteShadow);
       const path = frame.isRect
         ? this.shapePath(true, sx - pad, sy - pad, sw + pad * 2, sh + pad + bottomPad)
         : (() => {
@@ -166,14 +187,14 @@ export class PageDrawer {
           const cy = sy + sh / 2 + (bottomPad - pad) / 2;
           return this.shapePath(false, sx + sw / 2 - rx, cy - ry, rx * 2, ry * 2);
         })();
-      this.fillShape(canvas, path, '#FFFFFF', shadow);
+      this.fillShape(canvas, path, PRINT_FRAME.mat.color, shadow);
     }
     if (frame.decorated && frame.style === 'shadowbox') {
-      this.fillShape(canvas, this.shapePath(frame.isRect, sx, sy, sw, sh), '#FFFFFF', { color: 'rgba(0,0,0,0.25)', blur: 14 * PX, dx: 0, dy: 4 * PX });
+      this.fillShape(canvas, this.shapePath(frame.isRect, sx, sy, sw, sh), PRINT_FRAME.shadowbox.color, shadowOf(PRINT_FRAME.shadowbox.shadow));
     }
 
     canvas.save();
-    const clipRadius = frame.decorated && frame.style === 'rounded' ? Math.min(sw, sh) * 0.1 : 0;
+    const clipRadius = frame.decorated && frame.style === 'rounded' ? Math.min(sw, sh) * PRINT_FRAME.rounded.radius : 0;
     const clip = this.slotPath(slot, sx, sy, sw, sh, clipRadius);
     canvas.clipPath(clip.path, ClipOp.Intersect, true);
 
@@ -185,7 +206,7 @@ export class PageDrawer {
 
     // The border line: drawn 2× wide on the clip path, so its inner half shows.
     if (frame.borderWidth && clip.stroked) {
-      const lw = frame.borderWidth * PX * 2;
+      const lw = frame.borderWidth * PX * PRINT_FRAME.borderStroke;
       const p = this.paint(frame.color);
       p.setStyle(PaintStyle.Stroke);
       p.setStrokeWidth(lw);
@@ -201,10 +222,10 @@ export class PageDrawer {
 
     // Inset line frames (thin / double), after the clip is released.
     if (frame.decorated && (frame.style === 'thin' || frame.style === 'double')) {
-      const inset = (frame.style === 'double' ? 3 : 1) * PX;
+      const inset = (frame.style === 'double' ? PRINT_FRAME.inset.double : PRINT_FRAME.inset.thin) * PX;
       const p = this.paint(frame.color);
       p.setStyle(PaintStyle.Stroke);
-      p.setStrokeWidth(PX);
+      p.setStrokeWidth(PRINT_FRAME.inset.lineWidth * PX);
       p.setStrokeMiter(10);
       canvas.drawPath(this.shapePath(frame.isRect, sx + inset, sy + inset, sw - inset * 2, sh - inset * 2), p);
     }
@@ -255,8 +276,10 @@ export class PageDrawer {
     canvas.restore();
   }
 
-  /** The page at print size, no bleed, onto `canvas` (W × H). */
-  draw(canvas: SkCanvas, plan: PagePlan, photos: PhotoSource): void {
+  /** The page at print size, no bleed, onto `canvas` (W × H). `words: false`
+   *  leaves out every word (a caption, a text in a photo frame, a free text)
+   *  and draws the rest the same, like the website's drawPrintPage. */
+  draw(canvas: SkCanvas, plan: PagePlan, photos: PhotoSource, { words = true }: DrawOptions = {}): void {
     const W = plan.width, H = plan.height;
     const all = this.Skia.XYWHRect(0, 0, W, H);
     canvas.drawRect(all, this.paint('#ffffff'));
@@ -264,8 +287,8 @@ export class PageDrawer {
     if (plan.wash) canvas.drawRect(all, this.paint(plan.wash));
     for (const item of plan.items) {
       if (item.kind === 'photo') this.photo(canvas, item, photos);
-      else if (item.kind === 'boxText') this.boxText(canvas, item);
-      else if (item.kind === 'freeText') this.freeText(canvas, item);
+      else if (item.kind === 'boxText') { if (words) this.boxText(canvas, item); }
+      else if (item.kind === 'freeText') { if (words) this.freeText(canvas, item); }
       else this.boxPhoto(canvas, item, photos);
     }
   }
@@ -273,15 +296,15 @@ export class PageDrawer {
   /** The page as the print file's picture: drawn at print size, then its
    *  bleed mirrored round every edge (printBleed withBleed). The caller
    *  disposes the image. */
-  renderPrintPage(plan: PagePlan, photos: PhotoSource): SkImage {
+  renderPrintPage(plan: PagePlan, photos: PhotoSource, options: DrawOptions = {}): SkImage {
     const W = plan.width, H = plan.height, b = plan.bleed;
-    const trimSurface = this.Skia.Surface.MakeOffscreen(W, H);
+    const trimSurface = this.Skia.Surface.Make(W, H);
     if (!trimSurface) throw new Error(`could not make a ${W}×${H} drawing surface`);
-    this.draw(trimSurface.getCanvas(), plan, photos);
+    this.draw(trimSurface.getCanvas(), plan, photos, options);
     trimSurface.flush();
     const trim = trimSurface.makeImageSnapshot();
 
-    const outSurface = this.Skia.Surface.MakeOffscreen(W + 2 * b, H + 2 * b);
+    const outSurface = this.Skia.Surface.Make(W + 2 * b, H + 2 * b);
     if (!outSurface) throw new Error(`could not make a ${W + 2 * b}×${H + 2 * b} drawing surface`);
     const out = outSurface.getCanvas();
     out.drawRect(this.Skia.XYWHRect(0, 0, W + 2 * b, H + 2 * b), this.paint('#ffffff'));

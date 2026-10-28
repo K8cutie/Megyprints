@@ -19,8 +19,12 @@ const crypto = require('node:crypto');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const ENTRY = 'src/pages/builder/printPipeline.ts';
-/** Also part of the pictures: the test photos and the page set. */
-const TOOL_FILES = ['tools/golden/syntheticPhotos.ts', 'tools/golden/goldenPages.ts', 'tools/golden/webEntry.ts'];
+/** Also part of the pictures: the test photos, the page set, how the
+ *  website is driven and which font files (and faces) it is given. */
+const TOOL_FILES = [
+  'tools/golden/syntheticPhotos.ts', 'tools/golden/goldenPages.ts', 'tools/golden/webEntry.ts',
+  'tools/golden/renderWeb.mjs', 'tools/golden/sources.cjs', 'mobile/src/render/fontTable.ts',
+];
 
 const toPosix = (p) => p.split(path.sep).join('/');
 

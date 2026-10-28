@@ -73,4 +73,23 @@ describe('renderPageCanvasForPrint: the picture a print-file page is made from',
     // The trim page itself was painted: white paper, then the page colour.
     expect(trim.calls.filter((c) => c.fn === 'fillRect').length).toBeGreaterThanOrEqual(2);
   });
+
+  it('draws the words by default, and leaves exactly them out with words: false', async () => {
+    const withText: AlbumPage = {
+      ...page('8x8'),
+      textElements: [{ id: 't', text: 'Summer 2026', x: 40, y: 40, fontSize: 30, fontFamily: 'serif', color: '#2D2D2D', rotation: 0, opacity: 100 }],
+    } as AlbumPage;
+    const trimOf = (out: FakeCanvas) => made.find((c) => c !== out && c.width === 2400)!;
+    withFakeDocument();
+    const full = (await renderPageCanvasForPrint({ page: withText, photos: [], albumSize: '8x8' })) as unknown as FakeCanvas;
+    const fullTrim = trimOf(full);
+    expect(fullTrim.calls.filter((c) => c.fn === 'fillText').map((c) => c.args[0])).toEqual(['Summer 2026']);
+    made.length = 0;
+    const bare = (await renderPageCanvasForPrint({ page: withText, photos: [], albumSize: '8x8', words: false })) as unknown as FakeCanvas;
+    const bareTrim = trimOf(bare);
+    expect(bareTrim.calls.some((c) => c.fn === 'fillText' || c.fn === 'strokeText')).toBe(false);
+    // Everything else is drawn the same.
+    const notWords = (t: FakeCanvas) => t.calls.filter((c) => c.fn !== 'fillText' && c.fn !== 'save' && c.fn !== 'restore' && c.fn !== 'translate' && c.fn !== 'scale' && c.fn !== 'rotate' && c.fn !== 'beginPath' && c.fn !== 'moveTo' && c.fn !== 'lineTo' && c.fn !== 'stroke');
+    expect(notWords(bareTrim)).toEqual(notWords(fullTrim));
+  });
 });

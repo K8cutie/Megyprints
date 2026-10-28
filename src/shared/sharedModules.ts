@@ -71,6 +71,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/pageTurnStyles.ts',
   'src/pages/builder/photoAnalyzer.ts',
   'src/pages/builder/previewPaging.ts',
+  'src/pages/builder/printFrameSpec.ts',
   'src/pages/builder/printSheet.ts',
   'src/pages/builder/printSize.ts',
   'src/pages/builder/quoteBank.ts',

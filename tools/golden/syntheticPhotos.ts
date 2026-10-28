@@ -150,3 +150,15 @@ export function syntheticPhoto(n: number, size: { width: number; height: number 
 export function allSyntheticPhotos(): SyntheticPhoto[] {
   return PHOTO_SIZES.map((s, i) => syntheticPhoto(i, s));
 }
+
+/** One more test photo, saved WITH A DISPLAY P3 COLOUR PROFILE (renderWeb.mjs
+ *  writes the profile into the PNG): the same numbers stand for richer
+ *  colours than in plain sRGB. Chrome turns it into sRGB as it draws it, and
+ *  so must the app; a phone that draws its raw numbers prints it duller.
+ *  It is image PHOTO_SIZES.length (the 9th), used by one hand-made page only,
+ *  so the seeded generator's roll is unchanged. */
+export const P3_PHOTO = { width: 1600, height: 1200 } as const;
+export const P3_PHOTO_IMAGE = PHOTO_SIZES.length;
+export function p3SyntheticPhoto(): SyntheticPhoto {
+  return syntheticPhoto(P3_PHOTO_IMAGE, P3_PHOTO);
+}

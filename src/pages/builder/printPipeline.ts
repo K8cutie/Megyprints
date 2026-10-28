@@ -6,10 +6,11 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoRect } from './slotPhotoFit';
-import { applyMask, isMaskId, archRy, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha } from './masks';
+import { applyMask, isMaskId, archRy, starPoints, heartCurves, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha } from './masks';
 import { applyLookPixels, isLookId } from './looks';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { PRINT_DPI, getPrintMultiplier, getPrintDimensions } from './printSize';
+import { PRINT_FRAME, PRINT_FRAME_PX } from './printFrameSpec';
 import { dedupeSlotFills } from './slotUtils';
 import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
@@ -200,16 +201,19 @@ export async function renderPageForPrint(
  *  shrunk and JPEG'd: 300 DPI, its bleed mirrored on every edge, its words
  *  drawn in (the same drawing as `bakeWords`). The 2.0 app's golden check
  *  (tools/golden) compares the app's own page drawing against exactly this,
- *  pixel by pixel. Nothing on the website calls it. */
+ *  pixel by pixel. `words: false` leaves the words out (the page under the
+ *  words, as the sharp-words print file draws it), so the check can see
+ *  exactly which pixels the words paint. Nothing on the website calls it. */
 export async function renderPageCanvasForPrint(options: {
   page: AlbumPage;
   photos: UploadedPhoto[];
   albumSize: AlbumSizePreset;
   pageIndex?: number;
   bindingIn?: number;
+  words?: boolean;
 }): Promise<HTMLCanvasElement> {
-  const { page, photos, albumSize, pageIndex = 0, bindingIn } = options;
-  const trim = await drawPrintPage(page, photos, albumSize, pageIndex, false, true, bindingIn);
+  const { page, photos, albumSize, pageIndex = 0, bindingIn, words = true } = options;
+  const trim = await drawPrintPage(page, photos, albumSize, pageIndex, false, words, bindingIn);
   return withBleed(trim, bleedPx(PRINT_DPI));
 }
 
@@ -700,11 +704,12 @@ async function renderSlotPhoto(
     return;
   }
 
-  // ── Frame / border spec (single source: types.ts FRAME_STYLES) ──────────
+  // ── Frame / border spec (single source: types.ts FRAME_STYLES; the print
+  // numbers: printFrameSpec.ts, which the 2.0 app draws from too) ──────────
   // 1 UI css-px → PX print-px. Matches the border scale (frameWidth*PRINT_DPI/72)
   // used below and the raw-px insets/pads of the Fabric + DOM renderers, so the
   // three renderers stay in lockstep.
-  const PX = PRINT_DPI / 72;
+  const PX = PRINT_FRAME_PX;
   const effFrameStyle = (fullBleed ? 'none' : page.frameStyle) ?? 'none';
   const effBorderStyle = page.photoBorderStyle ?? 'solid';
   const frameColor = page.photoBorderColor ?? slot.borderColor ?? '#FFFFFF';
@@ -716,18 +721,14 @@ async function renderSlotPhoto(
   // slot clip so it extends past the slot edge. Polaroid is weighted at the
   // bottom and casts a stronger drop shadow.
   if (drawFrame && (effFrameStyle === 'matte' || effFrameStyle === 'polaroid')) {
-    const pad = 8 * PX;
-    const bottomPad = (effFrameStyle === 'polaroid' ? 28 : 8) * PX;
+    const pad = PRINT_FRAME.mat.pad * PX;
+    const bottomPad = (effFrameStyle === 'polaroid' ? PRINT_FRAME.mat.polaroidBottom : PRINT_FRAME.mat.pad) * PX;
+    const matShadow = effFrameStyle === 'polaroid' ? PRINT_FRAME.polaroidShadow : PRINT_FRAME.matteShadow;
     ctx.save();
-    ctx.fillStyle = '#FFFFFF';
-    if (effFrameStyle === 'polaroid') {
-      ctx.shadowColor = 'rgba(0,0,0,0.22)';
-      ctx.shadowBlur = 16 * PX;
-      ctx.shadowOffsetY = 6 * PX;
-    } else {
-      ctx.shadowColor = 'rgba(0,0,0,0.18)';
-      ctx.shadowBlur = 6 * PX;
-    }
+    ctx.fillStyle = PRINT_FRAME.mat.color;
+    ctx.shadowColor = matShadow.color;
+    ctx.shadowBlur = matShadow.blur * PX;
+    if (matShadow.offsetY) ctx.shadowOffsetY = matShadow.offsetY * PX;
     if (isRect) {
       ctx.fillRect(sx - pad, sy - pad, sw + pad * 2, sh + pad + bottomPad);
     } else {
@@ -750,11 +751,12 @@ async function renderSlotPhoto(
   // backing rect (under the photo) carrying the shadow, since the clipped photo
   // can't cast one outward.
   if (drawFrame && effFrameStyle === 'shadowbox') {
+    const box = PRINT_FRAME.shadowbox;
     ctx.save();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.shadowColor = 'rgba(0,0,0,0.25)';
-    ctx.shadowBlur = 14 * PX;
-    ctx.shadowOffsetY = 4 * PX;
+    ctx.fillStyle = box.color;
+    ctx.shadowColor = box.shadow.color;
+    ctx.shadowBlur = box.shadow.blur * PX;
+    ctx.shadowOffsetY = box.shadow.offsetY * PX;
     if (isRect) {
       ctx.fillRect(sx, sy, sw, sh);
     } else {
@@ -768,7 +770,7 @@ async function renderSlotPhoto(
   ctx.save();
 
   // Clip to slot shape. Rounded frame clips with a 10% corner radius.
-  const clipRadius = drawFrame && effFrameStyle === 'rounded' ? Math.min(sw, sh) * 0.1 : 0;
+  const clipRadius = drawFrame && effFrameStyle === 'rounded' ? Math.min(sw, sh) * PRINT_FRAME.rounded.radius : 0;
   applySlotClip(ctx, slot, sx, sy, sw, sh, clipRadius);
 
   // Apply rotation around slot center
@@ -830,12 +832,12 @@ async function renderSlotPhoto(
   // The `rounded` decorative frame thickens a thin border to 3px (matches
   // Fabric's max(borderWidth,3)) so the soft corner reads.
   let frameWidth = fullBleed || slot.masked ? 0 : (page.photoBorderWidth ?? slot.borderWidth);
-  if (drawFrame && effFrameStyle === 'rounded') frameWidth = Math.max(frameWidth ?? 0, 3);
+  if (drawFrame && effFrameStyle === 'rounded') frameWidth = Math.max(frameWidth ?? 0, PRINT_FRAME.rounded.minBorder);
   if (frameWidth) {
     ctx.strokeStyle = frameColor;
     // Dashed / dotted border style — mirrors the DOM (border-style) + Fabric
     // (strokeDashArray) renderers. The line dash is in print px, so scale by PX.
-    const lw = frameWidth * PX * 2;
+    const lw = frameWidth * PX * PRINT_FRAME.borderStroke;
     if (effBorderStyle === 'dashed') ctx.setLineDash([lw, lw]);
     else if (effBorderStyle === 'dotted') ctx.setLineDash([1, lw]);
     else ctx.setLineDash([]);
@@ -857,8 +859,8 @@ async function renderSlotPhoto(
   if (drawFrame && (effFrameStyle === 'thin' || effFrameStyle === 'double')) {
     ctx.save();
     ctx.strokeStyle = frameColor;
-    ctx.lineWidth = 1 * PX;
-    const inset = (effFrameStyle === 'double' ? 3 : 1) * PX;
+    ctx.lineWidth = PRINT_FRAME.inset.lineWidth * PX;
+    const inset = (effFrameStyle === 'double' ? PRINT_FRAME.inset.double : PRINT_FRAME.inset.thin) * PX;
     if (isRect) {
       ctx.strokeRect(sx + inset, sy + inset, sw - inset * 2, sh - inset * 2);
     } else {
@@ -900,15 +902,10 @@ function applySlotClip(
       break;
     }
     case 'heart': {
-      const size = Math.min(w, h);
-      const cx = x + w / 2;
-      const cy = y + h / 2;
-      const s = size / 24;
-      ctx.moveTo(cx, cy + 7 * s);
-      ctx.bezierCurveTo(cx, cy + 4 * s, cx - 9 * s, cy - 4 * s, cx - 9 * s, cy - 6 * s);
-      ctx.bezierCurveTo(cx - 9 * s, cy - 10 * s, cx - 5 * s, cy - 12 * s, cx, cy - 7 * s);
-      ctx.bezierCurveTo(cx + 5 * s, cy - 12 * s, cx + 9 * s, cy - 10 * s, cx + 9 * s, cy - 6 * s);
-      ctx.bezierCurveTo(cx + 9 * s, cy - 4 * s, cx, cy + 4 * s, cx, cy + 7 * s);
+      // ONE heart outline for print and the 2.0 app (maskShapes heartCurves).
+      const heart = heartCurves(x + w / 2, y + h / 2, Math.min(w, h));
+      ctx.moveTo(heart.start.x, heart.start.y);
+      for (const c of heart.curves) ctx.bezierCurveTo(...c);
       break;
     }
     case 'star': {

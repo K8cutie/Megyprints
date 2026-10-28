@@ -25,9 +25,10 @@ import { dedupeSlotFills } from '@web/pages/builder/slotUtils';
 import { getCanvasDimensions } from '@web/pages/builder/layouts';
 import { getPrintDimensions, PRINT_DPI } from '@web/pages/builder/printSize';
 import { bleedPx } from '@web/pages/builder/bleedGeometry';
+import { PRINT_FRAME, PRINT_FRAME_PX } from '@web/pages/builder/printFrameSpec';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from '@web/pages/builder/gradient';
 import { resolveTextSlotAlign, freeTextBoxWidth, CAPTION_PAD_X } from '@web/pages/builder/wordArtRules';
-import { bundledFace } from './fontTable';
+import { fontNotDrawn } from './fontTable';
 
 export interface Rect { x: number; y: number; w: number; h: number }
 export interface GradientStop { offset: number; color: string }
@@ -140,7 +141,7 @@ export interface PlanInput {
 
 const DEFAULT_PAPER = '#FFFBF7';
 /** 1 design px of frame → print px: the print renderer's own factor. */
-export const FRAME_PX = PRINT_DPI / 72;
+export const FRAME_PX = PRINT_FRAME_PX;
 
 function backgroundOf(page: AlbumPage, W: number, H: number, notDrawn: string[]): { fill: Fill; wash: string | null } {
   const bg = page.background;
@@ -176,10 +177,10 @@ function backgroundOf(page: AlbumPage, W: number, H: number, notDrawn: string[])
   return { fill, wash: opacity < 100 ? `rgba(255, 251, 247, ${(100 - opacity) / 100})` : null };
 }
 
-function noteFont(family: string | undefined, notDrawn: string[]): void {
-  if (bundledFace(family)) return;
-  const label = `font ${String(family ?? 'serif')} (drawn in the fallback)`;
-  if (!notDrawn.includes(label)) notDrawn.push(label);
+/** A text whose exact font file (face, weight, style) the app doesn't have. */
+function noteFont(t: { fontFamily?: string; bold?: boolean; italic?: boolean }, notDrawn: string[]): void {
+  const label = fontNotDrawn({ family: t.fontFamily, bold: t.bold, italic: t.italic });
+  if (label && !notDrawn.includes(label)) notDrawn.push(label);
 }
 
 /** The page's plan: see the top of this file. */
@@ -209,7 +210,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
       if (st) {
         const align = (st.alignment ?? 'center') as BoxTextItem['align'];
         const pad = box.w * CAPTION_PAD_X;
-        noteFont(st.fontFamily, notDrawn);
+        noteFont(st, notDrawn);
         items.push({
           kind: 'boxText', source: 'slot', box, align,
           anchorX: align === 'left' ? box.x + pad : align === 'right' ? box.x + box.w - pad : box.x + box.w / 2,
@@ -224,7 +225,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
       const style: FrameStyle = (fullBleed ? 'none' : page.frameStyle) ?? 'none';
       const decorated = style !== 'none' && slot.shape !== 'heart' && !slot.masked;
       let borderWidth = fullBleed || slot.masked ? 0 : (page.photoBorderWidth ?? slot.borderWidth ?? 0);
-      if (decorated && style === 'rounded') borderWidth = Math.max(borderWidth, 3);
+      if (decorated && style === 'rounded') borderWidth = Math.max(borderWidth, PRINT_FRAME.rounded.minBorder);
       if (slot.feather) notDrawn.push(`soft edge (slot ${i + 1})`);
       if (slot.texture) notDrawn.push(`textured edge ${slot.texture} (slot ${i + 1})`);
       if (page.slotLooks?.[i]) notDrawn.push(`colour look ${page.slotLooks[i]} (slot ${i + 1})`);
@@ -248,7 +249,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
   // ── The words ──
   for (const text of page.textElements || []) {
     const fontSize = (text.fontSize || 24) * scale;
-    noteFont(text.fontFamily, notDrawn);
+    noteFont(text, notDrawn);
     const ts = text.boxIndex != null && adapted && safe ? adapted.textSlots?.[text.boxIndex] : undefined;
     if (ts && safe) {
       const box = { x: safe.x + ts.x * safe.w, y: safe.y + ts.y * safe.h, w: ts.width * safe.w, h: ts.height * safe.h };

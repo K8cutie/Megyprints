@@ -267,6 +267,24 @@ export function starPoints(cx: number, cy: number, outerR: number, innerRatio = 
   return pts;
 }
 
+/* ── Heart: the outline print clips a photo to (printPipeline applySlotClip),
+   shared with the 2.0 app's page renderer so both draw the same curve ──── */
+export type HeartCurve = [c1x: number, c1y: number, c2x: number, c2y: number, x: number, y: number];
+/** A heart centred at (cx, cy) in a frame whose shorter side is `size`: its
+ *  start point and four cubic Béziers, left open (a clip closes it). */
+export function heartCurves(cx: number, cy: number, size: number): { start: { x: number; y: number }; curves: HeartCurve[] } {
+  const s = size / 24;
+  return {
+    start: { x: cx, y: cy + 7 * s },
+    curves: [
+      [cx, cy + 4 * s, cx - 9 * s, cy - 4 * s, cx - 9 * s, cy - 6 * s],
+      [cx - 9 * s, cy - 10 * s, cx - 5 * s, cy - 12 * s, cx, cy - 7 * s],
+      [cx + 5 * s, cy - 12 * s, cx + 9 * s, cy - 10 * s, cx + 9 * s, cy - 6 * s],
+      [cx + 9 * s, cy - 4 * s, cx, cy + 4 * s, cx, cy + 7 * s],
+    ],
+  };
+}
+
 /** CSS polygon() for a star filling a square box, in percentages. */
 export function starPolygonCss(): string {
   return `polygon(${starPoints(50, 50, 50).map((p) => `${p.x.toFixed(2)}% ${p.y.toFixed(2)}%`).join(', ')})`;

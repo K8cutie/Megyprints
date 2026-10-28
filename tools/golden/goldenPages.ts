@@ -4,10 +4,13 @@
 
    Part A comes from the website's own album generator (generateAlbum), seeded
    so it deals the same album every time (mulberry32, the seed the generator
-   specs use). Part B is made by hand for what the generator doesn't do on
-   its own: pans and zooms, masks, page colours and washes, frames, captions,
-   a quote in a photo frame, a free title with an outline, a photo in a
-   caption box.
+   specs use), on all five album sizes. Part B is made by hand for what the
+   generator doesn't do on its own: pans and zooms, every mask shape print
+   draws, page colours, washes and faded backgrounds, every frame style
+   (round slots too), the template's turned slot, a moved frame, captions in
+   every style of the bundled fonts, a quote in a photo frame, free titles
+   (outlined; turned and stretched with a shadow; see-through), a photo in a
+   caption box, and a photo saved with a Display P3 colour profile.
 
    renderWeb.mjs writes the result to tools/golden/web/pages.json once, with
    the website's pictures of it. The app's test reads that file, never this
@@ -17,7 +20,7 @@
 import { generateAlbum } from '../../src/pages/builder/generateAlbum';
 import type { AlbumPage, AlbumSizePreset, TextElement, SlotText } from '../../src/pages/builder/types';
 import { mulberry32 } from '../../src/test/mulberry32';
-import { PHOTO_SIZES } from './syntheticPhotos';
+import { PHOTO_SIZES, P3_PHOTO, P3_PHOTO_IMAGE } from './syntheticPhotos';
 
 /** Strict: a page with photos and no words. Text: a page with words. */
 export type GoldenKind = 'photos' | 'text';
@@ -95,17 +98,30 @@ export function buildGoldenSet(): GoldenSet {
     width: p.width, height: p.height, capturedAt: Date.UTC(2026, 4, 1) + i * 60_000,
   }));
 
-  // ── Part A: the generator's own pages, seeded ──
+  // ── Part A: the generator's own pages, seeded. The first two sizes are
+  //    dealt one after the other from one seed (as they always were, so their
+  //    pages stay the same); the other sizes each from a fresh seed. ──
   const real = Math.random;
-  Math.random = mulberry32(GOLDEN_SEED);
   let album88: AlbumPage[];
   let album64: AlbumPage[];
+  Math.random = mulberry32(GOLDEN_SEED);
   try {
     album88 = generateAlbum(roll, '8x8');
     album64 = generateAlbum(roll, '6x4');
   } finally {
     Math.random = real;
   }
+  const deal = (size: AlbumSizePreset): AlbumPage[] => {
+    Math.random = mulberry32(GOLDEN_SEED);
+    try {
+      return generateAlbum(roll, size);
+    } finally {
+      Math.random = real;
+    }
+  };
+  const album66 = deal('6x6');
+  const album86 = deal('8x6');
+  const album68 = deal('6x8');
   const fromAlbum = (album: AlbumPage[], size: AlbumSizePreset, templateId: string, checks: string): GoldenCase => {
     const pageIndex = album.findIndex((p) => p.templateId === templateId);
     if (pageIndex < 0) throw new Error(`the seeded ${size} album has no ${templateId} page any more: pick another`);
@@ -119,7 +135,14 @@ export function buildGoldenSet(): GoldenSet {
     fromAlbum(album64, '6x4', 't64-duo-tall-framed', '6x4 framed duo'),
     fromAlbum(album64, '6x4', 't64-fb-duo-tall-gap', '6x4 full-bleed duo'),
     fromAlbum(album64, '6x4', 't64-fb-duo-sq-band-b', '6x4 square duo with an empty band'),
+    fromAlbum(album66, '6x6', 't66-fb-duo-exact-v-gap', '6x6 two photos side by side'),
+    fromAlbum(album86, '8x6', 't86-duo-34-framed', '8x6 framed duo'),
+    fromAlbum(album68, '6x8', 't68-trio-34-cols-b', '6x8 three photos in columns'),
   ];
+
+  // The Display P3 photo goes after the generator's roll (it never saw it).
+  const p3Index = photos.length;
+  photos.push({ id: 'p3', image: P3_PHOTO_IMAGE, width: P3_PHOTO.width, height: P3_PHOTO.height });
 
   // ── Part B: by hand ──
   const b = (name: string, albumSize: AlbumSizePreset, pageIndex: number, checks: string, p: AlbumPage): GoldenCase =>
@@ -189,6 +212,74 @@ export function buildGoldenSet(): GoldenSet {
     b('64-script-caption', '6x4', 6, '6x4, a bold script caption', page('6x4', 't64-fb-duo-ls-band-b', [0, 3], {
       textElements: [caption(0, { text: 'A day we will remember', fontFamily: DANCING, fontSize: 30, bold: true })],
     })),
+
+    // ── Every frame style print draws, round slots, a turned slot, a moved frame ──
+    b('frame-matte', '8x8', 17, 'matte frame with its soft shadow, a thin dark border', page('8x8', 't88-solo-landscape', [3], {
+      background: { type: 'solid', solid: '#EFE7DD' }, frameStyle: 'matte', photoBorderWidth: 1, photoBorderColor: '#2D2D2D',
+    })),
+    b('frame-shadowbox', '8x8', 18, 'shadow box frame', page('8x8', 't88-solo-portrait', [6], {
+      background: { type: 'solid', solid: '#FFFBF7' }, frameStyle: 'shadowbox',
+    })),
+    b('frame-thin-dotted', '8x8', 19, 'thin inset line, dotted terracotta border', page('8x8', 't88-solo-square', [5], {
+      frameStyle: 'thin', photoBorderWidth: 3, photoBorderColor: '#B85C38', photoBorderStyle: 'dotted',
+    })),
+    b('frame-round-matte', '8x8', 20, 'a round template slot with a matte (oval mat), a square one beside it', page('8x8', 't8x8-18', [2, 4], {
+      background: { type: 'solid', solid: '#F3EDE4' }, frameStyle: 'matte',
+    })),
+    b('frame-round-double', '8x8', 21, 'double inset lines on a round slot (ovals) and four square ones', page('8x8', 't8x8-19', [0, 1, 3, 5, 2], {
+      background: { type: 'solid', solid: '#232323' }, frameStyle: 'double', photoBorderColor: '#FFFFFF',
+    })),
+    b('frame-round-shadowbox', '8x8', 22, 'shadow box on a round slot (an oval backing)', page('8x8', 't8x8-18', [6, 1], {
+      frameStyle: 'shadowbox',
+    })),
+    b('slot-turned', '8x8', 23, "the template's turned slot (15 degrees) over a bigger photo", page('8x8', 't8x8-07', [0, 3])),
+    b('frame-moved', '8x8', 24, 'a frame the customer moved and resized, with a border', page('8x8', 't88-solo-landscape', [7], {
+      background: { type: 'solid', solid: '#2D2D2D' }, photoBorderWidth: 2, photoBorderColor: '#FFFFFF',
+      slotGeometries: [{ x: 0.08, y: 0.22, width: 0.6, height: 0.5 }],
+    })),
+
+    // ── The rest of the masks print draws (oval and rounded print as plain
+    //    rectangles today: see the plan's "Found on the way") ──
+    b('masks-more-paths', '8x8', 25, 'octagon, diamond, cloud and halftone masks', page('8x8', 't88-fb-quad-grid-gap', [4, 6, 1, 3], {
+      slotMasks: ['octagon', 'diamond', 'cloud', 'halftone'],
+    })),
+    b('masks-oval-rounded', '8x8', 26, 'oval and rounded masks (rectangles in print today)', page('8x8', 't88-fb-duo-exact-v-gap', [2, 5], {
+      slotMasks: ['oval', 'rounded'],
+    })),
+
+    // ── Faded backgrounds: the paper-coloured wash over the page colour ──
+    b('faded-background', '8x8', 27, 'a faded page colour (opacity 55)', page('8x8', 't88-solo-portrait', [0], {
+      background: { type: 'solid', solid: '#1F75FE', opacity: 55 },
+    })),
+    b('faded-gradient', '6x4', 7, '6x4, a faded 90 degree wash (opacity 70)', page('6x4', 't64-solo-portrait', [3], {
+      background: { type: 'gradient', opacity: 70, gradient: { type: 'linear', angle: 90, stops: [{ offset: 0, color: '#FF7538' }, { offset: 1, color: '#926EAE' }] } },
+    })),
+
+    // ── Free titles: turned and stretched with a shadow, see-through ──
+    b('title-turned-shadow', '8x8', 28, 'a free title turned 12 degrees and stretched 1.3 times tall, with a shadow', page('8x8', 't88-solo-square', [1], {
+      background: { type: 'solid', solid: '#FCE883' },
+      textElements: [{ ...caption(0, { text: 'Best day ever', fontSize: 50, bold: true, color: '#2D2D2D', shadow: true }), boxIndex: undefined, x: 120, y: 40, width: 520, rotation: 12, scaleY: 1.3 }],
+    })),
+    b('title-shadow-alone', '8x8', 32, 'only the shadow of a title turned 12 degrees and stretched 1.3 times (white words on white paper)', page('8x8', 't88-solo-square', [], {
+      textElements: [{ ...caption(0, { text: 'Our summer', fontSize: 60, bold: true, color: '#FFFFFF', shadow: true }), boxIndex: undefined, x: 110, y: 200, width: 460, rotation: 12, scaleY: 1.3 }],
+    })),
+    b('title-see-through', '8x8', 29, 'a see-through (60%) free title turned -8 degrees, over a photo', page('8x8', 't88-fb-solo', [4], {
+      textElements: [{ ...caption(0, { text: 'Hello sunshine', fontFamily: DM_SANS, fontSize: 64, bold: true, color: '#FFFFFF' }), boxIndex: undefined, x: 90, y: 300, width: 560, rotation: -8, opacity: 60 }],
+    })),
+
+    // ── Every style of the bundled fonts ──
+    b('captions-italics', '8x8', 30, 'DM Sans italic and Playfair Display bold italic captions', page('8x8', 't88-fb-solo-pt-twobox-right', [5], {
+      textElements: [
+        caption(0, { text: 'The castle lights came on at last', fontFamily: DM_SANS, fontSize: 26, italic: true }),
+        caption(1, { text: 'Summer of 2026', fontSize: 30, bold: true, italic: true, alignment: 'right' }),
+      ],
+    })),
+    b('86-caption-bold-italic', '8x6', 8, '8x6, a DM Sans bold italic caption', page('8x6', 't86-solo-34-box-l', [2], {
+      textElements: [caption(0, { text: 'We walked all the way to the lighthouse', fontFamily: DM_SANS, fontSize: 24, bold: true, italic: true })],
+    })),
+
+    // ── A photo saved with a Display P3 profile (the app must draw it as Chrome does) ──
+    b('photo-display-p3', '8x8', 31, 'a photo with a Display P3 colour profile', page('8x8', 't88-solo-landscape', [p3Index])),
   ];
 
   return { seed: GOLDEN_SEED, photos, cases: [...partA, ...partB] };

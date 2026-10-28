@@ -6,20 +6,27 @@
      cd tools/golden && npm ci && node renderWeb.mjs
 
    Needs the website's packages (npm ci at the repo root), the app's (npm ci
-   in mobile/: the fonts come from there) and Playwright's Chromium (this
-   uses playwright-core 1.61.1, which drives Chromium build 1228; if it is
-   missing: npx playwright-core@1.61.1 install chromium-headless-shell).
+   in mobile/: the fonts and CanvasKit come from there) and Playwright's
+   Chromium (this uses playwright-core 1.61.1, which drives Chromium build
+   1228; if it is missing: npx playwright-core@1.61.1 install
+   chromium-headless-shell).
 
    What it does:
      1. bundles webEntry.ts (the website's printPipeline) with esbuild;
      2. builds the golden pages (goldenPages.ts, seeded) and the synthetic
-        photos (syntheticPhotos.ts);
+        photos (syntheticPhotos.ts); the Display P3 test photo is written by
+        CanvasKit (Skia), which puts the colour profile in the PNG;
      3. opens Chromium with the GPU off (the CPU drawing, like the app's
         headless check), loads the app's font files into it, and has the
-        website draw each page: 300 DPI, bleed, words in;
-     4. writes tools/golden/web/: one PNG per page, pages.json (the pages,
-        exactly as drawn) and manifest.json (what they were made from: see
-        sources.cjs).
+        website draw each page: 300 DPI, bleed, words in, writing down every
+        line of words print draws (webEntry.ts); a page with words is drawn
+        a second time without them (print's own `words: false`), so the check
+        knows exactly which pixels the words paint;
+     4. writes tools/golden/web/: one PNG per page (and NAME.bare.png),
+        pages.json (the pages, exactly as drawn) and manifest.json (what they
+        were made from: see sources.cjs, and the lines print drew).
+   Nothing here uses the app's page code (planPage): the words and boxes
+   come from print itself.
    The app's test (mobile/test/goldenPages.test.ts) compares against these.
    ══════════════════════════════════════════════════════════════════════════ */
 import { build } from 'esbuild';
@@ -43,15 +50,12 @@ async function bundleNode() {
     stdin: {
       contents: [
         "export { buildGoldenSet } from './goldenPages';",
-        "export { allSyntheticPhotos, PHOTO_SIZES } from './syntheticPhotos';",
+        "export { allSyntheticPhotos, p3SyntheticPhoto, PHOTO_SIZES } from './syntheticPhotos';",
         "export { BUNDLED_FONTS } from '../../mobile/src/render/fontTable';",
-        "export { planPage } from '../../mobile/src/render/pagePlan';",
       ].join('\n'),
       resolveDir: HERE, loader: 'ts',
     },
     bundle: true, platform: 'node', format: 'esm', outfile, logLevel: 'error',
-    // The app's '@web/…' imports are the website's src folder.
-    alias: { '@web': path.join(REPO_ROOT, 'src') },
   });
   const mod = await import(pathToFileURL(outfile).href);
   fs.rmSync(outfile, { force: true });
@@ -73,10 +77,26 @@ const encodePng = (p) => {
   return PNG.sync.write(png);
 };
 
+/** A PNG of `p` whose numbers are Display P3 colours: Skia writes the P3
+ *  profile into it (an iCCP chunk), as a phone camera does in a JPEG. */
+async function encodeP3Png(p) {
+  const dir = path.join(MOBILE, 'node_modules', 'canvaskit-wasm', 'bin', 'full');
+  const CanvasKitInit = require(path.join(dir, 'canvaskit.js'));
+  const CK = await CanvasKitInit({ locateFile: (f) => path.join(dir, f) });
+  const img = CK.MakeImage({
+    width: p.width, height: p.height, colorType: CK.ColorType.RGBA_8888, alphaType: CK.AlphaType.Unpremul, colorSpace: CK.ColorSpace.DISPLAY_P3,
+  }, p.rgba, p.width * 4);
+  if (!img) throw new Error('CanvasKit could not make the P3 photo');
+  const bytes = Buffer.from(img.encodeToBytes(CK.ImageFormat.PNG, 100));
+  img.delete();
+  if (!bytes.includes(Buffer.from('iCCP'))) throw new Error('the P3 photo has no colour profile');
+  return bytes;
+}
+
 async function main() {
-  const { buildGoldenSet, allSyntheticPhotos, BUNDLED_FONTS, planPage } = await bundleNode();
+  const { buildGoldenSet, allSyntheticPhotos, p3SyntheticPhoto, BUNDLED_FONTS } = await bundleNode();
   const set = buildGoldenSet();
-  const photoPngs = allSyntheticPhotos().map(encodePng);
+  const photoPngs = [...allSyntheticPhotos().map(encodePng), await encodeP3Png(p3SyntheticPhoto())];
   // The test photos as files: the website loads these bytes, and so does the
   // app's test (decoded by Skia, like a photo file on the phone).
   fs.rmSync(OUT, { recursive: true, force: true });
@@ -107,32 +127,32 @@ async function main() {
   await page.evaluate((fs_) => globalThis.golden.registerFonts(fs_), fonts);
   await page.evaluate((imgs) => globalThis.golden.setImages(imgs), photoPngs.map((b) => b.toString('base64')));
 
+  const drawOne = async (c, words) => {
+    const r = await page.evaluate((input) => globalThis.golden.render(input), {
+      page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photos: set.photos, words,
+    });
+    return { ...r, bytes: Buffer.from(r.png.slice(r.png.indexOf(',') + 1), 'base64') };
+  };
+
   const cases = [];
   for (const c of set.cases) {
     const t0 = Date.now();
-    const r = await page.evaluate((input) => globalThis.golden.render(input), {
-      page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photos: set.photos,
-    });
-    const bytes = Buffer.from(r.png.slice(r.png.indexOf(',') + 1), 'base64');
+    const full = await drawOne(c, true);
     const file = `${c.name}.png`;
-    fs.writeFileSync(path.join(OUT, file), bytes);
-    // The words: how the browser breaks each text into lines, in the boxes
-    // the app's plan puts them in (the app's test checks it gets the same).
-    const plan = planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: set.photos.length });
-    const words = [];
-    for (const it of plan.items) {
-      if (it.kind !== 'boxText' && it.kind !== 'freeText') continue;
-      const s = it.style;
-      const font = `${s.italic ? 'italic' : 'normal'} ${s.bold ? 'bold' : 'normal'} ${it.fontSize}px ${s.fontFamily || 'serif'}`;
-      const maxWidth = it.kind === 'boxText' ? it.maxWidth : it.boxWidth;
-      words.push({ font, maxWidth, lines: await page.evaluate(([f, tx, mw]) => globalThis.golden.wrap(f, tx, mw), [font, s.text, maxWidth]) });
+    fs.writeFileSync(path.join(OUT, file), full.bytes);
+    // The page under the words, when it has any (else it is the page itself).
+    let bare = null;
+    if (full.lines.length) {
+      const under = await drawOne(c, false);
+      if (under.lines.length) throw new Error(`${c.name}: words drawn with words: false`);
+      bare = `${c.name}.bare.png`;
+      fs.writeFileSync(path.join(OUT, bare), under.bytes);
     }
-    cases.push({ name: c.name, file, width: r.width, height: r.height, sha256: sha256(bytes), words });
-    console.log(`${c.name.padEnd(34)} ${r.width}x${r.height}  ${(bytes.length / 1024).toFixed(0)} KB  ${Date.now() - t0} ms`);
+    cases.push({ name: c.name, file, bare, width: full.width, height: full.height, sha256: sha256(full.bytes), lines: full.lines });
+    console.log(`${c.name.padEnd(34)} ${full.width}x${full.height}  ${(full.bytes.length / 1024).toFixed(0)} KB  ${full.lines.length} lines  ${Date.now() - t0} ms`);
   }
 
-  // How this Chromium measures and places a line (kept for the record: the
-  // app's text check compares its own numbers with these).
+  // How this Chromium measures and places a line (kept for the record).
   const probes = [];
   for (const f of BUNDLED_FONTS) {
     const font = `${f.italic ? 'italic' : 'normal'} ${f.weight === 700 ? 'bold' : 'normal'} 80px "${f.face}"`;
@@ -156,7 +176,7 @@ async function main() {
     cases,
   };
   fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 1));
-  const total = cases.reduce((n, c) => n + fs.statSync(path.join(OUT, c.file)).size, 0);
+  const total = fs.readdirSync(OUT).filter((f) => f.endsWith('.png')).reduce((n, f) => n + fs.statSync(path.join(OUT, f)).size, 0);
   console.log(`\n${cases.length} pages, ${(total / 1024 / 1024).toFixed(1)} MB → ${path.relative(REPO_ROOT, OUT)}`);
 }
 

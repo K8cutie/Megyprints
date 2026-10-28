@@ -14,7 +14,9 @@
        glyphs snapped to the same pixel row as Chromium's (see paintLine);
      • the WordArt order of wordArt.ts drawWordArtText: the shadow is cast
        once (by the outline when there is one), the fill goes on top;
-     • a canvas shadow is a blur with sigma = shadowBlur / 2 (HTML spec).
+     • a canvas shadow is a blur with sigma = shadowBlur / 2, and both the
+       blur and the offset are in page pixels whatever the transform (HTML
+       spec), so a turned or stretched title drops its shadow straight down.
    The wrap itself is the website's (wordArtRules.wrapTextLines), given this
    file's measurer.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -22,7 +24,7 @@
 import type { SkCanvas, SkPaint, SkParagraph, SkTypefaceFontProvider, Skia } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { BlurStyle, FontSlant, FontWeight, PaintStyle, StrokeCap, StrokeJoin, TextAlign } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { wordArtShadow, TEXT_LINE_HEIGHT, type TextMeasurer, type WordArtStyle } from '@web/pages/builder/wordArtRules';
-import { BUNDLED_FONTS, bundledFace, familyFaces, type BundledFont } from './fontTable';
+import { BUNDLED_FONTS, fontFileFor, paragraphFamilies, type BundledFont } from './fontTable';
 import { middleToBaseline, readFontMetrics, type FontFileMetrics } from './fontMetrics';
 
 export interface FontFile { font: BundledFont; bytes: Uint8Array }
@@ -65,22 +67,18 @@ export class PageText {
     if (missing.length) throw new Error(`fonts not loaded: ${missing.map((m) => m.file).join(', ')}`);
   }
 
-  /** The face file a look draws with (the CSS font matching, kept simple:
-   *  same face, same style, nearest weight). */
+  /** The face file a look draws with (fontTable fontFileFor: the same
+   *  matching the page plan uses to say a font is not drawn exactly). */
   private fileFor(look: TextLook): { font: BundledFont; metrics: FontFileMetrics } | null {
-    const face = bundledFace(look.family);
-    if (!face) return null;
-    const same = this.loaded.filter((l) => l.font.face.toLowerCase() === face.toLowerCase());
-    const want = look.bold ? 700 : 400;
-    const byStyle = same.filter((l) => l.font.italic === !!look.italic);
-    const pool = byStyle.length ? byStyle : same;
-    return pool.slice().sort((a, b) => Math.abs(a.font.weight - want) - Math.abs(b.font.weight - want))[0] ?? null;
+    const want = fontFileFor(look);
+    return want ? this.loaded.find((l) => l.font.file === want.file) ?? null : null;
   }
 
   private paragraph(text: string, look: TextLook, paint?: SkPaint): SkParagraph {
-    const face = bundledFace(look.family) ?? familyFaces(look.family)[0] ?? 'serif';
     const textStyle = {
-      fontFamilies: [face],
+      // A bundled face, or the stored list with its generic last (the phone's
+      // serif / sans-serif, as Chrome on Android picks), never one bare name.
+      fontFamilies: paragraphFamilies(look.family),
       fontSize: look.size,
       fontStyle: { weight: look.bold ? FontWeight.Bold : FontWeight.Normal, slant: look.italic ? FontSlant.Italic : FontSlant.Upright },
       color: this.Skia.Color('#000000'),
@@ -164,6 +162,20 @@ export class PageText {
     return paint;
   }
 
+  /** A page-pixel offset as an offset under the canvas's current transform.
+   *  A canvas shadow's offset ignores the transform (HTML canvas spec:
+   *  shadowOffsetX/Y are in the coordinate space's units before any
+   *  transform), so a turned or stretched title still drops its shadow
+   *  straight down on the page; drawn inside that title's rotate and scale,
+   *  the offset has to be turned back through them. */
+  private static pageOffset(canvas: SkCanvas, dx: number, dy: number): { x: number; y: number } {
+    const m = canvas.getTotalMatrix().get();
+    const a = m[0], c = m[1], b = m[3], d = m[4];
+    const det = a * d - c * b;
+    if (!det) return { x: dx, y: dy };
+    return { x: (d * dx - c * dy) / det, y: (a * dy - b * dx) / det };
+  }
+
   private blurred(paint: SkPaint, blur: number): SkPaint {
     if (blur > 0) paint.setMaskFilter(this.Skia.MaskFilter.MakeBlur(BlurStyle.Normal, blur / 2, false));
     return paint;
@@ -177,8 +189,9 @@ export class PageText {
     const sh = wordArtShadow(s, onCover);
     const shadowAt = (paint: SkPaint) => {
       if (!sh) return;
+      const o = PageText.pageOffset(canvas, sh.offsetX * scale, sh.offsetY * scale);
       canvas.save();
-      canvas.translate(sh.offsetX * scale, sh.offsetY * scale);
+      canvas.translate(o.x, o.y);
       this.paintLine(canvas, text, x, middleY, look, align, paint);
       canvas.restore();
     };
