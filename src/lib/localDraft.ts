@@ -9,29 +9,10 @@
 
 import { liveAlbumSize, liftRetiredPages } from '../pages/builder/retiredSizes';
 
-export const DRAFT_STORAGE_KEY = 'megy-album-v5';
-
-interface DraftPageLike {
-  photos?: unknown[];
-  slotFills?: (number | null)[];
-  textElements?: unknown[];
-}
-
-interface DraftLike {
-  uploadedPhotos?: unknown[];
-  albumPages?: DraftPageLike[];
-}
-
-/** Whether a draft holds real work: photos, or anything placed on a page. */
-export function draftHasContent(d: DraftLike | null | undefined): boolean {
-  if (!d) return false;
-  if ((d.uploadedPhotos?.length ?? 0) > 0) return true;
-  return (d.albumPages ?? []).some((p) =>
-    (p.photos?.length ?? 0) > 0
-    || (p.slotFills?.some((f) => f !== null) ?? false)
-    || (p.textElements?.length ?? 0) > 0,
-  );
-}
+// The draft's name and "does it hold work" live in localDraftRules.ts, which
+// the 2.0 app shares; they are offered here as before.
+import { DRAFT_STORAGE_KEY, draftHasContent, type DraftLike } from './localDraftRules';
+export { DRAFT_STORAGE_KEY, draftHasContent };
 
 export interface LocalDraftSummary {
   title: string;

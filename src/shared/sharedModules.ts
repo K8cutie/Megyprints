@@ -9,7 +9,8 @@
    Every file here runs anywhere JavaScript runs: no browser (document,
    window, localStorage, canvas…), no web-only package (fabric, jsPDF,
    pdf-lib, Supabase…). A listed file imports only other listed files, or a
-   package in SHARED_NPM_PACKAGES. sharedModules.spec.ts checks all of it on
+   package in SHARED_NPM_PACKAGES, or types only from one in
+   SHARED_TYPE_ONLY_PACKAGES. sharedModules.spec.ts checks all of it on
    every test run, and names the file and line that breaks it.
 
    Nothing on the website imports this list: it changes nothing a customer
@@ -26,6 +27,14 @@
    shared/platform (what the album builder needs from the device: the
    website passes the browser's pieces, the app passes its own) and
    lib/defaultBuilderPlatform.native (the app's default for those: none).
+   Phase 3a added the album builder itself (pages/builder/useBuilderState)
+   and what it needs: the pure parts split out of masks (maskShapes), looks
+   (lookRules), fonts (fontCatalog), wordArt (wordArtRules), coverLayout
+   (colorContrast), assistant/wizard (wizardSteps), albumTheme
+   (albumThemeRules), quotes (themeQuotePool), localDraft (localDraftRules),
+   draftAlbum (draftAlbumRow) and useAlbumSync (albumCloud); pageColors,
+   textFit and albumSyncRecord as they are; and canvasMeasurer.native (the
+   app has no browser canvas: its builder measures words with its own).
 
    A TWIN: a file listed as name.native.ts stands in for name.ts in the app.
    The app's bundler (Metro) and type check (tsconfig moduleSuffixes) pick
@@ -35,15 +44,21 @@
 
 /** Repo-relative paths, in plain sort order. */
 export const SHARED_MODULES = [
+  'src/assistant/wizardSteps.ts',
   'src/lib/accountErrors.ts',
+  'src/lib/albumCloud.ts',
   'src/lib/albumName.ts',
+  'src/lib/albumSyncRecord.ts',
+  'src/lib/albumThemeRules.ts',
   'src/lib/contact.ts',
   'src/lib/defaultBuilderPlatform.native.ts',
+  'src/lib/draftAlbumRow.ts',
   'src/lib/heicRules.ts',
   'src/lib/heifExif.ts',
   'src/lib/inAppBrowser.ts',
   'src/lib/jpegZip.ts',
   'src/lib/limit.ts',
+  'src/lib/localDraftRules.ts',
   'src/lib/megyMascot.ts',
   'src/lib/orderExpiry.ts',
   'src/lib/orderTracker.ts',
@@ -58,21 +73,28 @@ export const SHARED_MODULES = [
   'src/lib/rgbaPng.ts',
   'src/lib/settleGuard.ts',
   'src/lib/testingPhase.ts',
+  'src/lib/themeQuotePool.ts',
   'src/pages/builder/PreviewSizeConstants.ts',
   'src/pages/builder/albumMinimum.ts',
   'src/pages/builder/binding.ts',
   'src/pages/builder/blankPages.ts',
   'src/pages/builder/bookFeel.ts',
+  'src/pages/builder/canvasMeasurer.native.ts',
   'src/pages/builder/chooserFit.ts',
+  'src/pages/builder/colorContrast.ts',
   'src/pages/builder/coverGeometry.ts',
   'src/pages/builder/coverPhoto.ts',
   'src/pages/builder/densities.ts',
+  'src/pages/builder/fontCatalog.ts',
   'src/pages/builder/generateAlbum.ts',
   'src/pages/builder/gradient.ts',
   'src/pages/builder/lastPagePhoto.ts',
   'src/pages/builder/layouts.ts',
   'src/pages/builder/lookAlikes.ts',
+  'src/pages/builder/lookRules.ts',
+  'src/pages/builder/maskShapes.ts',
   'src/pages/builder/orderReadiness.ts',
+  'src/pages/builder/pageColors.ts',
   'src/pages/builder/pageNormalize.ts',
   'src/pages/builder/pagePhotoKey.ts',
   'src/pages/builder/pageTemplates.ts',
@@ -99,22 +121,35 @@ export const SHARED_MODULES = [
   'src/pages/builder/templates8x6.ts',
   'src/pages/builder/templates8x8.ts',
   'src/pages/builder/textColors.ts',
+  'src/pages/builder/textFit.ts',
   'src/pages/builder/textPainter.ts',
   'src/pages/builder/textures.ts',
   'src/pages/builder/themeQuotes.ts',
   'src/pages/builder/tiledTemplates.ts',
   'src/pages/builder/trashSpot.ts',
   'src/pages/builder/types.ts',
+  'src/pages/builder/useBuilderState.ts',
   'src/pages/builder/useEndOfAlbumPrompt.ts',
   'src/pages/builder/varietyTracker.ts',
+  'src/pages/builder/wordArtRules.ts',
   'src/shared/platform.ts',
 ] as const;
 
 /** npm packages a shared file may import. Each must run the same in a
  *  browser and in React Native.
  *  - react: React Native runs the same React. Used for a few hooks
- *    (settleGuard, useEndOfAlbumPrompt) and the CSSProperties type.
- *    (react-dom is web-only and is never allowed.) */
+ *    (settleGuard, useEndOfAlbumPrompt, useBuilderState) and the
+ *    CSSProperties type. (react-dom is web-only and is never allowed.) */
 export const SHARED_NPM_PACKAGES = ['react'] as const;
+
+/** npm packages a shared file may import TYPES from (`import type`), and
+ *  nothing else. A type import is erased when the code is built, so nothing
+ *  of the package is loaded by the shared file itself.
+ *  - @supabase/supabase-js: the album builder and lib/albumCloud are handed a
+ *    Supabase client (the website's, or the app's own: the app depends on the
+ *    same package) and name its type, SupabaseClient. They never make one:
+ *    making a client needs each side's own settings (lib/supabase reads the
+ *    website build's import.meta.env). */
+export const SHARED_TYPE_ONLY_PACKAGES = ['@supabase/supabase-js'] as const;
 
 export type SharedModule = (typeof SHARED_MODULES)[number];

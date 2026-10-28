@@ -13,6 +13,7 @@ import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, photoWord, addMoreLabel
 import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
 import { eventLinkForAlbum } from '../lib/eventAlbum';
 import { Capacitor } from '@capacitor/core';
+import type { WizardStep } from './wizardSteps';
 
 /* The size step's photos-per-page guidance is DERIVED from DENSITY_BY_SIZE
    (the single source of truth in densities.ts), so it can never disagree with
@@ -27,15 +28,8 @@ const SIZE_CHOICES: { label: string; preset: string }[] = [
   { label: '8.5×11" Portrait', preset: '8.5x11' },
 ];
 
-export type WizardStep =
-  | 'welcome'
-  | 'pick_theme'
-  | 'pick_size'
-  | 'design_cover'
-  | 'upload_photos'
-  | 'review_pages'
-  | 'add_text'
-  | 'finalize';
+// The steps themselves live in wizardSteps.ts, which the 2.0 app shares.
+export type { WizardStep } from './wizardSteps';
 
 export interface WizardState {
   step: WizardStep;

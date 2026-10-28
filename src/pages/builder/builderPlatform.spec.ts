@@ -7,38 +7,44 @@ import { createRoot, type Root } from 'react-dom/client';
    THE BUILDER RUNS ON THE DEVICE IT IS GIVEN (2.0 native app, Phase 0b).
    The real useBuilderState, wrapped in a BuilderPlatformContext with a
    made-up device: its own key-value stores, photo store, photo intake, face
-   finder, photo check and app lifecycle, all in memory. The builder's
+   finder, photo check and app lifecycle, all in memory; since Phase 3a also
+   its own text measurer, quote lines, occasion signal and account (its
+   saved sign-in, an album's version, signed-in user and album rows). The builder's
    default is the app's (none, defaultBuilderPlatform.native.ts), every
    browser piece the website uses (IndexedDB, face-api, the HEIC converter,
-   the EXIF reader) is replaced by one that FAILS the test if the builder
-   reaches for it, and the browser's localStorage holds a different album
-   that must never open. So each thing
+   the EXIF reader, the canvas text measure) is replaced by one that FAILS
+   the test if the builder reaches for it, the website's account modules
+   (lib/supabase, lib/authContext, lib/useAlbumSync) and lib/quotes are
+   tripwires that record it if they are ever loaded, and the browser's
+   localStorage holds a different album that must never open. So each thing
    checked here can only have come through the platform: that is what lets
    the native app hand the builder its own pieces.
    (The website's own path, with nothing provided, is what every other
    builder spec runs.) Test photos are made-up bytes, never real pictures.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const touched: string[] = [];
-/** Who the saved sign-in says is signed in (reset() asks it), and the
- *  account saves the builder makes (the cloud itself is not reached). */
+const touched: string[] = vi.hoisted(() => []);
+/** The made-up device's account: who its saved sign-in says is signed in
+ *  (reset() asks it), who is signed in now, the album rows the builder saves
+ *  and loads, and which albums' versions it asks for (the cloud itself is
+ *  never reached). */
 const cloud = vi.hoisted(() => ({
-  session: null as null | { user: { id: string } },
+  signedIn: null as null | string,
+  user: null as null | { id: string },
   saved: [] as Array<{ userId: string; data: { id?: string; occasion?: string | null } }>,
+  loaded: [] as Array<[string, string | undefined]>,
+  versionsAsked: [] as string[],
 }));
-vi.mock('../../lib/authContext', () => ({ useAuth: () => ({ user: null }) }));
-vi.mock('../../lib/supabase', () => ({ supabase: { auth: { getSession: async () => ({ data: { session: cloud.session } }) } } }));
-vi.mock('../../lib/useAlbumSync', async (importOriginal) => {
-  const real = await importOriginal<typeof import('../../lib/useAlbumSync')>();
-  const sync = {
-    save: async (userId: string, data: { id?: string; occasion?: string | null }) => {
-      cloud.saved.push({ userId, data });
-      return { success: true, updatedAt: '2026-10-28T00:00:00Z' };
-    },
-    load: async () => null,
-  };
-  return { ...real, useAlbumSync: () => sync };
-});
+// The website's account modules and quote pool: tripwires. The builder takes
+// all of it from the device now (BuilderPlatform.cloud / .quotes), so none of
+// these may even load.
+vi.mock('../../lib/authContext', () => { touched.push('lib/authContext'); return { useAuth: () => ({ user: null }) }; });
+vi.mock('../../lib/supabase', () => { touched.push('lib/supabase'); return { supabase: {} }; });
+vi.mock('../../lib/useAlbumSync', () => { touched.push('lib/useAlbumSync'); return {}; });
+vi.mock('../../lib/quotes', () => { touched.push('lib/quotes'); return {}; });
+vi.mock('./canvasMeasurer', () => ({
+  defaultMeasurer: () => { touched.push('canvas'); return null; },
+}));
 vi.mock('../../lib/useIndexedDBPhotos', () => ({
   useIndexedDBPhotos: () => { touched.push('IndexedDB'); throw new Error('the browser photo store was used'); },
   getImageDimensions: async () => { touched.push('getImageDimensions'); return { width: 0, height: 0 }; },
@@ -55,7 +61,7 @@ vi.mock('./exif', () => ({
 vi.mock('../../lib/defaultBuilderPlatform', () => import('../../lib/defaultBuilderPlatform.native'));
 
 import { useBuilderState, type BuilderActions } from './useBuilderState';
-import { BuilderPlatformContext, type BuilderPlatform, type KeyValueStore, type PickedPhoto, type StoredPhoto } from '../../shared/platform';
+import { BuilderPlatformContext, type BuilderPlatform, type KeyValueStore, type PickedPhoto, type StoredPhoto, type TextMeasurer } from '../../shared/platform';
 import { heicConverters } from '../../lib/heicPhoto';
 import { DRAFT_STORAGE_KEY } from '../../lib/localDraft';
 import { ALBUM_THEME_KEY } from '../../lib/albumTheme';
@@ -79,7 +85,31 @@ const TAKEN_AT = Date.UTC(2026, 8, 12, 12);
  *  what a pick showed (like a picker's URI, it may be gone next time). */
 function makeDevice() {
   const kept = new Map<string, StoredPhoto>();
-  const calls = { faces: [] as string[], sizes: [] as string[], checks: [] as string[], converted: [] as string[], released: [] as string[], dated: [] as string[], init: 0 };
+  const calls = { faces: [] as string[], sizes: [] as string[], checks: [] as string[], converted: [] as string[], released: [] as string[], dated: [] as string[], init: 0, fonts: [] as string[], occasions: [] as string[] };
+  /** This device measures words its own way: every letter three times as
+   *  wide as the font is tall (so a long caption must shrink to fit), and it
+   *  says which fonts it was asked for. */
+  const measurer: TextMeasurer = {
+    font: '',
+    measureText(text: string) {
+      calls.fonts.push(this.font);
+      return { width: text.length * 3 * Number(/(\d+(\.\d+)?)px/.exec(this.font)?.[1] ?? 16) };
+    },
+  };
+  let measures = true;
+  /** The album rows on this device's account (the cloud is never reached). */
+  const sync = {
+    save: async (userId: string, data: { id?: string; occasion?: string | null }) => {
+      cloud.saved.push({ userId, data });
+      return { success: true, updatedAt: '2026-10-28T00:00:00Z' };
+    },
+    load: async (userId: string, albumId?: string) => { cloud.loaded.push([userId, albumId]); return null; },
+    loadAll: async () => [],
+    deleteAlbum: async () => ({ success: true }),
+    loading: false,
+    error: null,
+    clearError: () => {},
+  };
   let convertNow!: () => void;
   const converting = new Promise<void>((r) => { convertNow = r; });
   let leave: (() => void) | null = null;
@@ -135,8 +165,23 @@ function makeDevice() {
       onLeave: (fn) => { leave = fn; return () => { leave = null; }; },
       onReturn: (fn) => { back = fn; return () => { back = null; }; },
     },
+    textMeasurer: () => (measures ? measurer : null),
+    quotes: { ensureThemeQuotes: async () => ['A line from this device'] },
+    occasionChanged: (occasion) => { calls.occasions.push(occasion); },
+    cloud: {
+      signedInUserId: async () => cloud.signedIn,
+      // No such album in this made-up cloud.
+      albumVersion: async (albumId) => { cloud.versionsAsked.push(albumId); return null; },
+      useUser: () => cloud.user,
+      useAlbumSync: () => sync,
+    },
   };
-  return { platform, kept, calls, convertNow: () => convertNow(), leave: () => leave?.(), listening: () => ({ leave: !!leave, back: !!back }), store: platform.deviceStore as ReturnType<typeof memoryStore>, session: platform.sessionStore as ReturnType<typeof memoryStore> };
+  return {
+    platform, kept, calls, convertNow: () => convertNow(), leave: () => leave?.(), listening: () => ({ leave: !!leave, back: !!back }),
+    store: platform.deviceStore as ReturnType<typeof memoryStore>, session: platform.sessionStore as ReturnType<typeof memoryStore>,
+    cantMeasure: () => { measures = false; },
+    comeBack: () => back?.(),
+  };
 }
 
 const page = (i: number, fill: number | null): AlbumPage => ({
@@ -183,8 +228,11 @@ beforeEach(() => {
   // The browser's own album and occasion: they must never open on this device.
   localStorage.setItem(DRAFT_STORAGE_KEY, draft('The browser album', [photo(0, 'blob:browser/p0')]));
   localStorage.setItem(ALBUM_THEME_KEY, 'Birthday');
-  cloud.session = null;
+  cloud.signedIn = null;
+  cloud.user = null;
   cloud.saved.length = 0;
+  cloud.loaded.length = 0;
+  cloud.versionsAsked.length = 0;
   device = makeDevice();
 });
 afterEach(async () => {
@@ -296,14 +344,51 @@ describe('the album builder on a device of its own (no browser pieces)', () => {
   it('the occasion is kept on this device: the album saved to the account carries it, and a new album clears it', async () => {
     device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://kept/p0')]));
     device.store.setItem(ALBUM_THEME_KEY, 'Wedding');
-    cloud.session = { user: { id: 'user-1' } };
+    cloud.signedIn = 'user-1';
     await open();
     // A new album: the one being put away is saved to the account first.
     await act(async () => { builder.reset(); });
     await settle();
     expect(cloud.saved.map((s) => [s.userId, s.data.id, s.data.occasion])).toEqual([['user-1', 'album-device', 'Wedding']]);
     expect(device.store.getItem(ALBUM_THEME_KEY)).toBeNull(); // Step 1 asks it again
+    expect(device.calls.occasions).toEqual(['']); // and the screens showing it are told
     expect(localStorage.getItem(ALBUM_THEME_KEY)).toBe('Birthday'); // the browser's, untouched
+    expect(touched).toEqual([]);
+  });
+
+  it('a caption is measured by this device: a long one shrinks to fit, and with no measurer nothing is said', async () => {
+    await open();
+    const words = 'The castle lights came on and none of us wanted this happy day to end so we stayed a little longer together';
+    let added!: ReturnType<BuilderActions['addTextElement']>;
+    await act(async () => { added = builder.addTextElement(undefined, undefined, words); });
+    expect(added.added).toBe(true);
+    expect(added.shrunk).toBe(true); // this device's letters are wide
+    expect(device.calls.fonts.length).toBeGreaterThan(0);
+    expect(device.calls.fonts.every((f) => /\dpx /.test(f))).toBe(true);
+    // A device that can't measure words: the caption goes in at its size.
+    device.cantMeasure();
+    device.calls.fonts.length = 0;
+    await act(async () => { added = builder.addTextElement(undefined, undefined, words); });
+    expect(added).toMatchObject({ added: true, shrunk: false, tooLong: false });
+    expect(device.calls.fonts).toEqual([]);
+    expect(touched).toEqual([]); // never the browser's canvas
+  });
+
+  it('the account is this device\'s: who is signed in, an album\'s version and its album rows', async () => {
+    device.store.setItem(DRAFT_STORAGE_KEY, draft('Device album', [photo(0, 'mem://kept/p0')]));
+    cloud.user = { id: 'user-1' };
+    await open();
+    expect(builder.user).toEqual({ id: 'user-1' });
+    // Back in the app: did the album move on on another device? One small
+    // read of its version, asked of this device's account.
+    cloud.versionsAsked.length = 0;
+    await act(async () => { device.comeBack(); });
+    await settle();
+    expect(cloud.versionsAsked).toEqual(['album-device']);
+    // A saved album opened by id comes from this device's album rows.
+    await act(async () => { await builder.loadAlbum('album-other'); });
+    expect(cloud.loaded).toContainEqual(['user-1', 'album-other']);
+    expect(touched).toEqual([]);
   });
 
   it('a new album clears this device\'s draft', async () => {

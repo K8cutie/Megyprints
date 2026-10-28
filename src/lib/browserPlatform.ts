@@ -6,11 +6,16 @@
    provided it uses this one: exactly what it called directly before (the
    browser's localStorage and sessionStorage, the IndexedDB photo store,
    face-api, the HEIC converter, the EXIF date, the photo check, the tab's
-   visibility). The builder gets it through lib/defaultBuilderPlatform.
+   visibility, and since Phase 3a the canvas text measure, lib/quotes, the
+   window event for the occasion, and for the account: lib/supabase's saved
+   session and the album version read (lib/albumCloud, on lib/supabase), the
+   sign-in context and lib/useAlbumSync). The builder gets it through
+   lib/defaultBuilderPlatform.
 
    Every piece calls the module it wraps AT CALL TIME, never when this file
-   loads, so a test that mocks or stubs one (vi.mock of useIndexedDBPhotos or
-   faceDetection, a stubbed globalThis.localStorage) still reaches the
+   loads, so a test that mocks or stubs one (vi.mock of useIndexedDBPhotos,
+   faceDetection, lib/quotes, lib/supabase, lib/authContext or
+   lib/useAlbumSync, a stubbed globalThis.localStorage) still reaches the
    builder exactly as it did.
 
    The website only ever hands the builder browser Files (addPhotos,
@@ -21,13 +26,21 @@
    of a TypeError from deep inside the browser.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import type { BuilderPlatform, KeyValueStore, PickedPhoto, StoredPhoto } from '../shared/platform';
+import type { BuilderPlatform, PickedPhoto, StoredPhoto } from '../shared/platform';
+import { browserLocalStore, browserSessionStore } from './browserStores';
 import { useIndexedDBPhotos, getImageDimensions, type StoredPhoto as IndexedDBPhoto } from './useIndexedDBPhotos';
 import { initFaceApi, detectFaceCenter } from '../pages/builder/faceDetection';
 import { readCaptureTime } from '../pages/builder/exif';
 import { toAlbumPhoto } from './heicPhoto';
 import { looksHeic, HEIC_CONVERTING_PREVIEW } from './heicRules';
 import { checkPhoto, facesForAllPhotos } from './photoCheckRunner';
+import { defaultMeasurer } from '../pages/builder/canvasMeasurer';
+import { ensureThemeQuotes } from './quotes';
+import { announceAlbumTheme } from './albumTheme';
+import { supabase } from './supabase';
+import { useAuth } from './authContext';
+import { useAlbumSync } from './useAlbumSync';
+import { albumVersionWith, signedInUserIdWith } from './albumCloud';
 
 const NOT_A_FILE = 'Website photos must be Files: the browser pieces were handed something else.';
 /** The File a website photo is; throws a plain error for anything else. */
@@ -43,18 +56,6 @@ function withFile<T>(photo: PickedPhoto, fn: (file: File) => Promise<T>): Promis
 }
 /** A photo from the IndexedDB store carries its bytes (blob). */
 const blobOf = (photo: StoredPhoto): Blob | undefined => (photo as Partial<IndexedDBPhoto>).blob;
-
-const browserLocalStore: KeyValueStore = {
-  getItem: (key) => localStorage.getItem(key),
-  setItem: (key, value) => localStorage.setItem(key, value),
-  removeItem: (key) => localStorage.removeItem(key),
-};
-
-const browserSessionStore: KeyValueStore = {
-  getItem: (key) => sessionStorage.getItem(key),
-  setItem: (key, value) => sessionStorage.setItem(key, value),
-  removeItem: (key) => sessionStorage.removeItem(key),
-};
 
 /** An <img>'s own size once it loads (the face auto-centre's photo box). */
 function pictureSize(url: string): Promise<{ width: number; height: number } | null> {
@@ -112,5 +113,17 @@ export const browserBuilderPlatform: BuilderPlatform = {
         window.removeEventListener('focus', onShow);
       };
     },
+  },
+  textMeasurer: () => defaultMeasurer(),
+  quotes: {
+    ensureThemeQuotes: (theme, min, opts) => ensureThemeQuotes(theme, min, opts),
+  },
+  occasionChanged: (occasion) => announceAlbumTheme(occasion),
+  cloud: {
+    // lib/supabase is read when the builder asks, never kept.
+    signedInUserId: () => signedInUserIdWith(supabase),
+    albumVersion: (albumId) => albumVersionWith(supabase, albumId),
+    useUser: () => useAuth().user,
+    useAlbumSync: () => useAlbumSync(),
   },
 };

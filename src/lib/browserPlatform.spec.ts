@@ -3,8 +3,32 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 // Face finding loads TensorFlow, which none of this needs.
 vi.mock('../pages/builder/faceDetection', () => ({ initFaceApi: async () => {}, detectFaceCenter: async () => null }));
 vi.mock('./photoCheckRunner', () => ({ checkPhoto: async () => null, facesForAllPhotos: () => false }));
+// The canvas text measure (null under jsdom) and the website's Supabase
+// client, made up, so the pieces built on them can be checked here.
+const canvas = vi.hoisted(() => ({ font: '', measureText: (text: string) => ({ width: text.length * 10 }) }));
+vi.mock('../pages/builder/canvasMeasurer', () => ({ defaultMeasurer: () => canvas }));
+const site = vi.hoisted(() => ({
+  session: null as null | { user: { id: string } },
+  row: null as null | { updated_at: string },
+  error: null as null | { message: string },
+  asked: [] as string[],
+}));
+vi.mock('./supabase', () => ({
+  supabase: {
+    auth: { getSession: async () => ({ data: { session: site.session }, error: null }) },
+    from: (table: string) => {
+      const chain = {
+        select: (cols: string) => { site.asked.push(`${table}.select(${cols})`); return chain; },
+        eq: (k: string, v: unknown) => { site.asked.push(`eq(${k}, ${String(v)})`); return chain; },
+        maybeSingle: async () => ({ data: site.row, error: site.error }),
+      };
+      return chain;
+    },
+  },
+}));
 
 import { browserBuilderPlatform } from './browserPlatform';
+import { captionFits } from '../pages/builder/textFit';
 import { HEIC_CONVERTING_PREVIEW } from './heicRules';
 import type { PickedPhoto } from '../shared/platform';
 
@@ -53,5 +77,39 @@ describe('website photos must be Files', () => {
     } catch (e) { thrown = e; }
     expect(thrown).toBeNull();
     for (const p of pending) await expect(p).rejects.toThrow(/Website photos must be Files/);
+  });
+});
+
+describe('the website measures captions with the canvas it always used (Phase 3a)', () => {
+  it('textMeasurer() is the same canvas measure textFit falls back to', () => {
+    expect(browserBuilderPlatform.textMeasurer()).toBe(canvas);
+  });
+  it('so a caption checked through the platform gets the same answer as before', () => {
+    const box = { w: 300, h: 40 };
+    const font = { fontSize: 20, fontFamily: 'DM Sans' };
+    const words = 'The castle lights came on and none of us wanted this happy day to end';
+    // textFit's own default (what the builder called before) and the platform's.
+    const before = captionFits(words, font, box);
+    expect(before).not.toBeNull(); // measured, not "can't tell"
+    expect(captionFits(words, font, box, browserBuilderPlatform.textMeasurer())).toEqual(before);
+  });
+});
+
+describe("the website's account pieces read lib/supabase exactly as the builder did (Phase 3a)", () => {
+  afterEach(() => { site.session = null; site.row = null; site.error = null; site.asked.length = 0; });
+  it('who is signed in comes from the saved session', async () => {
+    await expect(browserBuilderPlatform.cloud.signedInUserId()).resolves.toBeNull();
+    site.session = { user: { id: 'user-1' } };
+    await expect(browserBuilderPlatform.cloud.signedInUserId()).resolves.toBe('user-1');
+  });
+  it("an album's version is one small read of albums.updated_at by id", async () => {
+    site.row = { updated_at: '2026-10-29T01:02:03Z' };
+    await expect(browserBuilderPlatform.cloud.albumVersion('album-1')).resolves.toEqual({ updatedAt: '2026-10-29T01:02:03Z' });
+    expect(site.asked).toEqual(['albums.select(updated_at)', 'eq(id, album-1)']);
+  });
+  it('no such album is null (deleted on another device); a failed read is offline', async () => {
+    await expect(browserBuilderPlatform.cloud.albumVersion('album-1')).resolves.toBeNull();
+    site.error = { message: 'Failed to fetch' };
+    await expect(browserBuilderPlatform.cloud.albumVersion('album-1')).resolves.toBe('offline');
   });
 });

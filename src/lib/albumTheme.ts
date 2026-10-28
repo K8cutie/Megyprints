@@ -7,6 +7,12 @@
    Stored locally under one key that the quote engine (lib/quotes.ts) and the
    quote picker already read. No photos involved, so it stays private.
 
+   The rules (the key, the limits, reading and writing it in a device store)
+   live in albumThemeRules.ts, which the 2.0 app shares; everything there is
+   re-exported here, so the website imports this file as before. This file
+   adds the website's own pair (this browser's localStorage) and the window
+   event that tells the website's steps the occasion changed.
+
    The album builder (useBuilderState) reads and writes it through its
    device's own store (readAlbumThemeFrom / writeAlbumThemeTo with the
    platform's deviceStore), so in the 2.0 app the occasion is kept too, and a
@@ -15,59 +21,24 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { KeyValueStore } from '../shared/platform';
+import { ALBUM_THEME_EVENT, readAlbumThemeFrom, writeAlbumThemeTo } from './albumThemeRules';
 
-export const ALBUM_THEME_KEY = 'megy-album-theme';
-
-/** Quick picks. Each label round-trips through curatedThemeFor's alias map
- *  (lib/quotes.ts), so a pick lands on its curated quote pool with no new
- *  plumbing; anything else goes through the free-text path. */
-export const COMMON_THEMES = ['Wedding', 'Baptism', 'Birthday', 'Baby', 'Graduation', 'Family', 'Vacation'] as const;
-
-/** Shortest theme the step accepts ("Me" is a theme; "" and "x" are not). */
-export const MIN_THEME_LENGTH = 2;
-export const MAX_THEME_LENGTH = 40;
-
-/** The occasion kept in `store` ('' when none, or the store can't be read). */
-export function readAlbumThemeFrom(store: Pick<KeyValueStore, 'getItem'>): string {
-  try { return store.getItem(ALBUM_THEME_KEY) || ''; } catch { return ''; }
-}
+export * from './albumThemeRules';
 
 /** The occasion this browser keeps (the website's own steps). */
 export function readAlbumTheme(): string {
   try { return readAlbumThemeFrom(localStorage); } catch { return ''; }
 }
 
-/** Fired when the occasion changes outside the step that asks it (an album
- *  opened from the cloud brings its own): the steps showing it re-read. */
-export const ALBUM_THEME_EVENT = 'megy-album-theme';
-
-/** Keep the occasion in `store` ('' forgets it), and tell the steps showing
- *  it (website: a window event; nothing to tell where there is no window). */
-export function writeAlbumThemeTo(store: Pick<KeyValueStore, 'setItem' | 'removeItem'>, v: string): void {
-  const clean = cleanAlbumTheme(v);
-  try {
-    if (clean) store.setItem(ALBUM_THEME_KEY, clean); else store.removeItem(ALBUM_THEME_KEY);
-  } catch { /* storage blocked or full: not kept */ }
-  try { window.dispatchEvent(new CustomEvent(ALBUM_THEME_EVENT, { detail: clean })); } catch { /* no window */ }
+/** Tell the website's steps showing the occasion that it changed (a window
+ *  event they listen for); nothing to tell where there is no window. */
+export function announceAlbumTheme(occasion: string): void {
+  try { window.dispatchEvent(new CustomEvent(ALBUM_THEME_EVENT, { detail: occasion })); } catch { /* no window */ }
 }
 
 /** Keep the occasion in this browser (the website's own steps). */
 export function writeAlbumTheme(v: string): void {
   let store: Pick<KeyValueStore, 'setItem' | 'removeItem'>;
   try { store = localStorage; } catch { store = { setItem: () => {}, removeItem: () => {} }; }
-  writeAlbumThemeTo(store, v);
-}
-
-/** Trim, collapse whitespace, cap the length. Never throws. */
-export function cleanAlbumTheme(v: string): string {
-  return (v || '').replace(/\s+/g, ' ').trim().slice(0, MAX_THEME_LENGTH);
-}
-
-/** The gate the wizard's Next button and isStepComplete share. */
-export function isAlbumThemeReady(v: string): boolean {
-  return cleanAlbumTheme(v).length >= MIN_THEME_LENGTH;
-}
-
-export function isCommonTheme(v: string): boolean {
-  return (COMMON_THEMES as readonly string[]).includes(cleanAlbumTheme(v));
+  writeAlbumThemeTo(store, v, announceAlbumTheme);
 }

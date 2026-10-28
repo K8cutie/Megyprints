@@ -8,6 +8,7 @@ import { saveAlbumRow, serializeAlbum } from './useAlbumSync';
 import { DRAFT_STORAGE_KEY } from './localDraft';
 import { draftAlbumForAccount, type StoredDraft } from './draftAlbum';
 import { albumContentKey, draftSyncRecord, readSyncRecord, toDraftSync } from './albumSyncRecord';
+import { browserLocalStore } from './browserStores';
 
 /** What saving the draft to an account came to (saveDraftToAccount). */
 export type DraftSaveOutcome =
@@ -30,7 +31,7 @@ export async function saveDraftToAccount(userId: string, albumId: string): Promi
   if (!album?.id) return 'failed';
   let stored: StoredDraft;
   try { stored = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY) || '{}') as StoredDraft; } catch { return 'failed'; }
-  const rec = draftSyncRecord(album.id, stored.sync) ?? readSyncRecord(album.id);
+  const rec = draftSyncRecord(album.id, stored.sync) ?? readSyncRecord(album.id, browserLocalStore);
   let res;
   try {
     res = await saveAlbumRow(userId, album, { base: rec?.base ?? null });
