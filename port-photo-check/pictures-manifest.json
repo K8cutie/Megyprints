@@ -1,0 +1,1512 @@
+[
+ {
+  "file": "pc-scene-01.jpg",
+  "width": 4032,
+  "height": 3024,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789174800000,
+  "bytes": 2170852
+ },
+ {
+  "file": "pc-blur-01-1p5px.jpg",
+  "width": 4032,
+  "height": 3024,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-01.jpg",
+  "blurPx": 1.5,
+  "capturedAt": 1789174820000,
+  "bytes": 795053
+ },
+ {
+  "file": "pc-turned-01-o6.jpg",
+  "width": 4032,
+  "height": 3024,
+  "group": "synthetic",
+  "kind": "turned",
+  "base": "pc-scene-01.jpg",
+  "orientation": 6,
+  "capturedAt": 1789174820000,
+  "bytes": 2179098
+ },
+ {
+  "file": "pc-scene-02.jpg",
+  "width": 3024,
+  "height": 4032,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789175400000,
+  "bytes": 2176166
+ },
+ {
+  "file": "pc-blur-02-2px.jpg",
+  "width": 3024,
+  "height": 4032,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-02.jpg",
+  "blurPx": 2,
+  "capturedAt": 1789175420000,
+  "bytes": 625917
+ },
+ {
+  "file": "pc-turned-02-o8.jpg",
+  "width": 3024,
+  "height": 4032,
+  "group": "synthetic",
+  "kind": "turned",
+  "base": "pc-scene-02.jpg",
+  "orientation": 8,
+  "capturedAt": 1789175420000,
+  "bytes": 2183145
+ },
+ {
+  "file": "pc-scene-03.jpg",
+  "width": 4000,
+  "height": 3000,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789176000000,
+  "bytes": 2159358
+ },
+ {
+  "file": "pc-blur-03-3px.jpg",
+  "width": 4000,
+  "height": 3000,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-03.jpg",
+  "blurPx": 3,
+  "capturedAt": 1789176020000,
+  "bytes": 549864
+ },
+ {
+  "file": "pc-turned-03-o3.jpg",
+  "width": 4000,
+  "height": 3000,
+  "group": "synthetic",
+  "kind": "turned",
+  "base": "pc-scene-03.jpg",
+  "orientation": 3,
+  "capturedAt": 1789176020000,
+  "bytes": 2160007
+ },
+ {
+  "file": "pc-scene-04.jpg",
+  "width": 3264,
+  "height": 2448,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789176600000,
+  "bytes": 1474834
+ },
+ {
+  "file": "pc-blur-04-4px.jpg",
+  "width": 3264,
+  "height": 2448,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-04.jpg",
+  "blurPx": 4,
+  "capturedAt": 1789176620000,
+  "bytes": 386013
+ },
+ {
+  "file": "pc-turned-04-o2.jpg",
+  "width": 3264,
+  "height": 2448,
+  "group": "synthetic",
+  "kind": "turned",
+  "base": "pc-scene-04.jpg",
+  "orientation": 2,
+  "capturedAt": 1789176620000,
+  "bytes": 1476153
+ },
+ {
+  "file": "pc-scene-05.jpg",
+  "width": 4624,
+  "height": 3468,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789177200000,
+  "bytes": 2849073
+ },
+ {
+  "file": "pc-blur-05-6px.jpg",
+  "width": 4624,
+  "height": 3468,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-05.jpg",
+  "blurPx": 6,
+  "capturedAt": 1789177220000,
+  "bytes": 647858
+ },
+ {
+  "file": "pc-scene-06.jpg",
+  "width": 3000,
+  "height": 3000,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789177800000,
+  "bytes": 1651179
+ },
+ {
+  "file": "pc-blur-06-8px.jpg",
+  "width": 3000,
+  "height": 3000,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-06.jpg",
+  "blurPx": 8,
+  "capturedAt": 1789177820000,
+  "bytes": 382243
+ },
+ {
+  "file": "pc-scene-07.jpg",
+  "width": 4000,
+  "height": 2250,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789178400000,
+  "bytes": 1653974
+ },
+ {
+  "file": "pc-blur-07-2p5px.jpg",
+  "width": 4000,
+  "height": 2250,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-07.jpg",
+  "blurPx": 2.5,
+  "capturedAt": 1789178420000,
+  "bytes": 472647
+ },
+ {
+  "file": "pc-scene-08.jpg",
+  "width": 2448,
+  "height": 3264,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789179000000,
+  "bytes": 1453762
+ },
+ {
+  "file": "pc-blur-08-5px.jpg",
+  "width": 2448,
+  "height": 3264,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-08.jpg",
+  "blurPx": 5,
+  "capturedAt": 1789179020000,
+  "bytes": 338609
+ },
+ {
+  "file": "pc-scene-09.jpg",
+  "width": 1600,
+  "height": 1200,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789179600000,
+  "bytes": 403820
+ },
+ {
+  "file": "pc-blur-09-10px.jpg",
+  "width": 1600,
+  "height": 1200,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-09.jpg",
+  "blurPx": 10,
+  "capturedAt": 1789179620000,
+  "bytes": 117482
+ },
+ {
+  "file": "pc-scene-10.jpg",
+  "width": 4080,
+  "height": 3060,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789180200000,
+  "bytes": 2231930
+ },
+ {
+  "file": "pc-blur-10-3p5px.jpg",
+  "width": 4080,
+  "height": 3060,
+  "group": "synthetic",
+  "kind": "blur",
+  "base": "pc-scene-10.jpg",
+  "blurPx": 3.5,
+  "capturedAt": 1789180220000,
+  "bytes": 538609
+ },
+ {
+  "file": "pc-scene-11.jpg",
+  "width": 3468,
+  "height": 4624,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789180800000,
+  "bytes": 2837302
+ },
+ {
+  "file": "pc-near-11.jpg",
+  "width": 3468,
+  "height": 4624,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-11.jpg",
+  "move": {
+   "dx": 0.01,
+   "dy": 0,
+   "s": 1,
+   "b": 1
+  },
+  "capturedAt": 1789180820000,
+  "bytes": 2838077
+ },
+ {
+  "file": "pc-scene-12.jpg",
+  "width": 4032,
+  "height": 3024,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789181400000,
+  "bytes": 2167632
+ },
+ {
+  "file": "pc-near-12.jpg",
+  "width": 4032,
+  "height": 3024,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-12.jpg",
+  "move": {
+   "dx": -0.02,
+   "dy": 0.01,
+   "s": 1.02,
+   "b": 1.04
+  },
+  "capturedAt": 1789181420000,
+  "bytes": 2169422
+ },
+ {
+  "file": "pc-scene-13.jpg",
+  "width": 2250,
+  "height": 4000,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789182000000,
+  "bytes": 1670708
+ },
+ {
+  "file": "pc-near-13.jpg",
+  "width": 2250,
+  "height": 4000,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-13.jpg",
+  "move": {
+   "dx": 0,
+   "dy": -0.015,
+   "s": 1,
+   "b": 0.96
+  },
+  "capturedAt": 1789182020000,
+  "bytes": 1659914
+ },
+ {
+  "file": "pc-scene-14.jpg",
+  "width": 3000,
+  "height": 4000,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789182600000,
+  "bytes": 2186447
+ },
+ {
+  "file": "pc-near-14.jpg",
+  "width": 3000,
+  "height": 4000,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-14.jpg",
+  "move": {
+   "dx": 0.03,
+   "dy": 0,
+   "s": 1.01,
+   "b": 1
+  },
+  "capturedAt": 1789182620000,
+  "bytes": 2181254
+ },
+ {
+  "file": "pc-scene-15.jpg",
+  "width": 4000,
+  "height": 3000,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789183200000,
+  "bytes": 2135997
+ },
+ {
+  "file": "pc-near-15.jpg",
+  "width": 4000,
+  "height": 3000,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-15.jpg",
+  "move": {
+   "dx": -0.01,
+   "dy": -0.01,
+   "s": 0.99,
+   "b": 1.06
+  },
+  "capturedAt": 1789183220000,
+  "bytes": 2142492
+ },
+ {
+  "file": "pc-scene-16.jpg",
+  "width": 3024,
+  "height": 4032,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789183800000,
+  "bytes": 2225722
+ },
+ {
+  "file": "pc-near-16.jpg",
+  "width": 3024,
+  "height": 4032,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-16.jpg",
+  "move": {
+   "dx": 0.015,
+   "dy": 0.02,
+   "s": 1,
+   "b": 0.95
+  },
+  "capturedAt": 1789183820000,
+  "bytes": 2201118
+ },
+ {
+  "file": "pc-scene-17.jpg",
+  "width": 3264,
+  "height": 2448,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789184400000,
+  "bytes": 1463803
+ },
+ {
+  "file": "pc-near-17.jpg",
+  "width": 3264,
+  "height": 2448,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-17.jpg",
+  "move": {
+   "dx": 0,
+   "dy": 0,
+   "s": 1.03,
+   "b": 1
+  },
+  "capturedAt": 1789184420000,
+  "bytes": 1468161
+ },
+ {
+  "file": "pc-scene-18.jpg",
+  "width": 4032,
+  "height": 3024,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789185000000,
+  "bytes": 2198657
+ },
+ {
+  "file": "pc-near-18.jpg",
+  "width": 4032,
+  "height": 3024,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-18.jpg",
+  "move": {
+   "dx": -0.025,
+   "dy": 0,
+   "s": 1,
+   "b": 1.03
+  },
+  "capturedAt": 1789185020000,
+  "bytes": 2199170
+ },
+ {
+  "file": "pc-scene-19.jpg",
+  "width": 3000,
+  "height": 3000,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789185600000,
+  "bytes": 1618160
+ },
+ {
+  "file": "pc-near-19.jpg",
+  "width": 3000,
+  "height": 3000,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-19.jpg",
+  "move": {
+   "dx": 0.02,
+   "dy": -0.02,
+   "s": 1.02,
+   "b": 0.97
+  },
+  "capturedAt": 1789185620000,
+  "bytes": 1612123
+ },
+ {
+  "file": "pc-scene-20.jpg",
+  "width": 4080,
+  "height": 3060,
+  "group": "synthetic",
+  "kind": "scene",
+  "base": null,
+  "capturedAt": 1789186200000,
+  "bytes": 2230214
+ },
+ {
+  "file": "pc-near-20.jpg",
+  "width": 4080,
+  "height": 3060,
+  "group": "synthetic",
+  "kind": "near",
+  "base": "pc-scene-20.jpg",
+  "move": {
+   "dx": 0.005,
+   "dy": 0.005,
+   "s": 1,
+   "b": 1.08
+  },
+  "capturedAt": 1789186220000,
+  "bytes": 2246937
+ },
+ {
+  "file": "megy-sample-01.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789192800000,
+  "bytes": 275896
+ },
+ {
+  "file": "megy-sample-02.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789193400000,
+  "bytes": 256724
+ },
+ {
+  "file": "megy-sample-03.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789194000000,
+  "bytes": 351097
+ },
+ {
+  "file": "megy-sample-04.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789194600000,
+  "bytes": 300983
+ },
+ {
+  "file": "megy-sample-05.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789195200000,
+  "bytes": 328332
+ },
+ {
+  "file": "megy-sample-06.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789195800000,
+  "bytes": 270432
+ },
+ {
+  "file": "megy-sample-07.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789196400000,
+  "bytes": 333430
+ },
+ {
+  "file": "megy-sample-08.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789197000000,
+  "bytes": 407145
+ },
+ {
+  "file": "megy-sample-09.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789197600000,
+  "bytes": 213172
+ },
+ {
+  "file": "megy-sample-10.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789198200000,
+  "bytes": 255031
+ },
+ {
+  "file": "megy-sample-11.jpg",
+  "width": 1600,
+  "height": 900,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789198800000,
+  "bytes": 124409
+ },
+ {
+  "file": "megy-sample-12.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789199400000,
+  "bytes": 171926
+ },
+ {
+  "file": "megy-sample-13.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789200000000,
+  "bytes": 252095
+ },
+ {
+  "file": "megy-sample-14.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789200600000,
+  "bytes": 207596
+ },
+ {
+  "file": "megy-sample-15.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789201200000,
+  "bytes": 238623
+ },
+ {
+  "file": "megy-sample-16.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789201800000,
+  "bytes": 207963
+ },
+ {
+  "file": "megy-sample-17.jpg",
+  "width": 1600,
+  "height": 1373,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789202400000,
+  "bytes": 223674
+ },
+ {
+  "file": "megy-sample-18.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789203000000,
+  "bytes": 243683
+ },
+ {
+  "file": "megy-sample-19.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789203600000,
+  "bytes": 372254
+ },
+ {
+  "file": "megy-sample-20.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789204200000,
+  "bytes": 361301
+ },
+ {
+  "file": "megy-sample-21.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789204800000,
+  "bytes": 265705
+ },
+ {
+  "file": "megy-sample-22.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789205400000,
+  "bytes": 124027
+ },
+ {
+  "file": "megy-sample-23.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789206000000,
+  "bytes": 222380
+ },
+ {
+  "file": "megy-sample-24.jpg",
+  "width": 1069,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789206600000,
+  "bytes": 169153
+ },
+ {
+  "file": "megy-sample-25.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789207200000,
+  "bytes": 177462
+ },
+ {
+  "file": "megy-sample-26.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789207800000,
+  "bytes": 199652
+ },
+ {
+  "file": "megy-sample-27.jpg",
+  "width": 1600,
+  "height": 900,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789208400000,
+  "bytes": 89804
+ },
+ {
+  "file": "megy-sample-28.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789209000000,
+  "bytes": 227569
+ },
+ {
+  "file": "megy-sample-29.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789209600000,
+  "bytes": 236988
+ },
+ {
+  "file": "megy-sample-30.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789210200000,
+  "bytes": 279302
+ },
+ {
+  "file": "megy-sample-31.jpg",
+  "width": 1600,
+  "height": 1071,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789210800000,
+  "bytes": 213081
+ },
+ {
+  "file": "megy-sample-32.jpg",
+  "width": 1600,
+  "height": 1315,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789211400000,
+  "bytes": 306931
+ },
+ {
+  "file": "megy-sample-33.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789212000000,
+  "bytes": 374640
+ },
+ {
+  "file": "megy-sample-34.jpg",
+  "width": 1600,
+  "height": 1176,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789212600000,
+  "bytes": 217153
+ },
+ {
+  "file": "megy-sample-35.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789213200000,
+  "bytes": 278590
+ },
+ {
+  "file": "megy-sample-36.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789213800000,
+  "bytes": 196598
+ },
+ {
+  "file": "megy-sample-37.jpg",
+  "width": 1600,
+  "height": 1008,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789214400000,
+  "bytes": 160182
+ },
+ {
+  "file": "megy-sample-38.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789215000000,
+  "bytes": 213878
+ },
+ {
+  "file": "megy-sample-39.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789215600000,
+  "bytes": 253392
+ },
+ {
+  "file": "megy-sample-40.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789216200000,
+  "bytes": 204019
+ },
+ {
+  "file": "megy-sample-41.jpg",
+  "width": 1420,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789216800000,
+  "bytes": 319963
+ },
+ {
+  "file": "megy-sample-42.jpg",
+  "width": 1600,
+  "height": 1280,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789217400000,
+  "bytes": 286374
+ },
+ {
+  "file": "megy-sample-43.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789218000000,
+  "bytes": 290424
+ },
+ {
+  "file": "megy-sample-44.jpg",
+  "width": 1600,
+  "height": 1064,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789218600000,
+  "bytes": 269259
+ },
+ {
+  "file": "megy-sample-45.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789219200000,
+  "bytes": 312916
+ },
+ {
+  "file": "megy-sample-46.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789219800000,
+  "bytes": 247696
+ },
+ {
+  "file": "megy-sample-47.jpg",
+  "width": 1061,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789220400000,
+  "bytes": 328923
+ },
+ {
+  "file": "megy-sample-48.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789221000000,
+  "bytes": 256820
+ },
+ {
+  "file": "megy-sample-49.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789221600000,
+  "bytes": 266168
+ },
+ {
+  "file": "megy-sample-50.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789222200000,
+  "bytes": 227982
+ },
+ {
+  "file": "megy-sample-51.jpg",
+  "width": 1600,
+  "height": 900,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789222800000,
+  "bytes": 224514
+ },
+ {
+  "file": "megy-sample-52.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789223400000,
+  "bytes": 173167
+ },
+ {
+  "file": "megy-sample-53.jpg",
+  "width": 1412,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789224000000,
+  "bytes": 274627
+ },
+ {
+  "file": "megy-sample-54.jpg",
+  "width": 1600,
+  "height": 900,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789224600000,
+  "bytes": 210988
+ },
+ {
+  "file": "megy-sample-55.jpg",
+  "width": 1600,
+  "height": 900,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789225200000,
+  "bytes": 209303
+ },
+ {
+  "file": "megy-sample-56.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789225800000,
+  "bytes": 205865
+ },
+ {
+  "file": "megy-sample-57.jpg",
+  "width": 1068,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789226400000,
+  "bytes": 180056
+ },
+ {
+  "file": "megy-sample-58.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789227000000,
+  "bytes": 267835
+ },
+ {
+  "file": "megy-sample-59.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789227600000,
+  "bytes": 318830
+ },
+ {
+  "file": "megy-sample-60.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789228200000,
+  "bytes": 371330
+ },
+ {
+  "file": "megy-sample-61.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789228800000,
+  "bytes": 236730
+ },
+ {
+  "file": "megy-sample-62.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789229400000,
+  "bytes": 306063
+ },
+ {
+  "file": "megy-sample-63.jpg",
+  "width": 1038,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789230000000,
+  "bytes": 215062
+ },
+ {
+  "file": "megy-sample-64.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789230600000,
+  "bytes": 222808
+ },
+ {
+  "file": "megy-sample-65.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789231200000,
+  "bytes": 195704
+ },
+ {
+  "file": "megy-sample-66.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789231800000,
+  "bytes": 255172
+ },
+ {
+  "file": "megy-sample-67.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789232400000,
+  "bytes": 218827
+ },
+ {
+  "file": "megy-sample-68.jpg",
+  "width": 1600,
+  "height": 900,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789233000000,
+  "bytes": 204096
+ },
+ {
+  "file": "megy-sample-69.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789233600000,
+  "bytes": 222613
+ },
+ {
+  "file": "megy-sample-70.jpg",
+  "width": 1161,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789234200000,
+  "bytes": 431549
+ },
+ {
+  "file": "megy-sample-71.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789234800000,
+  "bytes": 341610
+ },
+ {
+  "file": "megy-sample-72.jpg",
+  "width": 1234,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789235400000,
+  "bytes": 229684
+ },
+ {
+  "file": "megy-sample-73.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789236000000,
+  "bytes": 223627
+ },
+ {
+  "file": "megy-sample-74.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789236600000,
+  "bytes": 335232
+ },
+ {
+  "file": "megy-sample-75.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789237200000,
+  "bytes": 268685
+ },
+ {
+  "file": "megy-sample-76.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789237800000,
+  "bytes": 311206
+ },
+ {
+  "file": "megy-sample-77.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789238400000,
+  "bytes": 287112
+ },
+ {
+  "file": "megy-sample-78.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample",
+  "kind": "sample",
+  "base": null,
+  "capturedAt": 1789239000000,
+  "bytes": 208239
+ },
+ {
+  "file": "pc-sblur-03-2px.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample-copy",
+  "kind": "blur",
+  "base": "megy-sample-03.jpg",
+  "blurPx": 2,
+  "capturedAt": 1789194020000,
+  "bytes": 263335
+ },
+ {
+  "file": "pc-sblur-09-3px.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample-copy",
+  "kind": "blur",
+  "base": "megy-sample-09.jpg",
+  "blurPx": 3,
+  "capturedAt": 1789197620000,
+  "bytes": 198817
+ },
+ {
+  "file": "pc-sblur-15-4px.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample-copy",
+  "kind": "blur",
+  "base": "megy-sample-15.jpg",
+  "blurPx": 4,
+  "capturedAt": 1789201220000,
+  "bytes": 170991
+ },
+ {
+  "file": "pc-sblur-22-1p5px.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample-copy",
+  "kind": "blur",
+  "base": "megy-sample-22.jpg",
+  "blurPx": 1.5,
+  "capturedAt": 1789205420000,
+  "bytes": 133661
+ },
+ {
+  "file": "pc-sblur-30-6px.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample-copy",
+  "kind": "blur",
+  "base": "megy-sample-30.jpg",
+  "blurPx": 6,
+  "capturedAt": 1789210220000,
+  "bytes": 143231
+ },
+ {
+  "file": "pc-sblur-41-2p5px.jpg",
+  "width": 1420,
+  "height": 1600,
+  "group": "sample-copy",
+  "kind": "blur",
+  "base": "megy-sample-41.jpg",
+  "blurPx": 2.5,
+  "capturedAt": 1789216820000,
+  "bytes": 264334
+ },
+ {
+  "file": "pc-sblur-52-5px.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample-copy",
+  "kind": "blur",
+  "base": "megy-sample-52.jpg",
+  "blurPx": 5,
+  "capturedAt": 1789223420000,
+  "bytes": 122480
+ },
+ {
+  "file": "pc-sblur-66-8px.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample-copy",
+  "kind": "blur",
+  "base": "megy-sample-66.jpg",
+  "blurPx": 8,
+  "capturedAt": 1789231820000,
+  "bytes": 144848
+ },
+ {
+  "file": "pc-snear-05.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample-copy",
+  "kind": "near",
+  "base": "megy-sample-05.jpg",
+  "move": {
+   "dx": 0.01,
+   "dy": 0,
+   "s": 1,
+   "b": 1
+  },
+  "capturedAt": 1789195220000,
+  "bytes": 553225
+ },
+ {
+  "file": "pc-snear-12.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample-copy",
+  "kind": "near",
+  "base": "megy-sample-12.jpg",
+  "move": {
+   "dx": -0.02,
+   "dy": 0.01,
+   "s": 1.02,
+   "b": 1.04
+  },
+  "capturedAt": 1789199420000,
+  "bytes": 399078
+ },
+ {
+  "file": "pc-snear-19.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample-copy",
+  "kind": "near",
+  "base": "megy-sample-19.jpg",
+  "move": {
+   "dx": 0,
+   "dy": -0.015,
+   "s": 1,
+   "b": 0.96
+  },
+  "capturedAt": 1789203620000,
+  "bytes": 628354
+ },
+ {
+  "file": "pc-snear-27.jpg",
+  "width": 1600,
+  "height": 900,
+  "group": "sample-copy",
+  "kind": "near",
+  "base": "megy-sample-27.jpg",
+  "move": {
+   "dx": 0.03,
+   "dy": 0,
+   "s": 1.01,
+   "b": 1
+  },
+  "capturedAt": 1789208420000,
+  "bytes": 285079
+ },
+ {
+  "file": "pc-snear-35.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample-copy",
+  "kind": "near",
+  "base": "megy-sample-35.jpg",
+  "move": {
+   "dx": -0.01,
+   "dy": -0.01,
+   "s": 0.99,
+   "b": 1.06
+  },
+  "capturedAt": 1789213220000,
+  "bytes": 479412
+ },
+ {
+  "file": "pc-snear-44.jpg",
+  "width": 1600,
+  "height": 1064,
+  "group": "sample-copy",
+  "kind": "near",
+  "base": "megy-sample-44.jpg",
+  "move": {
+   "dx": 0.015,
+   "dy": 0.02,
+   "s": 1,
+   "b": 0.95
+  },
+  "capturedAt": 1789218620000,
+  "bytes": 497508
+ },
+ {
+  "file": "pc-snear-58.jpg",
+  "width": 1067,
+  "height": 1600,
+  "group": "sample-copy",
+  "kind": "near",
+  "base": "megy-sample-58.jpg",
+  "move": {
+   "dx": 0,
+   "dy": 0,
+   "s": 1.03,
+   "b": 1
+  },
+  "capturedAt": 1789227020000,
+  "bytes": 482849
+ },
+ {
+  "file": "pc-snear-71.jpg",
+  "width": 1600,
+  "height": 1067,
+  "group": "sample-copy",
+  "kind": "near",
+  "base": "megy-sample-71.jpg",
+  "move": {
+   "dx": -0.025,
+   "dy": 0,
+   "s": 1,
+   "b": 1.03
+  },
+  "capturedAt": 1789234820000,
+  "bytes": 570070
+ }
+]

@@ -1,0 +1,6126 @@
+{
+ "when": "2026-10-28T07:24:20.638Z",
+ "faceApiBackend": "cpu",
+ "rows": [
+  {
+   "file": "pc-scene-01.jpg",
+   "width": 4032,
+   "height": 3024,
+   "check": {
+    "v": 1,
+    "sharp": 307.14991526171605,
+    "hash": "43bd4a5b8abd3931",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 67,
+   "fullCheckMs": 1197,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1394,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-01-1p5px.jpg",
+   "width": 4032,
+   "height": 3024,
+   "check": {
+    "v": 1,
+    "sharp": 209.06021898395326,
+    "hash": "6b1d4a5b8abd3931",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 56.39999997615814,
+   "fullCheckMs": 1140.8000000715256,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 695.6000000238419,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-turned-01-o6.jpg",
+   "width": 4032,
+   "height": 3024,
+   "check": {
+    "v": 1,
+    "sharp": 307.2039838116258,
+    "hash": "53bd4a5b8abd3931",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 53,
+   "fullCheckMs": 1144.2000000476837,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 790,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-02.jpg",
+   "width": 3024,
+   "height": 4032,
+   "check": {
+    "v": 1,
+    "sharp": 295.2634461434754,
+    "hash": "b9195aa8c9d391a9",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 50.299999952316284,
+   "fullCheckMs": 1137.5,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 709.7999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-02-2px.jpg",
+   "width": 3024,
+   "height": 4032,
+   "check": {
+    "v": 1,
+    "sharp": 148.03694202767483,
+    "hash": "2d295aa8c9d391a9",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 39.200000047683716,
+   "fullCheckMs": 1122.7000000476837,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 710.8999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-turned-02-o8.jpg",
+   "width": 3024,
+   "height": 4032,
+   "check": {
+    "v": 1,
+    "sharp": 295.09257541768494,
+    "hash": "b41d5aa8c9d391a9",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 49.39999997615814,
+   "fullCheckMs": 1160.5,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 801.9000000953674,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-03.jpg",
+   "width": 4000,
+   "height": 3000,
+   "check": {
+    "v": 1,
+    "sharp": 359.0723253474158,
+    "hash": "c104b222acb61963",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 56.09999990463257,
+   "fullCheckMs": 1134.6000000238419,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 732.3999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-03-3px.jpg",
+   "width": 4000,
+   "height": 3000,
+   "check": {
+    "v": 1,
+    "sharp": 91.08210948319368,
+    "hash": "c505b222acb61963",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 34,
+   "fullCheckMs": 1161.7000000476837,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1010.2999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-turned-03-o3.jpg",
+   "width": 4000,
+   "height": 3000,
+   "check": {
+    "v": 1,
+    "sharp": 359.5219827882609,
+    "hash": "c104b222acb61963",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 49.60000002384186,
+   "fullCheckMs": 1287.3000000715256,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 827.9000000953674,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-04.jpg",
+   "width": 3264,
+   "height": 2448,
+   "check": {
+    "v": 1,
+    "sharp": 411.4588474739453,
+    "hash": "e2e4ceacbc4a95b1",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 41.200000047683716,
+   "fullCheckMs": 1245.7999999523163,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 771.3000000715256,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-04-4px.jpg",
+   "width": 3264,
+   "height": 2448,
+   "check": {
+    "v": 1,
+    "sharp": 53.04362549849663,
+    "hash": "0b644eacbc4a95b1",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 25.700000047683716,
+   "fullCheckMs": 1244.3999999761581,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 737.6000000238419,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-turned-04-o2.jpg",
+   "width": 3264,
+   "height": 2448,
+   "check": {
+    "v": 1,
+    "sharp": 411.6053227251446,
+    "hash": "62e4ceacbc4a95b1",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 34.699999928474426,
+   "fullCheckMs": 1225.8000000715256,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 778.8000000715256,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-05.jpg",
+   "width": 4624,
+   "height": 3468,
+   "check": {
+    "v": 1,
+    "sharp": 387.1286739716643,
+    "hash": "b9b4cc8ceecd5377",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 71.09999990463257,
+   "fullCheckMs": 1319.4000000953674,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1136.6999999284744,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-05-6px.jpg",
+   "width": 4624,
+   "height": 3468,
+   "check": {
+    "v": 1,
+    "sharp": 37.78361057891525,
+    "hash": "39b4cd8ceecd5377",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 42.39999997615814,
+   "fullCheckMs": 1282.6000000238419,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 792.7000000476837,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-06.jpg",
+   "width": 3000,
+   "height": 3000,
+   "check": {
+    "v": 1,
+    "sharp": 351.6613346532405,
+    "hash": "566c74d4dc8a1627",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 63.300000071525574,
+   "fullCheckMs": 1265.8999999761581,
+   "faces": {
+    "w": 800,
+    "h": 800,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.39706117435143035,
+    "y": 0.829682502433505
+   },
+   "centreMs": 763.6000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.3020095814598196,
+     "y": 0.7382368811506279,
+     "width": 0.19010318578322147,
+     "height": 0.18289124256575418,
+     "score": 0.44361232240879783
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-06-8px.jpg",
+   "width": 3000,
+   "height": 3000,
+   "check": {
+    "v": 1,
+    "sharp": 5.309294710377762,
+    "hash": "556c74d4dd8a1627",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 30.299999952316284,
+   "fullCheckMs": 1223.3999999761581,
+   "faces": {
+    "w": 800,
+    "h": 800,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.3947258172765258,
+    "y": 0.8231990314932819
+   },
+   "centreMs": 766,
+   "centreBoxes": [
+    {
+     "x": 0.3003459482664965,
+     "y": 0.7296318458196921,
+     "width": 0.18875973802005858,
+     "height": 0.18713437134717925,
+     "score": 0.39904177965751103
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-07.jpg",
+   "width": 4000,
+   "height": 2250,
+   "check": {
+    "v": 1,
+    "sharp": 426.89482172952376,
+    "hash": "5552dbb946c7965a",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 52.300000071525574,
+   "fullCheckMs": 1342.5999999046326,
+   "faces": {
+    "w": 800,
+    "h": 450,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 790.7999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-07-2p5px.jpg",
+   "width": 4000,
+   "height": 2250,
+   "check": {
+    "v": 1,
+    "sharp": 157.41515050197893,
+    "hash": "5553dbb946c79658",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 29.100000023841858,
+   "fullCheckMs": 1214.2000000476837,
+   "faces": {
+    "w": 800,
+    "h": 450,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 758.7999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-08.jpg",
+   "width": 2448,
+   "height": 3264,
+   "check": {
+    "v": 1,
+    "sharp": 359.51381878974485,
+    "hash": "69d7c9f5e4a5ad27",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 42.89999997615814,
+   "fullCheckMs": 1234.4000000953674,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 768.9000000953674,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-08-5px.jpg",
+   "width": 2448,
+   "height": 3264,
+   "check": {
+    "v": 1,
+    "sharp": 29.83590653136763,
+    "hash": "4537c9f5e4a52d27",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 26,
+   "fullCheckMs": 1229.2000000476837,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 803.8000000715256,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-09.jpg",
+   "width": 1600,
+   "height": 1200,
+   "check": {
+    "v": 1,
+    "sharp": 516.5454367311571,
+    "hash": "b53288684d764ea4",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 15.799999952316284,
+   "fullCheckMs": 1249.3000000715256,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 735.3999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-09-10px.jpg",
+   "width": 1600,
+   "height": 1200,
+   "check": {
+    "v": 1,
+    "sharp": 2.3147134854586358,
+    "hash": "353389684d764ea5",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 13.200000047683716,
+   "fullCheckMs": 1213.6000000238419,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 729.1000000238419,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-10.jpg",
+   "width": 4080,
+   "height": 3060,
+   "check": {
+    "v": 1,
+    "sharp": 314.0958666182925,
+    "hash": "a9e16a6a45501945",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 53,
+   "fullCheckMs": 1238.3999999761581,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.43095737481660706,
+    "y": 0.7416954092549892
+   },
+   "centreMs": 793.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.32302569957981475,
+     "y": 0.6122117927205575,
+     "width": 0.21586335047358463,
+     "height": 0.2589672330688633,
+     "score": 0.31477127625595636
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-blur-10-3p5px.jpg",
+   "width": 4080,
+   "height": 3060,
+   "check": {
+    "v": 1,
+    "sharp": 83.66752804978769,
+    "hash": "29616a6a45501945",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 35.60000002384186,
+   "fullCheckMs": 1225.8999999761581,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1137.3999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-11.jpg",
+   "width": 3468,
+   "height": 4624,
+   "check": {
+    "v": 1,
+    "sharp": 355.1365673500413,
+    "hash": "70e45ad6d6aba551",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 82.79999995231628,
+   "fullCheckMs": 1505.8999999761581,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1305,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-11.jpg",
+   "width": 3468,
+   "height": 4624,
+   "check": {
+    "v": 1,
+    "sharp": 365.44225147360316,
+    "hash": "75a55ad6d6aba541",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 107.79999995231628,
+   "fullCheckMs": 1560.1000000238419,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 885.1999999284744,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-12.jpg",
+   "width": 4032,
+   "height": 3024,
+   "check": {
+    "v": 1,
+    "sharp": 377.34019984137706,
+    "hash": "56319ec8aba96a48",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 63.89999997615814,
+   "fullCheckMs": 1361.6000000238419,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 855.2000000476837,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-12.jpg",
+   "width": 4032,
+   "height": 3024,
+   "check": {
+    "v": 1,
+    "sharp": 396.32489372312244,
+    "hash": "ac6d9ec8aac97a5a",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 49.5,
+   "fullCheckMs": 1332.3999999761581,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.43279154216346133,
+    "y": 0.34239445184854184
+   },
+   "centreMs": 930.2000000476837,
+   "centreBoxes": [
+    {
+     "x": -0.09036610947902307,
+     "y": -0.21330070577503746,
+     "width": 1.0463153032849688,
+     "height": 1.1113903152471585,
+     "score": 0.42422407840882165
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-13.jpg",
+   "width": 2250,
+   "height": 4000,
+   "check": {
+    "v": 1,
+    "sharp": 435.82015524710266,
+    "hash": "f041b9d4e36c265b",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 48.40000009536743,
+   "fullCheckMs": 1343.0999999046326,
+   "faces": {
+    "w": 450,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 870.8999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-13.jpg",
+   "width": 2250,
+   "height": 4000,
+   "check": {
+    "v": 1,
+    "sharp": 413.73706417111725,
+    "hash": "f0b379d5636c265b",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 40.90000009536743,
+   "fullCheckMs": 1368.8999999761581,
+   "faces": {
+    "w": 450,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 870.5999999046326,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-14.jpg",
+   "width": 3000,
+   "height": 4000,
+   "check": {
+    "v": 1,
+    "sharp": 351.47584177854736,
+    "hash": "4d6cd6aca6997da4",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 59,
+   "fullCheckMs": 1287.3000000715256,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.2422335944771784,
+    "y": 0.484956423115016
+   },
+   "centreMs": 801.5,
+   "centreBoxes": [
+    {
+     "x": 0.08068428726103563,
+     "y": 0.4271804590012091,
+     "width": 0.3230986144322856,
+     "height": 0.19432252290215063,
+     "score": 0.6880736574795887
+    },
+    {
+     "x": 0.09037939957237227,
+     "y": 0.34840986432667226,
+     "width": 0.29713598683716635,
+     "height": 0.18153382259451153,
+     "score": 0.41278949476367455
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-14.jpg",
+   "width": 3000,
+   "height": 4000,
+   "check": {
+    "v": 1,
+    "sharp": 378.70861962305,
+    "hash": "1675d2ace2d975c4",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 50.799999952316284,
+   "fullCheckMs": 1547.7000000476837,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 853.5,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-15.jpg",
+   "width": 4000,
+   "height": 3000,
+   "check": {
+    "v": 1,
+    "sharp": 279.63366656696303,
+    "hash": "e2bcbeb86a8cd39b",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 48.799999952316284,
+   "fullCheckMs": 1329.6000000238419,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 858,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-15.jpg",
+   "width": 4000,
+   "height": 3000,
+   "check": {
+    "v": 1,
+    "sharp": 321.23555066717796,
+    "hash": "b5dc7eb84a9c939b",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 47,
+   "fullCheckMs": 1310.3000000715256,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 790.6999999284744,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-16.jpg",
+   "width": 3024,
+   "height": 4032,
+   "check": {
+    "v": 1,
+    "sharp": 446.74216068766117,
+    "hash": "6934dcb6281acece",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 55.5,
+   "fullCheckMs": 1242.6000000238419,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 797.2999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-16.jpg",
+   "width": 3024,
+   "height": 4032,
+   "check": {
+    "v": 1,
+    "sharp": 363.48041227297136,
+    "hash": "1da9d4b23c3a4ece",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 48.89999997615814,
+   "fullCheckMs": 1257.3000000715256,
+   "faces": {
+    "w": 600,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 810.6000000238419,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-17.jpg",
+   "width": 3264,
+   "height": 2448,
+   "check": {
+    "v": 1,
+    "sharp": 348.25564348692046,
+    "hash": "aab95ddc89cd8a96",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 43.60000002384186,
+   "fullCheckMs": 1306.2999999523163,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 822,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-17.jpg",
+   "width": 3264,
+   "height": 2448,
+   "check": {
+    "v": 1,
+    "sharp": 350.5234452011073,
+    "hash": "ce58dddc89cd8b96",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 34.40000009536743,
+   "fullCheckMs": 1222.5999999046326,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 760,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-18.jpg",
+   "width": 4032,
+   "height": 3024,
+   "check": {
+    "v": 1,
+    "sharp": 418.39110203892216,
+    "hash": "986967e1e7a7edb9",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 48.799999952316284,
+   "fullCheckMs": 1248.5,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 791.7999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-18.jpg",
+   "width": 4032,
+   "height": 3024,
+   "check": {
+    "v": 1,
+    "sharp": 441.85405326888383,
+    "hash": "9952e5e8c2a6c5a9",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 47.699999928474426,
+   "fullCheckMs": 1222.8000000715256,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 796.1000000238419,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-19.jpg",
+   "width": 3000,
+   "height": 3000,
+   "check": {
+    "v": 1,
+    "sharp": 230.15171797343683,
+    "hash": "35a99e4c2b2bc9e6",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 47.60000002384186,
+   "fullCheckMs": 1227.8999999761581,
+   "faces": {
+    "w": 800,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 777.7999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-19.jpg",
+   "width": 3000,
+   "height": 3000,
+   "check": {
+    "v": 1,
+    "sharp": 203.93218318295322,
+    "hash": "1a8b9f492b2be8f6",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 40.5,
+   "fullCheckMs": 1232.7999999523163,
+   "faces": {
+    "w": 800,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 815.3999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-scene-20.jpg",
+   "width": 4080,
+   "height": 3060,
+   "check": {
+    "v": 1,
+    "sharp": 302.4582156089092,
+    "hash": "5d444cc6a0a82d2c",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 57.10000002384186,
+   "fullCheckMs": 1230.0999999046326,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 779.7000000476837,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-near-20.jpg",
+   "width": 4080,
+   "height": 3060,
+   "check": {
+    "v": 1,
+    "sharp": 373.76103018892434,
+    "hash": "4a4d4cc6a2a82d2c",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 49.799999952316284,
+   "fullCheckMs": 1271.3999999761581,
+   "faces": {
+    "w": 800,
+    "h": 600,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 812.1999999284744,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-01.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 817.4386633567482,
+    "hash": "1c1f3fdf6e277323",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 24.700000047683716,
+   "fullCheckMs": 1307.5999999046326,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 719,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-02.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 944.1104929488309,
+    "hash": "100c51cde5343474",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 19.399999976158142,
+   "fullCheckMs": 1250.2000000476837,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 724.8999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-03.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 1180.2378531471154,
+    "hash": "393b1f1f2d361357",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 21.5,
+   "fullCheckMs": 1217.8000000715256,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 734.5,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-04.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 1669.8441368343301,
+    "hash": "1b59f9e8e2dce8b8",
+    "faces": 5,
+    "eyesClosed": false
+   },
+   "basicMs": 20.799999952316284,
+   "fullCheckMs": 1698.7000000476837,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 104.56086364743433,
+       "y": 257.40085781158297,
+       "width": 107.94132114580214,
+       "height": 90.8804704158551
+      },
+      "score": 0.7223815438461143,
+      "earRight": 0.25142143891070057,
+      "earLeft": 0.2950414899472492
+     },
+     {
+      "box": {
+       "x": 195.10944940199096,
+       "y": 465.97424228181825,
+       "width": 89.70454233263911,
+       "height": 78.03711934140738
+      },
+      "score": 0.7148783316979578,
+      "earRight": 0.24545908119661589,
+      "earLeft": 0.25048774144927616
+     },
+     {
+      "box": {
+       "x": 266.46434731474454,
+       "y": 285.2569616118513,
+       "width": 94.30778043102003,
+       "height": 85.18929076910572
+      },
+      "score": 0.7104481673061883,
+      "earRight": 0.3377018060073839,
+      "earLeft": 0.31619361270206003
+     },
+     {
+      "box": {
+       "x": 213.33699240913282,
+       "y": 216.26141614917893,
+       "width": 119.3871126994267,
+       "height": 117.61034803068537
+      },
+      "score": 0.6752890176054384,
+      "earRight": 0.16095893707309883,
+      "earLeft": 0.19861172616157044
+     },
+     {
+      "box": {
+       "x": 270.490897470922,
+       "y": 342.930119035125,
+       "width": 85.00290512087479,
+       "height": 77.12328416780414
+      },
+      "score": 0.5733656156816036,
+      "earRight": 0.297963110561635,
+      "earLeft": 0.3067173536197461
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5150586291261103,
+    "y": 0.3403278170616477
+   },
+   "centreMs": 720.6000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.3875672887188056,
+     "y": 0.2586150808028457,
+     "width": 0.25498268081460956,
+     "height": 0.16342547251760403,
+     "score": 0.42473889803782006
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-05.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 829.8783753410697,
+    "hash": "5138183a3829e981",
+    "faces": 4,
+    "eyesClosed": false
+   },
+   "basicMs": 20.899999976158142,
+   "fullCheckMs": 1572,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 284.78042085567637,
+       "y": 173.23245005751738,
+       "width": 102.26605669349887,
+       "height": 83.60884054540017
+      },
+      "score": 0.7726607877321037,
+      "earRight": 0.25387336483427864,
+      "earLeft": 0.26387667583042934
+     },
+     {
+      "box": {
+       "x": 250.17644211117255,
+       "y": 315.64958666236964,
+       "width": 81.06402964908067,
+       "height": 72.48235477932275
+      },
+      "score": 0.5844499656482923,
+      "earRight": 0.27277230455309026,
+      "earLeft": 0.25944165113045436
+     },
+     {
+      "box": {
+       "x": 87.46772585733234,
+       "y": 235.55957379748648,
+       "width": 104.33292026949258,
+       "height": 91.91225757190739
+      },
+      "score": 0.5490035017776433,
+      "earRight": 0.2501674674977756,
+      "earLeft": 0.2503254157052721
+     },
+     {
+      "box": {
+       "x": 375.4470143900394,
+       "y": 477.8383419179478,
+       "width": 84.4181173188944,
+       "height": 77.03534037334956
+      },
+      "score": 0.5086750324581412,
+      "earRight": 0.1995799864668012,
+      "earLeft": 0.20300512966720835
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6544661295032123,
+    "y": 0.27428078165233855
+   },
+   "centreMs": 779.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.5480711619189647,
+     "y": 0.21040337547205396,
+     "width": 0.2127899351684951,
+     "height": 0.1277548123605691,
+     "score": 0.4753795241650775
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-06.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 507.0021550198456,
+    "hash": "332b2555565e0e17",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 20.200000047683716,
+   "fullCheckMs": 1343.8999999761581,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 229.96303380970474,
+       "y": 164.71706810744178,
+       "width": 88.03575508115085,
+       "height": 85.90520833548479
+      },
+      "score": 0.6228249083651544,
+      "earRight": 0.3474735093340298,
+      "earLeft": 0.24200161710512924
+     }
+    ]
+   },
+   "centre": null,
+   "centreMs": 738.1000000238419,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-07.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 1754.842103874681,
+    "hash": "3b373b2b2bad3c2b",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 21.200000047683716,
+   "fullCheckMs": 1229.5,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 765.2000000476837,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-08.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 1083.6288047692763,
+    "hash": "030301404fcfd7cf",
+    "faces": 1,
+    "eyesClosed": true
+   },
+   "basicMs": 24.700000047683716,
+   "fullCheckMs": 1344.6000000238419,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 134.75844419402347,
+       "y": 229.91021583599147,
+       "width": 113.80898677960032,
+       "height": 95.46625594363258
+      },
+      "score": 0.7893518744334523,
+      "earRight": 0.1659548170809554,
+      "earLeft": 0.1793981310793902
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.2348114344179309,
+    "y": 0.5173017855985976
+   },
+   "centreMs": 750.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.16241108420243505,
+     "y": 0.41845277316764795,
+     "width": 0.1448007004309917,
+     "height": 0.19769802486189936,
+     "score": 0.5434434347098493
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-09.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 277.61763752816125,
+    "hash": "0737262332763637",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 18.799999952316284,
+   "fullCheckMs": 1601.1000000238419,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 617.3704023596807,
+       "y": 285.703530660457,
+       "width": 155.29272870461367,
+       "height": 134.1892197891851
+      },
+      "score": 0.8524675623450756,
+      "earRight": 0.21482554229370793,
+      "earLeft": 0.26321331585845437
+     },
+     {
+      "box": {
+       "x": 330.2392002442619,
+       "y": 211.75873545112432,
+       "width": 124.30809922386273,
+       "height": 104.80320751466805
+      },
+      "score": 0.7694001884193756,
+      "earRight": 0.24465318257002439,
+      "earLeft": 0.2631733923057212
+     },
+     {
+      "box": {
+       "x": 247.58011565481613,
+       "y": 160.07618492985554,
+       "width": 111.3137369483503,
+       "height": 90.18792858724737
+      },
+      "score": 0.5768033352083524,
+      "earRight": 0.2585423698542316,
+      "earLeft": 0.2629552427912299
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.681361425805604,
+    "y": 0.5859667400812272
+   },
+   "centreMs": 725.6999999284744,
+   "centreBoxes": [
+    {
+     "x": 0.7707878260407302,
+     "y": 0.5593841699505946,
+     "width": 0.19121948653830856,
+     "height": 0.22140640199563,
+     "score": 0.7548465188779548
+    },
+    {
+     "x": 0.4007155390321695,
+     "y": 0.39114290821622977,
+     "width": 0.1409886866590041,
+     "height": 0.18677519796964936,
+     "score": 0.6544326452819749
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-10.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 703.6260142927711,
+    "hash": "e87868686ab2559d",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 19.399999976158142,
+   "fullCheckMs": 1408.4000000953674,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 320.50217873833424,
+       "y": 244.47503614694398,
+       "width": 132.40984464586958,
+       "height": 113.83129959053745
+      },
+      "score": 0.8743704311900946,
+      "earRight": 0.20702184304502771,
+      "earLeft": 0.23260987492891474
+     },
+     {
+      "box": {
+       "x": 66.65400374397923,
+       "y": 272.9649628534277,
+       "width": 146.5416652142156,
+       "height": 122.99294460661967
+      },
+      "score": 0.7149437255463703,
+      "earRight": 0.2881754956110387,
+      "earLeft": 0.2809498918124914
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.4685494050540498,
+    "y": 0.401208306365955
+   },
+   "centreMs": 768.6000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.11652666604753922,
+     "y": 0.3571652139694387,
+     "width": 0.2793565664462362,
+     "height": 0.14398327699987,
+     "score": 0.8027022575713144
+    },
+    {
+     "x": 0.5988223818602214,
+     "y": 0.3134735490967859,
+     "width": 0.22174976220033904,
+     "height": 0.12010749852930852,
+     "score": 0.645020288933057
+    },
+    {
+     "x": 0.37600246924115843,
+     "y": 0.30126812176260126,
+     "width": 0.22575119940099075,
+     "height": 0.14167401018857584,
+     "score": 0.49800134397138096
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-11.jpg",
+   "width": 1600,
+   "height": 900,
+   "check": {
+    "v": 1,
+    "sharp": 75.51662885275202,
+    "hash": "b3abbbafaf2a4f4f",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 14.600000023841858,
+   "fullCheckMs": 1287.8000000715256,
+   "faces": {
+    "w": 800,
+    "h": 450,
+    "faces": [
+     {
+      "box": {
+       "x": 352.8507836667045,
+       "y": 98.11820807595791,
+       "width": 195.64682124572846,
+       "height": 198.40647522438235
+      },
+      "score": 0.9274956774971257,
+      "earRight": 0.2507872389736289,
+      "earLeft": 0.2546807616217514
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5520408353403015,
+    "y": 0.4323321869018395
+   },
+   "centreMs": 730.5,
+   "centreBoxes": [
+    {
+     "x": 0.4240377155916917,
+     "y": 0.20640228382693304,
+     "width": 0.25600623949721957,
+     "height": 0.4518598061498129,
+     "score": 0.8945668029927896
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-12.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 272.66973717672994,
+    "hash": "45e5c47cac26d7d1",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 17.899999976158142,
+   "fullCheckMs": 1401.8999999761581,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 455.99669721382236,
+       "y": 222.39835144532756,
+       "width": 263.1826555817229,
+       "height": 250.59175753106936
+      },
+      "score": 0.7932998500766888,
+      "earRight": 0.2646515176727651,
+      "earLeft": 0.2988323338792473
+     },
+     {
+      "box": {
+       "x": 155.002843622973,
+       "y": 199.08333912742276,
+       "width": 284.1932224199479,
+       "height": 272.720836859561
+      },
+      "score": 0.7477197690226302,
+      "earRight": 0.2709065868712921,
+      "earLeft": 0.3053462848268253
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5414309075989577,
+    "y": 0.6359547409322693
+   },
+   "centreMs": 747.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.19565204779562706,
+     "y": 0.37624727563871124,
+     "width": 0.3742823946474676,
+     "height": 0.5194149305871163,
+     "score": 0.89084730999959
+    },
+    {
+     "x": 0.5805546446271429,
+     "y": 0.45275990454711085,
+     "width": 0.3066551227751456,
+     "height": 0.4289153207631221,
+     "score": 0.8502821168745501
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-13.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 369.85194616934274,
+    "hash": "096d6d5bdbcbe1c8",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 19.09999990463257,
+   "fullCheckMs": 1381.5,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 163.37376651023595,
+       "y": 129.07970535305628,
+       "width": 146.47591766864113,
+       "height": 142.6739671520811
+      },
+      "score": 0.8126157499762255,
+      "earRight": 0.36143416384499677,
+      "earLeft": 0.25839277258010174
+     },
+     {
+      "box": {
+       "x": 409.4197764872739,
+       "y": 112.57764914196761,
+       "width": 145.07683814874807,
+       "height": 157.09762348742908
+      },
+      "score": 0.7893937345677753,
+      "earRight": 0.3070583769653827,
+      "earLeft": 0.28249141890949836
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.4504720380311504,
+    "y": 0.3670805991669619
+   },
+   "centreMs": 722.8999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.18254995206549623,
+     "y": 0.23655275337576998,
+     "width": 0.20425148633686027,
+     "height": 0.2920185600056098,
+     "score": 0.7779606786950845
+    },
+    {
+     "x": 0.5012108438499173,
+     "y": 0.205589884952544,
+     "width": 0.21718328014688726,
+     "height": 0.3208623950251485,
+     "score": 0.6078448544364762
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-14.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 619.5290184883984,
+    "hash": "0300959a92dbcbc9",
+    "faces": 4,
+    "eyesClosed": false
+   },
+   "basicMs": 18.299999952316284,
+   "fullCheckMs": 1634.7999999523163,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 258.29787448551275,
+       "y": 68.57738645598289,
+       "width": 115.04818853441519,
+       "height": 90.42489293180475
+      },
+      "score": 0.8398543519680047,
+      "earRight": 0.26914491468711704,
+      "earLeft": 0.24593615461714857
+     },
+     {
+      "box": {
+       "x": 319.81904957674595,
+       "y": 212.74523191561113,
+       "width": 143.34653008304716,
+       "height": 129.02240594889582
+      },
+      "score": 0.8285302798263201,
+      "earRight": 0.2934247601306565,
+      "earLeft": 0.3192635926671352
+     },
+     {
+      "box": {
+       "x": 462.4472779774382,
+       "y": 231.35000167298642,
+       "width": 101.0674914407943,
+       "height": 97.5363347837025
+      },
+      "score": 0.6640345497570093,
+      "earRight": 0.529040537217759,
+      "earLeft": 0.3962782135804172
+     },
+     {
+      "box": {
+       "x": 418.4151429528324,
+       "y": 236.8098464861724,
+       "width": 107.48370941036347,
+       "height": 100.43472258519992
+      },
+      "score": 0.5899017532879304,
+      "earRight": 0.29034735178622645,
+      "earLeft": 0.26297965065337203
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5364952504737964,
+    "y": 0.52661573670421
+   },
+   "centreMs": 718.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.3871620516415095,
+     "y": 0.40802657162354694,
+     "width": 0.18956629351963183,
+     "height": 0.2371783301613262,
+     "score": 0.6923470587740181
+    },
+    {
+     "x": 0.5530929970815808,
+     "y": 0.4317305084836177,
+     "width": 0.13273545222450245,
+     "height": 0.187817262051988,
+     "score": 0.64330582434885
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-15.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 1222.318185266853,
+    "hash": "5cded6d564e4f474",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 19.199999928474426,
+   "fullCheckMs": 1491,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 555.9564047685867,
+       "y": 100.28497088631416,
+       "width": 135.98371570192862,
+       "height": 117.64428348702253
+      },
+      "score": 0.8074755464116304,
+      "earRight": 0.2118037370953798,
+      "earLeft": 0.23379755522312962
+     },
+     {
+      "box": {
+       "x": 173.4407873938266,
+       "y": 128.6945501996423,
+       "width": 102.57334725903256,
+       "height": 82.7430279965205
+      },
+      "score": 0.7721801745569354,
+      "earRight": 0.2803706816262007,
+      "earLeft": 0.3148523979450229
+     },
+     {
+      "box": {
+       "x": 328.00059133791206,
+       "y": 169.34184204135946,
+       "width": 102.00039160415528,
+       "height": 96.76188912944887
+      },
+      "score": 0.6652821161519566,
+      "earRight": 0.21948096702073497,
+      "earLeft": 0.26549050546047026
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5446334144494638,
+    "y": 0.43009357365276235
+   },
+   "centreMs": 720.2000000476837,
+   "centreBoxes": [
+    {
+     "x": 0.7149522777063617,
+     "y": 0.2378402897578208,
+     "width": 0.14204745768414495,
+     "height": 0.1874467784202033,
+     "score": 0.7578219389048502
+    },
+    {
+     "x": 0.6779901304604288,
+     "y": 0.42537053453191104,
+     "width": 0.14555518901733533,
+     "height": 0.2036016294208236,
+     "score": 0.5319039474958475
+    },
+    {
+     "x": 0.4054065570195868,
+     "y": 0.30889534476280556,
+     "width": 0.12920059060346284,
+     "height": 0.19351370455032024,
+     "score": 0.5311975508232837
+    },
+    {
+     "x": 0.23226709350842087,
+     "y": 0.23121498335279014,
+     "width": 0.1219880743658763,
+     "height": 0.16726649764296553,
+     "score": 0.46921024090018176
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-16.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 289.7289097318542,
+    "hash": "17333339393b3636",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 18.300000071525574,
+   "fullCheckMs": 1358,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 324.0486630943308,
+       "y": 263.2080671631607,
+       "width": 126.6965954705746,
+       "height": 119.21050667609697
+      },
+      "score": 0.7275106210251302,
+      "earRight": 0.22491002498629123,
+      "earLeft": 0.25741908146160714
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.4626374279140404,
+    "y": 0.5529660528053641
+   },
+   "centreMs": 1138,
+   "centreBoxes": [
+    {
+     "x": 0.36586345955822763,
+     "y": 0.41517135506542996,
+     "width": 0.19354793671162562,
+     "height": 0.27558939547986844,
+     "score": 0.5846902338890648
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-17.jpg",
+   "width": 1600,
+   "height": 1373,
+   "check": {
+    "v": 1,
+    "sharp": 334.93064428195333,
+    "hash": "180040c253c6ce16",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 29.399999976158142,
+   "fullCheckMs": 2158.7000000476837,
+   "faces": {
+    "w": 800,
+    "h": 687,
+    "faces": [
+     {
+      "box": {
+       "x": 176.18006517751135,
+       "y": 219.5327923208912,
+       "width": 74.17104056495796,
+       "height": 70.43748156525753
+      },
+      "score": 0.684344515522348,
+      "earRight": 0.2977309604570476,
+      "earLeft": 0.28136886238109987
+     },
+     {
+      "box": {
+       "x": 211.34754372040385,
+       "y": 405.836396121929,
+       "width": 96.50247604261317,
+       "height": 87.09077255613556
+      },
+      "score": 0.5449463062745341,
+      "earRight": 0.2514945785134889,
+      "earLeft": 0.30240828947156295
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.8144004874023792,
+    "y": 0.6545491578357947
+   },
+   "centreMs": 1165.0999999046326,
+   "centreBoxes": [
+    {
+     "x": 0.7438684838749345,
+     "y": 0.5739473362997212,
+     "width": 0.14106400705488942,
+     "height": 0.16120364307214707,
+     "score": 0.3629349856600407
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-18.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 779.7029117392821,
+    "hash": "0d23e9f1c1d1cbc3",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 24.700000047683716,
+   "fullCheckMs": 1938,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1092.8999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-19.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 3801.5089926557234,
+    "hash": "1c0c341c0c520c2a",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 25.299999952316284,
+   "fullCheckMs": 1956.2000000476837,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1078,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-20.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 1427.9503699047837,
+    "hash": "97b99896b6367670",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 26.800000071525574,
+   "fullCheckMs": 2479.399999976158,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 292.2135574991702,
+       "y": 135.95990209932384,
+       "width": 169.55687844840583,
+       "height": 157.08965045830112
+      },
+      "score": 0.9007480077305966,
+      "earRight": 0.26095650119846103,
+      "earLeft": 0.30698768614283756
+     },
+     {
+      "box": {
+       "x": 416.1330700636027,
+       "y": 210.14488999301196,
+       "width": 128.21403367622787,
+       "height": 103.96006763114349
+      },
+      "score": 0.7304834564318896,
+      "earRight": 0.23756967398831735,
+      "earLeft": 0.24677621517670292
+     },
+     {
+      "box": {
+       "x": 494.5678899384338,
+       "y": 172.3691394453973,
+       "width": 151.48926533199648,
+       "height": 136.7822861439944
+      },
+      "score": 0.7291071138501805,
+      "earRight": 0.2549968989706459,
+      "earLeft": 0.2745792901857083
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5503204981042016,
+    "y": 0.44052803508657457
+   },
+   "centreMs": 1084.6999999284744,
+   "centreBoxes": [
+    {
+     "x": 0.3530905496752895,
+     "y": 0.28280448415251425,
+     "width": 0.24627915851502824,
+     "height": 0.2794324956527324,
+     "score": 0.8697808743976825
+    },
+    {
+     "x": 0.5687532054494157,
+     "y": 0.3512728784481249,
+     "width": 0.17879724108369788,
+     "height": 0.24697870757251014,
+     "score": 0.6500967243326289
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-21.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 653.1043822132278,
+    "hash": "60ea785834241684",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 30.700000047683716,
+   "fullCheckMs": 2242.6999999284744,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 488.17456805680115,
+       "y": 163.76326475603292,
+       "width": 109.10489942269041,
+       "height": 97.57116166849642
+      },
+      "score": 0.779216320164506,
+      "earRight": 0.269333315121905,
+      "earLeft": 0.26611605666028876
+     },
+     {
+      "box": {
+       "x": 275.9250855255254,
+       "y": 127.83887379656603,
+       "width": 105.9693470570767,
+       "height": 99.3473597767244
+      },
+      "score": 0.7072146477920891,
+      "earRight": 0.23149463043694812,
+      "earLeft": 0.32885816183376443
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6012806306869677,
+    "y": 0.3846513238216943
+   },
+   "centreMs": 1200,
+   "centreBoxes": [
+    {
+     "x": 0.5926302897404826,
+     "y": 0.3172475683047888,
+     "width": 0.12766323514183198,
+     "height": 0.16809912226596363,
+     "score": 0.5709663625502429
+    },
+    {
+     "x": 0.48226773649162086,
+     "y": 0.28395595707263616,
+     "width": 0.12204693321582077,
+     "height": 0.17127505110088526,
+     "score": 0.39749013870406896
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-22.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 545.9051864298787,
+    "hash": "291b2eaf0d4cc48e",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 21.5,
+   "fullCheckMs": 1949.5,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1119.7999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-23.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 805.0468834640914,
+    "hash": "0f8f099ad9c95b52",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 29.90000009536743,
+   "fullCheckMs": 2064.5,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 197.22564746371535,
+       "y": 306.82438853240586,
+       "width": 194.21806570429484,
+       "height": 173.9804573945735
+      },
+      "score": 0.6999599413962029,
+      "earRight": 0.3154832503426059,
+      "earLeft": 0.28414322920662444
+     },
+     {
+      "box": {
+       "x": 390.353238129367,
+       "y": 262.09394420977225,
+       "width": 172.26909833921417,
+       "height": 175.81904560734506
+      },
+      "score": 0.6613138573695345,
+      "earRight": 0.24440396799833086,
+      "earLeft": 0.2544938480944792
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.49353115245220747,
+    "y": 0.6882327034686815
+   },
+   "centreMs": 1155.1999999284744,
+   "centreBoxes": [
+    {
+     "x": 0.500284893723093,
+     "y": 0.4963474808964918,
+     "width": 0.23324156047521982,
+     "height": 0.3193783943935263,
+     "score": 0.798629959537134
+    },
+    {
+     "x": 0.2535358507061023,
+     "y": 0.579015323261294,
+     "width": 0.21879076515720047,
+     "height": 0.301102602779577,
+     "score": 0.6489588853404925
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-24.jpg",
+   "width": 1069,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 308.7771778302014,
+    "hash": "386a6dbbf37fd9dc",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 23.100000023841858,
+   "fullCheckMs": 2135.2000000476837,
+   "faces": {
+    "w": 535,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 227.89039187966034,
+       "y": 283.53975327811025,
+       "width": 114.45228118376559,
+       "height": 114.73338287716305
+      },
+      "score": 0.5635498909560986,
+      "earRight": 0.30572577442111154,
+      "earLeft": 0.22432994911340987
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5175173733366333,
+    "y": 0.4484251598905871
+   },
+   "centreMs": 1234.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.3983420708524601,
+     "y": 0.37248367989586195,
+     "width": 0.23835060496834637,
+     "height": 0.15188295998945034,
+     "score": 0.598418045360859
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-25.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 199.3093593361566,
+    "hash": "0fbfefb42e270e0f",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 25.299999952316284,
+   "fullCheckMs": 2071.399999976158,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 179.83207860330012,
+       "y": 429.04652621038986,
+       "width": 152.66204051958272,
+       "height": 129.55006054187112
+      },
+      "score": 0.9104948935422464,
+      "earRight": 0.2730405468889989,
+      "earLeft": 0.28617546384645937
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.47905355500749364,
+    "y": 0.6171838998558321
+   },
+   "centreMs": 1076.5,
+   "centreBoxes": [
+    {
+     "x": 0.3014067126346012,
+     "y": 0.531963833936333,
+     "width": 0.35529368474578477,
+     "height": 0.17044013183899842,
+     "score": 0.7994172806120685
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-26.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 244.9182189546566,
+    "hash": "0f321a6bcb9f9f87",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 22.5,
+   "fullCheckMs": 2303.7999999523163,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": -0.5711224847383887,
+       "y": 274.1058994155564,
+       "width": 158.02133912200026,
+       "height": 177.71659424451568
+      },
+      "score": 0.8763770257992016,
+      "earRight": 0.331249316734185,
+      "earLeft": 0.4371419904910766
+     },
+     {
+      "box": {
+       "x": 153.13621698111095,
+       "y": 205.3553861201234,
+       "width": 195.4850996410714,
+       "height": 198.7604455619337
+      },
+      "score": 0.6725652965188137,
+      "earRight": 0.2234760877894743,
+      "earLeft": 0.24646654807132673
+     },
+     {
+      "box": {
+       "x": 388.2163993382802,
+       "y": 252.8248319062069,
+       "width": 162.89915225302406,
+       "height": 175.63048226373414
+      },
+      "score": 0.5114224457343364,
+      "earRight": 0.34140761701749045,
+      "earLeft": 0.264506886519667
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.49808079913649544,
+    "y": 0.4212103627914696
+   },
+   "centreMs": 1025.7999999523163,
+   "centreBoxes": [
+    {
+     "x": 0.7102215323016907,
+     "y": 0.3231009345523592,
+     "width": 0.30560474168625573,
+     "height": 0.2028593028760244,
+     "score": 0.7838655748557827
+    },
+    {
+     "x": 0.30767597112688244,
+     "y": 0.2674136744935391,
+     "width": 0.3534668829299094,
+     "height": 0.24888708803588283,
+     "score": 0.6266603758167199
+    },
+    {
+     "x": -0.019664675714955476,
+     "y": 0.34231492360742694,
+     "width": 0.3340261425420622,
+     "height": 0.23269212748197338,
+     "score": 0.5871388493875555
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-27.jpg",
+   "width": 1600,
+   "height": 900,
+   "check": {
+    "v": 1,
+    "sharp": 41.05815211379162,
+    "hash": "0727cf2e2e0e161f",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 20.09999990463257,
+   "fullCheckMs": 1837.8000000715256,
+   "faces": {
+    "w": 800,
+    "h": 450,
+    "faces": [
+     {
+      "box": {
+       "x": 308.5828442279301,
+       "y": 131.52014782237964,
+       "width": 198.8249891205875,
+       "height": 194.75207735047852
+      },
+      "score": 0.8253830087660788,
+      "earRight": 0.22245027479026366,
+      "earLeft": 0.23392745364942394
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5245827886773573,
+    "y": 0.48631432965014004
+   },
+   "centreMs": 1077.0999999046326,
+   "centreBoxes": [
+    {
+     "x": 0.39427553235745266,
+     "y": 0.27765998029888456,
+     "width": 0.26061451263980945,
+     "height": 0.417308698702511,
+     "score": 0.7451710121536582
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-28.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 389.07718215747025,
+    "hash": "e92373535383900b",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 28.799999952316284,
+   "fullCheckMs": 2060.2999999523163,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 309.6603692824244,
+       "y": 164.84621130981324,
+       "width": 136.40580225078452,
+       "height": 126.02219483667719
+      },
+      "score": 0.8373051988587489,
+      "earRight": 0.30686903855093917,
+      "earLeft": 0.21728272023715856
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5085277201028222,
+    "y": 0.3513848043155931
+   },
+   "centreMs": 1039,
+   "centreBoxes": [
+    {
+     "x": 0.5738232654118449,
+     "y": 0.21290959691870565,
+     "width": 0.2694724991106189,
+     "height": 0.15123017046113435,
+     "score": 0.7329104379719996
+    },
+    {
+     "x": 0.1737596756831805,
+     "y": 0.27436244278527866,
+     "width": 0.3028942411054507,
+     "height": 0.2154975689272019,
+     "score": 0.7251422540076276
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-29.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 340.8164799878583,
+    "hash": "4d0c4d5b333b9d4c",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 28.700000047683716,
+   "fullCheckMs": 2117.399999976158,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 196.77927609257387,
+       "y": 143.28403891143182,
+       "width": 173.10395962008718,
+       "height": 180.50612641497725
+      },
+      "score": 0.877635647079613,
+      "earRight": 0.3710892748967145,
+      "earLeft": 0.30060091348617507
+     },
+     {
+      "box": {
+       "x": 24.895817242744037,
+       "y": 315.9993323746736,
+       "width": 122.32126464814266,
+       "height": 99.51296407115926
+      },
+      "score": 0.5276832086962081,
+      "earRight": 0.4886812986879812,
+      "earLeft": 0.4350609410605741
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.37785777777634993,
+    "y": 0.3642166995002301
+   },
+   "centreMs": 1184,
+   "centreBoxes": [
+    {
+     "x": 0.37862838107882335,
+     "y": 0.18908882037936128,
+     "width": 0.3122494304043353,
+     "height": 0.19483029416335726,
+     "score": 0.737522986482189
+    },
+    {
+     "x": 0.0648377440695412,
+     "y": 0.4116954461351846,
+     "width": 0.24448485435687947,
+     "height": 0.12764913248591425,
+     "score": 0.5668823799550616
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-30.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 1049.5905198643134,
+    "hash": "0fcc9c9aa8693381",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 23.899999976158142,
+   "fullCheckMs": 1888.9000000953674,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1079.7999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-31.jpg",
+   "width": 1600,
+   "height": 1071,
+   "check": {
+    "v": 1,
+    "sharp": 506.3066938209085,
+    "hash": "9f1f3717159d1b1b",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 28.100000023841858,
+   "fullCheckMs": 2833.8000000715256,
+   "faces": {
+    "w": 800,
+    "h": 536,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.4302182526718781,
+    "y": 0.5053533485659973
+   },
+   "centreMs": 1089.2999999523163,
+   "centreBoxes": [
+    {
+     "x": 0.27640156844979397,
+     "y": 0.2870930223691341,
+     "width": 0.30763336844416816,
+     "height": 0.43652065239372645,
+     "score": 0.7253902834460623
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-32.jpg",
+   "width": 1600,
+   "height": 1315,
+   "check": {
+    "v": 1,
+    "sharp": 1298.9225804396456,
+    "hash": "3f3b7b78383a9e0f",
+    "faces": 4,
+    "eyesClosed": false
+   },
+   "basicMs": 36.299999952316284,
+   "fullCheckMs": 2294,
+   "faces": {
+    "w": 800,
+    "h": 658,
+    "faces": [
+     {
+      "box": {
+       "x": 365.701682910996,
+       "y": 109.78574024345598,
+       "width": 140.27921343751953,
+       "height": 111.48449343624317
+      },
+      "score": 0.8361659800636194,
+      "earRight": 0.24024139248208123,
+      "earLeft": 0.25669810730436865
+     },
+     {
+      "box": {
+       "x": 214.80126345487173,
+       "y": 266.64593194235266,
+       "width": 115.36622294130882,
+       "height": 103.20061828455115
+      },
+      "score": 0.8273740947831955,
+      "earRight": 0.2540964070064402,
+      "earLeft": 0.2726978299017573
+     },
+     {
+      "box": {
+       "x": 481.53309405126595,
+       "y": 434.65655315872175,
+       "width": 110.32811901579018,
+       "height": 85.89017211259919
+      },
+      "score": 0.7642524885353307,
+      "earRight": 0.2841173400843587,
+      "earLeft": 0.27906122211424506
+     },
+     {
+      "box": {
+       "x": 327.3192726178336,
+       "y": 384.3311586525275,
+       "width": 122.7898138451379,
+       "height": 103.28644370594331
+      },
+      "score": 0.7542791768001667,
+      "earRight": 0.24555839850125133,
+      "earLeft": 0.25459309789391854
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5129654300804548,
+    "y": 0.4847803728907305
+   },
+   "centreMs": 1010.8999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.47863556625823234,
+     "y": 0.18292149250399073,
+     "width": 0.14035352315670724,
+     "height": 0.15344361903396192,
+     "score": 0.8761580893415988
+    },
+    {
+     "x": 0.5981311820856491,
+     "y": 0.6405211548542153,
+     "width": 0.14150083382979928,
+     "height": 0.14611809842325474,
+     "score": 0.7118504658977192
+    },
+    {
+     "x": 0.2862988442454613,
+     "y": 0.39313431104675445,
+     "width": 0.1390566658662703,
+     "height": 0.1541942464724343,
+     "score": 0.6528715718750727
+    },
+    {
+     "x": 0.4011489115590241,
+     "y": 0.5865809594260716,
+     "width": 0.1676016591875384,
+     "height": 0.17420126727184537,
+     "score": 0.6181144950808363
+    },
+    {
+     "x": 0.49620430165941853,
+     "y": 0.6038404775842144,
+     "width": 0.15504513053908553,
+     "height": 0.1617333254068742,
+     "score": 0.45694002413331786
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-33.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 1293.448030603275,
+    "hash": "fecb9bb7afa2a250",
+    "faces": 5,
+    "eyesClosed": false
+   },
+   "basicMs": 25.300000071525574,
+   "fullCheckMs": 2423.100000023842,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 373.8725744040293,
+       "y": 155.89620285640814,
+       "width": 123.26373559657853,
+       "height": 111.19821865004818
+      },
+      "score": 0.8866688984204198,
+      "earRight": 0.288041279476557,
+      "earLeft": 0.283780926926686
+     },
+     {
+      "box": {
+       "x": 209.06759256492023,
+       "y": 175.39027755316053,
+       "width": 139.91799069820456,
+       "height": 119.46428822698289
+      },
+      "score": 0.7351094813522389,
+      "earRight": 0.25706011003245843,
+      "earLeft": 0.3038588350354897
+     },
+     {
+      "box": {
+       "x": 512.2760539440366,
+       "y": 296.16222536510867,
+       "width": 112.35402880127347,
+       "height": 94.13200178866188
+      },
+      "score": 0.6493194345122931,
+      "earRight": 0.2571747873307163,
+      "earLeft": 0.26835465843212447
+     },
+     {
+      "box": {
+       "x": 316.7367055133428,
+       "y": 210.76268019213938,
+       "width": 134.91312979936686,
+       "height": 126.25630327983603
+      },
+      "score": 0.6336006991960546,
+      "earRight": 0.2207721559293435,
+      "earLeft": 0.2702865864509206
+     },
+     {
+      "box": {
+       "x": 391.81218106017985,
+       "y": 276.64318037920924,
+       "width": 131.3489883817059,
+       "height": 107.05840384078148
+      },
+      "score": 0.6212452879241456,
+      "earRight": 0.23484683255390934,
+      "earLeft": 0.25525233120904023
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5001366450832755,
+    "y": 0.5141755152385824
+   },
+   "centreMs": 1122.7999999523163,
+   "centreBoxes": [
+    {
+     "x": 0.4746215967019712,
+     "y": 0.297656248404251,
+     "width": 0.14940566568471686,
+     "height": 0.19804589139123135,
+     "score": 0.7230217960158026
+    },
+    {
+     "x": 0.6449328638659937,
+     "y": 0.5671174483042891,
+     "width": 0.12790759477373326,
+     "height": 0.17085184882865467,
+     "score": 0.696917196298533
+    },
+    {
+     "x": 0.5780390608649708,
+     "y": 0.5482179880689474,
+     "width": 0.14071689984639013,
+     "height": 0.18084495837968917,
+     "score": 0.6593557067294461
+    },
+    {
+     "x": 0.46272820713802415,
+     "y": 0.5152818430203526,
+     "width": 0.15760959449174705,
+     "height": 0.1973745085653168,
+     "score": 0.6403339091696529
+    },
+    {
+     "x": 0.22743283152682417,
+     "y": 0.2903817333442209,
+     "width": 0.19419230011843827,
+     "height": 0.27020021969403496,
+     "score": 0.6074656366826185
+    },
+    {
+     "x": 0.3658828890200931,
+     "y": 0.30595300529992864,
+     "width": 0.14550797448588232,
+     "height": 0.20781054992554737,
+     "score": 0.46036192310639407
+    },
+    {
+     "x": 0.3803455142644684,
+     "y": 0.39373453573464495,
+     "width": 0.17164735076277704,
+     "height": 0.23862585557434818,
+     "score": 0.3181274115878429
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-34.jpg",
+   "width": 1600,
+   "height": 1176,
+   "check": {
+    "v": 1,
+    "sharp": 247.46325181587972,
+    "hash": "1b58cc9a6c56da27",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 25.399999976158142,
+   "fullCheckMs": 2363.100000023842,
+   "faces": {
+    "w": 800,
+    "h": 588,
+    "faces": [
+     {
+      "box": {
+       "x": 195.73837712952974,
+       "y": 161.0545911044623,
+       "width": 119.25871635566678,
+       "height": 111.86639981460768
+      },
+      "score": 0.7814899350562664,
+      "earRight": 0.20897068927993293,
+      "earLeft": 0.27561907221394283
+     },
+     {
+      "box": {
+       "x": 507.4513271094947,
+       "y": 208.1520301435676,
+       "width": 118.2243746961416,
+       "height": 108.86780784286405
+      },
+      "score": 0.765428799538638,
+      "earRight": 0.27315018635344385,
+      "earLeft": 0.17515080577488737
+     },
+     {
+      "box": {
+       "x": 427.45963534715844,
+       "y": 238.05201045881478,
+       "width": 83.61219918503986,
+       "height": 79.03778767145256
+      },
+      "score": 0.6119675971228046,
+      "earRight": 0.25088159822443634,
+      "earLeft": 0.19397495781721258
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.3177715681915441,
+    "y": 0.3696688507280068
+   },
+   "centreMs": 1137.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.24242200054789703,
+     "y": 0.27577689697872315,
+     "width": 0.15069913528729417,
+     "height": 0.18778390749856735,
+     "score": 0.7170809945645812
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-35.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 822.036591565806,
+    "hash": "e6f2726f6baaba8f",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 27.100000023841858,
+   "fullCheckMs": 2077.899999976158,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 317.4563220086752,
+       "y": 79.05142722817644,
+       "width": 116.33188935213292,
+       "height": 103.84730290809908
+      },
+      "score": 0.7106895216858218,
+      "earRight": 0.34102143065108115,
+      "earLeft": 0.30753207572563185
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.416717401437936,
+    "y": 0.2983939715944842
+   },
+   "centreMs": 1057.1000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.30959501373164533,
+     "y": 0.1482962898649775,
+     "width": 0.14683720438064318,
+     "height": 0.1898480933767806,
+     "score": 0.6902564942406084
+    },
+    {
+     "x": 0.3749554652137512,
+     "y": 0.17582464160446312,
+     "width": 0.13847221269612286,
+     "height": 0.17118710455688088,
+     "score": 0.5829565528755296
+    },
+    {
+     "x": 0.3907380174761476,
+     "y": 0.2677519447468443,
+     "width": 0.13310177166807913,
+     "height": 0.18073970857714663,
+     "score": 0.313305305176813
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-36.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 386.7837422958786,
+    "hash": "ca8e9812a6a6861b",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 19.300000071525574,
+   "fullCheckMs": 1910.7999999523163,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1078.5,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-37.jpg",
+   "width": 1600,
+   "height": 1008,
+   "check": {
+    "v": 1,
+    "sharp": 1222.9425841678446,
+    "hash": "7c6c3c3c3e7a626a",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 20.700000047683716,
+   "fullCheckMs": 2086.5,
+   "faces": {
+    "w": 800,
+    "h": 504,
+    "faces": [
+     {
+      "box": {
+       "x": 539.4180926062618,
+       "y": 205.83227791938745,
+       "width": 92.61266582180552,
+       "height": 93.61687845806676
+      },
+      "score": 0.6671337241956083,
+      "earRight": 0.2541597671335031,
+      "earLeft": 0.27595251222939043
+     },
+     {
+      "box": {
+       "x": 486.78059800336763,
+       "y": 87.08597930358437,
+       "width": 131.00660306499864,
+       "height": 109.15604714547676
+      },
+      "score": 0.6650262330039898,
+      "earRight": 0.2880915324388313,
+      "earLeft": 0.2973274135677359
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6920487560602655,
+    "y": 0.40140726858481096
+   },
+   "centreMs": 1078.8999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.5866685978655761,
+     "y": 0.19289930071552552,
+     "width": 0.18031523838950014,
+     "height": 0.2130225689541339,
+     "score": 0.8452796822908417
+    },
+    {
+     "x": 0.6686128097376131,
+     "y": 0.40099308560134445,
+     "width": 0.1288161045173417,
+     "height": 0.2089221508527519,
+     "score": 0.4562554469635325
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-38.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 412.9591075842702,
+    "hash": "2d61613d3b6f6f16",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 23.899999976158142,
+   "fullCheckMs": 1974.7999999523163,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 158.587436180373,
+       "y": 277.6455417356257,
+       "width": 107.78672069135337,
+       "height": 100.03810834030618
+      },
+      "score": 0.7383365090787323,
+      "earRight": 0.24046279016008112,
+      "earLeft": 0.38645183448403525
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6264597807609623,
+    "y": 0.4322961365281269
+   },
+   "centreMs": 1209.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.2856992487063108,
+     "y": 0.3271899243470589,
+     "width": 0.20637599239213977,
+     "height": 0.11802865248691113,
+     "score": 0.5834768094639787
+    },
+    {
+     "x": 0.7207079742913467,
+     "y": 0.3721646865641267,
+     "width": 0.24651233852426746,
+     "height": 0.16523766214506808,
+     "score": 0.30751081567596344
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-39.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 695.3520898664237,
+    "hash": "62646cac1c884646",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 28.399999976158142,
+   "fullCheckMs": 1972.2999999523163,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 276.29402770579884,
+       "y": 137.70304050075728,
+       "width": 138.1005951864356,
+       "height": 128.04479562350608
+      },
+      "score": 0.7648136543651709,
+      "earRight": 0.19318369652002776,
+      "earLeft": 0.21515137113704946
+     },
+     {
+      "box": {
+       "x": 31.095262706794426,
+       "y": -5.1293215970742345,
+       "width": 127.43196174112414,
+       "height": 108.54582076793908
+      },
+      "score": 0.7011954919815211,
+      "earRight": 0.2273191599534393,
+      "earLeft": 0.29048572653541754
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.42277344006621687,
+    "y": 0.38483176703570604
+   },
+   "centreMs": 1154.7000000476837,
+   "centreBoxes": [
+    {
+     "x": 0.3417297651526876,
+     "y": 0.26556533297035695,
+     "width": 0.1620873498270586,
+     "height": 0.23853286813069816,
+     "score": 0.8034300226484544
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-40.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 269.7920583417079,
+    "hash": "0727af27072eec6c",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 20.40000009536743,
+   "fullCheckMs": 2883.0999999046326,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.7665018545051063,
+    "y": 0.273039730040878
+   },
+   "centreMs": 1167.5,
+   "centreBoxes": [
+    {
+     "x": 0.6986295291852843,
+     "y": 0.1770602937418384,
+     "width": 0.13574465063964392,
+     "height": 0.19195887259807923,
+     "score": 0.7393138105837489
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-41.jpg",
+   "width": 1420,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 727.9155255792751,
+    "hash": "d2505c4c685dc736",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 39.800000071525574,
+   "fullCheckMs": 2310.399999976158,
+   "faces": {
+    "w": 710,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 501.8364245050707,
+       "y": 336.06172293696596,
+       "width": 131.1864716917211,
+       "height": 113.30669206559377
+      },
+      "score": 0.8548626152671837,
+      "earRight": 0.23383184236854146,
+      "earLeft": 0.26408802738448234
+     },
+     {
+      "box": {
+       "x": 182.58621140971277,
+       "y": 144.70921504242327,
+       "width": 125.88470466023928,
+       "height": 122.43411686958171
+      },
+      "score": 0.8221325182827888,
+      "earRight": 0.2507883459456632,
+      "earLeft": 0.2660370504853028
+     },
+     {
+      "box": {
+       "x": 22.27654282400051,
+       "y": 208.33457224074817,
+       "width": 119.30456620413935,
+       "height": 104.57306001768112
+      },
+      "score": 0.7578544922138282,
+      "earRight": 0.2549871859334374,
+      "earLeft": 0.33942422821867585
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.47105065818781455,
+    "y": 0.3697768185514241
+   },
+   "centreMs": 1151.0999999046326,
+   "centreBoxes": [
+    {
+     "x": 0.04281664407885781,
+     "y": 0.2612153297120038,
+     "width": 0.17001776406708036,
+     "height": 0.12192797251005211,
+     "score": 0.7389079813762061
+    },
+    {
+     "x": 0.7100533908340041,
+     "y": 0.4153886591910272,
+     "width": 0.18923128146276724,
+     "height": 0.14024442267841963,
+     "score": 0.7268693468193601
+    },
+    {
+     "x": 0.2632047141129409,
+     "y": 0.18392055523340137,
+     "width": 0.16304047641452968,
+     "height": 0.13489166528687688,
+     "score": 0.6403818436085161
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-42.jpg",
+   "width": 1600,
+   "height": 1280,
+   "check": {
+    "v": 1,
+    "sharp": 818.938848850541,
+    "hash": "7070cdedaca4e4dc",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 33,
+   "fullCheckMs": 2244.2000000476837,
+   "faces": {
+    "w": 800,
+    "h": 640,
+    "faces": [
+     {
+      "box": {
+       "x": 213.44648897300985,
+       "y": 223.47127037522404,
+       "width": 96.08389557771595,
+       "height": 88.27692525643982
+      },
+      "score": 0.6660276380347558,
+      "earRight": 0.33943109788974823,
+      "earLeft": 0.9700968129921385
+     },
+     {
+      "box": {
+       "x": 315.9853891758467,
+       "y": 283.83968977824463,
+       "width": 89.03359375946378,
+       "height": 76.15175572858104
+      },
+      "score": 0.5800190436025797,
+      "earRight": 0.27239638643657127,
+      "earLeft": 0.39395242481459725
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5090616416991816,
+    "y": 0.4979510253946093
+   },
+   "centreMs": 1067.6999999284744,
+   "centreBoxes": [
+    {
+     "x": 0.2610063536988641,
+     "y": 0.3508101018585869,
+     "width": 0.13245450665131214,
+     "height": 0.1549291525889216,
+     "score": 0.48729609364987514
+    },
+    {
+     "x": 0.5858428832300038,
+     "y": 0.41798924054652675,
+     "width": 0.17127404646949507,
+     "height": 0.22710270838410498,
+     "score": 0.39727939002202817
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-43.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 682.9258148640515,
+    "hash": "1795b62c16332713",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 28.59999990463257,
+   "fullCheckMs": 2250.600000023842,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 548.05549427146,
+       "y": 96.84796980143646,
+       "width": 84.65587043645525,
+       "height": 78.04608293158212
+      },
+      "score": 0.7787416742123624,
+      "earRight": 0.35368675095942437,
+      "earLeft": 0.2655191718696307
+     },
+     {
+      "box": {
+       "x": 87.11945623317257,
+       "y": 221.29124719112244,
+       "width": 88.7096832289613,
+       "height": 86.38917737338325
+      },
+      "score": 0.7313499533497506,
+      "earRight": 0.31339670937283276,
+      "earLeft": 0.47596438600041896
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.7512166798655838,
+    "y": 0.20823549621521742
+   },
+   "centreMs": 1231.6000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.6849670486026495,
+     "y": 0.11459009907745295,
+     "width": 0.13249926252586886,
+     "height": 0.18729079427552892,
+     "score": 0.3180256256910689
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-44.jpg",
+   "width": 1600,
+   "height": 1064,
+   "check": {
+    "v": 1,
+    "sharp": 1807.372157570774,
+    "hash": "4d50a8c89aeaa2c3",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 22.299999952316284,
+   "fullCheckMs": 1989.6000000238419,
+   "faces": {
+    "w": 800,
+    "h": 532,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1128,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-45.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 1336.6948871086734,
+    "hash": "87878b619a968082",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 24.5,
+   "fullCheckMs": 1829,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1205.6000000238419,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-46.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 644.0425678536753,
+    "hash": "f0b89a2c2ba6635c",
+    "faces": 5,
+    "eyesClosed": false
+   },
+   "basicMs": 24.100000023841858,
+   "fullCheckMs": 2619.100000023842,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 309.6041431912147,
+       "y": 210.61427798371878,
+       "width": 103.03516791165373,
+       "height": 89.19546492118818
+      },
+      "score": 0.8572108394069026,
+      "earRight": 0.2707770841093207,
+      "earLeft": 0.23317165858897163
+     },
+     {
+      "box": {
+       "x": 281.6974061868259,
+       "y": 43.10267527273062,
+       "width": 80.86949629134601,
+       "height": 76.1112261506434
+      },
+      "score": 0.6499251649741722,
+      "earRight": 0.3452123042233405,
+      "earLeft": 0.26291138541701936
+     },
+     {
+      "box": {
+       "x": 141.4665307515233,
+       "y": 245.8940263631032,
+       "width": 100.78191341670313,
+       "height": 86.8594752836009
+      },
+      "score": 0.601511240776783,
+      "earRight": 0.2607419577956599,
+      "earLeft": 0.2597226692935463
+     },
+     {
+      "box": {
+       "x": 219.84600750617437,
+       "y": 223.4373409784019,
+       "width": 113.96512529975674,
+       "height": 93.46944810884246
+      },
+      "score": 0.5756700457080229,
+      "earRight": 0.2163444389827668,
+      "earLeft": 0.18152616695943583
+     },
+     {
+      "box": {
+       "x": 215.24155024566753,
+       "y": 171.37531699841563,
+       "width": 110.60076523065159,
+       "height": 92.67958618707289
+      },
+      "score": 0.5533059315135381,
+      "earRight": 0.30612632148372254,
+      "earLeft": 0.2720038267157258
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5184122035969001,
+    "y": 0.34916407584506187
+   },
+   "centreMs": 1132.8999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.25418108579383003,
+     "y": 0.29375503015656834,
+     "width": 0.20892754586482298,
+     "height": 0.129253950435465,
+     "score": 0.6159664888699611
+    },
+    {
+     "x": 0.5787065290935098,
+     "y": 0.27531917109809045,
+     "width": 0.20393679230646033,
+     "height": 0.11460163772238491,
+     "score": 0.5823912816217877
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-47.jpg",
+   "width": 1061,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 855.3916187745397,
+    "hash": "3e4de569392e1e07",
+    "faces": 1,
+    "eyesClosed": true
+   },
+   "basicMs": 26.90000009536743,
+   "fullCheckMs": 2004.6999999284744,
+   "faces": {
+    "w": 531,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 268.46066058573575,
+       "y": 236.34379896439094,
+       "width": 117.9899611203848,
+       "height": 103.3818625439439
+      },
+      "score": 0.663944400985599,
+      "earRight": 0.15491568337088815,
+      "earLeft": 0.18383615513085688
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6407248988286887,
+    "y": 0.3501593774374656
+   },
+   "centreMs": 1129.8999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.5254840076680214,
+     "y": 0.27872901265524197,
+     "width": 0.23048178232133465,
+     "height": 0.14286072956444734,
+     "score": 0.32862503109636176
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-48.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 347.1553377698633,
+    "hash": "030333677bb3b32c",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 25.5,
+   "fullCheckMs": 1928.5,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 337.1287994680653,
+       "y": 408.3284785683143,
+       "width": 98.84796832579981,
+       "height": 100.70456430057142
+      },
+      "score": 0.6809627657351365,
+      "earRight": 0.31075587463216603,
+      "earLeft": 0.224823268369177
+     }
+    ]
+   },
+   "centre": null,
+   "centreMs": 1718.3999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-49.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 513.11309848603,
+    "hash": "1b95b58f9f1f3d37",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 26.5,
+   "fullCheckMs": 2099.2999999523163,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1124.1000000238419,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-50.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 437.2018087302587,
+    "hash": "7ff7d3e848396131",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 25.200000047683716,
+   "fullCheckMs": 1853.1999999284744,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.5022926349948587,
+    "y": 0.4963369758719828
+   },
+   "centreMs": 1171.1000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.3487928684630479,
+     "y": 0.47962902706949767,
+     "width": 0.2736766945661515,
+     "height": 0.16128700982262634,
+     "score": 0.6848979055234414
+    },
+    {
+     "x": 0.34776483527599944,
+     "y": 0.3517579148518415,
+     "width": 0.30905559943771843,
+     "height": 0.1751656658971461,
+     "score": 0.3959361653025389
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-51.jpg",
+   "width": 1600,
+   "height": 900,
+   "check": {
+    "v": 1,
+    "sharp": 580.0453514687484,
+    "hash": "1e181d1d8d695874",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 22.399999976158142,
+   "fullCheckMs": 2296.2999999523163,
+   "faces": {
+    "w": 800,
+    "h": 450,
+    "faces": [
+     {
+      "box": {
+       "x": 560.3499305281517,
+       "y": 112.49323371579186,
+       "width": 81.64421531935533,
+       "height": 77.349788499672
+      },
+      "score": 0.5353418063867446,
+      "earRight": 0.1703225820327428,
+      "earLeft": 0.6084944126568845
+     }
+    ]
+   },
+   "centre": null,
+   "centreMs": 1184.3000000715256,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-52.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 173.24669683766223,
+    "hash": "0f931101658c1342",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 25.899999976158142,
+   "fullCheckMs": 1957.3999999761581,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.49347463096568883,
+    "y": 0.7363013295093163
+   },
+   "centreMs": 1151.8000000715256,
+   "centreBoxes": [
+    {
+     "x": 0.33612117988589607,
+     "y": 0.6381331806266435,
+     "width": 0.3147069021595855,
+     "height": 0.19633629776534556,
+     "score": 0.5703384211943481
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-53.jpg",
+   "width": 1412,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 949.988193576561,
+    "hash": "d66ec7931392935b",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 34.299999952316284,
+   "fullCheckMs": 2185,
+   "faces": {
+    "w": 706,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 113.46845720404949,
+       "y": 268.03656122535415,
+       "width": 181.58119216660552,
+       "height": 167.024165523378
+      },
+      "score": 0.8421970303503385,
+      "earRight": 0.2588956422266023,
+      "earLeft": 0.27592265135521593
+     },
+     {
+      "box": {
+       "x": 263.37950272492066,
+       "y": 188.06199160383449,
+       "width": 159.7837497028745,
+       "height": 155.75402075895468
+      },
+      "score": 0.8166155897479327,
+      "earRight": 0.2501897478761645,
+      "earLeft": 0.22408741834091747
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.40139001659908535,
+    "y": 0.3931698318686042
+   },
+   "centreMs": 1230.1000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.1666487211748906,
+     "y": 0.3468673302595126,
+     "width": 0.27104216824593064,
+     "height": 0.19312707635957532,
+     "score": 0.8058431868633162
+    },
+    {
+     "x": 0.36209587472637733,
+     "y": 0.24634525711812047,
+     "width": 0.27403543729690283,
+     "height": 0.2123722918105412,
+     "score": 0.7831389521702786
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-54.jpg",
+   "width": 1600,
+   "height": 900,
+   "check": {
+    "v": 1,
+    "sharp": 724.704457457696,
+    "hash": "6edad6b4a9b8a424",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 26.199999928474426,
+   "fullCheckMs": 2260.5,
+   "faces": {
+    "w": 800,
+    "h": 450,
+    "faces": [
+     {
+      "box": {
+       "x": 267.0372581601522,
+       "y": 70.66033158887707,
+       "width": 125.63017885548598,
+       "height": 100.67186220809073
+      },
+      "score": 0.734871736745084,
+      "earRight": 0.23183859935614995,
+      "earLeft": 0.23172176865364005
+     },
+     {
+      "box": {
+       "x": 223.66874617373455,
+       "y": 166.82501064762363,
+       "width": 117.0037026688949,
+       "height": 103.9343074781626
+      },
+      "score": 0.7123457347139541,
+      "earRight": 0.2590798515626501,
+      "earLeft": 0.33314083759815005
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.409052042772618,
+    "y": 0.29134944277838226
+   },
+   "centreMs": 1168.8000000715256,
+   "centreBoxes": [
+    {
+     "x": 0.3352973547097665,
+     "y": 0.17767595374763034,
+     "width": 0.1475093761257028,
+     "height": 0.22734697806150386,
+     "score": 0.6095798560468376
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-55.jpg",
+   "width": 1600,
+   "height": 900,
+   "check": {
+    "v": 1,
+    "sharp": 736.4798083378402,
+    "hash": "65cd69686dadab0e",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 24.40000009536743,
+   "fullCheckMs": 2282.1999999284744,
+   "faces": {
+    "w": 800,
+    "h": 450,
+    "faces": [
+     {
+      "box": {
+       "x": 485.8594359481207,
+       "y": 82.522182338491,
+       "width": 107.10355041908714,
+       "height": 97.15543111607867
+      },
+      "score": 0.6936685327944271,
+      "earRight": 0.33403868699753714,
+      "earLeft": 0.2792032189723115
+     },
+     {
+      "box": {
+       "x": 402.4591306469459,
+       "y": 124.92040995214649,
+       "width": 106.277004891888,
+       "height": 93.19980110018567
+      },
+      "score": 0.6707641362541035,
+      "earRight": 0.22516764351349763,
+      "earLeft": 0.22661757844177732
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6057851671464566,
+    "y": 0.3402240753349553
+   },
+   "centreMs": 1153.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.6033437095055021,
+     "y": 0.18608850543751673,
+     "width": 0.153101463860843,
+     "height": 0.23663277737625368,
+     "score": 0.7126995900062955
+    },
+    {
+     "x": 0.455125160926568,
+     "y": 0.26520201445939046,
+     "width": 0.14472263868387286,
+     "height": 0.22915763077300344,
+     "score": 0.6387864852875578
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-56.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 706.759749592987,
+    "hash": "dc8aef8ed6ccc4f0",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 27.899999976158142,
+   "fullCheckMs": 2355.899999976158,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 350.96740501261837,
+       "y": 158.5589096627859,
+       "width": 110.5960066779354,
+       "height": 94.83403150470025
+      },
+      "score": 0.8384008665625624,
+      "earRight": 0.24509824564014498,
+      "earLeft": 0.25135903165924667
+     },
+     {
+      "box": {
+       "x": 346.8005655664509,
+       "y": 340.49032203768337,
+       "width": 144.49039389253323,
+       "height": 127.12492210953731
+      },
+      "score": 0.7438514703465309,
+      "earRight": 0.26358664965068235,
+      "earLeft": 0.2868327264208636
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5358230730535802,
+    "y": 0.5949952194395949
+   },
+   "centreMs": 1138.3000000715256,
+   "centreBoxes": [
+    {
+     "x": 0.44489276363656755,
+     "y": 0.6477243225226711,
+     "width": 0.18262987170897213,
+     "height": 0.2315584750551224,
+     "score": 0.785982539511541
+    },
+    {
+     "x": 0.444123510761621,
+     "y": 0.3107076413013963,
+     "width": 0.12768992762809284,
+     "height": 0.15741066891604294,
+     "score": 0.748975704143141
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-57.jpg",
+   "width": 1068,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 334.58062650430367,
+    "hash": "3f8c9ed351281a5a",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 26.300000071525574,
+   "fullCheckMs": 2081.5,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 155.7467030198071,
+       "y": 244.06367894288468,
+       "width": 109.59171031599901,
+       "height": 99.4189892973266
+      },
+      "score": 0.7827736209311985,
+      "earRight": 0.2547922267792021,
+      "earLeft": 0.25174336971746647
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5216549488367048,
+    "y": 0.3995802950307258
+   },
+   "centreMs": 1134.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.26617173735103866,
+     "y": 0.29179959073026507,
+     "width": 0.23013216764040056,
+     "height": 0.14948208629261367,
+     "score": 0.6776002305852051
+    },
+    {
+     "x": 0.5237468621949712,
+     "y": 0.332334739411826,
+     "width": 0.2533912981273998,
+     "height": 0.1750262599193605,
+     "score": 0.4252090845443327
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-58.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 650.3428701086896,
+    "hash": "9ed496aea7a0838b",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 26.299999952316284,
+   "fullCheckMs": 1968.2000000476837,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 277.60107830780976,
+       "y": 389.59734016128607,
+       "width": 98.54682977044547,
+       "height": 87.165604553409
+      },
+      "score": 0.6362070604066352,
+      "earRight": 0.2782540535748146,
+      "earLeft": 0.3231329670336529
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6308501381324486,
+    "y": 0.5498343861199234
+   },
+   "centreMs": 1128.2999999523163,
+   "centreBoxes": [
+    {
+     "x": 0.5369387646708923,
+     "y": 0.49566750313815555,
+     "width": 0.18782274692311263,
+     "height": 0.10833376596353572,
+     "score": 0.6702646290084763
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-59.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 741.6545342813982,
+    "hash": "77f0291a96a6d979",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 27.299999952316284,
+   "fullCheckMs": 2108.399999976158,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 171.32147756287748,
+       "y": 252.31810243585477,
+       "width": 173.96128780679186,
+       "height": 170.05791629884865
+      },
+      "score": 0.7783407999405972,
+      "earRight": 0.24181056415126911,
+      "earLeft": 0.20008681886426258
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.48475934724833597,
+    "y": 0.3812800378219072
+   },
+   "centreMs": 1211.6000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.3186249571761055,
+     "y": 0.26683494166605404,
+     "width": 0.3322687801444609,
+     "height": 0.22889019231170643,
+     "score": 0.590260647897982
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-60.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 1232.0936360490296,
+    "hash": "ed0731357b2a792b",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 26.399999976158142,
+   "fullCheckMs": 2138.600000023842,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 188.27215336397768,
+       "y": 345.48143740977247,
+       "width": 140.6927439845853,
+       "height": 120.46801815516726
+      },
+      "score": 0.8322425446251867,
+      "earRight": 0.2584941351960732,
+      "earLeft": 0.29313140232528495
+     },
+     {
+      "box": {
+       "x": 247.11750208422842,
+       "y": 190.51652127009524,
+       "width": 79.34445211478979,
+       "height": 67.5202632349685
+      },
+      "score": 0.590729338242594,
+      "earRight": 0.25184171358564406,
+      "earLeft": 0.2860830800423366
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.49022176938868395,
+    "y": 0.5079443619455876
+   },
+   "centreMs": 1129.6999999284744,
+   "centreBoxes": [
+    {
+     "x": 0.3736530043951991,
+     "y": 0.44431284607248306,
+     "width": 0.2331375299869698,
+     "height": 0.12726303174620895,
+     "score": 0.7438287559701864
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-61.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 543.6831787803345,
+    "hash": "e0d6dee657e2e0c4",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 27.300000071525574,
+   "fullCheckMs": 2165.1999999284744,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 387.3542696553022,
+       "y": 134.06418877040957,
+       "width": 144.61014151817065,
+       "height": 130.1921296781778
+      },
+      "score": 0.813738909947849,
+      "earRight": 0.2824053496927441,
+      "earLeft": 0.2712956832688084
+     },
+     {
+      "box": {
+       "x": 200.5352824960814,
+       "y": 115.5064496347862,
+       "width": 117.9398995751527,
+       "height": 97.41162815836603
+      },
+      "score": 0.8030784029597609,
+      "earRight": 0.27768641597733,
+      "earLeft": 0.28894875746494353
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.45724208556476803,
+    "y": 0.3409396766430552
+   },
+   "centreMs": 1176.6000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.463627263494655,
+     "y": 0.23473760897507848,
+     "width": 0.20598939601436023,
+     "height": 0.26397745283089213,
+     "score": 0.7897536145358123
+    },
+    {
+     "x": 0.2448675116205209,
+     "y": 0.1831642914801398,
+     "width": 0.16940759968291025,
+     "height": 0.21287258661947672,
+     "score": 0.668953602160194
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-62.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 527.3111612682283,
+    "hash": "33337a1d2dadac6c",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 26.199999928474426,
+   "fullCheckMs": 2138.9000000953674,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 152.61945186455407,
+       "y": 274.71635926673355,
+       "width": 171.6998936538265,
+       "height": 148.37274185832172
+      },
+      "score": 0.8830622328066846,
+      "earRight": 0.2623630569004685,
+      "earLeft": 0.29731793577781074
+     },
+     {
+      "box": {
+       "x": 446.94143890738013,
+       "y": 243.1856654469523,
+       "width": 141.30568314572125,
+       "height": 138.0929671731249
+      },
+      "score": 0.7757609352201207,
+      "earRight": 0.1929877149628102,
+      "earLeft": 0.22456832128887916
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.47535479770088435,
+    "y": 0.5884024344517493
+   },
+   "centreMs": 1080.8000000715256,
+   "centreBoxes": [
+    {
+     "x": 0.5234740278654164,
+     "y": 0.4007556764450158,
+     "width": 0.23162617447429887,
+     "height": 0.3180319759818755,
+     "score": 0.7519520329773578
+    },
+    {
+     "x": 0.19560939306205344,
+     "y": 0.506944643974629,
+     "width": 0.20647727756772385,
+     "height": 0.2691045484838538,
+     "score": 0.6629130729542043
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-63.jpg",
+   "width": 1038,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 428.89330377701236,
+    "hash": "1e4cfce99999f8d4",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 26.5,
+   "fullCheckMs": 2249.7999999523163,
+   "faces": {
+    "w": 519,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 237.68737529256748,
+       "y": 206.05315201288423,
+       "width": 152.76088881082757,
+       "height": 150.40638867739756
+      },
+      "score": 0.7019423726394987,
+      "earRight": 0.34038877982286825,
+      "earLeft": 0.2909886836044759
+     },
+     {
+      "box": {
+       "x": 122.63401448309928,
+       "y": 282.72407808103657,
+       "width": 140.56910846558017,
+       "height": 132.42467369487488
+      },
+      "score": 0.6514810881715991,
+      "earRight": 0.2945876247781058,
+      "earLeft": 0.2994143695517042
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.4863948716277127,
+    "y": 0.37431272780995994
+   },
+   "centreMs": 1135.8999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.1723179760815249,
+     "y": 0.3463933878666678,
+     "width": 0.31827939583722753,
+     "height": 0.16601701086028203,
+     "score": 0.8912658533027306
+    },
+    {
+     "x": 0.45242539196373716,
+     "y": 0.23621505689297018,
+     "width": 0.3480463752101634,
+     "height": 0.22131125533442042,
+     "score": 0.6849337934263177
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-64.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 371.2270377304429,
+    "hash": "ba2a363733386fd6",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 26.40000009536743,
+   "fullCheckMs": 2151.899999976158,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 359.8310903031458,
+       "y": 160.9286444376612,
+       "width": 116.09190806406211,
+       "height": 102.22714638571927
+      },
+      "score": 0.7849807121173028,
+      "earRight": 0.2299800385960294,
+      "earLeft": 0.3089422156670434
+     },
+     {
+      "box": {
+       "x": 479.1020409579714,
+       "y": 166.6806056582891,
+       "width": 113.42038821449094,
+       "height": 101.93514788303462
+      },
+      "score": 0.7050056381852641,
+      "earRight": 0.19742573310796097,
+      "earLeft": 0.20719987984102728
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5768282767460691,
+    "y": 0.383013774417679
+   },
+   "centreMs": 1193.7000000476837,
+   "centreBoxes": [
+    {
+     "x": 0.5634295858955577,
+     "y": 0.2743080332708408,
+     "width": 0.15447598849340294,
+     "height": 0.2174114822936764,
+     "score": 0.5798603588737827
+    },
+    {
+     "x": 0.43575097910317767,
+     "y": 0.27456879051164185,
+     "width": 0.1439774965907235,
+     "height": 0.1973653089896163,
+     "score": 0.5665241721531962
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-65.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 262.05277602804244,
+    "hash": "577b69694b63d1e1",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 29.100000023841858,
+   "fullCheckMs": 3488.2999999523163,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 208.91910376642414,
+       "y": 85.4188556009033,
+       "width": 124.01867036423462,
+       "height": 119.5669387505024
+      },
+      "score": 0.7740408314622439,
+      "earRight": 0.1991678110635321,
+      "earLeft": 0.23806850992779358
+     },
+     {
+      "box": {
+       "x": 463.0148548789554,
+       "y": 118.15327903768438,
+       "width": 128.74599627898445,
+       "height": 123.2156676756553
+      },
+      "score": 0.7692445683380785,
+      "earRight": 0.2484618931289795,
+      "earLeft": 0.25525255897197735
+     },
+     {
+      "box": {
+       "x": 344.3851625881868,
+       "y": 87.57365671906607,
+       "width": 150.9826809467301,
+       "height": 128.55905710858815
+      },
+      "score": 0.6774947504634802,
+      "earRight": 0.2619358841102542,
+      "earLeft": 0.27760488021710156
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5168242149695481,
+    "y": 0.31693102583008936
+   },
+   "centreMs": 1087.7999999523163,
+   "centreBoxes": [
+    {
+     "x": 0.27773154826094865,
+     "y": 0.1654826075440549,
+     "width": 0.17312432368142938,
+     "height": 0.2237142425812749,
+     "score": 0.8387560195629646
+    },
+    {
+     "x": 0.5746123056852538,
+     "y": 0.21869262116729635,
+     "width": 0.18130457599289385,
+     "height": 0.2496868229488275,
+     "score": 0.7978240434987168
+    },
+    {
+     "x": 0.4134050152033632,
+     "y": 0.1764974959707096,
+     "width": 0.1845701427000404,
+     "height": 0.22667188637841285,
+     "score": 0.7443770523388424
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-66.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 392.4743528134286,
+    "hash": "e1c4851678e8d3d0",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 28.899999976158142,
+   "fullCheckMs": 2551.2000000476837,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 356.03850646289663,
+       "y": 347.13158730194544,
+       "width": 93.10084392255655,
+       "height": 94.92915237140376
+      },
+      "score": 0.6441978379997403,
+      "earRight": 0.31232620246458975,
+      "earLeft": 0.2625247014990063
+     }
+    ]
+   },
+   "centre": null,
+   "centreMs": 1212.4000000953674,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-67.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 432.74468726515187,
+    "hash": "6b24ece8fcf0e3cf",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 27.299999952316284,
+   "fullCheckMs": 2254.5,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 254.41815186795534,
+       "y": 272.51120352232687,
+       "width": 179.49583639243477,
+       "height": 185.8595239638666
+      },
+      "score": 0.9377827126528081,
+      "earRight": 0.24996613598380724,
+      "earLeft": 0.23126348017213008
+     },
+     {
+      "box": {
+       "x": 137.46021221382736,
+       "y": 213.1748589410988,
+       "width": 97.82958092432233,
+       "height": 90.00343559824171
+      },
+      "score": 0.7418073731014221,
+      "earRight": 0.26588294386069056,
+      "earLeft": 0.2532152491532708
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5522385016546512,
+    "y": 0.4194899635856623
+   },
+   "centreMs": 1124.1000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.4797822129632001,
+     "y": 0.3294512177915662,
+     "width": 0.39184993385697964,
+     "height": 0.23455839410201423,
+     "score": 0.7878303463691356
+    },
+    {
+     "x": 0.23284485648912256,
+     "y": 0.2749703152777442,
+     "width": 0.17719113927363006,
+     "height": 0.11358126105862108,
+     "score": 0.5900154095401726
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-68.jpg",
+   "width": 1600,
+   "height": 900,
+   "check": {
+    "v": 1,
+    "sharp": 604.2545700867048,
+    "hash": "41435353133f2d48",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 23.600000023841858,
+   "fullCheckMs": 2081.399999976158,
+   "faces": {
+    "w": 800,
+    "h": 450,
+    "faces": [
+     {
+      "box": {
+       "x": 513.1757559971267,
+       "y": 221.07667072470602,
+       "width": 139.8577155444145,
+       "height": 121.2215030238193
+      },
+      "score": 0.7378345434984527,
+      "earRight": 0.33830793596161945,
+      "earLeft": 0.30976667733924834
+     },
+     {
+      "box": {
+       "x": 217.96686126630726,
+       "y": 185.08543755340978,
+       "width": 104.79797344560282,
+       "height": 84.74746139106082
+      },
+      "score": 0.6025972484705044,
+      "earRight": 0.20493624172774155,
+      "earLeft": 0.22842160573704134
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.536646854264937,
+    "y": 0.578753348186634
+   },
+   "centreMs": 1293.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.6416602669259919,
+     "y": 0.5171479226040689,
+     "width": 0.16931116843875282,
+     "height": 0.2560556627297299,
+     "score": 0.8001005561368794
+    },
+    {
+     "x": 0.4630601266583423,
+     "y": 0.38430311103946935,
+     "width": 0.15722562737155865,
+     "height": 0.24948729776170664,
+     "score": 0.6135427630970147
+    },
+    {
+     "x": 0.26232227316512924,
+     "y": 0.3909785537392207,
+     "width": 0.14062959962560662,
+     "height": 0.2180453341627759,
+     "score": 0.5537460645471717
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-69.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 487.26997721976403,
+    "hash": "fffddb87bfee6e1e",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 32.89999997615814,
+   "fullCheckMs": 2295.3000000715256,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1505.3999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-70.jpg",
+   "width": 1161,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 1922.879255844493,
+    "hash": "066fee1e1f2969a1",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 60.5,
+   "fullCheckMs": 2049.7999999523163,
+   "faces": {
+    "w": 581,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1179.3999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-71.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 720.3008337479338,
+    "hash": "d55b591b1713321b",
+    "faces": 4,
+    "eyesClosed": false
+   },
+   "basicMs": 28.800000071525574,
+   "fullCheckMs": 2649.100000023842,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 373.55128616841546,
+       "y": 59.861428905674444,
+       "width": 108.3054892150479,
+       "height": 90.3507093033871
+      },
+      "score": 0.7630935268001695,
+      "earRight": 0.24097028379576274,
+      "earLeft": 0.2534557340869497
+     },
+     {
+      "box": {
+       "x": 417.1563882804503,
+       "y": 167.4766294350309,
+       "width": 105.23410190036948,
+       "height": 86.91355776967582
+      },
+      "score": 0.7165878024255604,
+      "earRight": 0.3000817172788743,
+      "earLeft": 0.3217554790195215
+     },
+     {
+      "box": {
+       "x": 297.30613208764083,
+       "y": 105.35087253146618,
+       "width": 91.40121752062771,
+       "height": 78.34961325925451
+      },
+      "score": 0.7023737697946297,
+      "earRight": 0.22196871581459252,
+      "earLeft": 0.2883116923522314
+     },
+     {
+      "box": {
+       "x": 522.7555775948265,
+       "y": 206.0546321483359,
+       "width": 98.28852073376639,
+       "height": 90.21474347477943
+      },
+      "score": 0.5860565139124512,
+      "earRight": 0.29351693457427797,
+      "earLeft": 0.29192281090779254
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6257278752360197,
+    "y": 0.34031387583407763
+   },
+   "centreMs": 1225.7000000476837,
+   "centreBoxes": [
+    {
+     "x": 0.4718171287757502,
+     "y": 0.12269811858865257,
+     "width": 0.12286510203502621,
+     "height": 0.17423832970097825,
+     "score": 0.4386055664068572
+    },
+    {
+     "x": 0.6499026054759169,
+     "y": 0.402288262740803,
+     "width": 0.12973601622037234,
+     "height": 0.15564137033869963,
+     "score": 0.425022649818564
+    },
+    {
+     "x": 0.49518842849531985,
+     "y": 0.27744272526335156,
+     "width": 0.1332735391950126,
+     "height": 0.1926667416320138,
+     "score": 0.3088662843126367
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-72.jpg",
+   "width": 1234,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 391.67475426765685,
+    "hash": "000050546c399999",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 42.60000002384186,
+   "fullCheckMs": 2318.100000023842,
+   "faces": {
+    "w": 617,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 272.0857188692976,
+       "y": 315.8972732523512,
+       "width": 101.14018432352383,
+       "height": 94.46841916690457
+      },
+      "score": 0.6433880467719066,
+      "earRight": 0.26458371014835796,
+      "earLeft": 0.2685281303277095
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5046467323010454,
+    "y": 0.43617971341925893
+   },
+   "centreMs": 1359.1999999284744,
+   "centreBoxes": [
+    {
+     "x": 0.4695618566826149,
+     "y": 0.36725770982283906,
+     "width": 0.16358445429606205,
+     "height": 0.12138441065770594,
+     "score": 0.6212032682705898
+    },
+    {
+     "x": 0.3761471536234139,
+     "y": 0.3689944692584754,
+     "width": 0.18476880705634136,
+     "height": 0.1361072477572034,
+     "score": 0.4264738843954178
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-73.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 629.0236300148159,
+    "hash": "f3cffff5eff9f9e3",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 37.300000071525574,
+   "fullCheckMs": 2295.399999976158,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1275.2999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-74.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 947.5081384295779,
+    "hash": "7edafc96cc6bafbe",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 31.600000023841858,
+   "fullCheckMs": 2146.600000023842,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1256.6000000238419,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-75.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 872.701811824956,
+    "hash": "38f2b9b514381a8a",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 44.59999990463257,
+   "fullCheckMs": 2446.9000000953674,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 215.79612681034067,
+       "y": 494.1906089775106,
+       "width": 99.65528399694142,
+       "height": 79.31982851885388
+      },
+      "score": 0.8262555122892026,
+      "earRight": 0.2417629744716283,
+      "earLeft": 0.29770302987264174
+     },
+     {
+      "box": {
+       "x": 294.757181452454,
+       "y": 493.7171683163193,
+       "width": 109.54314456106049,
+       "height": 88.91700410861247
+      },
+      "score": 0.7933114414248952,
+      "earRight": 0.2189962206584567,
+      "earLeft": 0.25946247120068733
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5891740120701937,
+    "y": 0.6616295877774925
+   },
+   "centreMs": 1280.9000000953674,
+   "centreBoxes": [
+    {
+     "x": 0.4237365056456813,
+     "y": 0.6051114616039741,
+     "width": 0.20382957789382505,
+     "height": 0.1223591346386165,
+     "score": 0.4259423997611881
+    },
+    {
+     "x": 0.5607958588831251,
+     "y": 0.5957885793123945,
+     "width": 0.1938156596115811,
+     "height": 0.11881311700001795,
+     "score": 0.33894296629781523
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-76.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 829.0931350477761,
+    "hash": "7df99b59550b0e99",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 32.200000047683716,
+   "fullCheckMs": 2185.6999999284744,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.7030925638457327,
+    "y": 0.34727869286012797
+   },
+   "centreMs": 1326.5,
+   "centreBoxes": [
+    {
+     "x": 0.613094832971029,
+     "y": 0.2893890780040521,
+     "width": 0.1799954617494075,
+     "height": 0.11577922971215171,
+     "score": 0.3687903660987819
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-77.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 872.4086132199086,
+    "hash": "0f292965775349c5",
+    "faces": 5,
+    "eyesClosed": false
+   },
+   "basicMs": 39.09999990463257,
+   "fullCheckMs": 3079.600000023842,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 320.446705956452,
+       "y": 363.7116152235032,
+       "width": 133.08606830248326,
+       "height": 110.63101366302197
+      },
+      "score": 0.8638576014924689,
+      "earRight": 0.24793439204513995,
+      "earLeft": 0.25627188941268475
+     },
+     {
+      "box": {
+       "x": 132.09494927952946,
+       "y": 76.62054409369814,
+       "width": 100.49942826771905,
+       "height": 85.8819343803182
+      },
+      "score": 0.762755701868649,
+      "earRight": 0.29455370015053417,
+      "earLeft": 0.31027595947706504
+     },
+     {
+      "box": {
+       "x": 258.10158756184956,
+       "y": 231.5367900828681,
+       "width": 111.69698520666654,
+       "height": 87.99329352114499
+      },
+      "score": 0.742219026404205,
+      "earRight": 0.2348681878472722,
+      "earLeft": 0.24366646736918535
+     },
+     {
+      "box": {
+       "x": 386.31245005342623,
+       "y": 211.04371537727627,
+       "width": 110.70777917352994,
+       "height": 104.3810934554032
+      },
+      "score": 0.7318941166080765,
+      "earRight": 0.3143120804280862,
+      "earLeft": 0.2435853799773797
+     },
+     {
+      "box": {
+       "x": 545.0453064695188,
+       "y": 92.4418337760646,
+       "width": 134.1621380235229,
+       "height": 115.89381920608136
+      },
+      "score": 0.7227002667960429,
+      "earRight": 0.23510880172629867,
+      "earLeft": 0.22916300284345828
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.4973508950859422,
+    "y": 0.5170316407787141
+   },
+   "centreMs": 1703.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.6776386905400846,
+     "y": 0.1879486914640231,
+     "width": 0.16048537130039864,
+     "height": 0.18817751933551002,
+     "score": 0.7787918291339269
+    },
+    {
+     "x": 0.4847103214168145,
+     "y": 0.38893507896117346,
+     "width": 0.14626792903715358,
+     "height": 0.19863485154442478,
+     "score": 0.7296159740523213
+    },
+    {
+     "x": 0.4136403724360884,
+     "y": 0.7139221262503719,
+     "width": 0.152006036355944,
+     "height": 0.17393663529072723,
+     "score": 0.6561530935382374
+    },
+    {
+     "x": 0.15657772833140118,
+     "y": 0.14620452001632894,
+     "width": 0.14183755016124153,
+     "height": 0.1843001187566196,
+     "score": 0.4269267821588923
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "megy-sample-78.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 457.5287679947614,
+    "hash": "1f1f39e1f2f3e5fc",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 31.399999976158142,
+   "fullCheckMs": 2535.2000000476837,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 169.0589298386359,
+       "y": 324.90682432580405,
+       "width": 110.61575882908507,
+       "height": 97.33413206354857
+      },
+      "score": 0.8012540005483685,
+      "earRight": 0.2794041027109578,
+      "earLeft": 0.3422050059143018
+     },
+     {
+      "box": {
+       "x": 260.29184106741434,
+       "y": 288.8351492551057,
+       "width": 135.09464254910822,
+       "height": 106.28994922674657
+      },
+      "score": 0.7690434396958563,
+      "earRight": 0.22883725918762257,
+      "earLeft": 0.24587553549477226
+     },
+     {
+      "box": {
+       "x": 348.78920520341876,
+       "y": 468.0340708106569,
+       "width": 95.00059396423892,
+       "height": 87.5242592656746
+      },
+      "score": 0.5108266422850658,
+      "earRight": 0.24005038449422292,
+      "earLeft": 0.2611261037685436
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.45306138006694874,
+    "y": 0.5441146634104195
+   },
+   "centreMs": 1320.6999999284744,
+   "centreBoxes": [
+    {
+     "x": 0.5032402317323821,
+     "y": 0.374033201216101,
+     "width": 0.2184444418569591,
+     "height": 0.12409337367304485,
+     "score": 0.6434124027904919
+    },
+    {
+     "x": 0.27297566648979205,
+     "y": 0.4266091469109903,
+     "width": 0.19225865936825956,
+     "height": 0.11742946920478081,
+     "score": 0.42638715658420456
+    },
+    {
+     "x": 0.07435353258012606,
+     "y": 0.4187036790793096,
+     "width": 0.2533009136725531,
+     "height": 0.13474242988670093,
+     "score": 0.3934400228410652
+    },
+    {
+     "x": 0.60589252448554,
+     "y": 0.5711431476930112,
+     "width": 0.2258767030682313,
+     "height": 0.14305297791172666,
+     "score": 0.3158331434863625
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-sblur-03-2px.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 74.43654206647865,
+    "hash": "393b1f1f2d361357",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 33.5,
+   "fullCheckMs": 2313.1999999284744,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1341.2999999523163,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-sblur-09-3px.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 19.451499885428614,
+    "hash": "0737262332763637",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 24.699999928474426,
+   "fullCheckMs": 3943.5,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 620.8818273797613,
+       "y": 287.1741825591379,
+       "width": 150.80403423849384,
+       "height": 131.97153465204823
+      },
+      "score": 0.8249787632416241,
+      "earRight": 0.21488414402720454,
+      "earLeft": 0.26275869269491015
+     },
+     {
+      "box": {
+       "x": 327.9308772362533,
+       "y": 210.4941005948319,
+       "width": 118.96677794877996,
+       "height": 99.87970246880893
+      },
+      "score": 0.7612296957054039,
+      "earRight": 0.24343528459834676,
+      "earLeft": 0.2789442486685221
+     },
+     {
+      "box": {
+       "x": 248.12483540587706,
+       "y": 155.72371358440316,
+       "width": 111.37977958373284,
+       "height": 90.58222151252258
+      },
+      "score": 0.748870820699671,
+      "earRight": 0.23648031900596103,
+      "earLeft": 0.22488637657207708
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6256940351563253,
+    "y": 0.5513706320657884
+   },
+   "centreMs": 1322.1000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.3961100625675703,
+     "y": 0.3817152765095625,
+     "width": 0.14999330390996157,
+     "height": 0.19298034443926965,
+     "score": 0.6872049138426144
+    },
+    {
+     "x": 0.7699504689472499,
+     "y": 0.5549514941616951,
+     "width": 0.1882069905701549,
+     "height": 0.2195700114421465,
+     "score": 0.6474219741827066
+    },
+    {
+     "x": 0.2932306107952457,
+     "y": 0.3282197585277353,
+     "width": 0.13731295701434426,
+     "height": 0.18446348527151907,
+     "score": 0.3982480341699303
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-sblur-15-4px.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 10.075817139428889,
+    "hash": "5cded6d564e4f474",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 21.5,
+   "fullCheckMs": 2821.7999999523163,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 173.8350034212314,
+       "y": 126.78138026439514,
+       "width": 101.60159464923746,
+       "height": 86.13794080489869
+      },
+      "score": 0.7151835027096822,
+      "earRight": 0.31019720527909417,
+      "earLeft": 0.3857214144954814
+     },
+     {
+      "box": {
+       "x": 561.9551565456094,
+       "y": 102.00701924241889,
+       "width": 118.78121379542446,
+       "height": 107.92277526077241
+      },
+      "score": 0.7002496890364195,
+      "earRight": 0.22596383032245781,
+      "earLeft": 0.2631803448034209
+     },
+     {
+      "box": {
+       "x": 528.0732843989964,
+       "y": 279.39770336347186,
+       "width": 119.14497978345304,
+       "height": 114.10087924547143
+      },
+      "score": 0.5233008515849245,
+      "earRight": 0.1754165222129448,
+      "earLeft": 0.24039673154141042
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5405089481185481,
+    "y": 0.4404105958275003
+   },
+   "centreMs": 1355.9000000953674,
+   "centreBoxes": [
+    {
+     "x": 0.7085280376656297,
+     "y": 0.2603257944477413,
+     "width": 0.14412785396790306,
+     "height": 0.1898050980990944,
+     "score": 0.7163022896264112
+    },
+    {
+     "x": 0.22836200460356335,
+     "y": 0.22965291980172173,
+     "width": 0.12468456615485682,
+     "height": 0.1706398059690615,
+     "score": 0.5478914221604793
+    },
+    {
+     "x": 0.3871580498141902,
+     "y": 0.3153076986385803,
+     "width": 0.13902285735449493,
+     "height": 0.19137607525069414,
+     "score": 0.49751683130969176
+    },
+    {
+     "x": 0.6566506706422034,
+     "y": 0.42747497664614986,
+     "width": 0.1600098382049493,
+     "height": 0.22369329520712913,
+     "score": 0.46582022303591525
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-sblur-22-1p5px.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 93.60723046920637,
+    "hash": "291b2eaf0d4cc48e",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 19.799999952316284,
+   "fullCheckMs": 2123.399999976158,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1183.8999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-sblur-30-6px.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 4.926947946925649,
+    "hash": "0fcc9c9a28693381",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 18.899999976158142,
+   "fullCheckMs": 2134.100000023842,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1355.8999999761581,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-sblur-41-2p5px.jpg",
+   "width": 1420,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 43.01331755912026,
+    "hash": "d2505c4c685dc736",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 27.300000071525574,
+   "fullCheckMs": 2558,
+   "faces": {
+    "w": 710,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 502.00608838366924,
+       "y": 338.841429705231,
+       "width": 130.8686421518295,
+       "height": 115.60559943585523
+      },
+      "score": 0.829807108027664,
+      "earRight": 0.21653498341314056,
+      "earLeft": 0.2519084319705962
+     },
+     {
+      "box": {
+       "x": 182.35561387525834,
+       "y": 140.40124108721898,
+       "width": 126.00933256387218,
+       "height": 129.39272825691424
+      },
+      "score": 0.7824297223320059,
+      "earRight": 0.24154502126804409,
+      "earLeft": 0.2608651472281381
+     },
+     {
+      "box": {
+       "x": 21.390759244533637,
+       "y": 207.00934355287797,
+       "width": 123.40910725067707,
+       "height": 108.28614496143922
+      },
+      "score": 0.7317699344135665,
+      "earRight": 0.24414585511832831,
+      "earLeft": 0.3128563593782291
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.47381342020759115,
+    "y": 0.36970230201923615
+   },
+   "centreMs": 1204.8000000715256,
+   "centreBoxes": [
+    {
+     "x": 0.2623559060696749,
+     "y": 0.18516226815424347,
+     "width": 0.16327921261059528,
+     "height": 0.13143515573039305,
+     "score": 0.7667420125624465
+    },
+    {
+     "x": 0.042923256584362114,
+     "y": 0.2551656323692546,
+     "width": 0.16964939296788975,
+     "height": 0.12271340185143664,
+     "score": 0.690648491276908
+    },
+    {
+     "x": 0.7186665259610545,
+     "y": 0.41827269380800436,
+     "width": 0.18603705786976563,
+     "height": 0.13596964207622442,
+     "score": 0.6836849130872205
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-sblur-52-5px.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 3.953493231360123,
+    "hash": "0f931101658c1342",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 18,
+   "fullCheckMs": 1883.5999999046326,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1078.7000000476837,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-sblur-66-8px.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 3.0023873633087907,
+    "hash": "e1c4851678e8d3d0",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 14.5,
+   "fullCheckMs": 1787.3000000715256,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1168.2000000476837,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-snear-05.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 760.7583354132327,
+    "hash": "48381c3a3839f981",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 19,
+   "fullCheckMs": 2345,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 287.36515578703614,
+       "y": 176.22055645283393,
+       "width": 110.84145687646917,
+       "height": 91.79659378475264
+      },
+      "score": 0.7759439082900481,
+      "earRight": 0.2578502756245956,
+      "earLeft": 0.2825902158028716
+     },
+     {
+      "box": {
+       "x": 94.68023591669112,
+       "y": 234.1807147304107,
+       "width": 105.41352402294675,
+       "height": 95.33835430084193
+      },
+      "score": 0.54139273849079,
+      "earRight": 0.2662511073816907,
+      "earLeft": 0.28062746845673414
+     },
+     {
+      "box": {
+       "x": 254.43874836000919,
+       "y": 312.2494249465655,
+       "width": 76.60814954836022,
+       "height": 71.27511699397897
+      },
+      "score": 0.5086630108359377,
+      "earRight": 0.2638807584997252,
+      "earLeft": 0.2530170943346915
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6017872641270656,
+    "y": 0.3528017323463908
+   },
+   "centreMs": 1618.1000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.5618772909686193,
+     "y": 0.2122150955170431,
+     "width": 0.20063871434753422,
+     "height": 0.11899435122267032,
+     "score": 0.434363014222974
+    },
+    {
+     "x": 0.44105852293797754,
+     "y": 0.3734964481462983,
+     "width": 0.19396329083845437,
+     "height": 0.11989192102944035,
+     "score": 0.42837985685211233
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-snear-12.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 254.37968761135247,
+    "hash": "45e5cd7c6c2c9491",
+    "faces": 2,
+    "eyesClosed": false
+   },
+   "basicMs": 20.100000023841858,
+   "fullCheckMs": 2446.2999999523163,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 136.79780289791347,
+       "y": 207.74997634179536,
+       "width": 288.86240818637685,
+       "height": 266.92007160996184
+      },
+      "score": 0.6054439854854384,
+      "earRight": 0.26125116277535615,
+      "earLeft": 0.30064688804608686
+     },
+     {
+      "box": {
+       "x": 434.0485859804148,
+       "y": 221.28405030924282,
+       "width": 277.07982272135104,
+       "height": 261.1713817711882
+      },
+      "score": 0.6041881874402897,
+      "earRight": 0.2787106326156072,
+      "earLeft": 0.31058540853302974
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5277662345421554,
+    "y": 0.6650501365154172
+   },
+   "centreMs": 1144.6000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.1806095690029325,
+     "y": 0.4048441665877451,
+     "width": 0.35326540973477477,
+     "height": 0.5204119398553442,
+     "score": 0.7830303554071052
+    },
+    {
+     "x": 0.5753282554341184,
+     "y": 0.43461483939699264,
+     "width": 0.29959464464725993,
+     "height": 0.4272567245527506,
+     "score": 0.5707327895068254
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-snear-19.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 3383.1582034777093,
+    "hash": "1c14341c475a8c2a",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 21.199999928474426,
+   "fullCheckMs": 2120.5,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": []
+   },
+   "centre": null,
+   "centreMs": 1215.8000000715256,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-snear-27.jpg",
+   "width": 1600,
+   "height": 900,
+   "check": {
+    "v": 1,
+    "sharp": 79.47480565188478,
+    "hash": "87b7a726362e1e1f",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 17.800000071525574,
+   "fullCheckMs": 2190.5999999046326,
+   "faces": {
+    "w": 800,
+    "h": 450,
+    "faces": [
+     {
+      "box": {
+       "x": 344.91658135620236,
+       "y": 136.92044271346316,
+       "width": 187.87686505182927,
+       "height": 175.41263937305462
+      },
+      "score": 0.8647854279636804,
+      "earRight": 0.22499866204871236,
+      "earLeft": 0.22780963837439092
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5501818525968167,
+    "y": 0.48322608124686806
+   },
+   "centreMs": 1213.3999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.4273773286277235,
+     "y": 0.2925647707944268,
+     "width": 0.24560904793818655,
+     "height": 0.38132262090488256,
+     "score": 0.6867057358772249
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-snear-35.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 888.7665475402881,
+    "hash": "77f2666fcbaaba8f",
+    "faces": 0,
+    "eyesClosed": false
+   },
+   "basicMs": 18.300000071525574,
+   "fullCheckMs": 2069,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": []
+   },
+   "centre": {
+    "x": 0.6127941905579983,
+    "y": 0.4746756315199127
+   },
+   "centreMs": 1209.6000000238419,
+   "centreBoxes": [
+    {
+     "x": 0.3099289241470409,
+     "y": 0.1593487857405088,
+     "width": 0.13517606360272055,
+     "height": 0.17086815349217271,
+     "score": 0.7535232710065403
+    },
+    {
+     "x": 0.368984659906059,
+     "y": 0.1685811990099479,
+     "width": 0.1264872842095895,
+     "height": 0.16208704945003188,
+     "score": 0.4321130307519495
+    },
+    {
+     "x": 0.36221656964739274,
+     "y": 0.2565873415955904,
+     "width": 0.14317213539629442,
+     "height": 0.20373895364974015,
+     "score": 0.3489840514987577
+    },
+    {
+     "x": 0.7626584051868757,
+     "y": 0.5748923353544241,
+     "width": 0.15300105178208012,
+     "height": 0.21511014194489253,
+     "score": 0.34645872369708436
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-snear-44.jpg",
+   "width": 1600,
+   "height": 1064,
+   "check": {
+    "v": 1,
+    "sharp": 1447.9027336485385,
+    "hash": "6d58b0cd8bc9e0e3",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 24.200000047683716,
+   "fullCheckMs": 3194.399999976158,
+   "faces": {
+    "w": 800,
+    "h": 532,
+    "faces": [
+     {
+      "box": {
+       "x": 542.9303092799482,
+       "y": 175.8171799531195,
+       "width": 86.81630245494381,
+       "height": 83.79165206314029
+      },
+      "score": 0.559444501710688,
+      "earRight": 0.33906893830351637,
+      "earLeft": 0.36198945703283286
+     }
+    ]
+   },
+   "centre": null,
+   "centreMs": 1269,
+   "centreBoxes": [],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-snear-58.jpg",
+   "width": 1067,
+   "height": 1600,
+   "check": {
+    "v": 1,
+    "sharp": 568.9891408996555,
+    "hash": "9ed496aee7a0a38a",
+    "faces": 1,
+    "eyesClosed": false
+   },
+   "basicMs": 20.399999976158142,
+   "fullCheckMs": 2163.600000023842,
+   "faces": {
+    "w": 534,
+    "h": 800,
+    "faces": [
+     {
+      "box": {
+       "x": 269.53379552123454,
+       "y": 387.1483965423628,
+       "width": 108.78817884372788,
+       "height": 90.85207134848349
+      },
+      "score": 0.809259303948836,
+      "earRight": 0.2612718430732272,
+      "earLeft": 0.2967908817791536
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.6326947951152785,
+    "y": 0.5424936180534824
+   },
+   "centreMs": 1100.8999999761581,
+   "centreBoxes": [
+    {
+     "x": 0.5274557135466983,
+     "y": 0.48194298607772296,
+     "width": 0.21047816313716017,
+     "height": 0.12110126395151893,
+     "score": 0.6442559258537284
+    }
+   ],
+   "sameBasic": true
+  },
+  {
+   "file": "pc-snear-71.jpg",
+   "width": 1600,
+   "height": 1067,
+   "check": {
+    "v": 1,
+    "sharp": 717.9833939823639,
+    "hash": "d55b1b1b17263617",
+    "faces": 3,
+    "eyesClosed": false
+   },
+   "basicMs": 20,
+   "fullCheckMs": 2298.600000023842,
+   "faces": {
+    "w": 800,
+    "h": 534,
+    "faces": [
+     {
+      "box": {
+       "x": 284.1279725785393,
+       "y": 111.01458832960905,
+       "width": 87.93659164527826,
+       "height": 78.37934345398745
+      },
+      "score": 0.7700496716678393,
+      "earRight": 0.2323083689600659,
+      "earLeft": 0.2567789928482916
+     },
+     {
+      "box": {
+       "x": 408.2790637606304,
+       "y": 167.82086429564623,
+       "width": 97.58088290215845,
+       "height": 82.52199380962587
+      },
+      "score": 0.7426277447860448,
+      "earRight": 0.29401176818863356,
+      "earLeft": 0.2765042224999851
+     },
+     {
+      "box": {
+       "x": 357.61990114144567,
+       "y": 62.32774636643229,
+       "width": 104.08218775022053,
+       "height": 86.91021644253449
+      },
+      "score": 0.7349804906544424,
+      "earRight": 0.23926577745313066,
+      "earLeft": 0.25041026879010136
+     }
+    ]
+   },
+   "centre": {
+    "x": 0.5299011701530564,
+    "y": 0.30196265152021134
+   },
+   "centreMs": 1099.1999999284744,
+   "centreBoxes": [
+    {
+     "x": 0.44927987593611696,
+     "y": 0.1385083473535431,
+     "width": 0.13169534943585437,
+     "height": 0.17943009309925867,
+     "score": 0.4303937398035392
+    },
+    {
+     "x": 0.4648738312363531,
+     "y": 0.25963239892818035,
+     "width": 0.14564863313364268,
+     "height": 0.20578455675869922,
+     "score": 0.39571620688495374
+    }
+   ],
+   "sameBasic": true
+  }
+ ]
+}

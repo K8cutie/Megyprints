@@ -1,0 +1,2521 @@
+{
+ "when": "2026-10-28T08:15:46.143Z",
+ "wrapperRun": {
+  "when": "2026-10-28T07:26:59.758Z",
+  "sharpRatio": {
+   "median": 1.324,
+   "min": 0.629,
+   "max": 2.108
+  },
+  "hashBits": {
+   "median": 0,
+   "max": 7
+  },
+  "galleryReads": {
+   "idle": {
+    "reads": 12,
+    "p50": 30.702800000086427,
+    "p95": 50.704699999885634,
+    "max": 50.704699999885634
+   },
+   "basic": {
+    "reads": 73,
+    "p50": 28.691299999831244,
+    "p95": 167.08709999988787,
+    "max": 199.4932999999728
+   },
+   "faces": {
+    "reads": 137,
+    "p50": 87.71070000017062,
+    "p95": 170.39929999993183,
+    "max": 314.5101999999024
+   }
+  },
+  "screenWaits": {
+   "basic": {
+    "samples": 436,
+    "p50": 0,
+    "p95": 127.88199999998324,
+    "max": 175.2546999999322
+   },
+   "faces": {
+    "samples": 816,
+    "p50": 16.690199999837205,
+    "p95": 19.382299999939278,
+    "max": 40.9660000000149
+   }
+  }
+ },
+ "pictures": {
+  "compared": 138,
+  "missing": [],
+  "sizeMismatch": []
+ },
+ "measurements": {
+  "sharpRatio": {
+   "median": 1,
+   "min": 0.999,
+   "max": 1,
+   "within5pct": 100,
+   "within15pct": 100
+  },
+  "hashBits": {
+   "median": 0,
+   "max": 0,
+   "zero": 100,
+   "atMost3": 100
+  },
+  "worstSharp": [
+   {
+    "file": "megy-sample-18.jpg",
+    "webSharp": 779.7,
+    "phoneSharp": 778.6,
+    "ratio": 0.999,
+    "hashBits": 0
+   },
+   {
+    "file": "megy-sample-22.jpg",
+    "webSharp": 545.9,
+    "phoneSharp": 545.1,
+    "ratio": 0.999,
+    "hashBits": 0
+   },
+   {
+    "file": "megy-sample-66.jpg",
+    "webSharp": 392.5,
+    "phoneSharp": 391.9,
+    "ratio": 0.999,
+    "hashBits": 0
+   },
+   {
+    "file": "megy-sample-45.jpg",
+    "webSharp": 1336.7,
+    "phoneSharp": 1334.9,
+    "ratio": 0.999,
+    "hashBits": 0
+   },
+   {
+    "file": "megy-sample-31.jpg",
+    "webSharp": 506.3,
+    "phoneSharp": 505.7,
+    "ratio": 0.999,
+    "hashBits": 0
+   }
+  ],
+  "worstHash": [
+   {
+    "file": "pc-scene-01.jpg",
+    "hashBits": 0
+   },
+   {
+    "file": "pc-blur-01-1p5px.jpg",
+    "hashBits": 0
+   },
+   {
+    "file": "pc-turned-01-o6.jpg",
+    "hashBits": 0
+   },
+   {
+    "file": "pc-scene-02.jpg",
+    "hashBits": 0
+   },
+   {
+    "file": "pc-blur-02-2px.jpg",
+    "hashBits": 0
+   }
+  ]
+ },
+ "verdicts": {
+  "made-up pictures": {
+   "photos": 44,
+   "median": {
+    "web": 351.5,
+    "phone": 351.5
+   },
+   "blurry": {
+    "web": [
+     "pc-blur-05-6px.jpg",
+     "pc-blur-06-8px.jpg",
+     "pc-blur-08-5px.jpg",
+     "pc-blur-09-10px.jpg"
+    ],
+    "phone": [
+     "pc-blur-05-6px.jpg",
+     "pc-blur-06-8px.jpg",
+     "pc-blur-08-5px.jpg",
+     "pc-blur-09-10px.jpg"
+    ],
+    "same": true,
+    "perPhotoAgreement": 100
+   },
+   "repeatSets": {
+    "web": [
+     "pc-blur-01-1p5px.jpg+pc-scene-01.jpg+pc-turned-01-o6.jpg",
+     "pc-blur-02-2px.jpg+pc-scene-02.jpg+pc-turned-02-o8.jpg",
+     "pc-blur-03-3px.jpg+pc-scene-03.jpg+pc-turned-03-o3.jpg",
+     "pc-blur-04-4px.jpg+pc-scene-04.jpg+pc-turned-04-o2.jpg",
+     "pc-blur-05-6px.jpg+pc-scene-05.jpg",
+     "pc-blur-06-8px.jpg+pc-scene-06.jpg",
+     "pc-blur-07-2p5px.jpg+pc-scene-07.jpg",
+     "pc-blur-08-5px.jpg+pc-scene-08.jpg",
+     "pc-blur-09-10px.jpg+pc-scene-09.jpg",
+     "pc-blur-10-3p5px.jpg+pc-scene-10.jpg",
+     "pc-near-11.jpg+pc-scene-11.jpg",
+     "pc-near-13.jpg+pc-scene-13.jpg",
+     "pc-near-17.jpg+pc-scene-17.jpg",
+     "pc-near-20.jpg+pc-scene-20.jpg"
+    ],
+    "phone": [
+     "pc-blur-01-1p5px.jpg+pc-scene-01.jpg+pc-turned-01-o6.jpg",
+     "pc-blur-02-2px.jpg+pc-scene-02.jpg+pc-turned-02-o8.jpg",
+     "pc-blur-03-3px.jpg+pc-scene-03.jpg+pc-turned-03-o3.jpg",
+     "pc-blur-04-4px.jpg+pc-scene-04.jpg+pc-turned-04-o2.jpg",
+     "pc-blur-05-6px.jpg+pc-scene-05.jpg",
+     "pc-blur-06-8px.jpg+pc-scene-06.jpg",
+     "pc-blur-07-2p5px.jpg+pc-scene-07.jpg",
+     "pc-blur-08-5px.jpg+pc-scene-08.jpg",
+     "pc-blur-09-10px.jpg+pc-scene-09.jpg",
+     "pc-blur-10-3p5px.jpg+pc-scene-10.jpg",
+     "pc-near-11.jpg+pc-scene-11.jpg",
+     "pc-near-13.jpg+pc-scene-13.jpg",
+     "pc-near-17.jpg+pc-scene-17.jpg",
+     "pc-near-20.jpg+pc-scene-20.jpg"
+    ],
+    "same": true
+   },
+   "repeatPairs": {
+    "pairs": 946,
+    "agree": 100,
+    "flaggedByEither": 22,
+    "flaggedByBoth": 22
+   },
+   "leaveOutWithoutEyes": {
+    "same": true,
+    "web": {
+     "blurry": [
+      "pc-blur-05-6px.jpg",
+      "pc-blur-06-8px.jpg",
+      "pc-blur-08-5px.jpg",
+      "pc-blur-09-10px.jpg"
+     ],
+     "repeats": [
+      "pc-blur-01-1p5px.jpg",
+      "pc-blur-02-2px.jpg",
+      "pc-blur-03-3px.jpg",
+      "pc-blur-04-4px.jpg",
+      "pc-blur-07-2p5px.jpg",
+      "pc-blur-10-3p5px.jpg",
+      "pc-near-11.jpg",
+      "pc-near-13.jpg",
+      "pc-near-17.jpg",
+      "pc-scene-20.jpg",
+      "pc-turned-01-o6.jpg",
+      "pc-turned-02-o8.jpg",
+      "pc-turned-03-o3.jpg",
+      "pc-turned-04-o2.jpg"
+     ],
+     "keeperOf": {
+      "pc-blur-01-1p5px.jpg": "pc-scene-01.jpg",
+      "pc-blur-02-2px.jpg": "pc-scene-02.jpg",
+      "pc-blur-03-3px.jpg": "pc-scene-03.jpg",
+      "pc-blur-04-4px.jpg": "pc-scene-04.jpg",
+      "pc-blur-07-2p5px.jpg": "pc-scene-07.jpg",
+      "pc-blur-10-3p5px.jpg": "pc-scene-10.jpg",
+      "pc-near-11.jpg": "pc-scene-11.jpg",
+      "pc-near-13.jpg": "pc-scene-13.jpg",
+      "pc-near-17.jpg": "pc-scene-17.jpg",
+      "pc-scene-20.jpg": "pc-near-20.jpg",
+      "pc-turned-01-o6.jpg": "pc-scene-01.jpg",
+      "pc-turned-02-o8.jpg": "pc-scene-02.jpg",
+      "pc-turned-03-o3.jpg": "pc-scene-03.jpg",
+      "pc-turned-04-o2.jpg": "pc-scene-04.jpg"
+     }
+    },
+    "phone": {
+     "blurry": [
+      "pc-blur-05-6px.jpg",
+      "pc-blur-06-8px.jpg",
+      "pc-blur-08-5px.jpg",
+      "pc-blur-09-10px.jpg"
+     ],
+     "repeats": [
+      "pc-blur-01-1p5px.jpg",
+      "pc-blur-02-2px.jpg",
+      "pc-blur-03-3px.jpg",
+      "pc-blur-04-4px.jpg",
+      "pc-blur-07-2p5px.jpg",
+      "pc-blur-10-3p5px.jpg",
+      "pc-near-11.jpg",
+      "pc-near-13.jpg",
+      "pc-near-17.jpg",
+      "pc-scene-20.jpg",
+      "pc-turned-01-o6.jpg",
+      "pc-turned-02-o8.jpg",
+      "pc-turned-03-o3.jpg",
+      "pc-turned-04-o2.jpg"
+     ],
+     "keeperOf": {
+      "pc-blur-01-1p5px.jpg": "pc-scene-01.jpg",
+      "pc-blur-02-2px.jpg": "pc-scene-02.jpg",
+      "pc-blur-03-3px.jpg": "pc-scene-03.jpg",
+      "pc-blur-04-4px.jpg": "pc-scene-04.jpg",
+      "pc-blur-07-2p5px.jpg": "pc-scene-07.jpg",
+      "pc-blur-10-3p5px.jpg": "pc-scene-10.jpg",
+      "pc-near-11.jpg": "pc-scene-11.jpg",
+      "pc-near-13.jpg": "pc-scene-13.jpg",
+      "pc-near-17.jpg": "pc-scene-17.jpg",
+      "pc-scene-20.jpg": "pc-near-20.jpg",
+      "pc-turned-01-o6.jpg": "pc-scene-01.jpg",
+      "pc-turned-02-o8.jpg": "pc-scene-02.jpg",
+      "pc-turned-03-o3.jpg": "pc-scene-03.jpg",
+      "pc-turned-04-o2.jpg": "pc-scene-04.jpg"
+     }
+    }
+   },
+   "leaveOutWithEyes": {
+    "same": true,
+    "web": {
+     "blurry": [
+      "pc-blur-05-6px.jpg",
+      "pc-blur-06-8px.jpg",
+      "pc-blur-08-5px.jpg",
+      "pc-blur-09-10px.jpg"
+     ],
+     "repeats": [
+      "pc-blur-01-1p5px.jpg",
+      "pc-blur-02-2px.jpg",
+      "pc-blur-03-3px.jpg",
+      "pc-blur-04-4px.jpg",
+      "pc-blur-07-2p5px.jpg",
+      "pc-blur-10-3p5px.jpg",
+      "pc-near-11.jpg",
+      "pc-near-13.jpg",
+      "pc-near-17.jpg",
+      "pc-scene-20.jpg",
+      "pc-turned-01-o6.jpg",
+      "pc-turned-02-o8.jpg",
+      "pc-turned-03-o3.jpg",
+      "pc-turned-04-o2.jpg"
+     ],
+     "keeperOf": {
+      "pc-blur-01-1p5px.jpg": "pc-scene-01.jpg",
+      "pc-blur-02-2px.jpg": "pc-scene-02.jpg",
+      "pc-blur-03-3px.jpg": "pc-scene-03.jpg",
+      "pc-blur-04-4px.jpg": "pc-scene-04.jpg",
+      "pc-blur-07-2p5px.jpg": "pc-scene-07.jpg",
+      "pc-blur-10-3p5px.jpg": "pc-scene-10.jpg",
+      "pc-near-11.jpg": "pc-scene-11.jpg",
+      "pc-near-13.jpg": "pc-scene-13.jpg",
+      "pc-near-17.jpg": "pc-scene-17.jpg",
+      "pc-scene-20.jpg": "pc-near-20.jpg",
+      "pc-turned-01-o6.jpg": "pc-scene-01.jpg",
+      "pc-turned-02-o8.jpg": "pc-scene-02.jpg",
+      "pc-turned-03-o3.jpg": "pc-scene-03.jpg",
+      "pc-turned-04-o2.jpg": "pc-scene-04.jpg"
+     }
+    },
+    "phone": {
+     "blurry": [
+      "pc-blur-05-6px.jpg",
+      "pc-blur-06-8px.jpg",
+      "pc-blur-08-5px.jpg",
+      "pc-blur-09-10px.jpg"
+     ],
+     "repeats": [
+      "pc-blur-01-1p5px.jpg",
+      "pc-blur-02-2px.jpg",
+      "pc-blur-03-3px.jpg",
+      "pc-blur-04-4px.jpg",
+      "pc-blur-07-2p5px.jpg",
+      "pc-blur-10-3p5px.jpg",
+      "pc-near-11.jpg",
+      "pc-near-13.jpg",
+      "pc-near-17.jpg",
+      "pc-scene-20.jpg",
+      "pc-turned-01-o6.jpg",
+      "pc-turned-02-o8.jpg",
+      "pc-turned-03-o3.jpg",
+      "pc-turned-04-o2.jpg"
+     ],
+     "keeperOf": {
+      "pc-blur-01-1p5px.jpg": "pc-scene-01.jpg",
+      "pc-blur-02-2px.jpg": "pc-scene-02.jpg",
+      "pc-blur-03-3px.jpg": "pc-scene-03.jpg",
+      "pc-blur-04-4px.jpg": "pc-scene-04.jpg",
+      "pc-blur-07-2p5px.jpg": "pc-scene-07.jpg",
+      "pc-blur-10-3p5px.jpg": "pc-scene-10.jpg",
+      "pc-near-11.jpg": "pc-scene-11.jpg",
+      "pc-near-13.jpg": "pc-scene-13.jpg",
+      "pc-near-17.jpg": "pc-scene-17.jpg",
+      "pc-scene-20.jpg": "pc-near-20.jpg",
+      "pc-turned-01-o6.jpg": "pc-scene-01.jpg",
+      "pc-turned-02-o8.jpg": "pc-scene-02.jpg",
+      "pc-turned-03-o3.jpg": "pc-scene-03.jpg",
+      "pc-turned-04-o2.jpg": "pc-scene-04.jpg"
+     }
+    }
+   }
+  },
+  "sample photos and their copies": {
+   "photos": 94,
+   "median": {
+    "web": 619.5,
+    "phone": 619.2
+   },
+   "blurry": {
+    "web": [
+     "pc-sblur-09-3px.jpg",
+     "pc-sblur-15-4px.jpg",
+     "pc-sblur-30-6px.jpg",
+     "pc-sblur-52-5px.jpg",
+     "pc-sblur-66-8px.jpg"
+    ],
+    "phone": [
+     "pc-sblur-09-3px.jpg",
+     "pc-sblur-15-4px.jpg",
+     "pc-sblur-30-6px.jpg",
+     "pc-sblur-52-5px.jpg",
+     "pc-sblur-66-8px.jpg"
+    ],
+    "same": true,
+    "perPhotoAgreement": 100
+   },
+   "repeatSets": {
+    "web": [
+     "megy-sample-03.jpg+pc-sblur-03-2px.jpg",
+     "megy-sample-05.jpg+pc-snear-05.jpg",
+     "megy-sample-09.jpg+pc-sblur-09-3px.jpg",
+     "megy-sample-12.jpg+pc-snear-12.jpg",
+     "megy-sample-15.jpg+pc-sblur-15-4px.jpg",
+     "megy-sample-19.jpg+pc-snear-19.jpg",
+     "megy-sample-22.jpg+pc-sblur-22-1p5px.jpg",
+     "megy-sample-30.jpg+pc-sblur-30-6px.jpg",
+     "megy-sample-35.jpg+pc-snear-35.jpg",
+     "megy-sample-41.jpg+pc-sblur-41-2p5px.jpg",
+     "megy-sample-52.jpg+pc-sblur-52-5px.jpg",
+     "megy-sample-58.jpg+pc-snear-58.jpg",
+     "megy-sample-66.jpg+pc-sblur-66-8px.jpg",
+     "megy-sample-71.jpg+pc-snear-71.jpg"
+    ],
+    "phone": [
+     "megy-sample-03.jpg+pc-sblur-03-2px.jpg",
+     "megy-sample-05.jpg+pc-snear-05.jpg",
+     "megy-sample-09.jpg+pc-sblur-09-3px.jpg",
+     "megy-sample-12.jpg+pc-snear-12.jpg",
+     "megy-sample-15.jpg+pc-sblur-15-4px.jpg",
+     "megy-sample-19.jpg+pc-snear-19.jpg",
+     "megy-sample-22.jpg+pc-sblur-22-1p5px.jpg",
+     "megy-sample-30.jpg+pc-sblur-30-6px.jpg",
+     "megy-sample-35.jpg+pc-snear-35.jpg",
+     "megy-sample-41.jpg+pc-sblur-41-2p5px.jpg",
+     "megy-sample-52.jpg+pc-sblur-52-5px.jpg",
+     "megy-sample-58.jpg+pc-snear-58.jpg",
+     "megy-sample-66.jpg+pc-sblur-66-8px.jpg",
+     "megy-sample-71.jpg+pc-snear-71.jpg"
+    ],
+    "same": true
+   },
+   "repeatPairs": {
+    "pairs": 4371,
+    "agree": 100,
+    "flaggedByEither": 14,
+    "flaggedByBoth": 14
+   },
+   "leaveOutWithoutEyes": {
+    "same": true,
+    "web": {
+     "blurry": [
+      "pc-sblur-09-3px.jpg",
+      "pc-sblur-15-4px.jpg",
+      "pc-sblur-30-6px.jpg",
+      "pc-sblur-52-5px.jpg",
+      "pc-sblur-66-8px.jpg"
+     ],
+     "repeats": [
+      "megy-sample-35.jpg",
+      "pc-sblur-03-2px.jpg",
+      "pc-sblur-22-1p5px.jpg",
+      "pc-sblur-41-2p5px.jpg",
+      "pc-snear-05.jpg",
+      "pc-snear-12.jpg",
+      "pc-snear-19.jpg",
+      "pc-snear-58.jpg",
+      "pc-snear-71.jpg"
+     ],
+     "keeperOf": {
+      "megy-sample-35.jpg": "pc-snear-35.jpg",
+      "pc-sblur-03-2px.jpg": "megy-sample-03.jpg",
+      "pc-sblur-22-1p5px.jpg": "megy-sample-22.jpg",
+      "pc-sblur-41-2p5px.jpg": "megy-sample-41.jpg",
+      "pc-snear-05.jpg": "megy-sample-05.jpg",
+      "pc-snear-12.jpg": "megy-sample-12.jpg",
+      "pc-snear-19.jpg": "megy-sample-19.jpg",
+      "pc-snear-58.jpg": "megy-sample-58.jpg",
+      "pc-snear-71.jpg": "megy-sample-71.jpg"
+     }
+    },
+    "phone": {
+     "blurry": [
+      "pc-sblur-09-3px.jpg",
+      "pc-sblur-15-4px.jpg",
+      "pc-sblur-30-6px.jpg",
+      "pc-sblur-52-5px.jpg",
+      "pc-sblur-66-8px.jpg"
+     ],
+     "repeats": [
+      "megy-sample-35.jpg",
+      "pc-sblur-03-2px.jpg",
+      "pc-sblur-22-1p5px.jpg",
+      "pc-sblur-41-2p5px.jpg",
+      "pc-snear-05.jpg",
+      "pc-snear-12.jpg",
+      "pc-snear-19.jpg",
+      "pc-snear-58.jpg",
+      "pc-snear-71.jpg"
+     ],
+     "keeperOf": {
+      "megy-sample-35.jpg": "pc-snear-35.jpg",
+      "pc-sblur-03-2px.jpg": "megy-sample-03.jpg",
+      "pc-sblur-22-1p5px.jpg": "megy-sample-22.jpg",
+      "pc-sblur-41-2p5px.jpg": "megy-sample-41.jpg",
+      "pc-snear-05.jpg": "megy-sample-05.jpg",
+      "pc-snear-12.jpg": "megy-sample-12.jpg",
+      "pc-snear-19.jpg": "megy-sample-19.jpg",
+      "pc-snear-58.jpg": "megy-sample-58.jpg",
+      "pc-snear-71.jpg": "megy-sample-71.jpg"
+     }
+    }
+   },
+   "leaveOutWithEyes": {
+    "same": true,
+    "web": {
+     "blurry": [
+      "pc-sblur-09-3px.jpg",
+      "pc-sblur-15-4px.jpg",
+      "pc-sblur-30-6px.jpg",
+      "pc-sblur-52-5px.jpg",
+      "pc-sblur-66-8px.jpg"
+     ],
+     "repeats": [
+      "megy-sample-35.jpg",
+      "pc-sblur-03-2px.jpg",
+      "pc-sblur-22-1p5px.jpg",
+      "pc-sblur-41-2p5px.jpg",
+      "pc-snear-05.jpg",
+      "pc-snear-12.jpg",
+      "pc-snear-19.jpg",
+      "pc-snear-58.jpg",
+      "pc-snear-71.jpg"
+     ],
+     "keeperOf": {
+      "megy-sample-35.jpg": "pc-snear-35.jpg",
+      "pc-sblur-03-2px.jpg": "megy-sample-03.jpg",
+      "pc-sblur-22-1p5px.jpg": "megy-sample-22.jpg",
+      "pc-sblur-41-2p5px.jpg": "megy-sample-41.jpg",
+      "pc-snear-05.jpg": "megy-sample-05.jpg",
+      "pc-snear-12.jpg": "megy-sample-12.jpg",
+      "pc-snear-19.jpg": "megy-sample-19.jpg",
+      "pc-snear-58.jpg": "megy-sample-58.jpg",
+      "pc-snear-71.jpg": "megy-sample-71.jpg"
+     }
+    },
+    "phone": {
+     "blurry": [
+      "pc-sblur-09-3px.jpg",
+      "pc-sblur-15-4px.jpg",
+      "pc-sblur-30-6px.jpg",
+      "pc-sblur-52-5px.jpg",
+      "pc-sblur-66-8px.jpg"
+     ],
+     "repeats": [
+      "megy-sample-35.jpg",
+      "pc-sblur-03-2px.jpg",
+      "pc-sblur-22-1p5px.jpg",
+      "pc-sblur-41-2p5px.jpg",
+      "pc-snear-05.jpg",
+      "pc-snear-12.jpg",
+      "pc-snear-19.jpg",
+      "pc-snear-58.jpg",
+      "pc-snear-71.jpg"
+     ],
+     "keeperOf": {
+      "megy-sample-35.jpg": "pc-snear-35.jpg",
+      "pc-sblur-03-2px.jpg": "megy-sample-03.jpg",
+      "pc-sblur-22-1p5px.jpg": "megy-sample-22.jpg",
+      "pc-sblur-41-2p5px.jpg": "megy-sample-41.jpg",
+      "pc-snear-05.jpg": "megy-sample-05.jpg",
+      "pc-snear-12.jpg": "megy-sample-12.jpg",
+      "pc-snear-19.jpg": "megy-sample-19.jpg",
+      "pc-snear-58.jpg": "megy-sample-58.jpg",
+      "pc-snear-71.jpg": "megy-sample-71.jpg"
+     }
+    }
+   }
+  },
+  "everything together": {
+   "photos": 138,
+   "median": {
+    "web": 413,
+    "phone": 412.6
+   },
+   "blurry": {
+    "web": [
+     "pc-blur-05-6px.jpg",
+     "pc-blur-06-8px.jpg",
+     "pc-blur-08-5px.jpg",
+     "pc-blur-09-10px.jpg",
+     "pc-sblur-09-3px.jpg",
+     "pc-sblur-15-4px.jpg",
+     "pc-sblur-30-6px.jpg",
+     "pc-sblur-52-5px.jpg",
+     "pc-sblur-66-8px.jpg"
+    ],
+    "phone": [
+     "pc-blur-05-6px.jpg",
+     "pc-blur-06-8px.jpg",
+     "pc-blur-08-5px.jpg",
+     "pc-blur-09-10px.jpg",
+     "pc-sblur-09-3px.jpg",
+     "pc-sblur-15-4px.jpg",
+     "pc-sblur-30-6px.jpg",
+     "pc-sblur-52-5px.jpg",
+     "pc-sblur-66-8px.jpg"
+    ],
+    "same": true,
+    "perPhotoAgreement": 100
+   },
+   "repeatSets": {
+    "web": [
+     "megy-sample-03.jpg+pc-sblur-03-2px.jpg",
+     "megy-sample-05.jpg+pc-snear-05.jpg",
+     "megy-sample-09.jpg+pc-sblur-09-3px.jpg",
+     "megy-sample-12.jpg+pc-snear-12.jpg",
+     "megy-sample-15.jpg+pc-sblur-15-4px.jpg",
+     "megy-sample-19.jpg+pc-snear-19.jpg",
+     "megy-sample-22.jpg+pc-sblur-22-1p5px.jpg",
+     "megy-sample-30.jpg+pc-sblur-30-6px.jpg",
+     "megy-sample-35.jpg+pc-snear-35.jpg",
+     "megy-sample-41.jpg+pc-sblur-41-2p5px.jpg",
+     "megy-sample-52.jpg+pc-sblur-52-5px.jpg",
+     "megy-sample-58.jpg+pc-snear-58.jpg",
+     "megy-sample-66.jpg+pc-sblur-66-8px.jpg",
+     "megy-sample-71.jpg+pc-snear-71.jpg",
+     "pc-blur-01-1p5px.jpg+pc-scene-01.jpg+pc-turned-01-o6.jpg",
+     "pc-blur-02-2px.jpg+pc-scene-02.jpg+pc-turned-02-o8.jpg",
+     "pc-blur-03-3px.jpg+pc-scene-03.jpg+pc-turned-03-o3.jpg",
+     "pc-blur-04-4px.jpg+pc-scene-04.jpg+pc-turned-04-o2.jpg",
+     "pc-blur-05-6px.jpg+pc-scene-05.jpg",
+     "pc-blur-06-8px.jpg+pc-scene-06.jpg",
+     "pc-blur-07-2p5px.jpg+pc-scene-07.jpg",
+     "pc-blur-08-5px.jpg+pc-scene-08.jpg",
+     "pc-blur-09-10px.jpg+pc-scene-09.jpg",
+     "pc-blur-10-3p5px.jpg+pc-scene-10.jpg",
+     "pc-near-11.jpg+pc-scene-11.jpg",
+     "pc-near-13.jpg+pc-scene-13.jpg",
+     "pc-near-17.jpg+pc-scene-17.jpg",
+     "pc-near-20.jpg+pc-scene-20.jpg"
+    ],
+    "phone": [
+     "megy-sample-03.jpg+pc-sblur-03-2px.jpg",
+     "megy-sample-05.jpg+pc-snear-05.jpg",
+     "megy-sample-09.jpg+pc-sblur-09-3px.jpg",
+     "megy-sample-12.jpg+pc-snear-12.jpg",
+     "megy-sample-15.jpg+pc-sblur-15-4px.jpg",
+     "megy-sample-19.jpg+pc-snear-19.jpg",
+     "megy-sample-22.jpg+pc-sblur-22-1p5px.jpg",
+     "megy-sample-30.jpg+pc-sblur-30-6px.jpg",
+     "megy-sample-35.jpg+pc-snear-35.jpg",
+     "megy-sample-41.jpg+pc-sblur-41-2p5px.jpg",
+     "megy-sample-52.jpg+pc-sblur-52-5px.jpg",
+     "megy-sample-58.jpg+pc-snear-58.jpg",
+     "megy-sample-66.jpg+pc-sblur-66-8px.jpg",
+     "megy-sample-71.jpg+pc-snear-71.jpg",
+     "pc-blur-01-1p5px.jpg+pc-scene-01.jpg+pc-turned-01-o6.jpg",
+     "pc-blur-02-2px.jpg+pc-scene-02.jpg+pc-turned-02-o8.jpg",
+     "pc-blur-03-3px.jpg+pc-scene-03.jpg+pc-turned-03-o3.jpg",
+     "pc-blur-04-4px.jpg+pc-scene-04.jpg+pc-turned-04-o2.jpg",
+     "pc-blur-05-6px.jpg+pc-scene-05.jpg",
+     "pc-blur-06-8px.jpg+pc-scene-06.jpg",
+     "pc-blur-07-2p5px.jpg+pc-scene-07.jpg",
+     "pc-blur-08-5px.jpg+pc-scene-08.jpg",
+     "pc-blur-09-10px.jpg+pc-scene-09.jpg",
+     "pc-blur-10-3p5px.jpg+pc-scene-10.jpg",
+     "pc-near-11.jpg+pc-scene-11.jpg",
+     "pc-near-13.jpg+pc-scene-13.jpg",
+     "pc-near-17.jpg+pc-scene-17.jpg",
+     "pc-near-20.jpg+pc-scene-20.jpg"
+    ],
+    "same": true
+   },
+   "repeatPairs": {
+    "pairs": 9453,
+    "agree": 100,
+    "flaggedByEither": 36,
+    "flaggedByBoth": 36
+   },
+   "leaveOutWithoutEyes": {
+    "same": true,
+    "web": {
+     "blurry": [
+      "pc-blur-05-6px.jpg",
+      "pc-blur-06-8px.jpg",
+      "pc-blur-08-5px.jpg",
+      "pc-blur-09-10px.jpg",
+      "pc-sblur-09-3px.jpg",
+      "pc-sblur-15-4px.jpg",
+      "pc-sblur-30-6px.jpg",
+      "pc-sblur-52-5px.jpg",
+      "pc-sblur-66-8px.jpg"
+     ],
+     "repeats": [
+      "pc-blur-01-1p5px.jpg",
+      "pc-blur-02-2px.jpg",
+      "pc-blur-03-3px.jpg",
+      "pc-blur-04-4px.jpg",
+      "pc-blur-07-2p5px.jpg",
+      "pc-blur-10-3p5px.jpg",
+      "pc-near-11.jpg",
+      "pc-near-13.jpg",
+      "pc-near-17.jpg",
+      "pc-sblur-03-2px.jpg",
+      "pc-sblur-22-1p5px.jpg",
+      "pc-sblur-41-2p5px.jpg",
+      "pc-scene-20.jpg",
+      "pc-snear-05.jpg",
+      "pc-snear-12.jpg",
+      "pc-snear-19.jpg",
+      "pc-snear-35.jpg",
+      "pc-snear-58.jpg",
+      "pc-snear-71.jpg",
+      "pc-turned-01-o6.jpg",
+      "pc-turned-02-o8.jpg",
+      "pc-turned-03-o3.jpg",
+      "pc-turned-04-o2.jpg"
+     ],
+     "keeperOf": {
+      "pc-blur-01-1p5px.jpg": "pc-scene-01.jpg",
+      "pc-blur-02-2px.jpg": "pc-scene-02.jpg",
+      "pc-blur-03-3px.jpg": "pc-scene-03.jpg",
+      "pc-blur-04-4px.jpg": "pc-scene-04.jpg",
+      "pc-blur-07-2p5px.jpg": "pc-scene-07.jpg",
+      "pc-blur-10-3p5px.jpg": "pc-scene-10.jpg",
+      "pc-near-11.jpg": "pc-scene-11.jpg",
+      "pc-near-13.jpg": "pc-scene-13.jpg",
+      "pc-near-17.jpg": "pc-scene-17.jpg",
+      "pc-sblur-03-2px.jpg": "megy-sample-03.jpg",
+      "pc-sblur-22-1p5px.jpg": "megy-sample-22.jpg",
+      "pc-sblur-41-2p5px.jpg": "megy-sample-41.jpg",
+      "pc-scene-20.jpg": "pc-near-20.jpg",
+      "pc-snear-05.jpg": "megy-sample-05.jpg",
+      "pc-snear-12.jpg": "megy-sample-12.jpg",
+      "pc-snear-19.jpg": "megy-sample-19.jpg",
+      "pc-snear-35.jpg": "megy-sample-35.jpg",
+      "pc-snear-58.jpg": "megy-sample-58.jpg",
+      "pc-snear-71.jpg": "megy-sample-71.jpg",
+      "pc-turned-01-o6.jpg": "pc-scene-01.jpg",
+      "pc-turned-02-o8.jpg": "pc-scene-02.jpg",
+      "pc-turned-03-o3.jpg": "pc-scene-03.jpg",
+      "pc-turned-04-o2.jpg": "pc-scene-04.jpg"
+     }
+    },
+    "phone": {
+     "blurry": [
+      "pc-blur-05-6px.jpg",
+      "pc-blur-06-8px.jpg",
+      "pc-blur-08-5px.jpg",
+      "pc-blur-09-10px.jpg",
+      "pc-sblur-09-3px.jpg",
+      "pc-sblur-15-4px.jpg",
+      "pc-sblur-30-6px.jpg",
+      "pc-sblur-52-5px.jpg",
+      "pc-sblur-66-8px.jpg"
+     ],
+     "repeats": [
+      "pc-blur-01-1p5px.jpg",
+      "pc-blur-02-2px.jpg",
+      "pc-blur-03-3px.jpg",
+      "pc-blur-04-4px.jpg",
+      "pc-blur-07-2p5px.jpg",
+      "pc-blur-10-3p5px.jpg",
+      "pc-near-11.jpg",
+      "pc-near-13.jpg",
+      "pc-near-17.jpg",
+      "pc-sblur-03-2px.jpg",
+      "pc-sblur-22-1p5px.jpg",
+      "pc-sblur-41-2p5px.jpg",
+      "pc-scene-20.jpg",
+      "pc-snear-05.jpg",
+      "pc-snear-12.jpg",
+      "pc-snear-19.jpg",
+      "pc-snear-35.jpg",
+      "pc-snear-58.jpg",
+      "pc-snear-71.jpg",
+      "pc-turned-01-o6.jpg",
+      "pc-turned-02-o8.jpg",
+      "pc-turned-03-o3.jpg",
+      "pc-turned-04-o2.jpg"
+     ],
+     "keeperOf": {
+      "pc-blur-01-1p5px.jpg": "pc-scene-01.jpg",
+      "pc-blur-02-2px.jpg": "pc-scene-02.jpg",
+      "pc-blur-03-3px.jpg": "pc-scene-03.jpg",
+      "pc-blur-04-4px.jpg": "pc-scene-04.jpg",
+      "pc-blur-07-2p5px.jpg": "pc-scene-07.jpg",
+      "pc-blur-10-3p5px.jpg": "pc-scene-10.jpg",
+      "pc-near-11.jpg": "pc-scene-11.jpg",
+      "pc-near-13.jpg": "pc-scene-13.jpg",
+      "pc-near-17.jpg": "pc-scene-17.jpg",
+      "pc-sblur-03-2px.jpg": "megy-sample-03.jpg",
+      "pc-sblur-22-1p5px.jpg": "megy-sample-22.jpg",
+      "pc-sblur-41-2p5px.jpg": "megy-sample-41.jpg",
+      "pc-scene-20.jpg": "pc-near-20.jpg",
+      "pc-snear-05.jpg": "megy-sample-05.jpg",
+      "pc-snear-12.jpg": "megy-sample-12.jpg",
+      "pc-snear-19.jpg": "megy-sample-19.jpg",
+      "pc-snear-35.jpg": "megy-sample-35.jpg",
+      "pc-snear-58.jpg": "megy-sample-58.jpg",
+      "pc-snear-71.jpg": "megy-sample-71.jpg",
+      "pc-turned-01-o6.jpg": "pc-scene-01.jpg",
+      "pc-turned-02-o8.jpg": "pc-scene-02.jpg",
+      "pc-turned-03-o3.jpg": "pc-scene-03.jpg",
+      "pc-turned-04-o2.jpg": "pc-scene-04.jpg"
+     }
+    }
+   },
+   "leaveOutWithEyes": {
+    "same": true,
+    "web": {
+     "blurry": [
+      "pc-blur-05-6px.jpg",
+      "pc-blur-06-8px.jpg",
+      "pc-blur-08-5px.jpg",
+      "pc-blur-09-10px.jpg",
+      "pc-sblur-09-3px.jpg",
+      "pc-sblur-15-4px.jpg",
+      "pc-sblur-30-6px.jpg",
+      "pc-sblur-52-5px.jpg",
+      "pc-sblur-66-8px.jpg"
+     ],
+     "repeats": [
+      "pc-blur-01-1p5px.jpg",
+      "pc-blur-02-2px.jpg",
+      "pc-blur-03-3px.jpg",
+      "pc-blur-04-4px.jpg",
+      "pc-blur-07-2p5px.jpg",
+      "pc-blur-10-3p5px.jpg",
+      "pc-near-11.jpg",
+      "pc-near-13.jpg",
+      "pc-near-17.jpg",
+      "pc-sblur-03-2px.jpg",
+      "pc-sblur-22-1p5px.jpg",
+      "pc-sblur-41-2p5px.jpg",
+      "pc-scene-20.jpg",
+      "pc-snear-05.jpg",
+      "pc-snear-12.jpg",
+      "pc-snear-19.jpg",
+      "pc-snear-35.jpg",
+      "pc-snear-58.jpg",
+      "pc-snear-71.jpg",
+      "pc-turned-01-o6.jpg",
+      "pc-turned-02-o8.jpg",
+      "pc-turned-03-o3.jpg",
+      "pc-turned-04-o2.jpg"
+     ],
+     "keeperOf": {
+      "pc-blur-01-1p5px.jpg": "pc-scene-01.jpg",
+      "pc-blur-02-2px.jpg": "pc-scene-02.jpg",
+      "pc-blur-03-3px.jpg": "pc-scene-03.jpg",
+      "pc-blur-04-4px.jpg": "pc-scene-04.jpg",
+      "pc-blur-07-2p5px.jpg": "pc-scene-07.jpg",
+      "pc-blur-10-3p5px.jpg": "pc-scene-10.jpg",
+      "pc-near-11.jpg": "pc-scene-11.jpg",
+      "pc-near-13.jpg": "pc-scene-13.jpg",
+      "pc-near-17.jpg": "pc-scene-17.jpg",
+      "pc-sblur-03-2px.jpg": "megy-sample-03.jpg",
+      "pc-sblur-22-1p5px.jpg": "megy-sample-22.jpg",
+      "pc-sblur-41-2p5px.jpg": "megy-sample-41.jpg",
+      "pc-scene-20.jpg": "pc-near-20.jpg",
+      "pc-snear-05.jpg": "megy-sample-05.jpg",
+      "pc-snear-12.jpg": "megy-sample-12.jpg",
+      "pc-snear-19.jpg": "megy-sample-19.jpg",
+      "pc-snear-35.jpg": "megy-sample-35.jpg",
+      "pc-snear-58.jpg": "megy-sample-58.jpg",
+      "pc-snear-71.jpg": "megy-sample-71.jpg",
+      "pc-turned-01-o6.jpg": "pc-scene-01.jpg",
+      "pc-turned-02-o8.jpg": "pc-scene-02.jpg",
+      "pc-turned-03-o3.jpg": "pc-scene-03.jpg",
+      "pc-turned-04-o2.jpg": "pc-scene-04.jpg"
+     }
+    },
+    "phone": {
+     "blurry": [
+      "pc-blur-05-6px.jpg",
+      "pc-blur-06-8px.jpg",
+      "pc-blur-08-5px.jpg",
+      "pc-blur-09-10px.jpg",
+      "pc-sblur-09-3px.jpg",
+      "pc-sblur-15-4px.jpg",
+      "pc-sblur-30-6px.jpg",
+      "pc-sblur-52-5px.jpg",
+      "pc-sblur-66-8px.jpg"
+     ],
+     "repeats": [
+      "pc-blur-01-1p5px.jpg",
+      "pc-blur-02-2px.jpg",
+      "pc-blur-03-3px.jpg",
+      "pc-blur-04-4px.jpg",
+      "pc-blur-07-2p5px.jpg",
+      "pc-blur-10-3p5px.jpg",
+      "pc-near-11.jpg",
+      "pc-near-13.jpg",
+      "pc-near-17.jpg",
+      "pc-sblur-03-2px.jpg",
+      "pc-sblur-22-1p5px.jpg",
+      "pc-sblur-41-2p5px.jpg",
+      "pc-scene-20.jpg",
+      "pc-snear-05.jpg",
+      "pc-snear-12.jpg",
+      "pc-snear-19.jpg",
+      "pc-snear-35.jpg",
+      "pc-snear-58.jpg",
+      "pc-snear-71.jpg",
+      "pc-turned-01-o6.jpg",
+      "pc-turned-02-o8.jpg",
+      "pc-turned-03-o3.jpg",
+      "pc-turned-04-o2.jpg"
+     ],
+     "keeperOf": {
+      "pc-blur-01-1p5px.jpg": "pc-scene-01.jpg",
+      "pc-blur-02-2px.jpg": "pc-scene-02.jpg",
+      "pc-blur-03-3px.jpg": "pc-scene-03.jpg",
+      "pc-blur-04-4px.jpg": "pc-scene-04.jpg",
+      "pc-blur-07-2p5px.jpg": "pc-scene-07.jpg",
+      "pc-blur-10-3p5px.jpg": "pc-scene-10.jpg",
+      "pc-near-11.jpg": "pc-scene-11.jpg",
+      "pc-near-13.jpg": "pc-scene-13.jpg",
+      "pc-near-17.jpg": "pc-scene-17.jpg",
+      "pc-sblur-03-2px.jpg": "megy-sample-03.jpg",
+      "pc-sblur-22-1p5px.jpg": "megy-sample-22.jpg",
+      "pc-sblur-41-2p5px.jpg": "megy-sample-41.jpg",
+      "pc-scene-20.jpg": "pc-near-20.jpg",
+      "pc-snear-05.jpg": "megy-sample-05.jpg",
+      "pc-snear-12.jpg": "megy-sample-12.jpg",
+      "pc-snear-19.jpg": "megy-sample-19.jpg",
+      "pc-snear-35.jpg": "megy-sample-35.jpg",
+      "pc-snear-58.jpg": "megy-sample-58.jpg",
+      "pc-snear-71.jpg": "megy-sample-71.jpg",
+      "pc-turned-01-o6.jpg": "pc-scene-01.jpg",
+      "pc-turned-02-o8.jpg": "pc-scene-02.jpg",
+      "pc-turned-03-o3.jpg": "pc-scene-03.jpg",
+      "pc-turned-04-o2.jpg": "pc-scene-04.jpg"
+     }
+    }
+   }
+  }
+ },
+ "faces": {
+  "picturesCompared": 138,
+  "faceCountSame": 66.7,
+  "hasFaceSame": 87.7,
+  "eyesClosedSame": 84.1,
+  "eyesClosedPictures": {
+   "bothOpen": 116,
+   "bothClosed": 0,
+   "webOnly": 2,
+   "phoneOnly": 20
+  },
+  "boxes": {
+   "web": 144,
+   "phone": 235,
+   "matched": 138,
+   "webFoundByPhone": 95.8,
+   "phoneFoundByWeb": 58.7,
+   "medianIoU": 0.534
+  },
+  "eyesOnMatchedFaces": {
+   "bothOpen": 116,
+   "bothClosed": 0,
+   "webOnly": 1,
+   "phoneOnly": 21,
+   "phoneUnscored": 0
+  },
+  "websitePicturesShut": 2,
+  "phoneShutLines": [
+   {
+    "line": 0.05,
+    "picturesShut": 10,
+    "agreeWithWebsite": 91.3
+   },
+   {
+    "line": 0.1,
+    "picturesShut": 20,
+    "agreeWithWebsite": 84.1
+   },
+   {
+    "line": 0.15,
+    "picturesShut": 24,
+    "agreeWithWebsite": 81.2
+   },
+   {
+    "line": 0.2,
+    "picturesShut": 29,
+    "agreeWithWebsite": 77.5
+   },
+   {
+    "line": 0.25,
+    "picturesShut": 31,
+    "agreeWithWebsite": 76.1
+   },
+   {
+    "line": 0.3,
+    "picturesShut": 33,
+    "agreeWithWebsite": 74.6
+   },
+   {
+    "line": 0.4,
+    "picturesShut": 38,
+    "agreeWithWebsite": 71
+   },
+   {
+    "line": 0.5,
+    "picturesShut": 40,
+    "agreeWithWebsite": 71
+   }
+  ],
+  "differences": [
+   {
+    "file": "megy-sample-03.jpg",
+    "faces": [
+     0,
+     5
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-04.jpg",
+    "faces": [
+     5,
+     5
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.298,
+       0.307
+      ],
+      "phoneOpen": [
+       0.988,
+       0.992
+      ]
+     },
+     {
+      "webEar": [
+       0.245,
+       0.25
+      ],
+      "phoneOpen": [
+       0.995,
+       0.909
+      ]
+     },
+     {
+      "webEar": [
+       0.251,
+       0.295
+      ],
+      "phoneOpen": [
+       0.999,
+       0.997
+      ]
+     },
+     {
+      "webEar": [
+       0.161,
+       0.199
+      ],
+      "phoneOpen": [
+       0.007,
+       0.048
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-06.jpg",
+    "faces": [
+     1,
+     4
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.347,
+       0.242
+      ],
+      "phoneOpen": [
+       0.148,
+       0.195
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-08.jpg",
+    "faces": [
+     1,
+     1
+    ],
+    "closed": [
+     true,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.166,
+       0.179
+      ],
+      "phoneOpen": [
+       0.024,
+       0.442
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-09.jpg",
+    "faces": [
+     3,
+     6
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.215,
+       0.263
+      ],
+      "phoneOpen": [
+       0.768,
+       0.992
+      ]
+     },
+     {
+      "webEar": [
+       0.259,
+       0.263
+      ],
+      "phoneOpen": [
+       0.937,
+       0.951
+      ]
+     },
+     {
+      "webEar": [
+       0.245,
+       0.263
+      ],
+      "phoneOpen": [
+       0.995,
+       0.985
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-10.jpg",
+    "faces": [
+     2,
+     3
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.207,
+       0.233
+      ],
+      "phoneOpen": [
+       0.831,
+       0.276
+      ]
+     },
+     {
+      "webEar": [
+       0.288,
+       0.281
+      ],
+      "phoneOpen": [
+       0.997,
+       0.996
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-14.jpg",
+    "faces": [
+     4,
+     3
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.529,
+       0.396
+      ],
+      "phoneOpen": [
+       0.993,
+       0.285
+      ]
+     },
+     {
+      "webEar": [
+       0.269,
+       0.246
+      ],
+      "phoneOpen": [
+       0.996,
+       0.994
+      ]
+     },
+     {
+      "webEar": [
+       0.293,
+       0.319
+      ],
+      "phoneOpen": [
+       0.99,
+       0.989
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-15.jpg",
+    "faces": [
+     3,
+     4
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.28,
+       0.315
+      ],
+      "phoneOpen": [
+       0.988,
+       0.949
+      ]
+     },
+     {
+      "webEar": [
+       0.219,
+       0.265
+      ],
+      "phoneOpen": [
+       0.67,
+       0.211
+      ]
+     },
+     {
+      "webEar": [
+       0.212,
+       0.234
+      ],
+      "phoneOpen": [
+       0.362,
+       0.382
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-16.jpg",
+    "faces": [
+     1,
+     2
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.225,
+       0.257
+      ],
+      "phoneOpen": [
+       0.043,
+       0.029
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-17.jpg",
+    "faces": [
+     2,
+     3
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.298,
+       0.281
+      ],
+      "phoneOpen": [
+       0.024,
+       0.433
+      ]
+     },
+     {
+      "webEar": [
+       0.251,
+       0.302
+      ],
+      "phoneOpen": [
+       0.086,
+       0.149
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-21.jpg",
+    "faces": [
+     2,
+     4
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.269,
+       0.266
+      ],
+      "phoneOpen": [
+       0.998,
+       0.998
+      ]
+     },
+     {
+      "webEar": [
+       0.231,
+       0.329
+      ],
+      "phoneOpen": [
+       0.12,
+       0.086
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-22.jpg",
+    "faces": [
+     0,
+     1
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-26.jpg",
+    "faces": [
+     3,
+     3
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.331,
+       0.437
+      ],
+      "phoneOpen": [
+       0.295,
+       0.99
+      ]
+     },
+     {
+      "webEar": [
+       0.341,
+       0.265
+      ],
+      "phoneOpen": [
+       0.479,
+       0.18
+      ]
+     },
+     {
+      "webEar": [
+       0.223,
+       0.246
+      ],
+      "phoneOpen": [
+       0.027,
+       0.005
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-28.jpg",
+    "faces": [
+     1,
+     2
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.307,
+       0.217
+      ],
+      "phoneOpen": [
+       0.221,
+       0.987
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-30.jpg",
+    "faces": [
+     0,
+     2
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-31.jpg",
+    "faces": [
+     0,
+     2
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-34.jpg",
+    "faces": [
+     3,
+     4
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.251,
+       0.194
+      ],
+      "phoneOpen": [
+       0.176,
+       0.021
+      ]
+     },
+     {
+      "webEar": [
+       0.209,
+       0.276
+      ],
+      "phoneOpen": [
+       0.706,
+       0.057
+      ]
+     },
+     {
+      "webEar": [
+       0.273,
+       0.175
+      ],
+      "phoneOpen": [
+       0.026,
+       0.895
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-35.jpg",
+    "faces": [
+     1,
+     3
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.341,
+       0.308
+      ],
+      "phoneOpen": [
+       0.998,
+       0.992
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-38.jpg",
+    "faces": [
+     1,
+     3
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.24,
+       0.386
+      ],
+      "phoneOpen": [
+       0.048,
+       0.058
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-39.jpg",
+    "faces": [
+     2,
+     3
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.227,
+       0.29
+      ],
+      "phoneOpen": [
+       0.706,
+       0.297
+      ]
+     },
+     {
+      "webEar": [
+       0.193,
+       0.215
+      ],
+      "phoneOpen": [
+       0.012,
+       0.075
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-40.jpg",
+    "faces": [
+     0,
+     3
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-41.jpg",
+    "faces": [
+     3,
+     3
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.234,
+       0.264
+      ],
+      "phoneOpen": [
+       0.025,
+       0.092
+      ]
+     },
+     {
+      "webEar": [
+       0.251,
+       0.266
+      ],
+      "phoneOpen": [
+       0.022,
+       0.002
+      ]
+     },
+     {
+      "webEar": [
+       0.255,
+       0.339
+      ],
+      "phoneOpen": [
+       0.033,
+       0.415
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-43.jpg",
+    "faces": [
+     2,
+     5
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.354,
+       0.266
+      ],
+      "phoneOpen": [
+       0.902,
+       0.59
+      ]
+     },
+     {
+      "webEar": [
+       0.313,
+       0.476
+      ],
+      "phoneOpen": [
+       0.469,
+       0.9
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-44.jpg",
+    "faces": [
+     0,
+     5
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-45.jpg",
+    "faces": [
+     0,
+     3
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-46.jpg",
+    "faces": [
+     5,
+     3
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.261,
+       0.26
+      ],
+      "phoneOpen": [
+       0.632,
+       0.987
+      ]
+     },
+     {
+      "webEar": [
+       0.271,
+       0.233
+      ],
+      "phoneOpen": [
+       0.003,
+       0.026
+      ]
+     },
+     {
+      "webEar": [
+       0.306,
+       0.272
+      ],
+      "phoneOpen": [
+       0.996,
+       0.662
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-47.jpg",
+    "faces": [
+     1,
+     1
+    ],
+    "closed": [
+     true,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-48.jpg",
+    "faces": [
+     1,
+     1
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-49.jpg",
+    "faces": [
+     0,
+     2
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-50.jpg",
+    "faces": [
+     0,
+     2
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-51.jpg",
+    "faces": [
+     1,
+     4
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.17,
+       0.608
+      ],
+      "phoneOpen": [
+       0.935,
+       0.19
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-52.jpg",
+    "faces": [
+     0,
+     2
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-54.jpg",
+    "faces": [
+     2,
+     2
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.259,
+       0.333
+      ],
+      "phoneOpen": [
+       0.03,
+       0.954
+      ]
+     },
+     {
+      "webEar": [
+       0.232,
+       0.232
+      ],
+      "phoneOpen": [
+       0.019,
+       0.005
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-57.jpg",
+    "faces": [
+     1,
+     2
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.255,
+       0.252
+      ],
+      "phoneOpen": [
+       0.999,
+       0.563
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-58.jpg",
+    "faces": [
+     1,
+     2
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.278,
+       0.323
+      ],
+      "phoneOpen": [
+       0.991,
+       0.986
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-59.jpg",
+    "faces": [
+     1,
+     1
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.242,
+       0.2
+      ],
+      "phoneOpen": [
+       0.008,
+       0.062
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-64.jpg",
+    "faces": [
+     2,
+     2
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.23,
+       0.309
+      ],
+      "phoneOpen": [
+       0.9,
+       0.993
+      ]
+     },
+     {
+      "webEar": [
+       0.197,
+       0.207
+      ],
+      "phoneOpen": [
+       0.001,
+       0.01
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-66.jpg",
+    "faces": [
+     1,
+     5
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.312,
+       0.263
+      ],
+      "phoneOpen": [
+       0.971,
+       0.149
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-67.jpg",
+    "faces": [
+     2,
+     3
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.25,
+       0.231
+      ],
+      "phoneOpen": [
+       0.902,
+       0.987
+      ]
+     },
+     {
+      "webEar": [
+       0.266,
+       0.253
+      ],
+      "phoneOpen": [
+       0.996,
+       0.99
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-68.jpg",
+    "faces": [
+     2,
+     5
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.338,
+       0.31
+      ],
+      "phoneOpen": [
+       0.99,
+       0.987
+      ]
+     },
+     {
+      "webEar": [
+       0.205,
+       0.228
+      ],
+      "phoneOpen": [
+       0.992,
+       0.986
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-69.jpg",
+    "faces": [
+     0,
+     1
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "megy-sample-72.jpg",
+    "faces": [
+     1,
+     3
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.265,
+       0.269
+      ],
+      "phoneOpen": [
+       0.997,
+       0.995
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-75.jpg",
+    "faces": [
+     2,
+     5
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.242,
+       0.298
+      ],
+      "phoneOpen": [
+       0.995,
+       0.993
+      ]
+     },
+     {
+      "webEar": [
+       0.219,
+       0.259
+      ],
+      "phoneOpen": [
+       0.995,
+       0.992
+      ]
+     }
+    ]
+   },
+   {
+    "file": "megy-sample-78.jpg",
+    "faces": [
+     3,
+     4
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.279,
+       0.342
+      ],
+      "phoneOpen": [
+       0.987,
+       0.993
+      ]
+     },
+     {
+      "webEar": [
+       0.229,
+       0.246
+      ],
+      "phoneOpen": [
+       0.988,
+       0.993
+      ]
+     },
+     {
+      "webEar": [
+       0.24,
+       0.261
+      ],
+      "phoneOpen": [
+       0.998,
+       0.986
+      ]
+     }
+    ]
+   },
+   {
+    "file": "pc-sblur-03-2px.jpg",
+    "faces": [
+     0,
+     5
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "pc-sblur-09-3px.jpg",
+    "faces": [
+     3,
+     6
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.243,
+       0.279
+      ],
+      "phoneOpen": [
+       0.867,
+       0.986
+      ]
+     },
+     {
+      "webEar": [
+       0.215,
+       0.263
+      ],
+      "phoneOpen": [
+       0.617,
+       0.771
+      ]
+     },
+     {
+      "webEar": [
+       0.236,
+       0.225
+      ],
+      "phoneOpen": [
+       0.479,
+       0.563
+      ]
+     }
+    ]
+   },
+   {
+    "file": "pc-sblur-22-1p5px.jpg",
+    "faces": [
+     0,
+     1
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": []
+   },
+   {
+    "file": "pc-sblur-30-6px.jpg",
+    "faces": [
+     0,
+     2
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "pc-sblur-41-2p5px.jpg",
+    "faces": [
+     3,
+     3
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.242,
+       0.261
+      ],
+      "phoneOpen": [
+       0.005,
+       0
+      ]
+     },
+     {
+      "webEar": [
+       0.244,
+       0.313
+      ],
+      "phoneOpen": [
+       0.868,
+       0.087
+      ]
+     },
+     {
+      "webEar": [
+       0.217,
+       0.252
+      ],
+      "phoneOpen": [
+       0.154,
+       0.152
+      ]
+     }
+    ]
+   },
+   {
+    "file": "pc-sblur-52-5px.jpg",
+    "faces": [
+     0,
+     2
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "pc-sblur-66-8px.jpg",
+    "faces": [
+     0,
+     1
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "pc-snear-05.jpg",
+    "faces": [
+     3,
+     5
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.264,
+       0.253
+      ],
+      "phoneOpen": [
+       0.999,
+       0.994
+      ]
+     },
+     {
+      "webEar": [
+       0.258,
+       0.283
+      ],
+      "phoneOpen": [
+       0.221,
+       0.149
+      ]
+     },
+     {
+      "webEar": [
+       0.266,
+       0.281
+      ],
+      "phoneOpen": [
+       0.24,
+       0.795
+      ]
+     }
+    ]
+   },
+   {
+    "file": "pc-snear-35.jpg",
+    "faces": [
+     0,
+     3
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": []
+   },
+   {
+    "file": "pc-snear-44.jpg",
+    "faces": [
+     1,
+     5
+    ],
+    "closed": [
+     false,
+     true
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.339,
+       0.362
+      ],
+      "phoneOpen": [
+       0.997,
+       0.994
+      ]
+     }
+    ]
+   },
+   {
+    "file": "pc-snear-58.jpg",
+    "faces": [
+     1,
+     2
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.261,
+       0.297
+      ],
+      "phoneOpen": [
+       0.996,
+       0.988
+      ]
+     }
+    ]
+   },
+   {
+    "file": "pc-snear-71.jpg",
+    "faces": [
+     3,
+     4
+    ],
+    "closed": [
+     false,
+     false
+    ],
+    "eyes": [
+     {
+      "webEar": [
+       0.232,
+       0.257
+      ],
+      "phoneOpen": [
+       0.994,
+       0.993
+      ]
+     },
+     {
+      "webEar": [
+       0.239,
+       0.25
+      ],
+      "phoneOpen": [
+       0.998,
+       0.998
+      ]
+     },
+     {
+      "webEar": [
+       0.294,
+       0.277
+      ],
+      "phoneOpen": [
+       0.998,
+       0.998
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "centring": {
+  "bothNone": 40,
+  "bothFound": 67,
+  "webOnly": 5,
+  "phoneOnly": 26,
+  "sameDecision": 77.5,
+  "distance": {
+   "median": 0.047,
+   "p90": 0.212,
+   "within005": 52.2,
+   "within01": 70.1
+  }
+ },
+ "speed": {
+  "device": {
+   "engine": "Hermes",
+   "dev": true
+  },
+  "blurAndRepeats": {
+   "medianMs": 285.3,
+   "p95Ms": 564.8,
+   "decodeMedianMs": 159.7,
+   "jsMedianMs": 125.3
+  },
+  "facesAndEyes": {
+   "medianMs": 392.3,
+   "p95Ms": 657.4,
+   "decodeAndMlKitMedianMs": 392.1
+  },
+  "faceCentringCold": {
+   "medianMs": 388.7,
+   "p95Ms": 599.3
+  },
+  "faceCentringAgain": {
+   "medianMs": 0,
+   "sameAnswer": true
+  },
+  "totals": {
+   "basicMs": 48650.3618999999,
+   "facesMs": 61534.322100000456,
+   "centreMs": 58583.51339999959,
+   "photos": 138
+  },
+  "screenWaits": {
+   "basic": {
+    "samples": 729,
+    "p50": 16.61409999988973,
+    "p95": 37.18140000011772,
+    "max": 68.17819999996573
+   },
+   "faces": {
+    "samples": 923,
+    "p50": 16.658299999311566,
+    "p95": 18.422199999913573,
+    "max": 28.463400000706315
+   }
+  },
+  "galleryReads": {
+   "idle": {
+    "reads": 12,
+    "p50": 19.55779999960214,
+    "p95": 28.538900000043213,
+    "max": 28.538900000043213
+   },
+   "basic": {
+    "reads": 145,
+    "p50": 17.500099999830127,
+    "p95": 48.25540000014007,
+    "max": 63.28880000021309
+   },
+   "faces": {
+    "reads": 187,
+    "p50": 16.719399999827147,
+    "p95": 26.208499999716878,
+    "max": 35.23509999923408
+   }
+  },
+  "websiteOnThisPC": {
+   "basicMedianMs": 27.3,
+   "fullCheckMedianMs": 1949.5,
+   "centreMedianMs": 1087.8,
+   "faceApiBackend": "cpu"
+  }
+ }
+}
