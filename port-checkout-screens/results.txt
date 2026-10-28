@@ -1,0 +1,46 @@
+2.0 native app: checkout screens, walked on my own emulator (pwa_test, Android 14, x86_64, port 5566), 2026-10-28.
+Branch feat/port-checkout-screens. Fixes commit e69f9d0, walked code = e69f9d0 (the later panel-wording commit only changes the test panel's words).
+
+TWO BUILDS (release APKs, x86_64, made in C:\m4c, JS inside, no Metro):
+  exact.apk  sha256 6921d63a5f1d187ade9acc6784c7b5f49317cd75bc2de5e81bdc8e1543baac2c  = the PR code, nothing changed
+  walk.apk   sha256 fe316d58bb2763e7cbdc71364f7ddda003e6d6371ba99b1cff84ef4ccd6f923d  = the PR code + walk-harness.diff:
+    (1) an email ending in @example.test signs in to a STAND-IN account on the phone, no network call
+        (no local Supabase: Docker Desktop's engine did not answer; the live project must not be signed in to)
+    (2) one logcat line for every fetch() the app's JavaScript makes (network-log*.txt)
+  Both read the LIVE project's public price list (public_price_schedule, read only) and the website's
+  public files (psgc lists, payment QR, sample photos). Nothing else is live.
+
+PRICE (live list, read 2026-10-28; live-price-schedule.json):
+  the app's own price code on that list, run on the PC: 8x8 softcover 40 pages = P1,288 (was P1,710); hardbound = P1,788 (was P2,510)
+  on the phone: 03 (P1,288, was P1,710, "you save P422") and 13 (Hardbound P1,788, was P2,510): same.
+
+ADDRESS: full PSGC cascade twice: Laguna > Binan City ("binan" finds Binan) > Canlalay (exact build, 04-09),
+  Metro Manila > Quezon City > Bagong Pag-asa (walk build, 16); region filled behind the scenes (payload: "National Capital Region (NCR)").
+STREET: 120 characters typed; read back from the screen (uiautomator): 120 chars, identical to what was typed; "120/120" shown (10, 18);
+  over the limit (124) it is kept whole and the count turns red (17); the order row's ship_street is the whole 120 (tester-order-payload.json).
+TESTER CODE: signed out: "Sign in first, then type the code." (11). Signed in (stand-in): "Tester code MEGYTEST: free", -P1,288, total P0,
+  "Place order · free with tester code", and "Test version: this code was not checked with the shop." (24).
+SIGN IN FROM CHECKOUT (review fix 1): "You must be signed in..." + Sign in (19) > sign-in screen (20) > signed in > back on the order,
+  message and button gone (22), the form kept, name tidied "Juan Dela Cruz", phone "+63 917 123 4567" (23).
+PLACE ORDER: bar "Making your cover..." then "Making page 26 of 40..." (25, 26); the window had FLAG KEEP_SCREEN_ON and a
+  SCREEN_BRIGHT_WAKE_LOCK for com.megyprints.app.dev while it ran (keep-awake.txt). Then "Stopped before sending" + the panel (27, 28, 30).
+PAYMENT STEP: "Send P1,288", GoTyme InstaPay QR, account ending 2370, "3. Send exactly P1,288." (no order number, no "is placed": review fix 4) (31);
+  "Attach the transfer receipt (JPG, PNG or PDF)" (review fix 5) (32); Android's picker, the synthetic test-receipt.png (33, 34);
+  reference 2026091012345678 (made up) (35); "I've sent P1,288" > panel: upload payment-proofs/<order id>.png create-only + RPC submit_payment_proof (36, payment-proof-plan.json).
+OFFLINE (review fix 2): wifi+data off, app restarted: no price ("Prices didn't load — tap to try again"), Province "Couldn't load the list. Tap to try again." (38, 39);
+  tap Barangay: provinces tried again (network-log-offline.txt 08:20:39), no empty list opened (40); online again: a tap on City loads the provinces (41),
+  the next tap opens the full Province list (42); the price came back by itself.
+
+NOTHING WAS SENT:
+  network-log.txt (whole signed-in walk incl. both Place orders and I've sent): 8 requests, all reads:
+    GET psgc provinces/regions/muncities/brgy 13813 (website files), POST rpc/public_price_schedule x2 (read-only RPC, body "{}"),
+    GET rest/v1/orders?...status=eq.pending_payment x2 ("this album already has an order?", read only).
+    No insert, no storage upload, no claim_tester_order, check_tester_code or submit_payment_proof. Place order and I've sent made no request at all.
+  network-log-offline.txt: only the same reads, failing offline, then succeeding.
+  Packet capture of the whole emulator session (both builds, emulator -tcpdump): bytes the phone sent to the Supabase host in total = 3,740
+    (TLS handshakes + the read requests). The order row alone is ~34 KB and the receipt 44 KB: neither went.
+  Not logged by the fetch log: pictures loaded natively by expo-image (the QR and the sample photos: GETs from megyprints.vercel.app).
+  logcat: no FATAL, no JavaScript error, in either build.
+
+NOT DONE / NOT PROVEN HERE: a real account sign-in, any write path (no local Supabase today); the real album (Phase 3);
+  the print files (renderer); a real phone.

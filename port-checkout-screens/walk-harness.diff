@@ -1,0 +1,57 @@
+diff --git a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/auth.tsx b/C:/m4c/mobile/src/lib/auth.tsx
+index 32ef478..73e41a4 100644
+--- a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/auth.tsx
++++ b/C:/m4c/mobile/src/lib/auth.tsx
+@@ -28,6 +28,9 @@ interface AuthValue {
+ 
+ const AuthContext = createContext<AuthValue | null>(null);
+ 
++// WALK HARNESS (C:\m4c build only): a stand-in account, no network.
++const WALK_STANDIN = { user: { id: '00000000-0000-4000-8000-000000000001', email: 'walk@example.test' } } as unknown as Session;
++
+ /** Google sign-in is not in the app yet (docs/mobile-port-plan.md, Phase 1
+  *  notes). Until it is, the website's "Use Sign in with Google" would point
+  *  at a button that is not there, so the app leaves that sentence out (the
+@@ -83,6 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
+     async signIn(email, password) {
+       const problem = signInFormProblem(email, password);
+       if (problem) return { ok: false, error: problem };
++      if (email.trim().toLowerCase().endsWith('@example.test')) {
++        console.log('[walk-auth] stand-in account signed in on the phone; nothing sent');
++        setSession(WALK_STANDIN);
++        return { ok: true };
++      }
+       if (!supabaseConfigured) {
+         return { ok: false, error: 'This test build was made without the Megy Prints server address, so it cannot sign in.' };
+       }
+diff --git a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/supabase.ts b/C:/m4c/mobile/src/lib/supabase.ts
+index f86ebd0..499f748 100644
+--- a/C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-checkout/mobile/src/lib/supabase.ts
++++ b/C:/m4c/mobile/src/lib/supabase.ts
+@@ -13,6 +13,26 @@
+ import AsyncStorage from '@react-native-async-storage/async-storage';
+ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+ 
++// WALK HARNESS (C:\m4c build only): every fetch the app's code makes, to logcat.
++{
++  const realFetch = globalThis.fetch;
++  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
++    const u = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
++    const method = String(init?.method ?? (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET')).toUpperCase();
++    const body = init?.body;
++    const size = typeof body === 'string' ? body.length : body ? 'binary' : 0;
++    console.log(`[walk-net] ${method} ${u} body=${size}`);
++    try {
++      const res = await realFetch(input as RequestInfo, init);
++      console.log(`[walk-net] <- ${res.status} ${method} ${u.split('?')[0]}`);
++      return res;
++    } catch (e) {
++      console.log(`[walk-net] <- failed ${method} ${u.split('?')[0]} ${String(e)}`);
++      throw e;
++    }
++  }) as typeof fetch;
++}
++
+ const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+ const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+ 

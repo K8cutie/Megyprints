@@ -1,0 +1,22 @@
+08:20:08.457 I/ReactNativeJS(13200): [walk-net] GET https://megyprints.vercel.app/psgc/provinces.json body=0
+08:20:08.458 I/ReactNativeJS(13200): [walk-net] GET https://megyprints.vercel.app/psgc/regions.json body=0
+08:20:08.464 I/ReactNativeJS(13200): [walk-net] POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule body=2
+08:20:08.652 I/ReactNativeJS(13200): [walk-net] <- failed GET https://megyprints.vercel.app/psgc/regions.json Error: fetch failed: java.net.UnknownHostException: Unable to resolve host "megyprints.vercel.app": No address associate
+08:20:08.652 I/ReactNativeJS(13200): [walk-net] <- failed POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule Error: fetch failed: java.net.UnknownHostException: Unable to resolve host "lvbsrbmikunynphl
+08:20:08.653 I/ReactNativeJS(13200): [walk-net] <- failed GET https://megyprints.vercel.app/psgc/provinces.json Error: fetch failed: java.net.UnknownHostException: Unable to resolve host "megyprints.vercel.app": No address associa
+08:20:11.668 I/ReactNativeJS(13200): [walk-net] POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule body=2
+08:20:11.673 I/ReactNativeJS(13200): [walk-net] <- failed POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule Error: fetch failed: java.net.UnknownHostException: Unable to resolve host "lvbsrbmikunynphl
+08:20:17.684 I/ReactNativeJS(13200): [walk-net] POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule body=2
+08:20:17.688 I/ReactNativeJS(13200): [walk-net] <- failed POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule Error: fetch failed: java.net.UnknownHostException: Unable to resolve host "lvbsrbmikunynphl
+08:20:29.699 I/ReactNativeJS(13200): [walk-net] POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule body=2
+08:20:29.704 I/ReactNativeJS(13200): [walk-net] <- failed POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule Error: fetch failed: java.net.UnknownHostException: Unable to resolve host "lvbsrbmikunynphl
+08:20:39.355 I/ReactNativeJS(13200): [walk-net] GET https://megyprints.vercel.app/psgc/provinces.json body=0
+08:20:39.356 I/ReactNativeJS(13200): [walk-net] GET https://megyprints.vercel.app/psgc/regions.json body=0
+08:20:39.363 I/ReactNativeJS(13200): [walk-net] <- failed GET https://megyprints.vercel.app/psgc/regions.json Error: fetch failed: java.net.UnknownHostException: Unable to resolve host "megyprints.vercel.app": No address associate
+08:20:39.366 I/ReactNativeJS(13200): [walk-net] <- failed GET https://megyprints.vercel.app/psgc/provinces.json Error: fetch failed: java.net.UnknownHostException: Unable to resolve host "megyprints.vercel.app": No address associa
+08:20:53.717 I/ReactNativeJS(13200): [walk-net] POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule body=2
+08:20:54.922 I/ReactNativeJS(13200): [walk-net] <- 200 POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule
+08:21:00.350 I/ReactNativeJS(13200): [walk-net] GET https://megyprints.vercel.app/psgc/provinces.json body=0
+08:21:00.350 I/ReactNativeJS(13200): [walk-net] GET https://megyprints.vercel.app/psgc/regions.json body=0
+08:21:01.377 I/ReactNativeJS(13200): [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/provinces.json
+08:21:01.379 I/ReactNativeJS(13200): [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/regions.json

@@ -1,0 +1,16 @@
+{
+  "upload": {
+    "bucket": "payment-proofs",
+    "path": "<order id>.png",
+    "contentType": "image/png",
+    "mode": "create-only"
+  },
+  "rpc": {
+    "name": "submit_payment_proof",
+    "args": {
+      "p_order_id": "<order id>",
+      "p_reference": "2026091012345678",
+      "p_proof_path": "<order id>.png"
+    }
+  }
+}

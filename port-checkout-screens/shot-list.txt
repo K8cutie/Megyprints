@@ -1,0 +1,45 @@
+## A. The exact PR code (release APK, sha256 6921d63a...), signed out
+01-start-screen.png
+02-order-top-test-album-40-pages.png
+03-price-from-live-list-1288.png
+04-province-list.png
+05-province-search-lagu.png
+06-city-search-binan-finds-binan.png
+07-laguna-binan-picked.png
+08-barangay-list-binan.png
+09-laguna-binan-canlalay.png
+10-street-120-chars-whole.png
+11-megytest-signed-out-sign-in-first.png
+12-place-order-signed-out-must-sign-in.png
+## B. Walk build (same code + stand-in account + fetch log), signed in via the stand-in
+13-hardbound-price-1788.png
+14-empty-form-errors-scrolled-to-name.png
+15-barangay-first-opens-province.png
+16-metro-manila-quezon-city-bagong-pag-asa.png
+17-street-over-limit-124-kept-whole-red-count.png
+18-street-120-and-zip.png
+19-must-sign-in.png
+20-sign-in-from-checkout.png
+21-stand-in-email-typed.png
+22-back-on-order-message-gone.png
+23-form-kept-name-phone-tidied.png
+24-megytest-free-test-order-unchecked-note.png
+25-placing-bar-cover.png
+26-placing-bar-page-26-of-40.png
+27-tester-order-stopped-before-sending.png
+28-tester-order-payload-json.png
+29-code-removed-paid-price.png
+30-paid-order-stopped-before-sending.png
+31-payment-step-qr-no-order-number.png
+32-receipt-button-website-words.png
+33-android-picker-synthetic-receipt.png
+34-receipt-picked.png
+35-reference-typed.png
+36-ive-sent-panel-upload-and-rpc.png
+37-payment-order-summary.png
+## C. Offline (wifi and data off), then back online
+38-offline-prices-didnt-load.png
+39-offline-province-couldnt-load.png
+40-offline-barangay-tap-retries-no-empty-list.png
+41-online-city-tap-loads-provinces.png
+42-city-tap-opens-full-province-list.png

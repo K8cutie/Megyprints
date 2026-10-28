@@ -1,0 +1,17 @@
+08:07:37.645 I/ReactNativeJS(10919): [walk-net] GET https://megyprints.vercel.app/psgc/provinces.json body=0
+08:07:37.646 I/ReactNativeJS(10919): [walk-net] GET https://megyprints.vercel.app/psgc/regions.json body=0
+08:07:37.651 I/ReactNativeJS(10919): [walk-net] POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule body=2
+08:07:37.970 I/ReactNativeJS(10919): [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/provinces.json
+08:07:37.975 I/ReactNativeJS(10919): [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/regions.json
+08:07:38.450 I/ReactNativeJS(10919): [walk-net] <- 200 POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule
+08:08:58.521 I/ReactNativeJS(10919): [walk-net] GET https://megyprints.vercel.app/psgc/muncities.json body=0
+08:08:58.580 I/ReactNativeJS(10919): [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/muncities.json
+08:09:16.358 I/ReactNativeJS(10919): [walk-net] POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule body=2
+08:09:16.469 I/ReactNativeJS(10919): [walk-net] <- 200 POST https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/rpc/public_price_schedule
+08:10:30.907 I/ReactNativeJS(10919): [walk-net] GET https://megyprints.vercel.app/psgc/brgy/13813.json body=0
+08:10:31.252 I/ReactNativeJS(10919): [walk-net] <- 200 GET https://megyprints.vercel.app/psgc/brgy/13813.json
+08:14:12.483 I/ReactNativeJS(10919): [walk-auth] stand-in account signed in on the phone; nothing sent
+08:14:12.492 I/ReactNativeJS(10919): [walk-net] GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/orders?select=id%2Corder_number%2Cstatus%2Camount%2Ccreated_at%2Cpayment_submitted_at%2Calbum_size%2Cpage_count%2Ctracking%2Calbum_title%3Aalbum_snapshot-%3E%3Etitle%2Calbum_id%2Ctester_code&user_id=eq.00000000-0000-4000-8000-000000000001&album_id=eq.00000000-0000-4000-8000-00000000c0de&status=eq.pending_payment&order=created_at.desc&limit=1 body=0
+08:14:13.379 I/ReactNativeJS(10919): [walk-net] <- 200 GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/orders
+08:16:20.627 I/ReactNativeJS(10919): [walk-net] GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/orders?select=id%2Corder_number%2Cstatus%2Camount%2Ccreated_at%2Cpayment_submitted_at%2Calbum_size%2Cpage_count%2Ctracking%2Calbum_title%3Aalbum_snapshot-%3E%3Etitle%2Calbum_id%2Ctester_code&user_id=eq.00000000-0000-4000-8000-000000000001&album_id=eq.00000000-0000-4000-8000-00000000c0de&status=eq.pending_payment&order=created_at.desc&limit=1 body=0
+08:16:21.163 I/ReactNativeJS(10919): [walk-net] <- 200 GET https://lvbsrbmikunynphlbckt.supabase.co/rest/v1/orders

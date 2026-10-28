@@ -1,0 +1,5 @@
+adb -s emulator-5566 shell dumpsys power   (2 s after Place order, while the bar ran)
+  mHoldingDisplaySuspendBlocker=true
+  SCREEN_BRIGHT_WAKE_LOCK        'WindowManager/displayId:0' ON_AFTER_RELEASE ACQ=-2s111ms (uid=1000 pid=561 ws=WorkSource{10199 com.megyprints.app.dev})
+adb -s emulator-5566 shell dumpsys window
+      fl=KEEP_SCREEN_ON LAYOUT_IN_SCREEN LAYOUT_INSET_DECOR SPLIT_TOUCH HARDWARE_ACCELERATED DRAWS_SYSTEM_BAR_BACKGROUNDS

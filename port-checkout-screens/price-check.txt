@@ -1,0 +1,3 @@
+The app's checkoutPrice (mobile/src/lib/checkout/price.ts) on the live list (live-price-schedule.json), test album 8x8, 40 pages:
+softcover 8x8 40 pages [{"label":"Album — 8×8 Softcover · 40 pages · 7 QR memories included","amount":1288}] total ₱1,288 was 1710 | Place order · pay ₱1,288 by bank transfer
+hardbound 8x8 40 pages [{"label":"Album — 8×8 Hardbound · 40 pages · 7 QR memories included","amount":1788}] total ₱1,788 was 2510 | Place order · pay ₱1,788 by bank transfer
