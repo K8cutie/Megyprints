@@ -29,6 +29,9 @@ import { LAYOUT_CURRENT, LAYOUT_MEMORY_NOTE, LAYOUT_NONE, LAYOUT_TITLE, leftover
 
 const COLUMNS = 2;
 const GAP = 12;
+/** A tile's padding and border, both sides: every tile is as wide as its
+ *  picture plus this, so a long layout name is cut short, never widening it. */
+const TILE_EDGE = 12;
 
 /** One layout, as this page would look on it. */
 function LayoutThumb({ ctx, t, width, height }: { ctx: EditorContext; t: PageTemplate; width: number; height: number }) {
@@ -95,7 +98,7 @@ export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
             return (
               <Pressable accessibilityRole="button" accessibilityLabel={isCurrent ? `${t.name}, current layout` : t.name}
                 accessibilityState={{ selected: isCurrent }} onPress={() => choose(t)} testID={`photos-layout-${t.id}`}
-                style={({ pressed }) => [styles.tile, isCurrent && styles.tileNow, pressed && styles.pressed]}>
+                style={({ pressed }) => [styles.tile, { width: tileW + TILE_EDGE }, isCurrent && styles.tileNow, pressed && styles.pressed]}>
                 <LayoutThumb ctx={ctx} t={t} width={tileW} height={tileH} />
                 <Text numberOfLines={1} style={[styles.name, isCurrent && styles.nameNow]}>{isCurrent ? LAYOUT_CURRENT : t.name}</Text>
               </Pressable>

@@ -27,7 +27,9 @@
        every step holds the photo list as it was, so an Undo past them would
        take them out of the album (and the photo picker then says they are
        already in it). When photos come in, the editor's Undo starts again
-       there (restartHere): it can never step back past them.
+       there (restartHere): it can never step back past them. Redo steps
+       made before they came in hold the old photo list too, so Redo is
+       held back until the next edit clears them (redoShown).
      • Every cover change saves a step of the PAGES that changes nothing
        (setBoxText, setPageColor, setPageBackground push a snapshot whatever
        the scope; the snapshot has no cover), and a cover drag or the title
@@ -43,6 +45,14 @@ type Pages = readonly AlbumPage[];
 
 export function undoShown(canUndo: boolean, pages: Pages, start: Pages): boolean {
   return canUndo && pages !== start;
+}
+
+/** Redo, held back after photos came in while the album still had Redo
+ *  steps: those steps hold the photo list as it was before the photos too,
+ *  so a Redo would take them out again. The album's next edit clears its
+ *  Redo steps (pushSnapshot), and the hold goes with them. */
+export function redoShown(canRedo: boolean, heldBack: boolean): boolean {
+  return canRedo && !heldBack;
 }
 
 /** Changes whenever the cover is changed (coverChanged). A start kept from

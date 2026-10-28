@@ -46,7 +46,7 @@ import { addChoicesFor, bannersFor, onRegistryChange, overlayComponents, registr
 import { editThePages } from './scope';
 import { selectedTarget, selectTarget } from './selection';
 import { renderedLines } from './textLines';
-import { lastEditorVisit, MOST_STEPS, nothingChanged, rememberVisit, startOnOpen, undoShown } from './undoBar';
+import { lastEditorVisit, MOST_STEPS, nothingChanged, redoShown, rememberVisit, startOnOpen, undoShown } from './undoBar';
 import './parts';
 
 /** How long a line over the page stays (the website's guard line). */
@@ -57,19 +57,23 @@ const TILE = 48;
 const TILE_GAP = 8;
 
 function HeaderUndo({ canUndo, canRedo, undo, redo }: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void }) {
-  // Shown only when there is something to undo or redo: never a greyed button.
+  // Shown only when there is something to undo or redo: never a greyed
+  // button. Each keeps its own place, so a button coming or going never
+  // moves the other under a finger tapping Undo again and again (found on
+  // the emulator: Redo appeared where Undo had been). An empty, silent
+  // space holds the place of one not shown.
   return (
     <View style={styles.headerRow}>
-      {canUndo && (
+      {canUndo ? (
         <Pressable accessibilityRole="button" accessibilityLabel={UNDO} onPress={undo} style={styles.headerButton} testID="edit-undo">
           <Text style={styles.headerText}>{`↶ ${UNDO}`}</Text>
         </Pressable>
-      )}
-      {canRedo && (
+      ) : <View style={styles.headerButton} importantForAccessibility="no" />}
+      {canRedo ? (
         <Pressable accessibilityRole="button" accessibilityLabel={REDO} onPress={redo} style={styles.headerButton} testID="edit-redo">
           <Text style={styles.headerText}>{`${REDO} ↷`}</Text>
         </Pressable>
-      )}
+      ) : <View style={styles.headerButton} importantForAccessibility="no" />}
     </View>
   );
 }
@@ -105,7 +109,14 @@ export default function EditPagesScreen() {
   }, []));
   // Photos came in (added from the phone, or missing ones put back): Undo
   // starts again here, so it can never take them out (undoBar.ts).
-  const restartUndo = useCallback(() => setStart(latest.current.albumPages), []);
+  // Redo steps from before they came in hold the old photo list too: Redo is
+  // held back until the album's next edit clears them.
+  const [redoHeld, setRedoHeld] = useState(false);
+  const restartUndo = useCallback(() => {
+    setStart(latest.current.albumPages);
+    if (latest.current.canRedo) setRedoHeld(true);
+  }, []);
+  useEffect(() => { if (!builder.canRedo) setRedoHeld(false); }, [builder.canRedo]);
 
   // Undo and Redo: the builder's own, one step; a step that changes nothing
   // on the pages (a cover change's empty step) is stepped over, one step at
@@ -209,10 +220,11 @@ export default function EditPagesScreen() {
   }, [index, before.length, screenW]);
 
   const canUndo = undoShown(builder.canUndo, builder.albumPages, start);
+  const canRedo = redoShown(builder.canRedo, redoHeld);
   const header = useMemo(() => ({
     title: EDIT_PAGES,
-    headerRight: () => <HeaderUndo canUndo={canUndo} canRedo={builder.canRedo} undo={undo} redo={redo} />,
-  }), [canUndo, builder.canRedo, undo, redo]);
+    headerRight: () => <HeaderUndo canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo} />,
+  }), [canUndo, canRedo, undo, redo]);
 
   if (!page || !ctx || !plan) {
     return (
@@ -281,7 +293,7 @@ export default function EditPagesScreen() {
       <SafeAreaView edges={['bottom']} style={styles.bar}>
         {/* The selected element's buttons, from the parts (the row keeps its
             place, so the page never jumps when something is picked). */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.actionsRow} contentContainerStyle={styles.actions} testID="edit-selected-actions">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} overScrollMode="never" style={styles.actionsRow} contentContainerStyle={styles.actions} testID="edit-selected-actions">
           {actions.map((a) => (
             <Pressable key={a.id} accessibilityRole="button" accessibilityLabel={a.label} onPress={() => a.onPress(selected!, ctx)} testID={`edit-action-${a.id}`}
               style={({ pressed }) => [styles.action, a.danger && styles.actionDanger, pressed && styles.pressed]}>
@@ -290,7 +302,7 @@ export default function EditPagesScreen() {
           ))}
         </ScrollView>
 
-        <ScrollView ref={strip} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip} testID="edit-strip">
+        <ScrollView ref={strip} horizontal showsHorizontalScrollIndicator={false} overScrollMode="never" contentContainerStyle={styles.strip} testID="edit-strip">
           {before.map((t) => (
             <Pressable key={t.id} accessibilityRole="button" accessibilityLabel={t.label} onPress={() => t.onPress(ctx)} style={[styles.tile, styles.tileWide]} testID={`edit-strip-${t.id}`}>
               <Text style={styles.tileText}>{t.label}</Text>
@@ -346,7 +358,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#EFE9E1' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.md, padding: space.lg, backgroundColor: colors.background },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
-  headerButton: { minWidth: 48, minHeight: 48, paddingHorizontal: space.sm, alignItems: 'center', justifyContent: 'center' },
+  headerButton: { width: 74, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   headerText: { fontSize: 15, fontWeight: '700', color: colors.accent },
   line: { fontSize: 13, fontWeight: '600', color: colors.muted, textAlign: 'center', paddingVertical: space.sm, paddingHorizontal: space.md },
   area: { flex: 1, alignItems: 'center', justifyContent: 'center' },

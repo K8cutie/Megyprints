@@ -1,9 +1,22 @@
-import { Stack } from 'expo-router';
+import { router, Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useLayoutEffect } from 'react';
 import { BuilderProvider } from '../builder/BuilderProvider';
 import { AuthProvider } from '../lib/auth';
 import { DraftProvider } from '../lib/draftStore';
+import { guardSharedRouter, rootMounted, rootUnmounted } from '../lib/routerBinding';
 import { colors } from '../lib/theme';
+
+/** Keeps the shared router bound after Android rebuilds the screen (routerBinding.ts). */
+function KeepRouterBound() {
+  const live = useRouter();
+  useLayoutEffect(() => {
+    guardSharedRouter(router);
+    rootMounted(live);
+    return () => rootUnmounted(live);
+  }, [live]);
+  return null;
+}
 
 export default function RootLayout() {
   return (
@@ -11,6 +24,7 @@ export default function RootLayout() {
       <DraftProvider>
         <BuilderProvider>
           <StatusBar style="dark" />
+          <KeepRouterBound />
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },

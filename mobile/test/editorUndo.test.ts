@@ -27,7 +27,7 @@ import { SCENARIOS } from '../../tools/parity/scenarios';
 import type { AppPlatform } from '../src/builder/appPlatform';
 import { hitTest } from '../src/editor/hitTest';
 import { editThePages } from '../src/editor/scope';
-import { coverChanged, lastEditorVisit, MOST_STEPS, nothingChanged, rememberVisit, startOnOpen, undoShown } from '../src/editor/undoBar';
+import { coverChanged, lastEditorVisit, MOST_STEPS, nothingChanged, redoShown, rememberVisit, startOnOpen, undoShown } from '../src/editor/undoBar';
 import { addPickedPhotos } from '../src/editor/photos/intake';
 import { addPhotos as addToDraft, emptyDraft, type DraftPhoto } from '../src/lib/photoDraft';
 import type { PhotoHeader } from '../src/builder/appPhotos';
@@ -316,6 +316,38 @@ describe('undo after the review: photos that came in, cover changes, steps that 
     expect(fills(builder(), 5)).toEqual(before5);
     expect(builder().uploadedPhotos.length).toBe(count + 3); // still in the album
     expect(undoShown(builder().canUndo, builder().albumPages, start)).toBe(false); // can't go past them
+  });
+
+  it('photos added while a Redo was waiting: Redo is held back until the next edit, so it can\'t take them out', async () => {
+    const platform = await madeAlbum(sc);
+    await act(async () => { editThePages(builder()); });
+    await act(async () => { builder().goToPage(3); });
+    await tapOn(platform, firstPhoto(platform));
+    await removeSelected(platform);
+    await act(async () => { builder().undo(); }); // a Redo is waiting
+    expect(builder().canRedo).toBe(true);
+    const count = builder().uploadedPhotos.length;
+    let r = { line: null as string | null, cameIn: false };
+    await act(async () => { r = await addPickedPhotos(builder(), newPhotos(['R1.jpg', 'R2.jpg']), new Set(), inspect); });
+    await settle();
+    expect(r.cameIn).toBe(true);
+    // What the screen does then (restartUndo): Redo held back while the album still has that step.
+    let held = builder().canRedo;
+    expect(redoShown(builder().canRedo, held)).toBe(false);
+    // Why: that Redo step holds the photo list from before the 2 photos.
+    await act(async () => { builder().redo(); });
+    expect(builder().uploadedPhotos.length).toBe(count);
+    await act(async () => { builder().undo(); });
+    expect(builder().uploadedPhotos.length).toBe(count + 2);
+    // The next edit clears the album's Redo steps, and the hold goes with them.
+    await act(async () => { builder().goToPage(5); });
+    await tapOn(platform, firstPhoto(platform));
+    await removeSelected(platform);
+    expect(builder().canRedo).toBe(false);
+    if (!builder().canRedo) held = false;
+    await act(async () => { builder().undo(); });
+    expect(redoShown(builder().canRedo, held)).toBe(true);
+    expect(builder().uploadedPhotos.length).toBe(count + 2);
   });
 
   it('a cover change: the editor\'s Undo starts afresh, so no press lands on the cover\'s empty steps', async () => {

@@ -72,7 +72,7 @@ export default function Start() {
         <Button label="Shared code check" kind="plain" onPress={() => router.push('/shared-check')} testID="go-check" />
       </View>
 
-      <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos and see it as a book. Editing pages and ordering come in later versions.</Text>
+      <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos, see it as a book and edit its pages. Ordering comes in a later version.</Text>
     </SafeAreaView>
   );
 }

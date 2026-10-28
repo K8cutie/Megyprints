@@ -1448,13 +1448,50 @@ Nov 9).
   - There is no "⋯" to choose something else for a box Megy dealt.
   - The cover's "Too long for the front cover" waits until the title's font is on the
     phone, so offline it says nothing.
+- **Parity with the website's editor:** `mobile/test/editorParity.test.ts` runs
+  `tools/parity/webEdits.spec.ts` (the website's builder in jsdom, with the calls its
+  editors make) and the app editor's own code on the same album, with seven edits.
+  Every page and the cover come out the same, field for field.
   - A selected photo can be moved and zoomed only by finger (TalkBack can select it and
     use its buttons, not move it).
 
+### Seen on the emulator (2026-10-30)
+
+- **Setup:**
+  - My own `pwa_test` emulator (Android 14, x86_64, port 5568, read-only).
+  - The release APK from this branch, built in my own short folder `C:\m5e`.
+  - No `.env.local`, so the app was signed out and reached no server of ours.
+  - 120 made-up photos: PIL shapes and a big number, no people, 3000x4000 with every 10th one 4000x3000, EXIF times over 2026-10-20 to 2026-10-23.
+- **Making the album:** Name ("Bohol Trip 2026", Vacation) → Size 8x8 → 120 photos → cover photo 3 → "Make my album" gave 53 pages.
+- **In "Edit pages":**
+  - A photo is moved by a slow drag and zoomed by a pinch (two-finger raw touch events, sent as root on my emulator).
+  - It is swapped with page 2's photo ("Swapped with the photo on page 1").
+  - A quick flick over the selected photo turns the page and stores nothing.
+  - "Replace photo" swaps in a photo from page 6. "Remove photo", then the empty frame → "Add to this box" → "Add Photo" fills it again.
+  - Change layout shows "✓ Current" first, and "Hero Left" is picked.
+  - A page is added (its layouts open, and the blank-page reminder shows) and deleted. 13 more deletions reach 40 pages, where the sheet says "Albums need at least 40 pages, so a page can't be deleted". Undo, one press per step, brings all 13 back.
+  - A long caption gets "Too long for this box" and "Make it fit (size 22)". Android back once hides the keyboard, and back again keeps the words.
+  - "Your Text" in an empty frame takes Playfair at once, then Lora with "Getting the font…", then a green.
+  - The quote picker, signed out, asks for sign-in and sends nothing.
+  - The page colour is set to yellow.
+  - Undo three steps, Redo one.
+- **The cover:** photo 4, dragged with a live preview, the title in Yeseva One (fetched), white, shadow off, and moved down. The editor's Undo starts afresh after it.
+- **Force-stop and open again:** "Continue my album" opens page 33. The saved file (read as root) holds every edit: the swap with its zoom 2.40 and offset, the replaced photo, the layout, the caption at 22, the empty frame, and the cover's photo, focus, font, colour, shadow and offset.
+- **Photos added while editing:** after a page edit, "Add photos" picks 3 and the app says "3 photos added.". Undo is hidden there. A later edit is undone, and the 3 photos are still in "Add a photo".
+- **Memory and logs:**
+  - TOTAL PSS was 394.6 MB after about 25 edits and 454.9 MB after the cover work, then 247.3 MB after the restart. Not fixed (see the PR).
+  - No FATAL, no crash and no JavaScript error in logcat.
+- **Found on the emulator and fixed:**
+  - Undo and Redo traded places when one came or went, so a second tap on Undo hit Redo. Each now keeps its own place.
+  - After a fling to the end of the page strip, Android's stretch stayed on and swallowed taps on the tiles (the "Cover" tile took 3 tries). The strip and the photo's button row no longer overscroll.
+  - Layout tiles with a long name were wider than the others. Every tile is now as wide as its picture.
+  - The start screen still said "Editing pages… come in later versions". It now reads "You can make an album from your photos, see it as a book and edit its pages. Ordering comes in a later version."
+  - **The app closed after a change of display size.** Android rebuilt the screen and React Native started a new root before stopping the old one (the log shows startSurface, then stopSurface). The old root's cleanup unbound expo-router's shared `router`, so the next button that called it ("Continue my album") threw "The imperative router is unavailable before the first render has finished" and the app closed. This happened twice on the emulator, with `wm density` 400 and 360. Now `<KeepRouterBound />` in the root layout (`src/lib/routerBinding.ts`, with a test) makes the shared router use the newest root still mounted. On the next build the same test opens the Preview and the editor and comes back, with no FATAL in the log. A font size change in Android's settings rebuilds the screen the same way; that case was not tried.
+  - At 360 dp the title "Edit pages" was cut short by the two fixed Undo/Redo places. Each place is now 74 dp. At 360 dp both buttons show with the full title, and "Remove photo" is on screen.
+
 ### Not done, not proven (editor core)
 
-- Not walked on an emulator or a phone in this step (the parts' verify step does
-  that); proven by jest on the real shared builder and by type checks only.
+- Walked on the emulator only (above), not on a phone. TalkBack was not turned on.
 - A QR code or a graphic is hit in its whole frame or caption box, not in the
   smaller square the website draws it in (`qrRect` / `ornamentFit` live in website
   files that are not shared yet). The app draws neither yet.
