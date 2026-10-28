@@ -719,42 +719,56 @@ move the pure half of each into a shared file, list it in
   it is; cancelling an unpaid order is on the website's Orders page),
   focusing the first box to fix (it scrolls there).
 
-### What was seen on the emulator (2026-10-28)
+### What was seen on the emulator (2026-10-28, after the review fixes)
 
-`pwa_test` (Android 14, x86_64), port 5566, release APKs built in `C:\m4c`.
-Two builds: the PR code as it is, and a **walk build**: the same code plus
-two stand-ins for the outside (a stand-in account that signs in on the
-phone with no network call, for an email ending in `@example.test`, because
-there was no local Supabase and the live project must not be signed in to;
-and one logcat line for every `fetch` the app makes). Evidence:
-`pr-evidence` @ `e0cc049`, folder `port-checkout-screens/` (`results.txt`
-lists every screenshot).
+`pwa_test` (Android 14, x86_64), port 5566, release APKs built in `C:\m4c`
+from a29f9b3. Two builds: the PR code as it is, and a **walk build**: the
+same code plus stand-ins for the outside (stand-in accounts that sign in on
+the phone with no network call, for emails ending in `@example.test`,
+because there is no local Supabase and the live project must not be signed
+in to; one logcat line for every `fetch` the app makes; and a stand-in
+"order waiting" for two of those accounts). Evidence: `pr-evidence` @
+`2d8887d`, folder `port-checkout-screens/walk2/` (`results.txt` lists every
+screenshot; the first walk, before the review fixes, is in
+`port-checkout-screens/` @ `e0cc049`).
 
-- **Price**: read from the live list: P1,288 (was P1,710) softcover,
-  P1,788 (was P2,510) hardbound, the same as the app's price code gives on
-  that list on the PC.
+- **Price**: read from the live list: P1,288 (was P1,710) softcover.
 - **Address**: Laguna > Biñan City ("binan" finds it) > Canlalay, and Metro
   Manila > Quezon City > Bagong Pag-asa (the order row says "National
   Capital Region (NCR)"). A 120-character street is read back from the
   screen whole and goes whole into the order row; at 124 it is kept and the
   count turns red.
 - **MEGYTEST**: signed out, "Sign in first, then type the code."; signed in,
-  free, P0, the test-order button and the "not checked with the shop" line.
-- **Sign in from checkout** goes back to the order; the message and button go
-  and the form stays.
-- **Place order**: the bar page by page, the window kept on
-  (`KEEP_SCREEN_ON`, a screen wake lock for the app), then the test panel.
-  The payment step, Android's picker with a made-up receipt picture, the
-  reference, and "I've sent" with its panel.
-- **Offline**: no price ("Prices didn't load — tap to try again"), the
-  Province box says it couldn't load; a tap on Barangay tries the provinces
-  again instead of opening an empty list; online again, it loads.
-- **Nothing was written**: the fetch log of the whole walk has only reads
-  (the website's address files, `public_price_schedule`, and "this album
-  already has an order?"); Place order and "I've sent" made no request. A
-  packet capture of the whole session: 3,740 bytes in all went from the
-  phone to the Supabase host (the order row alone is about 17 KB).
+  free, P0, the test-order button and the note that any 4 to 24 letter or
+  number code shows free in this version.
+- **Place order**: the bar page by page ("Making page 3 of 40…"), then the
+  test panel; the order row alone is 17,157 bytes (compact JSON). The
+  payment step, Android's picker with a made-up receipt picture, the
+  reference, and "I've sent" with its panel (the receipt upload carries
+  `cacheControl: "0"`).
+- **"This album already has an order"**: the filled "Open order MP-…" opens
+  that order's payment step in the app (its amount, "Order MP-… is placed",
+  "put MP-… in the note"; "I've sent" plans `submit_payment_proof` for that
+  order's id), first in the second-order question too; for an order whose
+  payment was sent it says "Payment sent — we're confirming it". The first
+  try (opening the website's `/orders?order=<id>` in Chrome) landed on the
+  website's home page, because the browser is not signed in.
+- **Nothing was written**: the fetch log has only reads (the website's
+  address files, `public_price_schedule`, the albums list, "this album
+  already has an order?"). Android's own per-app byte counters
+  (`dumpsys netstats`, read just before and after each step) show the phone
+  sent 277 bytes during Place order with MEGYTEST, 158 bytes during a paid
+  Place order and 79 bytes during "I've sent" with a 44 KB receipt picked:
+  the size of background connection traffic, against a 17 KB order row.
+- **Correction to the first walk**: its notes said a packet capture showed
+  3,740 bytes going to the Supabase host. In this run the emulator's
+  `-tcpdump` capture saw only boot-time ARP and IPv6 packets (on this AVD
+  the app's traffic goes over the netsim Wi-Fi path), so that number is not
+  confirmed; the per-app counters above replace it.
 - Not seen: a real account, any write, the real album, a real phone.
+- Small gap seen: the payment step of an order placed earlier still says
+  "Please pay within 7 days"; the website's Orders page says "Please pay by
+  <date>" from the order's own date. Fix: use the shared `payByDate` there.
 
 ---
 
