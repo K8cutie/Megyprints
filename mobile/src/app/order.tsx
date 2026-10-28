@@ -21,7 +21,7 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { PAY_WITHIN_MESSAGE } from '@web/lib/orderExpiry';
 import { countQrMemories, EXTRA_QR_RATE, FREE_QR_MEMORIES } from '@web/lib/pricing';
@@ -38,7 +38,7 @@ import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
-import { openOrderForAlbum, openOrderWords, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
+import { openOrderFailed, openOrderForAlbum, openOrderUrl, openOrderWords, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, ORDER_ID, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { PAYEE, PAYEE_QR_URL, paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../lib/checkout/payment';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
@@ -181,6 +181,13 @@ export default function OrderScreen() {
     setOpenAlbumAsk(!!r.openAlbum);
   };
   const placeSecond = () => { secondOk.current = true; setAskSecond(false); onPlace(); };
+  // "Open order MP-…": the website's order page for it, where it is paid or
+  // followed (the app has no Orders screen until Phase 6).
+  const openExistingOrder = () => {
+    if (!openOrder) return;
+    const o = openOrder;
+    Linking.openURL(openOrderUrl(o)).catch(() => setMessage(openOrderFailed(o)));
+  };
 
   if (step === 'placing' && plan) {
     return <Placing frames={frames} onDone={() => setStep('placed')} />;
@@ -194,7 +201,7 @@ export default function OrderScreen() {
         {tester && <Text style={styles.body}>This was a test order. Nothing is charged, and nothing will be printed or sent.</Text>}
         <TestPanel
           title="Test version: what Place order would send"
-          note={`The same order the website would send for this album${tester ? ', address and tester code' : ' and address'}. The order number and the price come from the database. The cover and the pages are not made in this version.${tester?.unchecked ? ` The code ${tester.code} was not checked with the shop (that check is a database write).` : ''}`}
+          note={`The same order the website would send for this album${tester ? ', address and tester code' : ' and address'}. The order number and the price come from the database. The cover and the pages are not made in this version.${tester?.unchecked ? ` The code ${tester.code} was not checked with the shop (that check is a database write): in this version any code of 4 to 24 letters and numbers shows as free.` : ''}`}
           steps={plan.steps}
           data={{ orders: plan.orderRow, qr_memories: plan.steps.flatMap((s) => (s.kind === 'upsert' ? s.rows : [])), files: plan.files }}
         />
@@ -235,6 +242,8 @@ export default function OrderScreen() {
         <View style={styles.notice} testID="order-already-open">
           <Text style={styles.noticeHead}>{words.headline}</Text>
           <Text style={styles.noticeBody}>{words.body}</Text>
+          <Button label={words.button} onPress={openExistingOrder} testID="order-open-existing" />
+          <Text style={styles.tiny}>Opens your order on the Megy Prints website.</Text>
         </View>
       )}
 
@@ -334,9 +343,10 @@ export default function OrderScreen() {
         />
       )}
 
-      {askSecond && openOrder && (
+      {askSecond && openOrder && words && (
         <View style={styles.notice} testID="order-second-ask">
           <Text style={styles.noticeBody}>{secondOrderQuestion(openOrder)}</Text>
+          <Button label={words.button} onPress={openExistingOrder} testID="order-second-open" />
           <Button label="Yes, place a second order" kind="plain" onPress={placeSecond} testID="order-second-yes" />
         </View>
       )}

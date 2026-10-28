@@ -623,13 +623,28 @@ tester-code check.
   instead of opening empty).
 - **Price**: the live price list (`public_price_schedule()`, read only, tried
   again after 3 s, 6 s … a minute) through the shared `pricing.ts`. No list,
-  no price: "Prices didn't load — tap to try again".
+  no price: "Prices didn't load — tap to try again". A tap always answers
+  with "Loading price…", even while a try the app started by itself is
+  still on its way (the tap then waits for that try).
 - **Tester code**: "Have a tester code?" → "Type your code" → "Tester code
   MEGYTEST: free", the real price crossed out, ₱0 to pay, "Place order ·
   free with tester code". In this build only the code's shape is checked:
   `check_tester_code` counts tries in the database (a write), so it is not
-  called; the form says "Test version: this code was not checked with the
-  shop." under the code, and the test panel says it again.
+  called. So here **any code of 4 to 24 letters or numbers shows free**, not
+  only MEGYTEST (the website refuses a wrong one with "That code doesn't
+  work. Check the spelling."). The form says so under the code ("Test
+  version: this code was not checked with the shop. Here, any code of 4 to
+  24 letters and numbers shows as free."), and the test panel says it again.
+  The shop's check is called only on the write path, against a local
+  Supabase.
+- **"This album already has an order"**: the website's notice at the top,
+  with its filled "Open order MP-…" button, and the same button first in the
+  "Place a second order for it?" question, before the outlined "Yes, place a
+  second order". The app has no Orders screen until Phase 6, so the button
+  opens the website's own order page (`/orders?order=<id>`, the address the
+  website's button opens) in the phone's browser, where that order is paid
+  or followed; it may ask to sign in there. A line under it says so. With no
+  browser, the order number and where to find it are said.
 - **Place order** runs the website's checks in its order (cover, name,
   phone, address, sign-in, "this album already has an order", 40 photos),
   then the bar (shared `placeProgress`: start, preparing, cover, page by
@@ -657,7 +672,7 @@ tester-code check.
 | What | How | Numbers |
 |---|---|---|
 | The order row | The website's own `createOrderFromAlbum` runs with a stand-in database that writes down the insert; the app's row must be equal, key order included (byte for byte) | 5 albums/addresses/codes, 19–20 keys, ~17 KB each: identical |
-| The files and the order of the writes | The website's upload and RPC functions run against the stand-in | cover PDF, (videos), pages PDF; `claim_tester_order` for a tester order; receipt + `submit_payment_proof` for 4 receipts: identical |
+| The files and the order of the writes | The website's upload and RPC functions run against the stand-in, which writes down each upload's whole options object | cover PDF, (videos), pages PDF, each with the same options; `claim_tester_order` for a tester order; receipt (type and `cacheControl: '0'`) + `submit_payment_proof` for 4 receipts: identical |
 | The address lists | The website's `psgc.ts` runs on the real files next to the app's | 84 provinces, 1,655 cities, 42,011 barangays: identical |
 | The checks | `handleProceedToPayment` and the 40-photo lines are cut out of `Order.tsx` and run on Node | 549 mixes of name, phone, address, cover, sign-in, open order, short album: same answer and words |
 | The price | The price lines are cut out of `Order.tsx` and run on Node; the database's saved totals (0055) | 2,688 albums (576 with a "was" price): identical; 6 database totals match |
@@ -692,9 +707,9 @@ move the pure half of each into a shared file, list it in
 - **Not in the app yet**: memory videos (so no hosting-term or HD picker:
   the included term, standard quality), event albums, the order number on
   the payment step (it comes from the insert), keeping the form after the
-  app closes (`checkoutSession`), "same as your last order", the "Open
-  order" button (no Orders screen until Phase 6), focusing the first box to
-  fix (it scrolls there).
+  app closes (`checkoutSession`), "same as your last order", an Orders
+  screen in the app ("Open order" opens the website's order page until
+  Phase 6), focusing the first box to fix (it scrolls there).
 
 ### What was seen on the emulator (2026-10-28)
 
@@ -730,7 +745,7 @@ lists every screenshot).
   (the website's address files, `public_price_schedule`, and "this album
   already has an order?"); Place order and "I've sent" made no request. A
   packet capture of the whole session: 3,740 bytes in all went from the
-  phone to the Supabase host (the order row alone is about 34 KB).
+  phone to the Supabase host (the order row alone is about 17 KB).
 - Not seen: a real account, any write, the real album, a real phone.
 
 ---

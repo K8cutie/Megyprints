@@ -8,6 +8,7 @@
    the website's (src/pages/Order.tsx).
    ══════════════════════════════════════════════════════════════════════════ */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { siteFile, WEBSITE_URL } from './site';
 
 export interface OpenOrder {
   id: string;
@@ -53,6 +54,19 @@ export function openOrderWords(o: OpenOrder): { headline: string; body: string; 
     body: `${o.payment_submitted_at ? "You don't need a new one." : "To finish it, pay that order. You don't need a new one."} Changed the album since? Place a new order below and we'll print the new one.`,
     button: `Open order ${o.order_number}`,
   };
+}
+
+/** Where "Open order MP-…" goes: the website's own order page, the same
+ *  address its button opens (navigate(`/orders?order=${id}`)), where that
+ *  order is paid or followed. The app has no Orders screen until Phase 6, so
+ *  it opens there, in the phone's browser. */
+export function openOrderUrl(o: Pick<OpenOrder, 'id'>, base?: string): string {
+  return siteFile(`orders?order=${encodeURIComponent(o.id)}`, base);
+}
+
+/** Said when the phone has no browser to open the order page with. */
+export function openOrderFailed(o: Pick<OpenOrder, 'order_number'>, base: string = WEBSITE_URL): string {
+  return `We couldn't open your browser. On ${base.replace(/^https?:\/\//, '').replace(/\/+$/, '')}, sign in and open Orders to find ${o.order_number}.`;
 }
 
 /** The question under Place order before a second order. */

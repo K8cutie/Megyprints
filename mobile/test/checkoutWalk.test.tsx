@@ -13,6 +13,7 @@
    from the same typed details.
    ══════════════════════════════════════════════════════════════════════════ */
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import type { AddressValue } from '@web/lib/contact';
 import type { PriceSchedule } from '@web/lib/pricing';
 import OrderScreen from '../src/app/order';
@@ -151,7 +152,7 @@ describe('the checkout screen, walked', () => {
     await fireEvent.press(screen.getByTestId('tester-code-apply'));
     expect(await screen.findByText('✓ Tester code MEGYTEST: free')).toBeOnTheScreen();
     // Only the shape was checked in this build, and the form says so.
-    expect(screen.getByTestId('tester-code-unchecked')).toHaveTextContent('Test version: this code was not checked with the shop.');
+    expect(screen.getByTestId('tester-code-unchecked')).toHaveTextContent('Test version: this code was not checked with the shop. Here, any code of 4 to 24 letters and numbers shows as free.');
     expect(screen.getByText(`−${peso(softPrice.total)}`)).toBeOnTheScreen();
     expect(screen.getByTestId('order-total')).toHaveTextContent(`${peso(softPrice.total)}  ₱0`);
     // The code was not sent to the database (that check counts tries: a write).
@@ -237,7 +238,7 @@ describe('the checkout screen, walked', () => {
     await fireEvent.press(screen.getByTestId('test-panel-toggle'));
     const sent = JSON.parse(String(screen.getByText(/"rpc": \{/).props.children));
     expect(sent).toEqual({
-      upload: { bucket: 'payment-proofs', path: '<order id>.png', contentType: 'image/png', mode: 'create-only' },
+      upload: { bucket: 'payment-proofs', path: '<order id>.png', contentType: 'image/png', cacheControl: '0', mode: 'create-only' },
       rpc: { name: 'submit_payment_proof', args: { p_order_id: '<order id>', p_reference: '2026091012345678', p_proof_path: '<order id>.png' } },
     });
     expect(rec.uploads).toHaveLength(0);
@@ -284,17 +285,41 @@ describe('the checkout screen, walked', () => {
   });
 
   it('this album already has an order waiting: said at the top, and a second one is asked', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
     fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', created_at: '2026-10-25T17:30:00Z', payment_submitted_at: null };
     await openScreen();
     expect(await screen.findByText('This album already has an order waiting for payment: MP-2026-ABC1234, placed October 26.')).toBeOnTheScreen();
     // The read was this account's unpaid orders of this album.
     expect(rec.reads.find((r) => r.table === 'orders')?.filters).toEqual({ user_id: 'user-1', album_id: album.albumId, status: 'pending_payment' });
+    // The way to that order: a filled "Open order MP-…" (the website's), to the website's order page.
+    expect(screen.getByTestId('order-open-existing')).toHaveTextContent('Open order MP-2026-ABC1234');
+    expect(screen.getByText('Opens your order on the Megy Prints website.')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('order-open-existing'));
+    expect(openURL).toHaveBeenLastCalledWith('https://megyprints.vercel.app/orders?order=o-1');
+
     await fillDetails();
     await fireEvent.press(screen.getByTestId('order-place'));
     expect(screen.getByText('This album already has order MP-2026-ABC1234 waiting for payment. Place a second order for it?')).toBeOnTheScreen();
     expect(screen.queryByTestId('order-placing')).toBeNull();
+    // The question offers the order first (filled), the second order after it (outlined).
+    expect(screen.getByTestId('order-second-open')).toHaveTextContent('Open order MP-2026-ABC1234');
+    openURL.mockClear();
+    await fireEvent.press(screen.getByTestId('order-second-open'));
+    expect(openURL).toHaveBeenCalledWith('https://megyprints.vercel.app/orders?order=o-1');
+    expect(screen.queryByTestId('order-placing')).toBeNull();
     await fireEvent.press(screen.getByText('Yes, place a second order'));
     expect(screen.getByTestId('order-placing')).toBeOnTheScreen();
+    openURL.mockRestore();
+  });
+
+  it('"Open order" with no browser on the phone says where to find the order', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('No Activity found to handle Intent'));
+    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', created_at: '2026-10-25T17:30:00Z', payment_submitted_at: '2026-10-26T01:00:00Z' };
+    await openScreen();
+    expect(await screen.findByText("This album already has an order — you sent the payment and we're confirming it: MP-2026-ABC1234, placed October 26.")).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('order-open-existing'));
+    expect(await screen.findByText("We couldn't open your browser. On megyprints.vercel.app, sign in and open Orders to find MP-2026-ABC1234.")).toBeOnTheScreen();
+    openURL.mockRestore();
   });
 
   it('prices that did not load: no price, and the button tries again', async () => {
@@ -307,6 +332,28 @@ describe('the checkout screen, walked', () => {
     await fireEvent.press(screen.getByTestId('order-place'));
     expect(await screen.findByText(`Place order · pay ${peso(softPrice.total)} by bank transfer`)).toBeOnTheScreen();
     expect(screen.queryByTestId('order-placing')).toBeNull(); // the tap only fetched the prices
+  });
+
+  it('a tap while the app is already trying again by itself still answers: "Loading price…"', async () => {
+    fake.rpc.public_price_schedule = { data: null, error: { message: 'Failed to fetch' } };
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    await render(<OrderScreen />);
+    expect(await screen.findByText("Prices didn't load — tap to try again")).toBeOnTheScreen();
+    // After 3 s the app tries again by itself, and that try is still on its way.
+    let release: () => void = () => {};
+    fake.hold.public_price_schedule = new Promise<void>((r) => { release = r; });
+    fake.rpc.public_price_schedule = { data: LIVE, error: null };
+    await act(async () => { jest.advanceTimersByTime(3000); });
+    const asked = () => rec.rpcs.filter((r) => r.name === 'public_price_schedule').length;
+    expect(asked()).toBe(2);
+    // The tap is answered at once, and waits for that try (no second request).
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(screen.getByText('Loading price…')).toBeOnTheScreen();
+    expect(screen.getByTestId('order-place')).toBeBusy();
+    expect(asked()).toBe(2);
+    await act(async () => { release(); });
+    expect(await screen.findByText(`Place order · pay ${peso(softPrice.total)} by bank transfer`)).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-placing')).toBeNull();
   });
 });
 

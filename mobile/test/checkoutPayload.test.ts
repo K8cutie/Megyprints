@@ -233,10 +233,19 @@ describe("the files are the website's, in its order", () => {
     await web.orders.uploadOrderCoverPdfWithRetry(orderId, {} as never, undefined, []);
     await web.orders.uploadOrderPrintPdf(orderId, { pages: [], photos: [], albumSize: '8x8' } as never, 'softcover');
     const websiteFiles = rec.uploads.map((u) => ({ bucket: u.bucket, path: u.path, contentType: u.contentType }));
+    // The whole options object each upload is given: the PDFs carry only their type.
+    expect(rec.uploads.map((u) => u.opts)).toEqual([{ contentType: 'application/pdf' }, { contentType: 'application/pdf' }]);
 
     const plan = placeOrderPlan({ userId: 'user-1', album: fixture.row, pages: fixture.pages, specs: { material: 'matte', cover: 'softcover', size: '8x8' }, shipping: { name: 'Jose Rizal', phone: '09171234567', address: validAddress() }, includedYears: 5, now: NOW });
     const appFiles = plan.files.map((f) => ({ ...f, path: f.path.replace(ORDER_ID, orderId) }));
     expect(appFiles).toEqual(websiteFiles);
+    // Each app upload's options (everything but where it goes and create-only) equal the website's.
+    const appOpts = plan.steps.flatMap((s) => {
+      if (s.kind !== 'upload') return [];
+      const { kind: _k, what: _w, bucket: _b, path: _p, mode: _m, tries: _t, ...opts } = s;
+      return [opts];
+    });
+    expect(appOpts).toEqual(rec.uploads.map((u) => u.opts));
     expect(appFiles).toEqual([
       { bucket: 'print-pdfs', path: 'order-1-cover.pdf', contentType: 'application/pdf' },
       { bucket: 'print-pdfs', path: 'order-1.pdf', contentType: 'application/pdf' },
@@ -282,7 +291,14 @@ describe('"I\'ve sent ₱X" sends what the website sends', () => {
     const app = paymentSubmitPlan('order-1', r.ref, r.file);
     expect(app.rpc).toEqual({ name: rec.rpcs[0].name, args: rec.rpcs[0].args });
     if (r.file) {
-      expect(app.upload).toMatchObject({ bucket: rec.uploads[0].bucket, path: rec.uploads[0].path, contentType: rec.uploads[0].contentType });
+      expect(app.upload).not.toBeNull();
+      if (!app.upload) return;
+      // Where it goes, then the WHOLE options object (type and cacheControl), equal.
+      const { bucket, path, mode, ...opts } = app.upload;
+      expect({ bucket, path }).toEqual({ bucket: rec.uploads[0].bucket, path: rec.uploads[0].path });
+      expect(opts).toEqual(rec.uploads[0].opts);
+      expect(opts).toEqual({ contentType: rec.uploads[0].contentType, cacheControl: '0' });
+      expect(mode).toBe('create-only');
     } else {
       expect(app.upload).toBeNull();
       expect(rec.uploads).toHaveLength(0);

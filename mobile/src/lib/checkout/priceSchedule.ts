@@ -75,6 +75,10 @@ export function usePriceSchedule(load: () => Promise<PriceSchedule | null>): Sch
   const retry = useCallback(() => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
     delay.current = null;
+    // Every tap answers: "Loading price…" even when a try (one the app
+    // started by itself) is already running. That try's answer is this
+    // tap's answer, and it clears this when it comes back.
+    setRetrying(true);
     void attempt(true);
   }, [attempt]);
 

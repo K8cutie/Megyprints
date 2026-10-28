@@ -82,7 +82,9 @@ export function referenceProblem(raw: string): string {
 /** What "I've sent ₱X" sends, in the website's order (handlePaymentSent):
  *  the receipt to payment-proofs (create-only), then submit_payment_proof. */
 export interface PaymentSubmitPlan {
-  upload: { bucket: string; path: string; contentType: string; mode: 'create-only' } | null;
+  /** cacheControl '0': the website's upload options for a receipt
+   *  (uploadPaymentProof), so a re-sent receipt is never served stale. */
+  upload: { bucket: string; path: string; contentType: string; cacheControl: '0'; mode: 'create-only' } | null;
   rpc: { name: 'submit_payment_proof'; args: { p_order_id: string; p_reference: string | null; p_proof_path: string | null } };
 }
 
@@ -94,7 +96,7 @@ export function paymentSubmitPlan(orderId: string, reference: string, proof: Pro
   // an empty reference is sent as null.
   const cleaned = cleanReference(reference);
   return {
-    upload: ext && path ? { bucket: PROOF_BUCKET, path, contentType: proofMimeFor(ext), mode: 'create-only' } : null,
+    upload: ext && path ? { bucket: PROOF_BUCKET, path, contentType: proofMimeFor(ext), cacheControl: '0', mode: 'create-only' } : null,
     rpc: { name: 'submit_payment_proof', args: { p_order_id: orderId, p_reference: cleaned ? cleanReference(cleaned) : null, p_proof_path: path } },
   };
 }
