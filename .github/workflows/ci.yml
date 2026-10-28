@@ -1,20 +1,29 @@
-# Verification gate for main.
+# Verification gate for main, and for native-2.0 (the branch the 2.0 app is
+# built on until it goes into main in one PR).
 #
-# Every pull request into main — and every push to main — must pass the unit
-# suite, the app typecheck and a production build before it can merge. Branch
-# protection on main lists the `verify` job as a required status check, so a
-# red run blocks the merge button; nothing reaches main on faith.
+# verify (website): every pull request into main or native-2.0 — and every
+# push to either — must pass the unit suite, the app typecheck and a
+# production build. Branch protection on main lists the `verify` job as a
+# required status check, so a red run blocks the merge button; nothing reaches
+# main on faith. It mirrors the local commands exactly (npm test / tsc /
+# npm run build), so a green check here means the same thing as a green run on
+# the developer's machine.
 #
-# Mirrors the local commands exactly (npm test / tsc / npm run build) so a green
-# check here means the same thing as a green run on the developer's machine.
+# mobile (the 2.0 app): runs only for native-2.0 (pull requests into it and
+# pushes to it), never for main. The app imports the website's code (../src),
+# so it installs the website's packages first, then the app's, then runs the
+# app's own check (mobile/: tsc + jest). jest includes the golden pixel test,
+# which draws the website's print pages in headless Chromium (tools/golden,
+# playwright-core) and compares the app's pages with them pixel by pixel, so
+# this job installs that Chromium too. It is NOT a required check on main.
 
 name: Verify
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, native-2.0]
   push:
-    branches: [main]
+    branches: [main, native-2.0]
 
 permissions:
   contents: read
@@ -75,3 +84,63 @@ jobs:
           else
             echo "No migration changes in this PR." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  mobile:
+    name: mobile
+    if: github.base_ref == 'native-2.0' || github.ref == 'refs/heads/native-2.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+
+      # The app imports the website's code (../src), so the website's packages
+      # must be there for both tsc and jest.
+      - name: Install website dependencies
+        run: npm ci
+
+      - name: Install app dependencies
+        working-directory: mobile
+        run: npm ci
+
+      # The golden pixel test (mobile/test/goldenPages.test.ts) and the caption
+      # test (textMeasurer.test.ts) make the website's pictures with
+      # tools/golden (renderWeb.mjs / fitWeb.mjs) in Playwright's headless
+      # Chromium. Install the tool's packages and the Chromium its pinned
+      # playwright-core drives, with the Linux libraries it needs.
+      - name: Install golden tools and headless Chromium
+        run: |
+          if [ -f tools/golden/package-lock.json ]; then
+            cd tools/golden
+            npm ci
+            echo "playwright-core $(node -p "require('playwright-core/package.json').version")"
+            npx --no-install playwright-core install --with-deps chromium-headless-shell
+          else
+            echo "SKIPPED: tools/golden is not on this commit, so no headless Chromium was installed." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: App check (tsc + jest, incl. the golden pixel test)
+        working-directory: mobile
+        run: npm run check
+
+      # When the check fails, keep what the golden test wrote (the app's
+      # pictures, a diff per page, report.json) so the failure can be seen.
+      - name: Keep the golden test's pictures and report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-out
+          path: tools/golden/out/
+          if-no-files-found: ignore
+          retention-days: 7
