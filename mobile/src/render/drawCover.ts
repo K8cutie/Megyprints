@@ -57,6 +57,13 @@ export class CoverDrawer {
     canvas.restore();
   }
 
+  /** Some of the cover's lines onto `canvas` (one text's, for the print
+   *  file: src/print/coverWrap.ts lifts each text off as its own patch, as
+   *  the website's liftWords does). */
+  drawLines(canvas: SkCanvas, lines: readonly CoverLine[]): void {
+    for (const l of lines) this.line(canvas, l);
+  }
+
   /** The wrap onto `canvas` (plan.width × plan.height). */
   draw(canvas: SkCanvas, plan: CoverPlan, photos: PhotoSource, options: CoverDrawOptions = {}): void {
     // One drawing for the whole wrap: the front page's photos are prepared

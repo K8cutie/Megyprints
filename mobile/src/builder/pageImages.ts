@@ -148,7 +148,8 @@ export async function drawPageImage(Sk: Skia, text: PageText, req: PageRequest, 
 }
 
 /** A picture the page names that the app could not open, for notDrawn. */
-function pictureNotDrawn(src: string): string {
+export function pictureNotDrawn(src: string): string {
+  if (typeof src !== 'string' || !src) return 'a picture that is missing from the album';
   return src.startsWith('data:') ? 'a picture kept in the album that could not be opened' : `picture file ${src.length > 80 ? `${src.slice(0, 77)}...` : src}`;
 }
 

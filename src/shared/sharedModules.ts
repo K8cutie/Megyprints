@@ -8,7 +8,7 @@
 
    Every file here runs anywhere JavaScript runs: no browser (document,
    window, localStorage, canvas…), no web-only package (fabric, jsPDF,
-   pdf-lib, Supabase…). A listed file imports only other listed files, or a
+   pdf.js, Supabase…). A listed file imports only other listed files, or a
    package in SHARED_NPM_PACKAGES, or types only from one in
    SHARED_TYPE_ONLY_PACKAGES. sharedModules.spec.ts checks all of it on
    every test run, and names the file and line that breaks it.
@@ -79,6 +79,8 @@ export const SHARED_MODULES = [
   'src/lib/photoRelink.ts',
   'src/lib/pickedFiles.ts',
   'src/lib/placeProgress.ts',
+  'src/lib/pressSheetWords.ts',
+  'src/lib/pressSheetZip.ts',
   'src/lib/pricing.ts',
   'src/lib/qrGeometry.ts',
   'src/lib/rgbaPng.ts',
@@ -117,8 +119,10 @@ export const SHARED_MODULES = [
   'src/pages/builder/pageTurnStyles.ts',
   'src/pages/builder/photoAnalyzer.ts',
   'src/pages/builder/previewPaging.ts',
+  'src/pages/builder/printFileSpec.ts',
   'src/pages/builder/printFrameSpec.ts',
   'src/pages/builder/printSheet.ts',
+  'src/pages/builder/printSheetPdf.ts',
   'src/pages/builder/printSize.ts',
   'src/pages/builder/quoteBank.ts',
   'src/pages/builder/rectTemplates.ts',
@@ -150,6 +154,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/useEndOfAlbumPrompt.ts',
   'src/pages/builder/varietyTracker.ts',
   'src/pages/builder/wordArtRules.ts',
+  'src/pages/builder/wordPatches.ts',
   'src/shared/platform.ts',
 ] as const;
 
@@ -157,8 +162,13 @@ export const SHARED_MODULES = [
  *  browser and in React Native.
  *  - react: React Native runs the same React. Used for a few hooks
  *    (settleGuard, useEndOfAlbumPrompt, useBuilderState) and the
- *    CSSProperties type. (react-dom is web-only and is never allowed.) */
-export const SHARED_NPM_PACKAGES = ['react'] as const;
+ *    CSSProperties type. (react-dom is web-only and is never allowed.)
+ *  - pdf-lib: plain JavaScript that reads and writes PDF bytes (no DOM, no
+ *    canvas; pako and its own PNG reader inside). The console lays the
+ *    print files out on press sheets with it (printSheetPdf.ts), and the
+ *    2.0 app makes the same sheets on the phone with the same file (Phase 5).
+ *    The app's package.json pins the website's exact version. */
+export const SHARED_NPM_PACKAGES = ['react', 'pdf-lib'] as const;
 
 /** npm packages a shared file may import TYPES from (`import type`), and
  *  nothing else. A type import is erased when the code is built, so nothing

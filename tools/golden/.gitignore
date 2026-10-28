@@ -5,3 +5,7 @@ out/
 node_modules/
 phone/
 phone-out/
+# Made by printWeb.mjs and the app's print-file check: never committed.
+print-web/
+print-app/
+print-out/
