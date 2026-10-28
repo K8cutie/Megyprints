@@ -770,7 +770,7 @@ test files; with what was on the emulator already, 2,517 photos.
 - Grid grouping by EXIF for photos without an index time (see above).
 - A real phone (not just the emulator) and a phone with 10,000+ photos.
 
-### The photo check and face centring on the phone (2026-10-28, review fixes 2026-10-30)
+### The photo check and face centring on the phone (2026-10-28, review fixes the same evening)
 
 `mobile/src/lib/phonePhotoCheck.ts` `createPhoneChecks()` gives the app's
 `photoCheck` (PhotoChecker) and `faces` (FaceFinder). Phase 3's app
@@ -810,7 +810,7 @@ address, which Phase 3's `appPhotos.ts` keeps today).
   points the shared rules read (`phoneFaces.ts`). Different model,
   different answers: the numbers are under "Phone and website, side by
   side" below.
-- **Why twice the size (review fix, 2026-10-30)**: ML Kit's guide asks for
+- **Why twice the size (review fix, 2026-10-28)**: ML Kit's guide asks for
   faces of at least 100 × 100 px before it reads them well. On the 800 px
   copy only the biggest faces are that big, so the phone judged the eyes on
   just 42 of the 237 faces it found (18 %; the website judges every face it
@@ -907,7 +907,7 @@ address, which Phase 3's `appPhotos.ts` keeps today).
   as the browser does, but none were in the test set), HEIC photos, photos
   of 108 or 200 MP, and the eye rule on photos it was not tuned on.
 
-#### Phone and website, side by side (tools/photo-check, run 2026-10-30)
+#### Phone and website, side by side (tools/photo-check, run 2026-10-28)
 
 The same 138 pictures through the website's own code (headless Chromium,
 face-api.js) and the app's (dev build on the x86_64 emulator, Android 14,

@@ -18,13 +18,16 @@ import { requireOptionalNativeModule } from 'expo';
 
 type Pt = { x: number; y: number };
 
-/** One face as the module reports it (the small copy's pixels). */
+/** One face as the module reports it, in the pixels of the copy it was
+ *  asked to look at (src/lib/phoneFaces.ts fromNative brings it back to the
+ *  small copy's pixels). */
 export interface NativeFace {
   x: number;
   y: number;
   width: number;
   height: number;
-  /** ML Kit's eye points (the person's left / right eye), when found. */
+  /** ML Kit's LEFT_EYE / RIGHT_EYE points, when found: in practice the eye
+   *  on the picture's left / right (tools/photo-check: 291 of 292 faces). */
   leftEye: Pt | null;
   rightEye: Pt | null;
   /** ML Kit's chance each eye is open, 0–1; null when it could not tell. */

@@ -135,7 +135,7 @@ class PhotoPixelsModule : Module() {
     }
   }
 
-  /** One face, in the small copy's pixels, as index.ts NativeFace. */
+  /** One face, in the pixels of the copy ML Kit looked at, as index.ts NativeFace. */
   private fun faceReport(f: Face): Map<String, Any?> {
     val box = f.boundingBox
     val eye = { type: Int -> f.getLandmark(type)?.position?.let { mapOf("x" to it.x.toDouble(), "y" to it.y.toDouble()) } }
