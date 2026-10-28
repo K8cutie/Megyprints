@@ -9,7 +9,12 @@
        and faces only the website found that it calls shut;
      • out/faces-sheet.png: the photos where the two find the most
        different numbers of faces, with the website's boxes (blue) and the
-       phone's (terracotta) drawn on.
+       phone's (terracotta) drawn on;
+     • out/phone-only-faces.png: EVERY face (big enough to count) that only
+       the phone found, cut out of its photo, so each one can be looked at:
+       a real face the website's finder missed, or something that is not a
+       face. Matched the way compare.mjs matches (greedy, overlap ≥ 0.2), so
+       the count is compare.mjs's "phone" minus "matched".
 
    A face both found is the pair the comparison matched (website box ↔ phone
    box, overlap ≥ 0.2), cut around the website's box with some room; a face
@@ -153,5 +158,53 @@ const png2 = await page.evaluate(async (rows) => {
   return c.toDataURL('image/png').split(',')[1];
 }, boxRows);
 fs.writeFileSync(path.join(OUT, 'faces-sheet.png'), Buffer.from(png2, 'base64'));
+
+/* ── Every face only the phone found ───────────────────────────────────── */
+/** compare.mjs's matching: greedy one-to-one by overlap (IoU ≥ 0.2). */
+function matchedPhone(as, bs) {
+  const cand = [];
+  as.forEach((a, i) => bs.forEach((b, j) => { const v = iou(a, b); if (v >= 0.2) cand.push({ i, j, v }); }));
+  cand.sort((x, y) => y.v - x.v);
+  const ui = new Set(), uj = new Set();
+  for (const c of cand) if (!ui.has(c.i) && !uj.has(c.j)) { ui.add(c.i); uj.add(c.j); }
+  return uj;
+}
+const phoneOnly = [];
+for (const w of web.rows) {
+  const p = P.get(w.file);
+  if (!p?.mlFaces) continue;
+  const h = w.faces.h, big = (b) => b.height >= h * MIN_SHARE;
+  const wf = w.faces.faces.map((f) => f.box).filter(big);
+  const pf = p.mlFaces.filter((f) => big(f.box));
+  const used = matchedPhone(wf, pf.map((f) => f.box));
+  pf.forEach((f, j) => { if (!used.has(j)) phoneOnly.push({ file: w.file, scale: w.width / w.faces.w, box: f.box, judged: R.eyesJudged(f), shut: R.phoneEyesShut(f), open: [f.leftEyeOpen, f.rightEyeOpen] }); });
+}
+const png3 = await page.evaluate(async (faces) => {
+  const CELL = 150, LABEL = 30, COLS = 8;
+  const c = document.createElement('canvas');
+  c.width = COLS * CELL; c.height = Math.max(1, Math.ceil(faces.length / COLS)) * (CELL + LABEL) + 40;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#2b2420'; g.font = 'bold 16px sans-serif';
+  g.fillText(`Every face only the phone found (${faces.length}), cut out of its photo with room around it`, 8, 24);
+  const imgs = new Map();
+  for (let i = 0; i < faces.length; i++) {
+    const k = faces[i];
+    if (!imgs.has(k.file)) imgs.set(k.file, await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = `http://pics.local/${encodeURIComponent(k.file)}`; }));
+    const img = imgs.get(k.file), s = k.scale, b = k.box;
+    const side = Math.max(b.width, b.height) * s * 1.6;
+    const cx = (b.x + b.width / 2) * s, cy = (b.y + b.height / 2) * s;
+    const x = (i % COLS) * CELL, y = 40 + Math.floor(i / COLS) * (CELL + LABEL);
+    g.drawImage(img, cx - side / 2, cy - side / 2, side, side, x + 3, y + 3, CELL - 6, CELL - 6);
+    g.fillStyle = '#2b2420'; g.font = '11px sans-serif';
+    g.fillText(`${i + 1}. ${k.file.replace('.jpg', '').replace('megy-sample-', 's')} ${Math.round(b.height)}px`, x + 4, y + CELL + 10);
+    g.fillStyle = k.shut ? '#b3261e' : '#6b5d54';
+    g.fillText(k.judged ? (k.shut ? 'eyes: shut' : 'eyes: open') : 'eyes: not judged', x + 4, y + CELL + 23);
+  }
+  return c.toDataURL('image/png').split(',')[1];
+}, phoneOnly);
+fs.writeFileSync(path.join(OUT, 'phone-only-faces.png'), Buffer.from(png3, 'base64'));
+fs.writeFileSync(path.join(OUT, 'phone-only-faces.json'), JSON.stringify(phoneOnly, null, 1));
 await browser.close();
-console.log('→ out/eyes-sheet.png, out/faces-sheet.png');
+console.log(`${phoneOnly.length} faces only the phone found → out/phone-only-faces.png`);
+console.log('→ out/eyes-sheet.png, out/faces-sheet.png, out/phone-only-faces.png');

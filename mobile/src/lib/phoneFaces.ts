@@ -10,6 +10,12 @@
    point for each eye, and its own score for each eye: the chance it is open
    (0–1).
 
+   ML Kit looks at a copy up to FACE_COPY_SCALE (2) times the small copy's
+   size (faceModel.ts): its guide asks for faces of 100 × 100 px, and on the
+   800 px small copy most faces in group photos are smaller than that. Its
+   boxes and eye points are brought back to the small copy's pixels
+   (fromNative), so the shared rules read the same sizes as on the website.
+
    So each ML Kit face becomes a CheckFace for the SAME shared rules:
      • boxHeight: ML Kit's box height (in the small copy's pixels, as on the
        website), so "too small to judge" (MIN_FACE_SHARE) is the same rule;
@@ -33,41 +39,46 @@ import type { NativeFace } from '../../modules/photo-pixels';
 
 type Pt = { x: number; y: number };
 
-/** One face as ML Kit reports it (the parts the photo check reads). */
+/** One face as ML Kit reports it (the parts the photo check reads), in the
+ *  small copy's pixels. */
 export interface PhoneFace {
   box: FaceBox;
-  /** ML Kit's eye points (the middle of each eye), when it found them. */
+  /** ML Kit's eye points (the middle of each eye), when it found them.
+   *  ML Kit's "left eye" is the one on the picture's left (tools/photo-check:
+   *  291 of 292 faces). */
   leftEye: Pt | null;
   rightEye: Pt | null;
   /** ML Kit's chance each eye is open, 0–1; null when it could not tell. */
   leftEyeOpen: number | null;
   rightEyeOpen: number | null;
+  /** The face's smaller side (box width or height) in the pixels of the copy
+   *  ML Kit looked at, as it reported it: what MIN_EYE_FACE_PX is measured in. */
+  mlKitSidePx: number;
 }
 
 /** ML Kit's open chance below which an eye counts as shut (both eyes must
  *  be, as on the website). ML Kit scores open eyes about 0.9 or more and
  *  eyes with the lids down (a blink, a squeezed laugh, looking down) under
- *  0.1; squints and big smiles land in between. tools/photo-check tried
- *  lines from 0.05 to 0.5 on the website's sample photos: at 0.3 the phone
- *  called visibly open, smiling eyes shut (33 photos to the website's 2);
- *  at 0.1 it calls shut only faces whose lids are down (20 photos), still
- *  more than the website, whose finder reads most laughing and downcast
- *  eyes as open. */
+ *  0.1; squints and big smiles land in between. CHOSEN ON THE TEST SET:
+ *  tools/photo-check tried lines from 0.05 to 0.5 on the same pictures it
+ *  reports on (the website's sample photos and copies, with only a few shut
+ *  eyes), so its agreement there is not a test of the line; at 0.3 the
+ *  phone called visibly open, smiling eyes shut (33 photos to the
+ *  website's 2). docs/mobile-port-plan.md has the numbers. */
 export const EYE_SHUT_BELOW = 0.1;
-/** The smallest face (box width and height, in the pixels of the copy ML Kit
- *  looked at: 800 px on the long side) whose eye scores are read. ML Kit's
- *  own guide asks for faces of at least 100 × 100 px; on smaller faces its
- *  eye scores call laughing and downcast eyes shut far more often (on the
- *  website's sample photos, most of the phone's extra "shut" verdicts were
- *  faces under this size, several the website's finder did not see at all).
+/** The smallest face (its smaller side, in the pixels of the copy ML Kit
+ *  looked at: mlKitSidePx) whose eye scores are read: ML Kit's own guide
+ *  asks for faces of at least 100 × 100 px. With ML Kit's copy twice the
+ *  small copy, that is a face of 50 px in the small copy: 8.3 % of a
+ *  landscape photo's height, about the website's MIN_FACE_SHARE (8 %).
  *  Smaller faces still count as faces, and still need MIN_FACE_SHARE to
  *  count at all, as on the website. */
 export const MIN_EYE_FACE_PX = 100;
 
 /** Are this face's eyes judged on the phone? ML Kit scored both, and the
- *  face is at least MIN_EYE_FACE_PX in both directions. */
+ *  face is at least MIN_EYE_FACE_PX in both directions in ML Kit's copy. */
 export function eyesJudged(f: PhoneFace): boolean {
-  return f.leftEyeOpen != null && f.rightEyeOpen != null && f.box.width >= MIN_EYE_FACE_PX && f.box.height >= MIN_EYE_FACE_PX;
+  return f.leftEyeOpen != null && f.rightEyeOpen != null && f.mlKitSidePx >= MIN_EYE_FACE_PX;
 }
 
 /** This face's eyes are shut by the phone's rule (both under the line, on a
@@ -109,15 +120,16 @@ export function toCheckFace(f: PhoneFace): CheckFace {
     return { boxHeight: Math.max(0, box.height), landmarks: [] };
   }
   const eyeWidth = box.width * 0.2;
-  // ML Kit's "left eye" is the person's left (on the right of the picture).
-  const personLeft = f.leftEye ?? { x: box.x + box.width * 0.7, y: box.y + box.height * 0.4 };
-  const personRight = f.rightEye ?? { x: box.x + box.width * 0.3, y: box.y + box.height * 0.4 };
+  // ML Kit's "left eye" is the one on the picture's left (see PhoneFace).
+  const pictureLeft = f.leftEye ?? { x: box.x + box.width * 0.3, y: box.y + box.height * 0.4 };
+  const pictureRight = f.rightEye ?? { x: box.x + box.width * 0.7, y: box.y + box.height * 0.4 };
   const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   const landmarks: Pt[] = Array.from({ length: 68 }, () => ({ ...middle }));
-  // 36–41 is the eye on the picture's left (the person's right), as in the
-  // 68-point layout; the rule needs both shut, so the order only keeps it tidy.
-  eyePoints(personRight, eyeWidth, earFromOpenChance(f.rightEyeOpen)).forEach((p, i) => { landmarks[36 + i] = p; });
-  eyePoints(personLeft, eyeWidth, earFromOpenChance(f.leftEyeOpen)).forEach((p, i) => { landmarks[42 + i] = p; });
+  // 36–41 is the eye on the picture's left, 42–47 the one on its right, as
+  // in the 68-point layout; the rule needs both shut, so the order only
+  // keeps it tidy.
+  eyePoints(pictureLeft, eyeWidth, earFromOpenChance(f.leftEyeOpen)).forEach((p, i) => { landmarks[36 + i] = p; });
+  eyePoints(pictureRight, eyeWidth, earFromOpenChance(f.rightEyeOpen)).forEach((p, i) => { landmarks[42 + i] = p; });
   return { boxHeight: box.height, landmarks };
 }
 
@@ -126,13 +138,17 @@ export function toCheckFace(f: PhoneFace): CheckFace {
 const probability = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : null);
 const point = (p: { x: number; y: number } | null | undefined) => (p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null);
 
-/** The module's face → a PhoneFace. */
-export function fromNative(f: NativeFace): PhoneFace {
+/** The module's face, found on a copy `sx` × `sy` times the small copy (1
+ *  when ML Kit looked at the small copy itself) → a PhoneFace in the small
+ *  copy's pixels. */
+export function fromNative(f: NativeFace, sx = 1, sy = sx): PhoneFace {
+  const back = (p: Pt | null) => (p ? { x: p.x / sx, y: p.y / sy } : null);
   return {
-    box: { x: f.x, y: f.y, width: f.width, height: f.height },
-    leftEye: point(f.leftEye),
-    rightEye: point(f.rightEye),
+    box: { x: f.x / sx, y: f.y / sy, width: f.width / sx, height: f.height / sy },
+    leftEye: back(point(f.leftEye)),
+    rightEye: back(point(f.rightEye)),
     leftEyeOpen: probability(f.leftEyeOpen),
     rightEyeOpen: probability(f.rightEyeOpen),
+    mlKitSidePx: Math.max(0, Math.min(f.width, f.height)),
   };
 }

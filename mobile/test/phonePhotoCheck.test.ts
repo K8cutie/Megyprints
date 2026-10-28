@@ -7,17 +7,20 @@ import { faceGroupCentre } from '@web/pages/builder/faceCentre';
 import type { StoredPhoto } from '@web/shared/platform';
 import { createPhoneChecks, PHONE_CHECK_AT_ONCE, type PhoneCheckDevice } from '../src/lib/phonePhotoCheck';
 import { earFromOpenChance, EYE_SHUT_BELOW, eyesJudged, fromNative, MIN_EYE_FACE_PX, phoneEyesShut, toCheckFace, type PhoneFace } from '../src/lib/phoneFaces';
+import { FACE_COPY_SCALE, faceCopyScale } from '../src/lib/faceModel';
 
 jest.mock('expo', () => ({ requireOptionalNativeModule: () => null }));
 
 /* ── ML Kit's eyes → the website's closed-eyes rule ─────────────────── */
 
+// ML Kit's "left eye" is the one on the picture's left.
 const face = (over: Partial<PhoneFace> = {}): PhoneFace => ({
   box: { x: 100, y: 80, width: 200, height: 240 },
-  leftEye: { x: 240, y: 170 },
-  rightEye: { x: 160, y: 170 },
+  leftEye: { x: 160, y: 170 },
+  rightEye: { x: 240, y: 170 },
   leftEyeOpen: 0.95,
   rightEyeOpen: 0.9,
+  mlKitSidePx: 200,
   ...over,
 });
 
@@ -58,15 +61,31 @@ describe("ML Kit's eye scores on the website's scale", () => {
     expect(faceVerdict([small], h)).toEqual({ faces: 0, eyesClosed: false });
   });
 
-  it("a face under MIN_EYE_FACE_PX (ML Kit's own 100 px guide) counts as a face, but its eyes are not judged", () => {
+  it("a face under MIN_EYE_FACE_PX (ML Kit's own 100 px guide) in ML Kit's copy counts as a face, but its eyes are not judged", () => {
     const h = 600;
-    const at = (side: number) => face({ box: { x: 10, y: 10, width: side, height: side }, leftEye: null, rightEye: null, leftEyeOpen: 0.01, rightEyeOpen: 0.02 });
+    // Seen at the small copy's own size (ML Kit's pixels = the small copy's).
+    const at = (side: number) => face({ box: { x: 10, y: 10, width: side, height: side }, leftEye: null, rightEye: null, leftEyeOpen: 0.01, rightEyeOpen: 0.02, mlKitSidePx: side });
     expect(MIN_EYE_FACE_PX).toBe(100);
     expect(MIN_EYE_FACE_PX - 1).toBeGreaterThan(h * MIN_FACE_SHARE); // big enough to count
     expect(faceVerdict([toCheckFace(at(MIN_EYE_FACE_PX - 1))], h)).toEqual({ faces: 1, eyesClosed: false });
     expect(faceVerdict([toCheckFace(at(MIN_EYE_FACE_PX))], h)).toEqual({ faces: 1, eyesClosed: true });
-    // Narrow but tall is still under the guide.
-    expect(eyesJudged(face({ box: { x: 0, y: 0, width: 80, height: 200 } }))).toBe(false);
+    // Narrow but tall is still under the guide (its smaller side counts).
+    const narrow = fromNative({ x: 0, y: 0, width: 80, height: 200, leftEye: null, rightEye: null, leftEyeOpen: 0.01, rightEyeOpen: 0.01 });
+    expect(eyesJudged(narrow)).toBe(false);
+  });
+
+  it("the 100 px guide is in ML Kit's pixels: a 50 px face in the small copy, seen at twice the size, is judged", () => {
+    const h = 600;
+    // ML Kit looked at a copy twice the small copy and saw a 100 px face.
+    const seen = fromNative({ x: 200, y: 100, width: 100, height: 110, leftEye: { x: 230, y: 140 }, rightEye: { x: 270, y: 140 }, leftEyeOpen: 0.03, rightEyeOpen: 0.04 }, 2);
+    expect(seen.box).toEqual({ x: 100, y: 50, width: 50, height: 55 });
+    expect(seen.mlKitSidePx).toBe(100);
+    expect(eyesJudged(seen)).toBe(true);
+    expect(seen.box.height).toBeGreaterThanOrEqual(h * MIN_FACE_SHARE);
+    expect(faceVerdict([toCheckFace(seen)], h)).toEqual({ faces: 1, eyesClosed: true });
+    // The same face seen at the small copy's size (50 px) is not judged.
+    const small = fromNative({ x: 100, y: 50, width: 50, height: 55, leftEye: null, rightEye: null, leftEyeOpen: 0.03, rightEyeOpen: 0.04 });
+    expect(faceVerdict([toCheckFace(small)], h)).toEqual({ faces: 1, eyesClosed: false });
   });
 
   it("phoneEyesShut says what the shared rule decides from toCheckFace's points", () => {
@@ -75,28 +94,33 @@ describe("ML Kit's eye scores on the website's scale", () => {
     const h = 600;
     for (let i = 0; i < 400; i++) {
       const side = 50 + r() * 200;
+      const height = side * (0.9 + r() * 0.3);
       const f = face({
-        box: { x: 50, y: 50, width: side, height: side * (0.9 + r() * 0.3) },
+        box: { x: 50, y: 50, width: side, height },
         leftEyeOpen: r() < 0.1 ? null : r() * 0.3,
         rightEyeOpen: r() < 0.1 ? null : r() * 0.3,
+        mlKitSidePx: Math.min(side, height) * (r() < 0.5 ? 1 : 2),
       });
       expect(faceVerdict([toCheckFace(f)], h).eyesClosed).toBe(phoneEyesShut(f));
     }
   });
 
-  it('the eye points sit where ML Kit found the eyes, as wide as a fifth of the face', () => {
+  it("the eye points sit where ML Kit found the eyes (36–41 the picture's left eye), as wide as a fifth of the face", () => {
     const f = toCheckFace(face());
     expect(f.boxHeight).toBe(240);
     expect(f.landmarks).toHaveLength(68);
-    const rightEye = f.landmarks.slice(36, 42), leftEye = f.landmarks.slice(42, 48);
-    expect((rightEye[0].x + rightEye[3].x) / 2).toBeCloseTo(160, 9);
-    expect((leftEye[0].x + leftEye[3].x) / 2).toBeCloseTo(240, 9);
-    expect(leftEye[3].x - leftEye[0].x).toBeCloseTo(40, 9);
+    const pictureLeft = f.landmarks.slice(36, 42), pictureRight = f.landmarks.slice(42, 48);
+    expect((pictureLeft[0].x + pictureLeft[3].x) / 2).toBeCloseTo(160, 9);
+    expect((pictureRight[0].x + pictureRight[3].x) / 2).toBeCloseTo(240, 9);
+    expect(pictureRight[3].x - pictureRight[0].x).toBeCloseTo(40, 9);
   });
 
   it("no eye points from ML Kit: the eyes go where eyes usually are in the face's box", () => {
     const f = toCheckFace(face({ leftEye: null, rightEye: null, leftEyeOpen: 0.01, rightEyeOpen: 0.01 }));
+    const middleOf = (eye: { x: number }[]) => (eye[0].x + eye[3].x) / 2;
     expect(f.landmarks[36 + 0].y).toBeCloseTo(80 + 240 * 0.4, 9);
+    expect(middleOf(f.landmarks.slice(36, 42))).toBeCloseTo(100 + 200 * 0.3, 9); // the picture's left
+    expect(middleOf(f.landmarks.slice(42, 48))).toBeCloseTo(100 + 200 * 0.7, 9);
     expect(faceVerdict([f], 600).eyesClosed).toBe(true);
   });
 });
@@ -115,6 +139,24 @@ describe("the native module's report → a face", () => {
       rightEye: { x: 35, y: 61 },
       leftEyeOpen: 0.12,
       rightEyeOpen: 0.97,
+      mlKitSidePx: 90,
+    });
+  });
+
+  it("found on a bigger copy: the box and eyes come back to the small copy's pixels; the size ML Kit saw is kept", () => {
+    expect(fromNative({
+      x: 24, y: 60, width: 180, height: 220,
+      leftEye: { x: 70, y: 120 },
+      rightEye: { x: 140, y: 122 },
+      leftEyeOpen: 0.5,
+      rightEyeOpen: 0.6,
+    }, 2, 2)).toEqual({
+      box: { x: 12, y: 30, width: 90, height: 110 },
+      leftEye: { x: 35, y: 60 },
+      rightEye: { x: 70, y: 61 },
+      leftEyeOpen: 0.5,
+      rightEyeOpen: 0.6,
+      mlKitSidePx: 180,
     });
   });
 
@@ -154,7 +196,7 @@ function fakePhone(over: Partial<PhoneCheckDevice> = {}, facesOf: (uri: string) 
       decoding--;
       return pixelsFor(uri, w, h);
     },
-    faces: { init: async () => true, find: async (uri, w, h) => { calls.find.push(`${uri}|${w}x${h}`); return facesOf(uri); } },
+    faces: { init: async () => true, find: async (uri, w, h, scale) => { calls.find.push(`${uri}|${w}x${h}x${scale}`); return facesOf(uri); } },
     ...over,
   };
   return { device, calls, log };
@@ -177,14 +219,29 @@ describe('the photo check on the phone', () => {
     expect(calls.find).toEqual([]); // no face work in the blur pass
   });
 
-  it('the face pass: ML Kit on the same small copy, the blur answer reused', async () => {
+  it('the face pass: ML Kit on a copy twice the small copy, the blur answer reused', async () => {
     const { device, calls } = fakePhone({}, () => [face({ leftEyeOpen: 0.02, rightEyeOpen: 0.05 })]);
     const { photoCheck } = createPhoneChecks(device);
     const basic = await photoCheck.check(photo(1), 4032, 3024, { faces: false });
     const full = await photoCheck.check(photo(1), 4032, 3024);
     expect(full).toEqual({ ...basic, faces: 1, eyesClosed: true });
     expect(calls.pixels).toHaveLength(1);
-    expect(calls.find).toEqual(['content://media/external/images/media/1|800x600']);
+    expect(FACE_COPY_SCALE).toBe(2);
+    expect(calls.find).toEqual(['content://media/external/images/media/1|800x600x2']);
+  });
+
+  it("ML Kit's copy is never bigger than the photo itself", async () => {
+    const { device, calls } = fakePhone();
+    const { photoCheck } = createPhoneChecks(device);
+    await photoCheck.check(photo(1, { width: 1000, height: 750 }), 1000, 750);
+    await photoCheck.check(photo(2, { width: 640, height: 480 }), 640, 480);
+    expect(calls.find).toEqual([
+      'content://media/external/images/media/1|800x600x1.25',
+      'content://media/external/images/media/2|640x480x1',
+    ]);
+    expect(faceCopyScale(4032, 800)).toBe(2);
+    expect(faceCopyScale(600, 800)).toBe(1); // never under the small copy
+    expect(faceCopyScale(0, 800)).toBe(1);
   });
 
   it('when ML Kit fails, the photo has no eye test: the blur answer still comes, faces stay unknown (never stuck)', async () => {
@@ -269,7 +326,7 @@ describe('face centring on the phone', () => {
     const { faces } = createPhoneChecks(device);
     const c = await faces.detectFaceCenter(photo(1).url);
     expect(calls.size).toEqual([photo(1).url]);
-    expect(calls.find).toEqual([`${photo(1).url}|800x600`]);
+    expect(calls.find).toEqual([`${photo(1).url}|800x600x2`]);
     expect(c).toEqual(faceGroupCentre(two.map((f) => f.box), 800, 600));
   });
 

@@ -2,8 +2,21 @@
    GOOGLE ML KIT FACE FINDING, on the phone: com.google.mlkit:face-detection
    16.1.7, the "bundled" kind (its model is inside the app: no Google Play
    download, finds faces with no network), called by the app's own native
-   module (modules/photo-pixels) on a copy of the photo the photo check's
-   size, straight from memory.
+   module (modules/photo-pixels) on a copy of the photo up to
+   FACE_COPY_SCALE (2) times the photo check's small copy (1600 px on the
+   long side), straight from memory. Why twice: ML Kit's guide asks for
+   faces of 100 × 100 px, and on the 800 px small copy only the biggest
+   faces are (tools/photo-check: the phone could judge the eyes on 42 of
+   the 237 faces it found there). Its answers are brought back to the small
+   copy's pixels (phoneFaces.ts fromNative).
+
+   APP SIZE: the bundled model adds about 13 MB to the app on an arm64
+   phone (the face finder's native code 8.5 MB, its model files 4.3 MB, of
+   which contours.tfl, 1.1 MB, is never used here), less to download
+   (docs/mobile-port-plan.md has the measured numbers). The other kind,
+   play-services-mlkit-face-detection, keeps the app small but has Google
+   Play services download the model on the phone, so the first check can
+   find no faces until it has: the owner's choice, before the store.
 
    PRIVACY: the photos never leave the phone. But ML Kit is not silent: it
    brings Google's usage-log uploader (com.google.android.datatransport,
@@ -40,7 +53,8 @@ import { fromNative, type PhoneFace } from './phoneFaces';
 /** Is ML Kit in this build? (Not in jest, or an older APK.) */
 export const faceModelAvailable = photoPixelsAvailable;
 
-/** What PhotoPixelsModule.kt asks ML Kit for (kept here for the reports). */
+/** What PhotoPixelsModule.kt asks ML Kit for, for the reports
+ *  (test/faceModel.test.ts checks it against the Kotlin). */
 export const FACE_MODEL = {
   library: 'com.google.mlkit:face-detection:16.1.7 (bundled model)',
   performanceMode: 'accurate',
@@ -50,13 +64,26 @@ export const FACE_MODEL = {
   minFaceSize: 0.05,
 } as const;
 
+/** ML Kit's copy is up to this many times the small copy on each side. */
+export const FACE_COPY_SCALE = 2;
+
+/** How many times the `smallWidth`-wide small copy ML Kit's copy is, for a
+ *  photo `photoWidth` wide (as shown): FACE_COPY_SCALE, but never bigger
+ *  than the photo itself (a bigger copy adds no detail), and never under 1. */
+export function faceCopyScale(photoWidth: number, smallWidth: number): number {
+  if (!(photoWidth > 0 && smallWidth > 0)) return 1;
+  return Math.max(1, Math.min(FACE_COPY_SCALE, photoWidth / smallWidth));
+}
+
 /** Nothing to load ahead: ML Kit loads its model inside the app on first use. */
 export function initFaceModel(): Promise<boolean> {
   return Promise.resolve(faceModelAvailable);
 }
 
-/** The faces in the photo at `uri`, found on its `w` × `h` small copy, in that copy's pixels. */
-export async function findFacesIn(uri: string, w: number, h: number): Promise<PhoneFace[]> {
+/** The faces in the photo at `uri`, found on a copy `scale` times its
+ *  `w` × `h` small copy, given in the small copy's pixels. */
+export async function findFacesIn(uri: string, w: number, h: number, scale = 1): Promise<PhoneFace[]> {
   if (!faceModelAvailable) return [];
-  return (await smallCopyFaces(uri, w, h)).map(fromNative);
+  const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+  return (await smallCopyFaces(uri, cw, ch)).map((f) => fromNative(f, cw / w, ch / h));
 }

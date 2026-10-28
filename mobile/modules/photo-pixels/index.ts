@@ -3,7 +3,8 @@
    It makes a SMALL copy of a photo on the phone the way the website's
    browser makes it (Chrome's createImageBitmap 'medium' resize: the same
    pixels, ±1; the EXIF turn applied; sRGB), and runs Google ML Kit's face
-   finder on a copy of the same size (its model inside the app: no download;
+   finder on a copy of the size asked for (the app asks for up to twice the
+   small copy; its model inside the app: no download;
    the photos never leave the phone, though ML Kit sends Google anonymous
    usage numbers, see src/lib/faceModel.ts):
      • pixels: the small copy's RGBA bytes, for the shared check rules

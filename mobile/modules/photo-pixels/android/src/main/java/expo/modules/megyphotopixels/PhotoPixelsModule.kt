@@ -32,7 +32,8 @@ import kotlin.math.min
 /**
  * Megy's photo check on the phone (see ../../../../../../index.ts): a small
  * copy of a photo, made the way the website's browser makes it, and Google
- * ML Kit's face finder on a copy of the same size.
+ * ML Kit's face finder on a copy of the size asked for (the app asks for up
+ * to twice the small copy: src/lib/faceModel.ts FACE_COPY_SCALE).
  *
  * THE SMALL COPY. The website asks Chrome for each photo at CHECK_LONG_SIDE
  * (800 px) on its long side: createImageBitmap(..., resizeQuality 'medium').
@@ -58,8 +59,11 @@ import kotlin.math.min
  * THE FACES. ML Kit (com.google.mlkit:face-detection, its model inside the
  * app: no download; the photos never leave the phone, though ML Kit sends
  * Google anonymous usage numbers, see src/lib/faceModel.ts) on a copy of the
- * same size, straight from memory: each face's box, its two eye points and
- * each eye's chance of being open, in that copy's pixels. That copy is made
+ * size asked for, straight from memory: each face's box, its two eye points
+ * and each eye's chance of being open, in that copy's pixels (the app brings
+ * them back to the small copy's pixels). Settings: takeFaceFinder (the app's
+ * reports copy them in faceModel.ts FACE_MODEL; a test checks the two
+ * agree). That copy is made
  * the quick way (the decoder's own 1/2, 1/4, 1/8 shrink, then Android's
  * scaling, then the EXIF turn): ML Kit is a different model from the
  * website's anyway, so it does not need the browser's exact pixels, and no

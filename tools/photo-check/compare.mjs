@@ -184,17 +184,23 @@ for (const e of allEyes) {
   else if (e.webClosed && e.phoneClosed) eyeConf.bothClosed++; else if (e.webClosed) eyeConf.webOnly++; else if (e.phoneClosed) eyeConf.phoneOnly++; else eyeConf.bothOpen++;
 }
 
+// The face's smaller side in ML Kit's own copy (what MIN_EYE_FACE_PX is
+// measured in). Runs from before ML Kit had a bigger copy (out/phone-800copy.json)
+// have no mlKitSidePx: there ML Kit's copy was the small copy itself.
+const sidePx = (x) => x.mlKitSidePx ?? Math.min(x.box.width, x.box.height);
+
 // Where the phone's "shut" line (EYE_SHUT_BELOW, an ML Kit open chance)
 // could sit, with and without the smallest face whose eyes are read
 // (MIN_EYE_FACE_PX): how many pictures each calls shut, and how often that
 // agrees with the website. (A face counts when it is big enough to judge.)
+// These are the pictures the line was chosen on: a sweep, not a test.
 const eyeLines = [];
 for (const minPx of [0, R.MIN_EYE_FACE_PX]) {
   for (const line of [0.05, 0.1, 0.15, 0.2, 0.3, 0.5]) {
     let shut = 0, same = 0;
     for (const f of files) {
       const p = P.get(f), h = W.get(f).faces.h;
-      const phoneShut = (p.mlFaces ?? []).some((x) => x.box.height >= h * R.MIN_FACE_SHARE && x.box.width >= minPx && x.box.height >= minPx
+      const phoneShut = (p.mlFaces ?? []).some((x) => x.box.height >= h * R.MIN_FACE_SHARE && sidePx(x) >= minPx
         && x.leftEyeOpen != null && x.rightEyeOpen != null && x.leftEyeOpen < line && x.rightEyeOpen < line);
       if (phoneShut) shut++;
       if (phoneShut === W.get(f).check.eyesClosed) same++;
@@ -202,6 +208,30 @@ for (const minPx of [0, R.MIN_EYE_FACE_PX]) {
     eyeLines.push({ line, minFacePx: minPx, picturesShut: shut, agreeWithWebsite: pct(same, files.length), inUse: line === R.EYE_SHUT_BELOW && minPx === R.MIN_EYE_FACE_PX });
   }
 }
+
+// How many faces each side judges the eyes on (faces big enough to count).
+// The website judges every face it counts; the phone only those ML Kit
+// scored that are at least MIN_EYE_FACE_PX in its copy.
+function eyeCoverage(phoneRows) {
+  let phoneFaces = 0, phoneJudged = 0, webFaces = 0, picturesShut = 0;
+  for (const f of files) {
+    const p = phoneRows.get(f), w = W.get(f), h = w.faces.h;
+    if (!p) continue;
+    const big = (p.mlFaces ?? []).filter((x) => x.box.height >= h * R.MIN_FACE_SHARE);
+    phoneFaces += big.length;
+    const judged = big.filter((x) => x.leftEyeOpen != null && x.rightEyeOpen != null && sidePx(x) >= R.MIN_EYE_FACE_PX);
+    phoneJudged += judged.length;
+    if (judged.some((x) => x.leftEyeOpen < R.EYE_SHUT_BELOW && x.rightEyeOpen < R.EYE_SHUT_BELOW)) picturesShut++;
+    webFaces += w.faces.faces.filter((x) => x.box.height >= h * R.MIN_FACE_SHARE).length;
+  }
+  return { phoneFaces, phoneJudged, phoneJudgedPct: pct(phoneJudged, phoneFaces), webFaces, webJudged: webFaces, phonePicturesShut: picturesShut };
+}
+const coverage = eyeCoverage(P);
+// The run before ML Kit's copy was made bigger (kept as out/phone-800copy.json), for before/after.
+const earlierFile = path.join(OUT, 'phone-800copy.json');
+const coverageEarlier = fs.existsSync(earlierFile)
+  ? eyeCoverage(new Map(JSON.parse(fs.readFileSync(earlierFile, 'utf8')).rows.map((r) => [r.file, r])))
+  : null;
 
 // Centring: web detectFaceCenter (whole picture) vs phone detectFaceCenter.
 const cen = { bothNone: 0, bothFound: 0, webOnly: 0, phoneOnly: 0, dist: [] };
@@ -292,8 +322,12 @@ const report = {
     eyesClosedPictures: closedConf,
     boxes: { web: totalW, phone: totalP, matched: totalM, webFoundByPhone: pct(totalM, totalW), phoneFoundByWeb: pct(totalM, totalP), medianIoU: r3(q(allEyes.map((e) => e.iou), 0.5)) },
     eyesOnMatchedFaces: eyeConf,
+    eyeCoverage: coverage,
+    eyeCoverageWith800Copy: coverageEarlier,
+    eyeRule: phone.eyeRule ?? null,
     websitePicturesShut: files.filter((f) => W.get(f).check.eyesClosed).length,
     phoneShutLines: eyeLines,
+    phoneShutLinesNote: 'EYE_SHUT_BELOW and MIN_EYE_FACE_PX were chosen on these same pictures: this is a sweep, not a test of the line.',
     differences: fr.filter((r) => r.webFaces !== r.phoneFaces || r.webClosed !== r.phoneClosed)
       .map((r) => ({ file: r.file, faces: [r.webFaces, r.phoneFaces], closed: [r.webClosed, r.phoneClosed], eyes: r.eyes.map((e) => ({ webEar: e.webEar, phoneOpen: e.phoneOpen })) })),
   },
@@ -323,7 +357,8 @@ ${report.onScreen ? `<p>On the phone's own screen (the same album rules, worked 
 <h2>Faces and closed eyes (different face finders)</h2>
 <table><tr><th>Same face count</th><th>Same "has a face"</th><th>Same closed-eyes verdict</th><th>Faces matched (web found by phone / phone found by web)</th><th>Median box overlap</th></tr>
 <tr><td>${F.faceCountSame}%</td><td>${F.hasFaceSame}%</td><td>${F.eyesClosedSame}% (both shut ${F.eyesClosedPictures.bothClosed}, web only ${F.eyesClosedPictures.webOnly}, phone only ${F.eyesClosedPictures.phoneOnly})</td><td>${F.boxes.matched} of ${F.boxes.web} / ${F.boxes.matched} of ${F.boxes.phone} (${F.boxes.webFoundByPhone}% / ${F.boxes.phoneFoundByWeb}%)</td><td>${F.boxes.medianIoU}</td></tr></table>
-<p class="small">The phone's eye rule: shut when both eyes score under ${R.EYE_SHUT_BELOW}, on faces at least ${R.MIN_EYE_FACE_PX} px. Other lines (pictures shut / agreement): ${eyeLines.map((l) => `${l.line}${l.minFacePx ? ` ≥${l.minFacePx}px` : ''}: ${l.picturesShut} / ${l.agreeWithWebsite}%${l.inUse ? ' (in use)' : ''}`).join(', ')}. Website: ${report.faces.websitePicturesShut} pictures shut.</p>
+<p><b>Eyes judged on:</b> phone ${coverage.phoneJudged} of the ${coverage.phoneFaces} faces it counts (${coverage.phoneJudgedPct}%), website all ${coverage.webFaces} of its faces.${coverageEarlier ? ` With ML Kit on the 800 px small copy (the run before): ${coverageEarlier.phoneJudged} of ${coverageEarlier.phoneFaces} (${coverageEarlier.phoneJudgedPct}%).` : ''}</p>
+<p class="small">The phone's eye rule: shut when both eyes score under ${R.EYE_SHUT_BELOW}, on faces at least ${R.MIN_EYE_FACE_PX} px in ML Kit's copy${phone.eyeRule ? ` (${phone.eyeRule.faceCopyScale}× the small copy)` : ''}. Both numbers were chosen on these same pictures, so the agreement is not a test of them. Other lines (pictures shut / agreement): ${eyeLines.map((l) => `${l.line}${l.minFacePx ? ` ≥${l.minFacePx}px` : ''}: ${l.picturesShut} / ${l.agreeWithWebsite}%${l.inUse ? ' (in use)' : ''}`).join(', ')}. Website: ${report.faces.websitePicturesShut} pictures shut.</p>
 <h2>Face centring</h2>
 <p>Same decision (face / no face): ${C.sameDecision}% (both found ${C.bothFound}, neither ${C.bothNone}, website only ${C.webOnly}, phone only ${C.phoneOnly}). Where both found faces, the points are ${C.distance.median} apart (median, share of the picture); within 0.05: ${C.distance.within005}%, within 0.1: ${C.distance.within01}%.</p>
 <h2>Speed on the phone (${esc(S.device.engine)}${S.device.dev ? ', dev build' : ''})</h2>
@@ -336,5 +371,5 @@ fs.writeFileSync(path.join(OUT, 'report.html'), html);
 
 console.log(JSON.stringify({ pictures: report.pictures, onScreen: report.onScreen, memory: report.memory, eyeLines, measurements: { sharpRatio: m.sharpRatio, worstSharpPct: m.worstSharpPct, overLimit: m.overLimit, hashBits: { median: m.hashBits.median, max: m.hashBits.max, zero: m.hashBits.zero } },
   verdicts: Object.fromEntries(Object.entries(verdicts).map(([n, v]) => [n, { blurrySame: v.blurry.same, blurry: [v.blurry.web.length, v.blurry.phone.length], repeatSetsSame: v.repeatSets.same, sets: [v.repeatSets.web.length, v.repeatSets.phone.length], pairsAgree: v.repeatPairs.agree, leaveOutNoEyes: v.leaveOutWithoutEyes.same, leaveOutWithEyes: v.leaveOutWithEyes.same }])),
-  faces: { faceCountSame: F.faceCountSame, hasFaceSame: F.hasFaceSame, eyesClosedSame: F.eyesClosedSame, closed: F.eyesClosedPictures, boxes: F.boxes, eyes: F.eyesOnMatchedFaces },
+  faces: { faceCountSame: F.faceCountSame, hasFaceSame: F.hasFaceSame, eyesClosedSame: F.eyesClosedSame, closed: F.eyesClosedPictures, boxes: F.boxes, eyes: F.eyesOnMatchedFaces, coverage, coverageEarlier },
   centring: C, speed: S }, null, 1));

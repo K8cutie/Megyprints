@@ -778,6 +778,17 @@ platform plugs them in where it now has "not available yet":
 `const checks = createPhoneChecks();` then `faces: checks.faces,
 photoCheck: checks.photoCheck`.
 
+**Where it runs today: only in the dev app's test screen**
+(`mobile/src/app/photo-check-lab.tsx`, dev builds only). It is ready to
+plug in, but the album flow does not use it yet: Phase 3's
+`appPlatform.ts` (branch `feat/port-phase-3`) still has
+`photoCheck.available: () => false` and a `detectFaceCenter` that answers
+null. When Phase 3 lands: put `createPhoneChecks()` into `appPlatform`
+with a test, then repeat the timing and memory runs from the real Photos
+step and "Make my album" (the face pass and face centring share one cache
+only while `StoredPhoto.url` is the same address as the photo's preview
+address, which Phase 3's `appPhotos.ts` keeps today).
+
 - **Blur and repeats**: the app's native module (`mobile/modules/photo-pixels`)
   makes each photo's 800 px small copy the way the website's browser does
   (Chrome's createImageBitmap 'medium': whole decode, Skia's halvings,
@@ -788,26 +799,63 @@ photoCheck: checks.photoCheck`.
   copy is close to, not exactly, the browser's: the test set has one 50 MP
   picture and its near copy to measure that.
 - **Faces and closed eyes**: Google ML Kit (`com.google.mlkit:face-detection`
-  16.1.7, model inside the app) on a copy of the same size, made the quick
-  way (the decoder's own shrink and Android's scaling: ML Kit is a different
-  model anyway, so it does not need the browser's exact pixels, and no whole
-  photo is held for it), called by the same native module (a wrapper library
-  held up Expo's shared module thread and needed a JPEG copy per photo).
-  Each face becomes the box and eye points the shared rules read
-  (`phoneFaces.ts`). Different model, different answers: the numbers are
-  under "Phone and website, side by side" below.
+  16.1.7, model inside the app) on a copy TWICE the small copy's size
+  (1600 px on the long side; `faceModel.ts` `FACE_COPY_SCALE`, never bigger
+  than the photo itself), made the quick way (the decoder's own shrink and
+  Android's scaling: ML Kit is a different model anyway, so it does not
+  need the browser's exact pixels, and no whole photo is held for it),
+  called by the same native module (a wrapper library held up Expo's
+  shared module thread and needed a JPEG copy per photo). Each face is
+  brought back to the small copy's pixels and becomes the box and eye
+  points the shared rules read (`phoneFaces.ts`). Different model,
+  different answers: the numbers are under "Phone and website, side by
+  side" below.
+- **Why twice the size (review fix, 2026-10-30)**: ML Kit's guide asks for
+  faces of at least 100 × 100 px before it reads them well. On the 800 px
+  copy only the biggest faces are that big, so the phone judged the eyes on
+  just 42 of the 237 faces it found (18 %; the website judges every face it
+  counts, 144 of 144): shut eyes in group photos and bursts were mostly not
+  looked at. On the 1600 px copy it judges 202 of 235 (86 %). The cost, on
+  the emulator, in one session (same pictures, same build):
+
+  | ML Kit's copy | Eyes judged on | Pictures "eyes shut" | ML Kit per photo (median / slowest 5 %) | App memory at the most |
+  |---|---|---|---|---|
+  | 800 px (1×) | 42 of 237 faces (18 %) | 2 | 251 / 369 ms | 392 MB |
+  | 1200 px (1.5×) | 140 of 236 (59 %) | 11 | 380 / 510 ms | 469 MB |
+  | **1600 px (2×, in use)** | **202 of 235 (86 %)** | **10** | **462 / 836 ms** | **521–550 MB (3 runs)** |
+
+  So about 0.2 s more per photo (in the background, while the customer
+  does other things) and about 150 MB more memory while the face pass runs.
+  Not yet tried on a 2 GB phone. If that is too much: `FACE_COPY_SCALE =
+  1.5` is a one-line change (59 % of faces judged), or, to keep the 1×
+  memory, judge eyes on a bigger crop of each small face only (more native
+  code; not built).
 - **Closed eyes, the phone's rule**: both eyes under ML Kit's open chance
   `EYE_SHUT_BELOW` (0.1), and only on faces at least `MIN_EYE_FACE_PX`
-  (100 px) tall and wide in the 800 px copy: ML Kit's own guide asks for
-  faces of at least 100 × 100 px, and on smaller faces it called laughing
-  and downcast eyes shut. Smaller faces still count as faces. Closed eyes
-  matter in three places, all shared rules: a photo with shut eyes is kept
-  off the extra full pages; it loses half its `photoQuality`, which picks
-  the keeper in a set of repeats and orders the cover photos
-  (`CoverEditor`); and `generateAlbum` treats it as a weak photo. So where
-  the phone says "shut" and the website says "open", the phone can keep a
-  different shot of a burst, offer it later on the cover, and give it a
-  smaller place.
+  (100 px) on their smaller side IN ML KIT'S COPY (a face of 50 px in the
+  small copy: 8.3 % of a landscape photo's height, about the website's
+  `MIN_FACE_SHARE` of 8 %). Smaller faces still count as faces. **Both
+  numbers were chosen on the same 138 test pictures the comparison below
+  reports on** (in the earlier run, on the 800 px copy): the agreement
+  figures are not a test of them, and there is no separate set of photos
+  with known shut eyes to test them on (the rules here allow only made-up
+  pictures and the website's sample photos). Closed eyes matter in three
+  places, all shared rules: a photo with shut eyes is kept off the extra
+  full pages; it loses half its `photoQuality`, which picks the keeper in a
+  set of repeats and orders the cover photos (`CoverEditor`); and
+  `generateAlbum` treats it as a weak photo. So where the phone says
+  "shut" and the website says "open", the phone can keep a different shot
+  of a burst, offer it later on the cover, and give it a smaller place.
+- **For the owner: laughing faces.** With the eyes now judged on most
+  faces, the phone calls 10 test pictures "eyes shut" where the website
+  calls 2 (none the same). Looking at each face, the eyes in the phone's 10
+  ARE shut or nearly shut: people laughing with their eyes squeezed, or
+  looking down (two of the 10 are blurred copies of sample photos). The
+  website's finder reads most of those as open. So the
+  2.0 app follows the rule ("both eyes shut") more closely than the website
+  does, and will give laughing photos a smaller place more often than the
+  website does. If laughing faces should not count as "eyes shut", that is
+  a change to the shared rule, for both.
 - **A failed face pass never stops the check**: if ML Kit fails on a photo
   (an error, the phone short of memory), that photo just has no eye test
   (faces stays unknown) and the builder marks its face pass done, as on the
@@ -816,6 +864,27 @@ photoCheck: checks.photoCheck`.
   "Megy is checking your photos… N of N" for the rest of the visit.
 - **Face centring**: the same ML Kit faces through the shared
   `faceCentre.faceGroupCentre` (split out of `faceDetection.ts`, unchanged).
+- **After the app is closed and opened again**, a face pass still to do
+  decodes each remaining photo for its blur answer again (about 0.3 s a
+  photo on the emulator) before looking for faces, because the blur answers
+  are kept in memory only. The website's face pass always does this. To
+  skip it: save the blur answers per photo address on the phone (in a file
+  beside the album draft, `draftFile.ts`), or, after Nov 9, let
+  `PhotoChecker.check` take the photo's known blur answer. Not done.
+- **App size: the face finder adds about 13 MB on a phone.** Measured from
+  ML Kit's own package (`face-detection-16.1.7.aar`): for an arm64 phone,
+  its native code is 8.5 MB and its model files 4.3 MB, stored uncompressed
+  in the app, so about 12.8 MB more on the phone; compressed for the
+  download, about 3.4 MB + 3.4 MB, so about 7 MB more to download. One
+  model file, `contours.tfl` (1.1 MB), is never used (contours are off).
+  Its Java code (0.6 MB before shrinking) and the libraries it brings are
+  not counted. Not measured: a release build before and after. Choices for
+  the owner before the store: keep the model inside the app (works with no
+  connection, bigger app) or use `play-services-mlkit-face-detection`
+  (smaller app; Google Play services downloads the model on the phone, so
+  until it has, the check finds no faces). Either way, ship an AAB so each
+  phone gets only its own processor's code (the x86_64 copy, 9.7 MB, is for
+  the PC's emulator only).
 - **Privacy, before the app ships with this module**: the photos never
   leave the phone. But ML Kit brings Google's usage-log uploader
   (`com.google.android.datatransport`, "cct", with the INTERNET permission
@@ -831,20 +900,24 @@ photoCheck: checks.photoCheck`.
   3. Optional, for no uploads at all: remove ML Kit's uploader service with a
      manifest `tools:node="remove"` in a config plugin, and run
      `tools/photo-check` again to see ML Kit still works. Not tried.
-- **Not proven yet**: a real phone (only the x86_64 emulator), a store
-  (release) build's speed (the test screen runs only in dev builds),
-  P3/Adobe RGB photos (the copy is decoded to sRGB, as the browser does, but
-  none were in the test set), HEIC photos, photos of 108 or 200 MP.
+- **Not proven yet**: a real phone (only the x86_64 emulator), a 2 GB
+  phone with other apps open, a store (release) build's speed and size
+  (the test screen runs only in dev builds), the check inside the real
+  album flow (Phase 3), P3/Adobe RGB photos (the copy is decoded to sRGB,
+  as the browser does, but none were in the test set), HEIC photos, photos
+  of 108 or 200 MP, and the eye rule on photos it was not tuned on.
 
-#### Phone and website, side by side (tools/photo-check, run 2026-10-28)
+#### Phone and website, side by side (tools/photo-check, run 2026-10-30)
 
 The same 138 pictures through the website's own code (headless Chromium,
 face-api.js) and the app's (dev build on the x86_64 emulator, Android 14,
-2.5 GB): 60 made-up pictures (20 scenes, one of them 50 MP; 10 blurred
-copies; 4 with an EXIF turn; 10 near copies; 8 blurred and 8 near copies of
-sample photos) and the website's 78 sample photos (people, many faces). No
-personal photos. Full numbers: `tools/photo-check/out/report.json` after a
-run (not kept in git).
+2.5 GB; ML Kit on the 1600 px copy): 60 made-up pictures (20 scenes, one
+of them 50 MP; 10 blurred copies; 4 with an EXIF turn; 10 near copies; 8
+blurred and 8 near copies of sample photos) and the website's 78 sample
+photos (people, many faces). No personal photos. Full numbers:
+`tools/photo-check/out/report.json` after a run (not kept in git). Three
+runs of the same build gave the same verdicts; the speeds and memory
+below are from the first.
 
 - **Blur and repeats: the same answers as the website, every one.**
   Sharpness within 0.15 % on every picture (median ratio 1.000). Fingerprint
@@ -856,48 +929,59 @@ run (not kept in git).
   suggestions (32 photos), with and without the eye test. The verdicts
   the app worked out and showed on its own screen are the website's.
 - **Faces: ML Kit finds more of the real faces.** The website's finder saw
-  144 faces big enough to judge, the phone 237. The phone found 138 of the
-  website's 144 (96 %); the 99 faces only the phone found are, on the
-  contact sheet, real people in group photos that the website's small
-  model misses; the website found 6 the phone did not (one is an
-  upside-down face, sample 47). Same number of faces on 65 % of pictures,
-  same "has a face or not" on 88 %. The boxes are drawn differently (median
-  overlap 0.54), which the rules do not mind (they read the box height).
-- **Closed eyes: the same verdict on 134 of 138 pictures (97 %), but not
-  on the same shut photos.** Each side calls 2 pictures shut, and they are
-  4 different pictures. The website: sample 08 (a boy laughing, eyes
-  squeezed shut: ML Kit scored one eye 0.02 and the other 0.44, and the
-  face is under 100 px wide, so it is not read) and sample 47 (a laughing
-  face upside down: ML Kit found no face). The phone: sample 26 (a girl
-  looking down at candles, lids down: the website read open) and a 5 px
-  blurred copy of sample 52 (the website found no face; the photo is
-  already in the blurry list). Looking at them: the website is right on
-  the two laughing photos, the phone on the girl looking down. Of the 138
-  faces both found, the phone judged the eyes on 28 (the rest are under
-  100 px or not scored); 27 agree, 1 differs. In this test the eye
-  differences changed no "leave out" suggestion.
+  144 faces big enough to judge, the phone 235. The phone found 137 of the
+  website's 144 (95 %). The 98 faces only the phone found are all on one
+  sheet (`tools/photo-check/out/phone-only-faces.png`, made by
+  `sheets.mjs`); looked at one by one, 97 are real faces the website's
+  small model misses (mostly smaller faces in group photos, faces turned
+  sideways or partly hidden), and 1 is doubtful (a heavily blurred copy of
+  sample 52, the box on the top of a head). The website found 7 the phone
+  did not (one is an upside-down face, sample 47). Same number of faces on
+  65 % of pictures, same "has a face or not" on 88 %. The boxes are drawn
+  differently (median overlap 0.55), which the rules do not mind (they
+  read the box height).
+- **Closed eyes: eyes judged on 202 of the phone's 235 faces (86 %; the
+  website judges all of its 144).** Of the 137 faces both found, the phone
+  judged 136: both say open on 127, the phone says shut on 8, the website
+  on 1. By picture: the same verdict on 126 of 138 (91 %), but on none of
+  the shut ones: the phone calls 10 pictures shut (samples 16, 26, 39, 41,
+  46, 51, 54, 64 and blurred copies of 41 and 52), the website 2 (samples
+  08 and 47). Looking at each face (`out/eyes-sheet.png`): in the phone's
+  10 the eyes are shut or nearly shut (laughing with eyes squeezed, or
+  looking down), which the website's finder reads as open; the website is
+  right on its 2 (sample 08, a boy laughing, which ML Kit scores 0.01 and
+  0.41; sample 47, a laughing face upside down, where ML Kit finds no
+  face). In this test the eye differences changed no "leave out"
+  suggestion. Remember the line (0.1) and the 100 px rule were chosen on
+  these pictures. Other lines, on faces of 100 px or more (pictures called
+  shut / same verdict as the website): 0.05 → 7 / 93.5 %, **0.1 → 10 /
+  91.3 % (in use)**, 0.15 → 17 / 86.2 %, 0.2 → 21 / 83.3 %, 0.3 → 23 /
+  81.9 %. The earlier run, with ML Kit on the 800 px copy, agreed on 97 %
+  of pictures only because it looked at so few eyes (42 of 237 faces).
 - **Face centring**: the same "face or no face" decision on 78 % of
-  pictures (both none 40, both found 67, phone only 26, website only 5;
+  pictures (both none 41, both found 67, phone only 25, website only 5;
   most "phone only" are the extra real faces). Where both found faces,
-  the centring points are a median 0.05 of the picture apart (70 % within
+  the centring points are a median 0.05 of the picture apart (66 % within
   0.1).
 - **Speed per photo** (emulator, dev build, Hermes; the PC was running
   other work too, so these are for comparing, not phone numbers):
-  blur and repeats median 370 ms (227 ms decoding on Android's threads,
-  135 ms of maths on the JavaScript thread), slowest 5 % 772 ms (the 50 MP
-  pictures); faces and eyes median 374 ms (slowest 5 % 487 ms); face
-  centring from scratch 348 ms, and 0 ms after the face pass (the faces are
-  kept). All 138: 60 s blur, 55 s faces.
+  blur and repeats median 282 ms (163 ms decoding on Android's threads,
+  125 ms of maths on the JavaScript thread), slowest 5 % 595 ms (the 50 MP
+  pictures); faces and eyes median 462 ms (slowest 5 % 839 ms); face
+  centring from scratch 401 ms, and 0 ms after the face pass (the faces are
+  kept). All 138: 51 s blur, 73 s faces.
 - **Picking is not held up**: while the check runs, a gallery page read
-  (what the photo grid does as you scroll) takes a median 24 ms (21 ms with
-  nothing running; slowest 5 % 64 ms, longest 108 ms), and the screen's
-  50 ms timer runs late by at most 76 ms (blur pass) and 45 ms (faces).
-  The first try, through the wrapper library, made gallery reads wait up
-  to 315 ms, and its small copy was not the browser's (sharpness 0.63 to
-  2.1 times the website's).
-- **Memory**: the app at 89 MB (PSS) before, 406 MB at the most while
-  checking (517 MB RSS), 304 MB 30 s after the last photo (ML Kit's model
-  let go). Not yet tried on a 2 GB phone with other apps open.
+  (what the photo grid does as you scroll) takes a median 19 ms in the
+  blur pass and 15 ms in the face pass (24 ms with nothing running;
+  slowest 5 % 52 ms, longest 83 ms), and the screen's 50 ms timer runs
+  late by at most 83 ms (blur pass) and 28 ms (faces). The first try,
+  through the wrapper library, made gallery reads wait up to 315 ms, and
+  its small copy was not the browser's (sharpness 0.63 to 2.1 times the
+  website's).
+- **Memory**: the app at 92 MB (PSS) before, 550 MB at the most while
+  checking (662 MB RSS; most of it in the face pass, see the table above),
+  310 MB 30 s after the last photo (ML Kit's model let go). Not yet tried
+  on a 2 GB phone with other apps open.
 - The website on this PC, for reference: blur and repeats 27 ms a photo;
   the whole check with faces 2.2 s (face-api on the CPU here; the real
   website uses WebGL where it can).

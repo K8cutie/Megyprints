@@ -31,9 +31,10 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   keeps access to photos picked with "Choose from Files" and reads their size
   and EXIF time; `modules/photo-pixels` makes the photo check's small copy the
   way the website's browser does and runs Google ML Kit's face finder on a
-  copy of the same size (`src/lib/phonePhotoCheck.ts`; compared with the
+  copy up to twice that size (`src/lib/phonePhotoCheck.ts`; compared with the
   website by `../tools/photo-check`). ML Kit sends Google anonymous usage
-  numbers (never the photos): see `src/lib/faceModel.ts` before shipping it. Expo autolinking builds every folder there; after changing
+  numbers (never the photos) and adds about 13 MB to the app: see
+  `src/lib/faceModel.ts` before shipping it. Expo autolinking builds every folder there; after changing
   its Kotlin, run prebuild and Gradle again. Jest has no native modules: its
   JS side (`index.ts`) works without the native half.
 - **Photos are never copied into the app.** The album keeps each photo's

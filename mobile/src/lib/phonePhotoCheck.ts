@@ -7,9 +7,11 @@
        the long side) made by the app's native module (modules/photo-pixels)
        the way the website's browser makes it, its pixels through the shared
        basicCheck steps (then checkFrom). Same thresholds, same maths;
-     • faces + closed eyes: Google ML Kit on a copy of the same size, in the
-       same native module (faceModel.ts), each face mapped to what the
-       shared rules read (phoneFaces.ts), then the shared faceVerdict;
+     • faces + closed eyes: Google ML Kit on a copy up to twice that size
+       (faceModel.ts faceCopyScale: ML Kit needs faces of 100 px to judge
+       eyes), in the same native module, each face brought back to the
+       small copy's pixels and mapped to what the shared rules read
+       (phoneFaces.ts), then the shared faceVerdict;
      • face centring: the same ML Kit faces through the shared
        faceGroupCentre.
 
@@ -17,8 +19,9 @@
    the phone at a time. For the blur check the native module decodes one
    whole photo at a time (as the website's browser does, a 12 MP photo is
    48 MB while it is shrunk; the small copy is about 2 MB); for faces it
-   asks Android's decoder for a copy near the small copy's size (a few MB,
-   no whole photo: ML Kit does not need the browser's exact pixels).
+   asks Android's decoder for a copy near ML Kit's size (about 8 MB for
+   1600 × 1200, no whole photo: ML Kit does not need the browser's exact
+   pixels).
    Decoding and ML Kit run on
    Android's background threads; only the pixel maths runs on the app's
    JavaScript thread, in three steps (grayscale, sharpness, fingerprint: the
@@ -32,14 +35,16 @@
    Work is not repeated: the builder checks each photo twice (blur first,
    faces later) and centres faces when it makes the album, so the blur
    answer and the faces found are kept per photo (a few numbers each) for
-   the faces pass and the centring to reuse.
+   the faces pass and the centring to reuse. Kept in memory only: after
+   the app is closed and opened again, a face pass still to do decodes the
+   photo for the blur answer again (as the website's face pass always does).
    ══════════════════════════════════════════════════════════════════════════ */
 import type { FaceFinder, PhotoChecker, StoredPhoto } from '@web/shared/platform';
 import { checkCopySize, checkFrom, dHash, faceVerdict, grayscale, tileSharpness, type PhotoCheck } from '@web/lib/photoCheck';
 import { faceGroupCentre } from '@web/pages/builder/faceCentre';
 import { createLimiter } from '@web/lib/limit';
 import { photoPixelsAvailable, pictureSize, smallCopyPixels } from '../../modules/photo-pixels';
-import { faceModelAvailable, findFacesIn, initFaceModel } from './faceModel';
+import { faceCopyScale, faceModelAvailable, findFacesIn, initFaceModel } from './faceModel';
 import { toCheckFace, type PhoneFace } from './phoneFaces';
 
 /** What the checks need from the phone (passed in, so tests can fake it). */
@@ -50,8 +55,9 @@ export interface PhoneCheckDevice {
   size(uri: string): Promise<{ width: number; height: number }>;
   /** The small copy's RGBA pixels. */
   pixels(uri: string, w: number, h: number): Promise<Uint8Array>;
-  /** ML Kit on the photo's w × h small copy, or null where it is missing. */
-  faces: { init(): Promise<boolean>; find(uri: string, w: number, h: number): Promise<PhoneFace[]> } | null;
+  /** ML Kit on a copy `scale` times the photo's w × h small copy (faces
+   *  given in the small copy's pixels), or null where it is missing. */
+  faces: { init(): Promise<boolean>; find(uri: string, w: number, h: number, scale: number): Promise<PhoneFace[]> } | null;
 }
 
 export const nativeDevice: PhoneCheckDevice = {
@@ -85,7 +91,7 @@ function keepLast<V>(max: number) {
   };
 }
 
-/** The faces ML Kit found on a photo's small copy (w × h). */
+/** The faces ML Kit found for a photo, in its small copy's pixels (w × h). */
 interface FoundFaces { w: number; h: number; faces: PhoneFace[] }
 
 export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { photoCheck: PhotoChecker; faces: FaceFinder } {
@@ -93,14 +99,16 @@ export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { ph
   const basics = keepLast<PhotoCheck>(KEEP);
   const found = keepLast<FoundFaces>(KEEP);
 
-  /** ML Kit on the photo's w × h small copy (kept per photo and size). */
-  async function facesOn(url: string, w: number, h: number): Promise<FoundFaces | null> {
+  /** ML Kit for the photo (`photoWidth` wide as shown) with a w × h small
+   *  copy: on a copy faceCopyScale times that (kept per photo and size). */
+  async function facesOn(url: string, w: number, h: number, photoWidth: number): Promise<FoundFaces | null> {
     if (!device.faces || !(await device.faces.init())) return null;
     const key = `${url}|${w}x${h}`;
     const known = found.get(key);
     if (known) return known;
     const finder = device.faces;
-    const faces = await limit(() => finder.find(url, w, h));
+    const scale = faceCopyScale(photoWidth, w);
+    const faces = await limit(() => finder.find(url, w, h, scale));
     const result = { w, h, faces };
     found.set(key, result);
     // Face centring asks by address only: this is that photo's answer.
@@ -136,7 +144,7 @@ export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { ph
         // and faces stays null. The builder then marks the face pass done
         // (facesTried), so its photo check never waits on that photo.
         try {
-          const f = await facesOn(photo.url, w, h);
+          const f = await facesOn(photo.url, w, h, width);
           if (f) Object.assign(result, faceVerdict(f.faces.map(toCheckFace), h));
         } catch {
           // No eye test for this photo.
@@ -162,7 +170,7 @@ export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { ph
           const size = await device.size(url);
           if (!(size.width > 0 && size.height > 0)) return null;
           const { w, h } = checkCopySize(size.width, size.height);
-          f = await facesOn(url, w, h);
+          f = await facesOn(url, w, h, size.width);
         }
         return f ? faceGroupCentre(f.faces.map((x) => x.box), f.w, f.h) : null;
       } catch {

@@ -21,8 +21,8 @@ import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
 import { checkPhotoAccess, loadGalleryPage, NEXT_PAGE, photosForAlbum, type GalleryPhoto } from '../lib/gallery';
 import { createPhoneChecks, nativeDevice, type PhoneCheckDevice } from '../lib/phonePhotoCheck';
-import { FACE_MODEL, faceModelAvailable } from '../lib/faceModel';
-import type { PhoneFace } from '../lib/phoneFaces';
+import { FACE_COPY_SCALE, FACE_MODEL, faceModelAvailable } from '../lib/faceModel';
+import { EYE_SHUT_BELOW, MIN_EYE_FACE_PX, type PhoneFace } from '../lib/phoneFaces';
 import { colors, space } from '../lib/theme';
 
 const PC = 'http://localhost:8095';
@@ -164,7 +164,7 @@ export default function PhotoCheckLab() {
         pixels: timed('pixels', nativeDevice.pixels),
         faces: nativeDevice.faces && {
           init: nativeDevice.faces.init,
-          find: timed('find', async (uri: string, w: number, h: number) => { const f = await nativeDevice.faces!.find(uri, w, h); lastFaces = f; return f; }),
+          find: timed('find', async (uri: string, w: number, h: number, scale: number) => { const f = await nativeDevice.faces!.find(uri, w, h, scale); lastFaces = f; return f; }),
         },
       };
       const stored = (p: (typeof photos)[number]) => ({ id: p.key, name: p.name, type: 'image/jpeg', size: 0, width: p.width, height: p.height, url: p.uri });
@@ -234,6 +234,7 @@ export default function PhotoCheckLab() {
       const report = {
         when: new Date().toISOString(),
         faceModel: faceModelAvailable ? FACE_MODEL : null,
+        eyeRule: { faceCopyScale: FACE_COPY_SCALE, minEyeFacePx: MIN_EYE_FACE_PX, eyeShutBelow: EYE_SHUT_BELOW },
         engine: typeof (globalThis as { HermesInternal?: unknown }).HermesInternal !== 'undefined' ? 'Hermes' : 'other',
         dev: __DEV__,
         totals: { basicMs: tA, facesMs: tB, centreMs: tC, photos: photos.length },
