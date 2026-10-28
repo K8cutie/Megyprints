@@ -208,6 +208,16 @@ export interface TitleBox {
   clampY(v: number): number;
 }
 
+/** The cover with no title: what is shown under the title's words while a
+ *  finger moves them, so they are seen once, where the finger has them (the
+ *  cover picture with the title in it would show it twice). Title changes
+ *  alone leave this the same, so its picture is drawn again only when the
+ *  rest of the cover changes. */
+export function coverWithoutTitle(cover: AlbumPage): AlbumPage {
+  const els = cover.textElements ?? [];
+  return els.some((t) => t.boxIndex === 0) ? { ...cover, textElements: els.filter((t) => t.boxIndex !== 0) } : cover;
+}
+
 /** CoverEditor's title box: the cover layout's caption box 0 in the layout's
  *  margins (none on a full-bleed cover), as fractions of the cover, and the
  *  offset limits from the box's own place, so it can go to every edge of the

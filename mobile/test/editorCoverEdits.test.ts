@@ -30,7 +30,7 @@ import { coverBlank, titleFontInApp, titleInkNeeded, titleTooLong } from '../src
 import {
   canRemoveCoverPhoto, colourEveryPage, colourTheCover, COVER_PAPER, coverCrop, coverHasPhoto, coverTitleOf, fitTitle,
   moveCoverTitle, panCoverPhoto, putPhotoOnCover, removeCoverPhoto, resetCoverCrop, setTitleAlignment, setTitleColour,
-  setTitleFont, setTitleSize, shownCoverPhotos, titleBoxOf, titleRectOf, toggleTitleBold, toggleTitleItalic,
+  setTitleFont, setTitleSize, shownCoverPhotos, titleBoxOf, coverWithoutTitle, titleRectOf, toggleTitleBold, toggleTitleItalic,
   toggleTitleShadow, typeTitle, zoomCoverPhoto, type CoverBuilder,
 } from '../src/editor/cover/coverEdits';
 import { dragTarget } from '../src/editor/cover/CoverStage';
@@ -352,6 +352,22 @@ describe('the small pieces', () => {
     expect(dragTarget(0.5, 0.3, title, true)).toBe('photo');
     expect(dragTarget(0.5, 0.3, title, false)).toBeNull();
     expect(dragTarget(0.5, 0.7, null, true)).toBe('photo');
+  });
+
+  it('the cover shown under a moving title has no title, and title changes alone leave it the same', () => {
+    const cover = {
+      templateId: 'c', slotFills: [], textElements: [
+        { text: 'Bohol Trip 2026', boxIndex: 0, color: '#FFFFFF', offsetY: 0.1 },
+        { text: 'a free line', color: '#000000' },
+      ],
+    } as unknown as AlbumPage;
+    const bare = coverWithoutTitle(cover);
+    expect(bare.textElements.map((t) => t.text)).toEqual(['a free line']);
+    expect(cover.textElements).toHaveLength(2); // the album's cover is untouched
+    const moved = { ...cover, textElements: [{ ...cover.textElements[0], offsetY: 0.3, color: '#C9A24B' }, cover.textElements[1]] } as AlbumPage;
+    expect(JSON.stringify(coverWithoutTitle(moved))).toBe(JSON.stringify(bare));
+    const untitled = { ...cover, textElements: [cover.textElements[1]] } as AlbumPage;
+    expect(coverWithoutTitle(untitled)).toBe(untitled);
   });
 
   it('the slider keeps to its steps and range', () => {

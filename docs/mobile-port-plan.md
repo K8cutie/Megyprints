@@ -1671,50 +1671,101 @@ Nov 9).
   - There is no "⋯" to choose something else for a box Megy dealt.
   - The cover's "Too long for the front cover" waits until the title's font is on the
     phone, so offline it says nothing.
+  - A selected photo can be moved and zoomed only by finger (TalkBack can select it and
+    use its buttons, not move it).
+- **Redo after photos came in (found while checking the high fix).** A Redo made before
+  photos came in holds the photo list from before them too, so it would take them out
+  again. Redo is held back after photos come in while the album has Redo steps; the
+  album's next edit clears them, and the hold with them (`undoBar.redoShown`, with a
+  test).
 - **Parity with the website's editor:** `mobile/test/editorParity.test.ts` runs
   `tools/parity/webEdits.spec.ts` (the website's builder in jsdom, with the calls its
   editors make) and the app editor's own code on the same album, with seven edits.
-  Every page and the cover come out the same, field for field.
-  - A selected photo can be moved and zoomed only by finger (TalkBack can select it and
-    use its buttons, not move it).
+  Every page and the cover come out the same, field for field (41 pages and the cover;
+  photos compared by name, only platform ids and photo addresses left out).
 
-### Seen on the emulator (2026-10-30)
+### Seen on the emulator (2026-10-29, after the merge of native-2.0)
 
 - **Setup:**
-  - My own `pwa_test` emulator (Android 14, x86_64, port 5568, read-only).
-  - The release APK from this branch, built in my own short folder `C:\m5e`.
-  - No `.env.local`, so the app was signed out and reached no server of ours.
-  - 120 made-up photos: PIL shapes and a big number, no people, 3000x4000 with every 10th one 4000x3000, EXIF times over 2026-10-20 to 2026-10-23.
-- **Making the album:** Name ("Bohol Trip 2026", Vacation) → Size 8x8 → 120 photos → cover photo 3 → "Make my album" gave 53 pages.
+  - My own `pwa_test` emulator (Android 14, x86_64, 1080x2400 at 420 dpi, port 5568,
+    read-only).
+  - The release APK from `33b3a36` (this branch with native-2.0 merged in), built in my
+    own short folder `C:\m5e` (x86_64 only).
+  - No `.env.local`, so the app was signed out and reached no server of ours. The paid
+    quote endpoint was never called.
+  - 120 made-up photos (PIL shapes and a big number, no people; 3000x4000, every 10th
+    one 4000x3000; EXIF times 2026-10-20 to 2026-10-23), and 3 more for "Add photos".
+- **Making the album:** Name ("Bohol Trip 2026", Vacation) → Size 8x8 → 120 photos →
+  cover photo 2 → "Make my album" gave 53 pages.
 - **In "Edit pages":**
-  - A photo is moved by a slow drag and zoomed by a pinch (two-finger raw touch events, sent as root on my emulator).
-  - It is swapped with page 2's photo ("Swapped with the photo on page 1").
-  - A quick flick over the selected photo turns the page and stores nothing.
-  - "Replace photo" swaps in a photo from page 6. "Remove photo", then the empty frame → "Add to this box" → "Add Photo" fills it again.
-  - Change layout shows "✓ Current" first, and "Hero Left" is picked.
-  - A page is added (its layouts open, and the blank-page reminder shows) and deleted. 13 more deletions reach 40 pages, where the sheet says "Albums need at least 40 pages, so a page can't be deleted". Undo, one press per step, brings all 13 back.
-  - A long caption gets "Too long for this box" and "Make it fit (size 22)". Android back once hides the keyboard, and back again keeps the words.
-  - "Your Text" in an empty frame takes Playfair at once, then Lora with "Getting the font…", then a green.
-  - The quote picker, signed out, asks for sign-in and sends nothing.
-  - The page colour is set to yellow.
-  - Undo three steps, Redo one.
-- **The cover:** photo 4, dragged with a live preview, the title in Yeseva One (fetched), white, shadow off, and moved down. The editor's Undo starts afresh after it.
-- **Force-stop and open again:** "Continue my album" opens page 33. The saved file (read as root) holds every edit: the swap with its zoom 2.40 and offset, the replaced photo, the layout, the caption at 22, the empty frame, and the cover's photo, focus, font, colour, shadow and offset.
-- **Photos added while editing:** after a page edit, "Add photos" picks 3 and the app says "3 photos added.". Undo is hidden there. A later edit is undone, and the 3 photos are still in "Add a photo".
-- **Memory and logs:**
-  - TOTAL PSS was 394.6 MB after about 25 edits and 454.9 MB after the cover work, then 247.3 MB after the restart. Not fixed (see the PR).
-  - No FATAL, no crash and no JavaScript error in logcat.
+  - A tap selects a photo ("Drag the photo to move it in its frame. Pinch to zoom.").
+    A slow drag moves it and a pinch zooms it (two-finger raw touch events, sent as root
+    on my emulator).
+  - "Swap photo", page 2, its photo: "Swapped with the photo on page 1"; the zoom and
+    offset travel with the photo.
+  - A quick sideways flick over the selected photo turns the page and stores nothing.
+  - "Replace photo" with a photo already on page 6 swaps the two ("Swapped with the
+    photo on page 6"), as the website does. "Remove photo" leaves "Click to add" and the
+    blank-page reminder; the empty frame → "Add to this box" → "Add Photo" fills it
+    again.
+  - "Change layout" opens with "✓ Current" first, each layout drawn as this page;
+    "Hero Left" is picked.
+  - "Add a page" opens its layouts and shows the blank-page reminder; "Delete page 5"
+    deletes it. 13 more deletions reach 40 pages, where the sheet says "Albums need at
+    least 40 pages, so a page can't be deleted." 13 presses of Undo bring all 13 back.
+  - A caption box ("Let AI write a quote"): the quote picker, signed out, asks for
+    sign-in and sends nothing; "Type your own words" opens the text editor. A long
+    caption made bigger (48) gets "Too long for this box" and "Make it fit (size 38)".
+    Android back once hides the keyboard, and back again keeps the words.
+  - "Your Text" in an emptied frame: Playfair (in the app) at once, Merriweather from
+    Google Fonts with "Getting the font…" first, then Forest green from the colour panel.
+  - Page colour: yellow.
+  - Undo three steps (page colour, then the font and colour, then the words), Redo one
+    (the words), then Redo the other two. Undo and Redo each keep their place.
+- **The cover ("Cover" tile, opened on the first tap):** photo 4; the photo dragged with
+  a live preview; the title font Yeseva One (fetched, "Getting the font…"), white, Shadow
+  off, dragged down. Picking a cover colour (Blue) replaced the cover photo with the
+  colour, which is what the website's CoverEditor does too (`setPageColor`); photo 4 was
+  put back and moved again. Back in the editor, Undo starts afresh.
+- **Force-stop and open again:** "Continue my album" opens the Preview on page 30 (where
+  the editor was). The saved file (`files/album-builder/megy-album-v5.txt`, read as
+  root) holds every edit:
+  - page 1 photo 20 and page 2 photo 10 at zoom 2.74 and offset X −142.6 (the swap took
+    the framing along);
+  - page 3 photo 7; page 4 `t88-fb-trio-hero-left-gap` with photos 1, 2, 3;
+  - page 29's caption at size 38; page 30 `#FCE883`, its third frame "Island hopping
+    day" in Merriweather `#2E7D4A`;
+  - 53 pages; the cover photo 4 with focusY 0.696, Yeseva One, `#FFFFFF`,
+    `shadow: false`, offsetY 0.16.
+- **Photos added while editing (the high finding), and the Redo hold:** a page edit,
+  Undo (Redo waiting), then "Add photos" and 3 new photos: "3 photos added.", and both
+  Undo and Redo are hidden. A new edit, then Undo: the photo is back and the saved file
+  still lists 123 photos.
+- **Display size changes:** `wm density 360` and `480` (360 dp wide) rebuild the app's
+  screen (logcat: startSurface, then stopSurface). It opens on the start screen;
+  "Continue my album" → "Edit pages" work, no FATAL (the router fix). At 360 dp "Edit
+  pages" and Undo fit in the header, and Replace photo and Remove photo are on screen.
+- **Memory and logs:** TOTAL PSS 381 MB after about 40 edits, 338 MB after the cover
+  work. No FATAL, no AndroidRuntime crash and no ReactNativeJS error or warning in
+  logcat for the whole walk.
 - **Found on the emulator and fixed:**
-  - Undo and Redo traded places when one came or went, so a second tap on Undo hit Redo. Each now keeps its own place.
-  - After a fling to the end of the page strip, Android's stretch stayed on and swallowed taps on the tiles (the "Cover" tile took 3 tries). The strip and the photo's button row no longer overscroll.
-  - Layout tiles with a long name were wider than the others. Every tile is now as wide as its picture.
-  - The start screen still said "Editing pages… come in later versions". It now reads "You can make an album from your photos, see it as a book and edit its pages. Ordering comes in a later version."
-  - **The app closed after a change of display size.** Android rebuilt the screen and React Native started a new root before stopping the old one (the log shows startSurface, then stopSurface). The old root's cleanup unbound expo-router's shared `router`, so the next button that called it ("Continue my album") threw "The imperative router is unavailable before the first render has finished" and the app closed. This happened twice on the emulator, with `wm density` 400 and 360. Now `<KeepRouterBound />` in the root layout (`src/lib/routerBinding.ts`, with a test) makes the shared router use the newest root still mounted. On the next build the same test opens the Preview and the editor and comes back, with no FATAL in the log. A font size change in Android's settings rebuilds the screen the same way; that case was not tried.
-  - At 360 dp the title "Edit pages" was cut short by the two fixed Undo/Redo places. Each place is now 74 dp. At 360 dp both buttons show with the full title, and "Remove photo" is on screen.
+  - Moving the cover title showed it twice: the live words over a cover picture that
+    still had the title in it. Under a moving title the stage now shows the cover drawn
+    without it (`coverWithoutTitle`, drawn ahead at the lowest priority; its picture
+    stays the same for title changes alone). Checked on the next build.
+- **Seen in an earlier walk on this branch (before the merge, 2026-10-29) and fixed
+  then:** Undo and Redo traded places when one came or went; an overscrolled page strip
+  swallowed taps; long layout names widened their tile; the start screen said editing
+  comes later; the app closed after a display size change ("The imperative router is
+  unavailable before the first render has finished": the old root's cleanup unbound
+  expo-router's shared `router`; `<KeepRouterBound />`, `src/lib/routerBinding.ts`);
+  at 360 dp the header cut the title short.
 
 ### Not done, not proven (editor core)
 
-- Walked on the emulator only (above), not on a phone. TalkBack was not turned on.
+- Walked on the emulator only (above), not on a phone. TalkBack was not turned on. A
+  font size change in Android's settings (it rebuilds the screen like a display size
+  change) was not tried.
 - A QR code or a graphic is hit in its whole frame or caption box, not in the
   smaller square the website draws it in (`qrRect` / `ornamentFit` live in website
   files that are not shared yet). The app draws neither yet.

@@ -27,7 +27,8 @@
    afresh after a cover change (undoBar.coverChanged).
 
    Moving the photo, zooming it and moving the title follow the finger live
-   (CoverStage `live`: drawn over the cover picture) and send the album ONE
+   (CoverStage `live`: drawn over the cover picture; a moving title over the
+   cover drawn without it, so it shows once) and send the album ONE
    change when the finger lets go, as a photo on the pages does; the live
    view stays until the cover is drawn with it. Warnings, from the website's rules (coverChecks.ts): a
    blank cover, a title too long, a title colour that wouldn't show.
@@ -55,7 +56,7 @@ import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
 import { colors, space } from '../../lib/theme';
 import { BLANK_COVER_MESSAGE, coverBlank, titleInkNeeded, titleTooLong } from './coverChecks';
 import {
-  colourEveryPage, colourTheCover, coverCrop, coverHasPhoto, coverTitleOf, canRemoveCoverPhoto, fitTitle, moveCoverTitle,
+  colourEveryPage, colourTheCover, coverCrop, coverHasPhoto, coverTitleOf, coverWithoutTitle, canRemoveCoverPhoto, fitTitle, moveCoverTitle,
   panCoverPhoto, putPhotoOnCover, removeCoverPhoto, resetCoverCrop, setTitleAlignment, setTitleColour, setTitleFont, setTitleSize,
   shownCoverPhotos, titleBoxOf, titleMovable, TITLE_SIZE, toggleTitleBold, toggleTitleItalic, toggleTitleShadow, typeTitle,
   zoomCoverPhoto, ZOOM_RANGE, type Align,
@@ -232,6 +233,17 @@ export default function CoverScreen() {
     return { x: box.baseX + ox, y: box.baseY + oy, w: box.w, h: box.h };
   })() : null;
 
+  // Under the title's words while the finger moves them: the cover drawn
+  // without them (coverWithoutTitle), made ahead at the lowest priority
+  // while the title can be moved, so the words are seen once, where the
+  // finger has them (found on the emulator: the title showed twice).
+  const bareCover = useMemo(() => coverWithoutTitle(drawn), [drawn]);
+  const bare = usePagePicture(text, movable && title.text.trim() ? {
+    page: bareCover, pageIndex: 0, albumSize: builder.albumSize, photos: builder.uploadedPhotos,
+    width: Math.min(1400, Math.round(coverW * PixelRatio.get())), coverMode: true,
+  } : null, PRIORITY.ahead);
+  const stageUri = live?.what === 'title' && bare.uri ? bare.uri : shownUri;
+
   // ── The album's photos for the cover, best first ──
   const photos = useMemo(() => coverPhotos(builder.uploadedPhotos).filter((p) => !!p.previewUrl), [builder.uploadedPhotos]);
   const onCover = coverPhotoId(builder);
@@ -305,7 +317,7 @@ export default function CoverScreen() {
       <View style={styles.top}>
         <Text style={styles.sub} testID="cover-one-photo">{W.ONE_PHOTO}</Text>
         <CoverStage
-          uri={shownUri} busy={!picture.uri && !!shownUri} failed={picture.error ? PAGE_NOT_SHOWN : null}
+          uri={stageUri} busy={!picture.uri && !!shownUri} failed={picture.error ? PAGE_NOT_SHOWN : null}
           width={coverW} height={coverH} titleRect={titleRect} hasPhoto={hasPhoto} onDrag={onDrag} label={W.FRONT_COVER}
           live={liveView}
         />

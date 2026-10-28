@@ -64,7 +64,11 @@ jest.mock('../src/editor/text/fonts/appFonts', () => {
   };
 });
 jest.mock('../src/builder/usePagePicture', () => ({
-  usePagePicture: () => ({ uri: 'file:///cache/megy-pages/cover.jpg', notDrawn: mockBench.notDrawn, missing: 0, error: null }),
+  // The cover's picture, or (a cover with no title) the one shown under a moving title.
+  usePagePicture: (_text: unknown, req: { page: { textElements?: { boxIndex?: number }[] } } | null) => ({
+    uri: req && !(req.page.textElements ?? []).some((t) => t.boxIndex === 0) ? 'file:///cache/megy-pages/cover-no-title.jpg' : 'file:///cache/megy-pages/cover.jpg',
+    notDrawn: mockBench.notDrawn, missing: 0, error: null,
+  }),
   forgetPhotoPictures: () => {},
   PRIORITY: { editing: 3, shown: 2, thumbnail: 1, ahead: 0 },
 }));
@@ -227,6 +231,9 @@ describe('the cover screen', () => {
     await refresh();
     const live = propsOf<{ titleRect: { y: number } }>('cover-stage', CoverStage).titleRect;
     expect(live.y).toBeCloseTo(box.baseY - 0.2, 6);
+    // Under the moving words, the cover without its title: the title shows once
+    // (before: the cover picture still had it, so it showed twice).
+    expect(propsOf<{ uri: string }>('cover-stage', CoverStage).uri).toBe('file:///cache/megy-pages/cover-no-title.jpg');
     await act(async () => { stage.onDrag('title', 'end', 0, -9); });
     await refresh();
     expect(coverTitleOf(builder().coverFront).offsetY).toBeCloseTo(-box.baseY, 10); // the top edge
