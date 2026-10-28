@@ -28,6 +28,9 @@ const { REPO_ROOT, fitFingerprint } = require('./fitSources.cjs');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, 'web-fit');
 const MOBILE = path.join(REPO_ROOT, 'mobile');
+// On Linux (the CI runner), letters are measured as on Windows: no hinting,
+// letters between pixels (see LINUX_TEXT in renderWeb.mjs). Windows: unchanged.
+const LINUX_TEXT = process.platform === 'linux' ? ['--font-render-hinting=none'] : [];
 
 async function bundleNode() {
   const outfile = path.join(os.tmpdir(), `fit-node-${process.pid}.mjs`);
@@ -63,7 +66,7 @@ async function main() {
   const cases = buildFitCases();
   const fontFiles = BUNDLED_FONTS.map((f) => path.join(MOBILE, 'node_modules', f.file));
   for (const f of fontFiles) if (!fs.existsSync(f)) throw new Error(`font file missing: ${f} (run npm ci in mobile/)`);
-  const browser = await chromium.launch({ headless: true, args: ['--disable-gpu', '--disable-accelerated-2d-canvas', '--disable-gpu-compositing'] });
+  const browser = await chromium.launch({ headless: true, args: [...LINUX_TEXT, '--disable-gpu', '--disable-accelerated-2d-canvas', '--disable-gpu-compositing'] });
   const page = await (await browser.newContext({ deviceScaleFactor: 1 })).newPage();
   page.on('pageerror', (e) => console.error('[page error]', e.message));
   await page.setContent('<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>');

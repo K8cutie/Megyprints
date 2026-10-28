@@ -15,7 +15,9 @@
 # app's own check (mobile/: tsc + jest). jest includes the golden pixel test,
 # which draws the website's print pages in headless Chromium (tools/golden,
 # playwright-core) and compares the app's pages with them pixel by pixel, so
-# this job installs that Chromium too. It is NOT a required check on main.
+# this job installs that Chromium too (on Linux the golden tools start it with
+# '--font-render-hinting=none' so letters sit as they do on Windows; jest runs
+# in Manila time). It is NOT a required check on main.
 
 name: Verify
 
@@ -130,8 +132,14 @@ jobs:
             echo "SKIPPED: tools/golden is not on this commit, so no headless Chromium was installed." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Manila time, as on the PCs these tests were proven on and as on a
+      # customer's phone: the checkout test compares the app's "pay by" day
+      # with the website's, which uses the device's own time zone (the
+      # runner's is UTC, and jest cannot switch it from inside a test).
       - name: App check (tsc + jest, incl. the golden pixel test)
         working-directory: mobile
+        env:
+          TZ: Asia/Manila
         run: npm run check
 
       # When the check fails, keep what the golden test wrote (the app's
