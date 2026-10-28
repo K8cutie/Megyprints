@@ -2,3 +2,5 @@
 web/
 out/
 node_modules/
+phone/
+phone-out/

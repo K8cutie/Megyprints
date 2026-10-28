@@ -42,3 +42,6 @@ yarn-error.*
 
 # Claude Code settings made by the Expo template (machine-local, not part of the app)
 /.claude/
+
+# The golden test pages for a -GoldenPages test build (scripts/golden-phone-assets.cjs)
+/golden-phone/

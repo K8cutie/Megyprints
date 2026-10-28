@@ -10,6 +10,8 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/'],
   moduleNameMapper: {
     '^@web/(.*)$': '<rootDir>/../src/$1',
+    // The golden test pages are only in a -GoldenPages build (goldenPages.js).
+    '^megy-golden-pages$': '<rootDir>/src/dev/noGoldenPages.json',
     // A website file that imports React gets the app's React (one copy).
     '^react$': here('node_modules/react'),
     '^react/(.*)$': here('node_modules/react/$1'),

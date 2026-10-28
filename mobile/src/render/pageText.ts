@@ -90,7 +90,12 @@ export class PageText {
     builder.pop();
     const p = builder.build();
     p.layout(LAYOUT_WIDTH);
-    builder.dispose();
+    // CanvasKit's builder must be disposed (WebAssembly memory). The phone's
+    // native builder has no dispose() at all (react-native-skia 2.14: its
+    // memory is freed with the JS object), and calling it stopped every page
+    // with words on the emulator ("undefined is not a function").
+    const disposable = builder as unknown as { dispose?: () => void };
+    if (typeof disposable.dispose === 'function') disposable.dispose();
     return p;
   }
 

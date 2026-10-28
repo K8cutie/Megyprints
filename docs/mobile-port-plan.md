@@ -939,27 +939,118 @@ italic.
 
 ### Not proven, and what must happen before Phase 5
 
-- **On a phone.** The check runs CanvasKit 0.41.0 on a CPU surface in Node;
-  the phone runs native Skia m154 (react-native-skia-android 154.0.0).
-  Shaping, glyph placement (the `round(ascent)` calibration), bilinear
-  rounding and path smoothing may differ, so the 45 passes do not carry
-  over by themselves. **Gate before Phase 5:** a debug screen in the dev
-  build draws the same golden pages on the phone (the same `Surface.Make`
-  CPU drawing), pulls the PNGs, and holds them to the same bars. The APK has
-  not been rebuilt with react-native-skia yet.
-- **Photo colours on the phone.** On Android a Skia surface has no colour
-  space, so a photo saved with a Display P3 or Adobe RGB profile would be
-  drawn with its raw numbers and print duller than the website prints it
-  (Chrome converts every photo to sRGB). The renderer cannot fix that from
-  JavaScript in react-native-skia 2.14 (no surface or read-back colour
-  space to ask for), so **Phase 2's photo intake must turn every photo into
-  sRGB** (decode with the target colour space set to sRGB, e.g. Android
-  `ImageDecoder.setTargetColorSpace(SRGB)`, and keep that file). The golden
-  page `photo-display-p3` is there for the on-device run to prove it; in
-  Node it passes because CanvasKit's surface is sRGB.
+- **On a phone.** Done on the emulator: see "Page renderer on the phone"
+  below. All 45 pages pass the same bars when the phone's own Skia draws
+  them. Still not seen: a real phone (ARM64).
+- **Photo colours on the phone.** Measured on the emulator (below): the
+  phone draws a Display P3 photo's raw numbers and the page fails; after
+  Android's `ImageDecoder` turns the photo into sRGB (`srgbCopy` in
+  `modules/photo-files`) it passes. Before Phase 5, every photo must go
+  through that step before it is drawn on a print page.
 - **Against Android Chrome.** The website pictures are Chromium on Windows.
   Customers' print files are mostly made in Chrome on Android (FreeType
   letters), which may sit even closer to the app's text.
+
+## Page renderer on the phone (2026-10-28, the gate before print files in the app)
+
+The Node check above runs Skia's CanvasKit build. This run draws the same 45
+golden pages with **the phone's own Skia** (react-native-skia 2.14 native,
+Skia m154, Hermes, release build) on the `pwa_test` emulator (Android 14,
+x86_64), and holds the pictures to the website's with the same bars and the
+same pixelmatch code. **All 45 pages pass.**
+
+### What was built (all in `mobile/`, no website change)
+
+- **Debug screen "Golden pages"** (`src/app/golden-pages.tsx`, logic in
+  `src/dev/goldenRun.ts`): draws every golden page with
+  `PageDrawer.renderPrintPage` (CPU surface, `Skia.Surface.Make`, print size
+  with bleed), with and without its words, and writes the PNGs and
+  `report.json` (the lines each text breaks into and how wide the phone's
+  Skia measures them, each text's box, what the plan could not draw, timings)
+  to the app's files folder. Reached from **Shared code check → Open golden
+  pages**, or `megyprints-dev://golden-pages?run=1`.
+- **Only in a test build made for it:** `build-android.ps1 -GoldenPages`
+  runs `scripts/golden-phone-assets.cjs` (the golden pages, the test photo
+  files and the font files, exact bytes as base64, about 4 MB, in
+  `golden-phone/bundle.json`, not in git; it stops if the website pictures
+  are out of date) and sets `MEGY_GOLDEN_PAGES=1`, so Metro resolves
+  `megy-golden-pages` to that file (`goldenPages.js`). Every other build gets
+  `src/dev/noGoldenPages.json` (`null`): no test pages, no link
+  (`test/goldenBuild.test.ts`).
+- `scripts/golden-phone-run.cjs --device <serial>`: installs the APK, opens
+  the screen with `run=1`, waits, pulls the folder into
+  `tools/golden/phone/` (`adb root` on an emulator without Google Play;
+  `run-as` for a debug build).
+- `npm run golden:phone` (`test/goldenPhone.check.ts`, not part of
+  `npm run check`): checks the phone drew from the same website pictures and
+  today's renderer code (a fingerprint of `src/render`, `goldenRun.ts` and the
+  shared files they import), then runs `comparePage` / `pageFailures` /
+  `lineFailures` on every page and writes `tools/golden/phone-out/`
+  (`table.md`, `report.json`, pixelmatch diffs, website | phone | diff
+  pictures).
+- `src/render/pageWords.ts`: the lines and boxes a plan draws (`appWords`),
+  moved out of the test so the phone works them out with its own Skia.
+- The Node check has a new test: the phone's run code, given CanvasKit,
+  draws pixel for pixel what the check draws (so a phone difference is the
+  phone's Skia, nothing else).
+
+### Results (emulator, release APK)
+
+| | Node (CanvasKit) | Phone (native Skia) | Bar |
+|---|---|---|---|
+| Pixels differing outside the words, worst page | 0.061% | 0.063% (frame-thin-dotted) | 0.15% |
+| Worst 64 px tile | 0.00% | 0.00% | 1% |
+| Each text's ink, worst | 4.69% | 3.24% (free-title-outline) | 6% |
+| 8 px blocks, worst | 26.5 | 24.8 (64-script-caption) | 40 |
+| Where text sits, worst | 0.36 px | 0.35 px (quote-in-photo-frame) | 0.5 px |
+| Lines as print drew them | all | all 21 lines, 12 text pages | exact |
+
+- The phone's pictures are not the Node pictures: none of the 45 is pixel
+  for pixel the same. On photo pages the two Skias differ by 1 to 3 levels
+  (bilinear rounding; on the faded pages half the pixels are 1 level apart),
+  on text pages letter edges differ by up to 37 levels (FreeType builds).
+  Both sit within the bars, the phone's letters a little closer to the
+  website's than CanvasKit's.
+- Drawing a page took 13 to 93 ms on the emulator; the whole run (46
+  pictures, 12 drawn twice, PNG encoding and writing) 13.3 s. Two runs gave
+  byte-identical PNGs. Highest memory seen during a run: 211 MB (PSS,
+  sampled about once a second).
+- **Found and fixed:** every page with words stopped on the phone with
+  "TypeError: undefined is not a function": `pageText.ts` called
+  `ParagraphBuilder.dispose()`, which CanvasKit has and the native build does
+  not (react-native-skia 2.14 installs `dispose` on most native objects, not
+  on the paragraph builder). It now calls it only where it exists. Nothing
+  else differed.
+
+### The Display P3 photo
+
+- Android reads the test photo (`photo-8.png`, a PNG with a P3 profile) as
+  **"Display P3"**. The phone's Skia draws it with its raw numbers (the
+  surface has no colour space): the page **fails**, 3.67% of pixels off,
+  tiles 100% off, up to 64 levels. The red patch prints (220, 40, 40) where
+  the website prints (240, 0, 21); the green (40, 170, 70) for (0, 173, 53).
+- The same page with the photo first turned into sRGB by Android's
+  `ImageDecoder` (`setTargetColorSpace(SRGB)`, then PNG) passes: 0.026% of
+  pixels off, worst channel 19 levels, and the patches come out (240, 0, 21)
+  and (0, 173, 53), the website's numbers. That step is
+  `srgbCopy(source, target)` in `modules/photo-files` (Android 9+; older
+  phones get `supported: false`).
+- **What the photo intake needs (before Phase 5):** every photo drawn on a
+  print page goes through `srgbCopy` (or the same decode in memory) first.
+  To keep "photos are never copied into the app", do it at print time, one
+  photo at a time, into the cache, and delete the copy after the page is
+  drawn; a photo that is already sRGB (`converted: false`) can be drawn
+  straight from the phone. The check (`npm run golden:phone`) fails if the
+  as-is P3 page ever stops failing or the converted one stops passing.
+
+### Not proven yet
+
+- A real phone (ARM64), and other Android versions than 14.
+- Fonts came into the test build as base64 bytes; the app's own way of
+  loading the font files for print (Phase 5) is not built yet.
+- No golden photo has an EXIF rotation, and none is a JPEG or HEIC: the
+  phone's decode of those is not compared yet.
+- A low-memory phone (the emulator has 2 GB).
 
 ---
 
