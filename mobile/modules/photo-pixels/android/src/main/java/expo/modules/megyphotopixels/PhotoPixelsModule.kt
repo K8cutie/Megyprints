@@ -32,7 +32,7 @@ import kotlin.math.min
 /**
  * Megy's photo check on the phone (see ../../../../../../index.ts): a small
  * copy of a photo, made the way the website's browser makes it, and Google
- * ML Kit's face finder on that copy.
+ * ML Kit's face finder on a copy of the same size.
  *
  * THE SMALL COPY. The website asks Chrome for each photo at CHECK_LONG_SIDE
  * (800 px) on its long side: createImageBitmap(..., resizeQuality 'medium').
@@ -51,21 +51,27 @@ import kotlin.math.min
  *      same pixels when the halved sides are even, as phone photos' are).
  * One whole photo is decoded at a time (a 12 MP photo is 48 MB while it is
  * halved: what the website's browser holds too). A photo over
- * MAX_FULL_PIXELS is first decoded at half size by the JPEG decoder (close
- * to, not exactly, the website's copy).
+ * MAX_FULL_PIXELS (24 MP) is first decoded at half size by the JPEG decoder
+ * (close to, not exactly, the website's copy: tools/photo-check measures a
+ * 50 MP picture).
  *
  * THE FACES. ML Kit (com.google.mlkit:face-detection, its model inside the
- * app: no download, no network) on the same small copy, straight from
- * memory: each face's box, its two eye points and each eye's chance of being
- * open, in the small copy's pixels. Runs on a background thread, never on
- * the app's shared module thread, so other phone calls (the photo grid) are
- * not held up while it looks. Its model takes about 80 MB while loaded, so
- * it is let go IDLE_CLOSE_MS after its last photo and loaded again (a
- * fraction of a second) when the next photo comes.
+ * app: no download; the photos never leave the phone, though ML Kit sends
+ * Google anonymous usage numbers, see src/lib/faceModel.ts) on a copy of the
+ * same size, straight from memory: each face's box, its two eye points and
+ * each eye's chance of being open, in that copy's pixels. That copy is made
+ * the quick way (the decoder's own 1/2, 1/4, 1/8 shrink, then Android's
+ * scaling, then the EXIF turn): ML Kit is a different model from the
+ * website's anyway, so it does not need the browser's exact pixels, and no
+ * whole photo is held for it. Runs on a background thread, never on the
+ * app's shared module thread, so other phone calls (the photo grid) are not
+ * held up while it looks. Its model takes about 80 MB while loaded, so it is
+ * let go IDLE_CLOSE_MS after its last photo and loaded again (a fraction of
+ * a second) when the next photo comes.
  *
  * `size(uri)`: the photo's size as shown, from its header only.
  * `pixels(uri, w, h)`: the small copy's RGBA bytes, row by row.
- * `faces(uri, w, h)`: the faces ML Kit finds on that small copy.
+ * `faces(uri, w, h)`: the faces ML Kit finds on a `w` × `h` copy (quick, as above).
  */
 class PhotoPixelsModule : Module() {
   private val context
@@ -109,7 +115,7 @@ class PhotoPixelsModule : Module() {
 
     AsyncFunction("faces") Coroutine { uri: String, width: Int, height: Int ->
       withContext(Dispatchers.IO) {
-        val px = smallCopy(uri, width, height)
+        val px = quickCopy(uri, width, height)
         val finder = takeFaceFinder()
         try {
           val bmp = Bitmap.createBitmap(px, width, height, Bitmap.Config.ARGB_8888)
@@ -209,6 +215,43 @@ class PhotoPixelsModule : Module() {
       }
     }
     return turn(raw, fw, fh, orientation)
+  }
+
+  /**
+   * A `width` × `height` copy (as shown) for ML Kit, the quick way: the
+   * decoder's own shrink to the nearest power of two at or above that size
+   * (a few MB, never the whole photo), Android's filtered scaling to the
+   * size, then the EXIF turn. ARGB ints, row by row.
+   */
+  private fun quickCopy(address: String, width: Int, height: Int): IntArray {
+    if (width <= 0 || height <= 0) throw IllegalArgumentException("No size asked for")
+    val uri = Uri.parse(address)
+    val resolver = context.contentResolver
+    val orientation = orientationOf(uri)
+    val turned = orientation in TURNED
+    val fw = if (turned) height else width
+    val fh = if (turned) width else height
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IllegalStateException("The photo could not be read")
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= fw && bounds.outHeight / (sample * 2) >= fh) sample *= 2
+    val opts = BitmapFactory.Options().apply {
+      inSampleSize = sample
+      inPreferredConfig = Bitmap.Config.ARGB_8888
+      if (Build.VERSION.SDK_INT >= 26) inPreferredColorSpace = ColorSpace.get(ColorSpace.Named.SRGB)
+    }
+    val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+      ?: throw IllegalStateException("The photo could not be decoded")
+    val sized = if (decoded.width == fw && decoded.height == fh) decoded else Bitmap.createScaledBitmap(decoded, fw, fh, true)
+    try {
+      val px = IntArray(fw * fh)
+      sized.getPixels(px, 0, fw, 0, 0, fw, fh)
+      return turn(px, fw, fh, orientation)
+    } finally {
+      if (sized !== decoded) sized.recycle()
+      decoded.recycle()
+    }
   }
 
   /** A halving: `w` × `h` ARGB ints. */

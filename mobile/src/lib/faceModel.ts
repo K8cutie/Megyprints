@@ -1,9 +1,19 @@
 /* ══════════════════════════════════════════════════════════════════════════
    GOOGLE ML KIT FACE FINDING, on the phone: com.google.mlkit:face-detection
    16.1.7, the "bundled" kind (its model is inside the app: no Google Play
-   download, works with no network), called by the app's own native module
-   (modules/photo-pixels) on the photo check's small copy, straight from
-   memory.
+   download, finds faces with no network), called by the app's own native
+   module (modules/photo-pixels) on a copy of the photo the photo check's
+   size, straight from memory.
+
+   PRIVACY: the photos never leave the phone. But ML Kit is not silent: it
+   brings Google's usage-log uploader (com.google.android.datatransport,
+   "cct"), and Google's ML Kit terms say the on-device APIs send Google
+   anonymous usage and performance numbers, with device and app details.
+   Before the app ships with this module: list ML Kit in the Play Data
+   safety form (Google's ML Kit data-disclosure page says what to tick), and
+   add it to the privacy page's service providers ("Google ML Kit: finds
+   faces on your phone; your photos are never sent"). docs/mobile-port-plan.md
+   has this on its list for the store.
 
    Why not a React Native wrapper library: the one tried
    (@infinitered/react-native-mlkit-face-detection 5.0.0) builds with Expo

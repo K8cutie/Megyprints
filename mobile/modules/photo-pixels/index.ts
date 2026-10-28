@@ -3,10 +3,14 @@
    It makes a SMALL copy of a photo on the phone the way the website's
    browser makes it (Chrome's createImageBitmap 'medium' resize: the same
    pixels, ±1; the EXIF turn applied; sRGB), and runs Google ML Kit's face
-   finder on that copy (its model inside the app: no download, no network):
+   finder on a copy of the same size (its model inside the app: no download;
+   the photos never leave the phone, though ML Kit sends Google anonymous
+   usage numbers, see src/lib/faceModel.ts):
      • pixels: the small copy's RGBA bytes, for the shared check rules
                (blur, repeats);
-     • faces:  the faces ML Kit finds on the same small copy, in its pixels.
+     • faces:  the faces ML Kit finds on a width × height copy (made by
+               Android's own decoder: ML Kit does not need the browser's
+               exact pixels), in that copy's pixels.
    Both run on Android's background threads. Jest has no native modules:
    photoPixelsAvailable is false there. */
 import { requireOptionalNativeModule } from 'expo';
@@ -53,7 +57,7 @@ export function smallCopyPixels(uri: string, width: number, height: number): Pro
   return need().pixels(uri, width, height);
 }
 
-/** The faces ML Kit finds on the `width` × `height` small copy. */
+/** The faces ML Kit finds on a `width` × `height` copy of the photo (as shown). */
 export function smallCopyFaces(uri: string, width: number, height: number): Promise<NativeFace[]> {
   return need().faces(uri, width, height);
 }

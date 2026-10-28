@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   grayscale, tileSharpness, dHash, hamming, eyeAspectRatio, eyesClosedIn,
   isBlurry, medianSharpness, photoQuality, findRepeats, suggestLeaveOut,
-  nextCheckJob, checkIsReady, checkProgress, checkCopySize, basicCheck, faceVerdict,
+  nextCheckJob, checkIsReady, checkProgress, checkCopySize, basicCheck, checkFrom, faceVerdict,
   BLUR_ABS, REPEAT_BITS, CHECK_LONG_SIDE, type CheckablePhoto, type PhotoCheck,
 } from './photoCheck';
 
@@ -140,6 +140,8 @@ describe('one photo, from its small copy', () => {
     expect(basicCheck(rgba, w, h)).toEqual({ v: 1, sharp: tileSharpness(gray, w, h), hash: dHash(gray, w, h), faces: null, eyesClosed: false });
     // The app hands in a plain Uint8Array (its decoder's bytes): same answer.
     expect(basicCheck(new Uint8Array(rgba), w, h)).toEqual(basicCheck(rgba, w, h));
+    // The app runs the steps one by one and finishes with checkFrom: same answer.
+    expect(checkFrom(tileSharpness(gray, w, h), dHash(gray, w, h))).toEqual(basicCheck(rgba, w, h));
   });
 
   it('faceVerdict counts faces large enough to judge and asks the closed-eyes rule', () => {

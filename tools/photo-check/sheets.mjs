@@ -2,21 +2,26 @@
 /* ══════════════════════════════════════════════════════════════════════════
    THE FACE DIFFERENCES, AS PICTURES, so a person can see which finder is
    right. Run after compare.mjs.
-     • out/eyes-sheet.png: every face where the website (face-api.js) and
-       the phone (ML Kit) judge the eyes differently, cut out of its photo,
-       with both scores under it;
+     • out/eyes-sheet.png: every face behind a picture where the website
+       (face-api.js) and the phone (ML Kit) judge the eyes differently, cut
+       out of its photo, with both scores under it: faces both finders found
+       and judge differently, faces only the phone found that it calls shut,
+       and faces only the website found that it calls shut;
      • out/faces-sheet.png: the photos where the two find the most
        different numbers of faces, with the website's boxes (blue) and the
        phone's (terracotta) drawn on.
 
-   Each face is the pair the comparison matched (website box ↔ phone box,
-   overlap ≥ 0.2), cut around the website's box with some room. Under it:
+   A face both found is the pair the comparison matched (website box ↔ phone
+   box, overlap ≥ 0.2), cut around the website's box with some room; a face
+   one side alone found is cut around that side's box. Under it:
      W = the website's eye aspect ratios (right, left; shut under 0.19),
-     P = the phone's open chances (right, left; shut under 0.3),
-   and which side calls the face's eyes shut.
+     P = the phone's open chances (right, left; shut under EYE_SHUT_BELOW,
+         read only on faces of MIN_EYE_FACE_PX or more: mobile/src/lib/
+         phoneFaces.ts, read through out/rules.mjs, which compare.mjs makes),
+   the face's height in the 800 px copy, and which side calls it shut.
    ══════════════════════════════════════════════════════════════════════════ */
 import { chromium } from 'playwright-core';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -26,9 +31,9 @@ const web = JSON.parse(fs.readFileSync(path.join(OUT, 'web.json'), 'utf8'));
 const phone = JSON.parse(fs.readFileSync(path.join(OUT, 'phone.json'), 'utf8'));
 const P = new Map(phone.rows.map((r) => [r.file, r]));
 
-const EAR = 0.19, MIN_SHARE = 0.08;
-// The phone's line between open and shut (mobile/src/lib/phoneFaces.ts EYE_SHUT_BELOW).
-const OPEN = Number(/export const EYE_SHUT_BELOW = ([0-9.]+);/.exec(fs.readFileSync(path.join(HERE, '..', '..', 'mobile', 'src', 'lib', 'phoneFaces.ts'), 'utf8'))[1]);
+// The website's rules and the app's eye rule, as compare.mjs bundled them.
+const R = await import(pathToFileURL(path.join(OUT, 'rules.mjs')).href);
+const EAR = R.EYE_CLOSED_EAR, MIN_SHARE = R.MIN_FACE_SHARE;
 const iou = (a, b) => {
   const x0 = Math.max(a.x, b.x), y0 = Math.max(a.y, b.y), x1 = Math.min(a.x + a.width, b.x + b.width), y1 = Math.min(a.y + a.height, b.y + b.height);
   const inter = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
@@ -43,20 +48,35 @@ for (const w of web.rows) {
   const wf = w.faces.faces.filter((f) => f.box.height >= h * MIN_SHARE);
   const pf = p.mlFaces.filter((f) => f.box.height >= h * MIN_SHARE);
   const used = new Set();
+  const scale = w.width / w.faces.w;
   for (const a of wf) {
     let best = -1, bi = -1;
     pf.forEach((b, j) => { if (!used.has(j)) { const v = iou(a.box, b.box); if (v > best) { best = v; bi = j; } } });
-    if (best < 0.2) continue;
+    const webShut = a.earLeft < EAR && a.earRight < EAR;
+    if (best < 0.2) {
+      // Only the website found this face.
+      if (webShut) cases.push({ file: w.file, scale, box: a.box, webEar: [a.earRight, a.earLeft], phoneOpen: null, webShut, phoneShut: false, only: 'website' });
+      continue;
+    }
     used.add(bi);
     const b = pf[bi];
-    const webShut = a.earLeft < EAR && a.earRight < EAR;
-    const phoneShut = b.leftEyeOpen != null && b.rightEyeOpen != null && b.leftEyeOpen < OPEN && b.rightEyeOpen < OPEN;
+    const phoneShut = R.phoneEyesShut(b);
     if (webShut !== phoneShut) {
-      cases.push({ file: w.file, scale: w.width / w.faces.w, box: a.box, webEar: [a.earRight, a.earLeft], phoneOpen: [b.rightEyeOpen, b.leftEyeOpen], webShut, phoneShut });
+      cases.push({ file: w.file, scale, box: a.box, faceHeight: b.box.height, webEar: [a.earRight, a.earLeft], phoneOpen: [b.rightEyeOpen, b.leftEyeOpen], judged: R.eyesJudged(b), webShut, phoneShut, only: null });
     }
   }
+  // Only the phone found these faces.
+  pf.forEach((b, j) => {
+    if (!used.has(j) && R.phoneEyesShut(b)) {
+      cases.push({ file: w.file, scale, box: b.box, faceHeight: b.box.height, webEar: null, phoneOpen: [b.rightEyeOpen, b.leftEyeOpen], judged: true, webShut: false, phoneShut: true, only: 'phone' });
+    }
+  });
 }
-console.log(`${cases.length} faces judged differently`);
+// Every picture whose verdicts differ has its faces here.
+const differ = web.rows.filter((w) => P.get(w.file)?.faces && P.get(w.file).faces.eyesClosed !== w.check.eyesClosed).map((w) => w.file);
+const covered = new Set(cases.map((c) => c.file));
+const notShown = differ.filter((f) => !covered.has(f));
+console.log(`${cases.length} faces behind ${covered.size} pictures; pictures whose eye verdicts differ: ${differ.length}${notShown.length ? `, not on the sheet: ${notShown.join(', ')}` : ', all on the sheet'}`);
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
@@ -74,20 +94,25 @@ const png = await page.evaluate(async (cases) => {
   const g = c.getContext('2d');
   g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
   g.fillStyle = '#2b2420'; g.font = 'bold 16px sans-serif';
-  g.fillText(`Faces where the website and the phone judge the eyes differently (${cases.length})`, 8, 24);
+  g.fillText(`Faces behind every picture where the website and the phone judge the eyes differently (${cases.length} faces)`, 8, 24);
   for (let i = 0; i < cases.length; i++) {
     const k = cases[i];
     const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = `http://pics.local/${encodeURIComponent(k.file)}`; });
     const s = k.scale, b = k.box;
     const side = Math.max(b.width, b.height) * s * 1.5;
+    const f2 = (v) => (v == null ? '–' : v.toFixed(2));
     const cx = (b.x + b.width / 2) * s, cy = (b.y + b.height / 2) * s;
     const x = (i % COLS) * CELL, y = 40 + Math.floor(i / COLS) * (CELL + LABEL);
     g.drawImage(img, cx - side / 2, cy - side / 2, side, side, x + 4, y + 4, CELL - 8, CELL - 8);
     g.fillStyle = '#2b2420'; g.font = '12px sans-serif';
     g.fillText(k.file.replace('.jpg', ''), x + 6, y + CELL + 12);
-    g.fillText(`W ${k.webEar.map((v) => v.toFixed(2)).join(' ')}  P ${k.phoneOpen.map((v) => v.toFixed(2)).join(' ')}`, x + 6, y + CELL + 28);
+    g.fillText(`W ${k.webEar ? k.webEar.map(f2).join(' ') : 'no face'}  P ${k.phoneOpen ? k.phoneOpen.map(f2).join(' ') : 'no face'}${k.faceHeight ? `  ${Math.round(k.faceHeight)}px` : ''}`, x + 6, y + CELL + 28);
     g.fillStyle = k.phoneShut ? '#b3261e' : '#1f5fa8'; g.font = 'bold 12px sans-serif';
-    g.fillText(k.phoneShut ? 'phone: shut, web: open' : 'web: shut, phone: open', x + 6, y + CELL + 44);
+    const says = k.only === 'phone' ? 'phone: shut, web: no face'
+      : k.only === 'website' ? 'web: shut, phone: no face'
+      : k.phoneShut ? 'phone: shut, web: open'
+      : k.judged ? 'web: shut, phone: open' : 'web: shut, phone: not read';
+    g.fillText(says, x + 6, y + CELL + 44);
   }
   return c.toDataURL('image/png').split(',')[1];
 }, cases);

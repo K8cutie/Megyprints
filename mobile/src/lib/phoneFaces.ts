@@ -5,9 +5,10 @@
    The website finds faces with face-api.js: a box per face and 68 points,
    and the shared rule (src/lib/photoCheck.ts eyesClosedIn) measures each eye
    from 6 of those points (the "eye aspect ratio": about 0.3 open, under 0.19
-   shut). The phone uses Google's ML Kit (on the phone, no network, model
-   inside the app), which gives a box per face, a point for each eye, and its
-   own score for each eye: the chance it is open (0–1).
+   shut). The phone uses Google's ML Kit (it runs on the phone, model inside
+   the app: the photos never leave the phone), which gives a box per face, a
+   point for each eye, and its own score for each eye: the chance it is open
+   (0–1).
 
    So each ML Kit face becomes a CheckFace for the SAME shared rules:
      • boxHeight: ML Kit's box height (in the small copy's pixels, as on the
@@ -18,8 +19,9 @@
        website's line between open and shut), lower is shut, higher is open.
        The other points are not read by any rule (they sit at the face's
        middle). A face whose eyes ML Kit could not score (turned away, too
-       small) gets no points, so the rule leaves it out, as it leaves out a
-       face it can't judge.
+       small), or one under MIN_EYE_FACE_PX in the copy ML Kit looked at,
+       gets no points, so the rule leaves its eyes out, as it leaves out a
+       face it can't judge (the face still counts as a face).
    The decisions (both eyes shut, face big enough, how many faces) stay in
    the shared code; only the measurement comes from a different model, so
    the answers can differ from the website's where the two models see a face
@@ -52,6 +54,28 @@ export interface PhoneFace {
  *  more than the website, whose finder reads most laughing and downcast
  *  eyes as open. */
 export const EYE_SHUT_BELOW = 0.1;
+/** The smallest face (box width and height, in the pixels of the copy ML Kit
+ *  looked at: 800 px on the long side) whose eye scores are read. ML Kit's
+ *  own guide asks for faces of at least 100 × 100 px; on smaller faces its
+ *  eye scores call laughing and downcast eyes shut far more often (on the
+ *  website's sample photos, most of the phone's extra "shut" verdicts were
+ *  faces under this size, several the website's finder did not see at all).
+ *  Smaller faces still count as faces, and still need MIN_FACE_SHARE to
+ *  count at all, as on the website. */
+export const MIN_EYE_FACE_PX = 100;
+
+/** Are this face's eyes judged on the phone? ML Kit scored both, and the
+ *  face is at least MIN_EYE_FACE_PX in both directions. */
+export function eyesJudged(f: PhoneFace): boolean {
+  return f.leftEyeOpen != null && f.rightEyeOpen != null && f.box.width >= MIN_EYE_FACE_PX && f.box.height >= MIN_EYE_FACE_PX;
+}
+
+/** This face's eyes are shut by the phone's rule (both under the line, on a
+ *  face whose eyes are judged). What toCheckFace's points tell the shared
+ *  rule, said directly, for the comparison tools (tools/photo-check). */
+export function phoneEyesShut(f: PhoneFace): boolean {
+  return eyesJudged(f) && f.leftEyeOpen! < EYE_SHUT_BELOW && f.rightEyeOpen! < EYE_SHUT_BELOW;
+}
 /** The eye aspect ratio given to a wide-open eye (chance 1): a typical open eye. */
 const OPEN_EAR = 0.3;
 
@@ -81,7 +105,7 @@ export function eyePoints(c: Pt, width: number, ear: number): Pt[] {
 /** An ML Kit face → the face the shared photo-check rules read. */
 export function toCheckFace(f: PhoneFace): CheckFace {
   const { box } = f;
-  if (f.leftEyeOpen == null || f.rightEyeOpen == null || !(box.width > 0 && box.height > 0)) {
+  if (!eyesJudged(f) || f.leftEyeOpen == null || f.rightEyeOpen == null) {
     return { boxHeight: Math.max(0, box.height), landmarks: [] };
   }
   const eyeWidth = box.width * 0.2;

@@ -2,11 +2,11 @@
    phoneFaces.ts) on a made-up phone: the website's shared rules decide,
    ML Kit's answers are turned into what those rules read, photos are
    decoded a few at a time, and nothing is decoded twice. */
-import { basicCheck, checkCopySize, EYE_CLOSED_EAR, faceVerdict, MIN_FACE_SHARE } from '@web/lib/photoCheck';
+import { basicCheck, checkCopySize, checkIsReady, EYE_CLOSED_EAR, faceVerdict, findRepeats, MIN_FACE_SHARE } from '@web/lib/photoCheck';
 import { faceGroupCentre } from '@web/pages/builder/faceCentre';
 import type { StoredPhoto } from '@web/shared/platform';
 import { createPhoneChecks, PHONE_CHECK_AT_ONCE, type PhoneCheckDevice } from '../src/lib/phonePhotoCheck';
-import { earFromOpenChance, EYE_SHUT_BELOW, fromNative, toCheckFace, type PhoneFace } from '../src/lib/phoneFaces';
+import { earFromOpenChance, EYE_SHUT_BELOW, eyesJudged, fromNative, MIN_EYE_FACE_PX, phoneEyesShut, toCheckFace, type PhoneFace } from '../src/lib/phoneFaces';
 
 jest.mock('expo', () => ({ requireOptionalNativeModule: () => null }));
 
@@ -56,6 +56,32 @@ describe("ML Kit's eye scores on the website's scale", () => {
     const h = 600, tiny = h * MIN_FACE_SHARE - 1;
     const small = toCheckFace(face({ box: { x: 10, y: 10, width: tiny, height: tiny }, leftEyeOpen: 0, rightEyeOpen: 0 }));
     expect(faceVerdict([small], h)).toEqual({ faces: 0, eyesClosed: false });
+  });
+
+  it("a face under MIN_EYE_FACE_PX (ML Kit's own 100 px guide) counts as a face, but its eyes are not judged", () => {
+    const h = 600;
+    const at = (side: number) => face({ box: { x: 10, y: 10, width: side, height: side }, leftEye: null, rightEye: null, leftEyeOpen: 0.01, rightEyeOpen: 0.02 });
+    expect(MIN_EYE_FACE_PX).toBe(100);
+    expect(MIN_EYE_FACE_PX - 1).toBeGreaterThan(h * MIN_FACE_SHARE); // big enough to count
+    expect(faceVerdict([toCheckFace(at(MIN_EYE_FACE_PX - 1))], h)).toEqual({ faces: 1, eyesClosed: false });
+    expect(faceVerdict([toCheckFace(at(MIN_EYE_FACE_PX))], h)).toEqual({ faces: 1, eyesClosed: true });
+    // Narrow but tall is still under the guide.
+    expect(eyesJudged(face({ box: { x: 0, y: 0, width: 80, height: 200 } }))).toBe(false);
+  });
+
+  it("phoneEyesShut says what the shared rule decides from toCheckFace's points", () => {
+    let seed = 7;
+    const r = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const h = 600;
+    for (let i = 0; i < 400; i++) {
+      const side = 50 + r() * 200;
+      const f = face({
+        box: { x: 50, y: 50, width: side, height: side * (0.9 + r() * 0.3) },
+        leftEyeOpen: r() < 0.1 ? null : r() * 0.3,
+        rightEyeOpen: r() < 0.1 ? null : r() * 0.3,
+      });
+      expect(faceVerdict([toCheckFace(f)], h).eyesClosed).toBe(phoneEyesShut(f));
+    }
   });
 
   it('the eye points sit where ML Kit found the eyes, as wide as a fifth of the face', () => {
@@ -161,10 +187,40 @@ describe('the photo check on the phone', () => {
     expect(calls.find).toEqual(['content://media/external/images/media/1|800x600']);
   });
 
-  it('when ML Kit fails the check says so (the builder then leaves that photo unchecked)', async () => {
-    const { device } = fakePhone({ faces: { init: async () => true, find: async () => { throw new Error('ML Kit broke'); } } });
+  it('when ML Kit fails, the photo has no eye test: the blur answer still comes, faces stay unknown (never stuck)', async () => {
+    for (const faces of [
+      { init: async () => true, find: async (): Promise<PhoneFace[]> => { throw new Error('ML Kit broke'); } },
+      { init: async (): Promise<boolean> => { throw new Error('no model'); }, find: async () => [face()] },
+    ]) {
+      const { device } = fakePhone({ faces });
+      const { photoCheck } = createPhoneChecks(device);
+      const basic = await photoCheck.check(photo(1), 4032, 3024, { faces: false });
+      // The face pass resolves (the builder then stores facesTried: true).
+      await expect(photoCheck.check(photo(1), 4032, 3024)).resolves.toEqual(basic);
+      expect(basic.faces).toBeNull();
+      expect(basic.eyesClosed).toBe(false);
+      // Straight to the face pass, with no blur pass first: the same.
+      const fresh = createPhoneChecks(fakePhone({ faces }).device).photoCheck;
+      await expect(fresh.check(photo(2), 4032, 3024)).resolves.toMatchObject({ faces: null, eyesClosed: false });
+    }
+  });
+
+  it("a face pass that fails leaves the builder's photo check ready (the shared checkIsReady)", async () => {
+    // Two repeats: the face pass runs on both; one fails. The builder's
+    // merge (useBuilderState) stores faces + facesTried: true either way.
+    const { device } = fakePhone({ faces: { init: async () => true, find: async (uri) => { if (uri.endsWith('/2')) throw new Error('out of memory'); return [face()]; } } });
     const { photoCheck } = createPhoneChecks(device);
-    await expect(photoCheck.check(photo(1), 4032, 3024)).rejects.toThrow('ML Kit broke');
+    const ps = [photo(1), photo(2)];
+    const stored = await Promise.all(ps.map(async (p) => {
+      const basic = await photoCheck.check(p, 4032, 3024, { faces: false });
+      const full = await photoCheck.check(p, 4032, 3024);
+      return { id: p.id, width: 4032, height: 3024, capturedAt: 1_000_000, check: { ...basic, faces: full.faces, eyesClosed: full.eyesClosed, facesTried: true } };
+    }));
+    // The same pixels for both (a burst): make them repeats.
+    stored[1].check.hash = stored[0].check.hash;
+    expect(findRepeats(stored)).toHaveLength(1);
+    expect(stored[1].check.faces).toBeNull();
+    expect(checkIsReady(stored)).toBe(true);
   });
 
   it('no face finder (or it will not start): faces stay unknown, the blur answer still comes', async () => {

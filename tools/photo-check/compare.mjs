@@ -18,7 +18,12 @@
        picking the keeper).
    Faces: counts, closed eyes, box overlap and the centring point. These come
    from different face finders (face-api.js on the website, Google ML Kit on
-   the phone), so they are expected to differ: the report says how much.
+   the phone), so they are expected to differ: the report says how much. The
+   phone's eye rule (EYE_SHUT_BELOW, MIN_EYE_FACE_PX) is read from the app's
+   own mobile/src/lib/phoneFaces.ts, bundled as it is, never copied here.
+   Also: the verdicts the app showed on its own screen (phone.json
+   "verdicts"), the app's memory (phone.json "memory", from phoneServer.mjs)
+   and the pictures over the app's 24 MP whole-decode limit.
    ══════════════════════════════════════════════════════════════════════════ */
 import { build } from 'esbuild';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -27,13 +32,17 @@ import path from 'node:path';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, 'out');
+const REPO = path.resolve(HERE, '..', '..');
 
+// The website's rules and the app's eye rule, as they are (sheets.mjs reads this too).
 const RULES = path.join(OUT, 'rules.mjs');
 await build({
   stdin: {
-    contents: `export * from '../../src/lib/photoCheck'; export { faceGroupCentre } from '../../src/pages/builder/faceCentre';`,
+    contents: `export * from '../../src/lib/photoCheck'; export { faceGroupCentre } from '../../src/pages/builder/faceCentre';
+export { EYE_SHUT_BELOW, MIN_EYE_FACE_PX, eyesJudged, phoneEyesShut } from '../../mobile/src/lib/phoneFaces';`,
     resolveDir: HERE, loader: 'ts',
   },
+  alias: { '@web': path.join(REPO, 'src') },
   bundle: true, platform: 'node', format: 'esm', outfile: RULES, logLevel: 'error',
 });
 const R = await import(pathToFileURL(RULES).href);
@@ -59,9 +68,12 @@ const sizeMismatch = files.filter((f) => { const p = P.get(f), m = M.get(f); ret
 
 /* ── Measurements, picture by picture ───────────────────────────────── */
 const meas = files.map((f) => {
-  const w = W.get(f).check, p = P.get(f).basic;
-  return { file: f, webSharp: w.sharp, phoneSharp: p.sharp, ratio: p.sharp / Math.max(1e-9, w.sharp), hashBits: R.hamming(w.hash, p.hash) };
+  const w = W.get(f).check, p = P.get(f).basic, m = M.get(f);
+  return { file: f, megapixels: Math.round((m.width * m.height) / 1e5) / 10, webSharp: w.sharp, phoneSharp: p.sharp, ratio: p.sharp / Math.max(1e-9, w.sharp), hashBits: R.hamming(w.hash, p.hash) };
 });
+// Over the app's whole-decode limit (PhotoPixelsModule.kt MAX_FULL_PIXELS, 24 MP):
+// decoded at half size first, so close to, not exactly, the website's copy.
+const overLimit = meas.filter((m) => m.megapixels > 24).map((m) => ({ file: m.file, megapixels: m.megapixels, webSharp: r1(m.webSharp), phoneSharp: r1(m.phoneSharp), ratio: r3(m.ratio), hashBits: m.hashBits }));
 const ratios = meas.map((m) => m.ratio);
 const hashBits = meas.map((m) => m.hashBits);
 
@@ -143,8 +155,8 @@ const faceRows = files.map((f) => {
       webClosed: a.earLeft < R.EYE_CLOSED_EAR && a.earRight < R.EYE_CLOSED_EAR,
       webEar: [r3(a.earRight), r3(a.earLeft)],
       phoneOpen: [r3(b.rightEyeOpen), r3(b.leftEyeOpen)],
-      phoneClosed: b.leftEyeOpen != null && b.rightEyeOpen != null && b.leftEyeOpen < 0.3 && b.rightEyeOpen < 0.3,
-      phoneScored: b.leftEyeOpen != null && b.rightEyeOpen != null,
+      phoneClosed: R.phoneEyesShut(b),
+      phoneJudged: R.eyesJudged(b),
     };
   });
   const sizeOk = p.faces != null;
@@ -166,25 +178,30 @@ for (const r of fr) {
 }
 const totalW = fr.reduce((s, r) => s + r.webBoxes, 0), totalP = fr.reduce((s, r) => s + r.phoneBoxes, 0), totalM = fr.reduce((s, r) => s + r.matched, 0);
 const allEyes = fr.flatMap((r) => r.eyes);
-const eyeConf = { bothOpen: 0, bothClosed: 0, webOnly: 0, phoneOnly: 0, phoneUnscored: 0 };
+const eyeConf = { bothOpen: 0, bothClosed: 0, webOnly: 0, phoneOnly: 0, phoneNotJudged: 0 };
 for (const e of allEyes) {
-  if (!e.phoneScored) eyeConf.phoneUnscored++;
+  if (!e.phoneJudged) eyeConf.phoneNotJudged++;
   else if (e.webClosed && e.phoneClosed) eyeConf.bothClosed++; else if (e.webClosed) eyeConf.webOnly++; else if (e.phoneClosed) eyeConf.phoneOnly++; else eyeConf.bothOpen++;
 }
 
 // Where the phone's "shut" line (EYE_SHUT_BELOW, an ML Kit open chance)
-// could sit: how many pictures each line calls shut, and how often that
+// could sit, with and without the smallest face whose eyes are read
+// (MIN_EYE_FACE_PX): how many pictures each calls shut, and how often that
 // agrees with the website. (A face counts when it is big enough to judge.)
-const eyeLines = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5].map((line) => {
-  let shut = 0, same = 0;
-  for (const f of files) {
-    const p = P.get(f), h = W.get(f).faces.h;
-    const phoneShut = (p.mlFaces ?? []).some((x) => x.box.height >= h * R.MIN_FACE_SHARE && x.leftEyeOpen != null && x.rightEyeOpen != null && x.leftEyeOpen < line && x.rightEyeOpen < line);
-    if (phoneShut) shut++;
-    if (phoneShut === W.get(f).check.eyesClosed) same++;
+const eyeLines = [];
+for (const minPx of [0, R.MIN_EYE_FACE_PX]) {
+  for (const line of [0.05, 0.1, 0.15, 0.2, 0.3, 0.5]) {
+    let shut = 0, same = 0;
+    for (const f of files) {
+      const p = P.get(f), h = W.get(f).faces.h;
+      const phoneShut = (p.mlFaces ?? []).some((x) => x.box.height >= h * R.MIN_FACE_SHARE && x.box.width >= minPx && x.box.height >= minPx
+        && x.leftEyeOpen != null && x.rightEyeOpen != null && x.leftEyeOpen < line && x.rightEyeOpen < line);
+      if (phoneShut) shut++;
+      if (phoneShut === W.get(f).check.eyesClosed) same++;
+    }
+    eyeLines.push({ line, minFacePx: minPx, picturesShut: shut, agreeWithWebsite: pct(same, files.length), inUse: line === R.EYE_SHUT_BELOW && minPx === R.MIN_EYE_FACE_PX });
   }
-  return { line, picturesShut: shut, agreeWithWebsite: pct(same, files.length) };
-});
+}
 
 // Centring: web detectFaceCenter (whole picture) vs phone detectFaceCenter.
 const cen = { bothNone: 0, bothFound: 0, webOnly: 0, phoneOnly: 0, dist: [] };
@@ -223,15 +240,46 @@ if (fs.existsSync(wrapperFile)) {
   wrapperRun = { when: wr.when, sharpRatio: { median: r3(q(rs, 0.5)), min: r3(Math.min(...rs)), max: r3(Math.max(...rs)) }, hashBits: { median: q(hb, 0.5), max: Math.max(...hb) }, galleryReads: wr.gallery ?? null, screenWaits: wr.lag };
 }
 
+/* ── What the app showed on its own screen (its verdicts, worked out on the
+   phone with the same album rules), against this comparison's ── */
+let onScreen = null;
+if (phone.verdicts) {
+  const v = phone.verdicts, all = verdicts['everything together'];
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  const webShut = files.filter((f) => W.get(f).check.eyesClosed).sort();
+  onScreen = {
+    photos: v.photos,
+    blurry: { phone: v.blurry.length, website: all.blurry.web.length, sameAsWebsite: same(v.blurry, all.blurry.web) },
+    repeatSets: { phone: v.repeatSets.length, website: all.repeatSets.web.length, sameAsWebsite: same(setKey(v.repeatSets), all.repeatSets.web) },
+    eyesShut: { phone: v.eyesShut.length, website: webShut.length, both: v.eyesShut.filter((f) => webShut.includes(f)).length },
+    leaveOut: {
+      phone: v.leaveOut.blurry.length + v.leaveOut.repeats.length,
+      website: all.leaveOutWithEyes.web.blurry.length + all.leaveOutWithEyes.web.repeats.length,
+      sameAsWebsite: same([...v.leaveOut.blurry].sort(), all.leaveOutWithEyes.web.blurry) && same([...v.leaveOut.repeats].sort(), all.leaveOutWithEyes.web.repeats),
+    },
+    // The app's own sums agree with this tool's, from the same answers.
+    sameAsThisTool: same(v.blurry, all.blurry.phone) && same(setKey(v.repeatSets), all.repeatSets.phone),
+  };
+}
+
+const groups = {
+  madeUp: ALBUMS['made-up pictures'].length,
+  samples: files.filter((f) => f.startsWith('megy-sample-')).length,
+  sampleCopies: files.filter((f) => /^pc-s(blur|near)-/.test(f)).length,
+};
 const report = {
   when: new Date().toISOString(),
   wrapperRun,
-  pictures: { compared: files.length, missing, sizeMismatch },
+  pictures: { compared: files.length, ...groups, missing, sizeMismatch },
+  onScreen,
+  memory: phone.memory ? { peakPssMB: phone.memory.peakPssMB, peakRssMB: phone.memory.peakRssMB, lastPssMB: phone.memory.lastPssMB, firstPssMB: phone.memory.samples[0]?.pss ?? null, how: phone.memory.how } : null,
   measurements: {
     sharpRatio: { median: r3(q(ratios, 0.5)), min: r3(Math.min(...ratios)), max: r3(Math.max(...ratios)), within5pct: pct(ratios.filter((x) => Math.abs(x - 1) <= 0.05).length, ratios.length), within15pct: pct(ratios.filter((x) => Math.abs(x - 1) <= 0.15).length, ratios.length) },
     hashBits: { median: q(hashBits, 0.5), max: Math.max(...hashBits), zero: pct(hashBits.filter((x) => x === 0).length, hashBits.length), atMost3: pct(hashBits.filter((x) => x <= 3).length, hashBits.length) },
     worstSharp: [...meas].sort((a, b) => Math.abs(Math.log(b.ratio)) - Math.abs(Math.log(a.ratio))).slice(0, 5).map((m) => ({ ...m, ratio: r3(m.ratio), webSharp: r1(m.webSharp), phoneSharp: r1(m.phoneSharp) })),
     worstHash: [...meas].sort((a, b) => b.hashBits - a.hashBits).slice(0, 5).map((m) => ({ file: m.file, hashBits: m.hashBits })),
+    worstSharpPct: r3(Math.max(...ratios.map((x) => Math.abs(x - 1))) * 100),
+    overLimit,
   },
   verdicts,
   faces: {
@@ -264,23 +312,27 @@ const m = report.measurements, F = report.faces, C = report.centring, S = speed;
 const html = `<!doctype html><meta charset="utf-8"><title>Photo check: phone vs website</title>
 <style>body{font:15px/1.45 system-ui,sans-serif;margin:24px;color:#2b2420;max-width:1100px}h1{color:#B85C38;font-size:22px}h2{font-size:17px;margin-top:22px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #e3d6cc;padding:5px 8px;text-align:left;vertical-align:top}th{background:#f6eee8}.ok{color:#1f7a3a}.no{color:#b3261e}.small{color:#6b5d54;font-size:13px}</style>
 <h1>Megy photo check: the 2.0 app (Android, ML Kit) vs the website (face-api.js)</h1>
-<p class="small">${files.length} pictures: 60 made-up (scenes, blurred copies, near copies, EXIF-turned copies) + ${files.length - 60} of the website's sample photos and copies. ${missing.length ? `Missing on the phone: ${missing.length}.` : 'None missing.'} Sizes measured differently: ${sizeMismatch.length}.</p>
+<p class="small">${files.length} pictures: ${groups.madeUp} made-up (scenes, blurred copies, near copies, EXIF-turned copies, one scene and its near copy at 50 MP), the ${groups.samples} sample photos and ${groups.sampleCopies} altered copies of them. ${missing.length ? `Missing on the phone: ${missing.length}.` : 'None missing.'} Sizes measured differently: ${sizeMismatch.length}.</p>
 <h2>Blur and repeats (the same shared rules, each side's own decoding)</h2>
 <table><tr><th>Album</th><th>Photos</th><th>Blurry (web / phone)</th><th>Repeat sets</th><th>Repeat pairs agree</th><th>Leave-out list, no eyes</th><th>Leave-out list, with eyes</th></tr>${rowsV}</table>
-<p class="small">Sharpness phone÷web: median ${m.sharpRatio.median}, range ${m.sharpRatio.min}–${m.sharpRatio.max}, within 5%: ${m.sharpRatio.within5pct}% of pictures. Fingerprint bits different: median ${m.hashBits.median}, max ${m.hashBits.max}; identical on ${m.hashBits.zero}%.</p>
+<p class="small">Sharpness phone÷web: median ${m.sharpRatio.median}, range ${m.sharpRatio.min}–${m.sharpRatio.max} (worst ${m.worstSharpPct}% apart), within 5%: ${m.sharpRatio.within5pct}% of pictures. Fingerprint bits different: median ${m.hashBits.median}, max ${m.hashBits.max}; identical on ${m.hashBits.zero}%.
+${m.overLimit.length ? `Over the app's 24 MP whole-decode limit: ${m.overLimit.map((o) => `${esc(o.file)} (${o.megapixels} MP) sharpness ${o.phoneSharp} vs ${o.webSharp}, fingerprint ${o.hashBits} bits apart`).join('; ')}.` : ''}</p>
+${report.onScreen ? `<p>On the phone's own screen (the same album rules, worked out on the phone): blurry ${report.onScreen.blurry.phone} (website ${report.onScreen.blurry.website}, ${report.onScreen.blurry.sameAsWebsite ? 'the same photos' : 'different photos'}), sets of repeats ${report.onScreen.repeatSets.phone} (website ${report.onScreen.repeatSets.website}, ${report.onScreen.repeatSets.sameAsWebsite ? 'the same sets' : 'different sets'}), eyes shut ${report.onScreen.eyesShut.phone} (website ${report.onScreen.eyesShut.website}, both ${report.onScreen.eyesShut.both}), suggested leaving out ${report.onScreen.leaveOut.phone} (website ${report.onScreen.leaveOut.website}, ${report.onScreen.leaveOut.sameAsWebsite ? 'the same photos' : 'different photos'}).</p>` : ''}
 <h2>Faces and closed eyes (different face finders)</h2>
 <table><tr><th>Same face count</th><th>Same "has a face"</th><th>Same closed-eyes verdict</th><th>Faces matched (web found by phone / phone found by web)</th><th>Median box overlap</th></tr>
 <tr><td>${F.faceCountSame}%</td><td>${F.hasFaceSame}%</td><td>${F.eyesClosedSame}% (both shut ${F.eyesClosedPictures.bothClosed}, web only ${F.eyesClosedPictures.webOnly}, phone only ${F.eyesClosedPictures.phoneOnly})</td><td>${F.boxes.matched} of ${F.boxes.web} / ${F.boxes.matched} of ${F.boxes.phone} (${F.boxes.webFoundByPhone}% / ${F.boxes.phoneFoundByWeb}%)</td><td>${F.boxes.medianIoU}</td></tr></table>
+<p class="small">The phone's eye rule: shut when both eyes score under ${R.EYE_SHUT_BELOW}, on faces at least ${R.MIN_EYE_FACE_PX} px. Other lines (pictures shut / agreement): ${eyeLines.map((l) => `${l.line}${l.minFacePx ? ` ≥${l.minFacePx}px` : ''}: ${l.picturesShut} / ${l.agreeWithWebsite}%${l.inUse ? ' (in use)' : ''}`).join(', ')}. Website: ${report.faces.websitePicturesShut} pictures shut.</p>
 <h2>Face centring</h2>
 <p>Same decision (face / no face): ${C.sameDecision}% (both found ${C.bothFound}, neither ${C.bothNone}, website only ${C.webOnly}, phone only ${C.phoneOnly}). Where both found faces, the points are ${C.distance.median} apart (median, share of the picture); within 0.05: ${C.distance.within005}%, within 0.1: ${C.distance.within01}%.</p>
 <h2>Speed on the phone (${esc(S.device.engine)}${S.device.dev ? ', dev build' : ''})</h2>
 <table><tr><th>Blur + repeats</th><th>Faces + eyes</th><th>Face centring (cold / again)</th><th>Screen waits (p95 / max)</th><th>Gallery read p95 (idle / blur pass / faces pass)</th></tr>
 <tr><td>${S.blurAndRepeats.medianMs} ms median (decode ${S.blurAndRepeats.decodeMedianMs}, maths ${S.blurAndRepeats.jsMedianMs}); p95 ${S.blurAndRepeats.p95Ms}</td><td>${S.facesAndEyes.medianMs} ms median (small copy made again + ML Kit); p95 ${S.facesAndEyes.p95Ms}</td><td>${S.faceCentringCold.medianMs} / ${S.faceCentringAgain.medianMs} ms</td><td>blur ${r1(S.screenWaits.basic.p95)} / ${r1(S.screenWaits.basic.max)} ms; faces ${r1(S.screenWaits.faces.p95)} / ${r1(S.screenWaits.faces.max)} ms</td><td>${S.galleryReads ? `${r1(S.galleryReads.idle.p95)} / ${r1(S.galleryReads.basic.p95)} / ${r1(S.galleryReads.faces.p95)} ms` : 'not measured'}</td></tr></table>
+${report.memory ? `<p>App memory (dumpsys meminfo, every 2 s): ${report.memory.firstPssMB} MB PSS at the start, peak ${report.memory.peakPssMB} MB PSS (${report.memory.peakRssMB} MB RSS) while checking, ${report.memory.lastPssMB} MB PSS 30 s after the last photo.</p>` : ''}
 ${report.wrapperRun ? `<p class="small">First try, through the wrapper library and the JPEG decoder's own shrink: sharpness phone÷web ${report.wrapperRun.sharpRatio.median} (range ${report.wrapperRun.sharpRatio.min}–${report.wrapperRun.sharpRatio.max}), fingerprints up to ${report.wrapperRun.hashBits.max} bits apart; gallery read p50 / p95 during the faces pass ${r1(report.wrapperRun.galleryReads?.faces?.p50)} / ${r1(report.wrapperRun.galleryReads?.faces?.p95)} ms (now ${r1(S.galleryReads?.faces?.p50)} / ${r1(S.galleryReads?.faces?.p95)} ms).</p>` : ''}
 <p class="small">Website on this PC (headless Chromium, face-api ${esc(S.websiteOnThisPC.faceApiBackend)} backend): blur ${S.websiteOnThisPC.basicMedianMs} ms, full check ${S.websiteOnThisPC.fullCheckMedianMs} ms, centring ${S.websiteOnThisPC.centreMedianMs} ms (for reference only).</p>`;
 fs.writeFileSync(path.join(OUT, 'report.html'), html);
 
-console.log(JSON.stringify({ pictures: report.pictures.compared, missing: missing.length, sizeMismatch: sizeMismatch.length, measurements: { sharpRatio: m.sharpRatio, hashBits: { median: m.hashBits.median, max: m.hashBits.max, zero: m.hashBits.zero } },
+console.log(JSON.stringify({ pictures: report.pictures, onScreen: report.onScreen, memory: report.memory, eyeLines, measurements: { sharpRatio: m.sharpRatio, worstSharpPct: m.worstSharpPct, overLimit: m.overLimit, hashBits: { median: m.hashBits.median, max: m.hashBits.max, zero: m.hashBits.zero } },
   verdicts: Object.fromEntries(Object.entries(verdicts).map(([n, v]) => [n, { blurrySame: v.blurry.same, blurry: [v.blurry.web.length, v.blurry.phone.length], repeatSetsSame: v.repeatSets.same, sets: [v.repeatSets.web.length, v.repeatSets.phone.length], pairsAgree: v.repeatPairs.agree, leaveOutNoEyes: v.leaveOutWithoutEyes.same, leaveOutWithEyes: v.leaveOutWithEyes.same }])),
   faces: { faceCountSame: F.faceCountSame, hasFaceSame: F.hasFaceSame, eyesClosedSame: F.eyesClosedSame, closed: F.eyesClosedPictures, boxes: F.boxes, eyes: F.eyesOnMatchedFaces },
   centring: C, speed: S }, null, 1));

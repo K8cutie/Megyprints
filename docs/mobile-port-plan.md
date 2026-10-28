@@ -770,7 +770,7 @@ test files; with what was on the emulator already, 2,517 photos.
 - Grid grouping by EXIF for photos without an index time (see above).
 - A real phone (not just the emulator) and a phone with 10,000+ photos.
 
-### The photo check and face centring on the phone (2026-10-28)
+### The photo check and face centring on the phone (2026-10-28, review fixes 2026-10-30)
 
 `mobile/src/lib/phonePhotoCheck.ts` `createPhoneChecks()` gives the app's
 `photoCheck` (PhotoChecker) and `faces` (FaceFinder). Phase 3's app
@@ -782,26 +782,59 @@ photoCheck: checks.photoCheck`.
   makes each photo's 800 px small copy the way the website's browser does
   (Chrome's createImageBitmap 'medium': whole decode, Skia's halvings,
   blended; checked against Chrome itself, ±1 per pixel), and the shared
-  photoCheck functions measure it. On 138 test pictures (60 made-up incl.
-  blurred, near and EXIF-turned copies, plus the 78 sample photos and 16
-  copies) sharpness matched to 0.1 %, fingerprints bit for bit, and the
-  blurry list, repeat sets and leave-out suggestions were the same as the
-  website's in every album tried.
+  photoCheck functions measure it (`grayscale`, `tileSharpness`, `dHash`,
+  finished with the shared `checkFrom`, the same steps as `basicCheck`).
+  Photos over 24 MP are first decoded at half size (memory), so for them the
+  copy is close to, not exactly, the browser's: the test set has one 50 MP
+  picture and its near copy to measure that.
 - **Faces and closed eyes**: Google ML Kit (`com.google.mlkit:face-detection`
-  16.1.7, model inside the app, no network) on the same small copy, called
-  by the same native module (a wrapper library held up Expo's shared module
-  thread and needed a JPEG copy per photo). Each face becomes the box and
-  eye points the shared rules read (`phoneFaces.ts`). Different model,
-  different answers: same "has a face" 88 %, same face count 67 % (ML Kit
-  finds more of the faces in group photos), same closed-eyes verdict 84 %
-  (ML Kit calls laughing and downcast eyes shut: 20 photos to the
-  website's 2, at its line of 0.1). `tools/photo-check` has the numbers and
-  the pictures of every difference.
+  16.1.7, model inside the app) on a copy of the same size, made the quick
+  way (the decoder's own shrink and Android's scaling: ML Kit is a different
+  model anyway, so it does not need the browser's exact pixels, and no whole
+  photo is held for it), called by the same native module (a wrapper library
+  held up Expo's shared module thread and needed a JPEG copy per photo).
+  Each face becomes the box and eye points the shared rules read
+  (`phoneFaces.ts`). Different model, different answers: the numbers are
+  under "Phone and website, side by side" below.
+- **Closed eyes, the phone's rule**: both eyes under ML Kit's open chance
+  `EYE_SHUT_BELOW` (0.1), and only on faces at least `MIN_EYE_FACE_PX`
+  (100 px) tall and wide in the 800 px copy: ML Kit's own guide asks for
+  faces of at least 100 × 100 px, and on smaller faces it called laughing
+  and downcast eyes shut. Smaller faces still count as faces. Closed eyes
+  matter in three places, all shared rules: a photo with shut eyes is kept
+  off the extra full pages; it loses half its `photoQuality`, which picks
+  the keeper in a set of repeats and orders the cover photos
+  (`CoverEditor`); and `generateAlbum` treats it as a weak photo. So where
+  the phone says "shut" and the website says "open", the phone can keep a
+  different shot of a burst, offer it later on the cover, and give it a
+  smaller place.
+- **A failed face pass never stops the check**: if ML Kit fails on a photo
+  (an error, the phone short of memory), that photo just has no eye test
+  (faces stays unknown) and the builder marks its face pass done, as on the
+  website, whose face finder answers "no faces" when it fails. Before this
+  fix, one failure on a photo in a set of repeats left the Photos step on
+  "Megy is checking your photos… N of N" for the rest of the visit.
 - **Face centring**: the same ML Kit faces through the shared
   `faceCentre.faceGroupCentre` (split out of `faceDetection.ts`, unchanged).
+- **Privacy, before the app ships with this module**: the photos never
+  leave the phone. But ML Kit brings Google's usage-log uploader
+  (`com.google.android.datatransport`, "cct", with the INTERNET permission
+  and its own service), and Google's ML Kit terms say the on-device APIs
+  send Google anonymous usage and performance numbers with device and app
+  details. So before any store or tester build has ML Kit:
+  1. **Play Data safety form**: add what ML Kit collects (Google's "ML Kit
+     data disclosure" page lists it).
+  2. **Privacy page** (`src/pages/Privacy.tsx`, "Service providers we rely
+     on"): add "Google ML Kit: finds faces on your phone; your photos are
+     never sent". Not added yet: no app that customers have uses ML Kit
+     (the Play testers' app is the 1.x shell).
+  3. Optional, for no uploads at all: remove ML Kit's uploader service with a
+     manifest `tools:node="remove"` in a config plugin, and run
+     `tools/photo-check` again to see ML Kit still works. Not tried.
 - **Not proven yet**: a real phone (only the x86_64 emulator), a store
-  (release) build's speed, P3/Adobe RGB photos (the copy is decoded to sRGB,
-  as the browser does, but none were in the test set), HEIC photos.
+  (release) build's speed (the test screen runs only in dev builds),
+  P3/Adobe RGB photos (the copy is decoded to sRGB, as the browser does, but
+  none were in the test set), HEIC photos, photos of 108 or 200 MP.
 
 ---
 

@@ -151,7 +151,15 @@ export function checkCopySize(width: number, height: number): { w: number; h: nu
  *  fills in faces and eyesClosed later. */
 export function basicCheck(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number): PhotoCheck {
   const gray = grayscale(rgba, w, h);
-  return { v: 1, sharp: tileSharpness(gray, w, h), hash: dHash(gray, w, h), faces: null, eyesClosed: false };
+  return checkFrom(tileSharpness(gray, w, h), dHash(gray, w, h));
+}
+
+/** The PhotoCheck that basicCheck's steps make (grayscale, then
+ *  tileSharpness and dHash on it). The 2.0 app runs those steps one by one,
+ *  letting its screen draw in between, and finishes here, so both build the
+ *  same PhotoCheck. */
+export function checkFrom(sharp: number, hash: string): PhotoCheck {
+  return { v: 1, sharp, hash, faces: null, eyesClosed: false };
 }
 
 /** A face found on the small copy, as the closed-eyes rule reads it: its

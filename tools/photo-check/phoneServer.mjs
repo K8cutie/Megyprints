@@ -5,7 +5,7 @@
    test screen (mobile/src/app/photo-check-lab.tsx) on an Android emulator
    or phone.
 
-     cd tools/photo-check && node phoneServer.mjs --serial emulator-5590 [--metro 8081] [--pc-port 8095]
+     cd tools/photo-check && node phoneServer.mjs --serial emulator-5566 [--metro 8081] [--pc-port 8095]
 
    Needs: the dev app (com.megyprints.app.dev) installed on that device, and
    Metro running for it (cd mobile && npx expo start, with adb reverse
@@ -15,9 +15,13 @@
      2. lets the app read all photos (READ_MEDIA_IMAGES) and forwards the
         device's localhost:8095 to this PC (adb reverse);
      3. opens the test screen (megyprints-dev://photo-check-lab), serves it
-        the list of pictures (GET /manifest) and takes its answers
-        (POST /results) into out/phone.json;
-     4. saves a screenshot of the finished screen as out/phone-lab.png.
+        the list of pictures and their taken times (GET /manifest) and takes
+        its answers (POST /results) into out/phone.json;
+     4. reads the app's memory every 2 s while it works and for 30 s after
+        (adb shell dumpsys meminfo: PSS and RSS, in MB), into phone.json's
+        "memory";
+     5. saves screenshots of the finished screen (the phone's own verdicts,
+        scrolled) as out/phone-lab-1.png, -2, … .
    Only made-up pictures and the website's sample photos are ever copied.
    ══════════════════════════════════════════════════════════════════════════ */
 import http from 'node:http';
@@ -38,7 +42,7 @@ const ADB = process.env.ADB || 'C:\\Android\\sdk\\platform-tools\\adb.exe';
 const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const serial = opt('--serial');
-if (!serial) { console.error('Say which device: --serial emulator-5590'); process.exit(2); }
+if (!serial) { console.error('Say which device: --serial emulator-5566'); process.exit(2); }
 const push = !args.includes('--no-push');
 const timeoutMin = Number(opt('--minutes') ?? 40);
 // This PC's ports (so two runs on one PC don't collide): the answers, and Metro.
@@ -87,7 +91,7 @@ const done = new Promise((resolve, reject) => {
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/manifest') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(manifest.map((m) => ({ file: m.file }))));
+      res.end(JSON.stringify(manifest.map((m) => ({ file: m.file, capturedAt: m.capturedAt ?? null }))));
       return;
     }
     if (req.method === 'POST' && req.url === '/results') {
@@ -112,10 +116,47 @@ const done = new Promise((resolve, reject) => {
   setTimeout(() => { server.close(); reject(new Error(`No answers after ${timeoutMin} minutes`)); }, timeoutMin * 60_000).unref();
 });
 
+/** The app's memory now (MB), from dumpsys meminfo's summary; null if it is not running. */
+function memoryNow() {
+  try {
+    const out = adb('shell', 'dumpsys', 'meminfo', APP);
+    const kb = (re) => { const m = re.exec(out); return m ? Math.round(Number(m[1]) / 102.4) / 10 : null; };
+    return { pss: kb(/TOTAL PSS:\s+(\d+)/), rss: kb(/TOTAL RSS:\s+(\d+)/), nativeHeap: kb(/Native Heap:\s+(\d+)/), javaHeap: kb(/Java Heap:\s+(\d+)/), graphics: kb(/Graphics:\s+(\d+)/) };
+  } catch {
+    return null;
+  }
+}
+const memory = [];
+let started = 0;
+const sample = (phase) => { const m = memoryNow(); if (m?.pss != null) memory.push({ t: Math.round((Date.now() - started) / 100) / 10, phase, ...m }); };
+
 adb('shell', 'am', 'force-stop', APP); // a fresh start, so the screen runs again
+started = Date.now();
 adb('shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', 'megyprints-dev://photo-check-lab', APP);
+let running = true;
+const poll = (async () => { while (running) { sample('checking'); await new Promise((r) => setTimeout(r, 2000)); } })();
 const report = await done;
-await new Promise((r) => setTimeout(r, 1500));
-fs.writeFileSync(path.join(OUT, 'phone-lab.png'), adbBytes('exec-out', 'screencap', '-p'));
+running = false;
+await poll;
+// After the last photo: ML Kit's model is let go 20 s later (IDLE_CLOSE_MS).
+const doneAt = Date.now();
+while (Date.now() - doneAt < 30_000) { sample('after'); await new Promise((r) => setTimeout(r, 2000)); }
+const peak = (k) => Math.max(...memory.filter((m) => m[k] != null).map((m) => m[k]));
+report.memory = {
+  samples: memory,
+  peakPssMB: peak('pss'),
+  peakRssMB: peak('rss'),
+  lastPssMB: memory.at(-1)?.pss ?? null,
+  how: 'adb shell dumpsys meminfo every 2 s (MB = KB / 1024)',
+};
+fs.writeFileSync(path.join(OUT, 'phone.json'), JSON.stringify(report, null, 1));
+
+// The finished screen, top to bottom.
+const [, sw, sh] = /(\d+)x(\d+)/.exec(adb('shell', 'wm', 'size')) ?? [0, 1080, 1920];
+for (let i = 1; i <= 8; i++) {
+  fs.writeFileSync(path.join(OUT, `phone-lab-${i}.png`), adbBytes('exec-out', 'screencap', '-p'));
+  adb('shell', 'input', 'swipe', String(sw / 2), String(Math.round(sh * 0.8)), String(sw / 2), String(Math.round(sh * 0.25)), '600');
+  await new Promise((r) => setTimeout(r, 900));
+}
 const t = report.totals;
-console.log(`${report.rows.length} pictures → out/phone.json (blur+repeats ${Math.round(t.basicMs / t.photos)} ms a photo, faces ${Math.round(t.facesMs / t.photos)} ms, centring ${Math.round(t.centreMs / t.photos)} ms)`);
+console.log(`${report.rows.length} pictures → out/phone.json (blur+repeats ${Math.round(t.basicMs / t.photos)} ms a photo, faces ${Math.round(t.facesMs / t.photos)} ms, centring ${Math.round(t.centreMs / t.photos)} ms; memory peak ${report.memory.peakPssMB} MB PSS, ${report.memory.peakRssMB} MB RSS, ${report.memory.lastPssMB} MB 30 s after)`);

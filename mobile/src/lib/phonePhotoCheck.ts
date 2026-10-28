@@ -4,24 +4,30 @@
 
    The rules are the website's own (src/lib/photoCheck.ts, faceCentre.ts):
      • blur + fingerprint: the photo's small copy (checkCopySize: 800 px on
-       the long side) decoded by the app's native module
-       (modules/photo-pixels), its pixels through the shared basicCheck steps.
-       Same thresholds, same maths: only the decoding is the phone's;
-     • faces + closed eyes: Google ML Kit on the same small copy, in the
+       the long side) made by the app's native module (modules/photo-pixels)
+       the way the website's browser makes it, its pixels through the shared
+       basicCheck steps (then checkFrom). Same thresholds, same maths;
+     • faces + closed eyes: Google ML Kit on a copy of the same size, in the
        same native module (faceModel.ts), each face mapped to what the
        shared rules read (phoneFaces.ts), then the shared faceVerdict;
      • face centring: the same ML Kit faces through the shared
        faceGroupCentre.
 
    Memory and the screen: at most PHONE_CHECK_AT_ONCE photos are asked of
-   the phone at a time, and the native module decodes one whole photo at a
-   time (as the website's browser does, a 12 MP photo is 48 MB while it is
-   shrunk; the small copy is about 2 MB). Decoding and ML Kit run on
+   the phone at a time. For the blur check the native module decodes one
+   whole photo at a time (as the website's browser does, a 12 MP photo is
+   48 MB while it is shrunk; the small copy is about 2 MB); for faces it
+   asks Android's decoder for a copy near the small copy's size (a few MB,
+   no whole photo: ML Kit does not need the browser's exact pixels).
+   Decoding and ML Kit run on
    Android's background threads; only the pixel maths runs on the app's
    JavaScript thread, in three steps (grayscale, sharpness, fingerprint: the
    shared functions basicCheck runs, in its order) with the screen let in
    between. The builder already checks one photo at a time, between other
    work.
+
+   A failed face pass never fails the check: the photo just has no eye test
+   (faces stays null), as on the website.
 
    Work is not repeated: the builder checks each photo twice (blur first,
    faces later) and centres faces when it makes the album, so the blur
@@ -29,7 +35,7 @@
    the faces pass and the centring to reuse.
    ══════════════════════════════════════════════════════════════════════════ */
 import type { FaceFinder, PhotoChecker, StoredPhoto } from '@web/shared/platform';
-import { checkCopySize, dHash, faceVerdict, grayscale, tileSharpness, type PhotoCheck } from '@web/lib/photoCheck';
+import { checkCopySize, checkFrom, dHash, faceVerdict, grayscale, tileSharpness, type PhotoCheck } from '@web/lib/photoCheck';
 import { faceGroupCentre } from '@web/pages/builder/faceCentre';
 import { createLimiter } from '@web/lib/limit';
 import { photoPixelsAvailable, pictureSize, smallCopyPixels } from '../../modules/photo-pixels';
@@ -119,13 +125,22 @@ export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { ph
         await breathe();
         const sharp = tileSharpness(gray, w, h);
         await breathe();
-        basic = { v: 1, sharp, hash: dHash(gray, w, h), faces: null, eyesClosed: false };
+        basic = checkFrom(sharp, dHash(gray, w, h));
         basics.set(key, basic);
       }
       const result: PhotoCheck = { ...basic };
       if (opts.faces !== false) {
-        const f = await facesOn(photo.url, w, h);
-        if (f) Object.assign(result, faceVerdict(f.faces.map(toCheckFace), h));
+        // A face pass that fails (ML Kit's error, the phone short of memory)
+        // is a photo with no eye test, as on the website, whose face finder
+        // answers "no faces" when it fails: the blur answer still comes back
+        // and faces stays null. The builder then marks the face pass done
+        // (facesTried), so its photo check never waits on that photo.
+        try {
+          const f = await facesOn(photo.url, w, h);
+          if (f) Object.assign(result, faceVerdict(f.faces.map(toCheckFace), h));
+        } catch {
+          // No eye test for this photo.
+        }
       }
       return result;
     },

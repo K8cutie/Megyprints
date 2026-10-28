@@ -8,12 +8,17 @@
    app's real photo check and face centring on them (phonePhotoCheck.ts), the
    way the album builder does: one photo at a time, blur first, then faces,
    then face centring from scratch. It sends every answer and how long each
-   step took back to the PC, which compares them with the website's.
+   step took back to the PC, which compares them with the website's. When it
+   is done it shows the phone's own verdicts, worked out with the website's
+   album rules (src/lib/photoCheck.ts): the blurry photos, the sets of
+   repeats, the photos with eyes shut and what Megy would suggest leaving
+   out, as small pictures (for the comparison's screenshots).
    ══════════════════════════════════════════════════════════════════════════ */
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text } from 'react-native';
-import type { PhotoCheck } from '@web/lib/photoCheck';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { findRepeats, isBlurry, medianSharpness, suggestLeaveOut, type CheckablePhoto, type PhotoCheck } from '@web/lib/photoCheck';
 import { Button } from '../components/Button';
+import { Thumb } from '../components/Thumb';
 import { checkPhotoAccess, loadGalleryPage, NEXT_PAGE, photosForAlbum, type GalleryPhoto } from '../lib/gallery';
 import { createPhoneChecks, nativeDevice, type PhoneCheckDevice } from '../lib/phonePhotoCheck';
 import { FACE_MODEL, faceModelAvailable } from '../lib/faceModel';
@@ -23,8 +28,61 @@ import { colors, space } from '../lib/theme';
 const PC = 'http://localhost:8095';
 const now = () => (globalThis.performance?.now ? globalThis.performance.now() : Date.now());
 
-interface Wanted { file: string }
+interface Wanted { file: string; capturedAt?: number | null }
 interface Steps { pixels?: number; find?: number; size?: number }
+
+/** The phone's own verdicts, by the website's album rules. */
+interface Verdicts {
+  photos: number;
+  median: number;
+  blurry: string[];
+  repeatSets: string[][];
+  eyesShut: string[];
+  withFaces: number;
+  leaveOut: { blurry: string[]; repeats: string[]; keeperOf: Record<string, string> };
+}
+
+/** The album as the builder would hold it: each picture with its check
+ *  (blur pass, then the face pass's faces and eyes) and its taken time. */
+function verdictsOf(rows: Record<string, unknown>[], wanted: Map<string, Wanted>): Verdicts {
+  const album: CheckablePhoto[] = rows.filter((r) => r.basic).map((r) => {
+    const basic = r.basic as PhotoCheck;
+    const f = r.faces as { faces: number | null; eyesClosed: boolean } | undefined;
+    return {
+      id: r.file as string, width: r.width as number, height: r.height as number,
+      capturedAt: wanted.get(r.file as string)?.capturedAt ?? null,
+      check: { ...basic, faces: f?.faces ?? null, eyesClosed: f?.eyesClosed ?? false, facesTried: true },
+    };
+  });
+  const median = medianSharpness(album);
+  const s = suggestLeaveOut(album);
+  return {
+    photos: album.length,
+    median,
+    blurry: album.filter((p) => isBlurry(p, median)).map((p) => p.id).sort(),
+    repeatSets: findRepeats(album).map((set) => [...set].sort()).sort((a, b) => a[0].localeCompare(b[0])),
+    eyesShut: album.filter((p) => p.check?.eyesClosed).map((p) => p.id).sort(),
+    withFaces: album.filter((p) => (p.check?.faces ?? 0) > 0).length,
+    leaveOut: { blurry: [...s.blurry].sort(), repeats: [...s.repeats].sort(), keeperOf: s.keeperOf },
+  };
+}
+
+const THUMB = 64;
+const short = (file: string) => file.replace(/\.jpg$/, '').replace(/^megy-sample-/, 'sample-').replace(/^pc-/, '');
+
+/** A row of small pictures, each with its short name. */
+function Pictures({ files, uriOf }: { files: string[]; uriOf: Map<string, string> }) {
+  return (
+    <View style={styles.pictures}>
+      {files.map((f) => (
+        <View key={f} style={styles.picture}>
+          <Thumb uri={uriOf.get(f) ?? ''} size={THUMB} recyclingKey={f} />
+          <Text style={styles.pictureName} numberOfLines={1}>{short(f)}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 /** Watches how late the JavaScript thread runs a 50 ms timer: how long the
  *  screen would wait for a tap while the check works. */
@@ -64,9 +122,11 @@ function galleryWatch() {
 export default function PhotoCheckLab() {
   const [status, setStatus] = useState('Ready.');
   const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ verdicts: Verdicts; uriOf: Map<string, string> } | null>(null);
 
   const run = async () => {
     setBusy(true);
+    setResult(null);
     try {
       setStatus('Asking the PC which pictures to check…');
       const wanted: Wanted[] = await (await fetch(`${PC}/manifest`)).json();
@@ -170,6 +230,7 @@ export default function PhotoCheckLab() {
       }
       const tC = now() - t2;
 
+      const verdicts = verdictsOf(rows, new Map(wanted.map((w) => [w.file, w])));
       const report = {
         when: new Date().toISOString(),
         faceModel: faceModelAvailable ? FACE_MODEL : null,
@@ -178,10 +239,12 @@ export default function PhotoCheckLab() {
         totals: { basicMs: tA, facesMs: tB, centreMs: tC, photos: photos.length },
         lag: { basic: lagA, faces: lagB },
         gallery: { idle: galleryIdle, basic: galleryA, faces: galleryB },
+        verdicts,
         rows,
       };
       setStatus('Sending the answers to the PC…');
       const res = await fetch(`${PC}/results`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) });
+      setResult({ verdicts, uriOf: new Map(photos.map((p) => [p.name, p.uri])) });
       setStatus(res.ok
         ? `Done: ${photos.length} pictures. Blur and repeats ${Math.round(tA / photos.length)} ms a photo, faces ${Math.round(tB / photos.length)} ms, centring ${Math.round(tC / photos.length)} ms.`
         : `The PC did not take the answers (${res.status}).`);
@@ -214,6 +277,27 @@ export default function PhotoCheckLab() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.lead}>Photo check test: the app checks the test pictures and sends the answers to the PC.</Text>
       <Text style={styles.status} testID="lab-status">{status}</Text>
+      {result && (
+        <View testID="lab-results">
+          <Text style={styles.heading}>
+            What the phone found ({result.verdicts.photos} pictures, faces on {result.verdicts.withFaces})
+          </Text>
+          <Text style={styles.heading}>Blurry: {result.verdicts.blurry.length}</Text>
+          <Pictures files={result.verdicts.blurry} uriOf={result.uriOf} />
+          <Text style={styles.heading}>Sets of repeats: {result.verdicts.repeatSets.length}</Text>
+          {result.verdicts.repeatSets.map((set) => (
+            <View key={set.join('+')} style={styles.set}>
+              <Pictures files={set} uriOf={result.uriOf} />
+            </View>
+          ))}
+          <Text style={styles.heading}>Eyes shut: {result.verdicts.eyesShut.length}</Text>
+          <Pictures files={result.verdicts.eyesShut} uriOf={result.uriOf} />
+          <Text style={styles.heading}>
+            Megy would suggest leaving out: {result.verdicts.leaveOut.blurry.length} blurry, {result.verdicts.leaveOut.repeats.length} repeats
+          </Text>
+          <Pictures files={[...result.verdicts.leaveOut.blurry, ...result.verdicts.leaveOut.repeats]} uriOf={result.uriOf} />
+        </View>
+      )}
       <Button label={busy ? 'Checking' : 'Check again'} busy={busy} onPress={() => { void run(); }} style={styles.button} testID="lab-run" />
     </ScrollView>
   );
@@ -224,5 +308,10 @@ const styles = StyleSheet.create({
   content: { padding: space.md },
   lead: { fontSize: 16, lineHeight: 22, color: colors.text },
   status: { fontSize: 16, lineHeight: 22, color: colors.text, marginTop: space.md },
+  heading: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: colors.text, marginTop: space.md, marginBottom: space.xs },
+  pictures: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  picture: { width: THUMB },
+  pictureName: { fontSize: 9, color: colors.muted },
+  set: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: space.xs, marginBottom: space.xs, alignSelf: 'flex-start' },
   button: { marginTop: space.lg },
 });

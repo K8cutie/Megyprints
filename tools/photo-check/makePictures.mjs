@@ -10,8 +10,10 @@
    Drawn by headless Chromium (playwright-core 1.61.1, Chromium build 1228,
    CPU drawing), seeded, so every run makes the same pictures:
      • 20 made-up scenes at common phone sizes (12, 16 MP; 4:3, 3:4, 1:1,
-       16:9; one small), drawn like a photo: sky, hills, objects with soft
-       shading, fine texture, words, and camera grain;
+       16:9; one small; and one 50 MP, a phone's 50 MP mode, which is over
+       the app's 24 MP whole-decode limit: scene 20 and its near copy),
+       drawn like a photo: sky, hills, objects with soft shading, fine
+       texture, words, and camera grain;
      • 10 blurred copies of scenes 1–10 (1.5 to 10 px of blur at full size:
        from "a little soft" to "badly out of focus");
      • 10 burst-style near copies of scenes 11–20 (the camera moved 1–3 %,
@@ -41,7 +43,7 @@ const SIZES = [
   [4032, 3024], [3024, 4032], [4000, 3000], [3264, 2448], [4624, 3468],
   [3000, 3000], [4000, 2250], [2448, 3264], [1600, 1200], [4080, 3060],
   [3468, 4624], [4032, 3024], [2250, 4000], [3000, 4000], [4000, 3000],
-  [3024, 4032], [3264, 2448], [4032, 3024], [3000, 3000], [4080, 3060],
+  [3024, 4032], [3264, 2448], [4032, 3024], [3000, 3000], [8160, 6120],
 ];
 const BLUR_PX = [1.5, 2, 3, 4, 6, 8, 2.5, 5, 10, 3.5];
 const NEAR = [ // camera move (share of the size), zoom, brightness
