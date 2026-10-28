@@ -194,7 +194,7 @@ export default function OrderScreen() {
         {tester && <Text style={styles.body}>This was a test order. Nothing is charged, and nothing will be printed or sent.</Text>}
         <TestPanel
           title="Test version: what Place order would send"
-          note={`The same order the website would send for this album, address${tester ? ' and tester code' : ''}. The order number and the price come from the database. The cover and the pages are not made in this version.${tester?.unchecked ? ` The code ${tester.code} was not checked with the shop (that check is a database write).` : ''}`}
+          note={`The same order the website would send for this album${tester ? ', address and tester code' : ' and address'}. The order number and the price come from the database. The cover and the pages are not made in this version.${tester?.unchecked ? ` The code ${tester.code} was not checked with the shop (that check is a database write).` : ''}`}
           steps={plan.steps}
           data={{ orders: plan.orderRow, qr_memories: plan.steps.flatMap((s) => (s.kind === 'upsert' ? s.rows : [])), files: plan.files }}
         />

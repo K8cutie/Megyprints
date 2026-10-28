@@ -695,9 +695,43 @@ move the pure half of each into a shared file, list it in
   app closes (`checkoutSession`), "same as your last order", the "Open
   order" button (no Orders screen until Phase 6), focusing the first box to
   fix (it scrolls there).
-- **Not seen on a device in this run**: no emulator was assigned. Proven by
-  the jest walk, a Metro + Hermes bundle of the whole app
-  (`npx expo export --platform android`), and a Gradle debug build.
+
+### What was seen on the emulator (2026-10-28)
+
+`pwa_test` (Android 14, x86_64), port 5566, release APKs built in `C:\m4c`.
+Two builds: the PR code as it is, and a **walk build**: the same code plus
+two stand-ins for the outside (a stand-in account that signs in on the
+phone with no network call, for an email ending in `@example.test`, because
+there was no local Supabase and the live project must not be signed in to;
+and one logcat line for every `fetch` the app makes). Evidence:
+`pr-evidence` @ `e0cc049`, folder `port-checkout-screens/` (`results.txt`
+lists every screenshot).
+
+- **Price**: read from the live list: P1,288 (was P1,710) softcover,
+  P1,788 (was P2,510) hardbound, the same as the app's price code gives on
+  that list on the PC.
+- **Address**: Laguna > Biñan City ("binan" finds it) > Canlalay, and Metro
+  Manila > Quezon City > Bagong Pag-asa (the order row says "National
+  Capital Region (NCR)"). A 120-character street is read back from the
+  screen whole and goes whole into the order row; at 124 it is kept and the
+  count turns red.
+- **MEGYTEST**: signed out, "Sign in first, then type the code."; signed in,
+  free, P0, the test-order button and the "not checked with the shop" line.
+- **Sign in from checkout** goes back to the order; the message and button go
+  and the form stays.
+- **Place order**: the bar page by page, the window kept on
+  (`KEEP_SCREEN_ON`, a screen wake lock for the app), then the test panel.
+  The payment step, Android's picker with a made-up receipt picture, the
+  reference, and "I've sent" with its panel.
+- **Offline**: no price ("Prices didn't load — tap to try again"), the
+  Province box says it couldn't load; a tap on Barangay tries the provinces
+  again instead of opening an empty list; online again, it loads.
+- **Nothing was written**: the fetch log of the whole walk has only reads
+  (the website's address files, `public_price_schedule`, and "this album
+  already has an order?"); Place order and "I've sent" made no request. A
+  packet capture of the whole session: 3,740 bytes in all went from the
+  phone to the Supabase host (the order row alone is about 34 KB).
+- Not seen: a real account, any write, the real album, a real phone.
 
 ---
 

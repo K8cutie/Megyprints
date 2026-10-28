@@ -31,7 +31,7 @@ export function TestPanel({ title, note, steps, data }: { title: string; note: s
         </View>
       ))}
       <Pressable accessibilityRole="button" onPress={() => setShowData((v) => !v)} style={styles.toggle} testID="test-panel-toggle">
-        <Text style={styles.toggleText}>{showData ? 'Hide' : 'Show'} the data ({Math.round(json.length / 1024)} KB)</Text>
+        <Text style={styles.toggleText}>{showData ? 'Hide' : 'Show'} the data ({json.length < 1024 ? 'under 1 KB' : `${Math.round(json.length / 1024)} KB`})</Text>
       </Pressable>
       {showData && (
         <ScrollView nestedScrollEnabled style={styles.box}>

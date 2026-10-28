@@ -208,6 +208,7 @@ describe('the checkout screen, walked', () => {
     jest.useRealTimers();
     expect(await screen.findByText('Stopped before sending')).toBeOnTheScreen();
     expect(screen.getByText(/THEN the payment step/)).toBeOnTheScreen();
+    expect(screen.getByText(/would send for this album and address\./)).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('See the payment step'));
 
     const amount = peso(softPrice.total);
@@ -232,6 +233,7 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByText("A reference number has digits in it. Copy it from your bank's receipt, or leave this empty.")).toBeOnTheScreen();
     await fireEvent.changeText(screen.getByTestId('pay-reference'), ' 2026091012345678 ');
     await fireEvent.press(screen.getByText(`I've sent ${amount}`));
+    expect(screen.getByTestId('test-panel-toggle')).toHaveTextContent('Show the data (under 1 KB)');
     await fireEvent.press(screen.getByTestId('test-panel-toggle'));
     const sent = JSON.parse(String(screen.getByText(/"rpc": \{/).props.children));
     expect(sent).toEqual({
