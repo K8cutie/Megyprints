@@ -187,7 +187,7 @@ then `npm ci` in the new worktree.
 
 **Where the app lives.** In this repo, in its own folder (`mobile/`, made in
 Phase 1), so it can import the shared files from `src/` directly (Metro's
-`watchFolders` points at the repo root). The website build never reads
+`watchFolders` points at `src/`; see Phase 1 notes). The website build never reads
 `mobile/`; the website tests (`vitest.config.ts`, `src/**/*.spec.ts`) never
 run the app's tests.
 
@@ -229,6 +229,172 @@ and check the originals are untouched (see `docs/play-store-runbook.md`).
 **Release notes and the feedback log must be true.** "Tester" means a report
 from a real tester; things built for testers are "For testers"; the owner's
 own finds are "Owner test".
+
+---
+
+## Phase 1 notes (2026-10-28)
+
+### What Phase 1 built
+
+The app skeleton in `mobile/` (branch `feat/port-phase-1`):
+
+- **Expo SDK 58, React Native 0.88, React 19.3, Hermes, the new
+  architecture, Expo Router 58**, TypeScript 6. Android package
+  `com.megyprints.app.dev`, app name "Megy Prints 2.0 (dev)", version 2.0.0
+  (code 100), so a dev build never replaces the real app on a phone.
+- **Screens** (`mobile/src/app/`): start screen; **Sign in** (email and
+  password, the same Megy Prints account as the website, Show/Hide on the
+  password, the website's own words for a wrong password from the shared
+  `accountErrors.ts`); **My albums** (this account's albums: name, size, pages,
+  when it last changed; read the same way as the website's `useAccountAlbums`,
+  with the same "couldn't load / Try again" and retry every 20 seconds);
+  **Shared code check** (see below).
+- **Sign-in is kept on the phone** (Supabase session in AsyncStorage), so the
+  app opens signed in next time.
+- **Shared code, one copy.** The app imports the website's files straight from
+  `src/` as `@web/<path>`. `mobile/sharedCode.js` (used by `metro.config.js`)
+  lets in only files listed in `src/shared/sharedModules.ts` and stops the
+  build naming any other file. `mobile/test/sharedImports.test.ts` checks the
+  same without a build, all the way down the import chain, and was shown to
+  catch planted bad imports. Today the app's bundle takes 22 website files
+  (album minimum, pricing, all page templates, the album maker, quote bank,
+  photo check, retired sizes, account error words…).
+- **Shared code check screen** runs the real website code on the phone and
+  compares 13 answers with the answers the same code gives on a computer
+  (`mobile/src/lib/sharedCheckExpected.ts`, kept true by a jest test): the
+  40-photo minimum and its words, sizes, sheet count, the price math on
+  made-up rates, the page-layout count (622; per size), the quote bank (818),
+  and a seeded album made from 60 pretend photos (40 pages, 19 full-page
+  photos, album code `0510106c`). "Same as on a computer" proves Hermes and
+  Node agree. A second box loads today's prices from the live server
+  (`public_price_schedule`) and prices an 8×8 with the shared `priceOf`.
+- **Server values.** The app reads the same two public values the website
+  ships (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) as
+  `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` from
+  `mobile/.env.local` (not in git; `mobile/.env.example` has the names). The
+  website keeps them out of git too (Vercel settings).
+
+### What was seen on the emulator (2026-10-28)
+
+On the `pwa_test` emulator (Android, x86_64), both APKs, next to the 1.x app
+(`com.megyprints.app` stayed installed: the dev app does not replace it):
+
+- Debug APK + Metro, and the release APK with Metro stopped: the Shared code
+  check says **"JavaScript engine: Hermes"** and **"Same as on a computer:
+  all 13 answers match"** (album made in 40 ms debug, 24 ms release).
+- "Load today's prices" reached the live server: 8×8, 40 pages: softcover
+  ₱1288, hardbound ₱1788.
+- Sign in: empty boxes say "Type your email."; a made-up address
+  (no such account) got the live server's answer in the website's words,
+  "Wrong email or password. Check the email for a typo."; the message goes
+  away as soon as a box is edited; Show/Hide works. Opening My albums while
+  signed out goes to Sign in.
+- **Not seen:** My albums with real albums, and opening the app signed in.
+  That needs a real account's password, which agents must not use; the list
+  and its query are covered by jest tests only. Owner check: sign in on the
+  dev app with your own account and compare My albums with the website.
+
+### How to run it
+
+1. `cd mobile`, `npm ci`, and make `mobile/.env.local` (see `.env.example`).
+2. **Build the APK:** `mobile\scripts\build-android.ps1` (PowerShell). It
+   copies the app and `src/` to `C:\megy2` and builds there (see "Long paths"
+   below), then copies the APK to `mobile\dist\android\`:
+   - `megyprints-2.0-dev-debug.apk`: takes its code from Metro. Start Metro
+     with `npx expo start` (port 8081) in `mobile/`. The emulator reaches it
+     by itself (10.0.2.2:8081); a phone on USB needs
+     `adb reverse tcp:8081 tcp:8081`.
+   - `-Variant release` gives `megyprints-2.0-dev-release.apk`: the code is
+     inside, no Metro needed (signed with the public debug key: for testing
+     only, never for Play).
+3. Install: `adb -s <device> install -r mobile\dist\android\megyprints-2.0-dev-debug.apk`.
+4. Checks: `npm run check` in `mobile/` (TypeScript + jest), and from the repo
+   root `npx tsc -b && npx vitest run` (the website's checks do not read
+   `mobile/`: `tsconfig.app.json` takes `src/` only, vitest takes
+   `src/**/*.spec.ts` only, ESLint, Vercel and Docker ignore `mobile/`).
+
+### Long paths and disk space on this PC
+
+- **Gradle cannot build from a worktree folder.** React Native's C++ parts are
+  built with CMake and ninja, and ninja cannot make a folder whose path is
+  longer than about 250 characters. The build makes paths that hold the
+  project folder twice, which from `.claude\worktrees\<name>\mobile` is about
+  265 characters ("ninja: error: mkdir(CMakeFiles/rnscreens.dir/C_/megy-...)").
+  A `subst` drive or a junction does not help: Node turns them back into the
+  long path and Gradle stops with "different roots". `build-android.ps1`
+  builds in the short folder `C:\megy2` instead.
+- **Even `C:\megy2` needs CMake to shorten names.** React Native's generated
+  C++ files ("codegen") sit deep in `node_modules`, and their object paths
+  pass 250 characters from any folder. CMake shortens them (a short hash for
+  the front of the path) under `CMAKE_OBJECT_PATH_MAX`, but Expo sets that to
+  1024 for every module ("never shorten"). `mobile/plugins/withShortCmakeObjectPaths.js`
+  sets Expo's own property `expo.android.cmakeObjectPathMax=240` in
+  `gradle.properties` at prebuild. The other fix would be a newer CMake whose
+  ninja handles long paths (`android.cmakeVersion`), which needs an SDK
+  download.
+- **Three native libraries are switched off** in
+  `mobile/react-native.config.js`: Reanimated, Worklets and Gesture Handler.
+  npm installs them because Expo Router lists them, but the app's code does
+  not use them (Metro's bundle has none of their code), and their C++ builds
+  are the largest. `test/nativeLibraries.test.ts` fails if app code imports
+  one of them while it is off. The editor (Phase 4) will probably want
+  Gesture Handler and Reanimated back: delete their lines, then prebuild and
+  Gradle again.
+- **The disk was full.** On 2026-10-28 drive C: had about 3 GB free (of 930 GB),
+  and during the first full build it reached 0 bytes (this build and other
+  work together). The build folder was deleted at once. Later that day other
+  space was freed (about 51 GB free). `build-android.ps1` now refuses to
+  start with less than 2.5 GB free and stops Gradle if free space drops
+  under 1 GB. A finished build folder (`C:\megy2`, debug + release, two ABIs)
+  takes a few GB; delete `C:\megy2\mobile\android` and
+  `C:\megy2\mobile\node_modules` to give it back. **Owner:** the many old
+  worktrees under `.claude\worktrees\` (each with its own `node_modules`) and
+  `C:\Users\Archie\.gradle\caches` (4.6 GB) are where space can come back from.
+
+### Google sign-in: owner steps (not in Phase 1)
+
+Phase 1 signs in with email and password only. People who made their account
+with Google cannot sign in to the dev app yet (the sign-in screen says so).
+Native Google sign-in needs these steps first, all in the owner's accounts:
+
+1. **Google Cloud Console** (the project that holds the website's Google
+   sign-in "Web application" OAuth client, the one Supabase uses) → APIs &
+   Services → Credentials → Create credentials → OAuth client ID →
+   **Android**:
+   - for dev builds: package `com.megyprints.app.dev`, SHA-1
+     `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25` (the
+     React Native debug key that dev builds are signed with; public, so this
+     client is for testing only);
+   - for Phase 7: package `com.megyprints.app` with the SHA-1 of the
+     **upload key** and of the **Play app signing key** (Play Console → Test
+     and release → App integrity → App signing). Phones that install from
+     Play get the Play-signed copy, so its SHA-1 must be there.
+2. **Supabase dashboard** → Authentication → Sign In / Providers → Google:
+   add the Android client ID(s) to the **Client IDs** box, next to the web
+   client ID already there (comma-separated). Keep the web client ID: the app
+   asks Google for an ID token made out to the web client. Leave "Skip nonce
+   checks" off (the app sends a nonce).
+3. **In the app (Phase 1b, our work):** Android's **Credential Manager**
+   (Google's current sign-in sheet; the old Google Sign-In SDK is deprecated)
+   through a small free module (an open-source Credential Manager wrapper, or
+   about 100 lines of our own Expo module in Kotlin), with
+   `GetSignInWithGoogleOption` / `GetGoogleIdOption` and
+   `serverClientId` = the **web** client ID, and a nonce: send Google the
+   SHA-256 of a random nonce and Supabase the raw nonce. Then
+   `supabase.auth.signInWithIdToken({ provider: 'google', token: idToken, nonce })`.
+   No browser and no supabase.co page: the Google sheet should show the app
+   name from the Google OAuth consent screen.
+
+### Left for later (found in Phase 1)
+
+- **My albums reads every page of every album** to count the pages (the
+  website's list leaves `pages` out to stay light). Fine for test accounts;
+  for big accounts add a `page_count` column (a generated column,
+  `jsonb_array_length(pages)`, in a migration) and read that instead.
+- **Debug builds use the public React Native debug key.** Before Phase 7,
+  make our own dev key, or keep dev builds off real accounts' Google sign-in.
+- Phones: the default ABIs are `arm64-v8a` (phones) and `x86_64` (emulator);
+  old 32-bit phones need `armeabi-v7a` added (`-Abis`).
 
 ---
 
