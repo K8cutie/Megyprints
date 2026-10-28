@@ -33,11 +33,42 @@ export interface SrgbCopyResult {
   converted: boolean;
 }
 
+/** What inspect says about one photo (its header only, no pixels). */
+export interface PhotoInspection {
+  uri: string;
+  /** The app can still open it (it was not deleted, its access was kept). */
+  readable: boolean;
+  /** The file's size in bytes. 0 = unknown. */
+  size: number;
+  /** As shown: EXIF rotation already applied. 0 = unknown. */
+  width: number;
+  height: number;
+  /** The colour space it was saved in, as Android names it. Null = unknown (Android 7). */
+  colorSpace: string | null;
+  /** Not sRGB (Display P3, Adobe RGB…): turned into sRGB before a print page is drawn. */
+  needsSrgb: boolean;
+}
+
+/** What drawableCopy wrote. */
+export interface DrawableCopyResult {
+  /** The photo as shown (EXIF rotation applied). */
+  width: number;
+  height: number;
+  /** The copy's size. */
+  outWidth: number;
+  outHeight: number;
+  colorSpace: string | null;
+  /** Its colours were changed to be sRGB. */
+  converted: boolean;
+}
+
 interface PhotoFilesNative {
   describe(uris: string[]): Promise<PickedFileInfo[]>;
   release(uris: string[]): Promise<number>;
   keptCount(): number;
   srgbCopy(source: string, target: string): Promise<SrgbCopyResult>;
+  inspect?(uris: string[]): Promise<PhotoInspection[]>;
+  drawableCopy?(source: string, target: string, maxSide: number): Promise<DrawableCopyResult>;
 }
 
 const native = requireOptionalNativeModule<PhotoFilesNative>('MegyPhotoFiles');
@@ -67,4 +98,21 @@ export async function releasePickedFiles(uris: string[]): Promise<number> {
 export async function srgbCopy(source: string, target: string): Promise<SrgbCopyResult | null> {
   if (!native || typeof native.srgbCopy !== 'function') return null;
   return native.srgbCopy(source, target);
+}
+
+/** Whether each photo is still on the phone, its size as shown and its
+ *  colour space, from the file's header (no pixels, no access taken). Null
+ *  when the build has no native half (jest, an older APK). */
+export async function inspectPhotos(uris: string[]): Promise<PhotoInspection[] | null> {
+  if (!native || typeof native.inspect !== 'function') return null;
+  if (uris.length === 0) return [];
+  return native.inspect(uris);
+}
+
+/** A small upright sRGB JPEG of the photo at `source`, written to the
+ *  file:// address `target`, for drawing pages on screen. Null when the build
+ *  has no native half. Throws when the photo can't be opened. */
+export async function drawableCopy(source: string, target: string, maxSide: number): Promise<DrawableCopyResult | null> {
+  if (!native || typeof native.drawableCopy !== 'function') return null;
+  return native.drawableCopy(source, target, maxSide);
 }

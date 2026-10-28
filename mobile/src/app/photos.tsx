@@ -5,14 +5,18 @@
    The 40-photo minimum is the website's rule and words (shared
    albumMinimum.ts, through photoDraft.photoStep): under 40 the ONE filled
    button is "Add N more photos" and there is no way on; at 40 or more it is
-   "Next". A photo can be taken out (×), with Undo.
+   the website's "Next: pick your cover →" (Phase 3: the photos go into the
+   album builder, then the cover step). A photo can be taken out (×), with
+   Undo.
    ══════════════════════════════════════════════════════════════════════════ */
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { releasePickedFiles } from '../../modules/photo-files';
+import { inspectPhotos, releasePickedFiles } from '../../modules/photo-files';
+import { useBuilder } from '../builder/BuilderProvider';
+import { saveStep, syncPhotos, TO_COVER } from '../builder/albumFlow';
 import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
 import { useDraft } from '../lib/draftStore';
@@ -34,6 +38,8 @@ export default function YourPhotos() {
   const { width } = useWindowDimensions();
   const cell = Math.floor((width - space.md * 2 - GAP * (COLUMNS - 1)) / COLUMNS);
   const step = photoStep(draft.photos);
+  const { builder, platform } = useBuilder();
+  const [going, setGoing] = useState(false);
 
   const undoing = useRef<DraftPhoto | null>(null);
 
@@ -89,7 +95,18 @@ export default function YourPhotos() {
     ]);
   };
 
-  const goOn = () => (step.main === 'next' ? router.push('/album-next') : router.push('/pick-photos'));
+  const goOn = async () => {
+    if (step.main !== 'next') { router.push('/pick-photos'); return; }
+    // The photos go into the album builder (by their address on the phone).
+    setGoing(true);
+    try {
+      await syncPhotos(builder, draft.photos, inspectPhotos);
+      saveStep(platform.deviceStore, 'cover');
+      router.push('/album-cover');
+    } finally {
+      setGoing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -141,7 +158,7 @@ export default function YourPhotos() {
             </Pressable>
           </View>
         )}
-        <Button label={step.mainLabel} onPress={goOn} testID="photos-main" />
+        <Button label={step.main === 'next' ? TO_COVER : step.mainLabel} onPress={() => { void goOn(); }} busy={going} testID="photos-main" />
         {step.secondLabel && <Button label={step.secondLabel} kind="plain" onPress={() => router.push('/pick-photos')} testID="photos-add-more" />}
       </SafeAreaView>
     </View>

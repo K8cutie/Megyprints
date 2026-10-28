@@ -14,9 +14,16 @@
 
    What the app does not draw yet is still planned where it sits, and named
    in `notDrawn`, never drawn as something else.
+
+   The FRONT COVER is one more page, planned with `coverMode` the way print
+   draws it (printPipeline renderPageLayers(coverFront, ..., coverMode true)):
+   no binding keep-out, its photo background cover-fitted at the customer's
+   focal point and zoom (types.ts bgCoverFit), a boxed title moved by its
+   offset, and the cover's float shadow on its words (wordArtShadow onCover).
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumPage, AlbumSizePreset, FrameStyle, SlotText, TemplateSlot, TextElement } from '@web/pages/builder/types';
+import { bgCoverFit } from '@web/pages/builder/types';
 import { getTemplateById, adaptTemplateToOrientation } from '@web/pages/builder/pageTemplates';
 import { marginForTemplate } from '@web/pages/builder/binding';
 import { resolveSlotBox } from '@web/pages/builder/slotGeometry';
@@ -81,6 +88,8 @@ export interface BoxTextItem {
   /** Print px per design px (outline and shadow scale with it). */
   scale: number;
   style: SlotText;
+  /** On the front cover: the cover's float shadow (wordArtShadow onCover). */
+  onCover: boolean;
 }
 
 /** A free text (a title at x/y), drawn in its own box like the DOM preview. */
@@ -98,6 +107,7 @@ export interface FreeTextItem {
   fontSize: number;
   scale: number;
   style: TextElement;
+  onCover: boolean;
 }
 
 /** A photo in a caption box: cover-fitted, centred, clipped to the box. */
@@ -121,6 +131,9 @@ export interface PagePlan {
   designWidth: number;
   designHeight: number;
   background: Fill;
+  /** A photo as the background (drawn instead of `background`): the album
+   *  photo, and the page it is fitted to (print px). Null = none. */
+  backgroundPhoto: { photoIndex: number; x: number; y: number; w: number; h: number; cover: boolean; zoom: number; focusX: number; focusY: number } | null;
   /** A see-through wash over the background (its opacity below 100). */
   wash: string | null;
   items: PlanItem[];
@@ -137,16 +150,24 @@ export interface PlanInput {
   photoCount: number;
   /** Binding allowance, inches (default: the editor's 3/8"). */
   bindingIn?: number;
+  /** The front cover (print's coverMode): see the top of this file. */
+  coverMode?: boolean;
+  /** The album photos' ids, by index: a photo background names its photo by
+   *  id (background.photoId). Without them a photo background is not drawn. */
+  photoIds?: readonly string[];
 }
 
 const DEFAULT_PAPER = '#FFFBF7';
 /** 1 design px of frame → print px: the print renderer's own factor. */
 export const FRAME_PX = PRINT_FRAME_PX;
 
-function backgroundOf(page: AlbumPage, W: number, H: number, notDrawn: string[]): { fill: Fill; wash: string | null } {
+type BackgroundPhoto = PagePlan['backgroundPhoto'];
+
+function backgroundOf(page: AlbumPage, W: number, H: number, notDrawn: string[], coverMode: boolean, photoIds: readonly string[] | undefined): { fill: Fill; wash: string | null; photo: BackgroundPhoto } {
   const bg = page.background;
-  if (!bg) return { fill: { kind: 'solid', color: DEFAULT_PAPER }, wash: null };
+  if (!bg) return { fill: { kind: 'solid', color: DEFAULT_PAPER }, wash: null, photo: null };
   let fill: Fill = { kind: 'solid', color: DEFAULT_PAPER };
+  let photo: BackgroundPhoto = null;
   switch (bg.type) {
     case 'solid':
       fill = { kind: 'solid', color: bg.solid || DEFAULT_PAPER };
@@ -163,18 +184,32 @@ function backgroundOf(page: AlbumPage, W: number, H: number, notDrawn: string[])
       }
       break;
     }
-    case 'image':
-      notDrawn.push('photo or picture background');
+    case 'image': {
+      // printPipeline renderBackground: an album photo (resolveBgImageSrc by
+      // photoId), cover-fitted on the cover, stretched to the page inside.
+      // A picture that is not one of the album's photos is not drawn yet.
+      const photoIndex = bg.photoId && photoIds ? photoIds.indexOf(bg.photoId) : -1;
+      if (photoIndex < 0) { notDrawn.push('picture background'); break; }
+      photo = { photoIndex, x: 0, y: 0, w: W, h: H, cover: coverMode, zoom: bg.zoom ?? 1, focusX: bg.focusX ?? 0.5, focusY: bg.focusY ?? 0.5 };
       break;
+    }
     case 'texture':
       // The website tiles the texture at its opacity and adds no wash.
       notDrawn.push('texture background');
-      return { fill, wash: null };
+      return { fill, wash: null, photo: null };
     default:
       break;
   }
   const opacity = bg.opacity ?? 100;
-  return { fill, wash: opacity < 100 ? `rgba(255, 251, 247, ${(100 - opacity) / 100})` : null };
+  return { fill, wash: opacity < 100 ? `rgba(255, 251, 247, ${(100 - opacity) / 100})` : null, photo };
+}
+
+/** Where a photo background goes once its picture's size is known (print's
+ *  drawImage: cover-fitted on the cover, the whole page inside). */
+export function backgroundPhotoRect(bp: NonNullable<PagePlan['backgroundPhoto']>, imgW: number, imgH: number): Rect {
+  if (!bp.cover) return { x: bp.x, y: bp.y, w: bp.w, h: bp.h };
+  const r = bgCoverFit(imgW, imgH, bp.w, bp.h, bp.zoom, bp.focusX, bp.focusY);
+  return { x: bp.x + r.x, y: bp.y + r.y, w: r.width, h: r.height };
 }
 
 /** A text whose exact font file (face, weight, style) the app doesn't have. */
@@ -184,17 +219,17 @@ function noteFont(t: { fontFamily?: string; bold?: boolean; italic?: boolean }, 
 }
 
 /** The page's plan: see the top of this file. */
-export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: PlanInput): PagePlan {
+export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn, coverMode = false, photoIds }: PlanInput): PagePlan {
   const { width: W, height: H } = getPrintDimensions(albumSize);
   const { width: uiW, height: uiH } = getCanvasDimensions(albumSize);
   const scale = W / uiW;
   const notDrawn: string[] = [];
   const items: PlanItem[] = [];
-  const { fill, wash } = backgroundOf(page, W, H, notDrawn);
+  const { fill, wash, photo: backgroundPhoto } = backgroundOf(page, W, H, notDrawn, coverMode, photoIds);
 
   const template = page.templateId ? getTemplateById(page.templateId) : null;
   const adapted = template ? adaptTemplateToOrientation(template, W, H) : null;
-  const m = adapted ? marginForTemplate(adapted, adapted.margin, albumSize, pageIndex, { bindingIn }) : null;
+  const m = adapted ? marginForTemplate(adapted, adapted.margin, albumSize, pageIndex, { bindingIn, noBinding: coverMode }) : null;
   const safe = m ? { x: W * m.left, y: H * m.top, w: W * (1 - m.left - m.right), h: H * (1 - m.top - m.bottom) } : null;
 
   // ── The template's slots ──
@@ -215,7 +250,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
           kind: 'boxText', source: 'slot', box, align,
           anchorX: align === 'left' ? box.x + pad : align === 'right' ? box.x + box.w - pad : box.x + box.w / 2,
           centerY: box.y + box.h / 2, maxWidth: box.w - pad * 2,
-          fontSize: (st.fontSize || 24) * scale, scale, style: st,
+          fontSize: (st.fontSize || 24) * scale, scale, style: st, onCover: coverMode,
         });
         continue;
       }
@@ -252,13 +287,16 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
     noteFont(text, notDrawn);
     const ts = text.boxIndex != null && adapted && safe ? adapted.textSlots?.[text.boxIndex] : undefined;
     if (ts && safe) {
-      const box = { x: safe.x + ts.x * safe.w, y: safe.y + ts.y * safe.h, w: ts.width * safe.w, h: ts.height * safe.h };
+      // The cover: a title moved off its box by its offset (fractions of the page).
+      const offX = coverMode ? (text.offsetX ?? 0) * W : 0;
+      const offY = coverMode ? (text.offsetY ?? 0) * H : 0;
+      const box = { x: safe.x + ts.x * safe.w + offX, y: safe.y + ts.y * safe.h + offY, w: ts.width * safe.w, h: ts.height * safe.h };
       const align = resolveTextSlotAlign(text, ts);
       const pad = box.w * CAPTION_PAD_X;
       items.push({
         kind: 'boxText', source: 'caption', box, align,
         anchorX: align === 'left' ? box.x + pad : align === 'right' ? box.x + box.w - pad : box.x + box.w / 2,
-        centerY: box.y + box.h / 2, maxWidth: box.w - pad * 2, fontSize, scale, style: text,
+        centerY: box.y + box.h / 2, maxWidth: box.w - pad * 2, fontSize, scale, style: text, onCover: coverMode,
       });
     } else {
       const align = (text.alignment ?? 'center') as FreeTextItem['align'];
@@ -267,7 +305,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
         kind: 'freeText', x: text.x * scale, y: text.y * scale, rotation: text.rotation || 0,
         scaleX: text.scaleX ?? 1, scaleY: text.scaleY ?? 1, opacity: text.opacity ?? 100,
         boxWidth, anchorX: align === 'left' ? 0 : align === 'right' ? boxWidth : boxWidth / 2,
-        align, fontSize, scale, style: text,
+        align, fontSize, scale, style: text, onCover: coverMode,
       });
     }
   }
@@ -288,6 +326,6 @@ export function planPage({ page, albumSize, pageIndex, photoCount, bindingIn }: 
 
   return {
     albumSize, width: W, height: H, bleed: bleedPx(PRINT_DPI), designWidth: uiW, designHeight: uiH,
-    background: fill, wash, items, notDrawn,
+    background: fill, backgroundPhoto, wash, items, notDrawn,
   };
 }

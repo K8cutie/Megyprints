@@ -38,7 +38,8 @@
           "isAccessMediaLocationEnabled": false
         }
       ],
-      "expo-image"
+      "expo-image",
+      "expo-asset"
     ],
     "experiments": {
       "tsconfigPaths": false

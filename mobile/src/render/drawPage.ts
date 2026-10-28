@@ -40,7 +40,7 @@ import { archRy, heartCurves, isPathShape, maskPathD, starPoints } from '@web/pa
 import { PRINT_FRAME, type PrintFrameShadow } from '@web/pages/builder/printFrameSpec';
 import { mirrorOps } from '@web/pages/builder/bleedGeometry';
 import { wrapTextLines, firstLineCenter, TEXT_LINE_HEIGHT } from '@web/pages/builder/wordArtRules';
-import { FRAME_PX, type BoxPhotoItem, type BoxTextItem, type Fill, type FreeTextItem, type PagePlan, type PhotoItem, type Rect } from './pagePlan';
+import { backgroundPhotoRect, FRAME_PX, type BoxPhotoItem, type BoxTextItem, type Fill, type FreeTextItem, type PagePlan, type PhotoItem, type Rect } from './pagePlan';
 import type { PageText, TextLook } from './pageText';
 
 /** The page's photos, by album photo index (null = not loaded: drawn empty). */
@@ -254,7 +254,7 @@ export class PageDrawer {
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.maxWidth);
     const top = firstLineCenter(lines.length, item.centerY, item.fontSize);
     const step = item.fontSize * TEXT_LINE_HEIGHT;
-    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, top + i * step, look, item.align, item.style, item.scale));
+    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, top + i * step, look, item.align, item.style, item.scale, 1, item.onCover));
     if (item.style.underline) this.text.underline(canvas, lines, item.anchorX, top, look, item.align, item.style.color || '#2D2D2D');
     canvas.restore();
   }
@@ -268,7 +268,7 @@ export class PageDrawer {
     canvas.scale(item.scaleX, item.scaleY);
     const step = item.fontSize * TEXT_LINE_HEIGHT;
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.boxWidth);
-    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, step / 2 + i * step, look, item.align, item.style, item.scale, alpha));
+    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, step / 2 + i * step, look, item.align, item.style, item.scale, alpha, item.onCover));
     if (item.style.underline) {
       const blockCenter = step / 2 + ((lines.length - 1) * step) / 2;
       this.text.underline(canvas, lines, item.anchorX, firstLineCenter(lines.length, blockCenter, item.fontSize), look, item.align, item.style.color || '#2D2D2D', alpha);
@@ -283,7 +283,15 @@ export class PageDrawer {
     const W = plan.width, H = plan.height;
     const all = this.Skia.XYWHRect(0, 0, W, H);
     canvas.drawRect(all, this.paint('#ffffff'));
-    canvas.drawRect(all, this.fill(plan.background));
+    const bp = plan.backgroundPhoto;
+    const bgImg = bp ? photos(bp.photoIndex) : null;
+    if (bp && bgImg) {
+      // printPipeline renderBackground 'image': the photo over white paper.
+      this.image(canvas, bgImg, { x: 0, y: 0, w: bgImg.width(), h: bgImg.height() }, backgroundPhotoRect(bp, bgImg.width(), bgImg.height()));
+    } else {
+      // A photo that can't be opened: print's paper colour, as when it fails to load.
+      canvas.drawRect(all, this.fill(bp ? { kind: 'solid', color: '#FFFBF7' } : plan.background));
+    }
     if (plan.wash) canvas.drawRect(all, this.paint(plan.wash));
     for (const item of plan.items) {
       if (item.kind === 'photo') this.photo(canvas, item, photos);
