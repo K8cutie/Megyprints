@@ -16,7 +16,12 @@
        colours with the "wouldn't show" warning and its fix, alignment,
        Bold / Italic / Shadow, the size; dragging the title moves it;
      • the blank cover warning; the "drawn more simply" line; Done goes back;
-       no Undo or Redo anywhere; nothing on a page changes.
+       no Undo or Redo anywhere; nothing on a page changes;
+     • the colours and the font list are the words part's own: a font from
+       the internet is fetched before the title uses it (offline, the title
+       keeps its font and the list says so), and a cover font this phone
+       doesn't have is fetched when the screen opens. The font store runs on
+       fakes; the real network fails the test if touched.
    ══════════════════════════════════════════════════════════════════════════ */
 import { createElement, type ComponentType } from 'react';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
@@ -40,6 +45,24 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('../src/builder/BuilderProvider', () => ({
   useBuilder: () => ({ builder: jest.requireActual('./editorHarness').builder(), platform: mockBench.platform, text: null }),
 }));
+/** The words part's font store on fakes: online or not, every address asked kept. */
+const mockFontNet = { online: false, asked: [] as string[] };
+jest.mock('../src/editor/text/fonts/appFonts', () => {
+  const { createFontStore } = jest.requireActual<typeof import('../src/editor/text/fonts/fontStore')>('../src/editor/text/fonts/fontStore');
+  const files = new Map<string, Uint8Array>();
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ttf = new Uint8Array(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'node_modules', '@expo-google-fonts/dm-sans/400Regular/DMSans_400Regular.ttf')));
+  const css = "@font-face {\n  font-style: normal;\n  font-weight: 400;\n  src: url(https://fonts.gstatic.com/s/x/a.ttf) format('truetype');\n}";
+  return {
+    fontStore: createFontStore({
+      fetchText: async (url: string) => { mockFontNet.asked.push(url); if (!mockFontNet.online) throw new Error('offline'); return css; },
+      fetchBytes: async () => { if (!mockFontNet.online) throw new Error('offline'); return ttf; },
+      files: { read: (n: string) => files.get(n) ?? null, write: (n: string, b: Uint8Array) => { files.set(n, b); }, uri: (n: string) => `file:///f/${n}`, list: () => [...files.keys()] },
+      registerUi: async () => {},
+      addToRenderer: async () => {},
+    }),
+  };
+});
 jest.mock('../src/builder/usePagePicture', () => ({
   usePagePicture: () => ({ uri: 'file:///cache/megy-pages/cover.jpg', notDrawn: mockBench.notDrawn, missing: 0, error: null }),
   forgetPhotoPictures: () => {},
@@ -61,7 +84,19 @@ let tick = 0;
 /** The screen drawn again with the builder as it is now (each builder change
  *  re-renders the screen on the phone; here it is asked for). */
 const refresh = async () => { await act(async () => { screen!.render(createElement(CoverScreen as ComponentType<{ t: number }>, { t: ++tick })); }); };
-afterEach(async () => { if (screen) await act(async () => { screen!.unmount(); }); screen = null; jest.clearAllMocks(); });
+let liveFetch: jest.SpyInstance;
+beforeEach(() => {
+  mockFontNet.online = false;
+  mockFontNet.asked = [];
+  liveFetch = jest.spyOn(globalThis, 'fetch').mockImplementation(() => { throw new Error('the network was called from a test'); });
+});
+afterEach(async () => {
+  if (screen) await act(async () => { screen!.unmount(); });
+  screen = null;
+  expect(liveFetch).not.toHaveBeenCalled();
+  liveFetch.mockRestore();
+  jest.clearAllMocks();
+});
 
 async function openCover(): Promise<void> {
   mockBench.platform = await madeAlbum(SCENARIOS[0]);
@@ -159,7 +194,7 @@ describe('the cover screen', () => {
 
     await press('cover-font');
     expect(has('cover-font-list')).toBe(true);
-    await press('cover-font-Playfair');
+    await press('font-Playfair'); // the words part's list: bundled, used at once
     expect(coverTitleOf(builder().coverFront).fontFamily).toBe('"Playfair Display", Georgia, serif');
     expect(has('cover-font-list')).toBe(false);
     expect(textOf(byId('cover-font')!)).toContain('Playfair');
@@ -221,5 +256,38 @@ describe('the cover screen', () => {
       await press('cover-done');
       expect(mockNav.back).toHaveBeenCalledTimes(1);
     } finally { mockBench.notDrawn = []; }
+  });
+  it('a cover font from the internet: fetched on open, fetched before the title uses it, kept as it was offline', async () => {
+    await openCover();
+    // The website's cover font (Cinzel) isn't in the app: asked for when the screen opens.
+    expect(coverTitleOf(builder().coverFront).fontFamily).toContain('Cinzel');
+    expect(mockFontNet.asked.some((u) => /family=Cinzel/.test(u))).toBe(true);
+
+    await press('cover-tab-text');
+    const before = coverTitleOf(builder().coverFront).fontFamily;
+    // Offline: the title keeps its font, and the list says so.
+    await press('cover-font');
+    await press('font-Lora');
+    expect(coverTitleOf(builder().coverFront).fontFamily).toBe(before);
+    expect(has('cover-font-list')).toBe(true);
+    expect(textOf(byId('cover-font-list-offline')!)).toMatch(/^No internet: Lora can't be downloaded now\. Your words stay in Cinzel\./);
+
+    // Online: fetched first, then the title is in it and the list closes.
+    mockFontNet.online = true;
+    await press('font-Lora');
+    await settle();
+    await refresh();
+    expect(coverTitleOf(builder().coverFront).fontFamily).toContain('Lora');
+    expect(has('cover-font-list')).toBe(false);
+    expect(builder().editScope).toBe('coverFront');
+  });
+
+  it('the title\'s colours include "Any color" (the words part\'s picker)', async () => {
+    await openCover();
+    await press('cover-tab-text');
+    await press('cover-title-color-any');
+    await act(async () => { byId('any-color-code')!.props.onChangeText('#3A6EA5'); });
+    await press('any-color-use');
+    expect(coverTitleOf(builder().coverFront).color.toUpperCase()).toBe('#3A6EA5');
   });
 });

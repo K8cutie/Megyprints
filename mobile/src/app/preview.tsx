@@ -11,7 +11,8 @@
 
    "Edit pages" (the website's way into its editor) opens the editor
    (src/editor) on the page shown; its "Back to preview" comes back here, on
-   the page it was on.
+   the page it was on. On the closed book, "Edit cover" opens the cover
+   editor (src/editor/cover), as the website's Preview does.
 
    Every page is drawn by the app's page renderer from the builder's own page
    data (usePagePicture). When something on a page is drawn more simply than
@@ -41,6 +42,8 @@ import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builde
 import { forgetPhotoPictures, preparePagePicture, usePagePicture } from '../builder/usePagePicture';
 import type { PageRequest } from '../builder/pageImages';
 import { EDIT_PAGES } from '../editor/editorWords';
+import { COVER_ROUTE } from '../editor/cover';
+import { EDIT_COVER } from '../editor/cover/words';
 import { useAuth } from '../lib/auth';
 import { useDraft } from '../lib/draftStore';
 import { colors, space } from '../lib/theme';
@@ -297,6 +300,12 @@ export default function Preview() {
           <Pressable accessibilityRole="button" onPress={editPages} style={styles.toggle} testID="preview-edit-pages">
             <Text style={styles.toggleText}>{EDIT_PAGES}</Text>
           </Pressable>
+          {/* The website's "Edit cover", beside the closed book. */}
+          {onCover && (
+            <Pressable accessibilityRole="button" onPress={() => router.push(COVER_ROUTE)} style={styles.toggle} testID="preview-edit-cover">
+              <Text style={styles.toggleText}>{EDIT_COVER}</Text>
+            </Pressable>
+          )}
         </View>
         {missingHere.length > 0 && (
           <Text style={styles.notDrawn} testID="preview-not-drawn">{NOT_DRAWN_LINE}</Text>

@@ -1325,11 +1325,41 @@ Branch `feat/port-phase-4-editor-cover`, on the editor core. Nothing in `../src`
   `coverLayout.ts`, which measures in a browser and is not shared; the renderer job is
   adding the spine); "Or choose a photo from your phone" (the renderer draws a cover
   photo only when it is one of the album's, by `photoId`, and the app has no one-photo
-  picker yet); "Any color" (no colour picker in the app); font names shown in their own
-  faces (the app's screens have no page fonts loaded; the cover picture draws the 3 the
-  renderer has, the rest "look simpler"); an "Edit cover" button on the Preview (the
-  website's way in; the Preview is Phase 3's file). Not walked on an emulator or a phone
-  in this step.
+  picker yet). Not walked on an emulator or a phone in this step. ("Any color", font
+  names in their own faces, fonts from the internet and the Preview's "Edit cover" came
+  when the parts were put together: see below.)
+
+### All three parts together (one editor)
+
+The three part branches were merged into `feat/port-phase-4-editor` (photos, then
+words, then the cover; no conflicts in code, `docs/` kept every part's section,
+`package.json` keeps the words part's `expo-font`, whose lock entry only moves from
+under `expo` to the top, same version and checksum). Then, so it is one editor:
+
+- **One colour picker and one font list.** The cover screen uses the words part's
+  (`text/ColourPickers.tsx`, `text/FontPicker.tsx`); the cover's own `pickers.tsx` is
+  gone. So the cover title gets "Any color", font names in their own faces, and the
+  fonts from the internet exactly as a caption does: fetched before the title uses it
+  ("Getting the font…"), and offline the title keeps its font and the list says so
+  (`useFontPick`, shared by the text editor and the cover's `FontListSheet`). A cover
+  font this phone doesn't have yet (an album made on the website) is fetched when the
+  cover screen opens. The words "Fonts" and "Use <colour> on every page" have one
+  source (`text/words.ts`; `cover/words.ts` re-exports them).
+- **One filled button per screen.** The "Any color" sheet's "Use" is outlined, so the
+  cover's "Done" and the text editor's "Done" stay the only filled ones; the text
+  editor's "Done" is 48 dp tall like every other target.
+- **Photos missing on this phone** is the photos part's line now, first over the page
+  (`photos/banners.tsx` `MissingPhotosBanner`, the website's MissingPhotosBar words and
+  amber look): "Add the photos" opens the phone's photos from the editor and, on the
+  way back, the same photos go back in their places (`intake.ts` → `syncPhotos`), and
+  the count is said, instead of sending the customer back to the Photos step.
+- **"Edit cover" on the Preview** beside the closed book, as the website's Preview
+  (`preview-edit-cover`), as well as the "Cover" tile before page 1 in the editor's
+  strip. Both open the same cover screen.
+- Tests added for each: the cover title's "Any color", a cover font fetched on open,
+  fetched before use and kept offline (the font store on fakes; the real network fails
+  the test), the missing-photos line and its trip, the words against the website's
+  source.
 
 ### Not done, not proven (editor core)
 

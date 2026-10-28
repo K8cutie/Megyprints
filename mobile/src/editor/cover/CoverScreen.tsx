@@ -10,8 +10,14 @@
        photo on, Zoom (1 to 3) and Reset, and dragging the cover moves the
        photo in its frame;
      • Text: the cover title, too long → "Make it fit"; its font (the 74),
-       colour (the 28), alignment, Bold, Italic, Shadow, and size (16 to 96);
-       dragging the title on the cover moves it, kept on the cover.
+       colour (the 28 and "Any color"), alignment, Bold, Italic, Shadow, and
+       size (16 to 96); dragging the title on the cover moves it, kept on
+       the cover.
+   The colours and the font list are the words part's own (text/ColourPickers,
+   text/FontPicker), so the editor has one look and one way for them: a font
+   from the internet is fetched before the title uses it, and the cover's
+   font is fetched when the screen opens if this phone doesn't have it yet
+   (an album made on the website), so the cover is drawn in its real font.
    Every change is the website's call (coverEdits.ts) on the website's
    builder, while the builder's cover scope is on: turned on when this screen
    is on top, back to the pages when it is left (useFocusEffect, as the cover
@@ -21,8 +27,8 @@
 
    Not here yet: the spine beside the cover (the website's SpineStrip and its
    notes read coverLayout.ts, which measures in a browser and is not shared),
-   "Or choose a photo from your phone" (the app draws a cover photo only when
-   it is one of the album's), and "Any color" (no colour picker in the app).
+   and "Or choose a photo from your phone" (the app draws a cover photo only
+   when it is one of the album's).
    ══════════════════════════════════════════════════════════════════════════ */
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
@@ -46,7 +52,10 @@ import {
   zoomCoverPhoto, ZOOM_RANGE, type Align,
 } from './coverEdits';
 import { CoverStage, type DragPhase, type DragWhat } from './CoverStage';
-import { CoverColours, FontSheet, TitleColours } from './pickers';
+import { PageColourPicker, TextColourPicker } from '../text/ColourPickers';
+import { FontListSheet } from '../text/FontPicker';
+import { fontStore } from '../text/fonts/appFonts';
+import { catalogFace } from '../text/fonts/fontSources';
 import { Slider } from './Slider';
 import { throttle } from './throttle';
 import * as W from './words';
@@ -210,6 +219,14 @@ export default function CoverScreen() {
   const shown = useMemo(() => shownCoverPhotos(photos, showAll, onCover, COVER_PHOTOS_SHOWN), [photos, showAll, onCover]);
   const cell = Math.floor((screenW - space.md * 2 - GAP * (COLUMNS - 1)) / COLUMNS);
 
+  // The cover's font, if this phone doesn't have it yet (an album made on the
+  // website or another phone): fetched once, and the cover is drawn again in it.
+  const titleFont = title.fontFamily;
+  useEffect(() => {
+    const face = catalogFace(titleFont);
+    if (face && fontStore.status(face) === 'missing') void fontStore.ensure(titleFont);
+  }, [titleFont]);
+
   // ── What the website warns about ──
   const blank = coverBlank(cover);
   const tooLong = titleTooLong(cover, builder.albumSize, platform.textMeasurer());
@@ -268,7 +285,7 @@ export default function CoverScreen() {
             )}
 
             <Text style={styles.label}>{W.COLOUR}</Text>
-            <CoverColours background={cover.background} onPick={(hex) => colourTheCover(builder, hex)} onPickAll={(hex) => colourEveryPage(builder, hex)} />
+            <PageColourPicker background={cover.background} onPick={(hex) => colourTheCover(builder, hex)} onPickAll={(hex) => colourEveryPage(builder, hex)} testID="cover-color" />
 
             {hasPhoto && (
               <View style={styles.box} testID="cover-zoom">
@@ -313,7 +330,7 @@ export default function CoverScreen() {
             </Pressable>
 
             <Text style={styles.label}>{W.COLOUR}</Text>
-            <TitleColours value={title.color} onPick={(hex) => setTitleColour(builder, hex)} />
+            <TextColourPicker value={title.color} onChange={(hex) => setTitleColour(builder, hex)} testID="cover-title-color" />
             {ink && (
               <View style={styles.warn} testID="cover-title-hard-to-see">
                 <Text style={styles.warnText}>{W.TITLE_HARD_TO_SEE}</Text>
@@ -353,7 +370,7 @@ export default function CoverScreen() {
         <Button label={W.DONE} onPress={done} testID="cover-done" />
       </SafeAreaView>
 
-      {fontsOpen && <FontSheet value={title.fontFamily} onPick={(f) => setTitleFont(builder, f)} onClose={() => setFontsOpen(false)} />}
+      {fontsOpen && <FontListSheet value={title.fontFamily} onPick={(f) => setTitleFont(latest.current, f)} onClose={() => setFontsOpen(false)} testID="cover-font-list" />}
     </View>
   );
 }

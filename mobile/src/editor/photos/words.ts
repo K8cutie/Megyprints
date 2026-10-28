@@ -17,6 +17,10 @@ export const NO_PHOTOS_YET = 'No photos uploaded yet.';
 export const THIS_PAGE = 'This page';
 export const pageTag = (pageIndex: number) => `Page ${pageIndex + 1}`;
 
+/** MissingPhotosBar.tsx: photos of the album that aren't on this phone,
+ *  picked again here; the same photos go back in their places. */
+export const ADD_THE_PHOTOS = 'Add the photos';
+
 /** PropertiesPanel.tsx: the selected frame's "Replace photo". */
 export const REPLACE_PHOTO = 'Replace photo';
 

@@ -16,10 +16,12 @@
                       a title colour that wouldn't show on the cover's colour
      CoverStage.tsx   the cover picture and the finger (move the title, move
                       the photo in its frame)
-     pickers.tsx      the cover's colours, the title's colours, the fonts
      Slider.tsx       zoom and size (the website's range inputs)
      throttle.ts      a drag sends at most one change every 100 ms
      words.ts         the website's words (test/editorCover.test.ts)
+   The colour pickers and the font list are the words part's
+   (../text/ColourPickers.tsx, ../text/FontPicker.tsx): one look, and fonts
+   from the internet fetched the same way for a caption and the cover title.
 
    FRONT only (the spine follows the title, the back is Megy's). The cover is
    not in the album's undo history (the website's Snapshot has no coverFront):

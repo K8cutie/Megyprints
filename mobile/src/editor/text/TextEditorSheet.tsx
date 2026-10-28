@@ -25,12 +25,11 @@ import { colors, space } from '../../lib/theme';
 import { CLOSE } from '../editorWords';
 import type { SheetProps } from '../registry';
 import { TextColourPicker } from './ColourPickers';
-import { FontPicker, useFontStoreVersion } from './FontPicker';
+import { FontPicker, useFontPick, useFontStoreVersion } from './FontPicker';
 import { fontStore as appFontStore } from './fonts/appFonts';
 import type { FontStore } from './fonts/fontStore';
-import { catalogFace } from './fonts/fontSources';
 import {
-  ALIGN_WORDS, BIGGER, BOLD, COLOR, DONE, EDIT_TEXT, fontOffline, ITALIC, makeItFit, OUTLINE, SHADOW, SMALLER,
+  ALIGN_WORDS, BIGGER, BOLD, COLOR, DONE, EDIT_TEXT, ITALIC, makeItFit, OUTLINE, SHADOW, SMALLER,
   tooLong, TYPE_YOUR_TEXT, UNDERLINE,
 } from './words';
 import {
@@ -53,29 +52,14 @@ export function TextEditorSheet({ ctx, params, close }: SheetProps<TextEditorPar
   const set = (patch: Partial<EditorState>) => setS((v) => ({ ...v, ...patch }));
   const [fontOpen, setFontOpen] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
-  const [fetching, setFetching] = useState<string | null>(null);
-  const [offline, setOffline] = useState<string | null>(null);
+  // A font from the internet is fetched before it is used (FontPicker useFontPick).
+  const { fetching, offline, pick } = useFontPick(store, (family) => { set({ fontFamily: family }); setFontOpen(false); });
 
   // Too long for its box? The renderers' own wrap, measured on the phone.
   const box = useMemo(() => fitBoxFor(page, target, builder.albumSize, pageIndex, builder.editScope === 'coverFront'), [page, target, builder.albumSize, pageIndex, builder.editScope]);
   const fit = fitOf(s, box, platform.textMeasurer());
 
-  const pickFont = async (family: string) => {
-    setOffline(null);
-    const r = await store.ensure(family);
-    setFetching(null);
-    if (r.ok) {
-      set({ fontFamily: family });
-      setFontOpen(false);
-    } else {
-      setOffline(fontOffline(fontName(family), fontName(s.fontFamily)));
-    }
-  };
-  const onPickFont = (family: string) => {
-    const face = catalogFace(family);
-    if (face && store.status(face) === 'missing') setFetching(family);
-    void pickFont(family);
-  };
+  const onPickFont = (family: string) => pick(family, s.fontFamily);
 
   const save = () => {
     saveWords(builder, page, pageIndex, target, contentOf(s));
@@ -207,7 +191,7 @@ const styles = StyleSheet.create({
   close: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   closeText: { fontSize: 20, color: colors.muted },
   title: { fontSize: 15, fontWeight: '700', color: colors.text },
-  done: { minHeight: 44, minWidth: 48, paddingHorizontal: space.md, borderRadius: 12, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginRight: space.xs },
+  done: { minHeight: 48, minWidth: 48, paddingHorizontal: space.md, borderRadius: 12, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginRight: space.xs },
   doneText: { color: colors.accentText, fontWeight: '800', fontSize: 15 },
   pressed: { opacity: 0.85 },
   typingArea: { flex: 1, backgroundColor: '#FAFAFA' },

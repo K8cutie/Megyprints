@@ -28,11 +28,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ALBUM_SIZES, dealtBoxRoll } from '@web/pages/builder/types';
-import { missingPhotos } from '@web/lib/photoPresence';
 import { useSettleGuard } from '@web/lib/settleGuard';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
-import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
+import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { usePagePicture } from '../builder/usePagePicture';
 import { colors, space } from '../lib/theme';
 import { BACK_TO_PREVIEW, DONE_PREVIEW, EDIT_PAGES, NEXT_PAGE, pageLine, PREVIOUS_PAGE, REDO, ROLL_LABELS, UNDO } from './editorWords';
@@ -191,7 +190,6 @@ export default function EditPagesScreen() {
   const tools = allTools.filter((t) => !t.wide);
   const wideTools = allTools.filter((t) => t.wide);
   const banners = bannersFor();
-  const missing = missingPhotos(pages, builder.uploadedPhotos, builder.coverFront);
   const isLast = index >= total - 1;
   const Sheet = sheet ? sheetById(sheet.id) : null;
   const overlays = overlayComponents();
@@ -200,13 +198,9 @@ export default function EditPagesScreen() {
     <View style={styles.page}>
       <Stack.Screen options={header} />
       <Text style={styles.line} testID="edit-counter">{pageLine(index, total)}</Text>
+      {/* The parts' lines over the page, in order: photos missing on this
+          phone, a swap waiting, "This page is yours", the blank pages… */}
       {banners.map(({ id, Component }) => <Component key={id} ctx={ctx} />)}
-      {missing.count > 0 && (
-        <View style={styles.ask} testID="edit-missing-photos">
-          <Text style={styles.askText}>{missingOnPhoneMessage(missing)}</Text>
-          <Button label="Add the photos" kind="plain" onPress={() => router.push('/photos')} testID="edit-missing-add" />
-        </View>
-      )}
 
       <View style={styles.area} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height - NOTE_LINE })}>
         {area.w > 0 && (
@@ -293,8 +287,6 @@ const styles = StyleSheet.create({
   headerButton: { minWidth: 48, minHeight: 48, paddingHorizontal: space.sm, alignItems: 'center', justifyContent: 'center' },
   headerText: { fontSize: 15, fontWeight: '700', color: colors.accent },
   line: { fontSize: 13, fontWeight: '600', color: colors.muted, textAlign: 'center', paddingVertical: space.sm, paddingHorizontal: space.md },
-  ask: { marginHorizontal: space.md, gap: space.sm, backgroundColor: '#FFF1EA', borderWidth: 1, borderColor: '#EBC3AE', borderRadius: 12, padding: space.sm },
-  askText: { fontSize: 13, lineHeight: 18, color: '#7A3A1E' },
   area: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   notDrawn: { height: NOTE_LINE, fontSize: 12, color: colors.muted, textAlign: 'center', paddingHorizontal: space.md, paddingTop: 4 },
   bar: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.sm, gap: space.sm },

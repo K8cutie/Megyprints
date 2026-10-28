@@ -10,7 +10,8 @@
    • PageColorPicker: the page colours (pageColors.ts, shared: White and the
      Crayola 8), the chosen one ringed and ticked, its name under them, and
      "Use <colour> on every page" once a swatch is chosen (never a button
-     that can't do anything). The cover part can use it too.
+     that can't do anything). The cover editor uses both (its colour, its
+     title's colour), so the editor has one look for colours.
    Every swatch is a 48 dp target.
    ══════════════════════════════════════════════════════════════════════════ */
 import { useState } from 'react';
@@ -42,19 +43,25 @@ function Swatch({ hex, name, on, onPress, testID, size = 36 }: { hex: string; na
 }
 
 /** TextColorPicker: the 28 swatches, "Any color", and the chosen colour's name. */
-export function TextColourPicker({ value, onChange, onPicked }: { value: string; onChange: (hex: string) => void; onPicked?: () => void }) {
+export function TextColourPicker({ value, onChange, onPicked, testID = 'text-color' }: {
+  value: string;
+  onChange: (hex: string) => void;
+  onPicked?: () => void;
+  /** Its controls' test ids start with this (the cover title's: 'cover-title-color'). */
+  testID?: string;
+}) {
   const name = textColorName(value);
   const own = !name && !!value;
   const [any, setAny] = useState(false);
   return (
-    <View testID="text-color-picker">
+    <View testID={`${testID}-picker`}>
       <View accessibilityRole="radiogroup" accessibilityLabel={TEXT_COLOR_LABEL} style={styles.grid}>
         {TEXT_COLORS.map((c) => (
-          <Swatch key={c.hex} hex={c.hex} name={c.name} on={sameColor(c.hex, value)} testID={`text-color-${c.name}`}
+          <Swatch key={c.hex} hex={c.hex} name={c.name} on={sameColor(c.hex, value)} testID={`${testID}-${c.name}`}
             onPress={() => { onChange(c.hex); onPicked?.(); }} />
         ))}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={ANY_COLOR} onPress={() => setAny((v) => !v)} testID="text-color-any"
+      <Pressable accessibilityRole="button" accessibilityLabel={ANY_COLOR} onPress={() => setAny((v) => !v)} testID={`${testID}-any`}
         style={({ pressed }) => [styles.anyRow, own && styles.anyRowOn, pressed && styles.pressed]}>
         <View style={styles.anyDot}>
           {own ? <View style={[styles.anyDotFill, { backgroundColor: value }]} /> : RAINBOW.map((c) => <View key={c} style={[styles.rainbowBit, { backgroundColor: c }]} />)}
@@ -62,7 +69,7 @@ export function TextColourPicker({ value, onChange, onPicked }: { value: string;
         <Text style={styles.anyText}>{ANY_COLOR}</Text>
       </Pressable>
       {any && <AnyColour value={value} onPick={(hex) => { onChange(hex); setAny(false); onPicked?.(); }} />}
-      <Text style={styles.name} testID="text-color-name" accessibilityLiveRegion="polite">{name ?? (own ? YOUR_OWN_COLOR : '')}</Text>
+      <Text style={styles.name} testID={`${testID}-name`} accessibilityLiveRegion="polite">{name ?? (own ? YOUR_OWN_COLOR : '')}</Text>
     </View>
   );
 }
@@ -101,18 +108,24 @@ function AnyColour({ value, onPick }: { value: string; onPick: (hex: string) => 
 }
 
 /** PageColorPicker (grid): White and the Crayola 8, and "Use … on every page". */
-export function PageColourPicker({ background, onPick, onPickAll }: { background: AlbumBackground | undefined; onPick: (hex: string) => void; onPickAll?: (hex: string) => void }) {
+export function PageColourPicker({ background, onPick, onPickAll, testID = 'page-color' }: {
+  background: AlbumBackground | undefined;
+  onPick: (hex: string) => void;
+  onPickAll?: (hex: string) => void;
+  /** Its controls' test ids start with this (the cover's: 'cover-color'). */
+  testID?: string;
+}) {
   const current = pageColorOf(background);
   const rows = [PAGE_COLORS.slice(0, 5), PAGE_COLORS.slice(5)];
   return (
-    <View testID="page-color-picker">
+    <View testID={`${testID}-picker`}>
       <View accessibilityRole="radiogroup" accessibilityLabel={PAGE_COLOUR_LABEL}>
         {rows.map((row, r) => (
           <View key={r} style={styles.pageRow}>
             {row.map((c) => {
               const on = current?.hex === c.hex;
               return (
-                <Pressable key={c.hex} accessibilityRole="radio" accessibilityLabel={c.name} accessibilityState={{ checked: on }} onPress={() => onPick(c.hex)} testID={`page-color-${c.name}`}
+                <Pressable key={c.hex} accessibilityRole="radio" accessibilityLabel={c.name} accessibilityState={{ checked: on }} onPress={() => onPick(c.hex)} testID={`${testID}-${c.name}`}
                   style={({ pressed }) => [styles.hit, pressed && styles.pressed]}>
                   <View style={[styles.ring, on && styles.ringOn]}>
                     <View style={[styles.swatch, { width: 38, height: 38, borderRadius: 19, backgroundColor: c.hex }]}>
@@ -125,9 +138,9 @@ export function PageColourPicker({ background, onPick, onPickAll }: { background
           </View>
         ))}
       </View>
-      <Text style={styles.name} testID="page-color-name" accessibilityLiveRegion="polite">{current?.name ?? ''}</Text>
+      <Text style={styles.name} testID={`${testID}-name`} accessibilityLiveRegion="polite">{current?.name ?? ''}</Text>
       {onPickAll && current && (
-        <Pressable accessibilityRole="button" accessibilityLabel={useOnEveryPage(current.name)} onPress={() => onPickAll(current.hex)} testID="page-color-all"
+        <Pressable accessibilityRole="button" accessibilityLabel={useOnEveryPage(current.name)} onPress={() => onPickAll(current.hex)} testID={`${testID}-all`}
           style={({ pressed }) => [styles.allButton, pressed && styles.pressed]}>
           <Text style={styles.allText}>{useOnEveryPage(current.name)}</Text>
         </Pressable>
@@ -157,8 +170,9 @@ const styles = StyleSheet.create({
   shadeOn: { borderWidth: 2, borderColor: RING },
   codeRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm, alignItems: 'center' },
   code: { flex: 1, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: space.sm, fontSize: 16, color: colors.text, backgroundColor: colors.card },
-  useButton: { minHeight: 48, paddingHorizontal: space.md, borderRadius: 10, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  useText: { color: colors.accentText, fontWeight: '700', fontSize: 14 },
+  // Outlined: the one filled button on the screen stays the way on ("Done").
+  useButton: { minHeight: 48, paddingHorizontal: space.md, borderRadius: 10, borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  useText: { color: colors.accent, fontWeight: '700', fontSize: 14 },
   bad: { fontSize: 12, color: colors.bad, marginTop: 4 },
   name: { marginTop: 6, textAlign: 'center', fontSize: 12, color: colors.muted, minHeight: 16 },
   pageRow: { flexDirection: 'row', justifyContent: 'center', gap: space.xs },

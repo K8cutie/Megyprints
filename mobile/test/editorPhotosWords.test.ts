@@ -18,6 +18,7 @@ const web = {
   layout: read('src/pages/builder/LayoutPicker.tsx'),
   engine: read('src/assistant/actionEngine.ts'),
   blank: read('src/pages/builder/blankPages.ts'),
+  missing: read('src/pages/builder/MissingPhotosBar.tsx'),
 };
 
 describe("the photos part uses the website's words", () => {
@@ -29,6 +30,10 @@ describe("the photos part uses the website's words", () => {
     expect(web.review).toContain(`>${words.NO_PHOTOS_YET}</p>`);
     expect(web.review).toContain(`'${words.THIS_PAGE}' : \`Page \${onPage + 1}\``);
     expect(words.pageTag(2)).toBe('Page 3');
+  });
+
+  it('photos missing on this phone, picked again (MissingPhotosBar.tsx)', () => {
+    expect(web.missing).toContain(`<ImagePlus size={14} /> ${words.ADD_THE_PHOTOS}`);
   });
 
   it('a page the customer changed, and Megy putting it back (MobileReview.tsx)', () => {

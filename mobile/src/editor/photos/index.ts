@@ -26,9 +26,10 @@
        picture of each layout drawn by the page renderer; applyPageLayout,
        asking first when a layout can't hold everything), and "Add or delete
        pages" (addPage / deletePage, never under the 40-page floor).
-     • Lines over the page: a swap waiting, "✎ This page is yours · Megy, fix
-       this page" (resetStudioPage), and the blank pages reminder ("5 pages
-       are blank", Delete / Edit: deletePages).
+     • Lines over the page: photos missing on this phone ("Add the photos":
+       picked here, back in their places), a swap waiting, "✎ This page is
+       yours · Megy, fix this page" (resetStudioPage), and the blank pages
+       reminder ("5 pages are blank", Delete / Edit: deletePages).
    Not this part: video memories and QR codes are Phase 6 (a tap on one
    selects it and nothing more); words, quotes and page colours are part 2;
    the cover is part 3.
@@ -37,7 +38,7 @@ import { createElement } from 'react';
 import { REMOVE_PHOTO, CHOICE_WORDS } from '../editorWords';
 import { ORDER, registerEditorPart, type EditorContext, type SheetComponent } from '../registry';
 import { pendingSwap, startSwap, swapOnTap } from './actions';
-import { BlankPagesBanner, StudioBanner, SwapBanner } from './banners';
+import { BlankPagesBanner, MissingPhotosBanner, StudioBanner, SwapBanner } from './banners';
 import { FramingOverlay } from './FramingOverlay';
 import { pickFromPhone } from './pickFromPhone';
 import { FILTER_SHEET, FilterSheet, LAYOUT_SHEET, MASK_SHEET, MaskSheet, PAGES_SHEET, PagesSheet, PICK_SHEET, PickPhotoSheet } from './sheets';
@@ -115,6 +116,8 @@ registerEditorPart({
   },
   overlays: [FramingOverlay],
   banners: [
+    // First over the page, as the website's MissingPhotosBar.
+    { id: 'photos-missing', order: 5, Component: MissingPhotosBanner },
     { id: 'photos-swap', order: 10, Component: SwapBanner },
     { id: 'photos-studio', order: 20, Component: StudioBanner },
     { id: 'photos-blank', order: 30, Component: BlankPagesBanner },

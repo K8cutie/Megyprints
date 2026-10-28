@@ -7,23 +7,43 @@
      • the blank pages reminder (blankPages.ts, the website's end-of-album
        card's words): "5 pages are blank", "Delete 5 blank pages" (never
        under the 40-page floor: deletePages) and "Edit the blank pages" (the
-       next blank one).
+       next blank one);
+     • photos of the album that aren't on this phone (the website's
+       MissingPhotosBar, first over the page): which pages, and "Add the
+       photos", which opens the phone's photos HERE and, on the way back,
+       puts the same photos back in their places (intake.ts → syncPhotos →
+       photoRelink) and says how many, as the website's bar does.
    ══════════════════════════════════════════════════════════════════════════ */
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useSyncExternalStore } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { blankPagesBody, blankPagesTitle, deleteBlankLabel, editBlankLabel } from '@web/pages/builder/blankPages';
+import { missingPhotos } from '@web/lib/photoPresence';
+import { missingOnPhoneMessage } from '../../builder/screenWords';
 import { colors, space } from '../../lib/theme';
 import type { EditorContext } from '../registry';
 import { blankPlan, cancelSwap, deleteBlankPages, fixStudioPage, nextBlankPage, onSwapChange, pendingSwap } from './actions';
-import { CANCEL, STUDIO_FIX, STUDIO_YOURS, SWAP_LINE } from './words';
+import { pickFromPhone } from './pickFromPhone';
+import { ADD_THE_PHOTOS, CANCEL, STUDIO_FIX, STUDIO_YOURS, SWAP_LINE } from './words';
 
-function Chip({ label, onPress, testID, filled = false }: { label: string; onPress: () => void; testID: string; filled?: boolean }) {
+function Chip({ label, onPress, testID, filled = false, amber = false }: { label: string; onPress: () => void; testID: string; filled?: boolean; amber?: boolean }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} testID={testID}
-      style={({ pressed }) => [styles.chip, filled && styles.chipFilled, pressed && styles.pressed]}>
-      <Text style={[styles.chipText, filled && styles.chipTextFilled]}>{label}</Text>
+      style={({ pressed }) => [styles.chip, filled && styles.chipFilled, amber && styles.chipAmber, pressed && styles.pressed]}>
+      <Text style={[styles.chipText, filled && styles.chipTextFilled, amber && styles.chipTextAmber]}>{label}</Text>
     </Pressable>
+  );
+}
+
+export function MissingPhotosBanner({ ctx }: { ctx: EditorContext }) {
+  const { albumPages, uploadedPhotos, coverFront } = ctx.builder;
+  const missing = missingPhotos(albumPages, uploadedPhotos, coverFront);
+  if (missing.count === 0) return null;
+  return (
+    <View style={[styles.box, styles.blank]} accessibilityRole="alert" testID="edit-missing-photos">
+      <Text style={[styles.small, styles.flex]}>{missingOnPhoneMessage(missing)}</Text>
+      <Chip label={ADD_THE_PHOTOS} amber onPress={() => pickFromPhone()} testID="edit-missing-add" />
+    </View>
   );
 }
 
@@ -84,5 +104,8 @@ const styles = StyleSheet.create({
   chipFilled: { backgroundColor: colors.accent },
   chipText: { fontSize: 13, fontWeight: '700', color: colors.accent },
   chipTextFilled: { color: colors.accentText },
+  // The website's MissingPhotosBar button: white, on the amber line.
+  chipAmber: { borderRadius: 10, borderWidth: 1, borderColor: '#E8C98A', backgroundColor: '#FFFFFF' },
+  chipTextAmber: { color: '#8A5A12' },
   pressed: { opacity: 0.85 },
 });

@@ -10,13 +10,15 @@
    the font…"); without the internet the words keep their font and the
    editor says so.
    ══════════════════════════════════════════════════════════════════════════ */
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance } from 'react-native';
-import { FONTS, FONT_GROUPS, fontFace, isSameFont } from '@web/pages/builder/fontCatalog';
+import { FONTS, FONT_GROUPS, fontFace, fontName, isSameFont } from '@web/pages/builder/fontCatalog';
 import { colors, space } from '../../lib/theme';
+import { EditorSheet } from '../core/EditorSheet';
+import { fontStore as appFontStore } from './fonts/appFonts';
 import type { FontStore } from './fonts/fontStore';
-import { genericOf } from './fonts/fontSources';
-import { FONTS_LABEL, GETTING_FONT } from './words';
+import { catalogFace, genericOf } from './fonts/fontSources';
+import { fontOffline, FONTS_LABEL, GETTING_FONT } from './words';
 
 export const ROW_H = 48;
 const HEAD_H = 30;
@@ -25,6 +27,53 @@ const AHEAD = 4;
 
 export function useFontStoreVersion(store: FontStore): number {
   return useSyncExternalStore(store.subscribe, store.version);
+}
+
+/** Picking a font, the same way wherever the list is (the text editor, the
+ *  cover title): a font from the internet is fetched first, its row saying
+ *  "Getting the font…"; once it is on the phone `onReady` gets it, so the
+ *  page and print use the exact font. Without the internet the words keep
+ *  `current` and `offline` says so. */
+export function useFontPick(store: FontStore, onReady: (family: string) => void): {
+  fetching: string | null;
+  offline: string | null;
+  pick: (family: string, current: string) => void;
+} {
+  const [fetching, setFetching] = useState<string | null>(null);
+  const [offline, setOffline] = useState<string | null>(null);
+  const ready = useRef(onReady);
+  ready.current = onReady;
+  const pick = (family: string, current: string) => {
+    setOffline(null);
+    const face = catalogFace(family);
+    if (face && store.status(face) === 'missing') setFetching(family);
+    void store.ensure(family).then((r) => {
+      setFetching(null);
+      if (r.ok) ready.current(family);
+      else setOffline(fontOffline(fontName(family), fontName(current)));
+    });
+  };
+  return { fetching, offline, pick };
+}
+
+/** The font list in a sheet of its own (the cover title's "Font"): the
+ *  list, fetched fonts and the no-internet line exactly as in the text
+ *  editor; closes once the picked font is ready. */
+export function FontListSheet({ value, onPick, onClose, store = appFontStore, testID = 'font-sheet' }: {
+  value: string;
+  onPick: (family: string) => void;
+  onClose: () => void;
+  /** Tests hand in their own font store (no network, no files). */
+  store?: FontStore;
+  testID?: string;
+}) {
+  const { fetching, offline, pick } = useFontPick(store, (family) => { onPick(family); onClose(); });
+  return (
+    <EditorSheet title={FONTS_LABEL} onClose={onClose} testID={testID}>
+      {offline && <Text style={styles.offline} accessibilityRole="alert" testID={`${testID}-offline`}>{offline}</Text>}
+      <FontPicker store={store} value={value} loading={fetching} onPick={(family) => pick(family, value)} maxHeight={420} />
+    </EditorSheet>
+  );
 }
 
 export function FontPicker({ store, value, loading, onPick, maxHeight = 288 }: {
@@ -110,4 +159,5 @@ const styles = StyleSheet.create({
   tick: { fontSize: 16, fontWeight: '800', color: colors.accent, marginLeft: space.sm },
   busy: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: space.sm },
   busyText: { fontSize: 12, color: colors.muted },
+  offline: { fontSize: 13, lineHeight: 18, color: '#8A5A12', backgroundColor: '#FFF6E5', borderWidth: 1, borderColor: '#F0D9A8', borderRadius: 10, paddingHorizontal: 12, paddingVertical: space.sm },
 });

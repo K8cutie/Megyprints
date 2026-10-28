@@ -538,7 +538,7 @@ describe('what the photos part adds to the screen', () => {
       expect(sheets.map((s) => s.id)).toEqual(['photos:layout', 'photos:pages']);
       for (const id of ['photos:pick', 'photos:layout', 'photos:mask', 'photos:filter', 'photos:pages']) expect(sheetById(id)).not.toBeNull();
       expect(overlayComponents()).toContain(FramingOverlay);
-      expect(bannersFor().map((b) => b.id)).toEqual(['photos-swap', 'photos-studio', 'photos-blank', 'photos-intake']);
+      expect(bannersFor().map((b) => b.id)).toEqual(['photos-missing', 'photos-swap', 'photos-studio', 'photos-blank', 'photos-intake']);
       const t = firstPhoto(platform);
       await tapOn(platform, t);
       ctx = ctxNow(platform, { sheets });

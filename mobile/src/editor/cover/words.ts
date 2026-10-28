@@ -24,8 +24,9 @@ export const ZOOM = 'Zoom';
 export const RESET = 'Reset';
 export const DRAG_HINT = 'Drag the cover above to reposition the photo.';
 export const REMOVE_PHOTO = 'Remove photo';
-/** PageColorPicker.tsx: the button under the swatches once one is chosen. */
-export const useOnEveryPage = (colourName: string) => `Use ${colourName.toLowerCase()} on every page`;
+/** PageColorPicker.tsx: the button under the swatches once one is chosen
+ *  (the words part's, whose picker the cover uses: one source). */
+export { useOnEveryPage } from '../text/words';
 
 /** CoverEditor.tsx Text tab. */
 export const COVER_TITLE = 'Cover title';
@@ -49,8 +50,8 @@ export const SIZE = 'Size';
 export const sizeLine = (px: number) => `${px}px`;
 /** CoverEditor.tsx (as a dialog): the one way out. */
 export const DONE = 'Done';
-/** FontList.tsx: the font list's name. */
-export const FONTS_LABEL = 'Fonts';
+/** FontList.tsx: the font list's name (the words part's list, one source). */
+export { FONTS_LABEL } from '../text/words';
 
 /** APP: the tile before page 1 in the "Edit pages" strip that opens this
  *  editor (the website opens it from the Preview's "Edit cover"). */

@@ -28,7 +28,7 @@ import { frameCell } from '../src/editor/photos/framing';
 import { panRoom } from '@web/pages/builder/slotPhotoFit';
 import { resetIntake, takeIntake, intakeLeaving } from '../src/editor/photos/intake';
 import { FilterSheet, MaskSheet, PagesSheet, PickPhotoSheet } from '../src/editor/photos/sheets';
-import { BlankPagesBanner, StudioBanner, SwapBanner } from '../src/editor/photos/banners';
+import { BlankPagesBanner, MissingPhotosBanner, StudioBanner, SwapBanner } from '../src/editor/photos/banners';
 import * as words from '../src/editor/photos/words';
 import '../src/editor/parts';
 import { builder, ctxOn, firstPhoto, madeAlbum, settle, tapOn, useEditorBench } from './editorHarness';
@@ -258,5 +258,24 @@ describe('the lines over the page', () => {
     await show(createElement(BlankPagesBanner, { ctx: ctxOn(platform) }));
     await press('photos-blank-delete');
     expect(builder().albumPages.length).toBe(40);
+  });
+  it("photos missing on this phone: which pages, and \"Add the photos\" opens the phone's photos here (the trip that puts them back)", async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await act(async () => { editThePages(builder()); });
+    await show(createElement(MissingPhotosBanner, { ctx: ctxOn(platform) }));
+    expect(byId('edit-missing-photos')).toHaveLength(0); // every photo is here
+
+    // The album opened on another phone: the first placed photo's file isn't here.
+    const b = builder();
+    const placed = b.albumPages.flatMap((p) => p.slotFills ?? []).find((f): f is number => typeof f === 'number' && f >= 0)!;
+    const away = { ...b, uploadedPhotos: b.uploadedPhotos.map((p, i) => (i === placed ? { ...p, previewUrl: '' } : p)) };
+    await show(createElement(MissingPhotosBanner, { ctx: { ...ctxOn(platform), builder: away } }));
+    expect(texts()).toMatch(/1 photo on pages? [0-9, and]+ isn't on this phone any more/);
+    expect(texts()).toContain(words.ADD_THE_PHOTOS);
+    await press('edit-missing-add');
+    expect(mockPush).toHaveBeenCalledWith('/pick-photos');
+    // The trip is the photos part's: on the way back the picked photos go in (intake.ts).
+    intakeLeaving(() => new Set());
+    expect(takeIntake()).toMatchObject({ reopen: null });
   });
 });

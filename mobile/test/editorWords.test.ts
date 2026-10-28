@@ -21,6 +21,7 @@ const web = {
 };
 const app = {
   screen: read('mobile/src/editor/EditPagesScreen.tsx'),
+  photosWords: read('mobile/src/editor/photos/words.ts'),
   preview: read('mobile/src/app/preview.tsx'),
 };
 
@@ -28,6 +29,8 @@ describe("the editor uses the website's words", () => {
   it('the way in from the Preview (BuilderPreview.tsx) and the line over the page (MobileReview.tsx)', () => {
     expect(web.preview).toContain(`<ChevronLeft size={14} /> ${words.EDIT_PAGES}`);
     expect(app.preview).toContain('EDIT_PAGES');
+    // The cover editor from the closed book, as the website's Preview.
+    expect(app.preview).toContain('{EDIT_COVER}');
     expect(words.pageLine(2, 40)).toBe('Page 3 of 40 · tap a photo to style it');
     expect(web.review).toContain('Page {idx + 1} of {total} · tap a photo to style it');
   });
@@ -67,6 +70,7 @@ describe("the editor uses the website's words", () => {
 
   it('photos missing on this phone (MissingPhotosBar.tsx)', () => {
     expect(web.missing).toContain('Add the photos');
-    expect(app.screen).toContain('Add the photos');
+    // The bar is the photos part's line over the page now (photos/banners.tsx).
+    expect(app.photosWords).toContain("'Add the photos'");
   });
 });
