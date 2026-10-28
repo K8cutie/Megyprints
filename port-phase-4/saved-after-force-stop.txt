@@ -1,0 +1,8 @@
+title: Bohol Trip 2026 | size: 8x8 | pages: 53 | photos: 120 | open page: 30
+{"page":1,"templateId":"t88-fb-solo","photos":[20],"background":{"type":"solid","solid":"#FFFFFF"}}
+{"page":2,"templateId":"t88-fb-solo","photos":[10],"slotScales":[2.736753068163365],"slotOffsetsX":[-142.6],"background":{"type":"solid","solid":"#FFFFFF"}}
+{"page":3,"templateId":"t88-fb-solo","photos":[7],"background":{"type":"solid","solid":"#FFFFFF"}}
+{"page":4,"templateId":"t88-fb-trio-hero-left-gap","photos":[1,2,3],"background":{"type":"solid","solid":"#FFFFFF"}}
+{"page":29,"templateId":"t88-fb-duo-exact-v-gap","photos":[66,67],"background":{"type":"solid","solid":"#FFFFFF"},"textElements":[{"boxIndex":0,"text":"Sunset at Alona Beach with the whole family after a long day of island hopping and swimming in the clear blue water together","fontFamily":"Georgia, \"Times New Roman\", serif","fontSize":38,"color":"#2D2D2D"}]}
+{"page":30,"templateId":"t88-fb-trio-hero-left-gap","photos":[68,69,"empty"],"background":{"type":"solid","solid":"#FCE883"},"slotTexts":[null,null,{"text":"Island hopping day","fontFamily":"\"Merriweather\", Georgia, serif","fontSize":28,"color":"#2E7D4A"}]}
+cover: {"photo":4,"focusX":0.5,"focusY":0.696,"title":"Bohol Trip 2026","font":"\"Yeseva One\", Georgia, serif","color":"#FFFFFF","shadow":false,"bold":true,"offsetX":0,"offsetY":0.16}
