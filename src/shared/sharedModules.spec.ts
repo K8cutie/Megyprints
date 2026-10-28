@@ -10,7 +10,8 @@
    listed file and fails, naming the file and line, if it:
      • imports a file that is not on the list (type-only imports too: the
        app's type check reads them), or an npm package that is not in
-       SHARED_NPM_PACKAGES. A file whose name.native.ts twin is listed is
+       SHARED_NPM_PACKAGES (types only: SHARED_TYPE_ONLY_PACKAGES, with
+       `import type`). A file whose name.native.ts twin is listed is
        fine: the app's bundler and type check take the twin, which must
        export the same names (checked here too);
      • imports a web-only package (fabric, jsPDF, pdf-lib, pdf.js, Supabase,
@@ -29,10 +30,9 @@
    The files are read with the TypeScript parser, so words in comments and
    strings don't count, and `typeof window` (a safe check) is allowed.
 
-   The album builder's state (useBuilderState) is not on the list yet (it
-   still imports website files), but Phase 0b took every browser call out of
-   it: the same browser check (not the import check) runs on it already, so
-   none can come back while it waits.
+   The album builder's state (useBuilderState) is on the list since Phase
+   3a: Phase 0b took every browser call out of it, and 3a every import of a
+   website file, so the app runs the website's own builder.
 
    How to fix a failure: move the browser part into its own file that is
    not on the list (the website keeps using it; the app gets its own
@@ -42,7 +42,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { posix, resolve } from 'node:path';
 import ts from 'typescript';
-import { SHARED_MODULES, SHARED_NPM_PACKAGES } from './sharedModules';
+import { SHARED_MODULES, SHARED_NPM_PACKAGES, SHARED_TYPE_ONLY_PACKAGES } from './sharedModules';
 
 const ROOT = resolve(__dirname, '../..');
 
@@ -153,6 +153,7 @@ function findProblems(file: string, text: string, listed: ReadonlySet<string>): 
   const add = (node: ts.Node, what: string) =>
     problems.push({ line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, what });
   const allowed: readonly string[] = SHARED_NPM_PACKAGES;
+  const typesOnly: readonly string[] = SHARED_TYPE_ONLY_PACKAGES;
 
   const checkImport = (node: ts.Node, spec: string, typeOnly: boolean) => {
     const kind = typeOnly ? 'type import' : 'import';
@@ -163,6 +164,8 @@ function findProblems(file: string, text: string, listed: ReadonlySet<string>): 
       return;
     }
     const name = packageName(spec);
+    // Its types only (erased at build): the package itself is never loaded.
+    if (typeOnly && typesOnly.includes(spec)) return;
     if (isWebOnlyPackage(name)) add(node, `${kind} '${spec}': a web-only package`);
     else if (!allowed.includes(name)) add(node, `${kind} '${spec}': npm package not in SHARED_NPM_PACKAGES`);
   };
@@ -227,6 +230,11 @@ describe('shared album code (the 2.0 app imports these files)', () => {
     expect(SHARED_NPM_PACKAGES.filter((p) => isWebOnlyPackage(p))).toEqual([]);
   });
 
+  it('the album builder itself is shared (Phase 3a)', () => {
+    expect(LISTED.has('src/pages/builder/useBuilderState.ts')).toBe(true);
+    expect(LISTED.has('src/shared/platform.ts')).toBe(true);
+  });
+
   it.each(SHARED_MODULES)('%s imports only shared code and uses no browser', (file) => {
     const text = readFileSync(resolve(ROOT, file), 'utf8');
     expect(asLines(file, findProblems(file, text, LISTED))).toEqual([]);
@@ -243,17 +251,6 @@ describe('shared album code (the 2.0 app imports these files)', () => {
   });
 });
 
-// Not shared yet (it imports website files), but it uses no browser itself.
-const NOT_YET_SHARED = ['src/pages/builder/useBuilderState.ts'];
-const isImportProblem = (p: Problem) => / is not a shared file$/.test(p.what);
-describe('files on their way to the shared list use no browser themselves', () => {
-  it.each(NOT_YET_SHARED)('%s', (file) => {
-    expect(LISTED.has(file), `${file} is listed now: take it out of NOT_YET_SHARED`).toBe(false);
-    const text = readFileSync(resolve(ROOT, file), 'utf8');
-    expect(asLines(file, findProblems(file, text, LISTED).filter((p) => !isImportProblem(p)))).toEqual([]);
-  });
-});
-
 describe('the check itself catches browser code', () => {
   // A pretend file inside the builder folder, so './types' resolves to a listed file.
   const FAKE = 'src/pages/builder/__fake__.ts';
@@ -264,20 +261,27 @@ describe('the check itself catches browser code', () => {
       "import type { AlbumPage } from './types';",          // listed: fine
       "import { fabric } from 'fabric';",
       "import { supabase } from '../../lib/supabase';",
-      "import type { X } from './useBuilderState';",
+      "import type { X } from './useCanvasEngine';",
       "import { format } from 'date-fns';",
       "export * from '@supabase/supabase-js';",
       "const j = await import('jspdf');",
       "import { useState } from 'react';",                   // allow-listed: fine
       "import { createRoot } from 'react-dom/client';",
+      "import type { SupabaseClient } from '@supabase/supabase-js';", // its types only: fine
+      "import { createClient } from '@supabase/supabase-js';",
+      "import { type User } from '@supabase/supabase-js';",
+      "import type { Session } from '@supabase/auth-js';",
     ].join('\n'))).toEqual([
       "2: import 'fabric': a web-only package",
       "3: import '../../lib/supabase' (src/lib/supabase.ts) is not a shared file",
-      "4: type import './useBuilderState' (src/pages/builder/useBuilderState.ts) is not a shared file",
+      "4: type import './useCanvasEngine' (src/pages/builder/useCanvasEngine.ts) is not a shared file",
       "5: import 'date-fns': npm package not in SHARED_NPM_PACKAGES",
       "6: import '@supabase/supabase-js': a web-only package",
       "7: import 'jspdf': a web-only package",
       "9: import 'react-dom/client': a web-only package",
+      "11: import '@supabase/supabase-js': a web-only package",
+      "12: import '@supabase/supabase-js': a web-only package",
+      "13: type import '@supabase/auth-js': a web-only package",
     ]);
   });
 

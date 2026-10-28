@@ -177,24 +177,68 @@ Notes for Phase 1:
   `PhotoIntake.captureTime` to return that shape (website: `readPhotoTime`;
   app: the gallery's date).
 
-Still not shared: `useBuilderState` imports 15 files that are not on the
-list. Step 1 splits (pure part listed): `masks` (isMaskId), `looks`
-(isLookId), `pageColors` (contrastRatio from coverLayout), `fonts`
-(DEFAULT_TITLE_FONT), `wordArt` (TEXT_LINE_HEIGHT), the `WizardStep` type
-from `assistant/wizard`. Device storage still read inside helpers (each
-fails closed, without a crash, outside a browser, but forgets): `quotes`
-(the AI quote cache), `albumSyncRecord` (readSyncRecord, drafts saved before
-DraftSync), `draftAlbum` and `localDraft` (pure parts used; the files also
-read localStorage), and `albumTheme`'s website-only `readAlbumTheme` /
-`writeAlbumTheme` (the builder uses the store-taking pair). `quotes` also
-asks the server with a relative address (`fetch('/api/theme-quotes')`),
-which only works on a web page; today nothing depends on it (that endpoint
-was deleted on 2026-10-27, a test keeps it gone, and the quote bank is off,
-so the builder never calls it), but any quote call brought back must take
-the full https address in the app. Needs a platform piece: `textFit`
-(caption measuring with a browser canvas). Phase 1 pieces: `supabase`,
-`authContext`, `useAlbumSync` (the app's own Supabase client and sign-in, as
-a twin or passed in).
+Still not shared at the end of 0b: `useBuilderState` imported 15 files that
+were not on the list. Phase 3a (below) shared all of them.
+
+### Phase 3a (2026-10-29, branch `feat/port-phase-3a-shared-builder`, stacked on 0b)
+
+`useBuilderState` is on the shared list: the app runs the website's own album
+builder. No change on the website (all website tests pass, the build has the
+same chunks, ESLint finds nothing new). Like 0b, it touches code the website
+runs, so it is **held until after the Nov 9 re-apply**.
+
+The pure parts were split out of their files, which re-export them (no
+website import changed): `masks` → `maskShapes` and `wordArt` →
+`wordArtRules` (byte-identical to the same split in PR #216, so the two meet
+without a conflict), `looks` → `lookRules`, `fonts` → `fontCatalog`,
+`coverLayout` → `colorContrast` (contrastRatio, so `pageColors` is shared),
+`assistant/wizard` → `wizardSteps` (the `WizardStep` type), `albumTheme` →
+`albumThemeRules`, `quotes` → `themeQuotePool`, `localDraft` →
+`localDraftRules`, `draftAlbum` → `draftAlbumRow`, `useAlbumSync` →
+`albumCloud`. `textFit`, `pageColors` and `albumSyncRecord` are shared as they
+are.
+
+Device storage goes through the store it is handed, same keys and values:
+the quote cache (`createThemeQuotes({ store, endpoint })`; website:
+localStorage and `/api/theme-quotes`, app: its deviceStore and `null`, so no
+relative-address call), the old per-device sync record
+(`readSyncRecord(albumId, store)`), the occasion (`writeAlbumThemeTo(store, v,
+announce)`).
+
+New platform pieces (`src/shared/platform.ts`), website values in
+`lib/browserPlatform.ts`, each calling exactly what the builder called before:
+- `textMeasurer()`: words measured in a CSS font (website: the canvas
+  `textFit` used; app: Skia's fonts). `textFit`'s default measurer comes from
+  `canvasMeasurer`, whose app twin `canvasMeasurer.native.ts` is none.
+- `quotes`: the occasion's caption lines (website: `lib/quotes`; app:
+  `createThemeQuotes` on its deviceStore).
+- `occasionChanged(occasion)`: tell the screens showing the occasion
+  (website: the `megy-album-theme` window event).
+- `cloud`: `client` (the Supabase client: the saved session and the version
+  read), `useUser()` (who is signed in), `useAlbumSync()` (the album rows).
+  Every albums write still goes through ONE function, `saveAlbumRowWith` in
+  `lib/albumCloud` (on its version, never an upsert); the website's
+  `useAlbumSync` binds it to `lib/supabase`, the app calls
+  `useAlbumSyncWith(its client)`.
+
+The shared-code check allows a type-only import of `@supabase/supabase-js`
+(`SHARED_TYPE_ONLY_PACKAGES`: erased at build, the app has the same package
+and hands in its own client). The app's tsconfig now has `moduleSuffixes
+[".native", ""]` and maps `@supabase/supabase-js` to its own copy; its import
+walk takes `.native` twins the way Metro does. `mobile/test/sharedBuilder.test.ts`
+mounts the website's builder under the app's React and the React Native test
+preset with an app-style device (file:// photos, memory store, a made-up
+client): 40 photos go in, the album is made with every photo placed, and the
+draft is kept in the device store.
+
+Not proven yet: the builder on Hermes on a phone (the test runs under Node);
+the quote pool's `\p{L}` pattern and the "saved at 2:41 PM" wording
+(`toLocaleTimeString`) on Hermes. The album content key (`albumSyncRecord`)
+reduces only `blob:` URLs, and a cover's own uploaded photo is kept in the
+cover page as a device URL (`background.image`: blob: on the website, a
+file:// URI in the app), so the same album can get different keys on the app
+and the website; the version check then asks which to keep rather than
+overwrite. Worth a platform rule in Phase 3b.
 
 ## 5. Risks, each with its fix
 

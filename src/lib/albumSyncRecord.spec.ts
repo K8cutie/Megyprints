@@ -97,15 +97,15 @@ describe('the record travels with the draft', () => {
   });
   it('the old per-device record is still read for a draft saved before (never written any more)', () => {
     localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify({ a1: { albumId: 'a1', base: 'v1', key: 'K1' } }));
-    expect(readSyncRecord('a1')).toMatchObject({ base: 'v1', key: 'K1' });
-    expect(readSyncRecord('a2')).toBeNull();
-    expect(readSyncRecord(undefined)).toBeNull();
+    expect(readSyncRecord('a1', localStorage)).toMatchObject({ base: 'v1', key: 'K1' });
+    expect(readSyncRecord('a2', localStorage)).toBeNull();
+    expect(readSyncRecord(undefined, localStorage)).toBeNull();
   });
   it('garbage in the old store reads as no record', () => {
     localStorage.setItem(SYNC_STORAGE_KEY, '{nope');
-    expect(readSyncRecord('a1')).toBeNull();
+    expect(readSyncRecord('a1', localStorage)).toBeNull();
     localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify([1, 2]));
-    expect(readSyncRecord('a1')).toBeNull();
+    expect(readSyncRecord('a1', localStorage)).toBeNull();
   });
 });
 

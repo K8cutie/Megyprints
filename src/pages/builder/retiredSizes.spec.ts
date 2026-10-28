@@ -137,7 +137,7 @@ describe('a 9×9 album read back in', () => {
   });
 
   it('from this device, saved to the account at checkout', () => {
-    const a = albumDataFromDraft({ albumId: 'a1', albumSize: '9x9', albumPages: pages9, coverFront: { id: 'cover', size: '9x9' } });
+    const a = albumDataFromDraft({ albumId: 'a1', albumSize: '9x9', albumPages: pages9, coverFront: { id: 'cover', size: '9x9' } }, '');
     expect(a.sizePreset).toBe('8x8');
     expect(a.pages).toEqual(pages8);
     expect(a.coverFront).toEqual({ id: 'cover', size: '8x8' });

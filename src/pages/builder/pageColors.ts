@@ -15,7 +15,7 @@
    shows, the way the spine does (coverLayout.spineInk).
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { contrastRatio } from './coverLayout';
+import { contrastRatio } from './colorContrast';
 import { sameColor } from './textColors';
 import type { AlbumBackground, AlbumPage, TextElement } from './types';
 

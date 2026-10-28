@@ -1,4 +1,4 @@
-import type { WizardStep } from '../../assistant/wizard';
+import type { WizardStep } from '../../assistant/wizardSteps';
 import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo, useContext } from 'react';
 import type {
   AlbumSizePreset,
@@ -27,38 +27,36 @@ import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom
 import { getCanvasDimensions } from './layouts';
 import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, FULL_PAGE_SHARE, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
-import { isMaskId, type MaskId } from './masks';
-import { isLookId, type LookId } from './looks';
+import { isMaskId, type MaskId } from './maskShapes';
+import { isLookId, type LookId } from './lookRules';
 import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
 import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
 import { withPhotoOnLastPage } from './lastPagePhoto';
-import { ensureThemeQuotes } from '../../lib/quotes';
-// ── Phase 1: Cloud imports ──
-import { useAuth } from '../../lib/authContext';
-import { useAlbumSync, serializeAlbum as toAlbumRow } from '../../lib/useAlbumSync';
-import type { AlbumData, SaveResult } from '../../lib/useAlbumSync';
+// ── Phase 1: Cloud imports (the client, the sign-in and the album rows come
+// from the platform: BuilderPlatform.cloud) ──
+import { serializeAlbum as toAlbumRow } from '../../lib/albumCloud';
+import type { AlbumData, SaveResult } from '../../lib/albumCloud';
 import { readSyncRecord, albumContentKey, decideSync, draftSyncRecord, toDraftSync, type DraftSync, type SyncRecord } from '../../lib/albumSyncRecord';
 import { defaultBuilderPlatform } from '../../lib/defaultBuilderPlatform';
-import { supabase } from '../../lib/supabase';
 import { photosToForget } from '../../lib/photoKeeping';
 import { albumNameToSave, cleanAlbumName } from '../../lib/albumName';
-import { albumDataFromDraft, type StoredDraft } from '../../lib/draftAlbum';
+import { albumDataFromDraft, type StoredDraft } from '../../lib/draftAlbumRow';
 import { kindOfPick } from '../../lib/pickedFiles';
 import { planRelink, copyQuality } from '../../lib/photoRelink';
-import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraft';
+import { DRAFT_STORAGE_KEY, draftHasContent } from '../../lib/localDraftRules';
 import { BuilderPlatformContext, type BuilderPlatform, type KeyValueStore, type PickedPhoto } from '../../shared/platform';
 import { faceCentrePan, slotDesignSize } from './slotPhotoFit';
 import { createLimiter } from '../../lib/limit';
 import { templateTracker, shuffleArray } from './varietyTracker';
 import { captionBoxSize, captionFits } from './textFit';
-import { TEXT_LINE_HEIGHT } from './wordArt';
+import { TEXT_LINE_HEIGHT } from './wordArtRules';
 import { HEIC_READY_SHOWN_MS } from '../../lib/heicRules';
 import { normalizeStoredPageFields, storedCoverPage } from './pageNormalize';
 import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from './retiredSizes';
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
-import { DEFAULT_TITLE_FONT } from './fonts';
-import { readAlbumThemeFrom, writeAlbumThemeTo } from '../../lib/albumTheme';
+import { DEFAULT_TITLE_FONT } from './fontCatalog';
+import { readAlbumThemeFrom, writeAlbumThemeTo } from '../../lib/albumThemeRules';
 import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -999,7 +997,9 @@ export function useBuilderState(): BuilderActions {
   // the builder's life: its pieces in a callback's deps never re-make it.
   const platform = useContext(BuilderPlatformContext) ?? defaultBuilderPlatform;
   if (!platform) throw new Error('The album builder needs its device pieces: wrap it in <BuilderPlatformContext.Provider>.');
-  const { deviceStore, sessionStore, faces, photoCheck: checker, lifecycle } = platform;
+  const { deviceStore, sessionStore, faces, photoCheck: checker, lifecycle, textMeasurer, occasionChanged, cloud: account } = platform;
+  /** The occasion's caption lines (website: lib/quotes; app: its own pool). */
+  const { ensureThemeQuotes } = platform.quotes;
   const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, previewUrlOf, releasePreviewUrl, urlNeedsReload, pictureSize, convertingPreview } = platform.photos;
   /** A saved photo URL that must be found again in the photo store when the
    *  album opens: none at all, or one the device says doesn't last (website:
@@ -1008,9 +1008,9 @@ export function useBuilderState(): BuilderActions {
   /** The album's occasion, kept on this device (deviceStore; the website:
    *  localStorage, where its own steps read and write it too). */
   const currentAlbumTheme = useCallback(() => readAlbumThemeFrom(deviceStore), [deviceStore]);
-  // ── Phase 1: Cloud hooks ──
-  const { user } = useAuth();
-  const albumSync = useAlbumSync();
+  // ── Phase 1: Cloud hooks (the account, from the platform) ──
+  const user = account.useUser();
+  const albumSync = account.useAlbumSync();
   const idbPhotos = platform.usePhotoStore(); // this device's photo store (website: IndexedDB) — zero cloud I/O
 
   // ── Core state ──
@@ -1056,7 +1056,7 @@ export function useBuilderState(): BuilderActions {
   const syncRecRef = useRef<SyncRecord | null | undefined>(undefined);
   if (syncRecRef.current === undefined) {
     const init = getInitialState(platform);
-    syncRecRef.current = draftSyncRecord(init.albumId, init.sync) ?? readSyncRecord(init.albumId);
+    syncRecRef.current = draftSyncRecord(init.albumId, init.sync) ?? readSyncRecord(init.albumId, deviceStore);
   }
   /** The record for `albumId`, when it is the one this tab holds. */
   const syncRecFor = useCallback((albumId: string | undefined): SyncRecord | null => {
@@ -1291,11 +1291,11 @@ export function useBuilderState(): BuilderActions {
    *  over into it, and out with its next save (Kraken, 2026-10-05). Only the
    *  SAME album reopened keeps what this device has for it. */
   const restoreAlbumChoices = useCallback((a: AlbumData, sameAlbum = false) => {
-    if (a.occasion) writeAlbumThemeTo(deviceStore, a.occasion);
-    else if (!sameAlbum) writeAlbumThemeTo(deviceStore, '');
+    if (a.occasion) writeAlbumThemeTo(deviceStore, a.occasion, occasionChanged);
+    else if (!sameAlbum) writeAlbumThemeTo(deviceStore, '', occasionChanged);
     if (a.photosPerPage != null) setPhotosPerPage(a.photosPerPage);
     else if (!sameAlbum) setPhotosPerPage(undefined);
-  }, [deviceStore]);
+  }, [deviceStore, occasionChanged]);
 
   /* ── Persistence strategy ──
      • Local (localStorage): debounced ~30s — cheap and client-only.
@@ -2269,7 +2269,7 @@ export function useBuilderState(): BuilderActions {
     } finally {
       setGenerating(null);
     }
-  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces, currentAlbumTheme]);
+  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces, currentAlbumTheme, ensureThemeQuotes]);
 
   /** Does the current page carry a video memory? Then its layout stays the
    *  full photo with the QR badge (see relayPageOnTemplate), and the layout
@@ -3159,7 +3159,7 @@ export function useBuilderState(): BuilderActions {
     const boxSize = inBox && cur ? captionBoxSize(cur, emptyBox, albumSize, currentPageIndex) : null;
     const freeW = Math.round(cw * 0.8);
     const start = inBox ? 28 : 32;
-    const fit = trimmed ? captionFits(trimmed, { fontSize: start, fontFamily: theme.fontFamily }, boxSize ?? { w: freeW, h: ch * 0.8 }) : null;
+    const fit = trimmed ? captionFits(trimmed, { fontSize: start, fontFamily: theme.fontFamily }, boxSize ?? { w: freeW, h: ch * 0.8 }, textMeasurer()) : null;
     if (fit && !fit.fits && fit.fitsAt == null) return { added: false, fontSize: start, shrunk: false, tooLong: true };
     const fontSize = fit && !fit.fits && fit.fitsAt != null ? fit.fitsAt : start;
     pushSnapshot();
@@ -3194,7 +3194,7 @@ export function useBuilderState(): BuilderActions {
       return { ...page, textElements: [...page.textElements, newText] };
     });
     return { added: true, fontSize, shrunk: fontSize < start, tooLong: false };
-  }, [updateCurrentPage, selectedTemplate, albumPages, currentPageIndex, albumSize]);
+  }, [updateCurrentPage, selectedTemplate, albumPages, currentPageIndex, albumSize, textMeasurer]);
 
   // Drop a themed quote into the current page's largest empty band (so the user
   // doesn't have to type). Returns the quote placed, or null when the page is
@@ -3416,7 +3416,7 @@ export function useBuilderState(): BuilderActions {
       return filled > 0 ? pages : prev;
     });
     return result;
-  }, [albumPages, selectedTemplate, pushSnapshot, currentAlbumTheme]);
+  }, [albumPages, selectedTemplate, pushSnapshot, currentAlbumTheme, ensureThemeQuotes]);
 
   /** The occasion changed on a made album (Step 1, then Next): every quote
    *  Megy dealt for another occasion gets an unused line for this one, in the
@@ -3455,7 +3455,7 @@ export function useBuilderState(): BuilderActions {
     pushSnapshot();
     setAlbumPages(next);
     return result;
-  }, [albumPages, pushSnapshot]);
+  }, [albumPages, pushSnapshot, ensureThemeQuotes]);
 
   const setBoxTextOffset = useCallback((slotIndex: number, offsetX: number, offsetY: number) => {
     updateCurrentPage((page) => ({
@@ -3631,7 +3631,7 @@ export function useBuilderState(): BuilderActions {
         : null;
     // getSession reads the saved session directly, so this is right even while
     // the auth context is still loading (it is, on the fresh-start mount).
-    void supabase.auth.getSession().then(async ({ data }) => {
+    void account.client.auth.getSession().then(async ({ data }) => {
       const session = data.session;
       // 1. Its latest version goes to the account before we let go. The cloud
       //    copy is only refreshed every 10 min or on leaving, so the draft on
@@ -3668,7 +3668,7 @@ export function useBuilderState(): BuilderActions {
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
     // A new album is a new occasion (Step 1 asks it again).
-    writeAlbumThemeTo(deviceStore, '');
+    writeAlbumThemeTo(deviceStore, '', occasionChanged);
     setCoverDesign(DEFAULT_COVER_DESIGN);
     setCoverFrontPage(createCoverPage('8x8'));
     setEditScope('interior');
@@ -3680,7 +3680,7 @@ export function useBuilderState(): BuilderActions {
     try { deviceStore.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     // ── Clear wizard state so it restarts from step 1 ──
     try { deviceStore.removeItem('megy_wizard_state'); } catch { /* ignore */ }
-  }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict, setCloudGone, syncRecFor, deviceStore, currentAlbumTheme]);
+  }, [idbPhotos, saveToCloud, serializeAlbum, user, setCloudConflict, setCloudGone, syncRecFor, deviceStore, currentAlbumTheme, account, occasionChanged]);
 
   /* ── Another account's album is not opened for this one ──
      A shared device: B signs in where A's album was left. It used to open as
@@ -3824,7 +3824,7 @@ export function useBuilderState(): BuilderActions {
     try {
       const rec = syncRecFor(albumId);
       // One small read first: the version only.
-      const { data: head, error } = await supabase.from('albums').select('updated_at').eq('id', albumId).maybeSingle();
+      const { data: head, error } = await account.client.from('albums').select('updated_at').eq('id', albumId).maybeSingle();
       if (error) return; // offline: nothing to compare with
       if (!head) {
         // Saved from here before, and now gone: deleted on another device.
@@ -3853,7 +3853,7 @@ export function useBuilderState(): BuilderActions {
       await loadAlbum(albumId, { replace: true });
       setCloudNotice('This album was changed on your other device, so that newer version is open now.');
     }
-  }, [albumSync, localAlbumKey, loadAlbum, setCloudConflict, setCloudGone, syncRecFor]);
+  }, [albumSync, localAlbumKey, loadAlbum, setCloudConflict, setCloudGone, syncRecFor, account]);
   useLayoutEffect(() => { reconcileRef.current = reconcile; }, [reconcile]);
 
   const openNewerVersion = useCallback(async () => {

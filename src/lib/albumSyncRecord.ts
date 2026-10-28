@@ -19,7 +19,13 @@
    tabs share one draft, and a record kept per device let a stale tab borrow
    the other tab's newer version and save its old album onto it (Kraken,
    2026-10-05). Content and the version it came from now move together.
+
+   Shared with the 2.0 app (src/shared/sharedModules.ts): nothing here
+   touches the browser; the old per-device record is read from the store it
+   is handed (the builder's deviceStore; website: localStorage).
    ══════════════════════════════════════════════════════════════════════════ */
+
+import type { KeyValueStore } from '../shared/platform';
 
 /** Where records were kept per device before they moved into the draft. Read
  *  only for a draft saved before that, which carries none of its own. */
@@ -61,11 +67,12 @@ export function toDraftSync(rec: SyncRecord | null): DraftSync | null {
   return { base: rec.base, key: rec.key, ...(rec.sentKey ? { sentKey: rec.sentKey } : {}) };
 }
 
-/** A record from the old per-device store (drafts saved before DraftSync). */
-export function readSyncRecord(albumId: string | undefined): SyncRecord | null {
+/** A record from the old per-device store (drafts saved before DraftSync),
+ *  kept in `store` (the device's: website localStorage). */
+export function readSyncRecord(albumId: string | undefined, store: Pick<KeyValueStore, 'getItem'>): SyncRecord | null {
   if (!albumId) return null;
   try {
-    const raw = localStorage.getItem(SYNC_STORAGE_KEY);
+    const raw = store.getItem(SYNC_STORAGE_KEY);
     const all = raw ? JSON.parse(raw) : null;
     if (!all || typeof all !== 'object' || Array.isArray(all)) return null;
     const rec = (all as Record<string, SyncRecord>)[albumId];

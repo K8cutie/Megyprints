@@ -5,9 +5,16 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    "moduleSuffixes": [
+      ".native",
+      ""
+    ],
     "paths": {
       "@web/*": [
         "../src/*"
+      ],
+      "@supabase/supabase-js": [
+        "./node_modules/@supabase/supabase-js"
       ],
       "react": [
         "./node_modules/@types/react"

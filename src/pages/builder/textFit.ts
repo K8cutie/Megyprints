@@ -8,18 +8,29 @@
    less a 4% pad each side, lines TEXT_LINE_HEIGHT apart, vertically centred,
    clipped to the box — so the same arithmetic, in the editor's design space,
    says whether it fits, and the size at which it would.
+
+   Shared with the 2.0 app (src/shared/sharedModules.ts). Measuring the words
+   is the device's job: a TextMeasurer (shared/platform.ts), set to a CSS
+   font and asked a width. Every function takes one; left out, it is the
+   device's default (canvasMeasurer: the browser's canvas on the website,
+   none in the app, whose builder hands in its own).
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumPage, AlbumSizePreset } from './types';
 import { adaptTemplateToOrientation, getTemplateById } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { getCanvasDimensions } from './layouts';
-import { wrapTextLines, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
+import { wrapTextLines, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArtRules';
+import { defaultMeasurer } from './canvasMeasurer';
+import type { TextMeasurer } from '../../shared/platform';
+
+export { defaultMeasurer };
 
 export interface Box { w: number; h: number }
 export interface CaptionStyle { fontSize?: number; fontFamily?: string; bold?: boolean; italic?: boolean }
-/** What wrapTextLines needs of a canvas context. */
-export type Measurer = Pick<CanvasRenderingContext2D, 'font' | 'measureText'>;
+/** What measuring a caption needs: a font to set and a width to read (a
+ *  browser canvas's 2D context is one). */
+export type Measurer = TextMeasurer;
 
 /** A caption box's size in DESIGN px (getCanvasDimensions space — the space
  *  fontSize is authored in), exactly as print lays it out. */
@@ -34,25 +45,13 @@ export function captionBoxSize(page: AlbumPage, boxIndex: number, albumSize: Alb
   return { w: ts.width * W * (1 - tm.left - tm.right), h: ts.height * H * (1 - tm.top - tm.bottom) };
 }
 
-let shared: Measurer | null | undefined;
-/** The browser's text measurer (null without a canvas, e.g. under jsdom). */
-export function defaultMeasurer(): Measurer | null {
-  if (shared !== undefined) return shared;
-  try {
-    shared = typeof document !== 'undefined' && !/jsdom/i.test(globalThis.navigator?.userAgent ?? '')
-      ? document.createElement('canvas').getContext('2d')
-      : null;
-  } catch { shared = null; }
-  return shared;
-}
-
 const fontOf = (s: CaptionStyle, size: number) =>
   `${s.italic ? 'italic' : 'normal'} ${s.bold ? 'bold' : 'normal'} ${size}px ${s.fontFamily || 'serif'}`;
 
 function linesAt(text: string, s: CaptionStyle, size: number, box: Box, m: Measurer): number {
   m.font = fontOf(s, size);
   const pad = box.w * CAPTION_PAD_X;
-  return wrapTextLines(m as CanvasRenderingContext2D, text, box.w - pad * 2).length;
+  return wrapTextLines(m, text, box.w - pad * 2).length;
 }
 
 export interface Fit {
