@@ -1,0 +1,1115 @@
+{
+ "madeFrom": {
+  "madeAt": "2026-10-28T02:14:51.544Z",
+  "chromium": "149.0.7827.55",
+  "pagesSha256": "6bdb72717f1bfb031622265f47dbec22449f333dc461b519f4cd1f002199c074",
+  "renderer": "bce563d20ae7ff98c0fa490fa6b136819ca133e886f2bf03865835b62fcd4765",
+  "tools": "0023a3f4d486fe5c7a7015d2ea447fb78620672f03d6569267c5bf02a47af56e",
+  "fonts": "dd2dcecf9c504c0f7ae074a57db965a1bbcc78455514f22e868983e38f2e7cb7"
+ },
+ "appRenderer": "1edec61823c2601edad31c5900372070e2fccc98ec1c670bd72d108527a133d6",
+ "device": {
+  "os": "android",
+  "version": 34,
+  "constants": {
+   "uiMode": "normal",
+   "reactNativeVersion": {
+    "minor": 88,
+    "prerelease": null,
+    "patch": 0,
+    "major": 0
+   },
+   "isTesting": false,
+   "Brand": "google",
+   "Manufacturer": "Google",
+   "Release": "14",
+   "Fingerprint": "google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys",
+   "Serial": "unknown",
+   "Model": "sdk_gphone64_x86_64",
+   "Version": 34
+  },
+  "hermes": true,
+  "dev": false
+ },
+ "startedAt": "2026-10-28T02:40:54.077Z",
+ "totalMs": 13283,
+ "photos": [
+  {
+   "file": "photos/photo-0.png",
+   "width": 1600,
+   "height": 1200,
+   "colorSpace": "sRGB IEC61966-2.1",
+   "converted": false
+  },
+  {
+   "file": "photos/photo-1.png",
+   "width": 1200,
+   "height": 1600,
+   "colorSpace": "sRGB IEC61966-2.1",
+   "converted": false
+  },
+  {
+   "file": "photos/photo-2.png",
+   "width": 1500,
+   "height": 1500,
+   "colorSpace": "sRGB IEC61966-2.1",
+   "converted": false
+  },
+  {
+   "file": "photos/photo-3.png",
+   "width": 1800,
+   "height": 1200,
+   "colorSpace": "sRGB IEC61966-2.1",
+   "converted": false
+  },
+  {
+   "file": "photos/photo-4.png",
+   "width": 1200,
+   "height": 1800,
+   "colorSpace": "sRGB IEC61966-2.1",
+   "converted": false
+  },
+  {
+   "file": "photos/photo-5.png",
+   "width": 2400,
+   "height": 1350,
+   "colorSpace": "sRGB IEC61966-2.1",
+   "converted": false
+  },
+  {
+   "file": "photos/photo-6.png",
+   "width": 1350,
+   "height": 2400,
+   "colorSpace": "sRGB IEC61966-2.1",
+   "converted": false
+  },
+  {
+   "file": "photos/photo-7.png",
+   "width": 1000,
+   "height": 750,
+   "colorSpace": "sRGB IEC61966-2.1",
+   "converted": false
+  },
+  {
+   "file": "photos/photo-8.png",
+   "width": 1600,
+   "height": 1200,
+   "colorSpace": "Display P3",
+   "converted": true
+  }
+ ],
+ "pages": [
+  {
+   "name": "gen-8x8-p0-t88-fb-solo",
+   "variant": "",
+   "file": "gen-8x8-p0-t88-fb-solo.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 59,
+   "bareMs": null,
+   "encodeMs": 188
+  },
+  {
+   "name": "gen-8x8-p5-t88-fb-duo-exact-h-gap",
+   "variant": "",
+   "file": "gen-8x8-p5-t88-fb-duo-exact-h-gap.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 49,
+   "bareMs": null,
+   "encodeMs": 180
+  },
+  {
+   "name": "gen-8x8-p6-t88-fb-duo-exact-v-gap",
+   "variant": "",
+   "file": "gen-8x8-p6-t88-fb-duo-exact-v-gap.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 43,
+   "bareMs": null,
+   "encodeMs": 178
+  },
+  {
+   "name": "gen-8x8-p28-t88-fb-solo-ls-twobox-above",
+   "variant": "",
+   "file": "gen-8x8-p28-t88-fb-solo-ls-twobox-above.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 43,
+   "bareMs": null,
+   "encodeMs": 165
+  },
+  {
+   "name": "gen-6x4-p6-t64-duo-tall-framed",
+   "variant": "",
+   "file": "gen-6x4-p6-t64-duo-tall-framed.png",
+   "bareFile": null,
+   "width": 1876,
+   "height": 1276,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 13,
+   "bareMs": null,
+   "encodeMs": 81
+  },
+  {
+   "name": "gen-6x4-p19-t64-fb-duo-tall-gap",
+   "variant": "",
+   "file": "gen-6x4-p19-t64-fb-duo-tall-gap.png",
+   "bareFile": null,
+   "width": 1876,
+   "height": 1276,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 17,
+   "bareMs": null,
+   "encodeMs": 83
+  },
+  {
+   "name": "gen-6x4-p23-t64-fb-duo-sq-band-b",
+   "variant": "",
+   "file": "gen-6x4-p23-t64-fb-duo-sq-band-b.png",
+   "bareFile": null,
+   "width": 1876,
+   "height": 1276,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 22,
+   "bareMs": null,
+   "encodeMs": 76
+  },
+  {
+   "name": "gen-6x6-p6-t66-fb-duo-exact-v-gap",
+   "variant": "",
+   "file": "gen-6x6-p6-t66-fb-duo-exact-v-gap.png",
+   "bareFile": null,
+   "width": 1876,
+   "height": 1876,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 20,
+   "bareMs": null,
+   "encodeMs": 113
+  },
+  {
+   "name": "gen-8x6-p22-t86-duo-34-framed",
+   "variant": "",
+   "file": "gen-8x6-p22-t86-duo-34-framed.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 1876,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 32,
+   "bareMs": null,
+   "encodeMs": 153
+  },
+  {
+   "name": "gen-6x8-p20-t68-trio-34-cols-b",
+   "variant": "",
+   "file": "gen-6x8-p20-t68-trio-34-cols-b.png",
+   "bareFile": null,
+   "width": 1876,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 36,
+   "bareMs": null,
+   "encodeMs": 149
+  },
+  {
+   "name": "pan-zoom-portrait",
+   "variant": "",
+   "file": "pan-zoom-portrait.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 33,
+   "bareMs": null,
+   "encodeMs": 151
+  },
+  {
+   "name": "pan-held-at-edge",
+   "variant": "",
+   "file": "pan-held-at-edge.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 43,
+   "bareMs": null,
+   "encodeMs": 155
+  },
+  {
+   "name": "masks-circle-heart-star",
+   "variant": "",
+   "file": "masks-circle-heart-star.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 55,
+   "bareMs": null,
+   "encodeMs": 157
+  },
+  {
+   "name": "masks-paths",
+   "variant": "",
+   "file": "masks-paths.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 48,
+   "bareMs": null,
+   "encodeMs": 208
+  },
+  {
+   "name": "masks-edges",
+   "variant": "",
+   "file": "masks-edges.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 93,
+   "bareMs": null,
+   "encodeMs": 214
+  },
+  {
+   "name": "gradient-duo-caption",
+   "variant": "",
+   "file": "gradient-duo-caption.png",
+   "bareFile": "gradient-duo-caption.bare.png",
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "left",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "Our first beach day",
+       "pageX": 91.5,
+       "pageY": 2100,
+       "width": 798.9000186920166
+      }
+     ],
+     "zone": {
+      "x": 38,
+      "y": 1838,
+      "w": 2287.5,
+      "h": 600
+     }
+    }
+   ],
+   "drawMs": 56,
+   "bareMs": 42,
+   "encodeMs": 205
+  },
+  {
+   "name": "caption-wraps-underlined",
+   "variant": "",
+   "file": "caption-wraps-underlined.png",
+   "bareFile": "caption-wraps-underlined.bare.png",
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "The castle lights came on and none of us wanted this happy",
+       "pageX": 1256.25,
+       "pageY": 2050.214566929134,
+       "width": 2084.049991607666
+      },
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "day to end so we stayed a little longer",
+       "pageX": 1256.25,
+       "pageY": 2154.214566929134,
+       "width": 1310.1500053405762
+      }
+     ],
+     "zone": {
+      "x": 150.5,
+      "y": 1842.4291338582677,
+      "w": 2287.5,
+      "h": 595.5708661417323
+     }
+    }
+   ],
+   "drawMs": 64,
+   "bareMs": 35,
+   "encodeMs": 212
+  },
+  {
+   "name": "quote-in-photo-frame",
+   "variant": "",
+   "file": "quote-in-photo-frame.png",
+   "bareFile": "quote-in-photo-frame.bare.png",
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#B85C38",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "Home is wherever we",
+       "pageX": 567.6534817913385,
+       "pageY": 1724.4291338582677,
+       "width": 953.0899810791016
+      },
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#B85C38",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "are together",
+       "pageX": 567.6534817913385,
+       "pageY": 1884.4291338582677,
+       "width": 536.5800018310547
+      }
+     ],
+     "zone": {
+      "x": 38,
+      "y": 1246.8582677165355,
+      "w": 1135.306963582677,
+      "h": 1191.1417322834645
+     }
+    },
+    {
+     "lines": [
+      {
+       "item": 1,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "Sunday lunch",
+       "pageX": 1719.8465182086616,
+       "pageY": 595.5708661417323,
+       "width": 635.899995803833
+      }
+     ],
+     "zone": {
+      "x": 1190.193036417323,
+      "y": 38,
+      "w": 1135.306963582677,
+      "h": 1191.1417322834645
+     }
+    }
+   ],
+   "drawMs": 47,
+   "bareMs": 32,
+   "encodeMs": 174
+  },
+  {
+   "name": "free-title-outline",
+   "variant": "",
+   "file": "free-title-outline.png",
+   "bareFile": "free-title-outline.bare.png",
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#FFFFFF",
+       "alpha": 1,
+       "outlined": true,
+       "shadow": false,
+       "text": "Summer 2026",
+       "pageX": 1200,
+       "pageY": 188.8,
+       "width": 1155.7599792480469
+      }
+     ],
+     "zone": {
+      "x": 140.39999999999998,
+      "y": 25.200000000000003,
+      "w": 2195.2,
+      "h": 403.20000000000005
+     }
+    }
+   ],
+   "drawMs": 35,
+   "bareMs": 37,
+   "encodeMs": 183
+  },
+  {
+   "name": "two-captions-shadow",
+   "variant": "",
+   "file": "two-captions-shadow.png",
+   "bareFile": "two-captions-shadow.bare.png",
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": true,
+       "text": "Grandma's",
+       "pageX": 1906.25,
+       "pageY": 528,
+       "width": 555.5499877929688
+      },
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": true,
+       "text": "garden",
+       "pageX": 1906.25,
+       "pageY": 672,
+       "width": 359.9599914550781
+      }
+     ],
+     "zone": {
+      "x": 1563,
+      "y": 38,
+      "w": 762.5,
+      "h": 1200
+     }
+    },
+    {
+     "lines": [
+      {
+       "item": 1,
+       "align": "right",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "May 2026",
+       "pageX": 2257,
+       "pageY": 1800,
+       "width": 356.0300064086914
+      }
+     ],
+     "zone": {
+      "x": 1563,
+      "y": 1238,
+      "w": 762.5,
+      "h": 1200
+     }
+    }
+   ],
+   "drawMs": 40,
+   "bareMs": 32,
+   "encodeMs": 162
+  },
+  {
+   "name": "frame-polaroid",
+   "variant": "",
+   "file": "frame-polaroid.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 30,
+   "bareMs": null,
+   "encodeMs": 161
+  },
+  {
+   "name": "frame-double-dashed-radial",
+   "variant": "",
+   "file": "frame-double-dashed-radial.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 49,
+   "bareMs": null,
+   "encodeMs": 251
+  },
+  {
+   "name": "photo-in-caption-box",
+   "variant": "",
+   "file": "photo-in-caption-box.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 79,
+   "bareMs": null,
+   "encodeMs": 210
+  },
+  {
+   "name": "64-caption-yellow",
+   "variant": "",
+   "file": "64-caption-yellow.png",
+   "bareFile": "64-caption-yellow.bare.png",
+   "width": 1876,
+   "height": 1276,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "Our trip to the hills",
+       "pageX": 281.25,
+       "pageY": 600,
+       "width": 458.1500015258789
+      }
+     ],
+     "zone": {
+      "x": 38,
+      "y": 38,
+      "w": 562.5,
+      "h": 1200
+     }
+    }
+   ],
+   "drawMs": 21,
+   "bareMs": 13,
+   "encodeMs": 70
+  },
+  {
+   "name": "64-pans",
+   "variant": "",
+   "file": "64-pans.png",
+   "bareFile": null,
+   "width": 1876,
+   "height": 1276,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 32,
+   "bareMs": null,
+   "encodeMs": 94
+  },
+  {
+   "name": "64-rounded-frame-black",
+   "variant": "",
+   "file": "64-rounded-frame-black.png",
+   "bareFile": null,
+   "width": 1876,
+   "height": 1276,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 18,
+   "bareMs": null,
+   "encodeMs": 75
+  },
+  {
+   "name": "64-script-caption",
+   "variant": "",
+   "file": "64-script-caption.png",
+   "bareFile": "64-script-caption.bare.png",
+   "width": 1876,
+   "height": 1276,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "A day we will remember",
+       "pageX": 956.25,
+       "pageY": 934.1781496062993,
+       "width": 635.1100006103516
+      }
+     ],
+     "zone": {
+      "x": 150.5,
+      "y": 706.3562992125985,
+      "w": 1687.5,
+      "h": 531.6437007874015
+     }
+    }
+   ],
+   "drawMs": 30,
+   "bareMs": 13,
+   "encodeMs": 79
+  },
+  {
+   "name": "frame-matte",
+   "variant": "",
+   "file": "frame-matte.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 34,
+   "bareMs": null,
+   "encodeMs": 150
+  },
+  {
+   "name": "frame-shadowbox",
+   "variant": "",
+   "file": "frame-shadowbox.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 40,
+   "bareMs": null,
+   "encodeMs": 157
+  },
+  {
+   "name": "frame-thin-dotted",
+   "variant": "",
+   "file": "frame-thin-dotted.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 51,
+   "bareMs": null,
+   "encodeMs": 159
+  },
+  {
+   "name": "frame-round-matte",
+   "variant": "",
+   "file": "frame-round-matte.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 51,
+   "bareMs": null,
+   "encodeMs": 173
+  },
+  {
+   "name": "frame-round-double",
+   "variant": "",
+   "file": "frame-round-double.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 84,
+   "bareMs": null,
+   "encodeMs": 208
+  },
+  {
+   "name": "frame-round-shadowbox",
+   "variant": "",
+   "file": "frame-round-shadowbox.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 55,
+   "bareMs": null,
+   "encodeMs": 172
+  },
+  {
+   "name": "slot-turned",
+   "variant": "",
+   "file": "slot-turned.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 48,
+   "bareMs": null,
+   "encodeMs": 168
+  },
+  {
+   "name": "frame-moved",
+   "variant": "",
+   "file": "frame-moved.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 29,
+   "bareMs": null,
+   "encodeMs": 165
+  },
+  {
+   "name": "masks-more-paths",
+   "variant": "",
+   "file": "masks-more-paths.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 66,
+   "bareMs": null,
+   "encodeMs": 195
+  },
+  {
+   "name": "masks-oval-rounded",
+   "variant": "",
+   "file": "masks-oval-rounded.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 54,
+   "bareMs": null,
+   "encodeMs": 178
+  },
+  {
+   "name": "faded-background",
+   "variant": "",
+   "file": "faded-background.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 44,
+   "bareMs": null,
+   "encodeMs": 155
+  },
+  {
+   "name": "faded-gradient",
+   "variant": "",
+   "file": "faded-gradient.png",
+   "bareFile": null,
+   "width": 1876,
+   "height": 1276,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 24,
+   "bareMs": null,
+   "encodeMs": 58
+  },
+  {
+   "name": "title-turned-shadow",
+   "variant": "",
+   "file": "title-turned-shadow.png",
+   "bareFile": "title-turned-shadow.bare.png",
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": true,
+       "text": "Best day ever",
+       "pageX": 1170.7902840042175,
+       "pageY": 428.1417148557705,
+       "width": 965.4400024414062
+      }
+     ],
+     "zone": {
+      "x": 268.06833648363113,
+      "y": 47.63971425826347,
+      "w": 1881.443895041173,
+      "h": 837.0040011950141
+     }
+    }
+   ],
+   "drawMs": 46,
+   "bareMs": 35,
+   "encodeMs": 178
+  },
+  {
+   "name": "title-shadow-alone",
+   "variant": "",
+   "file": "title-shadow-alone.png",
+   "bareFile": "title-shadow-alone.bare.png",
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#FFFFFF",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": true,
+       "text": "Our summer",
+       "pageX": 1039.4824103725105,
+       "pageY": 945.6140301563446,
+       "width": 1140.8699760437012
+      }
+     ],
+     "zone": {
+      "x": 205.2820037803574,
+      "y": 535.9676571099162,
+      "w": 1744.4008131843063,
+      "h": 895.2927460928568
+     }
+    }
+   ],
+   "drawMs": 19,
+   "bareMs": 21,
+   "encodeMs": 143
+  },
+  {
+   "name": "title-see-through",
+   "variant": "",
+   "file": "title-see-through.png",
+   "bareFile": "title-see-through.bare.png",
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#FFFFFF",
+       "alpha": 0.6,
+       "outlined": false,
+       "shadow": false,
+       "text": "Hello sunshine",
+       "pageX": 1193.0943465153355,
+       "pageY": 962.0552143387024,
+       "width": 1454.669979095459
+      }
+     ],
+     "zone": {
+      "x": 210.34522422255247,
+      "y": 632.9470273021152,
+      "w": 2041.4982445855658,
+      "h": 734.2163740731744
+     }
+    }
+   ],
+   "drawMs": 51,
+   "bareMs": 40,
+   "encodeMs": 182
+  },
+  {
+   "name": "captions-italics",
+   "variant": "",
+   "file": "captions-italics.png",
+   "bareFile": "captions-italics.bare.png",
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "The castle lights",
+       "pageX": 2018.75,
+       "pageY": 548,
+       "width": 628.1499938964844
+      },
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "came on at last",
+       "pageX": 2018.75,
+       "pageY": 652,
+       "width": 597.7099838256836
+      }
+     ],
+     "zone": {
+      "x": 1675.5,
+      "y": 38,
+      "w": 762.5,
+      "h": 1200
+     }
+    },
+    {
+     "lines": [
+      {
+       "item": 1,
+       "align": "right",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "Summer of",
+       "pageX": 2369.5,
+       "pageY": 1740,
+       "width": 476.1599998474121
+      },
+      {
+       "item": 1,
+       "align": "right",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "2026",
+       "pageX": 2369.5,
+       "pageY": 1860,
+       "width": 216.77000427246094
+      }
+     ],
+     "zone": {
+      "x": 1675.5,
+      "y": 1238,
+      "w": 762.5,
+      "h": 1200
+     }
+    }
+   ],
+   "drawMs": 48,
+   "bareMs": 32,
+   "encodeMs": 153
+  },
+  {
+   "name": "86-caption-bold-italic",
+   "variant": "",
+   "file": "86-caption-bold-italic.png",
+   "bareFile": "86-caption-bold-italic.bare.png",
+   "width": 2476,
+   "height": 1876,
+   "notDrawn": [],
+   "words": [
+    {
+     "lines": [
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "We walked all the way",
+       "pageX": 612.890625,
+       "pageY": 852,
+       "width": 831.7099914550781
+      },
+      {
+       "item": 0,
+       "align": "center",
+       "color": "#2D2D2D",
+       "alpha": 1,
+       "outlined": false,
+       "shadow": false,
+       "text": "to the lighthouse",
+       "pageX": 612.890625,
+       "pageY": 948,
+       "width": 638.9500045776367
+      }
+     ],
+     "zone": {
+      "x": 150.5,
+      "y": 38,
+      "w": 1000.78125,
+      "h": 1800
+     }
+    }
+   ],
+   "drawMs": 31,
+   "bareMs": 23,
+   "encodeMs": 138
+  },
+  {
+   "name": "photo-display-p3",
+   "variant": "",
+   "file": "photo-display-p3.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 37,
+   "bareMs": null,
+   "encodeMs": 149
+  },
+  {
+   "name": "photo-display-p3",
+   "variant": "srgb",
+   "file": "photo-display-p3.srgb.png",
+   "bareFile": null,
+   "width": 2476,
+   "height": 2476,
+   "notDrawn": [],
+   "words": [],
+   "drawMs": 36,
+   "bareMs": null,
+   "encodeMs": 164
+  }
+ ]
+}
