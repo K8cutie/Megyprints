@@ -34,6 +34,7 @@ import { lookCss, isLookId } from './looks';
 import CoverEditor from './CoverEditor';
 import TesterPageStamp from './TesterPageStamp';
 import TesterPageNote from './TesterPageNote';
+import PlayFeedbackCard from '../../components/PlayFeedbackCard';
 import { useSampleAlbumNotes } from './useSampleAlbumNotes';
 import { SAMPLE_DONE_NOTE, type SampleAlbumNote } from '../../lib/samplePhotos';
 import { useTesterStamp } from './useTesterStamp';
@@ -1339,6 +1340,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           )}
         </div>
       </div>
+
+      {/* The day's test is done (a sample album's last page): where to leave
+          feedback, under the book so the "You're done" screenshot stays clean.
+          The stage shrinks to make room (its ResizeObserver refits the page). */}
+      {sampleNotes && atAlbumEnd(pos) && (
+        <div className={`${upright ? 'px-4' : 'px-6'} pt-3 bg-paper`} data-testid="preview-play-feedback">
+          <div className="mx-auto max-w-md"><PlayFeedbackCard /></div>
+        </div>
+      )}
 
       {/* Upright phone: the turn under the book, in the thumb zone. */}
       {upright && (
