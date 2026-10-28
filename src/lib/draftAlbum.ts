@@ -31,8 +31,10 @@ export interface StoredDraft {
   sync?: unknown;
 }
 
-/** The album row for a stored draft (photo bytes stay on the device). */
-export function albumDataFromDraft(stored: StoredDraft): AlbumData {
+/** The album row for a stored draft (photo bytes stay on the device).
+ *  `occasion`: the album's occasion as this device keeps it (the builder
+ *  passes the one in its device store; checkout uses this browser's). */
+export function albumDataFromDraft(stored: StoredDraft, occasion: string = readAlbumTheme()): AlbumData {
   return {
     id: stored.albumId,
     title: albumNameToSave(stored.title),
@@ -51,7 +53,7 @@ export function albumDataFromDraft(stored: StoredDraft): AlbumData {
     ...(stored.coverFront ? { coverFront: liftRetiredPage(stored.coverFront) as unknown as AlbumData['coverFront'] } : {}),
     // The occasion and photos-per-page travel with the album, as in the
     // builder's own save (round 2, N4). A draft knows only this device's.
-    occasion: readAlbumTheme() || null,
+    occasion: occasion || null,
     photosPerPage: typeof stored.photosPerPage === 'number' && stored.photosPerPage > 0 ? stored.photosPerPage : null,
   };
 }

@@ -122,6 +122,80 @@ If 0b turns out bigger than it is worth, the fallback is that the app keeps
 its own, smaller album state built on the shared rules. Phases 1–2 do not
 need 0b, so that choice can wait.
 
+### 0b so far (2026-10-28, branch `feat/port-phase-0b`)
+
+Step 2 is done for the device pieces. `useBuilderState` no longer touches the
+browser itself: it reads one `BuilderPlatform` (`src/shared/platform.ts`, on
+the shared list) from `BuilderPlatformContext`:
+
+- `deviceStore` / `sessionStore`: the saved draft and the "start a new album"
+  signal (website: localStorage / sessionStorage).
+- `usePhotoStore()`: photos kept on the device, read back with a URL or URI
+  (website: IndexedDB).
+- `photos`: HEIC check and conversion, size, when the photo was taken, a URL
+  to show it, the "converting" picture (website: the HEIC worker, EXIF), and
+  which saved URLs must be found again in the photo store when an album
+  opens (`urlNeedsReload`; website: a blob: URL; app: anything that is not
+  the store's own lasting copy, since a picker's URI can stop working once
+  the app is closed).
+- `faces`: face finding for crops and the QR corner (website: face-api).
+- `photoCheck`: blur, repeats, closed eyes (website: photoCheckRunner).
+- `lifecycle`: the app going to the background and coming back (website:
+  tab visibility).
+
+The website passes nothing and gets `lib/browserPlatform.ts`, which calls
+exactly what the builder called before (no change on the website). The
+default comes from `lib/defaultBuilderPlatform.ts`; the app's bundler picks
+its twin `defaultBuilderPlatform.native.ts` ("none"), so the app never loads
+face-api, IndexedDB or the HEIC worker and must wrap the builder in the
+Provider with its own pieces. The shared-code check accepts an import whose
+`.native.ts` (or `.native.tsx`) twin is listed, and checks the twin exports
+the same names. It also runs its browser check (not its import check) on
+`useBuilderState` already, and bans `Blob`, `File`, `FileList` and
+`URL.createObjectURL` / `URL.revokeObjectURL`, so none of the calls 0b took
+out can come back. The album's occasion goes through `deviceStore` too
+(`readAlbumThemeFrom` / `writeAlbumThemeTo`), so a save to the account never
+sends an empty occasion over the saved one.
+
+Notes for Phase 1:
+- The app's tsconfig needs `"moduleSuffixes": [".native", ""]`, and the
+  app's own import check must resolve `.native.ts` the same way.
+- **One copy of React.** The builder gets its device pieces through a React
+  context made in a shared file (`src/shared/platform.ts`). Metro's default
+  lookup searches `node_modules` upward from the importing file, so a file
+  under `src/` would get the website's `react` (repo root) while the app's
+  screens get `mobile/node_modules/react`: two copies, so the app's
+  Provider and the builder's `useContext` never meet, and hooks fail with
+  "Invalid hook call". Fix in `mobile/metro.config.js`:
+  `resolver.disableHierarchicalLookup = true` with
+  `resolver.nodeModulesPaths = [<mobile>/node_modules]` (or
+  `extraNodeModules` for `react` and `react-native`). Phase 1 check: the
+  `react` that `src/shared/platform.ts` gets is the same file the app uses.
+- **Open PR #158** (photos with no capture time) changes the same lines:
+  it reads `readPhotoTime(file)` → `{ capturedAt, timeSource }` with the
+  file's date as a fallback. Whichever merges second widens
+  `PhotoIntake.captureTime` to return that shape (website: `readPhotoTime`;
+  app: the gallery's date).
+
+Still not shared: `useBuilderState` imports 15 files that are not on the
+list. Step 1 splits (pure part listed): `masks` (isMaskId), `looks`
+(isLookId), `pageColors` (contrastRatio from coverLayout), `fonts`
+(DEFAULT_TITLE_FONT), `wordArt` (TEXT_LINE_HEIGHT), the `WizardStep` type
+from `assistant/wizard`. Device storage still read inside helpers (each
+fails closed, without a crash, outside a browser, but forgets): `quotes`
+(the AI quote cache), `albumSyncRecord` (readSyncRecord, drafts saved before
+DraftSync), `draftAlbum` and `localDraft` (pure parts used; the files also
+read localStorage), and `albumTheme`'s website-only `readAlbumTheme` /
+`writeAlbumTheme` (the builder uses the store-taking pair). `quotes` also
+asks the server with a relative address (`fetch('/api/theme-quotes')`),
+which only works on a web page; today nothing depends on it (that endpoint
+was deleted on 2026-10-27, a test keeps it gone, and the quote bank is off,
+so the builder never calls it), but any quote call brought back must take
+the full https address in the app. Needs a platform piece: `textFit`
+(caption measuring with a browser canvas). Phase 1 pieces: `supabase`,
+`authContext`, `useAlbumSync` (the app's own Supabase client and sign-in, as
+a twin or passed in).
+
 ## 5. Risks, each with its fix
 
 | Risk | Fix |

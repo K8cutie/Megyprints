@@ -67,7 +67,7 @@ describe('checkout saves it instead of sending the guest away (source guard)', (
     expect(src).toMatch(/e instanceof AlbumNotSavedError\) \|\| !albumId \|\| !\(await saveDraftToAccount\(albumId\)\)\) throw e;\s*created = await orderIt\(\);/);
   });
   it('the builder\'s own reset saves a leaving draft through the same shape', () => {
-    expect(readFileSync(resolve(__dirname, '../pages/builder/useBuilderState.ts'), 'utf8')).toMatch(/albumDataFromDraft\(stored as StoredDraft\)/);
+    expect(readFileSync(resolve(__dirname, '../pages/builder/useBuilderState.ts'), 'utf8')).toMatch(/albumDataFromDraft\(stored as StoredDraft, currentAlbumTheme\(\)\)/);
   });
 });
 
