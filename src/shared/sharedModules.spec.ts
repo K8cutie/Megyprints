@@ -10,18 +10,29 @@
    listed file and fails, naming the file and line, if it:
      • imports a file that is not on the list (type-only imports too: the
        app's type check reads them), or an npm package that is not in
-       SHARED_NPM_PACKAGES;
+       SHARED_NPM_PACKAGES (types only: SHARED_TYPE_ONLY_PACKAGES, with
+       `import type`). A file whose name.native.ts twin is listed is
+       fine: the app's bundler and type check take the twin, which must
+       export the same names (checked here too);
      • imports a web-only package (fabric, jsPDF, pdf-lib, pdf.js, Supabase,
        face-api, TensorFlow, libheif, mp4-muxer, react-dom);
      • uses the browser: document. window. navigator. localStorage
        sessionStorage indexedDB, canvas (getContext(, HTMLCanvasElement,
        OffscreenCanvas, CanvasRenderingContext2D, ImageData, ImageBitmap,
        createImageBitmap), new Image(), HTMLImageElement / HTMLVideoElement /
-       HTMLElement, FileReader, DOMParser;
+       HTMLElement, FileReader, DOMParser, a browser photo (Blob, File,
+       FileList) or a blob: URL (URL.createObjectURL / URL.revokeObjectURL).
+       React Native's types declare URL, Blob and File too, so the app's own
+       type check would not catch these: on the phone createObjectURL throws
+       or reads a picked photo as if it were an RN Blob;
      • uses the website's build tool: import.meta (Vite) or __MEGY_BUILD__.
 
    The files are read with the TypeScript parser, so words in comments and
    strings don't count, and `typeof window` (a safe check) is allowed.
+
+   The album builder's state (useBuilderState) is on the list since Phase
+   3a: Phase 0b took every browser call out of it, and 3a every import of a
+   website file, so the app runs the website's own builder.
 
    How to fix a failure: move the browser part into its own file that is
    not on the list (the website keeps using it; the app gets its own
@@ -31,7 +42,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { posix, resolve } from 'node:path';
 import ts from 'typescript';
-import { SHARED_MODULES, SHARED_NPM_PACKAGES } from './sharedModules';
+import { SHARED_MODULES, SHARED_NPM_PACKAGES, SHARED_TYPE_ONLY_PACKAGES } from './sharedModules';
 
 const ROOT = resolve(__dirname, '../..');
 
@@ -48,8 +59,12 @@ const BROWSER_NAMES = [
   'ImageData', 'ImageBitmap', 'createImageBitmap', 'Image',
   'HTMLImageElement', 'HTMLVideoElement', 'HTMLElement',
   'FileReader', 'DOMParser',
+  'Blob', 'File', 'FileList',
   '__MEGY_BUILD__',
 ];
+
+/** Banned as `URL.name` (blob: URLs are the browser's; `new URL(…)` is fine). */
+const BLOB_URL_CALLS = ['createObjectURL', 'revokeObjectURL'];
 
 interface Problem { line: number; what: string }
 
@@ -71,6 +86,46 @@ function resolveLocal(fromFile: string, spec: string): string {
     if (/\.(ts|tsx)$/.test(candidate) && existsSync(resolve(ROOT, candidate))) return candidate;
   }
   return base;
+}
+
+/** 'src/lib/x.ts' → 'src/lib/x.native.ts' (a .tsx keeps its .tsx): the file
+ *  the app's bundler (Metro) and type check (moduleSuffixes) take in its
+ *  place, when there is one. */
+function nativeTwin(file: string): string {
+  return file.replace(/(?<!\.native)\.(tsx?)$/, '.native.$1');
+}
+
+/** Every file that can stand in for `file` in the app: x.native.ts or
+ *  x.native.tsx (Metro and moduleSuffixes take either, for x.ts or x.tsx). */
+function nativeTwins(file: string): string[] {
+  const base = file.replace(/(?<!\.native)\.tsx?$/, '');
+  return base === file ? [file] : [`${base}.native.ts`, `${base}.native.tsx`];
+}
+
+/** The website file a twin stands in for: name.ts, else name.tsx. */
+function websiteFileOf(twin: string): string {
+  const base = twin.replace(/\.native\.tsx?$/, '');
+  return [`${base}.ts`, `${base}.tsx`].find((f) => existsSync(resolve(ROOT, f))) ?? `${base}.ts`;
+}
+
+/** The names a file exports (declarations and `export { … }`). */
+function exportedNames(file: string, text: string): string[] {
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const names: string[] = [];
+  for (const st of sf.statements) {
+    const exported = ts.canHaveModifiers(st) && !!ts.getModifiers(st)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+    if (exported && ts.isVariableStatement(st)) {
+      for (const d of st.declarationList.declarations) if (ts.isIdentifier(d.name)) names.push(d.name.text);
+    } else if (exported && (ts.isFunctionDeclaration(st) || ts.isClassDeclaration(st) || ts.isInterfaceDeclaration(st)
+      || ts.isTypeAliasDeclaration(st) || ts.isEnumDeclaration(st)) && st.name) {
+      names.push(st.name.text);
+    } else if (ts.isExportDeclaration(st) && st.exportClause && ts.isNamedExports(st.exportClause)) {
+      for (const e of st.exportClause.elements) names.push(e.name.text);
+    } else if (ts.isExportDeclaration(st) && !st.exportClause) {
+      names.push(`* from ${(st.moduleSpecifier as ts.StringLiteral | undefined)?.text ?? '?'}`);
+    }
+  }
+  return names.sort();
 }
 
 /** Is this identifier a property/member NAME (obj.name, { name: … }) rather than a use of a global? */
@@ -98,15 +153,19 @@ function findProblems(file: string, text: string, listed: ReadonlySet<string>): 
   const add = (node: ts.Node, what: string) =>
     problems.push({ line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, what });
   const allowed: readonly string[] = SHARED_NPM_PACKAGES;
+  const typesOnly: readonly string[] = SHARED_TYPE_ONLY_PACKAGES;
 
   const checkImport = (node: ts.Node, spec: string, typeOnly: boolean) => {
     const kind = typeOnly ? 'type import' : 'import';
     if (spec.startsWith('.') || spec.startsWith('@/')) {
       const target = resolveLocal(file, spec);
-      if (!listed.has(target)) add(node, `${kind} '${spec}' (${target}) is not a shared file`);
+      // A listed name.native.ts twin stands in for name.ts in the app.
+      if (!listed.has(target) && !nativeTwins(target).some((t) => listed.has(t))) add(node, `${kind} '${spec}' (${target}) is not a shared file`);
       return;
     }
     const name = packageName(spec);
+    // Its types only (erased at build): the package itself is never loaded.
+    if (typeOnly && typesOnly.includes(spec)) return;
     if (isWebOnlyPackage(name)) add(node, `${kind} '${spec}': a web-only package`);
     else if (!allowed.includes(name)) add(node, `${kind} '${spec}': npm package not in SHARED_NPM_PACKAGES`);
   };
@@ -136,6 +195,10 @@ function findProblems(file: string, text: string, listed: ReadonlySet<string>): 
     } else if (ts.isPropertyAccessExpression(node) && node.name.text === 'getContext'
       && ts.isCallExpression(node.parent) && node.parent.expression === node) {
       add(node, 'uses getContext( (a browser canvas)');
+    } else if (ts.isPropertyAccessExpression(node) && BLOB_URL_CALLS.includes(node.name.text)
+      && ((ts.isIdentifier(node.expression) && node.expression.text === 'URL')
+        || (ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'URL'))) {
+      add(node, `uses URL.${node.name.text} (a browser blob: URL)`);
     } else if (ts.isIdentifier(node) && !isMemberName(node)) {
       const p = node.parent;
       const isObject = (ts.isPropertyAccessExpression(p) || ts.isElementAccessExpression(p)) && p.expression === node;
@@ -167,9 +230,24 @@ describe('shared album code (the 2.0 app imports these files)', () => {
     expect(SHARED_NPM_PACKAGES.filter((p) => isWebOnlyPackage(p))).toEqual([]);
   });
 
+  it('the album builder itself is shared (Phase 3a)', () => {
+    expect(LISTED.has('src/pages/builder/useBuilderState.ts')).toBe(true);
+    expect(LISTED.has('src/shared/platform.ts')).toBe(true);
+  });
+
   it.each(SHARED_MODULES)('%s imports only shared code and uses no browser', (file) => {
     const text = readFileSync(resolve(ROOT, file), 'utf8');
     expect(asLines(file, findProblems(file, text, LISTED))).toEqual([]);
+  });
+
+  // A twin stands in for the website's file in the app, so whatever imports
+  // one gets the other: they must offer the same names.
+  const twins = SHARED_MODULES.filter((f) => /\.native\.tsx?$/.test(f));
+  it.each(twins)('%s exports the same names as the website file it stands in for', (twin) => {
+    const web = websiteFileOf(twin);
+    expect(existsSync(resolve(ROOT, web)), `${web} (the website's file) is missing`).toBe(true);
+    expect(exportedNames(twin, readFileSync(resolve(ROOT, twin), 'utf8')))
+      .toEqual(exportedNames(web, readFileSync(resolve(ROOT, web), 'utf8')));
   });
 });
 
@@ -183,20 +261,63 @@ describe('the check itself catches browser code', () => {
       "import type { AlbumPage } from './types';",          // listed: fine
       "import { fabric } from 'fabric';",
       "import { supabase } from '../../lib/supabase';",
-      "import type { X } from './useBuilderState';",
+      "import type { X } from './useCanvasEngine';",
       "import { format } from 'date-fns';",
       "export * from '@supabase/supabase-js';",
       "const j = await import('jspdf');",
       "import { useState } from 'react';",                   // allow-listed: fine
       "import { createRoot } from 'react-dom/client';",
+      "import type { SupabaseClient } from '@supabase/supabase-js';", // its types only: fine
+      "import { createClient } from '@supabase/supabase-js';",
+      "import { type User } from '@supabase/supabase-js';",
+      "import type { Session } from '@supabase/auth-js';",
     ].join('\n'))).toEqual([
       "2: import 'fabric': a web-only package",
       "3: import '../../lib/supabase' (src/lib/supabase.ts) is not a shared file",
-      "4: type import './useBuilderState' (src/pages/builder/useBuilderState.ts) is not a shared file",
+      "4: type import './useCanvasEngine' (src/pages/builder/useCanvasEngine.ts) is not a shared file",
       "5: import 'date-fns': npm package not in SHARED_NPM_PACKAGES",
       "6: import '@supabase/supabase-js': a web-only package",
       "7: import 'jspdf': a web-only package",
       "9: import 'react-dom/client': a web-only package",
+      "11: import '@supabase/supabase-js': a web-only package",
+      "12: import '@supabase/supabase-js': a web-only package",
+      "13: type import '@supabase/auth-js': a web-only package",
+    ]);
+  });
+
+  it('a website file with a listed .native.ts twin may be imported (the app gets the twin); one without may not', () => {
+    expect(whats([
+      "import { defaultBuilderPlatform } from '../../lib/defaultBuilderPlatform';",
+      "import { browserBuilderPlatform } from '../../lib/browserPlatform';",
+    ].join('\n'))).toEqual([
+      "2: import '../../lib/browserPlatform' (src/lib/browserPlatform.ts) is not a shared file",
+    ]);
+    expect(nativeTwin('src/lib/x.ts')).toBe('src/lib/x.native.ts');
+    expect(nativeTwin('src/lib/x.tsx')).toBe('src/lib/x.native.tsx');
+    expect(nativeTwin('src/lib/x.native.ts')).toBe('src/lib/x.native.ts');
+    expect(nativeTwins('src/lib/x.tsx')).toEqual(['src/lib/x.native.ts', 'src/lib/x.native.tsx']);
+    expect(nativeTwins('src/lib/x.ts')).toEqual(['src/lib/x.native.ts', 'src/lib/x.native.tsx']);
+    // The website file a twin stands in for may be a .tsx.
+    expect(websiteFileOf('src/pages/builder/BuilderSetup.native.ts')).toBe('src/pages/builder/BuilderSetup.tsx');
+    expect(websiteFileOf('src/lib/defaultBuilderPlatform.native.ts')).toBe('src/lib/defaultBuilderPlatform.ts');
+  });
+
+  it('flags a browser photo and a blob: URL, but not a plain URL', () => {
+    expect(whats([
+      'const u = URL.createObjectURL(x);',
+      'URL.revokeObjectURL(u);',
+      "const f = new File([], 'a.jpg');",
+      'function take(list: FileList, b: Blob) { return [list, b]; }',
+      'const v = globalThis.URL.createObjectURL(x);',
+      "const ok = new URL('https://megyprints.com/a').pathname;",
+      'const fine = { File: 1, Blob: 2 };',
+    ].join('\n'))).toEqual([
+      '1: uses URL.createObjectURL (a browser blob: URL)',
+      '2: uses URL.revokeObjectURL (a browser blob: URL)',
+      '3: uses File (browser only)',
+      '4: uses FileList (browser only)',
+      '4: uses Blob (browser only)',
+      '5: uses URL.createObjectURL (a browser blob: URL)',
     ]);
   });
 

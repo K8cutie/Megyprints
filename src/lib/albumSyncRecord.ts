@@ -19,7 +19,13 @@
    tabs share one draft, and a record kept per device let a stale tab borrow
    the other tab's newer version and save its old album onto it (Kraken,
    2026-10-05). Content and the version it came from now move together.
+
+   Shared with the 2.0 app (src/shared/sharedModules.ts): nothing here
+   touches the browser; the old per-device record is read from the store it
+   is handed (the builder's deviceStore; website: localStorage).
    ══════════════════════════════════════════════════════════════════════════ */
+
+import type { KeyValueStore } from '../shared/platform';
 
 /** Where records were kept per device before they moved into the draft. Read
  *  only for a draft saved before that, which carries none of its own. */
@@ -61,11 +67,12 @@ export function toDraftSync(rec: SyncRecord | null): DraftSync | null {
   return { base: rec.base, key: rec.key, ...(rec.sentKey ? { sentKey: rec.sentKey } : {}) };
 }
 
-/** A record from the old per-device store (drafts saved before DraftSync). */
-export function readSyncRecord(albumId: string | undefined): SyncRecord | null {
+/** A record from the old per-device store (drafts saved before DraftSync),
+ *  kept in `store` (the device's: website localStorage). */
+export function readSyncRecord(albumId: string | undefined, store: Pick<KeyValueStore, 'getItem'>): SyncRecord | null {
   if (!albumId) return null;
   try {
-    const raw = localStorage.getItem(SYNC_STORAGE_KEY);
+    const raw = store.getItem(SYNC_STORAGE_KEY);
     const all = raw ? JSON.parse(raw) : null;
     if (!all || typeof all !== 'object' || Array.isArray(all)) return null;
     const rec = (all as Record<string, SyncRecord>)[albumId];
@@ -91,11 +98,21 @@ export function rowContent(row: Record<string, unknown>): Record<string, unknown
   };
 }
 
+/** A URL only this device can open: the website's blob: URLs (new every
+ *  visit), and the 2.0 app's file:// and content:// URIs (its photo store or
+ *  picker can hand back a different one on a later open). A cover photo from
+ *  the photo store is kept in the cover page as one (withLiveCoverPhoto), but
+ *  the photo itself is known by its id (localPhotoId), so where it shows from
+ *  is not part of the album. */
+const DEVICE_URL = /^(blob:|file:\/\/|content:\/\/)/;
+
 /** JSON with object keys sorted (the database hands jsonb back in its own key
- *  order), and this-session-only blob: URLs reduced to "blob:" (a cover photo
- *  from this device's photo store gets a new one every visit). */
+ *  order), and device-only URLs (DEVICE_URL) all reduced to the one "blob:",
+ *  so the same album has the same key on every visit, and on the website and
+ *  the app. (Before the app, this reduced blob: URLs only: the website's keys
+ *  are unchanged.) */
 function stableJson(v: unknown): string {
-  if (typeof v === 'string') return JSON.stringify(v.startsWith('blob:') ? 'blob:' : v);
+  if (typeof v === 'string') return JSON.stringify(DEVICE_URL.test(v) ? 'blob:' : v);
   if (Array.isArray(v)) return `[${v.map((x) => (x === undefined || typeof x === 'function' ? 'null' : stableJson(x))).join(',')}]`;
   if (v && typeof v === 'object') {
     const o = v as Record<string, unknown>;

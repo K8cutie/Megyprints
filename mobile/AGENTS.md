@@ -27,14 +27,23 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   Worklets, Gesture Handler) are not in the APK. Importing one crashes the
   app on the phone; `test/nativeLibraries.test.ts` fails first. Delete the
   line there to turn one back on.
-- **The app's own native code** lives in `modules/` (today `modules/photo-files`:
+- **The app's own native code** lives in `modules/`: `modules/photo-files`
   keeps access to photos picked with "Choose from Files" and reads their size
-  and EXIF time; `srgbCopy` turns a Display P3 / Adobe RGB photo into sRGB
-  for a print page). Expo autolinking builds every folder there; after changing
-  its Kotlin, run prebuild and Gradle again. Jest has no native modules: its
-  JS side (`index.ts`) works without the native half.
+  and EXIF time, and its `srgbCopy` turns a Display P3 / Adobe RGB photo into
+  sRGB for a print page; `modules/photo-pixels` makes the photo check's small
+  copy the way the website's browser does and runs Google ML Kit's face finder
+  on a copy up to twice that size (`src/lib/phonePhotoCheck.ts`; compared with
+  the website by `../tools/photo-check`). ML Kit sends Google anonymous usage
+  numbers (never the photos) and adds about 13 MB to the app: see
+  `src/lib/faceModel.ts` before shipping it. Expo autolinking builds every
+  folder there; after changing its Kotlin, run prebuild and Gradle again.
+  Jest has no native modules: its JS side (`index.ts`) works without the
+  native half.
 - **Photos are never copied into the app.** The album keeps each photo's
-  content:// address on the phone (see the Phase 2 notes in the plan).
+  content:// address on the phone (see the Phase 2 notes in the plan). Pages
+  on screen are drawn from small upright sRGB copies in the app's cache
+  (`modules/photo-files` drawableCopy), which the phone may clear: they are
+  made again from the photo's address.
 - **Server values** come from `.env.local` (not in git; `.env.example` has the
   names). Never commit them, never put real account passwords anywhere.
 - **Page renderer** (`src/render`, react-native-skia): album pages and the
@@ -58,10 +67,22 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   a timing pass with a 12 MP photo; the plan's "Page renderer on the
   phone"). Run it again after changing `src/render`: CanvasKit in Node is
   not the phone's Skia (the native paragraph builder has no `dispose()`,
-  for one). No JavaScript loops over a photo's pixels in the renderer: do
-  pixel work in Skia (a runtime shader on a CPU surface, as
-  `sampling.ts` halves pictures), held byte for byte to a plain
-  JavaScript reference in the tests.
+  for one). Do new pixel work in Skia (a runtime shader on a CPU surface,
+  as `sampling.ts` halves pictures), held byte for byte to a plain
+  JavaScript reference in the tests, not in a JavaScript loop over a
+  photo's pixels (Hermes runs such loops slowly). The one loop left is the
+  colour look (`lookRules.applyLookToPixels`, the website's own maths);
+  its phone timing is in the plan.
+- **The album builder** (`src/builder`, Phase 3): the website's own
+  `useBuilderState` (shared code) runs the album, once for the whole app
+  (`BuilderProvider.tsx`), on the app's platform (`appPlatform.ts`: a
+  file-per-name store saved before `setItem` returns, photos by their
+  address on the phone, the Skia caption measurer, the app's Supabase).
+  Screens call the steps in `albumFlow.ts`, never the album rules
+  themselves. `test/albumParity.test.ts` runs the website's builder
+  (`../tools/parity`, vitest + jsdom) and the app's on the same photos and
+  requires the same album; `test/textMeasurer.test.ts` holds the caption fit
+  to the website's in Chromium (`../tools/golden/fitWeb.mjs`).
 - **Gate before a commit:** `npm run check` here (TypeScript + jest), and from
   the repo root `npx tsc -b && npx vitest run` when `../src` changed.
 - Words a customer sees: plain English, say what you get, one filled

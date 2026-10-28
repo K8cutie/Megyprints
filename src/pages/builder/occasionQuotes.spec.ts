@@ -176,6 +176,8 @@ describe('Megy says what changed', () => {
     expect(src).toMatch(/if \(albumIsMade\(builder\.albumPages\)\) setRequoteFor\(\{ occasion: albumTheme\.trim\(\) \}\);/);
     expect(src).toMatch(/void builder\.requoteForOccasion\(occasion\)\.then\(\(\{ changed, cleared \}\) => \{\s*if \(changed \+ cleared > 0\) showToast\(occasionQuotesMessage\(occasion, changed, cleared\), 7000\);/);
     const state = readFileSync(resolve(__dirname, 'useBuilderState.ts'), 'utf8');
-    expect(state.match(/occasion: currentAlbumTheme\(\)/g)).toHaveLength(2); // generation and "let Megy finish" both mark their quotes
+    // generation and "let Megy finish" both mark their quotes (the album's
+    // save, `occasion: currentAlbumTheme() || null`, is not a quote mark)
+    expect(state.match(/occasion: currentAlbumTheme\(\)(?=,| \})/g)).toHaveLength(2);
   });
 });

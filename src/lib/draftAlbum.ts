@@ -14,47 +14,12 @@
 
 import type { AlbumData } from './useAlbumSync';
 import { DRAFT_STORAGE_KEY } from './localDraft';
-import { albumNameToSave } from './albumName';
 import { readAlbumTheme } from './albumTheme';
-import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from '../pages/builder/retiredSizes';
+import { albumDataFromDraft, type StoredDraft } from './draftAlbumRow';
 
-export interface StoredDraft {
-  albumId?: string;
-  title?: string;
-  albumSize?: string;
-  albumPages?: unknown[];
-  uploadedPhotos?: Array<{ id: string; name: string; size?: number; width?: number; height?: number; capturedAt?: number | null; check?: unknown; kept?: boolean; leftOut?: boolean }>;
-  coverFront?: unknown;
-  accountId?: string | null;
-  photosPerPage?: number | null;
-  /** The cloud version this draft is based on (albumSyncRecord.DraftSync). */
-  sync?: unknown;
-}
-
-/** The album row for a stored draft (photo bytes stay on the device). */
-export function albumDataFromDraft(stored: StoredDraft): AlbumData {
-  return {
-    id: stored.albumId,
-    title: albumNameToSave(stored.title),
-    sizePreset: liveAlbumSize(stored.albumSize) ?? '8x8',
-    pages: liftRetiredPages(stored.albumPages ?? []) as unknown as AlbumData['pages'],
-    photos: (stored.uploadedPhotos ?? []).map((p) => ({
-      ...(p.size ? { size: p.size } : {}),
-      ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
-      ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
-      id: p.id,
-      name: p.name,
-      ...(p.check ? { check: p.check as NonNullable<AlbumData['photos']>[number]['check'] } : {}),
-      ...(p.kept ? { kept: true } : {}),
-      ...(p.leftOut ? { leftOut: true } : {}),
-    })),
-    ...(stored.coverFront ? { coverFront: liftRetiredPage(stored.coverFront) as unknown as AlbumData['coverFront'] } : {}),
-    // The occasion and photos-per-page travel with the album, as in the
-    // builder's own save (round 2, N4). A draft knows only this device's.
-    occasion: readAlbumTheme() || null,
-    photosPerPage: typeof stored.photosPerPage === 'number' && stored.photosPerPage > 0 ? stored.photosPerPage : null,
-  };
-}
+// The draft as an album row lives in draftAlbumRow.ts, which the 2.0 app
+// shares; it is offered here as before.
+export { albumDataFromDraft, type StoredDraft };
 
 /** This device's draft of `albumId`, ready to save to `userId`'s account —
  *  or null when there is no such draft, it has no pages, or it belongs to
@@ -67,7 +32,7 @@ export function draftAlbumForAccount(userId: string, albumId: string | undefined
     if (!d.albumId || (albumId && d.albumId !== albumId)) return null;
     if (d.accountId && d.accountId !== userId) return null;
     if (!Array.isArray(d.albumPages) || d.albumPages.length === 0) return null;
-    return albumDataFromDraft(d);
+    return albumDataFromDraft(d, readAlbumTheme());
   } catch {
     return null;
   }

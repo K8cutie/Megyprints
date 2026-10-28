@@ -13,6 +13,7 @@ import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, photoWord, addMoreLabel
 import { isSizeOfferable } from '../pages/builder/albumSizeOptions';
 import { eventLinkForAlbum } from '../lib/eventAlbum';
 import { Capacitor } from '@capacitor/core';
+import { KEEP_PAGES, REMAKE_ALBUM, TO_COVER, MAKE_ALBUM, COVER_TO_PAGES, COVER_TO_PHOTOS, albumIsBuilt, coverStepNext, type WizardStep } from './wizardSteps';
 
 /* The size step's photos-per-page guidance is DERIVED from DENSITY_BY_SIZE
    (the single source of truth in densities.ts), so it can never disagree with
@@ -27,15 +28,8 @@ const SIZE_CHOICES: { label: string; preset: string }[] = [
   { label: '8.5×11" Portrait', preset: '8.5x11' },
 ];
 
-export type WizardStep =
-  | 'welcome'
-  | 'pick_theme'
-  | 'pick_size'
-  | 'design_cover'
-  | 'upload_photos'
-  | 'review_pages'
-  | 'add_text'
-  | 'finalize';
+// The steps themselves live in wizardSteps.ts, which the 2.0 app shares.
+export type { WizardStep } from './wizardSteps';
 
 export interface WizardState {
   step: WizardStep;
@@ -104,40 +98,15 @@ export function isStepOneReady(albumTitle: string | null | undefined, theme: str
   return isAlbumNameReady(albumTitle) && isAlbumThemeReady(theme);
 }
 
+// The step words and the made-album rules live in wizardSteps.ts, which the
+// 2.0 app shares; re-exported here as before.
+export { KEEP_PAGES, REMAKE_ALBUM, TO_COVER, MAKE_ALBUM, COVER_TO_PAGES, COVER_TO_PHOTOS, albumIsBuilt, coverStepNext };
+
 /** A step action drawn as the big filled button: the one that moves the
  *  customer on. "Upload Photos" has no → but it is the only way on from an
  *  empty upload step, and a pale cream button there read as a dead end. */
 /** The upload step's way on while short of the 40-photo minimum ("Add 26 more photos"). */
 const ADD_MORE = /^Add \d+ more photos?$/;
-/** The photos step with a made album: the way on, and the choice to start the pages over. */
-export const KEEP_PAGES = 'Keep my pages →';
-export const REMAKE_ALBUM = 'Make the album again';
-/** The photos step's way on once 40 photos are in: the cover comes next. */
-export const TO_COVER = 'Next: pick your cover →';
-/** The cover step's way on (CoverEditor's filled button), see coverStepNext. */
-export const MAKE_ALBUM = 'Make my album →';
-export const COVER_TO_PAGES = 'Continue to my pages →';
-export const COVER_TO_PHOTOS = 'Next: add your photos →';
-
-/** A REAL (non-empty) album exists (WizardEngine.hasBuiltAlbum). Exported so
- *  the cover editor's button and Megy's words read the album the same way. */
-export function albumIsBuilt(pages: BuilderActions['albumPages']): boolean {
-  return pages.length >= 40 && pages.some(
-    (p) => (p.slotFills?.some((f) => f != null) ?? false) || p.photos.length > 0,
-  );
-}
-
-/** Where the cover step's filled button goes. The cover comes after the
- *  photos, so it is where the album is made. An album already made goes back
- *  to its pages and is never made again by it (that would wipe the customer's
- *  edits and memories). Short of 40 photos (a journey saved before the photos
- *  came first, or photos left out since) it goes to the photos. */
-export function coverStepNext(albumMade: boolean, photosIn: number): { label: string; go: 'pages' | 'photos' | 'make' } {
-  if (albumMade) return { label: COVER_TO_PAGES, go: 'pages' };
-  if (photosShortBy(photosIn) > 0) return { label: COVER_TO_PHOTOS, go: 'photos' };
-  return { label: MAKE_ALBUM, go: 'make' };
-}
-
 export function isPrimaryAction(action: string): boolean {
   return action.includes('→') || action.includes('Now') || action === 'Upload Photos' || ADD_MORE.test(action);
 }

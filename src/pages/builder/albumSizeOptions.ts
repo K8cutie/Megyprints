@@ -1,6 +1,6 @@
-import { ALBUM_SIZES, type AlbumSizeConfig, type AlbumSizePreset } from './types';
-import { getTemplatesForAlbum } from './pageTemplates';
+import type { AlbumSizeConfig, AlbumSizePreset } from './types';
 import { getDisabledSizes } from '../../lib/storeSettings';
+import { isSizeOfferableAmong, offerableSizesAmong, sizeHasLayouts } from './sizeOffer';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  Which album sizes may a customer actually choose?
@@ -15,19 +15,18 @@ import { getDisabledSizes } from '../../lib/storeSettings';
  *       moment its first layout is authored.
  *  ══════════════════════════════════════════════════════════════════════════ */
 
-/** Does this size have at least one selectable interior layout? */
-export function sizeHasLayouts(size: AlbumSizePreset): boolean {
-  return getTemplatesForAlbum(size).length > 0;
-}
+/** Does this size have at least one selectable interior layout? (sizeOffer.ts,
+ *  the half the 2.0 app shares.) */
+export { sizeHasLayouts };
 
 /** Can this size be offered to a customer right now? */
 export function isSizeOfferable(size: AlbumSizePreset): boolean {
-  return !getDisabledSizes().includes(size) && sizeHasLayouts(size);
+  return isSizeOfferableAmong(size, getDisabledSizes());
 }
 
 /** The size cards/choices to show, in ALBUM_SIZES order. */
 export function offerableAlbumSizes(): AlbumSizeConfig[] {
-  return ALBUM_SIZES.filter((s) => isSizeOfferable(s.preset));
+  return offerableSizesAmong(getDisabledSizes());
 }
 
 /** Why a size isn't offered — for operator-facing surfaces (/admin) that should

@@ -1,9 +1,18 @@
+/* LOOK RULES: the part of looks.ts that needs no browser, so the 2.0 app
+   offers the same looks and colours a photo with the same numbers
+   (src/shared/sharedModules.ts). looks.ts re-exports all of it and adds
+   applyLookPixels (on a browser canvas); the website imports looks.ts
+   exactly as before. Moved here unchanged, plus applyLookToPixels (the same
+   maths over a whole photo, for the app's page renderer). */
+
 /* ══════════════════════════════════════════════════════════════════════════
-   LOOK RULES: the part of looks.ts that needs no browser (which looks there
-   are, their CSS filter functions and the same functions on a pixel), so the
-   2.0 app colours a photo with the same numbers as the website
-   (src/shared/sharedModules.ts). looks.ts re-exports all of it and adds the
-   canvas step (applyLookPixels); the website imports looks.ts as before.
+   LOOKS (owner, 2026-09-13, Studio): a colour treatment on ONE photo —
+   black & white, sepia, faded, warm. ONE definition per look as an ordered
+   list of CSS filter functions; the DOM applies it as a `filter` string, the
+   Fabric editor and the print pipeline apply the SAME functions to pixels
+   using the matrices the CSS Filter Effects spec defines for them — so the
+   three renderers agree by construction, and print never depends on the
+   browser's canvas `filter` support.
    ══════════════════════════════════════════════════════════════════════════ */
 
 export type LookId = 'bw' | 'sepia' | 'faded' | 'warm';

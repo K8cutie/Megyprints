@@ -29,7 +29,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumPage, AlbumSizePreset, FrameStyle, SlotText, TemplateSlot, TextElement } from '@web/pages/builder/types';
-import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc } from '@web/pages/builder/types';
+import { CORNER_POSITIONS, bgCoverFit, cornerImageUrl, resolveBgImageSrc } from '@web/pages/builder/types';
 import { getTemplateById, adaptTemplateToOrientation } from '@web/pages/builder/pageTemplates';
 import { marginForTemplate } from '@web/pages/builder/binding';
 import { resolveSlotBox } from '@web/pages/builder/slotGeometry';
@@ -111,6 +111,8 @@ export interface BoxTextItem {
   /** Print px per design px (outline and shadow scale with it). */
   scale: number;
   style: SlotText;
+  /** On the front cover: the cover's float shadow (wordArtShadow onCover). */
+  onCover: boolean;
 }
 
 /** A free text (a title at x/y), drawn in its own box like the DOM preview. */
@@ -128,6 +130,7 @@ export interface FreeTextItem {
   fontSize: number;
   scale: number;
   style: TextElement;
+  onCover: boolean;
 }
 
 /** A photo in a caption box: cover-fitted, centred, clipped to the box. */
@@ -213,6 +216,12 @@ export interface PagePlan {
   /** The front cover (print's coverMode): its words float. */
   onCover: boolean;
   background: Fill;
+  /** The album photo a photo background shows, and the page it is fitted to
+   *  (print px): `background` as { kind: 'image', image: { photo } }, said
+   *  the way the app's screens ask for it (which photos a page needs, where
+   *  the photo goes once its size is known: backgroundPhotoRect). Null when
+   *  the background is not an album photo. */
+  backgroundPhoto: { photoIndex: number; x: number; y: number; w: number; h: number; cover: boolean; zoom: number; focusX: number; focusY: number } | null;
   /** A see-through wash over the background (its opacity below 100). */
   wash: string | null;
   items: PlanItem[];
@@ -338,7 +347,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, photoIds = []
           kind: 'boxText', source: 'slot', box, align,
           anchorX: align === 'left' ? box.x + pad : align === 'right' ? box.x + box.w - pad : box.x + box.w / 2,
           centerY: box.y + box.h / 2, maxWidth: box.w - pad * 2,
-          fontSize: (st.fontSize || 24) * scale, scale, style: st,
+          fontSize: (st.fontSize || 24) * scale, scale, style: st, onCover: coverMode,
         });
         continue;
       }
@@ -401,7 +410,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, photoIds = []
       items.push({
         kind: 'boxText', source: 'caption', box, align,
         anchorX: align === 'left' ? box.x + pad : align === 'right' ? box.x + box.w - pad : box.x + box.w / 2,
-        centerY: box.y + box.h / 2, maxWidth: box.w - pad * 2, fontSize, scale, style: text,
+        centerY: box.y + box.h / 2, maxWidth: box.w - pad * 2, fontSize, scale, style: text, onCover: coverMode,
       });
     } else {
       const align = (text.alignment ?? 'center') as FreeTextItem['align'];
@@ -410,7 +419,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, photoIds = []
         kind: 'freeText', x: text.x * scale, y: text.y * scale, rotation: text.rotation || 0,
         scaleX: text.scaleX ?? 1, scaleY: text.scaleY ?? 1, opacity: text.opacity ?? 100,
         boxWidth, anchorX: align === 'left' ? 0 : align === 'right' ? boxWidth : boxWidth / 2,
-        align, fontSize, scale, style: text,
+        align, fontSize, scale, style: text, onCover: coverMode,
       });
     }
   }
@@ -450,6 +459,22 @@ export function planPage({ page, albumSize, pageIndex, photoCount, photoIds = []
 
   return {
     albumSize, width: W, height: H, bleed: bleedPx(PRINT_DPI), designWidth: uiW, designHeight: uiH, onCover: coverMode,
-    background: fill, wash, items, assets: [...assets], notDrawn,
+    background: fill, backgroundPhoto: backgroundPhotoOf(fill, W, H), wash, items, assets: [...assets], notDrawn,
   };
+}
+
+/** The plan's photo background in the screens' terms (PagePlan.backgroundPhoto). */
+function backgroundPhotoOf(fill: Fill, W: number, H: number): PagePlan['backgroundPhoto'] {
+  if (fill.kind !== 'image' || !('photo' in fill.image)) return null;
+  const c = fill.cover;
+  return { photoIndex: fill.image.photo, x: 0, y: 0, w: W, h: H, cover: !!c, zoom: c?.zoom ?? 1, focusX: c?.focusX ?? 0.5, focusY: c?.focusY ?? 0.5 };
+}
+
+/** Where a photo background goes once its picture's size is known: fitted at
+ *  its focus and zoom on the cover (types.bgCoverFit), the whole page inside
+ *  (print's drawImage). drawPage.ts draws it so. */
+export function backgroundPhotoRect(bp: NonNullable<PagePlan['backgroundPhoto']>, imgW: number, imgH: number): Rect {
+  if (!bp.cover) return { x: bp.x, y: bp.y, w: bp.w, h: bp.h };
+  const r = bgCoverFit(imgW, imgH, bp.w, bp.h, bp.zoom, bp.focusX, bp.focusY);
+  return { x: bp.x + r.x, y: bp.y + r.y, w: r.width, h: r.height };
 }

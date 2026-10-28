@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
@@ -7,9 +7,12 @@ import { supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 
 /** Sign in with the email and password of a Megy Prints account (the same
- *  account as on the website). */
+ *  account as on the website). Opened from checkout (then=back), it goes
+ *  back to that order once signed in, as the website's sign-in box keeps you
+ *  on the page; from anywhere else it opens My albums. */
 export default function SignIn() {
   const { signIn } = useAuth();
+  const { then } = useLocalSearchParams<{ then?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -25,7 +28,10 @@ export default function SignIn() {
     setError(null);
     const result = await signIn(email, password);
     setBusy(false);
-    if (result.ok) router.replace('/albums');
+    if (result.ok) {
+      if (then === 'back' && router.canGoBack()) router.back();
+      else router.replace('/albums');
+    }
     else setError(result.error ?? 'Sign-in did not work. Try again.');
   };
 

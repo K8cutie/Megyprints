@@ -15,6 +15,10 @@ import type { AlbumBackground, AlbumPage, CoverDesign, TextStyle } from './types
 import type { CoverWrapGeometry, Rect, CoverPanel } from './coverGeometry';
 import { insetRect } from './coverGeometry';
 import { contrastOutline } from './wordArtRules';
+import { contrastRatio, parseRgb } from './colorContrast';
+
+// In colorContrast.ts (shared with the 2.0 app's page colours); still offered here.
+export { contrastRatio };
 
 export interface PositionedText {
   style: TextStyle;
@@ -254,14 +258,6 @@ export const SPINE_MIN_FONT_PX = 18;
 export const SPINE_DARK_INK = '#2D2D2D';
 export const SPINE_LIGHT_INK = '#FFFBF7';
 
-/** WCAG contrast ratio (1..21) of two CSS colours; null when either can't be read. */
-export function contrastRatio(a: string, b: string): number | null {
-  const la = relativeLuminance(a);
-  const lb = relativeLuminance(b);
-  if (la == null || lb == null) return null;
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-
 /** The spine's ink: the title's own colour while it reads on the spine colour
  *  (3:1, the large-text bar) — or while its outline does — else whichever of
  *  the dark and light inks reads better there. */
@@ -366,27 +362,6 @@ export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry, measure: Spi
  *  Footer/Contact pages publish. */
 export const BRAND_BACK_WORDMARK = 'Megy Prints';
 export const BRAND_BACK_TAGLINE = 'megyprints.com';
-
-/** [r, g, b] (0..255) of a CSS colour in #rgb/#rrggbb/rgb() form; null otherwise. */
-function parseRgb(color: string): [number, number, number] | null {
-  const c = (color || '').trim();
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
-  const rgb = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(c);
-  if (hex) {
-    const h = hex[1].length === 3 ? hex[1].split('').map((ch) => ch + ch).join('') : hex[1];
-    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-  }
-  if (rgb) return [+rgb[1], +rgb[2], +rgb[3]];
-  return null;
-}
-
-/** WCAG relative luminance (0..1); null for a colour parseRgb can't read. */
-function relativeLuminance(color: string): number | null {
-  const rgb = parseRgb(color);
-  if (!rgb) return null;
-  const [r, g, b] = rgb.map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
 
 /** Perceived luminance (0..1) of a CSS colour; tolerant of #rgb/#rrggbb/rgb().
  *  Unknown formats read as light (→ dark ink), matching the light defaults. */

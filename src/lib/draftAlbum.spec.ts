@@ -27,7 +27,7 @@ beforeEach(() => localStorage.clear());
 describe('albumDataFromDraft — the draft as the album row', () => {
   it('id, name, size, pages, cover, and photo metadata (never the photo bytes)', () => {
     draft();
-    const a = albumDataFromDraft(JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY)!));
+    const a = albumDataFromDraft(JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY)!), '');
     expect(a).toMatchObject({ id: 'album-1', title: 'Guest HK Trip', sizePreset: '6x8', coverFront: { id: 'cover' } });
     expect(a.pages).toHaveLength(40);
     expect(a.photos).toEqual([{ id: 'a', name: 'a.jpg', check: { v: 1, sharp: 5, hash: 'ff' }, kept: true, leftOut: true }, { id: 'b', name: 'b.jpg' }]);
@@ -67,7 +67,7 @@ describe('checkout saves it instead of sending the guest away (source guard)', (
     expect(src).toMatch(/e instanceof AlbumNotSavedError\) \|\| !albumId \|\| !\(await saveDraftToAccount\(albumId\)\)\) throw e;\s*created = await orderIt\(\);/);
   });
   it('the builder\'s own reset saves a leaving draft through the same shape', () => {
-    expect(readFileSync(resolve(__dirname, '../pages/builder/useBuilderState.ts'), 'utf8')).toMatch(/albumDataFromDraft\(stored as StoredDraft\)/);
+    expect(readFileSync(resolve(__dirname, '../pages/builder/useBuilderState.ts'), 'utf8')).toMatch(/albumDataFromDraft\(stored as StoredDraft, currentAlbumTheme\(\)\)/);
   });
 });
 

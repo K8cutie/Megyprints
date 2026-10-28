@@ -56,6 +56,13 @@ const OUT = path.join(HERE, 'web');
 const MOBILE = path.join(REPO_ROOT, 'mobile');
 /** The page Chromium draws on: answered by route() below, never looked up. */
 const ORIGIN = 'http://golden.test';
+// Headless Chromium on Linux (the CI runner) hints letters and puts each one
+// on a whole pixel, so a line comes out a few pixels wider or narrower than
+// on Windows and the golden pages' words fail. '--font-render-hinting=none'
+// turns hinting off and lets letters sit between pixels, as Chromium on
+// Windows (and Android) does. Only on Linux: on Windows the pictures stay
+// exactly as they were.
+const LINUX_TEXT = process.platform === 'linux' ? ['--font-render-hinting=none'] : [];
 
 async function bundleNode() {
   const outfile = path.join(os.tmpdir(), `golden-node-${process.pid}.mjs`);
@@ -158,7 +165,8 @@ async function main() {
     headless: true,
     // The CPU drawing: no GPU canvas, so the pictures don't depend on this
     // PC's graphics card (the app's headless check draws on the CPU too).
-    args: ['--disable-gpu', '--disable-accelerated-2d-canvas', '--disable-gpu-compositing'],
+    // On Linux (CI), letters are placed as on Windows: see LINUX_TEXT.
+    args: [...LINUX_TEXT, '--disable-gpu', '--disable-accelerated-2d-canvas', '--disable-gpu-compositing'],
   });
   const context = await browser.newContext({ deviceScaleFactor: 1, viewport: { width: 800, height: 600 } });
   const served = [];

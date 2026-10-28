@@ -171,7 +171,7 @@ describe('the 40-photo minimum (the website\'s own rule and words)', () => {
       const s = photoStep(range(0, n));
       expect(s).toMatchObject({ count: n, short: 0, canGoOn: true, main: 'next', mainLabel: 'Next', secondLabel: 'Add more photos' });
     }
-    expect(photoStep(range(0, 2517)).message).toBe('You have 2,517 photos. That is enough for a 40-page album. Add more, or go on.');
+    expect(photoStep(range(0, 2517)).message).toBe('You have 2,517 photos ready. Add more, or go on to pick your cover.');
   });
 
   it('photos left out by the photo check do not count toward the 40', () => {
