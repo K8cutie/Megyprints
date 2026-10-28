@@ -358,10 +358,11 @@ there. Each job makes its own worktree:
 
 ```bash
 git -C "C:/megy-prints-flashdrive/V1/Megyprints-Clean" fetch origin
-git -C "C:/megy-prints-flashdrive/V1/Megyprints-Clean" worktree add -b feat/port-<phase> "C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-<phase>" origin/main
+git -C "C:/megy-prints-flashdrive/V1/Megyprints-Clean" worktree add -b feat/port-<phase> "C:/megy-prints-flashdrive/V1/Megyprints-Clean/.claude/worktrees/port-<phase>" origin/native-2.0
 ```
 
-then `npm ci` in the new worktree.
+then `npm ci` in the new worktree. (2.0 branches start from `native-2.0`
+since 2026-10-29: see "Working on 2.0" at the end.)
 
 **Where the app lives.** In this repo, in its own folder (`mobile/`, made in
 Phase 1), so it can import the shared files from `src/` directly (Metro's
@@ -1836,3 +1837,34 @@ replaced):
 - The 1.x frame, gone in 2.0: `nativeShell` (Capacitor), and through it
   `useSampleAlbumNotes` and `useTesterStamp`.
 - Website styling only: `utils` (Tailwind class names, clsx).
+
+---
+
+## Working on 2.0 (the native-2.0 branch)
+
+Decided by the owner on 2026-10-29. Until the Play production re-apply on
+Nov 9, 2.0 work does not touch main (the live website). 2.0 is built on its
+own long-lived branch, `native-2.0`.
+
+- **Every 2.0 PR targets `native-2.0`, not main.** Start a 2.0 worktree from
+  `origin/native-2.0` (not `origin/main`). A 2.0 PR is merged into
+  native-2.0 as soon as it is proven (gates pass, walked), even when it
+  changes website code.
+- **Merge main into native-2.0 regularly** (whenever main gets a website
+  change, and before each round of 2.0 merges), with a merge commit:
+  `git merge --no-ff origin/main`. Never rebase native-2.0 and never
+  force-push it: open PRs and worktrees are built on its commits.
+- **One PR from native-2.0 into main, after Nov 9**, merged only after a
+  full walk of the website (every customer step and the admin pages, on a
+  phone-sized screen and as the Android app). Nothing from native-2.0 goes
+  into main before then.
+- **CI on native-2.0** (`.github/workflows/ci.yml`) runs two jobs on every
+  PR into native-2.0 and every push to it: `verify` (the website: unit
+  tests, typecheck, build; the same gate main has) and `mobile` (the app:
+  `npm ci` at the root and in `mobile/`, tools/golden's packages and headless
+  Chromium, then `npm run check` in `mobile/`: tsc and every jest test,
+  including the golden pixel test). `mobile` never runs for main and is not
+  a required check.
+- The local gates stay the same: website `npx tsc -b && npx vitest run &&
+  npm run build`; app `npm ci && npm run check` in `mobile/` (the golden
+  test needs `npm ci` in `tools/golden` first).
