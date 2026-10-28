@@ -13,7 +13,6 @@
    from the same typed details.
    ══════════════════════════════════════════════════════════════════════════ */
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Linking } from 'react-native';
 import type { AddressValue } from '@web/lib/contact';
 import type { PriceSchedule } from '@web/lib/pricing';
 import OrderScreen from '../src/app/order';
@@ -284,18 +283,27 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByTestId('order-name').props.value).toBe('Juan Dela Cruz');
   });
 
-  it('this album already has an order waiting: said at the top, and a second one is asked', async () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
-    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', created_at: '2026-10-25T17:30:00Z', payment_submitted_at: null };
+  it('this album already has an order waiting: said at the top, "Open order" pays THAT order, and a second one is asked', async () => {
+    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', amount: 1288, created_at: '2026-10-25T17:30:00Z', payment_submitted_at: null, tester_code: null };
     await openScreen();
     expect(await screen.findByText('This album already has an order waiting for payment: MP-2026-ABC1234, placed October 26.')).toBeOnTheScreen();
     // The read was this account's unpaid orders of this album.
     expect(rec.reads.find((r) => r.table === 'orders')?.filters).toEqual({ user_id: 'user-1', album_id: album.albumId, status: 'pending_payment' });
-    // The way to that order: a filled "Open order MP-…" (the website's), to the website's order page.
+    // The way to that order: a filled "Open order MP-…" (the website's words).
     expect(screen.getByTestId('order-open-existing')).toHaveTextContent('Open order MP-2026-ABC1234');
-    expect(screen.getByText('Opens your order on the Megy Prints website.')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('order-open-existing'));
-    expect(openURL).toHaveBeenLastCalledWith('https://megyprints.vercel.app/orders?order=o-1');
+    // That order's payment step, in the app: ITS amount and number, as the website says them once there is a number.
+    expect(screen.getByText('Send ₱1,288')).toBeOnTheScreen();
+    expect(screen.getByTestId('pay-order-placed')).toHaveTextContent('Order MP-2026-ABC1234 is placed. Pay by bank transfer to finish.');
+    expect(screen.getByText('3. Send exactly ₱1,288 and put MP-2026-ABC1234 in the note if your app asks.')).toBeOnTheScreen();
+    expect(screen.queryByText('Order summary')).toBeNull(); // the form's price is not that order's
+    await fireEvent.changeText(screen.getByTestId('pay-reference'), '2026091012345678');
+    await fireEvent.press(screen.getByText("I've sent ₱1,288"));
+    await fireEvent.press(screen.getByTestId('test-panel-toggle'));
+    const sent = JSON.parse(String(screen.getByText(/"rpc": \{/).props.children));
+    expect(sent.rpc).toEqual({ name: 'submit_payment_proof', args: { p_order_id: 'o-1', p_reference: '2026091012345678', p_proof_path: null } });
+    expect(rec.rpcs.some((r) => r.name === 'submit_payment_proof')).toBe(false);
+    await fireEvent.press(screen.getByTestId('pay-back'));
 
     await fillDetails();
     await fireEvent.press(screen.getByTestId('order-place'));
@@ -303,23 +311,27 @@ describe('the checkout screen, walked', () => {
     expect(screen.queryByTestId('order-placing')).toBeNull();
     // The question offers the order first (filled), the second order after it (outlined).
     expect(screen.getByTestId('order-second-open')).toHaveTextContent('Open order MP-2026-ABC1234');
-    openURL.mockClear();
     await fireEvent.press(screen.getByTestId('order-second-open'));
-    expect(openURL).toHaveBeenCalledWith('https://megyprints.vercel.app/orders?order=o-1');
-    expect(screen.queryByTestId('order-placing')).toBeNull();
+    expect(screen.getByText('Send ₱1,288')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('pay-back'));
+    // Back on the form, the details stay; the second order still has to be said yes to.
+    expect(screen.getByTestId('order-name').props.value).toBe('Juan Dela Cruz');
+    await fireEvent.press(screen.getByTestId('order-place'));
     await fireEvent.press(screen.getByText('Yes, place a second order'));
     expect(screen.getByTestId('order-placing')).toBeOnTheScreen();
-    openURL.mockRestore();
   });
 
-  it('"Open order" with no browser on the phone says where to find the order', async () => {
-    const openURL = jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('No Activity found to handle Intent'));
-    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', created_at: '2026-10-25T17:30:00Z', payment_submitted_at: '2026-10-26T01:00:00Z' };
+  it('"Open order" on an order whose payment was sent says where it is, with nothing to pay', async () => {
+    fake.orderRow = { id: 'o-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment', amount: 1288, created_at: '2026-10-25T17:30:00Z', payment_submitted_at: '2026-10-26T01:00:00Z', tester_code: null };
     await openScreen();
     expect(await screen.findByText("This album already has an order — you sent the payment and we're confirming it: MP-2026-ABC1234, placed October 26.")).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('order-open-existing'));
-    expect(await screen.findByText("We couldn't open your browser. On megyprints.vercel.app, sign in and open Orders to find MP-2026-ABC1234.")).toBeOnTheScreen();
-    openURL.mockRestore();
+    expect(screen.getByText('Order MP-2026-ABC1234')).toBeOnTheScreen();
+    expect(screen.getByText('Placed October 26 · ₱1,288')).toBeOnTheScreen();
+    expect(screen.getByTestId('order-existing-headline')).toHaveTextContent("Payment sent — we're confirming it");
+    expect(screen.queryByText(/^Send ₱/)).toBeNull();
+    await fireEvent.press(screen.getByTestId('existing-back'));
+    expect(screen.getByText('Finalize Your Order')).toBeOnTheScreen();
   });
 
   it('prices that did not load: no price, and the button tries again', async () => {

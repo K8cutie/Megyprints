@@ -21,9 +21,10 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { PAY_WITHIN_MESSAGE } from '@web/lib/orderExpiry';
+import { trackOf } from '@web/lib/orderTracker';
 import { countQrMemories, EXTRA_QR_RATE, FREE_QR_MEMORIES } from '@web/lib/pricing';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
@@ -38,7 +39,7 @@ import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
-import { openOrderFailed, openOrderForAlbum, openOrderUrl, openOrderWords, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
+import { openOrderForAlbum, openOrderView, openOrderWords, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, ORDER_ID, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { PAYEE, PAYEE_QR_URL, paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../lib/checkout/payment';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
@@ -49,7 +50,7 @@ import { checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/chec
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 
-type Step = 'form' | 'placing' | 'placed' | 'payment';
+type Step = 'form' | 'placing' | 'placed' | 'payment' | 'existing';
 
 const DEFAULT_MATERIAL: MaterialType = 'matte';
 const DEFAULT_COVER: CoverType = 'softcover';
@@ -75,6 +76,8 @@ export default function OrderScreen() {
   const [signInAsk, setSignInAsk] = useState(false);
   const [openAlbumAsk, setOpenAlbumAsk] = useState(false);
   const [openOrder, setOpenOrder] = useState<OpenOrder | null>(null);
+  // The order "Open order MP-…" opened (it stays put while the form re-reads).
+  const [shownOrder, setShownOrder] = useState<OpenOrder | null>(null);
   const [askSecond, setAskSecond] = useState(false);
   const secondOk = useRef(false);
   const [plan, setPlan] = useState<PlaceOrderPlan | null>(null);
@@ -181,12 +184,12 @@ export default function OrderScreen() {
     setOpenAlbumAsk(!!r.openAlbum);
   };
   const placeSecond = () => { secondOk.current = true; setAskSecond(false); onPlace(); };
-  // "Open order MP-…": the website's order page for it, where it is paid or
-  // followed (the app has no Orders screen until Phase 6).
+  // "Open order MP-…": that order, in the app (see openOrderView): its
+  // payment step while it waits for the payment, else where it is.
   const openExistingOrder = () => {
     if (!openOrder) return;
-    const o = openOrder;
-    Linking.openURL(openOrderUrl(o)).catch(() => setMessage(openOrderFailed(o)));
+    setShownOrder(openOrder);
+    setStep('existing');
   };
 
   if (step === 'placing' && plan) {
@@ -217,9 +220,16 @@ export default function OrderScreen() {
     );
   }
 
+  if (step === 'existing' && shownOrder) {
+    if (openOrderView(shownOrder) === 'pay') {
+      return <Payment amount={shownOrder.amount ?? 0} order={shownOrder} onBack={() => setStep('form')} />;
+    }
+    return <ExistingOrder order={shownOrder} onBack={() => setStep('form')} />;
+  }
+
   if (step === 'payment') {
     const albumLine = [ALBUM_SIZES.find((s) => s.preset === albumSize)?.name, MATERIALS.find((m) => m.type === material)?.name, COVERS.find((c) => c.type === cover)?.name].join(' · ');
-    return <Payment amount={placedAmount} albumLine={albumLine} breakdown={price.breakdown.items} total={price.total} wasTotal={price.wasTotal} onBack={() => setStep('form')} />;
+    return <Payment amount={placedAmount} order={null} summary={{ albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal }} onBack={() => setStep('form')} />;
   }
 
   /* ══════════════ FORM ══════════════ */
@@ -243,7 +253,6 @@ export default function OrderScreen() {
           <Text style={styles.noticeHead}>{words.headline}</Text>
           <Text style={styles.noticeBody}>{words.body}</Text>
           <Button label={words.button} onPress={openExistingOrder} testID="order-open-existing" />
-          <Text style={styles.tiny}>Opens your order on the Megy Prints website.</Text>
         </View>
       )}
 
@@ -382,8 +391,14 @@ function Placing({ frames, onDone }: { frames: PlaceFrame[]; onDone: () => void 
 }
 
 /* ══════════════ PAYMENT: QR, amount, reference, receipt ══════════════ */
-function Payment({ amount, albumLine, breakdown, total, wasTotal, onBack }: {
-  amount: number; albumLine: string; breakdown: { label: string; amount: number }[]; total: number; wasTotal: number | null; onBack: () => void;
+interface PaySummary { albumLine: string; breakdown: { label: string; amount: number }[]; total: number; wasTotal: number | null }
+
+/** The payment step. `order` is an order already placed (opened from "this
+ *  album already has an order"): its number is said, as the website says it
+ *  once there is one. Without it (this version places nothing) those lines
+ *  are left out, as the website does. */
+function Payment({ amount, order, summary, onBack }: {
+  amount: number; order: Pick<OpenOrder, 'id' | 'order_number'> | null; summary?: PaySummary; onBack: () => void;
 }) {
   const [qrMissing, setQrMissing] = useState(false);
   const [receipt, setReceipt] = useState<PickedReceipt | null>(null);
@@ -391,10 +406,8 @@ function Payment({ amount, albumLine, breakdown, total, wasTotal, onBack }: {
   const [payRef, setPayRef] = useState('');
   const [refError, setRefError] = useState('');
   const [sent, setSent] = useState<PaymentSubmitPlan | null>(null);
-  const [summary, setSummary] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const amountLabel = peso(amount);
-  // No order is placed in this version, so there is no order number: the
-  // website then leaves out "Order … is placed" and "put … in the note".
 
   const addReceipt = async () => {
     setReceiptError('');
@@ -410,15 +423,18 @@ function Payment({ amount, albumLine, breakdown, total, wasTotal, onBack }: {
   const sentIt = () => {
     const bad = referenceProblem(payRef);
     if (bad) { setRefError(bad); return; }
-    setSent(paymentSubmitPlan(ORDER_ID, payRef, receipt));
+    setSent(paymentSubmitPlan(order?.id ?? ORDER_ID, payRef, receipt));
   };
 
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       <View style={styles.testNote}>
-        <Text style={styles.testNoteText}>Test version: no order was placed. This is how the payment step looks for this album.</Text>
+        <Text style={styles.testNoteText}>{order
+          ? `Test version: this is how paying order ${order.order_number} looks. I've sent shows what it would send, and sends nothing.`
+          : 'Test version: no order was placed. This is how the payment step looks for this album.'}</Text>
       </View>
       <Text style={[styles.h1, styles.center]}>Send {amountLabel}</Text>
+      {order && <Text style={[styles.small, styles.center]} testID="pay-order-placed">Order {order.order_number} is placed. Pay by bank transfer to finish.</Text>}
 
       <View style={styles.card}>
         <View style={styles.qrBox}>
@@ -439,7 +455,7 @@ function Payment({ amount, albumLine, breakdown, total, wasTotal, onBack }: {
         <View style={styles.steps}>
           <Text style={styles.small}>1. Open your bank or e-wallet app (GCash, Maya, BPI, BDO, UnionBank…).</Text>
           <Text style={styles.small}>2. Choose Scan QR / InstaPay and scan the code above.</Text>
-          <Text style={styles.small}>3. Send exactly {amountLabel}.</Text>
+          <Text style={styles.small}>3. Send exactly {amountLabel}{order ? ` and put ${order.order_number} in the note if your app asks` : ''}.</Text>
           <Text style={styles.small}>4. Attach your receipt below — it speeds up confirmation.</Text>
         </View>
         <Text style={styles.tiny}>Your app may charge a small InstaPay fee. We don't add any.</Text>
@@ -456,17 +472,19 @@ function Payment({ amount, albumLine, breakdown, total, wasTotal, onBack }: {
         <Text style={[styles.tiny, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>
         <Text style={[styles.tiny, styles.center]} testID="pay-within">{PAY_WITHIN_MESSAGE}</Text>
 
-        <Pressable accessibilityRole="button" onPress={() => setSummary((v) => !v)}>
-          <Text style={[styles.tiny, styles.center, styles.underline]}>Order summary</Text>
-        </Pressable>
         {summary && (
+          <Pressable accessibilityRole="button" onPress={() => setShowSummary((v) => !v)}>
+            <Text style={[styles.tiny, styles.center, styles.underline]}>Order summary</Text>
+          </Pressable>
+        )}
+        {summary && showSummary && (
           <View style={styles.summary}>
-            <Row label="Album" value={albumLine} accent />
-            {breakdown.map((item) => <Row key={item.label} label={item.label} value={peso(item.amount)} />)}
+            <Row label="Album" value={summary.albumLine} accent />
+            {summary.breakdown.map((item) => <Row key={item.label} label={item.label} value={peso(item.amount)} />)}
             <Row label="Shipping" value="Free" good />
             <View style={styles.totalRow}>
               <Text style={styles.strong}>Total</Text>
-              <Text style={styles.total}>{wasTotal !== null && <Text style={styles.was}>{peso(wasTotal)}  </Text>}{peso(total)}</Text>
+              <Text style={styles.total}>{summary.wasTotal !== null && <Text style={styles.was}>{peso(summary.wasTotal)}  </Text>}{peso(summary.total)}</Text>
             </View>
           </View>
         )}
@@ -480,6 +498,25 @@ function Payment({ amount, albumLine, breakdown, total, wasTotal, onBack }: {
         />
       )}
       <Button label="Back to your order" kind="plain" onPress={onBack} testID="pay-back" />
+    </ScrollView>
+  );
+}
+
+/* ══════════════ AN ORDER ALREADY PLACED, NOT WAITING FOR PAYMENT ══════════════ */
+/** Where an order "Open order MP-…" opened is, in the website's words (the
+ *  shared orderTracker), when there is nothing to pay: the payment was sent
+ *  and the shop is confirming it, or it is a tester-code order. */
+function ExistingOrder({ order, onBack }: { order: OpenOrder; onBack: () => void }) {
+  const track = trackOf(order);
+  return (
+    <ScrollView contentContainerStyle={styles.page} testID="order-existing">
+      <Text style={styles.h1}>Order {order.order_number}</Text>
+      <Text style={styles.small}>Placed {placedOn(order.created_at)}{typeof order.amount === 'number' && !track.test ? ` · ${peso(order.amount)}` : ''}</Text>
+      <View style={styles.card}>
+        <Text style={styles.strong} testID="order-existing-headline">{track.headline}</Text>
+        {!track.test && <Text style={styles.small}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>}
+      </View>
+      <Button label="Back to your order" onPress={onBack} testID="existing-back" />
     </ScrollView>
   );
 }

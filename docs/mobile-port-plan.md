@@ -640,11 +640,18 @@ tester-code check.
 - **"This album already has an order"**: the website's notice at the top,
   with its filled "Open order MP-…" button, and the same button first in the
   "Place a second order for it?" question, before the outlined "Yes, place a
-  second order". The app has no Orders screen until Phase 6, so the button
-  opens the website's own order page (`/orders?order=<id>`, the address the
-  website's button opens) in the phone's browser, where that order is paid
-  or followed; it may ask to sign in there. A line under it says so. With no
-  browser, the order number and where to find it are said.
+  second order". The website's button opens its Orders page; the app has no
+  Orders screen until Phase 6, and opening the website in the phone's
+  browser does not work: the browser is not signed in, and the website sends
+  a signed-out visitor from `/orders` to its home page (seen on the
+  emulator, `ProtectedRoute`), so the order is lost. So the app opens that
+  order itself (`openOrderView`): while it waits for its payment, **its**
+  payment step (its own amount from the order row, "Order MP-… is placed.
+  Pay by bank transfer to finish.", "put MP-… in the note", and "I've sent"
+  plans `submit_payment_proof` for that order's id, sent nothing in this
+  version); once the payment was sent (or for a tester-code order), where it
+  is, in the shared `orderTracker`'s words ("Payment sent — we're confirming
+  it"). "Back to your order" returns to the form as it was.
 - **Place order** runs the website's checks in its order (cover, name,
   phone, address, sign-in, "this album already has an order", 40 photos),
   then the bar (shared `placeProgress`: start, preparing, cover, page by
@@ -708,8 +715,9 @@ move the pure half of each into a shared file, list it in
   the included term, standard quality), event albums, the order number on
   the payment step (it comes from the insert), keeping the form after the
   app closes (`checkoutSession`), "same as your last order", an Orders
-  screen in the app ("Open order" opens the website's order page until
-  Phase 6), focusing the first box to fix (it scrolls there).
+  screen ("Open order" shows only that one order: its payment step or where
+  it is; cancelling an unpaid order is on the website's Orders page),
+  focusing the first box to fix (it scrolls there).
 
 ### What was seen on the emulator (2026-10-28)
 

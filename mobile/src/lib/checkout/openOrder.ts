@@ -8,14 +8,16 @@
    the website's (src/pages/Order.tsx).
    ══════════════════════════════════════════════════════════════════════════ */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { siteFile, WEBSITE_URL } from './site';
 
 export interface OpenOrder {
   id: string;
   order_number: string;
   status: string;
+  /** What the customer was asked to pay (0055), for that order's payment step. */
+  amount?: number | null;
   created_at: string;
   payment_submitted_at: string | null;
+  tester_code?: string | null;
 }
 
 export const OPEN_ORDER_COLUMNS = 'id, order_number, status, amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title, album_id, tester_code';
@@ -56,17 +58,15 @@ export function openOrderWords(o: OpenOrder): { headline: string; body: string; 
   };
 }
 
-/** Where "Open order MP-…" goes: the website's own order page, the same
- *  address its button opens (navigate(`/orders?order=${id}`)), where that
- *  order is paid or followed. The app has no Orders screen until Phase 6, so
- *  it opens there, in the phone's browser. */
-export function openOrderUrl(o: Pick<OpenOrder, 'id'>, base?: string): string {
-  return siteFile(`orders?order=${encodeURIComponent(o.id)}`, base);
-}
-
-/** Said when the phone has no browser to open the order page with. */
-export function openOrderFailed(o: Pick<OpenOrder, 'order_number'>, base: string = WEBSITE_URL): string {
-  return `We couldn't open your browser. On ${base.replace(/^https?:\/\//, '').replace(/\/+$/, '')}, sign in and open Orders to find ${o.order_number}.`;
+/** Where "Open order MP-…" goes, in the app. The website's button opens its
+ *  Orders page (/orders?order=<id>); the app has no Orders screen until
+ *  Phase 6, and the phone's browser is not signed in (the website sends a
+ *  signed-out visitor from /orders to its home page, so the order would be
+ *  lost). So the app opens that order itself: its payment step while it waits
+ *  for the payment (its own amount and number), else where it is. */
+export function openOrderView(o: OpenOrder): 'pay' | 'status' {
+  const waiting = o.status === 'pending_payment' && !o.payment_submitted_at && !o.tester_code;
+  return waiting && typeof o.amount === 'number' && Number.isFinite(o.amount) && o.amount > 0 ? 'pay' : 'status';
 }
 
 /** The question under Place order before a second order. */

@@ -14,7 +14,7 @@ import path from 'node:path';
 import { forward, PLACE_AT, pagesAt } from '@web/lib/placeProgress';
 import { albumPhotoCount, photosShortBy } from '@web/pages/builder/albumMinimum';
 import { fixtureCheckoutAlbum, fixturePhotos } from '../src/lib/checkout/fixtureAlbum';
-import { openOrderWords, placedOn, secondOrderQuestion, type OpenOrder } from '../src/lib/checkout/openOrder';
+import { openOrderView, openOrderWords, placedOn, secondOrderQuestion, type OpenOrder } from '../src/lib/checkout/openOrder';
 import { barPercent, KEEP_OPEN_NOTE, placeFrames } from '../src/lib/checkout/placeRun';
 import { receiptLabel, toReceipt } from '../src/lib/checkout/receipt';
 
@@ -106,6 +106,19 @@ describe('"This album already has an order": the website\'s words', () => {
     expect(openOrderWords(sent).body.startsWith("You don't need a new one.")).toBe(true);
     expect(secondOrderQuestion(waiting)).toBe('This album already has order MP-2026-ABC1234 waiting for payment. Place a second order for it?');
     expect(secondOrderQuestion(sent)).toBe('This album already has order MP-2026-ABC1234 with its payment sent. Place a second order for it?');
+  });
+
+  it('"Open order" goes to that order\'s payment step only while it waits for a payment it can ask', () => {
+    // The website's button text, and its payment-step lines once there is an order number.
+    expect(ORDER_SRC).toContain('Open order {openOrder.order_number}');
+    expect(ORDER_SRC).toContain('is placed. Pay by bank transfer to finish.');
+    expect(ORDER_SRC).toContain('in the note if your app asks');
+    expect(openOrderView({ ...waiting, amount: 1288 })).toBe('pay');
+    expect(openOrderView({ ...sent, amount: 1288 })).toBe('status');           // paid: we're confirming it
+    expect(openOrderView({ ...waiting, amount: 1288, tester_code: 'MEGYTEST' })).toBe('status'); // nothing to pay
+    expect(openOrderView({ ...waiting, amount: null })).toBe('status');       // no amount to ask for
+    expect(openOrderView({ ...waiting, amount: 0 })).toBe('status');
+    expect(openOrderView({ ...waiting, status: 'paid', amount: 1288 })).toBe('status');
   });
 });
 
