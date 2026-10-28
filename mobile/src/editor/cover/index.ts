@@ -2,36 +2,46 @@
    PART 3: THE COVER EDITOR, from the "Edit pages" screen.
 
    This folder is this part's own: the shared screen is reached only through
-   registerEditorPart (../registry.ts). Add files here (and its screen as a
-   NEW route file, e.g. src/app/edit-cover.tsx, which sets its own title with
-   <Stack.Screen options={…} /> so src/app/_layout.tsx needs no line); change
-   nothing in ../EditPagesScreen.tsx, ../PageStage.tsx or another part's
-   folder (if the registry lacks something, add it to registry.ts in a
-   small, separate step). Words go in this folder (cover/words.ts), held to
-   the website's source by this part's own test (test/editorCover*.test.ts;
-   test/editorHarness.ts makes an album through the app's steps).
+   registerEditorPart (../registry.ts). The way in is a "Cover" tile before
+   page 1 in the page strip (registry stripStart), which opens the cover
+   screen: its own route file, src/app/edit-cover.tsx (it sets its own title
+   with <Stack.Screen />, so src/app/_layout.tsx needs no line).
 
-   To build here, the website's CoverEditor (FRONT only; the spine follows
-   the title, the back is Megy's), every change through ctx.builder:
-   • The way in: a "Cover" tile before page 1 in the page strip (registry
-     stripStart), opening the cover screen.
-   • While the cover screen is focused the builder edits the cover
-     (setEditScope('coverFront') on focus, 'interior' on blur: useFocusEffect,
-     as src/app/album-cover.tsx does). The Edit pages screen puts the scope
-     back to 'interior' whenever it is focused, so a page edit can never land
-     on the cover.
-   • Background: the album's photos (setCoverToPhoto), the focal point and
-     zoom (setBackgroundCrop), page colours (setPageColor under the cover
-     scope). Text: the title (setBoxText box 0), its font and colour, moved
-     with setBoxTextOffset; the cover's float shadow.
-   • The cover is NOT in the undo history (the website's Snapshot has no
-     coverFront): show no Undo or Redo on the cover screen. A cover change
-     still adds an undo step that changes nothing (the website does the
-     same: test/editorUndo.test.ts pins it).
-   • Taps on the cover, if wanted: pageTargets({ coverMode: true }) (a title
-     moved by its offset is hit where it is drawn; empty boxes take no tap)
-     and selection with the page key 'cover'.
+     CoverScreen.tsx  the website's CoverEditor on a phone: the cover as print
+                      draws it, the Background and Text tabs, Done
+     coverEdits.ts    each control's call on the website's builder, the same
+                      call with the same arguments as CoverEditor.tsx, only
+                      while the builder's cover scope is on
+     coverChecks.ts   the website's warnings: a blank cover, a title too long,
+                      a title colour that wouldn't show on the cover's colour
+     CoverStage.tsx   the cover picture and the finger (move the title, move
+                      the photo in its frame)
+     pickers.tsx      the cover's colours, the title's colours, the fonts
+     Slider.tsx       zoom and size (the website's range inputs)
+     throttle.ts      a drag sends at most one change every 100 ms
+     words.ts         the website's words (test/editorCover.test.ts)
+
+   FRONT only (the spine follows the title, the back is Megy's). The cover is
+   not in the album's undo history (the website's Snapshot has no coverFront):
+   the cover screen shows no Undo or Redo. While it is on top the builder edits
+   the cover (setEditScope('coverFront') on focus, 'interior' on blur); the
+   Edit pages screen puts the scope back to 'interior' whenever it is focused.
    ══════════════════════════════════════════════════════════════════════════ */
+import { router } from 'expo-router';
 import { registerEditorPart } from '../registry';
+import { COVER_TILE } from './words';
 
-registerEditorPart({ id: 'cover' });
+/** The cover screen's route (src/app/edit-cover.tsx). */
+export const COVER_ROUTE = '/edit-cover';
+
+registerEditorPart({
+  id: 'cover',
+  stripStart: [{
+    id: 'cover',
+    label: COVER_TILE,
+    order: 10,
+    onPress() {
+      router.push(COVER_ROUTE);
+    },
+  }],
+});
