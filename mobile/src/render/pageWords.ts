@@ -60,7 +60,7 @@ export function appWords(plan: PagePlan, text: PageText): TextItemLines[] {
       item: k, align: it.align, color: it.style.color || '#2D2D2D',
       alpha: it.kind === 'freeText' ? it.opacity / 100 : 1,
       outlined: !!(it.style.outlineWidth && it.style.outlineColor),
-      shadow: !!wordArtShadow(it.style),
+      shadow: !!wordArtShadow(it.style, plan.onCover),
     };
     let lines: AppLine[];
     let zone: Area;

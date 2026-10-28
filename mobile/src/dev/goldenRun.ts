@@ -36,6 +36,7 @@ import { PageDrawer } from '../render/drawPage';
 import { PageText, type FontFile } from '../render/pageText';
 import { BUNDLED_FONTS } from '../render/fontTable';
 import { appWords, type TextItemLines } from '../render/pageWords';
+import { AssetCache, fromBase64 } from '../render/assets';
 
 /** What scripts/golden-phone-assets.cjs bundles into a test build. */
 export interface GoldenBundle {
@@ -46,6 +47,9 @@ export interface GoldenBundle {
   /** The album's photos, as the golden pages number them: `image` = which file. */
   photos: { id: string; image: number; width: number; height: number }[];
   photoFiles: { file: string; sha256: string; base64: string }[];
+  /** The files the website serves that the pages name (a mask edge, corner
+   *  art), by address; a QR code or a graphic is inside the page data itself. */
+  assetFiles?: { url: string; base64: string }[];
   fonts: { file: string; base64: string }[];
   cases: GoldenPhoneCase[];
 }
@@ -86,6 +90,8 @@ export interface PhonePage {
   encodeMs: number;
   /** Something stopped this page (it has no picture). */
   error?: string;
+  /** Pictures the page names that did not open (should be none). */
+  missing?: string[];
 }
 
 export interface PhoneReport {
@@ -98,29 +104,8 @@ export interface PhoneReport {
   pages: PhonePage[];
 }
 
-const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-const B64_INDEX = (() => {
-  const t = new Int16Array(128).fill(-1);
-  for (let i = 0; i < B64.length; i++) t[B64.charCodeAt(i)] = i;
-  return t;
-})();
-
-/** Base64 → bytes (no atob needed; the bundle's files arrive as base64). */
-export function fromBase64(s: string): Uint8Array {
-  const clean = s.replace(/[^A-Za-z0-9+/]/g, '');
-  const n = Math.floor((clean.length * 3) / 4);
-  const out = new Uint8Array(n);
-  let o = 0;
-  for (let i = 0; i + 1 < clean.length; i += 4) {
-    const a = B64_INDEX[clean.charCodeAt(i)], b = B64_INDEX[clean.charCodeAt(i + 1)];
-    const c = i + 2 < clean.length ? B64_INDEX[clean.charCodeAt(i + 2)] : -1;
-    const d = i + 3 < clean.length ? B64_INDEX[clean.charCodeAt(i + 3)] : -1;
-    if (o < n) out[o++] = (a << 2) | (b >> 4);
-    if (c >= 0 && o < n) out[o++] = ((b & 15) << 4) | (c >> 2);
-    if (d >= 0 && o < n) out[o++] = ((c & 3) << 6) | d;
-  }
-  return out.subarray(0, o);
-}
+// Base64 → bytes: the renderer's own (assets.ts), re-exported for the build test.
+export { fromBase64 };
 
 /** The bundled font files, in BUNDLED_FONTS order (all of them, or it stops). */
 export function bundleFonts(bundle: GoldenBundle): FontFile[] {
@@ -149,6 +134,9 @@ export async function runGoldenPages(Sk: Skia, bundle: GoldenBundle, writer: Gol
   const t0 = Date.now();
   const text = new PageText(Sk, bundleFonts(bundle));
   const drawer = new PageDrawer(Sk, text);
+  const served = new Map((bundle.assetFiles ?? []).map((a) => [a.url, a.base64]));
+  const assets = new AssetCache(Sk, (src) => { const b = served.get(src); return b ? fromBase64(b) : null; });
+  const photoIds = bundle.photos.map((p) => p.id);
   const fileBytes = bundle.photoFiles.map((f) => fromBase64(f.base64));
   const decode = (bytes: Uint8Array, file: string): SkImage => {
     const img = Sk.Image.MakeImageFromEncoded(Sk.Data.fromBytes(bytes));
@@ -202,11 +190,13 @@ export async function runGoldenPages(Sk: Skia, bundle: GoldenBundle, writer: Gol
     };
     const entry: PhonePage = { name: c.name, variant, file: `${tag}.png`, bareFile: null, width: 0, height: 0, notDrawn: [], words: [], drawMs: 0, bareMs: null, encodeMs: 0 };
     try {
-      const plan: PagePlan = planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: bundle.photos.length });
+      const plan: PagePlan = planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: bundle.photos.length, photoIds });
+      const missing = new Set<string>();
+      const named = { assets: assets.get, onMissing: (src: string) => { missing.add(src); } };
       entry.notDrawn = plan.notDrawn;
       entry.words = appWords(plan, text);
       let t = Date.now();
-      const img = drawer.renderPrintPage(plan, photoOf, { words: true });
+      const img = drawer.renderPrintPage(plan, photoOf, { words: true, ...named });
       entry.drawMs = Date.now() - t;
       entry.width = img.width();
       entry.height = img.height();
@@ -218,13 +208,14 @@ export async function runGoldenPages(Sk: Skia, bundle: GoldenBundle, writer: Gol
       if (c.bare || entry.words.length) {
         await pause();
         t = Date.now();
-        const bare = drawer.renderPrintPage(plan, photoOf, { words: false });
+        const bare = drawer.renderPrintPage(plan, photoOf, { words: false, ...named });
         entry.bareMs = Date.now() - t;
         entry.bareFile = `${tag}.bare.png`;
         const barePng = bare.encodeToBytes(ImageFormat.PNG, 100);
         bare.dispose();
         await writer.write(entry.bareFile, barePng);
       }
+      entry.missing = [...missing];
     } catch (err) {
       entry.error = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
     }
@@ -232,6 +223,8 @@ export async function runGoldenPages(Sk: Skia, bundle: GoldenBundle, writer: Gol
   }
 
   images.forEach((img) => img.dispose());
+  assets.dispose();
+  drawer.dispose();
   converted.forEach((img) => img.dispose());
   report.totalMs = Date.now() - t0;
   await writer.write('report.json', JSON.stringify(report, null, 1));
@@ -241,13 +234,17 @@ export async function runGoldenPages(Sk: Skia, bundle: GoldenBundle, writer: Gol
 
 /** Which photo files a golden page draws (by the file's index). */
 function planPhotoFiles(c: GoldenPhoneCase, bundle: GoldenBundle): number[] {
-  const plan = planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: bundle.photos.length });
+  const plan = planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: bundle.photos.length, photoIds: bundle.photos.map((p) => p.id) });
   const out: number[] = [];
   for (const it of plan.items) {
     if (it.kind === 'photo' || it.kind === 'boxPhoto') {
       const file = bundle.photos[it.photoIndex]?.image;
       if (file != null) out.push(file);
     }
+  }
+  if (plan.background.kind === 'image' && 'photo' in plan.background.image) {
+    const file = bundle.photos[plan.background.image.photo]?.image;
+    if (file != null) out.push(file);
   }
   return out;
 }

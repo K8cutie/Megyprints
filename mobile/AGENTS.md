@@ -37,12 +37,18 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   content:// address on the phone (see the Phase 2 notes in the plan).
 - **Server values** come from `.env.local` (not in git; `.env.example` has the
   names). Never commit them, never put real account passwords anywhere.
-- **Page renderer** (`src/render`, react-native-skia): album pages drawn the
-  way the website's print renderer draws them. `test/goldenPages.test.ts`
-  compares it pixel by pixel with the website's own pictures (made by
-  `../tools/golden/renderWeb.mjs` in headless Chromium; run `npm ci` in
-  `../tools/golden` once). Never loosen its bars to pass: the numbers and
-  why are in `test/golden/compare.ts` and the plan's "Page renderer notes".
+- **Page renderer** (`src/render`, react-native-skia): album pages and the
+  cover file drawn the way the website's print renderer draws them, pictures
+  sampled the way Chrome's canvas samples them (`src/render/sampling.ts`).
+  `test/goldenPages.test.ts`, `goldenCovers.test.ts` and
+  `goldenMistakes.test.ts` (run side by side; shared parts in
+  `test/golden/harness.ts`) compare it pixel by pixel with the website's own
+  pictures (made by `../tools/golden/renderWeb.mjs` in headless Chromium,
+  before the tests, by jest's globalSetup `test/golden/webPictures.cjs`; run
+  `npm ci` in `../tools/golden` once). Never loosen its bars to pass: the
+  numbers and why are in `test/golden/compare.ts` and the plan's "Page
+  renderer notes". A change that moves website print code into shared files
+  must print byte for byte the same: `node ../tools/golden/websiteSame.mjs <base ref>`.
   **On a phone:** `scripts\build-android.ps1 -Variant release -GoldenPages`
   (a test build with the golden pages; never for customers), then
   `node scripts/golden-phone-run.cjs --device <serial>` and

@@ -62,13 +62,13 @@ const report = readJson<PhoneReport>(path.join(PHONE, 'report.json'));
 const manifest = readJson<Manifest>(path.join(WEB, 'manifest.json'));
 /** Photo files the phone's colour step had to convert. */
 const convertedFiles = new Set(report.photos.filter((p) => p.converted).map((p) => p.file));
-const pagesJson = readJson<{ photos: { image: number }[]; cases: { name: string; albumSize: AlbumSizePreset; pageIndex: number; page: AlbumPage }[] }>(path.join(WEB, 'pages.json'));
+const pagesJson = readJson<{ photos: { id: string; image: number }[]; cases: { name: string; albumSize: AlbumSizePreset; pageIndex: number; page: AlbumPage }[] }>(path.join(WEB, 'pages.json'));
 
 /** The page plan (shared code, no measuring): its bleed and its photos. */
 function planOf(name: string): PagePlan {
   const c = pagesJson.cases.find((x) => x.name === name);
   if (!c) throw new Error(`${name} is not in pages.json`);
-  return planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: pagesJson.photos.length });
+  return planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: pagesJson.photos.length, photoIds: pagesJson.photos.map((p) => p.id) });
 }
 
 interface Row {

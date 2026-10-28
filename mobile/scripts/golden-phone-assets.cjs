@@ -122,6 +122,14 @@ function main() {
       return { file: p.file, sha256: p.sha256, base64: bytes.toString('base64') };
     }),
     fonts: fonts.map((file, i) => ({ file, base64: b64(fontPaths[i]) })),
+    // The files the website served while it drew the pages (mask edges from
+    // public/, the made-up corner art): the phone opens the very same bytes.
+    assetFiles: (manifest.served || []).map((url) => {
+      const made = (manifest.assets || []).find((a) => a.url === url);
+      const file = made ? path.join(WEB, made.file) : path.join(REPO, 'public', url);
+      if (!fs.existsSync(file)) throw new Error(`${url}: no file at ${file}`);
+      return { url, base64: b64(file) };
+    }),
     cases: set.cases.map((c) => {
       const w = manifest.cases.find((x) => x.name === c.name);
       if (!w) throw new Error(`${c.name} is in pages.json but not in manifest.json`);

@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   THE FONTS THE APP DRAWS PAGE WORDS WITH (for now: three of the website's
+   THE FONTS THE APP DRAWS PAGE WORDS WITH (for now: four of the website's
    74), as TTF files from the @expo-google-fonts packages (SIL Open Font
    License). The golden check (tools/golden) gives the website render these
    very files too, so the two are compared on equal fonts.
@@ -7,9 +7,11 @@
    Each family has a real file for every style a page can ask for (regular,
    bold, italic, bold italic), the faces the website loads from Google Fonts
    (src/index.css: Playfair Display and DM Sans with their italics, 400 to
-   900). One exception: Dancing Script has no italic anywhere (Google has
-   none, so the browser slants the upright itself); a page in Dancing Script
-   italic is listed in PagePlan.notDrawn, like a missing font.
+   900; index.html: Cinzel 400 and 700, the cover's face: a new cover title
+   and the reserved back's Megy Prints lockup). Two exceptions: Dancing
+   Script and Cinzel have no italic anywhere (Google has none, so the
+   browser slants the upright itself); a page in either italic is listed in
+   PagePlan.notDrawn, like a missing font.
 
    A page in a font that is not here draws in the phone's own font for that
    family list (its generic serif / sans-serif included, as Chrome on
@@ -30,6 +32,7 @@ export interface BundledFont {
 const PF = '@expo-google-fonts/playfair-display';
 const DM = '@expo-google-fonts/dm-sans';
 const DS = '@expo-google-fonts/dancing-script';
+const CZ = '@expo-google-fonts/cinzel';
 
 export const BUNDLED_FONTS: readonly BundledFont[] = [
   { face: 'Playfair Display', weight: 400, italic: false, file: `${PF}/400Regular/PlayfairDisplay_400Regular.ttf` },
@@ -42,6 +45,10 @@ export const BUNDLED_FONTS: readonly BundledFont[] = [
   { face: 'DM Sans', weight: 700, italic: true, file: `${DM}/700Bold_Italic/DMSans_700Bold_Italic.ttf` },
   { face: 'Dancing Script', weight: 400, italic: false, file: `${DS}/400Regular/DancingScript_400Regular.ttf` },
   { face: 'Dancing Script', weight: 700, italic: false, file: `${DS}/700Bold/DancingScript_700Bold.ttf` },
+  // The cover's own face: the reserved back's Megy Prints lockup and a cover
+  // title in Cinzel (the website loads 400 and 700; Cinzel has no italic).
+  { face: 'Cinzel', weight: 400, italic: false, file: `${CZ}/400Regular/Cinzel_400Regular.ttf` },
+  { face: 'Cinzel', weight: 700, italic: false, file: `${CZ}/700Bold/Cinzel_700Bold.ttf` },
 ];
 
 const GENERIC = /^(serif|sans-serif|cursive|monospace|fantasy|system-ui)$/i;

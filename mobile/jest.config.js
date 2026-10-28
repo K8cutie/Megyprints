@@ -7,6 +7,9 @@ const here = (p) => path.join(__dirname, p);
 module.exports = {
   preset: 'jest-expo',
   roots: ['<rootDir>/test'],
+  // The golden tests (three files, run side by side) read the website
+  // pictures: made, when out of date, once before any of them starts.
+  globalSetup: '<rootDir>/test/golden/webPictures.cjs',
   testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/'],
   moduleNameMapper: {
     '^@web/(.*)$': '<rootDir>/../src/$1',

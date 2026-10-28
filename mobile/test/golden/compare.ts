@@ -22,6 +22,13 @@
           is big. (Real differences are faint: blended edge pixels a few
           levels apart, whole rows of them along a photo's edge, which
           pixelmatch counts; a missing line is strong.)
+        • any one 64 × 64 px tile's mean colour (its counted pixels, each
+          channel): within MAX_TILE_MEAN_LEVELS of the website's. A colour
+          a little off everywhere (a texture's tint a shade off, a wash or a
+          look a little too strong) moves every pixel by a few levels:
+          under pixelmatch's threshold and the tile's 32 levels, but not
+          under a whole tile's mean, where real differences (a few edge
+          pixels) average out.
    2. THE INK, per text box: Chromium on Windows draws letters with
       DirectWrite (grid-fitted), Skia with FreeType, so letter edges never
       match pixel for pixel. What must match:
@@ -62,6 +69,8 @@ export const MAX_DIFF_OUTSIDE_WORDS = 0.15;
 export const TILE = 64;
 export const TILE_LEVELS = 32;
 export const MAX_TILE_DIFF = 1;
+/** Any 64 × 64 tile's mean colour (counted pixels, per channel), levels of 255. */
+export const MAX_TILE_MEAN_LEVELS = 2;
 /** A text's ink, per channel, app vs website: share of the website's ink. */
 export const MAX_INK_DIFF = 0.06;
 /** A text's 8 × 8 blocks: mean colour, levels of 255. */
@@ -99,6 +108,9 @@ export interface PageComparison {
   outsideWordsPct: number;
   worstTilePct: number;
   worstTileAt: { x: number; y: number } | null;
+  /** The worst tile's mean colour difference, levels (largest channel). */
+  worstTileMean: number;
+  worstTileMeanAt: { x: number; y: number } | null;
   /** % of the page left out as words' ink. */
   inkPct: number;
   /** pixelmatch inside the ink (reported, not barred). */
@@ -284,28 +296,33 @@ export function comparePage(p: Pictures, zones: Area[], bleed = 0): PageComparis
   // not judged on its own).
   let worstTilePct = 0;
   let worstTileAt: { x: number; y: number } | null = null;
+  let worstTileMean = 0;
+  let worstTileMeanAt: { x: number; y: number } | null = null;
   for (let ty = 0; ty < H; ty += TILE) {
     for (let tx = 0; tx < W; tx += TILE) {
-      let n = 0, d = 0;
+      let n = 0, d = 0, sr = 0, sg = 0, sb = 0;
       const y1 = Math.min(H, ty + TILE), x1 = Math.min(W, tx + TILE);
       for (let y = ty; y < y1; y++) {
         let i = (y * W + tx) * 4;
         for (let x = tx; x < x1; x++, i += 4) {
           if (excused[y * W + x]) continue;
           n++;
+          sr += app[i] - ref[i]; sg += app[i + 1] - ref[i + 1]; sb += app[i + 2] - ref[i + 2];
           if (Math.abs(app[i] - ref[i]) > TILE_LEVELS || Math.abs(app[i + 1] - ref[i + 1]) > TILE_LEVELS || Math.abs(app[i + 2] - ref[i + 2]) > TILE_LEVELS) d++;
         }
       }
       if (n < (TILE * TILE) / 4) continue;
       const pct = (d / n) * 100;
       if (pct > worstTilePct) { worstTilePct = pct; worstTileAt = { x: tx, y: ty }; }
+      const mean = Math.max(Math.abs(sr), Math.abs(sg), Math.abs(sb)) / n;
+      if (mean > worstTileMean) { worstTileMean = mean; worstTileMeanAt = { x: tx, y: ty }; }
     }
   }
 
   return {
     pixels: W * H, differing, differingPct: (differing / (W * H)) * 100,
     counted, outsideWordsPct: counted ? (restDiff / counted) * 100 : 0,
-    worstTilePct, worstTileAt,
+    worstTilePct, worstTileAt, worstTileMean, worstTileMeanAt,
     inkPct: (inkPx / (W * H)) * 100, inkDiffPct: inkPx ? (inkDiffPx / inkPx) * 100 : null,
     over8LevelsPct: (over8 / (W * H)) * 100, maxChannelDiff: maxChannel,
     words, diff,
@@ -317,10 +334,39 @@ export function pageFailures(cmp: PageComparison): string[] {
   const out: string[] = [];
   if (!(cmp.outsideWordsPct <= MAX_DIFF_OUTSIDE_WORDS)) out.push(`page: ${cmp.outsideWordsPct.toFixed(3)}% of pixels differ (bar ${MAX_DIFF_OUTSIDE_WORDS}%)`);
   if (!(cmp.worstTilePct <= MAX_TILE_DIFF)) out.push(`tile at ${cmp.worstTileAt?.x},${cmp.worstTileAt?.y}: ${cmp.worstTilePct.toFixed(2)}% off by more than ${TILE_LEVELS} levels (bar ${MAX_TILE_DIFF}%)`);
+  if (!(cmp.worstTileMean <= MAX_TILE_MEAN_LEVELS)) out.push(`tile at ${cmp.worstTileMeanAt?.x},${cmp.worstTileMeanAt?.y}: its colour ${cmp.worstTileMean.toFixed(2)} levels off on average (bar ${MAX_TILE_MEAN_LEVELS})`);
   cmp.words.forEach((w, i) => {
     if (!(w.inkDiff <= MAX_INK_DIFF)) out.push(`text ${i + 1}: ink ${(w.inkDiff * 100).toFixed(1)}% off the website's (bar ${MAX_INK_DIFF * 100}%)`);
     if (!(w.worstBlock <= MAX_BLOCK_DIFF)) out.push(`text ${i + 1}: an 8x8 block ${w.worstBlock.toFixed(1)} levels off (bar ${MAX_BLOCK_DIFF})`);
     if (!(Math.abs(w.shift.x) < MAX_WORD_SHIFT_PX && Math.abs(w.shift.y) < MAX_WORD_SHIFT_PX)) out.push(`text ${i + 1}: sits ${w.shift.x.toFixed(2)}, ${w.shift.y.toFixed(2)} px off (bar ${MAX_WORD_SHIFT_PX})`);
   });
   return out;
+}
+
+/* TEXTURE TILES (goldenPages.test.ts): a page texture's tile, as print
+   prepares it before repeating it over the page (the material's SVG drawn at
+   the print tile size), against the app's (textureTile.ts: the same SVG
+   drawn by Skia). Both are Skia drawing the same vector shapes and the same
+   Perlin noise, so they agree to a few levels of 255 on every pixel: the
+   bars were set by measuring all 16 textures, own colour and tinted
+   (2026-10-29: worst pixel 3 levels, worst mean 0.77), just above the worst.
+   A wrong tint, a missing grain layer or a wrong noise seed moves whole
+   areas by far more. */
+export const MAX_TEXTURE_TILE_LEVELS = 4;
+export const MAX_TEXTURE_TILE_MEAN = 1;
+
+/** How a tile differs: its worst pixel and its mean (largest channel, levels). */
+export function tileFailures(ref: Uint8Array, app: Uint8Array): { maxLevels: number; meanLevels: number; failures: string[] } {
+  if (ref.length !== app.length) return { maxLevels: 255, meanLevels: 255, failures: ['the tiles are not the same size'] };
+  let max = 0, sum = 0;
+  for (let i = 0; i < ref.length; i += 4) {
+    const d = Math.max(Math.abs(ref[i] - app[i]), Math.abs(ref[i + 1] - app[i + 1]), Math.abs(ref[i + 2] - app[i + 2]), Math.abs(ref[i + 3] - app[i + 3]));
+    if (d > max) max = d;
+    sum += d;
+  }
+  const mean = sum / (ref.length / 4);
+  const failures: string[] = [];
+  if (!(max <= MAX_TEXTURE_TILE_LEVELS)) failures.push(`a pixel ${max} levels off (bar ${MAX_TEXTURE_TILE_LEVELS})`);
+  if (!(mean <= MAX_TEXTURE_TILE_MEAN)) failures.push(`${mean.toFixed(2)} levels off on average (bar ${MAX_TEXTURE_TILE_MEAN})`);
+  return { maxLevels: max, meanLevels: mean, failures };
 }

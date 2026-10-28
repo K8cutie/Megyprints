@@ -53,12 +53,9 @@ export function mintCode(len = 8): string {
   return out;
 }
 
-/** Contain-fit a square QR centered in a slot rect. Used by ALL THREE renderers
- *  (PageView, Fabric, print) so the QR can never desync between them. */
-export function qrRect(sx: number, sy: number, sw: number, sh: number) {
-  const side = Math.min(sw, sh);
-  return { dx: sx + (sw - side) / 2, dy: sy + (sh - side) / 2, side };
-}
+// Where a QR sits in its slot (qrRect) lives in qrGeometry.ts, which the 2.0
+// app shares; re-exported here as before.
+export { qrRect } from './qrGeometry';
 
 /** Destination hosts we allow a memory to point at. This is UX-only guidance —
  *  the SERVER (api/m.mjs) enforces the authoritative allowlist; a client check
