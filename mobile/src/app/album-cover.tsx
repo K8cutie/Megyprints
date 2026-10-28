@@ -13,8 +13,8 @@
    the app has: measured in the phone's own font instead, its answer would be
    a guess (the website's cover default, Cinzel, is not in the app yet).
    ══════════════════════════════════════════════════════════════════════════ */
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AlbumPage } from '@web/pages/builder/types';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -60,12 +60,14 @@ export default function AlbumCover() {
   const { width: screenW } = useWindowDimensions();
   const [showAll, setShowAll] = useState(false);
 
-  // Own the cover scope while open; always hand it back (CoverEditor).
+  // Own the cover scope while this is the screen on top; always hand it back
+  // (CoverEditor). On focus, not on mount: this screen stays mounted under
+  // the Preview and the page editor, which must edit the pages, not the cover.
   const { setEditScope } = builder;
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     setEditScope('coverFront');
     return () => setEditScope('interior');
-  }, [setEditScope]);
+  }, [setEditScope]));
   // The decoded photos go when the cover step is left (they are a few MB each).
   useEffect(() => () => forgetPhotoPictures(), []);
   const goToPreview = useGoToPreview();

@@ -9,6 +9,10 @@
    inside of the front cover, then 2 | 3, 4 | 5… A swipe turns the page too.
    Each turn plays the website's page turn (the leaf hinged at the spine).
 
+   "Edit pages" (the website's way into its editor) opens the editor
+   (src/editor) on the page shown; its "Back to preview" comes back here, on
+   the page it was on.
+
    Every page is drawn by the app's page renderer from the builder's own page
    data (usePagePicture). When something on a page is drawn more simply than
    it prints, one plain line under the book says so.
@@ -36,6 +40,7 @@ import { accountSaveDue, markAccountSaved } from '../builder/accountSave';
 import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { forgetPhotoPictures, preparePagePicture, usePagePicture } from '../builder/usePagePicture';
 import type { PageRequest } from '../builder/pageImages';
+import { EDIT_PAGES } from '../editor/editorWords';
 import { useAuth } from '../lib/auth';
 import { useDraft } from '../lib/draftStore';
 import { colors, space } from '../lib/theme';
@@ -234,6 +239,11 @@ export default function Preview() {
     // faceProps changes with the album; the pages' keys cover it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, index, view, onCover, total, singleW, pages, builder.coverFront]);
+  const editPages = () => {
+    setCoverAt(null);
+    builder.goToPage(index);
+    router.push('/edit-pages');
+  };
   const noteNotDrawn = (key: string, list: string[]) => setNotDrawn((m) => (m[key]?.join('|') === list.join('|') ? m : { ...m, [key]: list }));
   const face = (f: TurnFace) => <Face face={f} {...faceProps} />;
 
@@ -276,11 +286,18 @@ export default function Preview() {
           )}
         </View>
         <Text style={styles.caption} testID="preview-caption">{previewCaption(pos)}</Text>
-        {!onCover && (
-          <Pressable accessibilityRole="button" onPress={() => setOpenBook((v) => !v)} style={styles.toggle} testID="preview-open-book">
-            <Text style={styles.toggleText}>{openBook ? 'One page at a time' : 'See it as an open book'}</Text>
+        <View style={styles.toggleRow}>
+          {!onCover && (
+            <Pressable accessibilityRole="button" onPress={() => setOpenBook((v) => !v)} style={styles.toggle} testID="preview-open-book">
+              <Text style={styles.toggleText}>{openBook ? 'One page at a time' : 'See it as an open book'}</Text>
+            </Pressable>
+          )}
+          {/* The website's "‹ Edit pages": the editor on the page shown (page 1
+              from the cover); "Back to preview" there comes back to it. */}
+          <Pressable accessibilityRole="button" onPress={editPages} style={styles.toggle} testID="preview-edit-pages">
+            <Text style={styles.toggleText}>{EDIT_PAGES}</Text>
           </Pressable>
-        )}
+        </View>
         {missingHere.length > 0 && (
           <Text style={styles.notDrawn} testID="preview-not-drawn">{NOT_DRAWN_LINE}</Text>
         )}
@@ -338,7 +355,8 @@ const styles = StyleSheet.create({
   insideText: { fontSize: 12, color: '#B9A992', textAlign: 'center', padding: space.sm },
   layerFace: { position: 'absolute', top: 0, overflow: 'hidden', backgroundColor: '#FFFFFF', backfaceVisibility: 'hidden' },
   caption: { fontSize: 14, fontWeight: '600', color: colors.muted },
-  toggle: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: 8 },
+  toggleRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.sm },
+  toggle: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: 8 },
   toggleText: { fontSize: 14, fontWeight: '700', color: colors.text },
   notDrawn: { fontSize: 13, color: colors.muted, textAlign: 'center', paddingHorizontal: space.md },
   saved: { fontSize: 13, color: colors.muted, textAlign: 'center' },

@@ -30,6 +30,7 @@ export default function RootLayout() {
             <Stack.Screen name="album-cover" options={{ title: 'Your cover' }} />
             <Stack.Screen name="making" options={{ headerShown: false, gestureEnabled: false }} />
             <Stack.Screen name="preview" options={{ title: 'Your album' }} />
+            <Stack.Screen name="edit-pages" options={{ title: 'Edit pages' }} />
             <Stack.Screen name="golden-pages" options={{ title: 'Golden pages' }} />
           </Stack>
         </BuilderProvider>

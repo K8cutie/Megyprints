@@ -1072,6 +1072,93 @@ pushed to `DCIM/Camera` and media-scanned.
 
 ---
 
+## Phase 4 notes (2026-10-30): the editor
+
+Branch `feat/port-phase-4-editor`, stacked on `feat/port-phase-3` (draft #222).
+Like Phase 3 it is a DRAFT under the same HOLD. Nothing in `../src` changed.
+
+### The editor core (what every part plugs into)
+
+- **"Edit pages"** (`mobile/src/app/edit-pages.tsx` → `src/editor/EditPagesScreen.tsx`):
+  the website's phone editor (MobileReview), reached from the Preview's "Edit pages"
+  button (on the page shown; page 1 from the cover) and back ("Back to preview",
+  "Done — Preview my album" on the last page, or Android's back). One page at a
+  time, large, drawn by the Skia renderer; a swipe, "Previous page" / "Next page"
+  (PageTurnBar's words) or the page strip turns it.
+- **A tap knows what it hit** (`src/editor/hitTest.ts`): every element a customer
+  can tap (photo, empty frame, words in a frame, QR, graphic, free text, caption
+  box words / photo / QR / graphic, empty caption box, sticker) as a box in the
+  renderer's own print px, built from the same shared code the renderer uses
+  (pageTemplates, binding, slotGeometry, maskShapes, slotUtils, wordArtRules), in
+  the website's z-order and its precedence inside a frame. Round frames are
+  ellipses; free texts turn and stretch about their top-left like drawPage.
+  `test/editorHitTest.test.ts` holds every photo, caption and caption-box photo
+  on every layout of every size (left and right pages) to `planPage` AND to the
+  website's phone geometry (`studioPhoneGeom.slotRectPx`, `textFit.captionBoxSize`).
+- **Selection** lives in the website's builder (`selectedElementId` tagged with the
+  page, `selectedSlotIndex`, `selectedTextId`, `selectedPhotoId`: `selection.ts`).
+- **Undo / Redo** in the header (`undoBar.ts`): the website's own 20-step history
+  (`useBuilderState` undo/redo; the cover is not in it). Shown only when there is
+  something to undo or redo (never greyed). Undo stops at the album as the editor
+  found it, because the website's history also holds "Make my album" and one Undo
+  too many would take every page away; that start holds over a trip to the
+  Preview and back when nothing changed the pages meanwhile.
+- **The cover scope**: the cover step now owns `editScope = 'coverFront'` only while
+  it is the screen on top (`useFocusEffect`), and the editor puts it back to
+  `'interior'` whenever it is focused, so a page edit never lands on the cover.
+
+### How the parts plug in (`src/editor/registry.ts`)
+
+Each part registers itself once from its folder's `index.ts`
+(`src/editor/parts.ts` imports `core`, `photos`, `text`, `cover`):
+
+    registerEditorPart({
+      id: 'photos',                  // sheets are named 'photos:<name>'
+      taps: [{ kinds, order, onTap(target, ctx) → true if it took the tap }],
+      addChoices: [{ id, label, desc, short, kinds: ['emptySlot' | 'emptyBox'], order, onPick }],
+      selectedActions: [{ id, label, kinds, order, danger?, shown?, onPress(target, ctx) }],
+      tools: [{ id, label, order, wide?, shown?, onPress(ctx) }],
+      sheets: { name: ({ ctx, params, close }) => <EditorSheet …/> },
+      overlays: [({ ctx, scale, width, height }) => …],   // drawn over the page
+      stripStart: [{ id, label, order, onPress(ctx) }],   // tiles before page 1
+      banners: [{ id, order, Component: ({ ctx }) => … }], // lines over the page
+    });
+
+`ctx` (EditorContext) carries `builder` (the website's useBuilderState: EVERY edit
+goes through it), `platform`, `text` (page fonts), `pageIndex`, `page`, `targets`,
+`selected`, `select()`, `openSheet('<part>:<name>', params)`, `closeSheet()` and
+`say(line)` (the website's guard line). `ORDER` holds the website's order for
+tools and "Add to this box" lines. A tap no rule takes selects the element, and
+an empty frame or box opens "Add to this box" (the screen's own sheet) when a
+part offers something for it. Tests: `test/editorRegistry.test.ts` (with the
+part folders taken out by `isolateRegistry`), `test/editorUndo.test.ts`,
+`test/editorHarness.ts` (an album made through the app's steps, for every part's
+tests).
+
+### Part 1: photos, layouts, pages (`src/editor/photos`)
+
+(Written by the part's job.)
+
+### Part 2: words, fonts, colours, quotes, page colours (`src/editor/text`)
+
+(Written by the part's job.)
+
+### Part 3: the cover editor (`src/editor/cover`)
+
+(Written by the part's job.)
+
+### Not done, not proven (editor core)
+
+- Not walked on an emulator or a phone in this step (the parts' verify step does
+  that); proven by jest on the real shared builder and by type checks only.
+- A QR code or a graphic is hit in its whole frame or caption box, not in the
+  smaller square the website draws it in (`qrRect` / `ornamentFit` live in website
+  files that are not shared yet). The app draws neither yet.
+- QR codes and video memories ("Add memory video", a tap on a QR) are Phase 6: a
+  tap on one selects it and nothing more.
+
+---
+
 ## Page renderer notes (2026-10-28, Phase 5 groundwork)
 
 The riskiest part of 2.0 was done early: the app draws an album page itself
