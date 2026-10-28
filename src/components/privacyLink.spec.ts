@@ -78,3 +78,42 @@ describe('the policy says how people really pay', () => {
     expect(text(host).toLowerCase()).not.toContain('cash on delivery');
   });
 });
+
+/* Owner, 2026-10-28: "Fix them": the policy said a QR memory stores a video
+   LINK (the video file itself is uploaded, to a public bucket), and never
+   mentioned events (guests' photos and videos are uploaded and shown to the
+   event's guests and screen). The numbers below are 0044's (event_keep_days
+   120, cancelled/host-deleted + 3 days). */
+describe('the policy says what happens to QR memory videos and event photos', () => {
+  const section = (title: string) => [...host.querySelectorAll('section')].find((s) => s.querySelector('h2')?.textContent === title) ?? null;
+  const render = () => act(async () => { root.render(createElement(MemoryRouter, null, createElement(Privacy))); });
+
+  it('QR memory videos: uploaded when you order, anyone with the code can watch, deleting the memory or account', async () => {
+    await render();
+    const words = text(section('Where your photos go'));
+    expect(words).toContain('A video you add to a page stays on your device while you design, and is uploaded to our servers when you place your order.');
+    expect(words).toContain('Anyone who scans the QR code, or has its link, can watch the video.');
+    expect(words).toContain('You can delete a QR memory in My Memories, and its QR code stops working. Deleting your account also deletes the video files.');
+    // Not just "a link" any more.
+    expect(text(host)).not.toContain('we store that link');
+  });
+
+  it('events: the host\'s booking details, guests\' photos seen by the event, how long they are kept', async () => {
+    await render();
+    const events = section('Events');
+    expect(events).not.toBeNull();
+    const words = text(events);
+    expect(words).toContain('your name, mobile number, the event date, venue and number of guests, and any payment receipts you attach');
+    expect(words).toContain('you join by scanning the QR code at the event and typing your name. No account is needed.');
+    expect(words).toContain('They can be seen, with your name and table number, by the host, by the other guests of that event, and on the event\'s screen at the venue.');
+    expect(words).toContain('anyone with the exact address can open them');
+    expect(words).toContain('Everything from an event is deleted 120 days after the event, or 3 days after a booking is cancelled or the host deletes their account.');
+  });
+
+  it('"Information we collect" names both', async () => {
+    await render();
+    const words = text(section('Information we collect'));
+    expect(words).toContain('QR memory videos');
+    expect(words).toContain('Event photos and videos');
+  });
+});

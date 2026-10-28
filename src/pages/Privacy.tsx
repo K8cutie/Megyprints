@@ -51,13 +51,42 @@ export default function Privacy() {
             storage so that we can print and ship it. Only our fulfillment team can access this file,
             and it is used solely to produce and deliver your album.
           </p>
+          <p>
+            <b>Videos for QR memories</b> are different, because people scan the printed QR code to
+            watch them. A video you add to a page stays on your device while you design, and is uploaded
+            to our servers when you place your order. <b>Anyone who scans the QR code, or has its link,
+            can watch the video.</b> You can delete a QR memory in <b>My Memories</b>, and its QR code
+            stops working. Deleting your account also deletes the video files.
+          </p>
+        </Section>
+
+        <Section title="Events">
+          <p>
+            If you book Megy Prints for an event, we keep the booking details you give us: your name,
+            mobile number, the event date, venue and number of guests, and any payment receipts you
+            attach. We use them to run your event and make its album.
+          </p>
+          <p>
+            <b>If you're a guest</b>, you join by scanning the QR code at the event and typing your name.
+            No account is needed. The photos and short videos you share are uploaded to our servers.
+            They can be seen, with your name and table number, by the host, by the other guests of that
+            event, and on the event's screen at the venue. The shared copies are kept at web addresses
+            that aren't listed anywhere, but anyone with the exact address can open them.
+          </p>
+          <p>
+            You can delete anything you shared, and the host can remove a guest and everything that
+            guest shared. Deleted items are removed from our servers within a day. Everything from an
+            event is deleted <b>120 days after the event</b>, or 3 days after a booking is cancelled or
+            the host deletes their account.
+          </p>
         </Section>
 
         <Section title="Information we collect">
           <ul className="list-disc pl-5 space-y-1">
             <li><b>Account details</b> — your email address (including if you sign in with Google), so you can save albums and manage your orders.</li>
             <li><b>Order &amp; delivery details</b> — your name, contact number, and shipping address, used to deliver your album.</li>
-            <li><b>Living-memory QR links</b> — if you attach a video to an album, we store that link so the printed QR code can open it. You can re-point or remove it anytime.</li>
+            <li><b>QR memory videos</b> — the video you add to a page, uploaded when you order, so the printed QR code can play it (see <b>Where your photos go</b>).</li>
+            <li><b>Event photos and videos</b> — what guests share at an event booked with us, and the host's booking details (see <b>Events</b>).</li>
             <li><b>Basic technical data</b> — anonymous error and performance diagnostics that help us keep the app working.</li>
           </ul>
         </Section>
