@@ -1274,7 +1274,62 @@ words, line for line; every change through the website's `useBuilderState`.
 
 ### Part 3: the cover editor (`src/editor/cover`)
 
-(Written by the part's job.)
+Branch `feat/port-phase-4-editor-cover`, on the editor core. Nothing in `../src` changed.
+
+- **The way in**: a "Cover" tile before page 1 in the Edit pages strip (`stripStart`),
+  opening the cover screen, its own route `src/app/edit-cover.tsx` (it sets its own
+  title, "Design your cover", so `_layout.tsx` has no line for it). Done, the header's
+  back arrow or Android's back return to the page.
+- **The screen** (`CoverScreen.tsx`): the website's CoverEditor, FRONT only. The cover
+  as print draws it (the page renderer, `coverMode`; while a changed cover is drawn the
+  last picture stays, at most one new picture every 300 ms), "The back cover carries
+  the Megy Prints mark in your cover colour", and the website's two tabs:
+  - **Background**: the album's photos, best first, 10 then "Show all N photos"; the
+    cover's colours (White + the Crayola 8) and "Use <colour> on every page"; with a
+    photo on, Zoom (1 to 3) and Reset; dragging the cover moves the photo in its frame.
+    "Remove photo" only for a cover photo that is not one of the album's.
+  - **Text**: the cover title (sent once typing pauses, and before the screen is left);
+    "Too long for the front cover" with "Make it fit (size N)" (only in a font the app
+    has, as the cover step); Font (the 74, in the website's groups); Colour (the 28);
+    Alignment; Bold, Italic, Shadow (on = no setting, off = `false`); Size 16 to 96 (one
+    change when the finger lets go). Dragging the title (inside its dashed box) moves
+    it, kept on the cover (`setBoxTextOffset`, the website's limits).
+- **Every change is CoverEditor's call** (`coverEdits.ts`), same call, same arguments:
+  `setPageBackground` (photo, Remove photo), `setPageColor`, `applyPageColorToAllPages`,
+  `setBackgroundCrop` (drag, zoom, Reset), `setBoxText(0, { text, ...patch })` (every
+  title control), `setBoxTextOffset`. Each first checks the builder's cover scope is on
+  and does nothing otherwise, so a cover change can never land on a page. The scope is
+  `'coverFront'` while the screen is on top (`useFocusEffect`), `'interior'` when it is
+  left; the last words typed are sent before it is handed back.
+- **No Undo or Redo** on the cover screen: the website's Snapshot holds the pages, not
+  the cover. Each cover change still saves one undo step that changes nothing (the
+  website's own behaviour); typing and the size slider are sent once per pause / per
+  let-go so they don't fill the 20 steps and push page changes out of the Edit pages
+  Undo.
+- **Warnings** (`coverChecks.ts`, the website's rules): a blank cover (`coverIsBlank`,
+  "Your front cover is blank: no title or photo on it.", shown on the cover while it is
+  blank; the website says it when Order is pressed); a title too long; a title colour
+  that wouldn't show on the cover's colour (the website's 3:1 bar `pageColors.readsOn`,
+  with "Use charcoal" / "Use white"). A colour swatch already switches such a title
+  (`recolorPage`); the warning catches a title colour picked afterwards. The album's
+  name stays the cover title until the customer types their own (the builder's rule).
+- **Tests** (`test/editorCover*.test.ts`, 31): the words against the website's source;
+  the website's source still making those calls; each control's call and arguments (a
+  recording builder); on the real builder, every control changes the cover and no page;
+  the scope guard; Undo leaves the cover; the album name; the three warnings; the title
+  box against the hit test AND `planPage` on every size and both cover layouts, and its
+  edges; and the screen itself rendered on the real builder and pressed (tabs, photo,
+  colours, every page, zoom, reset, drags, font list, title colours with the warning and
+  its fix, toggles, size, blank cover, the not-drawn line, Done, leaving mid-typing).
+- **Not done**: the spine beside the cover and its notes (the website's SpineStrip reads
+  `coverLayout.ts`, which measures in a browser and is not shared; the renderer job is
+  adding the spine); "Or choose a photo from your phone" (the renderer draws a cover
+  photo only when it is one of the album's, by `photoId`, and the app has no one-photo
+  picker yet); "Any color" (no colour picker in the app); font names shown in their own
+  faces (the app's screens have no page fonts loaded; the cover picture draws the 3 the
+  renderer has, the rest "look simpler"); an "Edit cover" button on the Preview (the
+  website's way in; the Preview is Phase 3's file). Not walked on an emulator or a phone
+  in this step.
 
 ### Not done, not proven (editor core)
 
