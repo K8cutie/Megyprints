@@ -1,0 +1,70 @@
+{
+ "what": "2.0 native app, Phase 3: make the album from the phone's photos, see it as a book (branch feat/port-phase-3)",
+ "albumParity": {
+  "test": "mobile/test/albumParity.test.ts (website half: tools/parity/webAlbums.spec.ts, vitest + jsdom, re-run every time)",
+  "scenarios": [
+   {
+    "name": "40 photos, 8x8, Wedding",
+    "pagesApp": 40,
+    "pagesWebsite": 40,
+    "templateIdsEqual": 40,
+    "pagesIdenticalInEveryField": 40,
+    "photosPlaced": 40
+   },
+   {
+    "name": "57 photos, 6x8, Vacation, 4 with no time",
+    "pagesApp": 41,
+    "pagesWebsite": 41,
+    "templateIdsEqual": 41,
+    "pagesIdenticalInEveryField": 41,
+    "photosPlaced": 57
+   },
+   {
+    "name": "120 photos, 8x6, Family reunion",
+    "pagesApp": 63,
+    "pagesWebsite": 63,
+    "templateIdsEqual": 63,
+    "pagesIdenticalInEveryField": 63,
+    "photosPlaced": 120
+   }
+  ],
+  "control": "the same 40 photos with another seed: the album differs on more than 5 pages (the comparison can fail)"
+ },
+ "captionFit": {
+  "test": "mobile/test/textMeasurer.test.ts (website half: tools/golden/fitWeb.mjs, the website's textFit in headless Chromium 1228 with the app's font files)",
+  "captions": 252,
+  "tooLongForTheirBox": 37,
+  "identical": 251,
+  "onTheBoxEdge": [
+   "made:64-caption-yellow:dmsans-bold:sentence:48: app fitsAt 42, website fitsAt 41 ('happy day' 0.005 px inside the box in Skia)"
+  ],
+  "widthsMeasured": 4255,
+  "worstWidthOffPx": 0.145
+ },
+ "emulator": {
+  "device": "own pwa_test emulator, Android 14 x86_64, port 5574, release APK built in C:\\m3p, no .env.local (signed out, no server)",
+  "photos": "44 made from public/sample-photos with EXIF times, one stored on its side (EXIF Orientation 6), the golden Display P3 PNG",
+  "displayP3RedPatchOnScreen": [
+   239,
+   0,
+   21
+  ],
+  "websiteSrgbRedPatch": [
+   240,
+   0,
+   21
+  ],
+  "rawP3Numbers": [
+   220,
+   40,
+   40
+  ],
+  "pageTurnRecording": "15-page-turn.mp4: 37 frames over about 0.8 s",
+  "memoryAfterPagingPss_MB": 133
+ },
+ "branchCommit": "fb93b7c",
+ "gates": {
+  "mobile": "npm run check: tsc + jest, 25 suites / 227 tests pass (golden 45 pages included), 520 s",
+  "website": "no src/ change; on the merged tree npx tsc -b passes and npx vitest run gives 209 files / 2,642 tests passing"
+ }
+}
