@@ -1201,7 +1201,76 @@ editor uses (`actions.ts`); nothing in `../src` changed.
 
 ### Part 2: words, fonts, colours, quotes, page colours (`src/editor/text`)
 
-(Written by the part's job.)
+Branch `feat/port-phase-4-editor-text`, on `feat/port-phase-4-editor`. MobileReview's
+words, line for line; every change through the website's `useBuilderState`.
+
+- **Taps** (`wordsFlow.tapOpens`): a caption box's words, words in a photo frame, a
+  free text. A line from the quote pool (`isPoolQuote`) opens the quotes; anything
+  else opens the text editor. An empty box Megy dealt opens its kind's editor at
+  once; an undealt one is left to the screen's "Add to this box", where this part
+  adds "Add Quote" and "Your Text" (photo frames and caption boxes).
+- **Saves** (`wordsFlow`): a caption box `setBoxText(box, content)`; words in a
+  frame `setSlotText(frame, content + its quote flag | null, page)`; a free text
+  `updateTextElement(id, content)`; a quote `setBoxText(box, { text, italic, quote },
+  page)` / `setSlotText(frame, { …look, text, italic, quote }, page)`; Remove quote
+  `setBoxText(box, { text: '' }, page)` / `setSlotText(frame, null, page)`. Tests hold
+  each call to these exact arguments with a spy on the real builder.
+- **The text editor** (`TextEditorSheet`, MobileTextEditor): type, Bold / Italic /
+  Underline, the font, size 14–80 by 2, the 28 text colours + "Any color" (a sheet
+  of 42 shades and a colour code: React Native has no colour input), Outline,
+  Shadow, Left / Center / Right; "✓ Done" saves, ✕ doesn't. A caption box says
+  "Too long for this box … Make it fit (size N)" with the website's `captionFits`,
+  measured by the Skia page fonts (`platform.textMeasurer`). The typing box is a
+  preview: React Native draws one text shadow, so Shadow wins over Outline there
+  (the page draws both).
+- **Fonts** (`fonts/`): all 74. Bundled = whatever `render/fontTable.ts
+  BUNDLED_FONTS` has (today Playfair Display, DM Sans, Dancing Script: the theme
+  fonts; Cinzel when the renderer job lands it). Georgia stays the phone's serif
+  (not on Google Fonts; the website on Android does the same). The other 70 are
+  fetched from Google Fonts the first time they are picked (or the album open in
+  the editor uses them), in exactly the styles the website loads (`WEBSITE_STYLES`, re-derived
+  from `index.html` + `src/index.css` by the test), checked to be a font file, kept
+  in `Paths.document/megy-fonts` for good, and given to the page renderer
+  (`PageText.addFonts` + `fontTable.addDrawnFonts`: pages, caption measuring and
+  later print use the exact font) and to the text views (expo-font). Saved fonts
+  go into the renderer at start, before the first page is drawn (`BuilderProvider`).
+  The font list shows each name in its own face from a ~4 KB copy holding just
+  those letters (Google Fonts `text=`), fetched as rows come into view. Offline:
+  the words keep their font and the editor says "No internet: … can't be
+  downloaded now. Your words stay in …".
+  - **APK size:** unchanged by fonts (no new bundled file; expo-font was already
+    in the build through `expo`, now listed directly). The 10 bundled TTFs are
+    1.09 MB. Fetched sizes (measured 2026-10-30): one font 23–404 KB; all 70 in
+    every style 6.96 MB (117 files), regular only 3.63 MB; nobody needs them all.
+  - **Shared edits (small, additive):** `render/fontTable.ts` (`drawnFonts`,
+    `addDrawnFonts`, a version to listen to), `render/pageText.ts` (`addFonts`,
+    `hasFile`), `builder/pageImages.ts` (a page's picture name includes the
+    downloaded faces its words use, so a page drawn before its font arrived is
+    drawn again; unchanged for bundled-only pages), `builder/usePagePicture.ts`
+    (listens for a new font), `builder/BuilderProvider.tsx` (saved fonts at start).
+- **Quotes** (`QuotePickerSheet`, QuotePickerModal): "Write a line for this photo"
+  for a signed-in account only, as on the website (the cost rule: sign-in is a
+  commit signal): ALL the page's photos (≤ 6) as 512 px JPEGs made by the phone,
+  to `https://megyprints.vercel.app/api/photo-quotes` (`photoQuotes.ts`, the
+  website's request and answers), written for the box's room (`quoteRoom`) and
+  offered only if they fit. An empty quote box starts writing at once. Signed out
+  it asks for the sign-in and sends nothing; after the sign-in the editor opens
+  the picker again on that box and writes (`resumeQuote.ts`). The 800-line bank
+  (offline) is built but shows only behind the shared `DEAL_BANK_QUOTES` switch,
+  OFF on the website since 2026-10-21, so off here too. Tests never reach the
+  endpoint (fakes; the real `fetch` fails a test if touched).
+- **Page colour** tool (`PageColourSheet`, PageColorSheet): White + the Crayola 8 in
+  48 dp swatches (5 + 4 rows: nine in one row can't be 48 dp on a phone),
+  `setPageColor`, "Use … on every page" (`applyPageColorToAllPages`, cover included)
+  and the website's line. `ColourPickers.PageColourPicker` is there for the cover.
+- **Not done / not proven:** not walked on an emulator or phone (the verify step);
+  the keyboard lift of the format bar, expo-font in the typing box and a real
+  Google Fonts download are unproven on a device. The endpoint's `ALLOWED_ORIGINS`
+  guard (if set on Vercel) would refuse the app, which sends no Origin: the picker
+  then says "Couldn't write lines just now"; the fix is a server rule for the app,
+  held until Nov 9. An album from the website in a fetched font draws in the
+  phone's serif on the Preview until the editor is opened once (the editor fetches
+  the album's fonts); the Preview itself doesn't fetch.
 
 ### Part 3: the cover editor (`src/editor/cover`)
 

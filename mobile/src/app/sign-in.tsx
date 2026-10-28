@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
@@ -10,6 +10,9 @@ import { colors, space } from '../lib/theme';
  *  account as on the website). */
 export default function SignIn() {
   const { signIn } = useAuth();
+  // Opened from a screen that carries on once signed in (the editor's "Write
+  // a line for this photo"): back to it, not to My albums.
+  const { back } = useLocalSearchParams<{ back?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -25,7 +28,10 @@ export default function SignIn() {
     setError(null);
     const result = await signIn(email, password);
     setBusy(false);
-    if (result.ok) router.replace('/albums');
+    if (result.ok) {
+      if (back === '1' && router.canGoBack()) router.back();
+      else router.replace('/albums');
+    }
     else setError(result.error ?? 'Sign-in did not work. Try again.');
   };
 

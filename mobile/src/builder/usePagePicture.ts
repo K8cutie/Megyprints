@@ -12,7 +12,7 @@
    they are let go when the pages are off screen and when the app goes to
    the background.
    ══════════════════════════════════════════════════════════════════════════ */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { Directory, File, Paths } from 'expo-file-system';
 import '@shopify/react-native-skia/lib/commonjs/skia/NativeSetup';
@@ -20,6 +20,7 @@ import { Skia } from '@shopify/react-native-skia/lib/commonjs/skia/Skia';
 import { ImageFormat } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { drawableCopy } from '../../modules/photo-files';
 import type { PageText } from '../render/pageText';
+import { drawnFontsVersion, onDrawnFontsChange } from '../render/fontTable';
 import { drawPageImage, hashText, pageKey, photoImageCache, PHOTO_MAX_SIDE, type PageRequest } from './pageImages';
 import { pagePictureShown } from './pageShown';
 
@@ -145,6 +146,8 @@ export async function preparePagePicture(text: PageText, req: PageRequest): Prom
 
 /** The picture of `req`'s page for a screen; null req = nothing to draw. */
 export function usePagePicture(text: PageText | null, req: PageRequest | null): PagePicture {
+  // A caption font downloaded meanwhile changes the key of a page that uses it.
+  useSyncExternalStore(onDrawnFontsChange, drawnFontsVersion);
   const key = req && text ? pageKey(req) : null;
   const [state, setState] = useState<PagePicture>(() => {
     const hit = key ? known.get(key) : undefined;
