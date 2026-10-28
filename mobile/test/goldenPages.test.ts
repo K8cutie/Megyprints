@@ -45,6 +45,7 @@ import { BUNDLED_FONTS } from '../src/render/fontTable';
 import { headlessSkia, fontFiles, fontPath, imageFromFile, pixelsOf, readPng, writeImage, writeRgba, REPO_ROOT } from './golden/headless';
 import { comparePage, pageFailures, PIXELMATCH, type PageComparison } from './golden/compare';
 import { appWords, lineFailures, type WebLine } from './golden/words';
+import { runGoldenPages, type GoldenBundle, type PhoneReport, type ToSrgb } from '../src/dev/goldenRun';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { goldenFingerprint } = require('../../tools/golden/sources.cjs') as { goldenFingerprint: (fonts: string[]) => Fingerprint };
@@ -294,4 +295,65 @@ describe('the check fails on each kind of small mistake', () => {
     const fakeDrawer = new PageDrawer(Sk, fakeText);
     failsOn(run('captions-italics', (p) => p, { using: fakeDrawer, usingText: fakeText }), INK);
   }, 120_000);
+});
+
+/* The phone's golden run (src/dev/goldenRun.ts: the debug screen of a
+   -GoldenPages test build) must draw exactly what this check draws, so that
+   comparing the phone's pictures with the website's tests the phone's Skia
+   and nothing else. Run here with CanvasKit on three pages (a caption, a
+   frame, the Display P3 photo), its pictures must be the ones check() draws,
+   pixel for pixel, with the same lines and boxes; and a photo the colour
+   step converts is drawn a second time with the converted file. */
+describe("the phone's golden run draws what this check draws", () => {
+  it('the same pictures, words and boxes, and a second picture after the colour step', async () => {
+    const names = ['frame-double-dashed-radial', '64-caption-yellow', 'photo-display-p3'];
+    const b64 = (file: string) => fs.readFileSync(file).toString('base64');
+    const cases = set.cases.filter((c) => names.includes(c.name));
+    const bundle: GoldenBundle = {
+      madeFrom: { madeAt: 'test', chromium: manifest.chromium, pagesSha256: '', renderer: manifest.fingerprint.renderer.hash, tools: manifest.fingerprint.tools.hash, fonts: manifest.fingerprint.fonts },
+      appRenderer: 'test',
+      photos: set.photos,
+      photoFiles: manifest.photos.map((p) => ({ file: p.file, sha256: '', base64: b64(path.join(WEB, p.file)) })),
+      fonts: BUNDLED_FONTS.map((f) => ({ file: f.file, base64: b64(fontPath(f.file)) })),
+      cases: cases.map((c) => {
+        const w = manifest.cases.find((x) => x.name === c.name) as WebCase;
+        return { name: c.name, albumSize: c.albumSize, pageIndex: c.pageIndex, kind: c.kind, page: c.page, width: w.width, height: w.height, bare: !!w.bare };
+      }),
+    };
+    const written = new Map<string, Uint8Array | string>();
+    // A stand-in for the phone's srgbCopy: says the P3 file was converted (same bytes back).
+    const toSrgb: ToSrgb = async ({ file, bytes }) => ({ colorSpace: file.endsWith('photo-8.png') ? 'Display P3' : 'sRGB IEC61966-2.1', converted: file.endsWith('photo-8.png'), bytes });
+    const report = await runGoldenPages(Sk, bundle, { write: async (n, c) => { written.set(n, c); } }, { toSrgb });
+
+    expect(report.pages.map((p) => p.file)).toEqual([...cases.map((c) => `${c.name}.png`), 'photo-display-p3.srgb.png']);
+    expect(report.pages.every((p) => !p.error)).toBe(true);
+    expect(report.photos.filter((p) => p.converted).map((p) => p.file)).toEqual(['photos/photo-8.png']);
+    const pngPixels = (name: string) => {
+      const bytes = written.get(name);
+      if (!(bytes instanceof Uint8Array)) throw new Error(`the run wrote no ${name}`);
+      const img = Sk.Image.MakeImageFromEncoded(Sk.Data.fromBytes(bytes));
+      if (!img) throw new Error(`${name} is not a picture`);
+      const px = pixelsOf(img);
+      img.dispose();
+      return px;
+    };
+    const same = (a: Uint8Array, b: Uint8Array) => a.length === b.length && Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0;
+    for (const entry of report.pages) {
+      const L = caseNamed(entry.name);
+      const full = draw(L.plan, { words: true });
+      full.img.dispose();
+      expect([entry.width, entry.height]).toEqual([L.W, L.H]);
+      expect(same(pngPixels(entry.file), full.rgba)).toBe(true);
+      expect(entry.words).toEqual(appWords(L.plan, text));
+      expect(entry.notDrawn).toEqual(L.plan.notDrawn);
+      expect(entry.bareFile != null).toBe(!!L.web.bare);
+      if (entry.bareFile) {
+        const bare = draw(L.plan, { words: false });
+        bare.img.dispose();
+        expect(same(pngPixels(entry.bareFile), bare.rgba)).toBe(true);
+      }
+    }
+    const json = JSON.parse(written.get('report.json') as string) as PhoneReport;
+    expect(json.pages.length).toBe(4);
+  }, 300_000);
 });

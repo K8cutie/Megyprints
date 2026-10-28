@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { priceOf, type PriceSchedule } from '@web/lib/pricing';
 import { Button } from '../components/Button';
+import { goldenBundle } from '../dev/goldenBundle';
 import { compareWithExpected, runSharedChecks, type SharedCheckReport } from '../lib/sharedCheck';
 import { SHARED_CHECK_EXPECTED } from '../lib/sharedCheckExpected';
 import { supabase, supabaseConfigured, supabaseHost } from '../lib/supabase';
@@ -107,6 +109,15 @@ export default function SharedCheck() {
           testID="load-prices"
         />
       </View>
+
+      {goldenBundle && (
+        // Test builds made with -GoldenPages only (goldenPages.js): never in a customer build.
+        <View style={styles.liveBox}>
+          <Text style={styles.lineLabel}>Golden pages (test build)</Text>
+          <Text style={styles.small}>Draw the {goldenBundle.cases.length} test pages with this phone&apos;s Skia, for the computer to compare with the website&apos;s print files.</Text>
+          <Button label="Open golden pages" kind="plain" onPress={() => router.push('/golden-pages')} style={styles.liveButton} testID="open-golden" />
+        </View>
+      )}
     </ScrollView>
   );
 }

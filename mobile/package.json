@@ -8,7 +8,8 @@
     "android": "expo run:android",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "check": "tsc --noEmit && jest"
+    "check": "tsc --noEmit && jest",
+    "golden:phone": "jest --testMatch \"**/test/goldenPhone.check.ts\""
   },
   "dependencies": {
     "@expo-google-fonts/dancing-script": "0.4.2",
