@@ -19,11 +19,15 @@ export function TesterCodeBox({ tester, onChange, check }: {
 
   if (tester) {
     return (
-      <View style={styles.on} testID="tester-code-on">
-        <Text style={styles.onText}>✓ {testerLine(tester)}</Text>
-        <Pressable accessibilityRole="button" onPress={() => { onChange(null); setTyped(''); setError(''); }} testID="tester-code-remove">
-          <Text style={styles.link}>Remove</Text>
-        </Pressable>
+      <View style={styles.onWrap}>
+        <View style={styles.on} testID="tester-code-on">
+          <Text style={styles.onText}>✓ {testerLine(tester)}</Text>
+          <Pressable accessibilityRole="button" onPress={() => { onChange(null); setTyped(''); setError(''); }} testID="tester-code-remove">
+            <Text style={styles.link}>Remove</Text>
+          </Pressable>
+        </View>
+        {/* This build checks only the code's shape (the shop's check is a database write). */}
+        {tester.unchecked && <Text style={styles.unchecked} testID="tester-code-unchecked">Test version: this code was not checked with the shop.</Text>}
       </View>
     );
   }
@@ -68,6 +72,8 @@ export function TesterCodeBox({ tester, onChange, check }: {
 }
 
 const styles = StyleSheet.create({
+  onWrap: { gap: 6 },
+  unchecked: { fontSize: 13, lineHeight: 18, color: '#8A5A12' },
   on: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, borderRadius: 12, borderWidth: 1, borderColor: '#CDE5D3', backgroundColor: '#EEF7F0', paddingHorizontal: space.md, paddingVertical: 12 },
   onText: { fontSize: 16, fontWeight: '700', color: '#2E6B3F', flex: 1 },
   openRow: { paddingVertical: space.sm },

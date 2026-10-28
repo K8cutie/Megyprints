@@ -150,6 +150,8 @@ describe('the checkout screen, walked', () => {
     await fireEvent.changeText(screen.getByTestId('tester-code-input'), ' megy test ');
     await fireEvent.press(screen.getByTestId('tester-code-apply'));
     expect(await screen.findByText('✓ Tester code MEGYTEST: free')).toBeOnTheScreen();
+    // Only the shape was checked in this build, and the form says so.
+    expect(screen.getByTestId('tester-code-unchecked')).toHaveTextContent('Test version: this code was not checked with the shop.');
     expect(screen.getByText(`−${peso(softPrice.total)}`)).toBeOnTheScreen();
     expect(screen.getByTestId('order-total')).toHaveTextContent(`${peso(softPrice.total)}  ₱0`);
     // The code was not sent to the database (that check counts tries: a write).
@@ -213,12 +215,16 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByText('GoTyme Bank · InstaPay · QR Ph')).toBeOnTheScreen();
     expect(screen.getByLabelText('GoTyme Bank InstaPay QR for ARCHIE GARCIA')).toBeOnTheScreen();
     expect(screen.getByText('Account ending in 2370')).toBeOnTheScreen();
-    expect(screen.getByText(`3. Send exactly ${amount} and put (your order number) in the note if your app asks.`)).toBeOnTheScreen();
+    // No order was placed, so no order number: the website then leaves out
+    // "Order … is placed" and "put … in the note" (it never says both).
+    expect(screen.getByText(`3. Send exactly ${amount}.`)).toBeOnTheScreen();
+    expect(screen.queryByText(/is placed\. Pay by bank transfer/)).toBeNull();
+    expect(screen.queryByText(/in the note/)).toBeNull();
     expect(screen.getByText(/Please pay within 7 days/)).toBeOnTheScreen();
 
     // A receipt from the phone.
     mockPicked.asset = { uri: 'file:///cache/receipt.png', name: 'receipt.png', size: 214_000, mimeType: 'image/png' };
-    await fireEvent.press(screen.getByText('Add a photo of your receipt'));
+    await fireEvent.press(screen.getByText('Attach the transfer receipt (JPG, PNG or PDF)'));
     expect(await screen.findByText('receipt.png · 209 KB')).toBeOnTheScreen();
     // A bad reference is said, not cleaned quietly.
     await fireEvent.changeText(screen.getByTestId('pay-reference'), 'lol nope');
@@ -249,9 +255,9 @@ describe('the checkout screen, walked', () => {
     jest.useRealTimers();
     await fireEvent.press(await screen.findByText('See the payment step'));
     mockPicked.asset = { uri: 'file:///cache/big.png', name: 'big.png', size: 9 * 1024 * 1024, mimeType: 'image/png' };
-    await fireEvent.press(screen.getByText('Add a photo of your receipt'));
+    await fireEvent.press(screen.getByText('Attach the transfer receipt (JPG, PNG or PDF)'));
     expect(await screen.findByText('That file is over 8 MB. A screenshot of the receipt is enough.')).toBeOnTheScreen();
-    expect(screen.getByText('Add a photo of your receipt')).toBeOnTheScreen();
+    expect(screen.getByText('Attach the transfer receipt (JPG, PNG or PDF)')).toBeOnTheScreen();
   });
 
   it('not signed in: the website\'s words, and the way to sign in', async () => {
@@ -263,8 +269,16 @@ describe('the checkout screen, walked', () => {
     // The details are tidied as the order stores them.
     expect(screen.getByTestId('order-phone').props.value).toBe('+63 917 123 4567');
     await fireEvent.press(screen.getByText('Sign in'));
-    expect(mockPush).toHaveBeenCalledWith('/sign-in');
+    // Sign in comes back to this order (then=back), not to My albums.
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/sign-in', params: { then: 'back' } });
     expect(screen.queryByTestId('order-placing')).toBeNull();
+
+    // Back from signing in: the message and its button are gone, the details stay.
+    mockAuth.session = { user: { id: 'user-1' } };
+    await screen.rerender(<OrderScreen />);
+    expect(screen.queryByText(/You must be signed in to check out/)).toBeNull();
+    expect(screen.queryByTestId('order-sign-in')).toBeNull();
+    expect(screen.getByTestId('order-name').props.value).toBe('Juan Dela Cruz');
   });
 
   it('this album already has an order waiting: said at the top, and a second one is asked', async () => {

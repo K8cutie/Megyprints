@@ -43,7 +43,7 @@ export function ChoiceSheet<T extends PsgcItem>({ visible, title, items, selecte
           keyExtractor={(it) => it.code}
           keyboardShouldPersistTaps="handled"
           initialNumToRender={30}
-          ListEmptyComponent={<Text style={styles.empty}>No name has those letters. Check the spelling.</Text>}
+          ListEmptyComponent={typed.trim() ? <Text style={styles.empty}>No name has those letters. Check the spelling.</Text> : undefined}
           renderItem={({ item }) => {
             const on = item.code === selected;
             return (

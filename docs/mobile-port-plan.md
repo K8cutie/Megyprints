@@ -618,7 +618,9 @@ tester-code check.
   from the city), picking a level clears the ones under it, the street is
   never cut (its count shows near 120 and a longer one is said), the ZIP box
   keeps 4 digits. A box before its turn is never greyed: it says what to
-  choose first and opens that.
+  choose first and opens that, through the same checks (a list still loading
+  waits; a list that didn't load, offline for example, is tried again
+  instead of opening empty).
 - **Price**: the live price list (`public_price_schedule()`, read only, tried
   again after 3 s, 6 s … a minute) through the shared `pricing.ts`. No list,
   no price: "Prices didn't load — tap to try again".
@@ -626,7 +628,8 @@ tester-code check.
   MEGYTEST: free", the real price crossed out, ₱0 to pay, "Place order ·
   free with tester code". In this build only the code's shape is checked:
   `check_tester_code` counts tries in the database (a write), so it is not
-  called; the test panel says the code was not checked with the shop.
+  called; the form says "Test version: this code was not checked with the
+  shop." under the code, and the test panel says it again.
 - **Place order** runs the website's checks in its order (cover, name,
   phone, address, sign-in, "this album already has an order", 40 photos),
   then the bar (shared `placeProgress`: start, preparing, cover, page by
@@ -636,11 +639,18 @@ tester-code check.
   `orders` row, the `qr_memories` rows, the files).
 - **Payment step** (after "See the payment step"): "Send ₱X", the GoTyme
   InstaPay QR (the website's picture), account ending 2370, the four steps,
-  "Add a photo of your receipt" (Android's picker on pictures and PDFs,
-  checked with the website's rules: JPG, PNG, WebP or PDF, 8 MB), the
+  "Attach the transfer receipt (JPG, PNG or PDF)" (the website's words;
+  Android's picker on pictures and PDFs, checked with the website's rules:
+  JPG, PNG, WebP or PDF, 8 MB), the
   reference box (bad ones said, not cleaned quietly), "I've sent ₱X" → the
   test panel shows the receipt upload and `submit_payment_proof` it would
-  send.
+  send. No order is placed, so there is no order number: as the website
+  does without one, it leaves out "Order … is placed" and "put … in the
+  note".
+- **Not signed in**: the website's "You must be signed in to check out"
+  and a Sign in button. Sign in opened from checkout (`/sign-in?then=back`)
+  comes back to the order; once signed in, the message and the button go
+  (the website's `shownError`). From anywhere else sign-in opens My albums.
 
 ### Same as the website: how it is proven (jest, `mobile/test/checkout*`)
 
@@ -651,7 +661,7 @@ tester-code check.
 | The address lists | The website's `psgc.ts` runs on the real files next to the app's | 84 provinces, 1,655 cities, 42,011 barangays: identical |
 | The checks | `handleProceedToPayment` and the 40-photo lines are cut out of `Order.tsx` and run on Node | 549 mixes of name, phone, address, cover, sign-in, open order, short album: same answer and words |
 | The price | The price lines are cut out of `Order.tsx` and run on Node; the database's saved totals (0055) | 2,688 albums (576 with a "was" price): identical; 6 database totals match |
-| The screen | The real screen, walked in jest (testing-library): empty form, long street, MEGYTEST to the panel, paid order to the payment step, not signed in, an order waiting, prices not loaded | the panel's row equals the website's row for the same typed details |
+| The screen | The real screen, walked in jest (testing-library): empty form, long street, MEGYTEST to the panel, paid order to the payment step, not signed in and back, an order waiting, prices not loaded, address lists offline | the panel's row equals the website's row for the same typed details |
 
 **Mirrors, until the website files are split (after Nov 9).** Four website
 files hold rules checkout needs but also call the website's Supabase client

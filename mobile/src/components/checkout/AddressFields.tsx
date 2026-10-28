@@ -77,9 +77,11 @@ export function AddressFields({ value, onChange, errors }: {
   }, [value.cityCode, tries.brgy]);
 
   const failedText = "Couldn't load the list. Tap to try again.";
-  const tap = (level: Level) => {
-    if (level === 'city' && !value.provinceCode) { setOpen('prov'); return; }
-    if (level === 'brgy' && !value.cityCode) { setOpen(value.provinceCode ? 'city' : 'prov'); return; }
+  // A level whose parent isn't picked opens the parent, through the same
+  // checks: still loading does nothing yet, a list that didn't load tries again.
+  const tap = (level: Level): void => {
+    if (level === 'city' && !value.provinceCode) return tap('prov');
+    if (level === 'brgy' && !value.cityCode) return tap(value.provinceCode ? 'city' : 'prov');
     if (loading[level]) return;
     if (failed[level]) { setTries((t) => ({ ...t, [level]: t[level] + 1 })); return; }
     setOpen(level);

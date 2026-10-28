@@ -2,8 +2,8 @@
    CHECKOUT (Phase 5 screens): the website's Order page on the phone.
 
    form → Place order → placing (the bar, screen kept on) → payment
-   (GoTyme / InstaPay QR, the amount, the order number for the transfer note,
-   "Add a photo of your receipt", "I've sent ₱X").
+   (GoTyme / InstaPay QR, the amount, the order number for the transfer note
+   once there is one, "Attach the transfer receipt", "I've sent ₱X").
 
    Everything a customer reads is the website's (src/pages/Order.tsx), and
    every rule is the website's: shared code (prices, contact and address
@@ -119,6 +119,11 @@ export default function OrderScreen() {
     const fills = albumQrFills(album.pages);
     return placeFrames({ pages: album.pages.length, clips: fills.filter((f) => f?.kind === 'clip').length, memories: fills.filter(Boolean).length, tester: !!tester });
   }, [album.pages, tester]);
+
+  // Signing in answers "You must be signed in to check out": don't leave it
+  // up, nor its Sign in button (the website's shownError).
+  const signInSaid = message.startsWith('You must be signed in');
+  const shownMessage = userId && signInSaid ? '' : message;
 
   const scrollToSpot = (spot: 'name' | 'phone' | 'address') => {
     // The name and phone boxes sit inside the "Your Details" card: their own
@@ -335,8 +340,9 @@ export default function OrderScreen() {
           <Button label="Yes, place a second order" kind="plain" onPress={placeSecond} testID="order-second-yes" />
         </View>
       )}
-      {!!message && <Text style={styles.error} accessibilityRole="alert">{message}</Text>}
-      {signInAsk && <Button label="Sign in" kind="plain" onPress={() => router.push('/sign-in')} testID="order-sign-in" />}
+      {!!shownMessage && <Text style={styles.error} accessibilityRole="alert">{shownMessage}</Text>}
+      {/* Sign in comes back here, to this order (then=back), not to My albums. */}
+      {signInAsk && !userId && <Button label="Sign in" kind="plain" onPress={() => router.push({ pathname: '/sign-in', params: { then: 'back' } })} testID="order-sign-in" />}
       {(openAlbumAsk || tooFew) && <Button label="Open my album" kind="plain" onPress={() => router.push('/photos')} testID="order-open-album" />}
     </ScrollView>
   );
@@ -377,7 +383,8 @@ function Payment({ amount, albumLine, breakdown, total, wasTotal, onBack }: {
   const [sent, setSent] = useState<PaymentSubmitPlan | null>(null);
   const [summary, setSummary] = useState(false);
   const amountLabel = peso(amount);
-  const orderNo = '(your order number)';
+  // No order is placed in this version, so there is no order number: the
+  // website then leaves out "Order … is placed" and "put … in the note".
 
   const addReceipt = async () => {
     setReceiptError('');
@@ -402,7 +409,6 @@ function Payment({ amount, albumLine, breakdown, total, wasTotal, onBack }: {
         <Text style={styles.testNoteText}>Test version: no order was placed. This is how the payment step looks for this album.</Text>
       </View>
       <Text style={[styles.h1, styles.center]}>Send {amountLabel}</Text>
-      <Text style={[styles.small, styles.center]}>Order {orderNo} is placed. Pay by bank transfer to finish.</Text>
 
       <View style={styles.card}>
         <View style={styles.qrBox}>
@@ -423,15 +429,14 @@ function Payment({ amount, albumLine, breakdown, total, wasTotal, onBack }: {
         <View style={styles.steps}>
           <Text style={styles.small}>1. Open your bank or e-wallet app (GCash, Maya, BPI, BDO, UnionBank…).</Text>
           <Text style={styles.small}>2. Choose Scan QR / InstaPay and scan the code above.</Text>
-          <Text style={styles.small}>3. Send exactly {amountLabel} and put {orderNo} in the note if your app asks.</Text>
+          <Text style={styles.small}>3. Send exactly {amountLabel}.</Text>
           <Text style={styles.small}>4. Attach your receipt below — it speeds up confirmation.</Text>
         </View>
         <Text style={styles.tiny}>Your app may charge a small InstaPay fee. We don't add any.</Text>
 
         <View style={styles.receiptBox}>
           <Text style={styles.strongSmall}>Receipt screenshot <Text style={styles.tiny}>(optional)</Text></Text>
-          <Button label={receipt ? receiptLabel(receipt) : 'Add a photo of your receipt'} kind="plain" onPress={() => void addReceipt()} testID="pay-receipt" />
-          <Text style={styles.tiny}>JPG, PNG or PDF</Text>
+          <Button label={receipt ? receiptLabel(receipt) : 'Attach the transfer receipt (JPG, PNG or PDF)'} kind="plain" onPress={() => void addReceipt()} testID="pay-receipt" />
           {!!receiptError && <Text style={styles.error}>{receiptError}</Text>}
           <Field label="Reference no. (optional — from your bank's receipt)" value={payRef} onChangeText={(t) => { setPayRef(t); setRefError(''); }}
             autoComplete="off" autoCorrect={false} placeholder="e.g. 2026091012345678" maxLength={64} error={refError} testID="pay-reference" />
