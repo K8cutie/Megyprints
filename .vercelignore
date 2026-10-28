@@ -9,3 +9,5 @@ nginx
 api/*.spec.mjs
 # The 2.0 native app (Expo/React Native): built on its own, never part of the website
 mobile
+# The 2.0 app's golden check tools (headless Chromium, test pictures): never part of the website
+tools
