@@ -29,13 +29,27 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   line there to turn one back on.
 - **The app's own native code** lives in `modules/` (today `modules/photo-files`:
   keeps access to photos picked with "Choose from Files" and reads their size
-  and EXIF time). Expo autolinking builds every folder there; after changing
+  and EXIF time; `srgbCopy` turns a Display P3 / Adobe RGB photo into sRGB
+  for a print page). Expo autolinking builds every folder there; after changing
   its Kotlin, run prebuild and Gradle again. Jest has no native modules: its
   JS side (`index.ts`) works without the native half.
 - **Photos are never copied into the app.** The album keeps each photo's
   content:// address on the phone (see the Phase 2 notes in the plan).
 - **Server values** come from `.env.local` (not in git; `.env.example` has the
   names). Never commit them, never put real account passwords anywhere.
+- **Page renderer** (`src/render`, react-native-skia): album pages drawn the
+  way the website's print renderer draws them. `test/goldenPages.test.ts`
+  compares it pixel by pixel with the website's own pictures (made by
+  `../tools/golden/renderWeb.mjs` in headless Chromium; run `npm ci` in
+  `../tools/golden` once). Never loosen its bars to pass: the numbers and
+  why are in `test/golden/compare.ts` and the plan's "Page renderer notes".
+  **On a phone:** `scripts\build-android.ps1 -Variant release -GoldenPages`
+  (a test build with the golden pages; never for customers), then
+  `node scripts/golden-phone-run.cjs --device <serial>` and
+  `npm run golden:phone` (same bars; the plan's "Page renderer on the
+  phone"). Run it again after changing `src/render`: CanvasKit in Node is
+  not the phone's Skia (the native paragraph builder has no `dispose()`,
+  for one).
 - **Gate before a commit:** `npm run check` here (TypeScript + jest), and from
   the repo root `npx tsc -b && npx vitest run` when `../src` changed.
 - Words a customer sees: plain English, say what you get, one filled

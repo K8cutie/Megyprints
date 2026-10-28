@@ -772,6 +772,288 @@ test files; with what was on the emulator already, 2,517 photos.
 
 ---
 
+## Page renderer notes (2026-10-28, Phase 5 groundwork)
+
+The riskiest part of 2.0 was done early: the app draws an album page itself
+(`mobile/src/render`, react-native-skia), and a test holds it, pixel by
+pixel, to the picture the website's print renderer makes of the same page.
+A review of the first version found that the words half of that test could
+not tell whether the words were drawn at all; this section describes the
+check as it is after the fixes.
+
+### What draws a page
+
+- `pagePlan.ts`: what goes where, from the page data, without drawing. It
+  follows `printPipeline.ts drawPrintPage` step by step, and every number
+  comes from shared website code: print size (`printSize.ts`), the template
+  adapted to the page, margins with the spine keep-out (`binding.ts`), a
+  moved frame (`slotGeometry.ts`), masks (`maskShapes.ts`), the caption
+  margin and alignment (`wordArtRules.ts`), washes (`gradient.ts`), the
+  frame numbers (`printFrameSpec.ts`). Anything the app can't draw yet, or
+  can't draw the website's way (a font style with no file), is listed in
+  `plan.notDrawn`, never passed off as the real thing.
+- `drawPage.ts`: the drawing, with the canvas rules where Skia's defaults
+  differ (bilinear, no mipmaps; a photo's edges smoothed only when the
+  drawing is turned off the page's axes, as Chromium does; smoothed clips;
+  miter limit 10; shadows as blur sigma = shadowBlur / 2; the border stroke
+  follows the clip path like `ctx.stroke()`). A print page is drawn on a CPU
+  surface (`Skia.Surface.Make`) on the phone too: the same kind of drawing
+  the check proves, and no GPU texture limit. Bleed: `bleedGeometry.ts
+  mirrorOps`, the same mirrored strips as the website.
+- **Shared, not copied:** the frame numbers (mat pads, shadows, rounded
+  corner, inset lines, the border's 2x stroke) live in
+  `src/pages/builder/printFrameSpec.ts`, and the heart outline in
+  `maskShapes.ts heartCurves`. `printPipeline.ts` and the app both draw from
+  them (a website refactor with no change to what prints: the golden check
+  re-made the website pictures from the changed `printPipeline.ts` and every
+  frame page still matches).
+- `pageText.ts`: words with Skia Paragraph (HarfBuzz shaping), the website's
+  own wrap (`wrapTextLines`) with a Skia measurer, and Chromium's placement:
+  - **word by word**: Chromium's canvas (default `fontKerning: auto`) shapes
+    each word and space on its own, so kerning across a space is never
+    applied. Playfair Display has such pairs: "Our first beach day" at 80 px
+    is 687.92 px in Chromium, 684.88 shaped whole, 687.92 word by word;
+  - **'middle' from the font file** (`fontMetrics.ts`): OS/2 typo ascender /
+    descender scaled to the font size, rounded to 1/64 px, as Blink does;
+  - **glyph row**: Skia Paragraph draws glyphs `round(ascent)` px below the
+    top it is painted at (not the baseline `getLineMetrics` reports).
+    Calibrated against Skia's `drawText`: 112 of 112 font/size cases;
+  - **shadow offset in page pixels**: a canvas shadow's offset and blur
+    ignore the transform, so a turned or stretched title drops its shadow
+    straight down. The first version turned the offset with the title (a
+    title turned 12 degrees and stretched 1.3 times: its shadow's ink 11.7%
+    off the website's; now 2.07%).
+- `fontTable.ts`: 3 of the 74 fonts for now, **10 files**: Playfair Display
+  and DM Sans each regular, bold, italic and bold italic (the faces the
+  website loads, `src/index.css`), Dancing Script regular and bold (Google
+  has no italic: a page in Dancing Script italic is listed in `notDrawn`).
+  The first version had no DM Sans italics and no Playfair bold italic, so
+  Skia faked them (22 to 58 px wider or narrower on one long line). A font
+  the app does not have falls back down the page's own family list, generic
+  last (`Georgia, "Times New Roman", serif` → the phone's serif), as Chrome
+  on Android does, never to Skia's single default family.
+
+### The golden check
+
+- `tools/golden/goldenPages.ts`: **45 pages**. 10 from the website's
+  generator, seeded (mulberry32, seed 0x5eed) on all five sizes (4 on 8x8,
+  3 on 6x4, one each on 6x6, 8x6 and 6x8); 35 by hand: zoom and pan, a pan
+  held at the photo's edge; every mask shape print draws (circle, heart,
+  star, hexagon, arch, scallop, ticket, wavy, pinking, stamp, leaf,
+  octagon, diamond, cloud, halftone, and oval and rounded, which print as
+  rectangles today); page colours, linear and radial washes, faded
+  backgrounds (opacity below 100); every frame style (matte, polaroid,
+  shadow box, thin, double, rounded; matte, double and shadow box on round
+  slots too), solid, dashed and dotted borders; the template's turned slot
+  (t8x8-07, 15 degrees); a moved and resized frame; a photo in a caption
+  box; captions left, right, wrapping, underlined, with a shadow, in every
+  style of the three fonts; a quote in a photo frame; free titles (outlined;
+  turned 12 degrees and stretched 1.3 times with a shadow; the same shadow
+  alone, white words on white paper; see-through and turned); and a photo
+  saved with a **Display P3 colour profile**. Photos are synthetic
+  (`syntheticPhotos.ts`), never real ones.
+- `tools/golden/renderWeb.mjs`: the website's `renderPageCanvasForPrint`
+  (the picture each print-file page is shrunk from: 300 DPI, bleed, words
+  in) in headless Chromium 1228 (playwright-core 1.61.1, GPU off), with the
+  app's font files loaded into it. A page with words is drawn twice, with
+  and without them (print's own `words: false`), and every line of words
+  print draws is written down (`webEntry.ts`: each `fillText`, with its
+  transform, font, colour, see-through, outline and shadow). Nothing in the
+  tool uses the app's page code. Writes `tools/golden/web/` (not in git).
+- `mobile/test/goldenPages.test.ts`: the app's renderer, headless in Node
+  (react-native-skia's CanvasKit build: `LoadSkiaWeb` + `JsiSkApi`), every
+  page compared. It re-runs renderWeb.mjs itself, before the tests are
+  listed, when the website's print code (printPipeline.ts and everything it
+  imports), the golden pages, the tool or the fonts changed
+  (`tools/golden/sources.cjs`).
+- **The bars** (`mobile/test/golden/compare.ts`), each set by measuring:
+  just above the worst real page, with every kind of mistake scoring well
+  over it. "Ink" is what the words paint: with-words minus without-words,
+  exact on both sides.
+
+  | Bar | Worst real page | Bar | Smallest mistake it must catch |
+  |---|---|---|---|
+  | Pixels differing outside the words' ink (pixelmatch 0.05, edges counted), share of the pixels counted | 0.061% | 0.15% | 0.465% (a double frame's inset line missing) |
+  | Any 64 px tile: pixels off by more than 32 levels | 0.00% | 1% | 6.64% (the same) |
+  | Each text's ink per colour channel, app vs website | 4.69% | 6% | 11.7% (the old turned-shadow bug) |
+  | Each text's 8 px blocks, mean colour | 26.5 levels | 40 | 54 to 210 (shadow, outline, underline, letters missing) |
+  | Where each text's ink sits | 0.36 px | 0.5 px | 1.21 px (a caption 1 px lower) |
+  | Each line: same text, same spot, as wide, same colour / outline / shadow as print drew it | exact, ≤ 0.01 px, ≤ 1 px | | |
+
+  Only each text's ink, widened by 2 px, is left out of the pixel bars, and
+  only inside that text's box (and its mirror in the bleed); the paper or
+  photo under a title is held to the page bar. The first version left whole
+  boxes out (14 to 44% of a page) and only reported their pixels.
+- **Mistake tests** (the second describe): each puts one small error in, in
+  the page plan or in the drawing code itself, and the pixel and ink bars
+  alone must catch it: a photo 1/4 px off (3 pages), a frame 1 px wider, a
+  double frame's inset line missing, a dashed border drawn solid, a caption
+  1 px lower, no words at all (4 pages), a title at opacity 0, the
+  underline, outline or shadow missing, a quote in #FF0000 instead of
+  #B85C38, a caption in black instead of #2D2D2D, the turned-shadow bug put
+  back, and the italic font files taken away. All 19 fail as they must;
+  their scores go to `tools/golden/out/mistakes.json`.
+- First run: `cd tools/golden && npm ci`, then `cd mobile && npm test`
+  (about 8 minutes: 45 pages and 19 mistakes, text pages drawn twice; a
+  page takes 0.2 to 0.9 s to draw).
+
+### Results (2026-10-28)
+
+All 45 pages pass. Outside the words: 0.000 to 0.061% of pixels differ, and
+no tile has a pixel off by more than 32 levels. What is left on photo pages
+is the one blended pixel at each sharp stripe edge of a downscaled photo, up
+to 15 of 255 levels apart (Chromium's Skia and CanvasKit round bilinear
+weights differently); on the Display P3 photo, colour conversion rounding up
+to 31 levels on a few pixels (0.033% of the page). Text: every line is the
+line print drew, at print's spot to 1/100 px; each text's ink within 4.69%
+of the website's, blocks within 26.5 levels, positions within 0.36 px. The
+remaining ink difference is letter edges: Chromium on Windows draws letters
+with DirectWrite (grid-fitted), Skia with FreeType. The smallest captions
+come closest to the 6% ink bar (64-caption-yellow, 4.69%): a new golden page
+with very small words is the likeliest to need the bar re-measured, never
+loosened to pass.
+
+### Not drawn yet (listed in `plan.notDrawn`)
+
+Texture backgrounds, photo/picture backgrounds, QR codes (slot and caption
+box), graphics/ornaments (slot, caption box, free-placed), stickers, theme
+corner art, soft-edge and textured-edge masks, colour looks, the cover
+(front, spine, back), every font but the three above, and Dancing Script
+italic.
+
+### Found on the way (website, not changed here)
+
+- **Oval and Rounded masks print as plain rectangles.** The preview
+  (`slotShapeStyle.ts`) and the editor draw them, but `printPipeline.ts
+  applySlotClip` has no case for 'oval' or 'rounded'. The app copies print
+  (golden page `masks-oval-rounded`); fixing print is a website change.
+- **A path-shape mask (hexagon, scallop…) gets no border line in print**:
+  `ctx.clip(new Path2D(...))` leaves no current path for `ctx.stroke()`.
+  Masked slots have border width 0 anyway, so nothing prints wrong today.
+- **Georgia** (the default text font) is a Microsoft font; Android phones
+  don't have it, so a print file made on an Android phone already uses the
+  phone's serif. For the app: bundle Gelasio (same letter widths, OFL).
+- The website's real fonts come from Google Fonts as variable woff2 files;
+  the check uses the static TTF files on both sides. Same designs; widths
+  could differ slightly between the two file kinds.
+
+### Not proven, and what must happen before Phase 5
+
+- **On a phone.** Done on the emulator: see "Page renderer on the phone"
+  below. All 45 pages pass the same bars when the phone's own Skia draws
+  them. Still not seen: a real phone (ARM64).
+- **Photo colours on the phone.** Measured on the emulator (below): the
+  phone draws a Display P3 photo's raw numbers and the page fails; after
+  Android's `ImageDecoder` turns the photo into sRGB (`srgbCopy` in
+  `modules/photo-files`) it passes. Before Phase 5, every photo must go
+  through that step before it is drawn on a print page.
+- **Against Android Chrome.** The website pictures are Chromium on Windows.
+  Customers' print files are mostly made in Chrome on Android (FreeType
+  letters), which may sit even closer to the app's text.
+
+## Page renderer on the phone (2026-10-28, the gate before print files in the app)
+
+The Node check above runs Skia's CanvasKit build. This run draws the same 45
+golden pages with **the phone's own Skia** (react-native-skia 2.14 native,
+Skia m154, Hermes, release build) on the `pwa_test` emulator (Android 14,
+x86_64), and holds the pictures to the website's with the same bars and the
+same pixelmatch code. **All 45 pages pass.**
+
+### What was built (all in `mobile/`, no website change)
+
+- **Debug screen "Golden pages"** (`src/app/golden-pages.tsx`, logic in
+  `src/dev/goldenRun.ts`): draws every golden page with
+  `PageDrawer.renderPrintPage` (CPU surface, `Skia.Surface.Make`, print size
+  with bleed), with and without its words, and writes the PNGs and
+  `report.json` (the lines each text breaks into and how wide the phone's
+  Skia measures them, each text's box, what the plan could not draw, timings)
+  to the app's files folder. Reached from **Shared code check → Open golden
+  pages**, or `megyprints-dev://golden-pages?run=1`.
+- **Only in a test build made for it:** `build-android.ps1 -GoldenPages`
+  runs `scripts/golden-phone-assets.cjs` (the golden pages, the test photo
+  files and the font files, exact bytes as base64, about 4 MB, in
+  `golden-phone/bundle.json`, not in git; it stops if the website pictures
+  are out of date) and sets `MEGY_GOLDEN_PAGES=1`, so Metro resolves
+  `megy-golden-pages` to that file (`goldenPages.js`). Every other build gets
+  `src/dev/noGoldenPages.json` (`null`): no test pages, no link
+  (`test/goldenBuild.test.ts`).
+- `scripts/golden-phone-run.cjs --device <serial>`: installs the APK, opens
+  the screen with `run=1`, waits, pulls the folder into
+  `tools/golden/phone/` (`adb root` on an emulator without Google Play;
+  `run-as` for a debug build).
+- `npm run golden:phone` (`test/goldenPhone.check.ts`, not part of
+  `npm run check`): checks the phone drew from the same website pictures and
+  today's renderer code (a fingerprint of `src/render`, `goldenRun.ts` and the
+  shared files they import), then runs `comparePage` / `pageFailures` /
+  `lineFailures` on every page and writes `tools/golden/phone-out/`
+  (`table.md`, `report.json`, pixelmatch diffs, website | phone | diff
+  pictures).
+- `src/render/pageWords.ts`: the lines and boxes a plan draws (`appWords`),
+  moved out of the test so the phone works them out with its own Skia.
+- The Node check has a new test: the phone's run code, given CanvasKit,
+  draws pixel for pixel what the check draws (so a phone difference is the
+  phone's Skia, nothing else).
+
+### Results (emulator, release APK)
+
+| | Node (CanvasKit) | Phone (native Skia) | Bar |
+|---|---|---|---|
+| Pixels differing outside the words, worst page | 0.061% | 0.063% (frame-thin-dotted) | 0.15% |
+| Worst 64 px tile | 0.00% | 0.00% | 1% |
+| Each text's ink, worst | 4.69% | 3.24% (free-title-outline) | 6% |
+| 8 px blocks, worst | 26.5 | 24.8 (64-script-caption) | 40 |
+| Where text sits, worst | 0.36 px | 0.35 px (quote-in-photo-frame) | 0.5 px |
+| Lines as print drew them | all | all 21 lines, 12 text pages | exact |
+
+- The phone's pictures are not the Node pictures: none of the 45 is pixel
+  for pixel the same. On photo pages the two Skias differ by 1 to 3 levels
+  (bilinear rounding; on the faded pages half the pixels are 1 level apart),
+  on text pages letter edges differ by up to 37 levels (FreeType builds).
+  Both sit within the bars, the phone's letters a little closer to the
+  website's than CanvasKit's.
+- Drawing a page took 13 to 93 ms on the emulator; the whole run (46
+  pictures, 12 drawn twice, PNG encoding and writing) 13.3 s. Two runs gave
+  byte-identical PNGs. Highest memory seen during a run: 211 MB (PSS,
+  sampled about once a second).
+- **Found and fixed:** every page with words stopped on the phone with
+  "TypeError: undefined is not a function": `pageText.ts` called
+  `ParagraphBuilder.dispose()`, which CanvasKit has and the native build does
+  not (react-native-skia 2.14 installs `dispose` on most native objects, not
+  on the paragraph builder). It now calls it only where it exists. Nothing
+  else differed.
+
+### The Display P3 photo
+
+- Android reads the test photo (`photo-8.png`, a PNG with a P3 profile) as
+  **"Display P3"**. The phone's Skia draws it with its raw numbers (the
+  surface has no colour space): the page **fails**, 3.67% of pixels off,
+  tiles 100% off, up to 64 levels. The red patch prints (220, 40, 40) where
+  the website prints (240, 0, 21); the green (40, 170, 70) for (0, 173, 53).
+- The same page with the photo first turned into sRGB by Android's
+  `ImageDecoder` (`setTargetColorSpace(SRGB)`, then PNG) passes: 0.026% of
+  pixels off, worst channel 19 levels, and the patches come out (240, 0, 21)
+  and (0, 173, 53), the website's numbers. That step is
+  `srgbCopy(source, target)` in `modules/photo-files` (Android 9+; older
+  phones get `supported: false`).
+- **What the photo intake needs (before Phase 5):** every photo drawn on a
+  print page goes through `srgbCopy` (or the same decode in memory) first.
+  To keep "photos are never copied into the app", do it at print time, one
+  photo at a time, into the cache, and delete the copy after the page is
+  drawn; a photo that is already sRGB (`converted: false`) can be drawn
+  straight from the phone. The check (`npm run golden:phone`) fails if the
+  as-is P3 page ever stops failing or the converted one stops passing.
+
+### Not proven yet
+
+- A real phone (ARM64), and other Android versions than 14.
+- Fonts came into the test build as base64 bytes; the app's own way of
+  loading the font files for print (Phase 5) is not built yet.
+- No golden photo has an EXIF rotation, and none is a JPEG or HEIC: the
+  phone's decode of those is not compared yet.
+- A low-memory phone (the emulator has 2 GB).
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

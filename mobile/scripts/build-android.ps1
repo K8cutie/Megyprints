@@ -30,6 +30,10 @@
     -Abis arm64-v8a,x86_64   phones (arm64) and the PC emulator (x86_64); add armeabi-v7a for old 32-bit phones
     -BuildDir C:\megy2       the short folder
     -Fresh                   delete the short folder's android\ and node_modules\ first
+    -GoldenPages             a TEST build that carries the 45 golden pages (about 4 MB) for the debug
+                             screen "Golden pages" (Shared code check): the page renderer drawn by
+                             the phone's own Skia (scripts\golden-phone-assets.cjs, src\dev\goldenRun.ts).
+                             Never for a build that goes to customers.
 
   Needs: JDK 21 (Eclipse Adoptium), Android SDK at C:\Android\sdk, mobile\node_modules
   (npm ci in mobile\), and mobile\.env.local (see mobile\.env.example).
@@ -42,7 +46,8 @@ param(
   [string] $AndroidHome = 'C:\Android\sdk',
   [double] $NeedFreeGB = 2.5,
   [double] $MinFreeGB = 1.0,
-  [switch] $Fresh
+  [switch] $Fresh,
+  [switch] $GoldenPages
 )
 $ErrorActionPreference = 'Stop'
 
@@ -56,6 +61,22 @@ function Get-FreeGB { [math]::Round((Get-PSDrive $Drive).Free / 1GB, 2) }
 if (-not (Test-Path (Join-Path $Mobile 'node_modules'))) { throw "No mobile\node_modules: run npm ci in $Mobile first." }
 if (-not (Test-Path (Join-Path $Mobile '.env.local'))) { Write-Warning 'No mobile\.env.local: the app will build, but it cannot sign in (see mobile\.env.example).' }
 if (-not (Test-Path $JavaHome)) { throw "JDK not found at $JavaHome" }
+
+# The golden pages go into a test build only when asked for (goldenPages.js):
+# Metro reads MEGY_GOLDEN_PAGES when Gradle bundles the app's code.
+if ($GoldenPages) {
+  Write-Host 'Golden pages: node scripts\golden-phone-assets.cjs'
+  Push-Location $Mobile
+  try {
+    & node (Join-Path $PSScriptRoot 'golden-phone-assets.cjs')
+    if ($LASTEXITCODE -ne 0) { throw "golden-phone-assets.cjs failed ($LASTEXITCODE)" }
+  } finally {
+    Pop-Location
+  }
+  $env:MEGY_GOLDEN_PAGES = '1'
+} else {
+  Remove-Item Env:\MEGY_GOLDEN_PAGES -ErrorAction SilentlyContinue
+}
 
 # robocopy exit codes 0-7 mean success (8+ is a failure).
 function Copy-Tree([string] $From, [string] $To, [string[]] $Extra) {
@@ -140,6 +161,7 @@ $apk = Join-Path $androidDir "app\build\outputs\apk\$Variant\app-$Variant.apk"
 if (-not (Test-Path $apk)) { throw "Built, but no APK at $apk" }
 $outDir = Join-Path $Mobile 'dist\android'
 New-Item -ItemType Directory -Force $outDir | Out-Null
-$out = Join-Path $outDir "megyprints-2.0-dev-$Variant.apk"
+$suffix = if ($GoldenPages) { '-golden' } else { '' }
+$out = Join-Path $outDir "megyprints-2.0-dev-$Variant$suffix.apk"
 Copy-Item -Force $apk $out
 Write-Host "APK: $out ($([math]::Round((Get-Item $out).Length / 1MB, 1)) MB)"

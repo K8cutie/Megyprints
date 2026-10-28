@@ -1,0 +1,6 @@
+# Made by renderWeb.mjs and the app's golden test: never committed.
+web/
+out/
+node_modules/
+phone/
+phone-out/

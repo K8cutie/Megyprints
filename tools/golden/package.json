@@ -1,0 +1,14 @@
+{
+  "name": "megyprints-golden",
+  "private": true,
+  "description": "Makes the golden pictures the 2.0 app's page renderer is checked against: the website's print renderer in headless Chromium.",
+  "type": "module",
+  "scripts": {
+    "web": "node renderWeb.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.7",
+    "playwright-core": "1.61.1",
+    "pngjs": "7.0.0"
+  }
+}
