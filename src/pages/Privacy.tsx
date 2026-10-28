@@ -85,8 +85,13 @@ export default function Privacy() {
 
         <Section title="Payment">
           <p>
-            Payment is currently handled by bank transfer or cash on delivery. We do <b>not</b>
-            collect or store your card details in the app.
+            You pay by bank transfer: at checkout you scan our InstaPay QR code with your own bank or
+            e-wallet app and send the amount shown. We do <b>not</b> collect or store your card or bank
+            details in the app.
+          </p>
+          <p>
+            You can attach a screenshot of your transfer receipt and its reference number. It's optional.
+            We keep it in private storage, only to confirm your payment.
           </p>
         </Section>
 
