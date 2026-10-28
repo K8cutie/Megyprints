@@ -1,0 +1,156 @@
+{
+ "main-sample": {
+  "errors": [],
+  "failed": null,
+  "platform": {
+   "what": "platform",
+   "platform": "android",
+   "native": true
+  },
+  "made": {
+   "phase": "edit",
+   "pages": 40,
+   "photos": 40,
+   "filledSlotsAll": 40,
+   "sampleNames": 40,
+   "syntheticNames": 0
+  },
+  "preview": {
+   "page": 40,
+   "pages": 40,
+   "notes": [
+    "You're done with today's test!"
+   ],
+   "stamps": 1,
+   "previewCaption": [
+    "Page 40 of 40"
+   ]
+  }
+ },
+ "branch-sample": {
+  "errors": [],
+  "failed": null,
+  "platform": {
+   "what": "platform",
+   "platform": "android",
+   "native": true
+  },
+  "made": {
+   "phase": "edit",
+   "pages": 40,
+   "photos": 40,
+   "filledSlotsAll": 40,
+   "sampleNames": 40,
+   "syntheticNames": 0
+  },
+  "preview": {
+   "page": 40,
+   "pages": 40,
+   "notes": [
+    "You're done with today's test!"
+   ],
+   "stamps": 1,
+   "previewCaption": [
+    "Page 40 of 40"
+   ]
+  }
+ },
+ "main-normal": {
+  "errors": [],
+  "failed": null,
+  "platform": {
+   "what": "platform",
+   "platform": "android",
+   "native": true
+  },
+  "made": {
+   "phase": "edit",
+   "pages": 40,
+   "photos": 40,
+   "filledSlotsAll": 40,
+   "sampleNames": 28,
+   "syntheticNames": 12
+  },
+  "caption": {
+   "fitNote": "Too long for this box: part of it will be cut off in print. Shorten it, or make the text smaller. Make it fit (size 22)",
+   "madeFit": "Make it fit (size 22)",
+   "savedFontSize": 22
+  },
+  "builderAddText": {
+   "added": true,
+   "fontSize": 21,
+   "shrunk": true,
+   "tooLong": false
+  },
+  "afterReload": {
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "samePages": true,
+   "samePhotoNames": true,
+   "sameFills": true,
+   "sameTexts": true,
+   "captionBack": true,
+   "idb": {
+    "count": 40,
+    "withBlob": 40
+   }
+  }
+ },
+ "branch-normal": {
+  "errors": [],
+  "failed": null,
+  "platform": {
+   "what": "platform",
+   "platform": "android",
+   "native": true
+  },
+  "made": {
+   "phase": "edit",
+   "pages": 40,
+   "photos": 40,
+   "filledSlotsAll": 40,
+   "sampleNames": 28,
+   "syntheticNames": 12
+  },
+  "caption": {
+   "fitNote": "Too long for this box: part of it will be cut off in print. Shorten it, or make the text smaller. Make it fit (size 22)",
+   "madeFit": "Make it fit (size 22)",
+   "savedFontSize": 22
+  },
+  "builderAddText": {
+   "added": true,
+   "fontSize": 21,
+   "shrunk": true,
+   "tooLong": false
+  },
+  "afterReload": {
+   "pages": 40,
+   "photos": 40,
+   "withUrl": 40,
+   "samePages": true,
+   "samePhotoNames": true,
+   "sameFills": true,
+   "sameTexts": true,
+   "captionBack": true,
+   "idb": {
+    "count": 40,
+    "withBlob": 40
+   }
+  }
+ },
+ "mainVsBranch": {
+  "normalBeforeReload": {
+   "pages": true,
+   "photoOrder": true,
+   "fills": true,
+   "texts": true
+  },
+  "normalAfterReload": {
+   "fills": true,
+   "texts": true
+  },
+  "screenshots": "23 pairs: 18 pixel-identical; 5 differ only inside the animated gold Add a video memory button (y 1357-1579 of 1688), 0 pixels over a 24-level threshold"
+ },
+ "how": "Playwright 1.61 headless Chromium (--use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist), 390x844 @2x touch, window.CapacitorCustomPlatform={name:android}, Math.random seeded (mulberry32 20261029) so both sides lay out the same album, local Vite on 127.0.0.1, taps paced 750 ms. Photos: 12 synthetic gradients + the website public/sample-photos."
+}
