@@ -42,6 +42,16 @@
         • where it sits: the ink's offset against the website's (sum of
           squared differences at ±2 px, parabola through the best three)
           under MAX_WORD_SHIFT_PX. No ink, or a flat curve, is NaN: a fail.
+      So the website pictures are made on WINDOWS (CI's mobile job runs
+      there too). Chromium on Linux draws letters with another weight
+      (measured 2026-10-29, node:22-bookworm, Chromium 149 with
+      --font-render-hinting=none, against Windows 11: the same canvas words
+      in the app's fonts, cream and white 2 to 11% less ink, dark 1 to 4%
+      more; its --text-contrast / --text-gamma switches change nothing
+      there, on Windows they do). Every golden cover then fails the ink bar
+      on its light titles, outlines and lockup (up to 29%, the outlined
+      back blurb 52%), with the app's pictures byte for byte the same as on
+      Windows: a difference of the reference, not of the app.
    3. THE LINES (goldenPages.test.ts): the same lines, in the same order,
       as print really drew them (webEntry.ts writes down every fillText),
       each placed where print placed it, in its colour, as wide.

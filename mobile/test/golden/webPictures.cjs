@@ -42,6 +42,9 @@ function ensureWebPictures() {
     throw new Error(`The website pictures must be made again (${why}), but tools/golden has no packages: run "npm ci" in tools/golden, then the tests again.`);
   }
   console.log(`\nMaking the website pictures again (${why})…`);
+  if (process.platform !== 'win32') {
+    console.warn(`Note: these website pictures are made on ${process.platform}. The golden bars were measured against Chromium on Windows; Chromium here draws letters with another weight (light ones most), so covers and pages with light words fail the ink bar here and pass on Windows (test/golden/compare.ts).`);
+  }
   execFileSync(process.execPath, [path.join(TOOL, 'renderWeb.mjs')], { cwd: TOOL, stdio: 'inherit', timeout: 900_000 });
   const still = goldenIsStale();
   if (still) throw new Error(`renderWeb.mjs ran, but the pictures are still out of date: ${still}`);

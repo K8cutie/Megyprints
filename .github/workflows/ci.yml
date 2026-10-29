@@ -13,11 +13,15 @@
 # pushes to it), never for main. The app imports the website's code (../src),
 # so it installs the website's packages first, then the app's, then runs the
 # app's own check (mobile/: tsc + jest). jest includes the golden pixel test,
-# which draws the website's print pages in headless Chromium (tools/golden,
-# playwright-core) and compares the app's pages with them pixel by pixel, so
-# this job installs that Chromium too (on Linux the golden tools start it with
-# '--font-render-hinting=none' so letters sit as they do on Windows; jest runs
-# in Manila time). It is NOT a required check on main.
+# which draws the website's print pages and covers in headless Chromium
+# (tools/golden, playwright-core) and compares the app's with them pixel by
+# pixel, so this job installs that Chromium too. It runs on WINDOWS: the
+# golden bars were measured against Chromium on Windows (DirectWrite letters),
+# and Chromium on Linux draws letters with a different weight that no switch
+# changes (light letters and light outlines most: the golden covers' titles
+# come out up to 29% off the ink bar there, while the app's pictures are byte
+# for byte the same on both; mobile/test/golden/compare.ts). jest runs in
+# Manila time. It is NOT a required check on main.
 
 name: Verify
 
@@ -90,8 +94,9 @@ jobs:
   mobile:
     name: mobile
     if: github.base_ref == 'native-2.0' || github.ref == 'refs/heads/native-2.0'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Windows, where the golden pictures' bars were measured (see the top).
+    runs-on: windows-latest
+    timeout-minutes: 60
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
@@ -120,14 +125,15 @@ jobs:
       # test (textMeasurer.test.ts) make the website's pictures with
       # tools/golden (renderWeb.mjs / fitWeb.mjs) in Playwright's headless
       # Chromium. Install the tool's packages and the Chromium its pinned
-      # playwright-core drives, with the Linux libraries it needs.
+      # playwright-core drives (Windows needs no extra libraries for it).
       - name: Install golden tools and headless Chromium
+        shell: bash
         run: |
           if [ -f tools/golden/package-lock.json ]; then
             cd tools/golden
             npm ci
             echo "playwright-core $(node -p "require('playwright-core/package.json').version")"
-            npx --no-install playwright-core install --with-deps chromium-headless-shell
+            npx --no-install playwright-core install chromium-headless-shell
           else
             echo "SKIPPED: tools/golden is not on this commit, so no headless Chromium was installed." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
@@ -136,8 +142,12 @@ jobs:
       # customer's phone: the checkout test compares the app's "pay by" day
       # with the website's, which uses the device's own time zone (the
       # runner's is UTC, and jest cannot switch it from inside a test).
+      # PowerShell, not bash: Git Bash hands node its own idea of TZ (tried:
+      # TZ=America/New_York came out as the PC's own zone), PowerShell passes
+      # it through and node honours it.
       - name: App check (tsc + jest, incl. the golden pixel test)
         working-directory: mobile
+        shell: pwsh
         env:
           TZ: Asia/Manila
         run: npm run check

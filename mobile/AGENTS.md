@@ -54,7 +54,10 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   `test/golden/harness.ts`) compare it pixel by pixel with the website's own
   pictures (made by `../tools/golden/renderWeb.mjs` in headless Chromium,
   before the tests, by jest's globalSetup `test/golden/webPictures.cjs`; run
-  `npm ci` in `../tools/golden` once). Never loosen its bars to pass: the
+  `npm ci` in `../tools/golden` once). They are made on Windows, where the
+  bars were measured (CI's mobile job runs on Windows too): Chromium on
+  Linux draws letters with another weight, and the covers fail there.
+  Never loosen its bars to pass: the
   numbers and why are in `test/golden/compare.ts` and the plan's "Page
   renderer notes". A change that moves website print code into shared files
   must print byte for byte the same: `node ../tools/golden/websiteSame.mjs`

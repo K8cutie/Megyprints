@@ -7,8 +7,8 @@
    picked, without making the app 7 MB bigger:
 
      • bundled: the theme fonts, inside the app (render/fontTable.ts
-       BUNDLED_FONTS: Playfair Display, DM Sans, Dancing Script, and Cinzel
-       once the renderer job lands it). Megy's own text uses only these.
+       BUNDLED_FONTS: Playfair Display, DM Sans, Dancing Script, and Cinzel,
+       the cover title's face). Megy's own text uses only these.
      • google: every other font, downloaded from Google Fonts the first time
        it is picked (or a page on screen uses it), then kept on the phone for
        good (fontStore.ts). About 40–400 KB a font; all 70 of them together
