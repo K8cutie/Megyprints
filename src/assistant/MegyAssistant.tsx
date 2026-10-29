@@ -31,6 +31,7 @@ import SamplePhotosOffer from './SamplePhotosOffer';
 import SampleAlbumOffer from './SampleAlbumOffer';
 import { useSampleAlbum } from './useSampleAlbum';
 import { takeSampleAlbumRequest } from '../lib/samplePhotos';
+import { takeDailyTest } from '../lib/dailyTest';
 import { useSettleGuard, noteScreenTap, tooSoonAfterScreenTap } from '../lib/settleGuard';
 import { useModalDialog } from '../lib/useModalDialog';
 import { splitBold } from './boldText';
@@ -330,10 +331,12 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const sampleAlbum = useSampleAlbum(builder, albumTheme, setAlbumTheme, (m) => showToast(m, 6000));
   // "Welcome back" → "Make today's sample album" (lib/samplePhotos): this new
   // album is made at once, from Step 1, whose card says "Making your sample
-  // album…" while it works.
+  // album…" while it works. From Home's Today's test (lib/dailyTest), it is
+  // made with the tester's name and cover or colour, and opens on "You're done".
   useEffect(() => {
     if (builder.uploadedPhotos.length > 0 || albumIsMade(builder.albumPages)) return;
     if (!takeSampleAlbumRequest()) return;
+    const test = takeDailyTest();
     void Promise.resolve().then(() => {
       const eng = wizardRef.current;
       if (eng.state.step === 'welcome') {
@@ -342,7 +345,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       }
       setShowWizard(true);
       setWizardStep(eng.state.step);
-      void sampleAlbum.start();
+      void sampleAlbum.start(test);
     });
     // Once, as the builder opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps

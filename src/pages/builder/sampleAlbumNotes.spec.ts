@@ -26,7 +26,7 @@ import BuilderPreview, { PageView } from './BuilderPreview';
 import { ActionEngine } from '../../assistant/actionEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { AlbumPage } from './types';
-import { samplePhotoName, SAMPLE_WELCOME_NOTE, SAMPLE_DONE_NOTE, isSampleAlbum, showSampleAlbumNotes } from '../../lib/samplePhotos';
+import { samplePhotoName, SAMPLE_WELCOME_NOTE, SAMPLE_WELCOME_BACK_NOTE, sampleWelcomeNote, SAMPLE_DONE_NOTE, isSampleAlbum, showSampleAlbumNotes } from '../../lib/samplePhotos';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const GIF = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
@@ -111,8 +111,18 @@ describe('the card on a page', () => {
 
   it('page 1 in the pages (phone and computer) asks for the welcome card, only on page 1', () => {
     const src = (f: string) => readFileSync(resolve(__dirname, f), 'utf8');
-    expect(src('MobileReview.tsx')).toMatch(/<PageView [^>]*testerNote=\{sampleNotes && idx === 0 \? SAMPLE_WELCOME_NOTE : null\}/);
-    expect(src('BuilderEdit.tsx')).toMatch(/\{sampleNotes && actions\.currentPageIndex === 0 && <TesterPageNote note=\{SAMPLE_WELCOME_NOTE\}/);
+    expect(src('MobileReview.tsx')).toMatch(/<PageView [^>]*testerNote=\{sampleNotes && idx === 0 \? sampleWelcomeNote\(actions\.previewSeen\) : null\}/);
+    expect(src('BuilderEdit.tsx')).toMatch(/\{sampleNotes && actions\.currentPageIndex === 0 && <TesterPageNote note=\{sampleWelcomeNote\(actions\.previewSeen\)\}/);
+  });
+
+  // Today's test (2026-10-29) opens the album on "You're done": once it has
+  // been previewed, page 1 no longer says to page through to the end.
+  it("once previewed, page 1 only says the way back to \"You're done\"", () => {
+    expect(sampleWelcomeNote(false)).toBe(SAMPLE_WELCOME_NOTE);
+    expect(sampleWelcomeNote(true)).toBe(SAMPLE_WELCOME_BACK_NOTE);
+    expect(SAMPLE_WELCOME_BACK_NOTE).toEqual({ title: 'Welcome to the Megy Prints app test!', body: "Tap **Back to preview** to see **You're done** again." });
+    // The button it names is the real one, on every page but the last once previewed.
+    expect(readFileSync(resolve(__dirname, 'PageTurnBar.tsx'), 'utf8')).toContain('Back to preview');
   });
 });
 

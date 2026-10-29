@@ -28,6 +28,8 @@ whose notes list it.
 | 2026-10-28 | For testers | — | "Make a sample album" on Step 1, and sample photos to make up the 40-photo minimum, a different sample album each test day (#207) | 2026-10-28 | 1.4.0 |
 | 2026-10-28 | For testers | — | The app asks to download each new version, then says when it is ready: "Restart to update" | with 1.4.0 (first shows when 1.4.1 is out) | 1.4.0 |
 | 2026-10-29 | Tester | "The sample photos are helpful to test. I like the concept. maybe a little less text in the steps [too many things to read hah]" (owner: he meant a faster way to the sample album) | "Make today's sample album" on the app's home screen, one tap (#227). The next day, "Welcome back" makes today's sample album (#208) | on merge | 1.4.1 |
+| 2026-10-29 | Owner test | testers screenshot the home page or just flip pages; the daily test should prove real use | Today's test before the sample album is made: type today's date as the name, then choose the cover or tap today's colour (alternating daily; the colour changes each day and only that colour counts); then Make my album opens on "You're done" (#228) | on merge | 1.4.1 |
+| 2026-10-29 | Owner test | "for now please disable resume from where you left off or open existing album feature on the onset" | In the app while testing, no "Welcome back" or "You have an album in progress" at the start: Start Creating and Make today's sample album start a new album. Signed in, the old album stays in your account; signed out with your own album on the phone, it asks first (#228) | on merge | 1.4.1 |
 
 ## App versions on the Alpha track
 

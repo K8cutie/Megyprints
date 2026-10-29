@@ -186,6 +186,19 @@ export const SAMPLE_WELCOME_NOTE: SampleAlbumNote = {
   body: 'Tap **Next page** until you reach the last page, then tap **Done — Preview my album**.',
 };
 
+/** Page 1 once the album has been previewed: Today's test (lib/dailyTest)
+ *  opens it on "You're done", so the steps above no longer apply. Every
+ *  page but the last then shows "Back to preview" (PageTurnBar). */
+export const SAMPLE_WELCOME_BACK_NOTE: SampleAlbumNote = {
+  title: 'Welcome to the Megy Prints app test!',
+  body: "Tap **Back to preview** to see **You're done** again.",
+};
+
+/** Page 1's card: how to reach "You're done", or (seen already) the way back. */
+export function sampleWelcomeNote(previewSeen: boolean): SampleAlbumNote {
+  return previewSeen ? SAMPLE_WELCOME_BACK_NOTE : SAMPLE_WELCOME_NOTE;
+}
+
 /** The last page, in Preview. With the stamp's date and time beside it, the screenshot is the proof. */
 export const SAMPLE_DONE_NOTE: SampleAlbumNote = {
   title: "You're done with today's test!",

@@ -8,7 +8,7 @@ import { readLocalDraftSummary } from '../lib/localDraft';
 import { chooseResumeOffers, type ResumeOffer, type SavedAlbumSummary } from '../lib/resumeOffer';
 import { readResumeCache, writeResumeCache, hasStoredSession, rememberedNoAlbums } from '../lib/resumeCache';
 import {
-  wasResumeAsked, wasResumeAskedThisVisit, markResumeAsked, clearResumeAsked, startFreshAlbum,
+  wasResumeAsked, wasResumeAskedThisVisit, markResumeAsked, clearResumeAsked, startFreshAlbum, skipsResumePrompts,
 } from '../lib/albumSession';
 import { formatRelativeTime } from './UserProjectsSection';
 import { useModalDialog } from '../lib/useModalDialog';
@@ -70,7 +70,20 @@ function detailOf(o: ResumeOffer): string {
   return o.updatedAt ? `Last saved ${formatRelativeTime(new Date(o.updatedAt))}` : 'Saved in your account';
 }
 
+/* The Android app while testing (owner, 2026-10-29: "for now please disable
+   resume from where you left off or open existing album feature on the
+   onset"): not asked at all, and no plain screen held while albums load. The
+   app opens on Home, where Start Creating and "Make today's sample album"
+   start a new album; signed in, the album in progress is saved to the
+   account first (useBuilderState reset()), so it stays in Your Projects.
+   The website, or TESTING_PHASE off: asked as always. "Make today's sample
+   album" here (#208) waits for the day the prompt comes back to the app. */
 export function ResumePrompt() {
+  const [off] = useState(() => skipsResumePrompts(isNativeShell()));
+  return off ? null : <ResumePromptScreen />;
+}
+
+function ResumePromptScreen() {
   const { user, loading } = useAuth();
   const { pathname, search } = useLocation();
   const navigate = useNavigate();

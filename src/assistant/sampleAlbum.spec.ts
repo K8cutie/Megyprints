@@ -18,6 +18,7 @@ vi.mock('../lib/nativeShell', () => ({ isNativeShell: () => h.native }));
 vi.mock('../pages/builder/BuilderContext', () => ({ useBuilderContext: () => h.ctx }));
 vi.mock('../pages/builder/BuilderEdit', () => ({ default: () => null }));
 vi.mock('../pages/builder/MobileReview', () => ({ default: () => null }));
+vi.mock('../pages/builder/BuilderPreview', () => ({ default: () => null }));
 vi.mock('../pages/builder/CoverEditor', () => ({ default: () => null }));
 vi.mock('../pages/builder/LayoutPicker', () => ({ default: () => null }));
 vi.mock('../pages/builder/BuilderBackGuard', () => ({ default: () => null }));
@@ -29,7 +30,10 @@ vi.mock('../lib/storeSettings', async (importOriginal) => ({
 import Builder from '../pages/Builder';
 import { WIZARD_STORAGE_KEY } from './wizard';
 import { readAlbumTheme } from '../lib/albumTheme';
-import { sampleAlbumPhotos, sampleDayNumber, sampleCoverPhoto, sampleAlbumName, requestSampleAlbum, SAMPLE_END_OF_DAY_NAMES } from '../lib/samplePhotos';
+import { sampleAlbumPhotos, sampleDayNumber, sampleCoverPhoto, sampleAlbumName, requestSampleAlbum, SAMPLE_END_OF_DAY_NAMES, SAMPLE_COVER_NAME } from '../lib/samplePhotos';
+import { requestDailyTest, todaysTask, todaysColour, coverChoices, dateExample } from '../lib/dailyTest';
+import { ActionEngine } from './actionEngine';
+import type { BuilderActions } from '../pages/builder/useBuilderState';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const GIF = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
@@ -59,13 +63,16 @@ function stepOne(title: string, photos: Photo[] = []) {
         ctx.albumPages = ctx.albumPages.map((p, i) => ({ ...p, slotFills: [i] }));
         return { intentType: intent.type, success: true, message: 'Album generated!' };
       }
+      // "Done — Preview my album" as the real engine runs it.
+      if (intent.type === 'preview_album') return new ActionEngine(ctx as unknown as BuilderActions).execute(intent as never);
       return { intentType: intent.type, success: true, message: '' };
     }),
     setCoverToPhoto: vi.fn(),
     putPhotoOnLastPage: vi.fn(),
+    applyPageColorToAllPages: vi.fn(),
     resizeAsk: null, setResizeAsk: vi.fn(),
     setPhase: vi.fn((p: string) => { ctx.phase = p; }), setWizardStep: vi.fn((w: string) => { ctx.wizardStep = w; }),
-    setAlbumTitle: vi.fn((t: string) => { ctx.albumTitle = t; }), goToPage: vi.fn(),
+    setAlbumTitle: vi.fn((t: string) => { ctx.albumTitle = t; }), goToPage: vi.fn((i: number) => { ctx.currentPageIndex = i; }),
     getPageSnapshot: () => undefined, saveDraftNow: vi.fn(), reset: vi.fn(), loadAlbum: vi.fn(),
     setBoxText: vi.fn(), updateTextElement: vi.fn(), setQrFill: vi.fn(),
     finishBoxesWithQuotes: vi.fn(async () => ({ filled: 0, remaining: 0 })), setLayoutPickerOpen: vi.fn(),
@@ -85,10 +92,11 @@ const render = async () => {
   });
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 };
-async function open(title = '', photos: Photo[] = [], occasion = '', wizard: { step: string; completed: string[] } = { step: 'pick_theme', completed: ['welcome'] }, request = false) {
+async function open(title = '', photos: Photo[] = [], occasion = '', wizard: { step: string; completed: string[] } = { step: 'pick_theme', completed: ['welcome'] }, request = false, before?: () => void) {
   vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
   localStorage.clear(); sessionStorage.clear();
   if (request) requestSampleAlbum();
+  before?.();
   if (occasion) localStorage.setItem('megy-album-theme', occasion);
   Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true, writable: true });
   Object.defineProperty(window, 'innerHeight', { value: 844, configurable: true, writable: true });
@@ -252,5 +260,79 @@ describe("Welcome back's \"Make today's sample album\"", () => {
     expect(calls('add_photos')).toHaveLength(0);
     expect(calls('generate_album')).toHaveLength(0);
     expect(ctx.setAlbumTitle).not.toHaveBeenCalled();
+  });
+});
+
+/* Home's TODAY'S TEST (owner, 2026-10-29: "Type date and edit background
+   color of sample album or choose cover for sample album. After that
+   generate the album"; the colour day names ONE colour). The new album opens
+   with the request and the tester's test: named what they typed, the cover
+   they chose or today's colour on every page, and once it is made, Preview
+   on its LAST page ("You're done with today's test!"), no 39 Next page taps. */
+describe("Today's test → the sample album", () => {
+  const OCT29 = new Date(2026, 9, 29, 15, 20);
+  const OCT30 = new Date(2026, 9, 30, 9, 5);
+  const coverDay = todaysTask(OCT29) === 'cover' ? OCT29 : OCT30;
+  const colourDay = todaysTask(OCT29) === 'colour' ? OCT29 : OCT30;
+  const madeWith = async (day: Date, pick: { name: string; cover?: string; colour?: string }) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(day);
+    // Home kept the test, then opened a new album with the request.
+    await open('', [], '', { step: 'welcome', completed: [] }, true, () => { expect(requestDailyTest(pick, day)).toBe(true); });
+    for (let i = 0; i < 8; i++) await render();
+  };
+  const order = (fn: { mock: { invocationCallOrder: number[] } }) => fn.mock.invocationCallOrder[0];
+  const dispatchOrder = (type: string) => ctx.dispatch.mock.invocationCallOrder[(ctx.dispatch.mock.calls as unknown as Array<[{ type: string }]>).findIndex(([i]) => i.type === type)];
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("a cover day: the typed name, the chosen cover, today's 40, and Preview opens on the last page", async () => {
+    const cover = coverChoices(coverDay).find((n) => n !== SAMPLE_COVER_NAME)!;
+    await madeWith(coverDay, { name: `${dateExample(coverDay)} 2026`, cover });
+    // Named what they typed, not "Sample Album · …".
+    expect(ctx.setAlbumTitle).toHaveBeenCalledWith(`${dateExample(coverDay)} 2026`);
+    expect(ctx.setAlbumTitle).not.toHaveBeenCalledWith(sampleAlbumName(coverDay));
+    expect(calls('add_photos')[0][0].payload!.files!.map((f) => f.name)).toEqual(sampleAlbumPhotos(sampleDayNumber(coverDay)));
+    // Their cover, not the usual sample.
+    const chosen = ctx.uploadedPhotos.find((p) => p.name === cover)!;
+    expect(ctx.setCoverToPhoto).toHaveBeenCalledWith(chosen.id, { titleColor: '#FFFFFF' });
+    expect(ctx.setCoverToPhoto).toHaveBeenCalledTimes(1);
+    expect(ctx.applyPageColorToAllPages).not.toHaveBeenCalled();
+    expect(calls('generate_album')).toHaveLength(1);
+    // Made, the end-of-day photo last, THEN Preview on the last page.
+    expect(order(ctx.putPhotoOnLastPage)).toBeGreaterThan(dispatchOrder('generate_album'));
+    expect(calls('preview_album')).toHaveLength(1);
+    expect(dispatchOrder('preview_album')).toBeGreaterThan(order(ctx.putPhotoOnLastPage));
+    expect(ctx.goToPage).toHaveBeenLastCalledWith(39);
+    expect(ctx.currentPageIndex).toBe(39);
+    expect(ctx.phase).toBe('preview');
+    // Used once.
+    expect(sessionStorage.getItem('megy-daily-test')).toBeNull();
+  });
+
+  it("a colour day: the typed name, today's colour on every page, the cover keeps its photo, Preview on the last page", async () => {
+    const colour = todaysColour(colourDay);
+    await madeWith(colourDay, { name: `10/${colourDay.getDate()}`, colour: colour.hex });
+    expect(ctx.setAlbumTitle).toHaveBeenCalledWith(`10/${colourDay.getDate()}`);
+    // Every page in today's colour, once the album is made.
+    expect(ctx.applyPageColorToAllPages).toHaveBeenCalledTimes(1);
+    expect(ctx.applyPageColorToAllPages).toHaveBeenCalledWith(colour.hex);
+    expect(order(ctx.applyPageColorToAllPages)).toBeGreaterThan(dispatchOrder('generate_album'));
+    // The usual sample cover, put back on after the colour (the colour is for the pages).
+    const cover = sampleCoverPhoto(ctx.uploadedPhotos)!;
+    expect(ctx.setCoverToPhoto).toHaveBeenCalledTimes(2);
+    expect(ctx.setCoverToPhoto).toHaveBeenLastCalledWith(cover.id, { titleColor: '#FFFFFF' });
+    expect(ctx.setCoverToPhoto.mock.invocationCallOrder[1]).toBeGreaterThan(order(ctx.applyPageColorToAllPages));
+    expect(dispatchOrder('preview_album')).toBeGreaterThan(order(ctx.applyPageColorToAllPages));
+    expect(ctx.currentPageIndex).toBe(39);
+    expect(ctx.phase).toBe('preview');
+  });
+
+  it('without a test (Step 1, Welcome back): opens on its pages as before, no Preview', async () => {
+    await open('', [], '', { step: 'welcome', completed: [] }, true);
+    for (let i = 0; i < 6; i++) await render();
+    expect(calls('generate_album')).toHaveLength(1);
+    expect(calls('preview_album')).toHaveLength(0);
+    expect(ctx.applyPageColorToAllPages).not.toHaveBeenCalled();
+    expect(ctx.phase).toBe('edit');
   });
 });

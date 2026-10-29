@@ -48,7 +48,7 @@ import TesterPageStamp from './TesterPageStamp';
 import { useTesterStamp } from './useTesterStamp';
 import TesterPageNote from './TesterPageNote';
 import { useSampleAlbumNotes } from './useSampleAlbumNotes';
-import { SAMPLE_WELCOME_NOTE } from '../../lib/samplePhotos';
+import { sampleWelcomeNote } from '../../lib/samplePhotos';
 import { bindingEdge } from './binding';
 
 /* ── Local helper types for in-place filter effects ─────────────────────── */
@@ -1177,7 +1177,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               {testerStamp && <TesterPageStamp lines={testerStamp} pageW={400}
                 side={bindingEdge(actions.currentPageIndex) === 'left' ? 'right' : 'left'} />}
               {/* A sample album's page 1: what to do (lib/samplePhotos), over the canvas like the stamp. */}
-              {sampleNotes && actions.currentPageIndex === 0 && <TesterPageNote note={SAMPLE_WELCOME_NOTE} pageW={400} />}
+              {sampleNotes && actions.currentPageIndex === 0 && <TesterPageNote note={sampleWelcomeNote(actions.previewSeen)} pageW={400} />}
 
               {/* Empty State Overlay */}
               <AnimatePresence>
