@@ -59,6 +59,10 @@ export default function Start() {
             {albumButtons}
             <Text style={styles.who}>Signed in as {email ?? 'your account'}</Text>
             <Button label="See my albums" kind="plain" onPress={() => router.push('/albums')} testID="see-albums" />
+            <View style={styles.pair}>
+              <Button label="Your orders" kind="plain" onPress={() => router.push('/orders')} style={styles.half} testID="see-orders" />
+              <Button label="My profile" kind="plain" onPress={() => router.push('/profile')} style={styles.half} testID="see-profile" />
+            </View>
             <Pressable accessibilityRole="button" onPress={() => { void signOut(); }} style={styles.link}>
               <Text style={styles.linkText}>Sign out</Text>
             </Pressable>
@@ -73,7 +77,7 @@ export default function Start() {
         <Button label="Checkout with a test album" kind="plain" onPress={() => router.push('/order')} testID="go-order" />
       </View>
 
-      <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos, see it as a book and edit its pages. You can also try checkout with a test album (nothing is ordered). Real orders come in a later version.</Text>
+      <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos, see it as a book and edit its pages, and see your orders and your profile. You can also try checkout with a test album (nothing is ordered). Ordering in the app comes in a later version.</Text>
     </SafeAreaView>
   );
 }
@@ -85,6 +89,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 32, fontWeight: '800', color: colors.text, marginTop: space.sm },
   lead: { fontSize: 17, lineHeight: 24, color: colors.muted, textAlign: 'center', marginTop: space.sm },
   actions: { gap: space.md },
+  pair: { flexDirection: 'row', gap: space.md },
+  half: { flex: 1, paddingHorizontal: space.sm },
   who: { fontSize: 15, color: colors.muted, textAlign: 'center' },
   link: { alignSelf: 'center', padding: space.sm },
   linkText: { fontSize: 16, color: colors.accent, fontWeight: '600', textDecorationLine: 'underline' },

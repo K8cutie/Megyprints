@@ -44,6 +44,11 @@
    the step words and made-album rules moved into assistant/wizardSteps, and
    sizeOffer (the sizes a customer may pick, split out of albumSizeOptions).
 
+   Phase 6 (Your orders and Profile) added myOrdersCloud (a customer's own
+   orders, read and cancelled through the client handed in, split out of
+   myOrders) and accountDeletionRules (what deleting an account touches and
+   the call to the endpoint, split out of accountDeletion).
+
    A TWIN: a file listed as name.native.ts stands in for name.ts in the app.
    The app's bundler (Metro) and type check (tsconfig moduleSuffixes) pick
    the .native.ts file, so a listed file may import name.ts (the website's,
@@ -55,6 +60,7 @@ export const SHARED_MODULES = [
   'src/assistant/rebuildQuestion.ts',
   'src/assistant/types.ts',
   'src/assistant/wizardSteps.ts',
+  'src/lib/accountDeletionRules.ts',
   'src/lib/accountErrors.ts',
   'src/lib/albumCloud.ts',
   'src/lib/albumName.ts',
@@ -70,6 +76,7 @@ export const SHARED_MODULES = [
   'src/lib/limit.ts',
   'src/lib/localDraftRules.ts',
   'src/lib/megyMascot.ts',
+  'src/lib/myOrdersCloud.ts',
   'src/lib/orderExpiry.ts',
   'src/lib/orderTracker.ts',
   'src/lib/passwordReset.ts',

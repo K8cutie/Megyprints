@@ -1,4 +1,4 @@
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { changedAgo, type AlbumRow } from '../lib/albums';
@@ -38,6 +38,7 @@ export default function Albums() {
       <View style={styles.center}>
         <Text style={styles.heading}>No albums yet</Text>
         <Text style={styles.muted}>Albums you make in this app or on the Megy Prints website show here while you are signed in.</Text>
+        <AccountLinks />
       </View>
     );
   }
@@ -49,7 +50,18 @@ export default function Albums() {
       contentContainerStyle={styles.list}
       ListHeaderComponent={<Text style={styles.count}>{albums.length} {albums.length === 1 ? 'album' : 'albums'}</Text>}
       renderItem={({ item }) => <AlbumCard album={item} />}
+      ListFooterComponent={<AccountLinks />}
     />
+  );
+}
+
+/** Your orders and My profile, from My albums. */
+function AccountLinks() {
+  return (
+    <View style={styles.links}>
+      <Button label="Your orders" kind="plain" onPress={() => router.push('/orders')} style={styles.half} testID="albums-orders" />
+      <Button label="My profile" kind="plain" onPress={() => router.push('/profile')} style={styles.half} testID="albums-profile" />
+    </View>
   );
 }
 
@@ -75,4 +87,6 @@ const styles = StyleSheet.create({
   name: { fontSize: 18, fontWeight: '700', color: colors.text },
   meta: { fontSize: 15, color: colors.text, marginTop: space.xs },
   when: { fontSize: 14, color: colors.muted, marginTop: 2 },
+  links: { flexDirection: 'row', gap: space.md, marginTop: space.md, alignSelf: 'stretch' },
+  half: { flex: 1, paddingHorizontal: space.sm },
 });
