@@ -134,6 +134,29 @@ describe('Step 1 in the Android app: "Make a sample album"', () => {
     expect(make()?.textContent).toBe('Make a sample album');
   });
 
+  // Owner, 2026-10-28, of it under the name and occasions: "couldn't be more NOT OBVIOUS".
+  it('is the first thing on the card: above the step title and the name box, its button filled, then "or make your own album"', async () => {
+    await open();
+    const box = offer()!;
+    expect(box).not.toBeNull();
+    // Megy's Step 1 card, the one on screen (a backstop copy of the name box sits under it).
+    const card = box.closest('.shadow-xl')!;
+    expect(card).not.toBeNull();
+    const name = card.querySelector('[data-testid="album-name"]')!;
+    expect(name).not.toBeNull();
+    // The step's title types itself in: the card's heading.
+    const title = card.querySelector('h3')!;
+    expect(title).not.toBeNull();
+    const before = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(before(box, title)).toBe(true);
+    expect(before(box, name)).toBe(true);
+    expect(make()!.className).toContain('bg-peach');
+    expect(make()!.className).toContain('text-white');
+    const or = document.querySelector('[data-testid="sample-album-or"]')!;
+    expect(or.textContent?.trim()).toBe('or make your own album');
+    expect(before(box, or) && before(or, title)).toBe(true);
+  });
+
   it("one tap: named \"Sample Album\", occasion Family, today's 40 samples in, a sample on the cover, the album made, today's end-of-day photo on its last page, its pages open", async () => {
     await open();
     await tapMake();
