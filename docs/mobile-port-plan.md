@@ -1648,12 +1648,18 @@ where a cover text's lines go: `coverTextLayout`, now what
 `maskShapes.featherGradients` (what `masks.featherAlpha` draws). The old
 files re-export them, so the website imports what it always did;
 `coverLayout.ts` keeps the browser's text measure as the default.
-**Proof:** `node tools/golden/websiteSame.mjs HEAD` makes every golden
+**Proof:** `node tools/golden/websiteSame.mjs [<ref>]` makes every golden
 page's print file (sharp words, and words baked in) and every golden cover
-file with the website's print code before and after, in the same Chromium:
-**156 of 156 byte-identical** (JPEG and every word patch). The check catches
-a real change: the soft edge made 1% wider showed exactly the 4 soft-edge
-files as different.
+file with the website's print code at `<ref>` and in the working copy, in
+the same Chromium, and compares them byte for byte (JPEG and every word
+patch). With no ref it compares with where the branch left main (`git
+merge-base HEAD origin/main`); it stops with exit code 2 if the two print
+codes are the same text (a ref after the change, such as HEAD once it is
+committed, would prove nothing), and always deletes its temp copy. After
+merging native-2.0 (2026-10-29): **156 of 156 byte-identical** against main
+as the branch left it (5ef26a9) and against `origin/native-2.0` (c8f2a38).
+The check catches a real change: the soft edge made 1% wider showed exactly
+the 4 soft-edge files as different.
 
 ### The golden check now
 
@@ -1734,16 +1740,95 @@ cover over it must be measured, never the bar loosened.
   caller (`AssetCache` files). The golden check reads the website's
   `public/masks` and made-up corner art; the app must bundle the real files
   (or fetch them) before Phase 5.
-- **Not on a phone yet:** the new features and the cover were proven in
-  Node (CanvasKit) only. The phone's golden run handles them (pictures by
-  address, tested in Node), but no emulator or phone run was made for them.
-- **Colour looks run in JavaScript** over every pixel of the photo's box
-  (looks-four: 4 looked photos took 15 s in Node, other tests running).
-  Measure on a phone; a Skia shader would be faster but must keep the
-  website's numbers.
+- **On the phone: one cover fails** (`cover-86-old-form`, the old cover
+  form's back blurb with its automatic light outline over a photo): see "On
+  the phone" below. Only one golden text has a light outline, too few to
+  set a weight for light outlines from.
+- **Colour looks still run in JavaScript** (the website's own maths, number
+  for number) over the photo's box: on the emulator a page with four looked
+  photos takes 2.7 s, 3.0 s with a 12 MP photo in each frame ("On the
+  phone" below). A real phone is slower than the PC's emulator.
+- **Light letters on the phone** are given a hairline of weight (0.2 px)
+  measured on 19 white and cream texts; colours between dark and light
+  (luminance 128 to 223) are not in the golden set and are drawn as before,
+  not measured.
+- **Not on a real phone** (ARM64) or another Android version: the emulator
+  only (Android 14, x86_64).
 - **Making a new memory QR in the app** (the `qrcode` step) is not ported:
   the app draws the PNG the album already keeps.
 - Oval and rounded masks still print as rectangles (website, unchanged).
+
+### On the phone (emulator, 2026-10-29, after merging native-2.0)
+
+Review fixes first: pictures drawn at half size or less are halved by Skia
+itself (a runtime shader on a CPU surface: byte for byte the JavaScript
+loop's result on every golden picture file), the halved copies live only
+while one page or cover is drawn, and drawing surfaces are kept for reuse
+(`render/surfaces.ts`: on the phone a disposed surface keeps its pixels
+until the collector runs). The phone's golden run now draws the 6 covers,
+the 32 texture tiles, a timing pass with a 12 MP photo and the light-weight
+trials. **The phone proof from #219 no longer applies to this code** (every
+photo is drawn through the new sampling): this run replaces it.
+
+Run: `-GoldenPages` release build (x86_64), `pwa_test` emulator (Android 14),
+`node scripts/golden-phone-run.cjs`, `npm run golden:phone`. Same bars, same
+pixelmatch code as the Node check.
+
+| | Node (CanvasKit) | Phone (native Skia) | Bar |
+|---|---|---|---|
+| Pages passing | 75 of 75 | 74 of 74, the Display P3 page fails as it must and passes after the colour step | |
+| Pixels differing outside the words, worst page | 0.038% | 0.014% (frame-round-double) | 0.15% |
+| Worst 64 px tile / tile mean | 0.00% / 1.18 | 0.00% / 1.29 (faded-gradient) | 1% / 2 |
+| Words' ink, worst page | 4.86% | 2.78% (64-caption-yellow) | 6% |
+| 8 px blocks / where text sits | 26.5 / 0.36 px | 24.8 / 0.35 px | 40 / 0.5 px |
+| Covers passing | 5 of 6 + the known 0.52 px | 5 of 6 (cover-64-soft-plain passes: 0.47 px) | |
+| Texture tiles: worst pixel / mean | 3 / 0.72 | 2 / 0.45 | 4 / 1 |
+
+Covers on the phone:
+
+| Cover | Ink | Blocks | Sits | Result |
+|---|---|---|---|---|
+| cover-88-hard-photo | 2.16% | 25.1 | 0.20 px | pass |
+| cover-64-soft-plain | 5.64% | 27.0 | 0.47 px | pass |
+| cover-88-soft-texture | 2.12% | 22.3 | 0.19 px | pass |
+| cover-64-hard-long-title | 3.65% | 23.3 | 0.17 px | pass |
+| cover-88-hard-edge-words | 2.16% | 28.4 | 0.20 px | pass |
+| cover-86-old-form | **17.85%** | 17.4 | 0.18 px | **fails** (text 1) |
+
+- **Found and fixed: light letters were thinner on the phone.** The first
+  phone run failed four covers on the ink bar (11 to 26%). Each text's ink
+  against the website's: dark text 0.97 to 1.01, white and cream 0.82 (27
+  px) to 0.95 (72 px), 0.99 at 700 px: a fixed fraction of a pixel short on
+  every edge. Drawing the light letters in a grey and colouring them after
+  (so Skia's glyph step treats them as darker) made them thinner still. A
+  hairline of weight in their own colour (`pageText.ts`, phone only, light
+  colours only) was tried at 0, 0.15, 0.2, 0.25, 0.35 and 0.5 px; at 0.2 px
+  all 19 light texts sit at 0.96 to 1.06 of the website's ink (worst 5.6%,
+  the 6x4 spine). Node (CanvasKit) is unchanged: it draws no weight.
+- **Still failing: `cover-86-old-form` text 1**, the back blurb (DM Sans 55
+  px, dark) with the 3 px light outline the old cover form adds over a
+  photo: the light outline's ink is 7.4% short and the dark letters 2.9%
+  heavy, and the bar counts the two together, so 17.8%. The outline gets
+  the 0.2 px too; by the trials about 0.4 px would be needed, but one golden
+  text is too few to set that from: add light-outlined texts at several
+  sizes to the golden set, then pick the outline's own weight from the same
+  trials. The old cover form is for drafts made before cover pages.
+- **QR codes scan from the phone's pictures**: OpenCV's QR reader decodes
+  all four app-drawn QR pages (`qr-chip-88`, `qr-chip-64`,
+  `qr-in-caption-box`, `qr-moved-turned-64`) to their megyprints.app/m/
+  links, and still reads them shrunk to 0.25, 0.35, 0.12 and 0.18 of the
+  page.
+- **Time on the emulator** (print size with bleed, words included): pages
+  11 to 2731 ms, median 121 ms; covers 19 to 467 ms. Colour looks:
+  looks-four 2731 ms (3.0 s with a 12 MP photo in each frame), looks-64 959
+  ms (1.2 s). Halved photos: big-photo-small-frames 184 ms (239 ms with 12
+  MP photos), textured edges 643 ms (739 ms). The whole run, 82 pictures
+  plus tiles, trials and timing pass: 64 s.
+- **Memory** (total PSS, sampled every 2 s): highest 1,045 MB, while the
+  trials drew cover files back to back (it fell to about 400 MB right
+  after: the phone's collector frees surfaces late); two earlier runs of
+  the same build kind peaked at 771 and 796 MB. On a 2 GB phone, making a
+  whole album's print files must be measured (Phase 5).
 
 ---
 

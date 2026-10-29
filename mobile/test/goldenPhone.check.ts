@@ -31,9 +31,11 @@
 
    The cover files go through checkCover's comparison (the whole wrap, the
    same bars, the lines on the wrap), with the same known platform
-   difference as the Node check (test/golden/known.ts); each texture tile
-   through tileFailures. The run's timing pass (pages drawn with a 12 MP
-   photo) is reported, not compared.
+   difference as the Node check (test/golden/known.ts: a difference of
+   Windows Chromium's letters, so on the phone that picture may pass, or
+   fail in exactly that way); each texture tile through tileFailures. The
+   run's timing pass (pages drawn with a 12 MP photo) and its light-weight
+   trials are reported, not compared.
 
    Writes tools/golden/phone-out/: report.json, table.md, a diff per page
    (pixelmatch's own picture) and side/NAME.png (website | phone | diff, and
@@ -104,6 +106,8 @@ interface Row {
 }
 const rows: Row[] = [];
 const tileRows: { file: string; maxLevels: number; meanLevels: number; ms: number; failures: string[] }[] = [];
+/** The light-weight trials: each light text's ink against the website's, per trial weight. */
+const inkRows: { ink: string; page: string; texts: { color: string; inkOff: number }[]; failures: string[] }[] = [];
 
 let Sk: Skia;
 let text: PageText;
@@ -137,12 +141,23 @@ afterAll(() => {
   const tiles = tileRows.length
     ? `\n\nTexture tiles drawn alone on the phone: ${tileRows.filter((t) => !t.failures.length).length} of ${tileRows.length} within the bars; worst pixel ${Math.max(...tileRows.map((t) => t.maxLevels))} levels (bar 4), worst mean ${Math.max(...tileRows.map((t) => t.meanLevels)).toFixed(2)} (bar 1).\n`
     : '';
+  const inks = [...new Set(inkRows.map((r) => r.ink))];
+  const inkPages = [...new Set(inkRows.map((r) => r.page))];
+  const cell = (ink: string, page: string) => {
+    const r = inkRows.find((x) => x.ink === ink && x.page === page);
+    if (!r) return '-';
+    const worst = Math.max(...r.texts.map((x) => x.inkOff));
+    return `${(worst * 100).toFixed(1)}%${r.failures.length ? ' FAIL' : ''}`;
+  };
+  const trialsTable = inkRows.length
+    ? `\n\nLight-weight trials (pageText.ts "Light letters on the phone"): each page with light words drawn again, its light letters given each weight (device px); the worst light text's ink against the website's (bar 6%); FAIL = some bar fails on that page:\n\n| Page | ${inks.join(' | ')} |\n|---|${inks.map(() => '---').join('|')}|\n${inkPages.map((pg) => `| ${pg} | ${inks.map((ink) => cell(ink, pg)).join(' | ')} |`).join('\n')}\n`
+    : '';
   const timing = report.timing
     ? `\n\nTiming pass: each page drawn with a ${report.timing.photo} photo in every photo slot (made in ${report.timing.makeMs} ms), words included, print size with bleed:\n\n| Page | Draw on phone |\n|---|---|\n${report.timing.pages.map((t) => `| ${t.name} | ${t.error ? `stopped: ${t.error}` : `${t.drawMs} ms`} |`).join('\n')}\n`
     : '';
-  fs.writeFileSync(path.join(OUT, 'table.md'), `${head}\n${lines.join('\n')}\n${tiles}${timing}`);
-  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ pixelmatch: PIXELMATCH, chromium: manifest.chromium, device: report.device, phoneTotalMs: report.totalMs, photos: report.photos, rows, tiles: tileRows, timing: report.timing ?? null }, null, 1));
-  console.log(`Golden pages and covers, PHONE vs website (pixelmatch ${PIXELMATCH.threshold}, edges counted):\n${head}\n${lines.join('\n')}${tiles}${timing}`);
+  fs.writeFileSync(path.join(OUT, 'table.md'), `${head}\n${lines.join('\n')}\n${tiles}${timing}${trialsTable}`);
+  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ pixelmatch: PIXELMATCH, chromium: manifest.chromium, device: report.device, phoneTotalMs: report.totalMs, photos: report.photos, rows, tiles: tileRows, timing: report.timing ?? null, lightWeight: inkRows }, null, 1));
+  console.log(`Golden pages and covers, PHONE vs website (pixelmatch ${PIXELMATCH.threshold}, edges counted):\n${head}\n${lines.join('\n')}${tiles}${timing}${trialsTable}`);
 });
 
 describe('the phone drew the pages the computer compares it with', () => {
@@ -255,9 +270,11 @@ describe('every page and cover the phone drew, against the website (the same bar
       // Raw Display P3 numbers drawn as sRGB: the bars must catch it.
       expect(failures.length).toBeGreaterThan(0);
     } else if (known) {
+      // A Windows-Chromium difference (known.ts): the phone draws its own
+      // letters, so the page may pass here, or fail in exactly that way.
       expect(lf).toEqual([]);
-      expect(failures).toHaveLength(1);
-      expect(failures[0]).toMatch(known);
+      expect(failures.length).toBeLessThanOrEqual(1);
+      failures.forEach((f) => expect(f).toMatch(known));
     } else {
       expect(lf).toEqual([]);
       expect(failures).toEqual([]);
@@ -277,3 +294,28 @@ describe('every texture tile the phone drew alone, against the tile print prepar
   }, 60_000);
 });
 
+/* The light-weight trials (reported, not barred: they are what
+   PHONE_LIGHT_WEIGHT_PX was picked from). Each trial picture is held to the
+   website's like its page, with the page's own bare picture from the run. */
+describe('the light-weight trials, against the website (reported)', () => {
+  const trials = (report.lightWeight ?? []).filter((t) => !t.error);
+  it.each(trials.map((t) => [`${t.px} px ${t.name}`, t] as [string, NonNullable<PhoneReport['lightWeight']>[number]]))('%s', (_tag, t) => {
+    const p = report.pages.find((x) => x.name === t.name && !x.variant) as PhonePage;
+    const isCover = t.kind === 'cover';
+    const web = (isCover ? manifest.covers : manifest.cases).find((c) => c.name === t.name) as WebCase;
+    const ref = readPng(Sk, path.join(WEB, web.file));
+    const refBare = web.bare ? readPng(Sk, path.join(WEB, web.bare)).data : ref.data;
+    const app = readPng(Sk, path.join(PHONE, t.file));
+    const appBare = p.bareFile ? readPng(Sk, path.join(PHONE, p.bareFile)).data : app.data;
+    const cmp = comparePage({ ref: ref.data, refBare, app: app.data, appBare, W: ref.width, H: ref.height }, p.words.map((w) => w.zone), isCover ? 0 : planOf(t.name).bleed);
+    const texts = cmp.words.map((w, i) => ({ color: p.words[i]?.lines[0]?.color ?? '', inkOff: w.inkDiff })).filter((x) => x.color && isLight(x.color));
+    inkRows.push({ ink: `${t.px} px`, page: t.name, texts, failures: pageFailures(cmp) });
+    expect(texts.length).toBeGreaterThan(0);
+  }, 300_000);
+});
+
+/** pageText.isLightColor: Skia's luminance of the colour, 224 and up. */
+function isLight(color: string): boolean {
+  const c = Sk.Color(color);
+  return ((Math.round(c[0] * 255) * 54 + Math.round(c[1] * 255) * 183 + Math.round(c[2] * 255) * 19) >> 8) >= 224;
+}

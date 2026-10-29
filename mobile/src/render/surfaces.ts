@@ -36,6 +36,12 @@ export function releaseSurface(surface: SkSurface): void {
   if ('ref' in (surface as object)) surface.dispose();
 }
 
+/** Is this RN Skia's CanvasKit build (Node, the tests) rather than the
+ *  phone's native Skia? (Its objects carry the CanvasKit object as `ref`.) */
+export function isCanvasKit(Sk: Skia): boolean {
+  return 'ref' in (Sk.Paint() as object);
+}
+
 export interface Drawable {
   surface: SkSurface;
   canvas: SkCanvas;

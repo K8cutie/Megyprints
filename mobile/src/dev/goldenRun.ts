@@ -40,7 +40,7 @@ import { TileMode } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import type { AlbumPage, AlbumSizePreset, CoverDesign, CoverType, MaterialType } from '@web/pages/builder/types';
 import { planPage, type PagePlan } from '../render/pagePlan';
 import { PageDrawer } from '../render/drawPage';
-import { PageText, type FontFile } from '../render/pageText';
+import { PageText, isLightColor, LIGHT_WEIGHT_TRIALS, type FontFile } from '../render/pageText';
 import { BUNDLED_FONTS } from '../render/fontTable';
 import { appWords, type TextItemLines } from '../render/pageWords';
 import { AssetCache, fromBase64 } from '../render/assets';
@@ -148,6 +148,11 @@ export interface PhoneReport {
   tiles?: { file: string; phoneFile: string; ms: number; error?: string }[];
   /** The timing pass: pages drawn with a 12 MP photo in every photo slot (not compared). */
   timing?: { photo: string; makeMs: number; pages: { name: string; drawMs: number; error?: string }[] };
+  /** The light-weight trials: each page or cover with light words drawn
+   *  again (with its words), its light letters given each trial weight
+   *  (device px), compared with the website's by the phone check
+   *  (pageText.ts "Light letters on the phone"). */
+  lightWeight?: { px: number; name: string; kind: 'page' | 'cover'; file: string; error?: string }[];
 }
 
 // Base64 → bytes: the renderer's own (assets.ts), re-exported for the build test.
@@ -175,6 +180,8 @@ export interface RunOptions {
   device?: Record<string, unknown>;
   /** The timing pass's pages (default TIMING_PAGES; [] for none). */
   timingPages?: readonly string[];
+  /** The light-weight trials, device px (default LIGHT_WEIGHT_TRIALS; [] for none). */
+  lightWeightTrials?: readonly number[];
 }
 
 /** A camera-sized photo made on the device (no real photo): colour washes,
@@ -358,6 +365,41 @@ export async function runGoldenPages(Sk: Skia, bundle: GoldenBundle, writer: Gol
         report.tiles.push({ file: tile.file, phoneFile, ms: Date.now() - t, error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
       }
     }
+  }
+
+  // The light-weight trials: what drew light words, drawn again with each weight.
+  const trials = options.lightWeightTrials ?? LIGHT_WEIGHT_TRIALS;
+  const light = report.pages.filter((p) => !p.variant && !p.error && p.words.some((w) => w.lines.some((l) => isLightColor(Sk, l.color))));
+  if (trials.length && light.length) {
+    report.lightWeight = [];
+    const own = text.setLightWeight(0);
+    for (const px of trials) {
+      text.setLightWeight(px);
+      for (const p of light) {
+        const entry: NonNullable<PhoneReport['lightWeight']>[number] = { px, name: p.name, kind: p.kind ?? 'page', file: `weight-${px.toFixed(2)}-${p.name}.png` };
+        options.onPage?.(total, total, `light weight ${px} px: ${p.name}`);
+        await pause();
+        try {
+          let img: SkImage;
+          if (p.kind === 'cover') {
+            const c = coverList.find((x) => x.name === p.name) as GoldenPhoneCover;
+            const plan = planCover({ albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material, coverFront: c.coverFront, coverDesign: c.coverDesign, photoCount: bundle.photos.length, photoIds }, measure);
+            img = covers.render(plan, photoAsIs, { words: true, assets: assets.get });
+          } else {
+            const c = cases.find((x) => x.name === p.name) as GoldenPhoneCase;
+            const plan = planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: bundle.photos.length, photoIds });
+            img = drawer.renderPrintPage(plan, photoAsIs, { words: true, assets: assets.get });
+          }
+          const png = img.encodeToBytes(ImageFormat.PNG, 100);
+          img.dispose();
+          await writer.write(entry.file, png);
+        } catch (err) {
+          entry.error = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        }
+        report.lightWeight.push(entry);
+      }
+    }
+    text.setLightWeight(own);
   }
 
   // The timing pass: the slow kinds of page with a 12 MP photo in every slot.

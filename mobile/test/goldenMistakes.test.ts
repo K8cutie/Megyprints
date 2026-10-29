@@ -278,7 +278,7 @@ describe("the phone's golden run draws what this check draws", () => {
     const written = new Map<string, Uint8Array | string>();
     // A stand-in for the phone's srgbCopy: says the P3 file was converted (same bytes back).
     const toSrgb: ToSrgb = async ({ file, bytes }) => ({ colorSpace: file.endsWith('photo-8.png') ? 'Display P3' : 'sRGB IEC61966-2.1', converted: file.endsWith('photo-8.png'), bytes });
-    const report = await runGoldenPages(G.Sk, bundle, { write: async (n, c) => { written.set(n, c); } }, { toSrgb, timingPages: ['64-caption-yellow'] });
+    const report = await runGoldenPages(G.Sk, bundle, { write: async (n, c) => { written.set(n, c); } }, { toSrgb, timingPages: ['64-caption-yellow'], lightWeightTrials: [0.35] });
 
     expect(report.pages.map((p) => p.file)).toEqual([...cases.map((c) => `${c.name}.png`), 'photo-display-p3.srgb.png', `${coverName}.png`]);
     expect(report.pages.every((p) => !p.error)).toBe(true);
@@ -337,6 +337,17 @@ describe("the phone's golden run draws what this check draws", () => {
     expect(report.timing?.pages.map((p) => [p.name, p.error ?? 'drawn'])).toEqual([['64-caption-yellow', 'drawn']]);
     const json = JSON.parse(written.get('report.json') as string) as PhoneReport;
     expect(json.pages.length).toBe(7);
+    // The light-weight trial: the cover (its words are cream) drawn again
+    // with its light letters given the trial weight, as the drawer draws it.
+    expect(report.lightWeight?.map((e) => [e.name, e.px, e.error ?? 'drawn'])).toEqual([[coverName, 0.35, 'drawn']]);
+    const was = G.text.setLightWeight(0.35);
+    try {
+      expect(same(pngPixels(report.lightWeight?.[0].file as string), coverPx(true))).toBe(true);
+    } finally {
+      G.text.setLightWeight(was);
+    }
+    // ...and the weight changes what is drawn (CanvasKit draws none by default).
+    expect(same(pngPixels(report.lightWeight?.[0].file as string), coverPx(true))).toBe(false);
   }, 300_000);
 });
 

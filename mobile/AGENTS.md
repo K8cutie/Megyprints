@@ -64,10 +64,12 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   (a test build with the golden pages; never for customers), then
   `node scripts/golden-phone-run.cjs --device <serial>` and
   `npm run golden:phone` (same bars, pages, covers and texture tiles, plus
-  a timing pass with a 12 MP photo; the plan's "Page renderer on the
+  a timing pass with a 12 MP photo and the light-letter trials; the plan's
+  "Page renderer on the phone" and "Everything print draws: On the
   phone"). Run it again after changing `src/render`: CanvasKit in Node is
   not the phone's Skia (the native paragraph builder has no `dispose()`,
-  for one). Do new pixel work in Skia (a runtime shader on a CPU surface,
+  for one; light letters come out thinner, which `pageText.ts` makes up
+  for on the phone only). Do new pixel work in Skia (a runtime shader on a CPU surface,
   as `sampling.ts` halves pictures), held byte for byte to a plain
   JavaScript reference in the tests, not in a JavaScript loop over a
   photo's pixels (Hermes runs such loops slowly). The one loop left is the
