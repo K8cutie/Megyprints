@@ -49,6 +49,7 @@ import { useTesterStamp } from './useTesterStamp';
 import TesterPageNote from './TesterPageNote';
 import { useSampleAlbumNotes } from './useSampleAlbumNotes';
 import { sampleWelcomeNote } from '../../lib/samplePhotos';
+import { useDailyTestRun, runFor } from '../../lib/dailyTestRun';
 import { bindingEdge } from './binding';
 
 /* ── Local helper types for in-place filter effects ─────────────────────── */
@@ -90,6 +91,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   const { user } = useAuth();
   const testerStamp = useTesterStamp(actions.albumPages);
   const sampleNotes = useSampleAlbumNotes(actions.uploadedPhotos);
+  // The album Today's test made: the bar at the top says what to do, not page 1's card.
+  const dailyRun = useDailyTestRun();
+  const testRun = sampleNotes ? runFor(dailyRun, actions.albumPages) : null;
 
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
@@ -1177,7 +1181,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               {testerStamp && <TesterPageStamp lines={testerStamp} pageW={400}
                 side={bindingEdge(actions.currentPageIndex) === 'left' ? 'right' : 'left'} />}
               {/* A sample album's page 1: what to do (lib/samplePhotos), over the canvas like the stamp. */}
-              {sampleNotes && actions.currentPageIndex === 0 && <TesterPageNote note={sampleWelcomeNote(actions.previewSeen)} pageW={400} />}
+              {sampleNotes && !testRun && actions.currentPageIndex === 0 && <TesterPageNote note={sampleWelcomeNote(actions.previewSeen)} pageW={400} />}
 
               {/* Empty State Overlay */}
               <AnimatePresence>

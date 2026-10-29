@@ -12,10 +12,16 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
    TODAY'S TEST (owner, the same day: testers screenshot the home page or
    just flip pages; "They should type the correct date so they cant cheat
-   the process"): the button opens a short screen. Type today's date as the
-   album's name, do today's task (choose the cover, or tap today's colour),
-   then "Make my album" makes it the way "Welcome back" does (#208) and the
-   builder opens it on "You're done" (assistant/sampleAlbum.spec.ts).
+   the process"; then "Do 10 test pool that shows different feature"): the
+   button opens a short screen. Type today's date as the album's name, do
+   today's task (one of 10, one tap on a list), then "Make my album" makes it
+   the way "Welcome back" does (#208), with today's task in the album
+   (assistant/sampleAlbum.spec.ts). The minute in the app starts as the
+   screen opens (builder/dailyTestBar.spec.ts).
+
+   THE NEWEST APP ON HOME (owner, 2026-10-29): when the app comes back to the
+   front on Home, it checks for a newer version and reloads into it; never
+   while Today's test is open, never on the website or with the switch off.
 
    It never throws a guest's own album away without asking. The website: no
    change.
@@ -31,7 +37,7 @@ const h = vi.hoisted(() => {
   // GSAP's ScrollTrigger reads these when Home loads (jsdom has neither).
   window.matchMedia ??= ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
   (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
-  return { native: true, testing: true, user: null as { id: string } | null };
+  return { native: true, testing: true, user: null as { id: string } | null, vis: 'visible' as DocumentVisibilityState, update: (async () => 'latest') as (note: unknown) => Promise<string> };
 });
 vi.mock('../lib/nativeShell', () => ({ isNativeShell: () => h.native }));
 vi.mock('../lib/testingPhase', async (importOriginal) => {
@@ -42,16 +48,22 @@ vi.mock('../lib/authContext', () => ({ useAuth: () => ({ user: h.user, loading: 
 vi.mock('../lib/supabase', () => ({ supabase: { from: () => ({}) }, supabaseConfigured: false }));
 vi.mock('../components/UserProjectsSection', () => ({ UserProjectsSection: () => null, formatRelativeTime: () => '' }));
 vi.mock('./BuilderDemoSection', () => ({ default: () => null }));
+vi.mock('../lib/appVersion', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()), ensureLatestApp: (note: unknown) => h.update(note),
+}));
 
 import Home from './Home';
 import { asksBeforeNewAlbum } from './home/KeepAlbumAsk';
 import { DRAFT_STORAGE_KEY, readLocalDraftSummary, type LocalDraftSummary } from '../lib/localDraft';
 import { samplePhotoName, sampleDayNumber } from '../lib/samplePhotos';
-import { coverChoices, todaysColour, todaysTask, colourTaskLine, takeDailyTest, dateExample } from '../lib/dailyTest';
+import { coverChoices, todaysBeforeTask, todaysAlbumTask, beforeTaskFor, takeDailyTest, dateExample, type BeforeTaskId } from '../lib/dailyTest';
+import { readRun, readTestClock } from '../lib/dailyTestRun';
 import { PAGE_COLORS } from './builder/pageColors';
+import { FONTS } from './builder/fonts';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 window.scrollTo = (() => {}) as typeof window.scrollTo;
+Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => h.vis });
 
 let host: HTMLDivElement;
 let root: Root;
@@ -75,7 +87,11 @@ const mount = async () => {
 };
 const tap = async (id: string) => { await act(async () => { $(id)!.click(); }); };
 const tapEl = async (el: HTMLElement) => { await act(async () => { el.click(); }); };
-const storage = () => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } });
+const storage = () => {
+  const local: Record<string, string> = { ...localStorage };
+  delete local['megy-daily-test-clock']; // the minute in the app, from Today's test opening
+  return JSON.stringify({ local, session: { ...sessionStorage } });
+};
 /** Today's test is its own chunk: wait for it to load. */
 const opened = async () => {
   for (let i = 0; i < 20 && !$('todays-test'); i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
@@ -96,18 +112,27 @@ const samples = Array.from({ length: 40 }, (_, i) => ({ id: `s${i}`, name: sampl
 const YESTERDAY = Date.now() - 24 * 3600e3;
 const seedDraft = (d: Record<string, unknown>) => localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ editedAt: 1, ...d }));
 
-// The phone's clock: a cover day and a colour day (they alternate).
+// The phone's clock, and the day each task of the pool comes round.
 const OCT29 = new Date(2026, 9, 29, 15, 20);
-const OCT30 = new Date(2026, 9, 30, 9, 5);
-const COVER_DAY = todaysTask(OCT29) === 'cover' ? OCT29 : OCT30;
-const COLOUR_DAY = todaysTask(OCT29) === 'colour' ? OCT29 : OCT30;
+const dayFor = (task: BeforeTaskId) => {
+  for (let i = 0; i < 10; i++) { const d = new Date(2026, 9, 29 + i, 15, 20); if (todaysBeforeTask(d) === task) return d; }
+  throw new Error(task);
+};
+const COVER_DAY = dayFor('cover');
+const COLOUR_DAY = dayFor('colour');
+const FONT_DAY = dayFor('titleFont');
+const SIZE_DAY = dayFor('size');
 const clock = (at: Date) => vi.setSystemTime(at);
 const dateOf = (at: Date) => dateExample(at);
+/** The option that is today's answer, and one that isn't. */
+const optionFor = (value: string | null) => $$('todays-test-option').find((b) => b.dataset.value === value)!;
+const otherOption = () => $$('todays-test-option').find((b) => b.dataset.value !== beforeTaskFor(new Date()).answer)!;
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   clock(OCT29);
-  h.native = true; h.testing = true; h.user = null;
+  h.native = true; h.testing = true; h.user = null; h.vis = 'visible';
+  h.update = vi.fn(async () => 'latest');
   localStorage.clear(); sessionStorage.clear();
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
 });
@@ -120,7 +145,7 @@ describe('who sees it', () => {
     const make = $('home-todays-sample-make')!;
     expect(text(make)).toBe("Make today's sample album");
     expect(make.className).toContain('bg-peach');
-    expect(text($('home-todays-sample-how'))).toBe('Testers: type today\'s date, do today\'s task, then screenshot "You\'re done".');
+    expect(text($('home-todays-sample-how'))).toBe('Testers: type today\'s date, do today\'s 2 tasks, then screenshot "You\'re done".');
     // Above "Turn your photos into a printed album" (the Albums card).
     expect(box.compareDocumentPosition($('home-albums-card')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // One filled button in the box, nothing greyed.
@@ -156,10 +181,13 @@ describe("the button opens Today's test; nothing is made yet", () => {
     // The only filled button on it, and nothing greyed anywhere.
     expect([...screen.querySelectorAll('button')].filter((b) => b.className.includes('bg-peach'))).toEqual([make]);
     expect(screen.querySelectorAll('button[disabled]')).toHaveLength(0);
-    // Not made yet: still Home, no flags.
+    // Not made yet: still Home, no flags. The minute in the app starts now, from
+    // zero, apart from any album an earlier test made (its run is untouched).
     expect($('where')).toBeNull();
     expect(sessionStorage.getItem('megy-fresh-start')).toBeNull();
     expect(sessionStorage.getItem('megy-make-sample-album')).toBeNull();
+    expect(readTestClock()).toEqual({ day: sampleDayNumber(OCT29), fgMs: 0 });
+    expect(readRun()).toBeNull();
   });
 
   it('✕ (or Escape) closes it and changes nothing', async () => {
@@ -204,20 +232,21 @@ describe("step 1: today's date, by the phone's clock", () => {
   });
 });
 
-describe('step 2: today\'s task, said plainly', () => {
-  it('a cover day: "Choose your cover", 12 of today\'s photos, a tap picks one', async () => {
+describe('step 2: today\'s task, one tap on a list already shown', () => {
+  it('a cover day: "Choose your cover", 12 of today\'s photos, any one counts', async () => {
     clock(COVER_DAY);
     await mount();
     await tap('home-todays-sample-make');
     await opened();
     expect($('todays-test-task')!.dataset.task).toBe('cover');
-    expect(text($('todays-test-task-line'))).toBe('Choose your cover. Tap the photo you want on the front of your album.');
-    const photos = $$('todays-test-cover');
-    expect(photos.map((p) => p.dataset.photo)).toEqual(coverChoices(COVER_DAY));
+    expect(text($('todays-test-task-line'))).toBe('2 Choose your cover.');
+    expect(text($('todays-test-task-hint'))).toBe('Tap the photo you want on the front of your album.');
+    const photos = $$('todays-test-option');
+    expect(photos.map((p) => p.dataset.value)).toEqual(coverChoices(COVER_DAY));
     expect(photos[0].querySelector('img')!.getAttribute('src')).toBe(`/sample-photos/${coverChoices(COVER_DAY)[0]}`);
-    expect($$('todays-test-colour')).toHaveLength(0);
     await tapEl(photos[4]);
-    expect($$('todays-test-cover').map((p) => p.getAttribute('aria-checked'))).toEqual(photos.map((_, i) => String(i === 4)));
+    expect($$('todays-test-option').map((p) => p.getAttribute('aria-checked'))).toEqual(photos.map((_, i) => String(i === 4)));
+    expect($('todays-test-wrong')).toBeNull();
   });
 
   it('a colour day: today\'s colour in the owner\'s words, the page colours to tap, only that one counts', async () => {
@@ -225,41 +254,78 @@ describe('step 2: today\'s task, said plainly', () => {
     await mount();
     await tap('home-todays-sample-make');
     await opened();
-    const colour = todaysColour(COLOUR_DAY);
+    const t = beforeTaskFor(COLOUR_DAY);
+    const name = PAGE_COLORS.find((c) => c.hex === t.answer)!.name;
     expect($('todays-test-task')!.dataset.task).toBe('colour');
-    expect(text($('todays-test-task-line'))).toBe(colourTaskLine(colour));
-    expect(text($('todays-test-task-line'))).toBe(`For today, select ${colour.name} for your album background.`);
-    // The website's page colours (Crayola 8 + White), each named.
-    expect($$('todays-test-colour').map((b) => text(b))).toEqual(PAGE_COLORS.map((c) => c.name));
-    expect($$('todays-test-cover')).toHaveLength(0);
-    const other = $$('todays-test-colour').find((b) => b.dataset.colour !== colour.name)!;
-    await tapEl(other);
-    expect(text($('todays-test-colour-wrong'))).toBe(`Today's colour is ${colour.name}. Tap ${colour.name}.`);
-    expect($$('todays-test-colour').every((b) => b.getAttribute('aria-checked') === 'false')).toBe(true);
-    await tapEl($$('todays-test-colour').find((b) => b.dataset.colour === colour.name)!);
-    expect($('todays-test-colour-wrong')).toBeNull();
-    expect($$('todays-test-colour').filter((b) => b.getAttribute('aria-checked') === 'true').map((b) => b.dataset.colour)).toEqual([colour.name]);
+    expect(text($('todays-test-task-line'))).toBe(`2 For today, select ${name} for your album background.`);
+    expect($$('todays-test-option').map((b) => text(b))).toEqual(PAGE_COLORS.map((c) => c.name));
+    await tapEl(otherOption());
+    expect(text($('todays-test-wrong'))).toBe(`Today's colour is ${name}. Tap ${name}.`);
+    expect($$('todays-test-option').every((b) => b.getAttribute('aria-checked') === 'false')).toBe(true);
+    await tapEl(optionFor(t.answer));
+    expect($('todays-test-wrong')).toBeNull();
+    expect($$('todays-test-option').filter((b) => b.getAttribute('aria-checked') === 'true').map((b) => b.dataset.value)).toEqual([t.answer]);
+  });
+
+  it('a font day: the fonts, each shown in its own face; only today\'s counts', async () => {
+    clock(FONT_DAY);
+    await mount();
+    await tap('home-todays-sample-make');
+    await opened();
+    const t = beforeTaskFor(FONT_DAY);
+    const name = FONTS.find((f) => f.family === t.answer)!.name;
+    expect(text($('todays-test-task-line'))).toBe(`2 For today, pick the font ${name} for your album's title.`);
+    const options = $$('todays-test-option');
+    expect(options.length).toBeGreaterThan(4);
+    for (const o of options) expect((o.querySelector('span[style]') as HTMLElement).style.fontFamily).not.toBe('');
+    await tapEl(otherOption());
+    expect(text($('todays-test-wrong'))).toBe(`Today's font is ${name}. Tap ${name}.`);
+    await tapEl(optionFor(t.answer));
+    expect($('todays-test-wrong')).toBeNull();
+  });
+
+  it('a size day: the sizes offered, in words', async () => {
+    clock(SIZE_DAY);
+    await mount();
+    await tap('home-todays-sample-make');
+    await opened();
+    const t = beforeTaskFor(SIZE_DAY);
+    expect(text($('todays-test-task-line'))).toMatch(/^2 Make your album .+×.+\.$/);
+    expect($$('todays-test-option').map((b) => text(b))).toContain('8×8');
+    await tapEl(optionFor(t.answer));
+    expect($('todays-test-wrong')).toBeNull();
   });
 });
 
 describe('"Make my album"', () => {
-  it('a step missing: says which, and makes nothing (the button stays filled and tappable)', async () => {
-    clock(COLOUR_DAY);
+  it('a step missing: says which, in the order of the steps, and makes nothing (the button stays filled and tappable)', async () => {
+    clock(FONT_DAY);
     await mount();
     await tap('home-todays-sample-make');
     await opened();
-    const colour = todaysColour(COLOUR_DAY);
+    const t = beforeTaskFor(FONT_DAY);
+    const name = FONTS.find((f) => f.family === t.answer)!.name;
     await tap('todays-test-make');
     expect(text($('todays-test-missing'))).toBe("Type today's date first.");
+    // Today's task done, the date wrong: still the date first.
+    await tapEl(optionFor(t.answer));
     await typeDate('Oct 1');
     await tap('todays-test-make');
     expect(text($('todays-test-missing'))).toBe("Type today's date first.");
     expect($('todays-test-date-refused')).not.toBeNull();
-    await typeDate(dateOf(COLOUR_DAY));
-    expect(text($('todays-test-missing'))).toBe(`Pick today's colour first: ${colour.name}.`);
-    await tapEl($$('todays-test-colour').find((b) => b.dataset.colour !== colour.name)!);
+    await typeDate(dateOf(FONT_DAY));
+    expect($('todays-test-missing')).toBeNull();
+
+    // The date done, the task not.
+    await mount();
+    await tap('home-todays-sample-make');
+    await opened();
+    await typeDate(dateOf(FONT_DAY));
     await tap('todays-test-make');
-    expect(text($('todays-test-missing'))).toBe(`Pick today's colour first: ${colour.name}.`);
+    expect(text($('todays-test-missing'))).toBe(`Pick today's font first: ${name}.`);
+    await tapEl(otherOption());
+    await tap('todays-test-make');
+    expect(text($('todays-test-missing'))).toBe(`Pick today's font first: ${name}.`);
     expect($('todays-test-make')!.hasAttribute('disabled')).toBe(false);
     expect($('where')).toBeNull();
     expect(sessionStorage.getItem('megy-make-sample-album')).toBeNull();
@@ -274,42 +340,43 @@ describe('"Make my album"', () => {
     expect($('where')).toBeNull();
   });
 
-  it("a cover day, done: #208's flags, the typed name and the cover kept for the builder, no sign-in nudge", async () => {
+  it("done: #208's flags, the typed name and today's task kept for the builder, no sign-in nudge", async () => {
     clock(COVER_DAY);
     await mount();
     await tap('home-todays-sample-make');
     await opened();
-    await typeDate(`oct ${COVER_DAY.getDate()}`);
+    await typeDate(dateOf(COVER_DAY).toLowerCase());
     const cover = coverChoices(COVER_DAY)[7];
-    await tapEl($$('todays-test-cover')[7]);
+    await tapEl($$('todays-test-option')[7]);
     await tap('todays-test-make');
     expect($('todays-test')).toBeNull();
     expect($('where')!.textContent).toBe('/builder');
     expect(sessionStorage.getItem('megy-fresh-start')).toBe('1'); // a new album
     expect(sessionStorage.getItem('megy-make-sample-album')).toBe('1'); // made as the builder opens
     expect(sessionStorage.getItem('megy_soft_auth_dismissed')).toBe('1');
-    expect(takeDailyTest(COVER_DAY)).toEqual({ day: sampleDayNumber(COVER_DAY), name: `oct ${COVER_DAY.getDate()}`, cover });
+    expect(takeDailyTest(COVER_DAY)).toEqual({ day: sampleDayNumber(COVER_DAY), name: dateOf(COVER_DAY).toLowerCase(), before: 'cover', answer: cover, album: todaysAlbumTask(COVER_DAY) });
   });
 
-  it("a colour day, done: the typed name and today's colour kept for the builder", async () => {
-    clock(COLOUR_DAY);
+  it("a font day, done: the typed name and today's font kept for the builder", async () => {
+    clock(FONT_DAY);
     await mount();
     await tap('home-todays-sample-make');
     await opened();
-    await typeDate(`10/${COLOUR_DAY.getDate()}`);
-    await tapEl($$('todays-test-colour').find((b) => b.dataset.colour === todaysColour(COLOUR_DAY).name)!);
+    await typeDate(`${FONT_DAY.getMonth() + 1}/${FONT_DAY.getDate()}`);
+    const t = beforeTaskFor(FONT_DAY);
+    await tapEl(optionFor(t.answer));
     await tap('todays-test-make');
     expect($('where')!.textContent).toBe('/builder');
     expect(sessionStorage.getItem('megy-make-sample-album')).toBe('1');
-    expect(takeDailyTest(COLOUR_DAY)).toEqual({ day: sampleDayNumber(COLOUR_DAY), name: `10/${COLOUR_DAY.getDate()}`, colour: todaysColour(COLOUR_DAY).hex });
+    expect(takeDailyTest(FONT_DAY)).toEqual({ day: sampleDayNumber(FONT_DAY), name: `${FONT_DAY.getMonth() + 1}/${FONT_DAY.getDate()}`, before: 'titleFont', answer: t.answer, album: todaysAlbumTask(FONT_DAY) });
   });
 });
 
 async function finishTest() {
   await opened();
   await typeDate(dateOf(new Date()));
-  if (todaysTask(new Date()) === 'cover') await tapEl($$('todays-test-cover')[0]);
-  else await tapEl($$('todays-test-colour').find((b) => b.dataset.colour === todaysColour(new Date()).name)!);
+  const t = beforeTaskFor(new Date());
+  await tapEl(t.answer == null ? $$('todays-test-option')[0] : optionFor(t.answer));
   await tap('todays-test-make');
 }
 
@@ -511,5 +578,56 @@ describe('Start Creating in the app while testing: a new album straight away', (
         expect($('where')).toBeNull();
       }
     }
+  });
+});
+
+/* THE NEWEST APP ON HOME (lib/autoUpdate): back to the front on Home → check
+   /version.json (appVersion's ensureLatestApp, no note) and reload when the
+   live build is another one. The builder never does (assistant/sampleAlbum.spec). */
+describe('back to the front on Home: the newest app', () => {
+  const comeBack = async () => {
+    h.vis = 'hidden';
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    h.vis = 'visible';
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  };
+
+  it('the Android app while testing: it checks each time the app comes back to the front, with no note', async () => {
+    await mount();
+    expect(h.update).not.toHaveBeenCalled();
+    await comeBack();
+    expect(h.update).toHaveBeenCalledTimes(1);
+    expect(h.update).toHaveBeenCalledWith(null);
+    await comeBack();
+    expect(h.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('going to the back is not coming back', async () => {
+    await mount();
+    h.vis = 'hidden';
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(h.update).not.toHaveBeenCalled();
+  });
+
+  it('never while Today\'s test is open (what they typed stays)', async () => {
+    await mount();
+    await tap('home-todays-sample-make');
+    await opened();
+    await typeDate('Oct 29');
+    await comeBack();
+    expect(h.update).not.toHaveBeenCalled();
+    expect(($('todays-test-name') as HTMLInputElement).value).toBe('Oct 29');
+    await tap('todays-test-close');
+    await comeBack();
+    expect(h.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('the website, or TESTING_PHASE off: never', async () => {
+    for (const [native, testing] of [[false, true], [true, false]]) {
+      h.native = native; h.testing = testing;
+      await mount();
+      await comeBack();
+    }
+    expect(h.update).not.toHaveBeenCalled();
   });
 });

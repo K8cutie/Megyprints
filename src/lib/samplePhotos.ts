@@ -177,8 +177,24 @@ export function isSampleAlbum(photos: readonly { name: string }[]): boolean {
   return photos.length > 0 && photos.every((p) => SAMPLE_PHOTO_NAMES.includes(p.name));
 }
 
+/** "You're done": the line that names both of today's tasks, with a small
+ *  picture of the answer when it is a colour or a photo. */
+export interface DoneProof {
+  /** "Today: title font Dancing Script · new layout on page 5". */
+  text: string;
+  /** A colour swatch (today's colour or title colour). */
+  hex?: string;
+  /** The cover photo they chose. */
+  photo?: string;
+}
+
 /** A card over a page: a bold first line, then what to do (**bold** words). */
-export interface SampleAlbumNote { title: string; body: string }
+export interface SampleAlbumNote {
+  title: string;
+  body: string;
+  /** "You're done" only: both of today's tasks (lib/dailyTest doneLine). */
+  proof?: DoneProof | null;
+}
 
 /** Page 1, where the sample album opens. */
 export const SAMPLE_WELCOME_NOTE: SampleAlbumNote = {
@@ -199,10 +215,24 @@ export function sampleWelcomeNote(previewSeen: boolean): SampleAlbumNote {
   return previewSeen ? SAMPLE_WELCOME_BACK_NOTE : SAMPLE_WELCOME_NOTE;
 }
 
-/** The last page, in Preview. With the stamp's date and time beside it, the screenshot is the proof. */
+/** The last page, in Preview, once today's test is done (lib/dailyTestRun).
+ *  With the stamp's date and time beside it, and the line that names both of
+ *  today's tasks (doneNote), the screenshot is the proof. */
 export const SAMPLE_DONE_NOTE: SampleAlbumNote = {
   title: "You're done with today's test!",
   body: 'Take a screenshot and send it as proof.',
+};
+
+/** "You're done", with the line that names both of today's tasks. */
+export function doneNote(proof: DoneProof | null | undefined): SampleAlbumNote {
+  return proof ? { ...SAMPLE_DONE_NOTE, proof } : SAMPLE_DONE_NOTE;
+}
+
+/** The last page of a sample album that wasn't made through Today's test
+ *  (from sample photos added on the photo step, say): no "You're done". */
+export const SAMPLE_NOT_DONE_NOTE: SampleAlbumNote = {
+  title: "Today's test isn't done yet",
+  body: "Go to Home and tap **Make today's sample album**.",
 };
 
 /** The cards show, and Preview opens on the last page, in a sample album in

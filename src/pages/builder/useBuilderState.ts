@@ -895,8 +895,10 @@ export interface BuilderActions {
   setCoverPhoto: (file: File) => Promise<void>;
   /** COVER: one of the album's photos on the cover, as a tap on it in the
    *  cover step puts it (testing phase: the sample album's cover), and the
-   *  title in a colour, as the cover editor's colours set it. */
-  setCoverToPhoto: (photoId: string, opts?: { titleColor?: string }) => void;
+   *  title in a colour, as the cover editor's colours set it. `title`: the
+   *  title's font, side, style, size or shadow, as the cover editor sets them
+   *  (testing phase: Today's test, lib/dailyTest). */
+  setCoverToPhoto: (photoId: string, opts?: { titleColor?: string; title?: Partial<TextElement> }) => void;
   /** One of the album's photos onto its last page, trading places with the
    *  photo there (testing phase: the sample album's "end of the day" photo). */
   putPhotoOnLastPage: (photoId: string) => void;
@@ -3360,14 +3362,15 @@ export function useBuilderState(): BuilderActions {
     setCoverFrontPage((p) => recolorPage(p, hex));
   }, []);
 
-  const setCoverToPhoto = useCallback((photoId: string, opts?: { titleColor?: string }) => {
+  const setCoverToPhoto = useCallback((photoId: string, opts?: { titleColor?: string; title?: Partial<TextElement> }) => {
     const photo = uploadedPhotosRef.current.find((p) => p.id === photoId);
     if (!photo) return;
     const titleColor = opts?.titleColor;
+    const look: Partial<TextElement> = { ...(opts?.title ?? {}), ...(titleColor ? { color: titleColor } : {}) };
     setCoverFrontPage((p) => ({
       ...p,
       background: { type: 'image', image: photo.previewUrl, photoId: photo.id, opacity: 100 },
-      ...(titleColor ? { textElements: (p.textElements ?? []).map((t) => (t.boxIndex === 0 ? { ...t, color: titleColor } : t)) } : {}),
+      ...(Object.keys(look).length ? { textElements: (p.textElements ?? []).map((t) => (t.boxIndex === 0 ? { ...t, ...look } : t)) } : {}),
     }));
   }, []);
 
