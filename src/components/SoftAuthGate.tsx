@@ -3,12 +3,12 @@ import { LogIn, UserPlus, Sparkles } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from './AuthModalProvider';
 import { useModalDialog } from '../lib/useModalDialog';
+import { SOFT_AUTH_DISMISS_KEY as DISMISS_KEY } from '../lib/softAuthNudge';
 
 /* Soft sign-in nudge — a friendly, DISMISSIBLE prompt shown once per session when
    a signed-out user enters the builder. "Continue without an account" is always
    fine; the HARD gates (adding a QR, checkout) enforce sign-in at the point of
    action. Dismissal is remembered for the session so we never nag. */
-const DISMISS_KEY = 'megy_soft_auth_dismissed';
 
 export default function SoftAuthGate() {
   const { user, loading } = useAuth();
