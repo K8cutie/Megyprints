@@ -61,6 +61,27 @@ export class PageText {
     }
   }
 
+  /** Font files the app got after it was built (a caption font downloaded
+   *  from Google Fonts: src/editor/text/fonts). From now on they draw and
+   *  measure like the bundled ones; widths measured before (in a fallback
+   *  font) are forgotten. Tell fontTable too (addDrawnFonts), so the page
+   *  plan matches the text to them. A file already here is skipped. */
+  addFonts(files: readonly FontFile[]): void {
+    for (const f of files) {
+      if (this.loaded.some((l) => l.font.file === f.font.file)) continue;
+      const typeface = this.Skia.Typeface.MakeFreeTypeFaceFromData(this.Skia.Data.fromBytes(f.bytes));
+      if (!typeface) throw new Error(`could not read the font file ${f.font.file}`);
+      this.provider.registerFont(typeface, f.font.face);
+      this.loaded.push({ font: f.font, metrics: readFontMetrics(f.bytes) });
+    }
+    this.widths.clear();
+  }
+
+  /** Has this font file (bundled or added)? */
+  hasFile(file: string): boolean {
+    return this.loaded.some((l) => l.font.file === file);
+  }
+
   /** Every bundled font must be given: the page renderer never guesses one. */
   static expectAll(files: readonly FontFile[]): void {
     const missing = BUNDLED_FONTS.filter((b) => !files.some((f) => f.font.file === b.file));

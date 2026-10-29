@@ -21,6 +21,7 @@ import { createAppPlatform, type AppPlatform } from './appPlatform';
 import { fileKeyValueStore, memoryStore } from './deviceStore';
 import { expoSyncFiles } from './expoFiles';
 import { loadPageFonts } from './fontAssets';
+import { loadDownloadedFonts } from '../editor/text/fonts/appFonts';
 import { skiaTextMeasurer } from './textMeasurer';
 
 /** React Native's AppState as the builder's lifecycle: leaving = the app
@@ -43,9 +44,13 @@ let fontsLoading: Promise<PageText | null> | null = null;
 export function pageFonts(): Promise<PageText | null> {
   if (!fontsLoading) {
     fontsLoading = loadPageFonts()
-      .then((files) => {
+      .then(async (files) => {
         PageText.expectAll(files);
-        pageText = new PageText(Skia, files);
+        const t = new PageText(Skia, files);
+        // Caption fonts fetched on earlier visits (src/editor/text/fonts), in
+        // before the first page is drawn, so it is drawn in them.
+        await loadDownloadedFonts(t);
+        pageText = t;
         measurer = skiaTextMeasurer(pageText);
         return pageText;
       })

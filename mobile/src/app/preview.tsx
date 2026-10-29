@@ -9,6 +9,11 @@
    inside of the front cover, then 2 | 3, 4 | 5… A swipe turns the page too.
    Each turn plays the website's page turn (the leaf hinged at the spine).
 
+   "Edit pages" (the website's way into its editor) opens the editor
+   (src/editor) on the page shown; its "Back to preview" comes back here, on
+   the page it was on. On the closed book, "Edit cover" opens the cover
+   editor (src/editor/cover), as the website's Preview does.
+
    Every page is drawn by the app's page renderer from the builder's own page
    data (usePagePicture). When something on a page is drawn more simply than
    it prints, one plain line under the book says so.
@@ -20,7 +25,7 @@
    another device too, or deleted there: the website's question, its words.
    Photos this phone no longer has are named, with the way to put them back.
    ══════════════════════════════════════════════════════════════════════════ */
-import { router } from 'expo-router';
+import { router, useIsFocused } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, Easing, PanResponder, PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -34,8 +39,12 @@ import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { accountSaveDue, markAccountSaved } from '../builder/accountSave';
 import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
-import { forgetPhotoPictures, preparePagePicture, usePagePicture } from '../builder/usePagePicture';
+import { forgetPhotoPictures, preparePagePicture, PRIORITY, usePagePicture } from '../builder/usePagePicture';
+import { useOncePerVisit } from '../lib/useOncePerVisit';
 import type { PageRequest } from '../builder/pageImages';
+import { EDIT_PAGES } from '../editor/editorWords';
+import { COVER_ROUTE } from '../editor/cover';
+import { EDIT_COVER } from '../editor/cover/words';
 import { useAuth } from '../lib/auth';
 import { useDraft } from '../lib/draftStore';
 import { colors, space } from '../lib/theme';
@@ -62,10 +71,14 @@ function faceRequest(face: TurnFace, { W, pages, cover, photos, albumSize }: Pic
   return null;
 }
 
-/** One side of a leaf: a page as it prints, the front cover, or the inside of a cover. */
+/** One side of a leaf: a page as it prints, the front cover, or the inside of a cover.
+ *  Drawn only while the Preview is the screen on top: under "Edit pages" or
+ *  the cover editor it keeps its last picture and asks for no new one, so
+ *  every edit there draws the page once, for the screen the customer sees. */
 function Face({ face, W, H, pages, cover, photos, albumSize, text, onNotDrawn }: FaceProps) {
-  const req = faceRequest(face, { W, pages, cover, photos, albumSize });
-  const picture = usePagePicture(text, req);
+  const focused = useIsFocused();
+  const req = focused ? faceRequest(face, { W, pages, cover, photos, albumSize }) : null;
+  const picture = usePagePicture(text, req, PRIORITY.shown);
   const key = face.kind === 'page' ? `p${face.index}` : face.kind;
   useEffect(() => { if (req) onNotDrawn?.(key, picture.notDrawn); }, [key, picture.notDrawn.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   if (face.kind === 'inside') {
@@ -135,6 +148,8 @@ export default function Preview() {
   const { session } = useAuth();
   const { clear: clearDraft } = useDraft();
   const { width: screenW, height: screenH } = useWindowDimensions();
+  const focused = useIsFocused();
+  const once = useOncePerVisit();
   const pages = builder.albumPages;
   const total = pages.length;
   const [openBook, setOpenBook] = useState(false);
@@ -221,7 +236,8 @@ export default function Preview() {
   // The pages a turn either way would show, drawn ahead of time (after the
   // ones on screen: pictures are drawn one at a time, in the order asked).
   useEffect(() => {
-    if (!text || total === 0) return;
+    // Not while another screen is on top (the editor): nothing is drawn ahead for a book no one sees.
+    if (!text || total === 0 || !focused) return;
     const ahead: TurnFace[] = [];
     if (onCover) ahead.push({ kind: 'page', index });
     else if (view === 'page') ahead.push({ kind: 'page', index: index + 1 }, { kind: 'page', index: index - 1 });
@@ -233,7 +249,14 @@ export default function Preview() {
     }
     // faceProps changes with the album; the pages' keys cover it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, index, view, onCover, total, singleW, pages, builder.coverFront]);
+  }, [text, index, view, onCover, total, singleW, pages, builder.coverFront, focused]);
+  // A quick double tap opens one editor, not two (useOncePerVisit).
+  const editPages = once(() => {
+    setCoverAt(null);
+    builder.goToPage(index);
+    router.push('/edit-pages');
+  });
+  const editCover = once(() => router.push(COVER_ROUTE));
   const noteNotDrawn = (key: string, list: string[]) => setNotDrawn((m) => (m[key]?.join('|') === list.join('|') ? m : { ...m, [key]: list }));
   const face = (f: TurnFace) => <Face face={f} {...faceProps} />;
 
@@ -276,11 +299,24 @@ export default function Preview() {
           )}
         </View>
         <Text style={styles.caption} testID="preview-caption">{previewCaption(pos)}</Text>
-        {!onCover && (
-          <Pressable accessibilityRole="button" onPress={() => setOpenBook((v) => !v)} style={styles.toggle} testID="preview-open-book">
-            <Text style={styles.toggleText}>{openBook ? 'One page at a time' : 'See it as an open book'}</Text>
+        <View style={styles.toggleRow}>
+          {!onCover && (
+            <Pressable accessibilityRole="button" onPress={() => setOpenBook((v) => !v)} style={styles.toggle} testID="preview-open-book">
+              <Text style={styles.toggleText}>{openBook ? 'One page at a time' : 'See it as an open book'}</Text>
+            </Pressable>
+          )}
+          {/* The website's "‹ Edit pages": the editor on the page shown (page 1
+              from the cover); "Back to preview" there comes back to it. */}
+          <Pressable accessibilityRole="button" onPress={editPages} style={styles.toggle} testID="preview-edit-pages">
+            <Text style={styles.toggleText}>{EDIT_PAGES}</Text>
           </Pressable>
-        )}
+          {/* The website's "Edit cover", beside the closed book. */}
+          {onCover && (
+            <Pressable accessibilityRole="button" onPress={editCover} style={styles.toggle} testID="preview-edit-cover">
+              <Text style={styles.toggleText}>{EDIT_COVER}</Text>
+            </Pressable>
+          )}
+        </View>
         {missingHere.length > 0 && (
           <Text style={styles.notDrawn} testID="preview-not-drawn">{NOT_DRAWN_LINE}</Text>
         )}
@@ -338,7 +374,8 @@ const styles = StyleSheet.create({
   insideText: { fontSize: 12, color: '#B9A992', textAlign: 'center', padding: space.sm },
   layerFace: { position: 'absolute', top: 0, overflow: 'hidden', backgroundColor: '#FFFFFF', backfaceVisibility: 'hidden' },
   caption: { fontSize: 14, fontWeight: '600', color: colors.muted },
-  toggle: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: 8 },
+  toggleRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.sm },
+  toggle: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: 8 },
   toggleText: { fontSize: 14, fontWeight: '700', color: colors.text },
   notDrawn: { fontSize: 13, color: colors.muted, textAlign: 'center', paddingHorizontal: space.md },
   saved: { fontSize: 13, color: colors.muted, textAlign: 'center' },

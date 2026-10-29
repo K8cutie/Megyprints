@@ -1295,6 +1295,485 @@ pushed to `DCIM/Camera` and media-scanned.
 
 ---
 
+## Phase 4 notes (2026-10-30): the editor
+
+Branch `feat/port-phase-4-editor`, stacked on `feat/port-phase-3` (draft #222).
+Like Phase 3 it is a DRAFT under the same HOLD. Nothing in `../src` changed.
+
+### The editor core (what every part plugs into)
+
+- **"Edit pages"** (`mobile/src/app/edit-pages.tsx` → `src/editor/EditPagesScreen.tsx`):
+  the website's phone editor (MobileReview), reached from the Preview's "Edit pages"
+  button (on the page shown; page 1 from the cover) and back ("Back to preview",
+  "Done — Preview my album" on the last page, or Android's back). One page at a
+  time, large, drawn by the Skia renderer; a swipe, "Previous page" / "Next page"
+  (PageTurnBar's words) or the page strip turns it.
+- **A tap knows what it hit** (`src/editor/hitTest.ts`): every element a customer
+  can tap (photo, empty frame, words in a frame, QR, graphic, free text, caption
+  box words / photo / QR / graphic, empty caption box, sticker) as a box in the
+  renderer's own print px, built from the same shared code the renderer uses
+  (pageTemplates, binding, slotGeometry, maskShapes, slotUtils, wordArtRules), in
+  the website's z-order and its precedence inside a frame. Round frames are
+  ellipses; free texts turn and stretch about their top-left like drawPage.
+  `test/editorHitTest.test.ts` holds every photo, caption and caption-box photo
+  on every layout of every size (left and right pages) to `planPage` AND to the
+  website's phone geometry (`studioPhoneGeom.slotRectPx`, `textFit.captionBoxSize`).
+- **Selection** lives in the website's builder (`selectedElementId` tagged with the
+  page, `selectedSlotIndex`, `selectedTextId`, `selectedPhotoId`: `selection.ts`).
+- **Undo / Redo** in the header (`undoBar.ts`): the website's own 20-step history
+  (`useBuilderState` undo/redo; the cover is not in it). Shown only when there is
+  something to undo or redo (never greyed). Undo stops at the album as the editor
+  found it, because the website's history also holds "Make my album" and one Undo
+  too many would take every page away; that start holds over a trip to the
+  Preview and back when nothing changed the pages meanwhile.
+- **The cover scope**: the cover step now owns `editScope = 'coverFront'` only while
+  it is the screen on top (`useFocusEffect`), and the editor puts it back to
+  `'interior'` whenever it is focused, so a page edit never lands on the cover.
+
+### How the parts plug in (`src/editor/registry.ts`)
+
+Each part registers itself once from its folder's `index.ts`
+(`src/editor/parts.ts` imports `core`, `photos`, `text`, `cover`):
+
+    registerEditorPart({
+      id: 'photos',                  // sheets are named 'photos:<name>'
+      taps: [{ kinds, order, onTap(target, ctx) → true if it took the tap }],
+      addChoices: [{ id, label, desc, short, kinds: ['emptySlot' | 'emptyBox'], order, onPick }],
+      selectedActions: [{ id, label, kinds, order, danger?, shown?, onPress(target, ctx) }],
+      tools: [{ id, label, order, wide?, shown?, onPress(ctx) }],
+      sheets: { name: ({ ctx, params, close }) => <EditorSheet …/> },
+      overlays: [({ ctx, scale, width, height }) => …],   // drawn over the page
+      stripStart: [{ id, label, order, onPress(ctx) }],   // tiles before page 1
+      banners: [{ id, order, Component: ({ ctx }) => … }], // lines over the page
+    });
+
+`ctx` (EditorContext) carries `builder` (the website's useBuilderState: EVERY edit
+goes through it), `platform`, `text` (page fonts), `pageIndex`, `page`, `targets`,
+`selected`, `select()`, `openSheet('<part>:<name>', params)`, `closeSheet()` and
+`say(line)` (the website's guard line). `ORDER` holds the website's order for
+tools and "Add to this box" lines. A tap no rule takes selects the element, and
+an empty frame or box opens "Add to this box" (the screen's own sheet) when a
+part offers something for it. Tests: `test/editorRegistry.test.ts` (with the
+part folders taken out by `isolateRegistry`), `test/editorUndo.test.ts`,
+`test/editorHarness.ts` (an album made through the app's steps, for every part's
+tests).
+
+### Part 1: photos, layouts, pages (`src/editor/photos`)
+
+Branch `feat/port-phase-4-editor-photos` (on `feat/port-phase-4-editor`). Every
+change is one call to the website's own useBuilderState with the arguments its
+editor uses (`actions.ts`); nothing in `../src` changed.
+
+- **Move and zoom** (`framing.ts`, `FramingOverlay.tsx`): a selected photo moves
+  with one finger and zooms with two, in slotPhotoFit's one fit (the renderer
+  calls the same `slotPhotoRect`), the pan held to the photo's overflow (pushed
+  past the edge it stops there and comes back the moment the finger turns), the
+  zoom between 1 (the cover fit) and 10 (the website's zoom slider's top).
+  Stored with `setSlotOffset` (design px) / `setSlotScale`: one undo step per
+  move and per pinch, each stored the moment that finger work ends, so no Undo
+  ever changes nothing. A zoom that prints soft says `SOFT_MESSAGE`
+  (printSharpness). The overlay takes a touch only where the selected photo is
+  on top, keeps a pinch's second finger, and hands a plain tap to the page's
+  own tap. While the finger works the photo is drawn over the page picture;
+  it steps aside when the changed page is on show (`builder/pageShown.ts`, said
+  by `usePagePicture`), so it never jumps back.
+- **Swap photo**, then a tap on another photo or an empty frame, on this page or
+  after turning pages: `fillSlot`, which swaps the frames (framing travels) or
+  moves into an empty one (slotSwap `placePhoto`), with the website's
+  `swapNotice` line. A line over the page says a swap is waiting, with Cancel;
+  a tap on the photo itself or leaving the editor calls it off. (A drag of one
+  photo onto another is not built: a drag moves the photo in its frame.)
+- **Replace photo** and **Add Photo** ("Add to this box" on an empty frame):
+  MobileReview's "Add a photo" sheet, every album photo tagged "This page" /
+  "Page 3", a pick → `fillSlot` + `swapNotice`; a caption box's photo → the same
+  sheet → `setTextSlotPhoto`. "Upload more photos" and the **Add photos** tool go
+  to the app's photo picker; on the way back only the photos picked on that trip
+  go in (`intake.ts`: `syncPhotos` with nothing taken out, so an album opened from
+  the account keeps every photo), the website's honest count is said, and the
+  sheet opens again. **Remove photo** → `clearSlot`.
+- **Mask** and **Filter** (StudioPhone's words): the shapes and colour looks by
+  name, the current one ticked, `setSlotMask` / `setSlotLook` with the edge
+  warning. The renderer does not draw soft edges, textured edges or colour looks
+  yet (the renderer job): the page says "drawn more simply" for those.
+- **Change layout** (`LayoutSheet.tsx`, LayoutPicker's words): "✓ Current"
+  first, then `availableTemplatesForCurrentPage` (layoutChoicesForPage: the 16%
+  crop budget per frame, same photo count first), each a picture of this page on
+  that layout drawn by the page renderer (`relayPageOnTemplate`); a layout that
+  can't hold every photo or caption asks first (new page / take out), then
+  `applyPageLayout`.
+- **Pages** ("Add or delete pages", the app's own: the website does it in
+  Megy's chat, whose lines it says): `addPage` (then the new page's layouts),
+  `deletePage` of the page on screen, never under 40 pages (said, not offered).
+- **Lines over the page**: "✎ This page is yours" + "Megy, fix this page"
+  (`resetStudioPage`), and the blank pages reminder in the website's words
+  (blankPages.ts): "5 pages are blank", "Delete 5 blank pages" (`deletePages`,
+  the last ones, never under 40), "Edit the blank pages" (the next one).
+- **Not the website's on a phone, said plainly**: the SlotChooser offers Add
+  Photo / Add Quote / Your Text; QR left the boxes on the website on 2026-10-02
+  (video memories are Phase 6), so the app offers none there either.
+- Tests: `editorPhotosFraming` (the frame and the fit held to `planPage` /
+  drawPage on every layout of every size, left and right pages; the gesture),
+  `editorPhotos` (every action on the real shared builder: the calls recorded,
+  the album compared with slotSwap / layoutChoicesForPage / blankPagePlan /
+  planPage, Undo), `editorPhotosScreens` (the overlay, sheets and lines
+  rendered and used through their own touch handlers), `editorPhotosWords`
+  (each phrase held to the website's file).
+- Not proven: not walked on an emulator or a phone (the verify step); the
+  layout pictures and the move preview are drawn only on a phone (Skia,
+  expo-image), so jest checks their numbers, not their pixels.
+
+### Part 2: words, fonts, colours, quotes, page colours (`src/editor/text`)
+
+Branch `feat/port-phase-4-editor-text`, on `feat/port-phase-4-editor`. MobileReview's
+words, line for line; every change through the website's `useBuilderState`.
+
+- **Taps** (`wordsFlow.tapOpens`): a caption box's words, words in a photo frame, a
+  free text. A line from the quote pool (`isPoolQuote`) opens the quotes; anything
+  else opens the text editor. An empty box Megy dealt opens its kind's editor at
+  once; an undealt one is left to the screen's "Add to this box", where this part
+  adds "Add Quote" and "Your Text" (photo frames and caption boxes).
+- **Saves** (`wordsFlow`): a caption box `setBoxText(box, content)`; words in a
+  frame `setSlotText(frame, content + its quote flag | null, page)`; a free text
+  `updateTextElement(id, content)`; a quote `setBoxText(box, { text, italic, quote },
+  page)` / `setSlotText(frame, { …look, text, italic, quote }, page)`; Remove quote
+  `setBoxText(box, { text: '' }, page)` / `setSlotText(frame, null, page)`. Tests hold
+  each call to these exact arguments with a spy on the real builder.
+- **The text editor** (`TextEditorSheet`, MobileTextEditor): type, Bold / Italic /
+  Underline, the font, size 14–80 by 2, the 28 text colours + "Any color" (a sheet
+  of 42 shades and a colour code: React Native has no colour input), Outline,
+  Shadow, Left / Center / Right; "✓ Done" saves, ✕ doesn't. A caption box says
+  "Too long for this box … Make it fit (size N)" with the website's `captionFits`,
+  measured by the Skia page fonts (`platform.textMeasurer`). The typing box is a
+  preview: React Native draws one text shadow, so Shadow wins over Outline there
+  (the page draws both).
+- **Fonts** (`fonts/`): all 74. Bundled = whatever `render/fontTable.ts
+  BUNDLED_FONTS` has (today Playfair Display, DM Sans, Dancing Script: the theme
+  fonts; Cinzel when the renderer job lands it). Georgia stays the phone's serif
+  (not on Google Fonts; the website on Android does the same). The other 70 are
+  fetched from Google Fonts the first time they are picked (or the album open in
+  the editor uses them), in exactly the styles the website loads (`WEBSITE_STYLES`, re-derived
+  from `index.html` + `src/index.css` by the test), checked to be a font file, kept
+  in `Paths.document/megy-fonts` for good, and given to the page renderer
+  (`PageText.addFonts` + `fontTable.addDrawnFonts`: pages, caption measuring and
+  later print use the exact font) and to the text views (expo-font). Saved fonts
+  go into the renderer at start, before the first page is drawn (`BuilderProvider`).
+  The font list shows each name in its own face from a ~4 KB copy holding just
+  those letters (Google Fonts `text=`), fetched as rows come into view. Offline:
+  the words keep their font and the editor says "No internet: … can't be
+  downloaded now. Your words stay in …".
+  - **APK size:** unchanged by fonts (no new bundled file; expo-font was already
+    in the build through `expo`, now listed directly). The 10 bundled TTFs are
+    1.09 MB. Fetched sizes (measured 2026-10-30): one font 23–404 KB; all 70 in
+    every style 6.96 MB (117 files), regular only 3.63 MB; nobody needs them all.
+  - **Shared edits (small, additive):** `render/fontTable.ts` (`drawnFonts`,
+    `addDrawnFonts`, a version to listen to), `render/pageText.ts` (`addFonts`,
+    `hasFile`), `builder/pageImages.ts` (a page's picture name includes the
+    downloaded faces its words use, so a page drawn before its font arrived is
+    drawn again; unchanged for bundled-only pages), `builder/usePagePicture.ts`
+    (listens for a new font), `builder/BuilderProvider.tsx` (saved fonts at start).
+- **Quotes** (`QuotePickerSheet`, QuotePickerModal): "Write a line for this photo"
+  for a signed-in account only, as on the website (the cost rule: sign-in is a
+  commit signal): ALL the page's photos (≤ 6) as 512 px JPEGs made by the phone,
+  to `https://megyprints.vercel.app/api/photo-quotes` (`photoQuotes.ts`, the
+  website's request and answers), written for the box's room (`quoteRoom`) and
+  offered only if they fit. An empty quote box starts writing at once. Signed out
+  it asks for the sign-in and sends nothing; after the sign-in the editor opens
+  the picker again on that box and writes (`resumeQuote.ts`). The 800-line bank
+  (offline) is built but shows only behind the shared `DEAL_BANK_QUOTES` switch,
+  OFF on the website since 2026-10-21, so off here too. Tests never reach the
+  endpoint (fakes; the real `fetch` fails a test if touched).
+- **Page colour** tool (`PageColourSheet`, PageColorSheet): White + the Crayola 8 in
+  48 dp swatches (5 + 4 rows: nine in one row can't be 48 dp on a phone),
+  `setPageColor`, "Use … on every page" (`applyPageColorToAllPages`, cover included)
+  and the website's line. `ColourPickers.PageColourPicker` is there for the cover.
+- **Not done / not proven:** not walked on an emulator or phone (the verify step);
+  the keyboard lift of the format bar, expo-font in the typing box and a real
+  Google Fonts download are unproven on a device. The endpoint's `ALLOWED_ORIGINS`
+  guard (if set on Vercel) would refuse the app, which sends no Origin: the picker
+  then says "Couldn't write lines just now"; the fix is a server rule for the app,
+  held until Nov 9. An album from the website in a fetched font draws in the
+  phone's serif on the Preview until the editor is opened once (the editor fetches
+  the album's fonts); the Preview itself doesn't fetch.
+
+### Part 3: the cover editor (`src/editor/cover`)
+
+Branch `feat/port-phase-4-editor-cover`, on the editor core. Nothing in `../src` changed.
+
+- **The way in**: a "Cover" tile before page 1 in the Edit pages strip (`stripStart`),
+  opening the cover screen, its own route `src/app/edit-cover.tsx` (it sets its own
+  title, "Design your cover", so `_layout.tsx` has no line for it). Done, the header's
+  back arrow or Android's back return to the page.
+- **The screen** (`CoverScreen.tsx`): the website's CoverEditor, FRONT only. The cover
+  as print draws it (the page renderer, `coverMode`; while a changed cover is drawn the
+  last picture stays, at most one new picture every 300 ms), "The back cover carries
+  the Megy Prints mark in your cover colour", and the website's two tabs:
+  - **Background**: the album's photos, best first, 10 then "Show all N photos"; the
+    cover's colours (White + the Crayola 8) and "Use <colour> on every page"; with a
+    photo on, Zoom (1 to 3) and Reset; dragging the cover moves the photo in its frame.
+    "Remove photo" only for a cover photo that is not one of the album's.
+  - **Text**: the cover title (sent once typing pauses, and before the screen is left);
+    "Too long for the front cover" with "Make it fit (size N)" (only in a font the app
+    has, as the cover step); Font (the 74, in the website's groups); Colour (the 28);
+    Alignment; Bold, Italic, Shadow (on = no setting, off = `false`); Size 16 to 96 (one
+    change when the finger lets go). Dragging the title (inside its dashed box) moves
+    it, kept on the cover (`setBoxTextOffset`, the website's limits).
+- **Every change is CoverEditor's call** (`coverEdits.ts`), same call, same arguments:
+  `setPageBackground` (photo, Remove photo), `setPageColor`, `applyPageColorToAllPages`,
+  `setBackgroundCrop` (drag, zoom, Reset), `setBoxText(0, { text, ...patch })` (every
+  title control), `setBoxTextOffset`. Each first checks the builder's cover scope is on
+  and does nothing otherwise, so a cover change can never land on a page. The scope is
+  `'coverFront'` while the screen is on top (`useFocusEffect`), `'interior'` when it is
+  left; the last words typed are sent before it is handed back.
+- **No Undo or Redo** on the cover screen: the website's Snapshot holds the pages, not
+  the cover. Each cover change still saves one undo step that changes nothing (the
+  website's own behaviour); typing and the size slider are sent once per pause / per
+  let-go so they don't fill the 20 steps and push page changes out of the Edit pages
+  Undo.
+- **Warnings** (`coverChecks.ts`, the website's rules): a blank cover (`coverIsBlank`,
+  "Your front cover is blank: no title or photo on it.", shown on the cover while it is
+  blank; the website says it when Order is pressed); a title too long; a title colour
+  that wouldn't show on the cover's colour (the website's 3:1 bar `pageColors.readsOn`,
+  with "Use charcoal" / "Use white"). A colour swatch already switches such a title
+  (`recolorPage`); the warning catches a title colour picked afterwards. The album's
+  name stays the cover title until the customer types their own (the builder's rule).
+- **Tests** (`test/editorCover*.test.ts`, 31): the words against the website's source;
+  the website's source still making those calls; each control's call and arguments (a
+  recording builder); on the real builder, every control changes the cover and no page;
+  the scope guard; Undo leaves the cover; the album name; the three warnings; the title
+  box against the hit test AND `planPage` on every size and both cover layouts, and its
+  edges; and the screen itself rendered on the real builder and pressed (tabs, photo,
+  colours, every page, zoom, reset, drags, font list, title colours with the warning and
+  its fix, toggles, size, blank cover, the not-drawn line, Done, leaving mid-typing).
+- **Not done**: the spine beside the cover and its notes (the website's SpineStrip reads
+  `coverLayout.ts`, which measures in a browser and is not shared; the renderer job is
+  adding the spine); "Or choose a photo from your phone" (the renderer draws a cover
+  photo only when it is one of the album's, by `photoId`, and the app has no one-photo
+  picker yet). Not walked on an emulator or a phone in this step. ("Any color", font
+  names in their own faces, fonts from the internet and the Preview's "Edit cover" came
+  when the parts were put together: see below.)
+
+### All three parts together (one editor)
+
+The three part branches were merged into `feat/port-phase-4-editor` (photos, then
+words, then the cover; no conflicts in code, `docs/` kept every part's section,
+`package.json` keeps the words part's `expo-font`, whose lock entry only moves from
+under `expo` to the top, same version and checksum). Then, so it is one editor:
+
+- **One colour picker and one font list.** The cover screen uses the words part's
+  (`text/ColourPickers.tsx`, `text/FontPicker.tsx`); the cover's own `pickers.tsx` is
+  gone. So the cover title gets "Any color", font names in their own faces, and the
+  fonts from the internet exactly as a caption does: fetched before the title uses it
+  ("Getting the font…"), and offline the title keeps its font and the list says so
+  (`useFontPick`, shared by the text editor and the cover's `FontListSheet`). A cover
+  font this phone doesn't have yet (an album made on the website) is fetched when the
+  cover screen opens. The words "Fonts" and "Use <colour> on every page" have one
+  source (`text/words.ts`; `cover/words.ts` re-exports them).
+- **One filled button per screen.** The "Any color" sheet's "Use" is outlined, so the
+  cover's "Done" and the text editor's "Done" stay the only filled ones; the text
+  editor's "Done" is 48 dp tall like every other target.
+- **Photos missing on this phone** is the photos part's line now, first over the page
+  (`photos/banners.tsx` `MissingPhotosBanner`, the website's MissingPhotosBar words and
+  amber look): "Add the photos" opens the phone's photos from the editor and, on the
+  way back, the same photos go back in their places (`intake.ts` → `syncPhotos`), and
+  the count is said, instead of sending the customer back to the Photos step.
+- **"Edit cover" on the Preview** beside the closed book, as the website's Preview
+  (`preview-edit-cover`), as well as the "Cover" tile before page 1 in the editor's
+  strip. Both open the same cover screen.
+- Tests added for each: the cover title's "Any color", a cover font fetched on open,
+  fetched before use and kept offline (the font store on fakes; the real network fails
+  the test), the missing-photos line and its trip, the words against the website's
+  source.
+
+### Review fixes (2026-10-30)
+
+A review of the joined editor found two high and twelve medium problems, plus some
+low ones. All app-side: nothing under `../src` changed (no website code before
+Nov 9).
+
+- **Undo took photos out of the album (high).** Adding photos saves no undo step
+  (the website's `addPhotos`), but every step holds the photo list as it was, so an
+  Undo past an earlier page edit took the new photos out again, or made missing photos
+  missing again, and the photo picker then refused them as "already in your album".
+  Now, when photos come in from the editor (added, or put back in their places), the
+  editor's Undo starts again from there (`ctx.restartUndo`, `intake.ts` `cameIn`). Undo
+  can't step back past them. Test: page edit, then add photos, then another edit, then
+  Undo: the photos stay and Undo stops there.
+- **Undo presses that did nothing (medium).** Every cover change saves an empty step of
+  the pages (`setBoxText`, `setPageColor` and `setPageBackground` push whatever the
+  scope). Now a cover change ends the editor's Undo there (`undoBar.coverChanged`, said
+  by the cover screen; `startOnOpen` then starts afresh). Any step that still changes
+  nothing on the pages is stepped over: one press always changes something, up to 20
+  steps, never past the start. The text editor's Done with nothing changed saves
+  nothing, so it adds no empty step.
+- **A slow font changed the words after another font was picked (medium).**
+  `useFontPick` now uses only the latest pick, and only while its list is still open.
+- **Screens hidden under the editor kept drawing (medium).** The Preview and the cover
+  step ask for no picture while another screen is on top (`useIsFocused`). Page
+  pictures now go through a queue (`builder/pictureQueue.ts`, with tests): the page
+  being edited first, then pages on screen, then layout thumbnails, then pages drawn
+  ahead. A picture nobody waits for any more is dropped before it is drawn, and one
+  asked for twice is drawn once.
+- **Change layout drew up to 56 pictures at once (medium).** The grid is a `FlatList`
+  that draws only the tiles near the screen. Tiles that scroll away, or a sheet that
+  closes, drop their waiting pictures.
+- **A sideways swipe over a selected photo moved it (medium).** A quick sideways flick
+  (at least 0.6 px/ms, under 350 ms; `pageFlick`) turns the page and stores nothing,
+  even where the photo could move. A slow drag still moves the photo. The photo is put
+  down when the page turns.
+- **Moving the cover photo or title was jerky (medium).** While the finger is down the
+  album is not changed. The photo (placed by the shared `bgCoverFit`) and the title's
+  words follow the finger live over the cover picture, and one change is sent when it
+  lifts. The zoom slider works the same way. The live view stays until the new cover
+  picture is shown. The sliders stop the controls scrolling while a finger is on them.
+- **Android back in the text editor (medium).** Back closes an open font or colour
+  panel first. With none open it keeps the words (saves them, as Done). ✕ still closes
+  without saving, as on the website.
+- **TalkBack could reach nothing on the page (medium).** Each thing on the page gets an
+  invisible, named button in its own box ("Photo 2", "Words: …", "Empty frame. Add:
+  Photo, Quote, Text", …). A TalkBack double tap does what a tap there does. Fingers go
+  through them to the page as before.
+- **The layout sheet told the customer to tap the QR (medium).** The app can't change a
+  video memory yet, so on a memory page the second sentence is the app's own: "To use a
+  layout with more photos, remove the video on the website first."
+- **Smaller fixes.**
+  - "Write a line" carries on after sign-in only on the way straight back from that
+    sign-in: leaving the sign-in screen without signing in forgets it.
+  - "Remove photo" is second in the photo's buttons, so it is on screen on a narrow
+    phone.
+  - "Delete page" says the page's words go with it.
+  - "Any color" uses the website's spelling, "color", and puts the code under a quiet
+    "Have a color code?" line.
+  - A font that can't be had while online says "We could not get … right now", not "No
+    internet".
+  - A saved font file the renderer refuses is deleted and reported, not left stuck on
+    "Getting the font…". A download is saved only after the renderer accepts it.
+  - "Too long for this box" waits for a font from the internet that is not on the phone
+    yet. Georgia, which no phone has, is still measured in the stand-in the page is
+    drawn in.
+  - Page pictures are pruned during a session too: every 60 new pictures, by count
+    (1200 → 800) and by size (200 MB → 120 MB).
+  - A double tap on "Edit pages", "Edit cover" or the "Cover" tile opens one screen.
+  - The editor saves on the phone 2 s after the last change.
+- **Kept on purpose:** the pinch's lowest zoom is 1 (the photo always covers its frame).
+  A photo zoomed below 1 on the website comes up to 1 at the first pinch, as
+  `test/editorPhotosFraming.test.ts` pins. The website's slider goes down to 0.1, which
+  leaves gaps in print.
+- **Not fixed (website code, after Nov 9):**
+  - The website's setters still push empty undo steps under the cover scope, and its
+    `addPhotos` still saves no step. The app works around both.
+  - Logic the app repeats from website `.tsx` files that are not shared can drift:
+    CoverEditor's title defaults and box clamp, MobileTextEditor's opening content and
+    save shape, `lib/photoQuotes`' `pagePhotoUrls` (the app's copy has no
+    HEIC-converting skip), and PropertiesPanel's zoom top. They should become shared
+    `.ts` modules in the held website draft.
+- **Still not done:**
+  - Placed stickers can only be removed, not moved.
+  - There is no "⋯" to choose something else for a box Megy dealt.
+  - The cover's "Too long for the front cover" waits until the title's font is on the
+    phone, so offline it says nothing.
+  - A selected photo can be moved and zoomed only by finger (TalkBack can select it and
+    use its buttons, not move it).
+- **Redo after photos came in (found while checking the high fix).** A Redo made before
+  photos came in holds the photo list from before them too, so it would take them out
+  again. Redo is held back after photos come in while the album has Redo steps; the
+  album's next edit clears them, and the hold with them (`undoBar.redoShown`, with a
+  test).
+- **Parity with the website's editor:** `mobile/test/editorParity.test.ts` runs
+  `tools/parity/webEdits.spec.ts` (the website's builder in jsdom, with the calls its
+  editors make) and the app editor's own code on the same album, with seven edits.
+  Every page and the cover come out the same, field for field (41 pages and the cover;
+  photos compared by name, only platform ids and photo addresses left out).
+
+### Seen on the emulator (2026-10-29, after the merge of native-2.0)
+
+- **Setup:**
+  - My own `pwa_test` emulator (Android 14, x86_64, 1080x2400 at 420 dpi, port 5568,
+    read-only).
+  - The release APK from `33b3a36` (this branch with native-2.0 merged in), built in my
+    own short folder `C:\m5e` (x86_64 only).
+  - No `.env.local`, so the app was signed out and reached no server of ours. The paid
+    quote endpoint was never called.
+  - 120 made-up photos (PIL shapes and a big number, no people; 3000x4000, every 10th
+    one 4000x3000; EXIF times 2026-10-20 to 2026-10-23), and 3 more for "Add photos".
+- **Making the album:** Name ("Bohol Trip 2026", Vacation) → Size 8x8 → 120 photos →
+  cover photo 2 → "Make my album" gave 53 pages.
+- **In "Edit pages":**
+  - A tap selects a photo ("Drag the photo to move it in its frame. Pinch to zoom.").
+    A slow drag moves it and a pinch zooms it (two-finger raw touch events, sent as root
+    on my emulator).
+  - "Swap photo", page 2, its photo: "Swapped with the photo on page 1"; the zoom and
+    offset travel with the photo.
+  - A quick sideways flick over the selected photo turns the page and stores nothing.
+  - "Replace photo" with a photo already on page 6 swaps the two ("Swapped with the
+    photo on page 6"), as the website does. "Remove photo" leaves "Click to add" and the
+    blank-page reminder; the empty frame → "Add to this box" → "Add Photo" fills it
+    again.
+  - "Change layout" opens with "✓ Current" first, each layout drawn as this page;
+    "Hero Left" is picked.
+  - "Add a page" opens its layouts and shows the blank-page reminder; "Delete page 5"
+    deletes it. 13 more deletions reach 40 pages, where the sheet says "Albums need at
+    least 40 pages, so a page can't be deleted." 13 presses of Undo bring all 13 back.
+  - A caption box ("Let AI write a quote"): the quote picker, signed out, asks for
+    sign-in and sends nothing; "Type your own words" opens the text editor. A long
+    caption made bigger (48) gets "Too long for this box" and "Make it fit (size 38)".
+    Android back once hides the keyboard, and back again keeps the words.
+  - "Your Text" in an emptied frame: Playfair (in the app) at once, Merriweather from
+    Google Fonts with "Getting the font…" first, then Forest green from the colour panel.
+  - Page colour: yellow.
+  - Undo three steps (page colour, then the font and colour, then the words), Redo one
+    (the words), then Redo the other two. Undo and Redo each keep their place.
+- **The cover ("Cover" tile, opened on the first tap):** photo 4; the photo dragged with
+  a live preview; the title font Yeseva One (fetched, "Getting the font…"), white, Shadow
+  off, dragged down. Picking a cover colour (Blue) replaced the cover photo with the
+  colour, which is what the website's CoverEditor does too (`setPageColor`); photo 4 was
+  put back and moved again. Back in the editor, Undo starts afresh.
+- **Force-stop and open again:** "Continue my album" opens the Preview on page 30 (where
+  the editor was). The saved file (`files/album-builder/megy-album-v5.txt`, read as
+  root) holds every edit:
+  - page 1 photo 20 and page 2 photo 10 at zoom 2.74 and offset X −142.6 (the swap took
+    the framing along);
+  - page 3 photo 7; page 4 `t88-fb-trio-hero-left-gap` with photos 1, 2, 3;
+  - page 29's caption at size 38; page 30 `#FCE883`, its third frame "Island hopping
+    day" in Merriweather `#2E7D4A`;
+  - 53 pages; the cover photo 4 with focusY 0.696, Yeseva One, `#FFFFFF`,
+    `shadow: false`, offsetY 0.16.
+- **Photos added while editing (the high finding), and the Redo hold:** a page edit,
+  Undo (Redo waiting), then "Add photos" and 3 new photos: "3 photos added.", and both
+  Undo and Redo are hidden. A new edit, then Undo: the photo is back and the saved file
+  still lists 123 photos.
+- **Display size changes:** `wm density 360` and `480` (360 dp wide) rebuild the app's
+  screen (logcat: startSurface, then stopSurface). It opens on the start screen;
+  "Continue my album" → "Edit pages" work, no FATAL (the router fix). At 360 dp "Edit
+  pages" and Undo fit in the header, and Replace photo and Remove photo are on screen.
+- **Memory and logs:** TOTAL PSS 381 MB after about 40 edits, 338 MB after the cover
+  work. No FATAL, no AndroidRuntime crash and no ReactNativeJS error or warning in
+  logcat for the whole walk.
+- **Found on the emulator and fixed:**
+  - Moving the cover title showed it twice: the live words over a cover picture that
+    still had the title in it. Under a moving title the stage now shows the cover drawn
+    without it (`coverWithoutTitle`, drawn ahead at the lowest priority; its picture
+    stays the same for title changes alone). Checked on the next build.
+- **Seen in an earlier walk on this branch (before the merge, 2026-10-29) and fixed
+  then:** Undo and Redo traded places when one came or went; an overscrolled page strip
+  swallowed taps; long layout names widened their tile; the start screen said editing
+  comes later; the app closed after a display size change ("The imperative router is
+  unavailable before the first render has finished": the old root's cleanup unbound
+  expo-router's shared `router`; `<KeepRouterBound />`, `src/lib/routerBinding.ts`);
+  at 360 dp the header cut the title short.
+
+### Not done, not proven (editor core)
+
+- Walked on the emulator only (above), not on a phone. TalkBack was not turned on. A
+  font size change in Android's settings (it rebuilds the screen like a display size
+  change) was not tried.
+- A QR code or a graphic is hit in its whole frame or caption box, not in the
+  smaller square the website draws it in (`qrRect` / `ornamentFit` live in website
+  files that are not shared yet). The app draws neither yet.
+- QR codes and video memories ("Add memory video", a tap on a QR) are Phase 6: a
+  tap on one selects it and nothing more.
+
+---
+
 ## Page renderer notes (2026-10-28, Phase 5 groundwork)
 
 The riskiest part of 2.0 was done early: the app draws an album page itself

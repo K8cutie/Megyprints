@@ -1,9 +1,22 @@
-import { Stack } from 'expo-router';
+import { router, Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useLayoutEffect } from 'react';
 import { BuilderProvider } from '../builder/BuilderProvider';
 import { AuthProvider } from '../lib/auth';
 import { DraftProvider } from '../lib/draftStore';
+import { guardSharedRouter, rootMounted, rootUnmounted } from '../lib/routerBinding';
 import { colors } from '../lib/theme';
+
+/** Keeps the shared router bound after Android rebuilds the screen (routerBinding.ts). */
+function KeepRouterBound() {
+  const live = useRouter();
+  useLayoutEffect(() => {
+    guardSharedRouter(router);
+    rootMounted(live);
+    return () => rootUnmounted(live);
+  }, [live]);
+  return null;
+}
 
 export default function RootLayout() {
   return (
@@ -11,6 +24,7 @@ export default function RootLayout() {
       <DraftProvider>
         <BuilderProvider>
           <StatusBar style="dark" />
+          <KeepRouterBound />
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },
@@ -30,6 +44,7 @@ export default function RootLayout() {
             <Stack.Screen name="album-cover" options={{ title: 'Your cover' }} />
             <Stack.Screen name="making" options={{ headerShown: false, gestureEnabled: false }} />
             <Stack.Screen name="preview" options={{ title: 'Your album' }} />
+            <Stack.Screen name="edit-pages" options={{ title: 'Edit pages' }} />
             <Stack.Screen name="golden-pages" options={{ title: 'Golden pages' }} />
             <Stack.Screen name="photo-check-lab" options={{ title: 'Photo check test' }} />
             <Stack.Screen name="order" options={{ title: 'Your order' }} />

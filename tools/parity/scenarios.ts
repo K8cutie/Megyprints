@@ -157,3 +157,54 @@ export function firstCaptionBox(pages: AlbumPage[]): number {
 
 /** The same "random" numbers on both sides (mulberry32, as src/test/mulberry32.ts). */
 export const seeded = rng;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE SAME EDITS ON THE WEBSITE AND IN THE APP (2.0, Phase 4): one album
+   (SCENARIOS[0]) made on each side, then the same edits, each through that
+   side's own editor:
+     • website: tools/parity/webEdits.spec.ts calls the website builder the
+       way its editors call it (MobileReview, PropertiesPanel, LayoutPicker,
+       MobileTextEditor, PageColorPicker, CoverEditor);
+     • app: mobile/test/editorParity.test.ts goes through the app editor's
+       own code (the parts' actions, the text editor's save, the cover
+       editor's calls).
+   Then every page and the cover must be the same, field for field
+   (editedAlbum: photos by name, the platform's own ids and addresses left
+   out).
+   ══════════════════════════════════════════════════════════════════════════ */
+export const EDIT_PLAN = {
+  /** "Remove photo" on the first photo of this page, then "Add a photo" into
+   *  that frame with the first photo on `fromPage` (the two swap). */
+  remove: { page: 3, fromPage: 10 },
+  /** The first photo on this page moved (design px) and zoomed. */
+  frame: { page: 4, dx: 40, dy: -20, zoom: 1.6 },
+  /** "Change layout": the first other layout that holds the page as it is. */
+  layout: { page: 5 },
+  /** The first caption box from this page on: the text editor's Done. */
+  caption: { from: 6, text: 'Sunset at the pier', fontSize: 30, fontFamily: '"Playfair Display", Georgia, serif', color: '#1F3A5F', bold: true, alignment: 'left' as const },
+  /** "Page colour" on this page. */
+  colour: { page: 7, hex: '#1F75FE' },
+  /** The cover: the title's font, colour, Bold off, Shadow off; the photo
+   *  moved in its frame; the title moved up. */
+  cover: { font: '"Playfair Display", Georgia, serif', color: '#C9A24B', focus: { x: 0.3, y: 0.6 }, titleUp: -0.1 },
+  /** "Add a page" after this page. */
+  addAfter: 20,
+};
+
+const DROP_KEYS = new Set(['id', 'madeAt', 'updatedAt', 'createdAt']);
+const PHOTO_INDEX_KEYS = new Set(['slotFills', 'textSlotFills']);
+
+/** Every page and the cover, field for field, with photos by name and the
+ *  platform's own ids and photo addresses left out. */
+export function editedAlbum(b: { uploadedPhotos: UploadedPhoto[]; albumPages: AlbumPage[]; coverFront: AlbumPage }): unknown {
+  const names = b.uploadedPhotos.map((p) => p.name);
+  const byId = new Map(b.uploadedPhotos.map((p) => [p.id, p.name]));
+  const norm = (v: unknown) => JSON.parse(JSON.stringify(v, (key: string, value: unknown) => {
+    if (DROP_KEYS.has(key)) return undefined;
+    if (key === 'image' && typeof value === 'string') return undefined; // blob: on the website, content:// in the app
+    if (key === 'photoId' && typeof value === 'string') return byId.get(value) ?? value;
+    if (PHOTO_INDEX_KEYS.has(key) && Array.isArray(value)) return value.map((i) => (typeof i === 'number' ? names[i] ?? `#${i}?` : i));
+    return value;
+  })) as unknown;
+  return { pages: b.albumPages.map(norm), cover: norm(b.coverFront) };
+}

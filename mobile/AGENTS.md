@@ -69,6 +69,14 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   (`../tools/parity`, vitest + jsdom) and the app's on the same photos and
   requires the same album; `test/textMeasurer.test.ts` holds the caption fit
   to the website's in Chromium (`../tools/golden/fitWeb.mjs`).
+- **The editor** (`src/editor`, Phase 4): the "Edit pages" screen owns the
+  page, the taps (`hitTest.ts`: the renderer's own boxes), the selection
+  (kept in the builder), undo and the page turn. What a customer can DO comes
+  from parts, each in its own folder (`photos`, `text`, `cover`), plugged in
+  only through `registry.ts` (`registerEditorPart`); every edit goes through
+  `ctx.builder` (the shared useBuilderState). A part never edits
+  `EditPagesScreen.tsx`, `PageStage.tsx` or another part's folder. The
+  plan's "Phase 4 notes" has the registry's shape.
 - **Gate before a commit:** `npm run check` here (TypeScript + jest), and from
   the repo root `npx tsc -b && npx vitest run` when `../src` changed.
 - Words a customer sees: plain English, say what you get, one filled
