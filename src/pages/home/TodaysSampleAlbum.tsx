@@ -1,6 +1,8 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   "Make today's sample album": the first thing on Home, in the Android app
-   while TESTING_PHASE is on (lib/samplePhotos).
+   "Start the User tutorial" (was "Make today's sample album"): the first
+   thing on Home, in the Android app while TESTING_PHASE is on
+   (lib/samplePhotos). Owner, 2026-10-29: "Can we call it User tutorial
+   instead of sample album"; the daily test reads as a daily lesson.
 
    Tester, 2026-10-29: "maybe a little less text in the steps [too many
    things to read hah]". The owner: he meant a faster way to the sample
@@ -11,8 +13,9 @@
    (home/TodaysTest, lib/dailyTest): type today's date as the album's name
    and do today's task (one of 10), then "Make my album" makes a new album
    (startFreshAlbum) that the builder makes as it opens (requestSampleAlbum),
-   with today's second task in the album; "You're done" comes once both are
-   done and a minute has passed. The line under the button says what to do.
+   with today's second task in the album; "You finished today's lesson!"
+   comes once both are done and a minute has passed. The line under the
+   button says what to do.
 
    Also here: when the app comes back to the front on Home, it checks for a
    newer version and reloads into it (lib/autoUpdate).
@@ -30,7 +33,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { GraduationCap } from 'lucide-react';
 import { isNativeShell } from '../../lib/nativeShell';
 import { showSamplePhotos } from '../../lib/samplePhotos';
 import { readLocalDraftSummary } from '../../lib/localDraft';
@@ -66,13 +69,13 @@ export default function TodaysSampleAlbum({ signedIn, onMake }: {
       className="mx-auto mb-3 max-w-[480px] rounded-[22px] bg-white p-4 pb-3 text-center font-body shadow-[0_16px_40px_rgba(0,0,0,0.2)] md:mb-6">
       <button type="button" onClick={tap} data-testid="home-todays-sample-make"
         className="flex h-[52px] w-full items-center justify-center gap-2 rounded-[14px] bg-peach text-[16px] font-bold text-white shadow-[0_6px_16px_rgba(184,92,56,0.3)] hover:bg-blush-pink active:scale-[0.98] transition-[transform,background-color]">
-        <Sparkles size={18} /> Make today&apos;s sample album
+        <GraduationCap size={19} /> Start the User tutorial
       </button>
       <p data-testid="home-todays-sample-how" className="mt-2 text-[13px] leading-snug text-medium">
-        Testers: type today&apos;s date, do today&apos;s 2 tasks, then screenshot &quot;You&apos;re done&quot;.
+        Testers: do today&apos;s User tutorial, then screenshot &quot;You finished today&apos;s lesson!&quot;
       </p>
       {asking && (
-        <KeepAlbumAsk text="A sample album starts a new one. Sign in first to keep yours." makeLabel="Make the sample album"
+        <KeepAlbumAsk text="The User tutorial starts a new album. Sign in first to keep yours." makeLabel="Start the User tutorial"
           onMake={() => { setAsking(false); setTesting(true); }}
           onKeep={() => setAsking(false)} />
       )}

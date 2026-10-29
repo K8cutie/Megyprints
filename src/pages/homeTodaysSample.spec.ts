@@ -26,6 +26,13 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
    It never throws a guest's own album away without asking. The website: no
    change.
 
+   THE DAILY LESSON (owner, the same day: "it becomes a tutorial of sorts",
+   "make it look like its a tutorial", and "Can we call it User tutorial
+   instead of sample album"): the button says "Start the User tutorial"; the
+   screen is "User tutorial", "Today's lesson", with which lesson this is and
+   the features tried so far; each step has its number, and today's task is a
+   "Try it" card that first says what the feature does.
+
    START-UP PROMPTS OFF (owner, 2026-10-29: "for now please disable resume
    from where you left off or open existing album feature on the onset"):
    in the app while testing, Start Creating starts a new album straight away
@@ -57,7 +64,7 @@ import { asksBeforeNewAlbum } from './home/KeepAlbumAsk';
 import { DRAFT_STORAGE_KEY, readLocalDraftSummary, type LocalDraftSummary } from '../lib/localDraft';
 import { samplePhotoName, sampleDayNumber } from '../lib/samplePhotos';
 import { coverChoices, todaysBeforeTask, todaysAlbumTask, beforeTaskFor, takeDailyTest, dateExample, type BeforeTaskId } from '../lib/dailyTest';
-import { readRun, readTestClock } from '../lib/dailyTestRun';
+import { readRun, readTestClock, PROGRESS_KEY } from '../lib/dailyTestRun';
 import { PAGE_COLORS } from './builder/pageColors';
 import { FONTS } from './builder/fonts';
 
@@ -143,9 +150,11 @@ describe('who sees it', () => {
     await mount();
     const box = $('home-todays-sample')!;
     const make = $('home-todays-sample-make')!;
-    expect(text(make)).toBe("Make today's sample album");
+    expect(text(make)).toBe('Start the User tutorial');
     expect(make.className).toContain('bg-peach');
-    expect(text($('home-todays-sample-how'))).toBe('Testers: type today\'s date, do today\'s 2 tasks, then screenshot "You\'re done".');
+    expect(text($('home-todays-sample-how'))).toBe('Testers: do today\'s User tutorial, then screenshot "You finished today\'s lesson!"');
+    // No "sample album" anywhere a tester reads it (owner: "Can we call it User tutorial instead of sample album").
+    expect(text(box).toLowerCase()).not.toContain('sample album');
     // Above "Turn your photos into a printed album" (the Albums card).
     expect(box.compareDocumentPosition($('home-albums-card')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // One filled button in the box, nothing greyed.
@@ -164,14 +173,24 @@ describe('who sees it', () => {
 });
 
 describe("the button opens Today's test; nothing is made yet", () => {
-  it('a short screen: the name, today\'s task, ONE filled "Make my album"', async () => {
+  it('a short lesson: "User tutorial", "Today\'s lesson", the lesson count, numbered steps, ONE filled "Make my album"', async () => {
     await mount();
     await tap('home-todays-sample-make');
     const screen = (await opened())!;
     expect(screen).not.toBeNull();
     expect(screen.querySelector('[role="dialog"]')!.getAttribute('aria-modal')).toBe('true');
-    expect(text(screen.querySelector('h2'))).toBe("Today's test");
-    expect(text(screen.querySelector('label[for="todays-test-name"]'))).toBe("1 Type today's date as your album's name");
+    expect(text(screen.querySelector('h2'))).toBe('User tutorial');
+    expect(text($('todays-test-subtitle'))).toBe("Today's lesson");
+    // The first lesson: nothing tried yet.
+    expect(text($('lesson-progress-line'))).toBe('Lesson 1 · 15 features to try');
+    expect($('lesson-progress-bar')!.style.width).toBe('0%');
+    // No "test" in a heading the tester sees.
+    expect([...screen.querySelectorAll('h2, h3, [data-testid="todays-test-subtitle"]')].map((e) => text(e).toLowerCase()).join(' ')).not.toContain('test');
+    // Numbered steps: 1 the name, 2 today's tip, 3 (still to come) the tip in the album.
+    expect($$('lesson-step-chip').map((c) => c.dataset.step)).toEqual(['1', '2', '3']);
+    expect(text($('todays-test-next')!.querySelector('p'))).toBe('Next: one more tip inside your album.');
+    expect(text($('todays-test-name-teach'))).toBe("Your album's name goes on its front cover.");
+    expect(text(screen.querySelector('label[for="todays-test-name"]'))).toBe("Type today's date as your album's name");
     expect(($('todays-test-name') as HTMLInputElement).placeholder).toBe('Oct 29');
     expect(text(screen)).toContain('For example: Oct 29');
     const make = $('todays-test-make')!;
@@ -239,8 +258,8 @@ describe('step 2: today\'s task, one tap on a list already shown', () => {
     await tap('home-todays-sample-make');
     await opened();
     expect($('todays-test-task')!.dataset.task).toBe('cover');
-    expect(text($('todays-test-task-line'))).toBe('2 Choose your cover.');
-    expect(text($('todays-test-task-hint'))).toBe('Tap the photo you want on the front of your album.');
+    expect(text($('todays-test-task-teach'))).toBe('Any photo can go on the front cover.');
+    expect(text($('todays-test-task-line'))).toBe('Try it: tap the photo you want on the cover.');
     const photos = $$('todays-test-option');
     expect(photos.map((p) => p.dataset.value)).toEqual(coverChoices(COVER_DAY));
     expect(photos[0].querySelector('img')!.getAttribute('src')).toBe(`/sample-photos/${coverChoices(COVER_DAY)[0]}`);
@@ -257,7 +276,10 @@ describe('step 2: today\'s task, one tap on a list already shown', () => {
     const t = beforeTaskFor(COLOUR_DAY);
     const name = PAGE_COLORS.find((c) => c.hex === t.answer)!.name;
     expect($('todays-test-task')!.dataset.task).toBe('colour');
-    expect(text($('todays-test-task-line'))).toBe(`2 For today, select ${name} for your album background.`);
+    // The owner's example: "Every page can have a background colour. Try it: pick Red."
+    expect(text($('todays-test-task-teach'))).toBe('Every page can have a background colour.');
+    expect(text($('todays-test-task-line'))).toBe(`Try it: pick ${name}.`);
+    expect(text($('todays-test-task')!.querySelector('[data-testid="lesson-try-it"]'))).toBe('Try it:');
     expect($$('todays-test-option').map((b) => text(b))).toEqual(PAGE_COLORS.map((c) => c.name));
     await tapEl(otherOption());
     expect(text($('todays-test-wrong'))).toBe(`Today's colour is ${name}. Tap ${name}.`);
@@ -274,7 +296,9 @@ describe('step 2: today\'s task, one tap on a list already shown', () => {
     await opened();
     const t = beforeTaskFor(FONT_DAY);
     const name = FONTS.find((f) => f.family === t.answer)!.name;
-    expect(text($('todays-test-task-line'))).toBe(`2 For today, pick the font ${name} for your album's title.`);
+    // The owner's example: "Your cover title can use many fonts. Try it: pick Great Vibes."
+    expect(text($('todays-test-task-teach'))).toBe('Your cover title can use many fonts.');
+    expect(text($('todays-test-task-line'))).toBe(`Try it: pick ${name}.`);
     const options = $$('todays-test-option');
     expect(options.length).toBeGreaterThan(4);
     for (const o of options) expect((o.querySelector('span[style]') as HTMLElement).style.fontFamily).not.toBe('');
@@ -290,7 +314,7 @@ describe('step 2: today\'s task, one tap on a list already shown', () => {
     await tap('home-todays-sample-make');
     await opened();
     const t = beforeTaskFor(SIZE_DAY);
-    expect(text($('todays-test-task-line'))).toMatch(/^2 Make your album .+×.+\.$/);
+    expect(text($('todays-test-task-line'))).toMatch(/^Try it: pick .+×.+\.$/);
     expect($$('todays-test-option').map((b) => text(b))).toContain('8×8');
     await tapEl(optionFor(t.answer));
     expect($('todays-test-wrong')).toBeNull();
@@ -372,6 +396,32 @@ describe('"Make my album"', () => {
   });
 });
 
+describe('which lesson this is, and the features tried so far', () => {
+  it('day 2: lesson 2 and the 2 features of day 1; still there after a reload', async () => {
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify({ tried: ['titleColour', 'layout'], days: [sampleDayNumber(OCT29) - 1] }));
+    await mount();
+    await tap('home-todays-sample-make');
+    await opened();
+    expect(text($('lesson-progress-line'))).toBe("Lesson 2 · You've tried 2 of 15 features");
+    expect($('lesson-progress-bar')!.style.width).toBe('13%');
+    // The app reloads: the same.
+    await act(async () => { root.unmount(); });
+    root = createRoot(host);
+    await mount();
+    await tap('home-todays-sample-make');
+    await opened();
+    expect(text($('lesson-progress-line'))).toBe("Lesson 2 · You've tried 2 of 15 features");
+  });
+
+  it('opening and closing the lesson counts nothing', async () => {
+    await mount();
+    await tap('home-todays-sample-make');
+    await opened();
+    await tap('todays-test-close');
+    expect(localStorage.getItem(PROGRESS_KEY)).toBeNull();
+  });
+});
+
 async function finishTest() {
   await opened();
   await typeDate(dateOf(new Date()));
@@ -417,8 +467,8 @@ describe('signed out, with their own album on this phone', () => {
     expect(ask).not.toBeNull();
     expect(ask.querySelector('[role="dialog"]')!.getAttribute('aria-modal')).toBe('true');
     expect(text(ask.querySelector('h2'))).toBe('You have an album in progress on this phone.');
-    expect(text(ask.querySelector('p'))).toBe('A sample album starts a new one. Sign in first to keep yours.');
-    expect(text($('todays-sample-ask-make'))).toBe('Make the sample album');
+    expect(text(ask.querySelector('p'))).toBe('The User tutorial starts a new album. Sign in first to keep yours.');
+    expect(text($('todays-sample-ask-make'))).toBe('Start the User tutorial');
     expect($('todays-sample-ask-make')!.className).toContain('bg-peach');
     expect(text($('todays-sample-ask-keep'))).toBe('Keep my album');
     expect($('todays-sample-ask-keep')!.className).not.toContain('bg-peach');
@@ -454,7 +504,7 @@ describe('signed out, with their own album on this phone', () => {
     expect(storage()).toBe(before);
   });
 
-  it('"Make the sample album": Today\'s test, then the same new album', async () => {
+  it('"Start the User tutorial": Today\'s lesson, then the same new album', async () => {
     await mount();
     await tap('home-todays-sample-make');
     await tap('todays-sample-ask-make');

@@ -9,6 +9,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
    pools and which task is today's; each before-task's options, its one
    answer and its words; what "Make my album" says or keeps; how the answer
    reaches the album; and the line on "You're done".
+
+   THE DAILY LESSON (owner, the same day: "it becomes a tutorial of sorts"):
+   the same mechanics, in a lesson's words. Each before-task says what the
+   feature does (lib/lessonTips), then what to do after "Try it:" ("Your
+   cover title can use many fonts. Try it: pick Great Vibes."), and the done
+   line says "Today you tried: ...".
    ══════════════════════════════════════════════════════════════════════════ */
 
 import {
@@ -20,6 +26,7 @@ import { sampleDayNumber, sampleAlbumPhotos, SAMPLE_END_OF_DAY_NAMES } from './s
 import { PAGE_COLORS } from '../pages/builder/pageColors';
 import { DEFAULT_TITLE_FONT, FONTS } from '../pages/builder/fonts';
 import { COMMON_THEMES } from './albumTheme';
+import { SETUP_TIPS, ALBUM_TIPS, LESSON_FEATURES } from './lessonTips';
 
 // Thursday 29 October 2026, mid-afternoon on the phone's clock.
 const OCT29 = new Date(2026, 9, 29, 15, 20);
@@ -130,10 +137,10 @@ describe('each before-task: one tap on a list already shown, one answer that cou
         expect(isTodaysAnswer(t, 'megy-sample-99.jpg')).toBe(false);
         return;
       }
-      // The answer is one of the options, in bold in the line, and the only one that counts.
+      // The answer is one of the options, in bold in the line ("pick **Red**."), and the only one that counts.
       const answer = t.options.find((o) => o.value === t.answer)!;
       expect(answer, `${task} answer in its options`).toBeTruthy();
-      expect(t.line).toContain(`**${answer.label}**`);
+      expect(t.line).toBe(`pick **${answer.label}**.`);
       expect(t.options.filter((o) => isTodaysAnswer(t, o.value)).map((o) => o.value)).toEqual([t.answer]);
       expect(isTodaysAnswer(t, null)).toBe(false);
       expect(t.wrong).toMatch(new RegExp(`^Today's .+ is ${answer.label.replace(/[+×]/g, '\\$&')}\\. Tap ${answer.label.replace(/[+×]/g, '\\$&')}\\.$`));
@@ -146,7 +153,9 @@ describe('each before-task: one tap on a list already shown, one answer that cou
     while (beforeTaskFor(day).answer !== PAGE_COLORS.find((c) => c.name === 'Brown')!.hex) day = addDays(day, 10);
     const t = beforeTaskFor(day);
     expect(t.options.map((o) => o.label)).toEqual(PAGE_COLORS.map((c) => c.name));
-    expect(t.line).toBe('For today, select **Brown** for your album background.');
+    // The owner's example: "Every page can have a background colour. Try it: pick Red."
+    expect(t.teach).toBe('Every page can have a background colour.');
+    expect(t.line).toBe('pick **Brown**.');
     expect(t.wrong).toBe("Today's colour is Brown. Tap Brown.");
     expect(t.want).toBe("Pick today's colour first: Brown.");
     expect(isTodaysAnswer(t, PAGE_COLORS.find((c) => c.name === 'Brown')!.hex.toLowerCase())).toBe(true);
@@ -160,21 +169,61 @@ describe('each before-task: one tap on a list already shown, one answer that cou
       expect(o.font).toBe(o.value);
     }
     expect(t.options.map((o) => o.value)).not.toContain(DEFAULT_TITLE_FONT);
-    expect(t.line).toMatch(/^For today, pick the font \*\*.+\*\* for your album's title\.$/);
+    // The owner's example: "Your cover title can use many fonts. Try it: pick Great Vibes."
+    expect(t.teach).toBe('Your cover title can use many fonts.');
+    expect(t.line).toMatch(/^pick \*\*.+\*\*\.$/);
   });
 
   it('the size: the sizes offered, never 8×8 (the size an album starts at)', () => {
     for (let k = 0; k < 6; k++) {
       const t = beforeTaskFor(addDays(dayFor('size'), k * 10));
       expect(t.answer).not.toBe('8x8');
-      expect(t.line).toMatch(/^Make your album \*\*.+×.+\*\*\.$/);
+      expect(t.line).toMatch(/^pick \*\*.+×.+\*\*\.$/);
+      expect(t.teach).toBe('Albums come in different sizes, in inches.');
     }
   });
 
   it('the occasion: Step 1\'s occasions', () => {
     const t = beforeTaskFor(dayFor('occasion'));
     expect(t.options.map((o) => o.value)).toEqual([...COMMON_THEMES]);
-    expect(t.line).toMatch(/^This album is for: \*\*.+\*\*\.$/);
+    expect(t.line).toMatch(/^pick \*\*.+\*\*\.$/);
+  });
+});
+
+describe('the lesson: a "Try it" card for each before-task', () => {
+  it('every before-task first says what its feature does, in one short line, then what to do', () => {
+    for (const task of BEFORE_TASKS) {
+      const t = beforeTaskFor(dayFor(task));
+      expect(t.teach, task).toBe(SETUP_TIPS[task]);
+      // One short sentence (or two very short ones), ending in a full stop; no "test".
+      expect(t.teach.length, task).toBeLessThanOrEqual(70);
+      expect(t.teach, task).toMatch(/\.$/);
+      expect(t.teach.toLowerCase(), task).not.toContain('test');
+      // What to do reads on from "Try it:": small first letter, a full stop.
+      expect(t.line, task).toMatch(/^[a-z].*\.$/);
+    }
+    expect(beforeTaskFor(dayFor('cover')).line).toBe('tap the photo you want on the cover.');
+  });
+
+  it('15 features to try: the 10 before-tasks and the 5 in the album, each with its line', () => {
+    expect(LESSON_FEATURES).toEqual([...BEFORE_TASKS, ...ALBUM_TASKS]);
+    expect(new Set(LESSON_FEATURES).size).toBe(15);
+    for (const task of ALBUM_TASKS) {
+      expect(ALBUM_TIPS[task].teach, task).toMatch(/\.$/);
+      expect(ALBUM_TIPS[task].try, task).toMatch(/^[A-Z].*\.$/);
+    }
+    // The owner's example for the layout: "This is where you change a page's layout. Pick any new one."
+    expect(`${ALBUM_TIPS.layout.teach} ${ALBUM_TIPS.layout.try}`).toBe("This is where you change a page's layout. Pick any new one.");
+  });
+
+  it('the checks are the same as before: the wrong pick and the missing step still name today\'s answer', () => {
+    let day = dayFor('colour');
+    while (beforeTaskFor(day).answer !== PAGE_COLORS.find((c) => c.name === 'Red')!.hex) day = addDays(day, 10);
+    const t = beforeTaskFor(day);
+    expect(t.wrong).toBe("Today's colour is Red. Tap Red.");
+    expect(t.want).toBe("Pick today's colour first: Red.");
+    expect(isTodaysAnswer(t, t.answer)).toBe(true);
+    expect(isTodaysAnswer(t, PAGE_COLORS.find((c) => c.name !== 'Red')!.hex)).toBe(false);
   });
 });
 
@@ -261,7 +310,7 @@ describe('the answer, applied to the album the way the steps before "Make my alb
   });
 });
 
-describe('the line on "You\'re done": both of today\'s tasks', () => {
+describe('the line on "You finished today\'s lesson!": both of today\'s tasks', () => {
   it('names today\'s before-task and its answer in plain words', () => {
     expect(beforeTaskLabel({ before: 'cover', answer: 'megy-sample-12.jpg' })).toBe('cover photo 12');
     expect(beforeTaskLabel({ before: 'colour', answer: '#EE204D' })).toBe('background Red');
@@ -275,7 +324,8 @@ describe('the line on "You\'re done": both of today\'s tasks', () => {
     expect(beforeTaskLabel({ before: 'titleShadow', answer: 'off' })).toBe('title with no shadow');
   });
 
-  it('"Today: <before> · <in the album>"', () => {
-    expect(doneLine('title font Dancing Script', 'new layout on page 5')).toBe('Today: title font Dancing Script · new layout on page 5');
+  it('"Today you tried: <before> · <in the album>" (the proof line: the owner\'s words)', () => {
+    expect(doneLine('title font Great Vibes', 'words on page 4')).toBe('Today you tried: title font Great Vibes · words on page 4');
+    expect(doneLine('title font Dancing Script', 'new layout on page 5')).toBe('Today you tried: title font Dancing Script · new layout on page 5');
   });
 });

@@ -2,16 +2,21 @@ import type { SampleAlbumNote } from '../../lib/samplePhotos';
 import { splitBold } from '../../assistant/boldText';
 
 /* A sample album's card over a page (lib/samplePhotos): "Welcome to the Megy
-   Prints app test!" on page 1, "You're done with today's test!" on the last
-   page in Preview. Drawn OVER the page on screen, low on it (faces are mostly
+   Prints app!" on page 1, "You finished today's lesson!" on the last page in
+   Preview (2026-10-29: the daily test reads as a daily lesson). Drawn OVER the page on screen, low on it (faces are mostly
    higher up), just above the tester stamp, sized to the page, like the stamp:
    taps go through it and the print pipeline never sees it.
 
-   On "You're done", after Today's test (lib/dailyTest), one more short line
-   names both of today's tasks, so the screenshot proves them ("Today: title
-   font Dancing Script · new layout on page 5"), with a swatch or a small
+   On "You finished today's lesson!", after Today's lesson (lib/dailyTest),
+   one more short line names both of today's tasks, so the screenshot proves
+   them ("Today you tried: title font Dancing Script · new layout on page 5"), with a swatch or a small
    picture when the answer is a colour or a photo. Smaller words than the
-   rest of the card, so it adds as little height as it can. */
+   rest of the card, so it adds as little height as it can.
+
+   2026-10-29, the daily lesson: the line got longer ("Today you tried: "),
+   so it wraps to two lines more often. The card's spacing is tighter, so
+   even then it is no taller than #229's card (measured on the walk: the
+   faces under it are covered no more than before). */
 export default function TesterPageNote({ note, pageW }: {
   note: SampleAlbumNote;
   /** The page's width on screen, in px. */
@@ -37,25 +42,25 @@ export default function TesterPageNote({ note, pageW }: {
         zIndex: 50,
         pointerEvents: 'none',
         userSelect: 'none',
-        padding: `${Math.round(font * 0.75)}px ${Math.round(font * 0.9)}px`,
+        padding: `${Math.round(font * 0.55)}px ${Math.round(font * 0.9)}px`,
         borderRadius: Math.round(font * 0.8),
         background: 'rgba(255, 255, 255, 0.94)',
         boxShadow: '0 4px 18px rgba(42, 33, 28, 0.18)',
         color: '#2A211C',
         fontSize: font,
-        lineHeight: 1.35,
+        lineHeight: 1.25,
         textAlign: 'center',
       }}
     >
-      <div style={{ fontWeight: 700, color: '#B85C38', fontSize: Math.round(font * 1.12) }} data-testid="tester-page-note-title">{note.title}</div>
-      <div style={{ marginTop: Math.round(font * 0.35) }} data-testid="tester-page-note-body">
+      <div style={{ fontWeight: 700, color: '#B85C38', fontSize: Math.round(font * 1.12), lineHeight: 1.2 }} data-testid="tester-page-note-title">{note.title}</div>
+      <div style={{ marginTop: Math.round(font * 0.15) }} data-testid="tester-page-note-body">
         {splitBold(note.body).map((run, i) => (run.bold ? <strong key={i}>{run.text}</strong> : <span key={i}>{run.text}</span>))}
       </div>
       {proof && (
         <div data-testid="tester-page-note-proof"
           style={{
-            marginTop: Math.round(font * 0.45), display: 'flex', justifyContent: 'center', alignItems: 'center',
-            gap: Math.round(small * 0.4), fontSize: small, lineHeight: 1.25, fontWeight: 600, color: '#5C4033',
+            marginTop: Math.round(font * 0.3), display: 'flex', justifyContent: 'center', alignItems: 'center',
+            gap: Math.round(small * 0.4), fontSize: small, lineHeight: 1.15, fontWeight: 600, color: '#5C4033',
           }}>
           {proof.hex && (
             <span data-testid="tester-page-note-swatch" aria-hidden="true"

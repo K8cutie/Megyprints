@@ -1156,6 +1156,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const openBookToggle = upright && !onCover && (
     <div className="flex flex-col items-center gap-1">
       <button type="button" onClick={() => setOpenBook((v) => !v)} data-testid="preview-open-book" data-glow={openBookTask || undefined}
+        // A lesson's coach mark points here (lib/lessonTips ALBUM_TIPS.openBook).
+        data-coach="open-book"
         className={`px-3 py-1.5 rounded-lg border text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors ${
           openBookTask ? 'border-peach bg-blush ring-4 ring-peach/40' : 'border-line bg-white'}`}>
         {openBook ? <><FileText size={13} /> One page at a time</> : <><BookOpen size={13} /> See it as an open book</>}

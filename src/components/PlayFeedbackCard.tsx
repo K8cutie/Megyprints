@@ -11,7 +11,7 @@ import { PLAY_LISTING_URL, showPlayFeedback } from '../lib/playFeedback';
    so the button opens the app's Play page and three steps say where to go.
 
    Shown where a tester has just finished something: under the sample album's
-   "You're done with today's test!" page (BuilderPreview) and under a test
+   "You finished today's lesson!" page (BuilderPreview) and under a test
    order's thank-you (Order). In the app a link to another site leaves the
    WebView: Capacitor hands it to Android (Bridge.launchIntent, ACTION_VIEW),
    which opens play.google.com links in the Play Store app.

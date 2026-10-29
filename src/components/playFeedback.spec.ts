@@ -105,7 +105,7 @@ describe('the feedback box', () => {
 describe('under the sample album\'s "You\'re done" page', () => {
   it('on the last page: the box, under the book (not on the page the tester screenshots)', () => {
     preview(samples);
-    expect(text(q('tester-page-note-title'))).toBe("You're done with today's test!");
+    expect(text(q('tester-page-note-title'))).toBe("You finished today's lesson!");
     const box = q('preview-play-feedback');
     expect(box).not.toBeNull();
     expect(box!.querySelector('[data-testid="play-feedback-open"]')).not.toBeNull();

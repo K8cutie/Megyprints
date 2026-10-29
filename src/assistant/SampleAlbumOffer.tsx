@@ -14,7 +14,11 @@ import type { SampleAlbumStage } from './useSampleAlbum';
    The button opens Today's test first (lib/dailyTest), the same screen as
    Home's "Make today's sample album" (owner, 2026-10-29: Step 1 still
    skipped the test). After a failure it makes the album again with the test
-   already done. */
+   already done.
+
+   The owner, 2026-10-29: "Can we call it User tutorial instead of sample
+   album": the words say User tutorial (the code keeps its sample-album
+   names). */
 export default function SampleAlbumOffer({ stage, onMake }: { stage: SampleAlbumStage; onMake: () => void }) {
   const [show] = useState(() => showSamplePhotos(isNativeShell()));
   // Ready before the tap, so Today's test opens at once.
@@ -25,15 +29,15 @@ export default function SampleAlbumOffer({ stage, onMake }: { stage: SampleAlbum
     <div className="mb-5" data-testid="sample-album-top">
       <div className="p-3 rounded-xl bg-blush border border-peach/30" data-testid="sample-album">
         <p className="text-sm text-cocoa leading-relaxed">
-          <b>Just testing the app?</b> Megy makes a whole album from 40 sample photos. You can still make one from your own photos after.
+          <b>Just testing the app?</b> The User tutorial makes a whole album from 40 sample photos and teaches you the app. You can still make one from your own photos after.
         </p>
         <button type="button" onClick={onMake} aria-busy={busy} data-testid="sample-album-make"
           className="mt-2 w-full px-4 py-3 rounded-xl text-base font-semibold bg-peach text-white hover:bg-blush-pink shadow-md active:scale-[0.98] transition-all">
-          {busy ? 'Making your sample album…' : 'Make a sample album'}
+          {busy ? 'Starting the User tutorial…' : 'Start the User tutorial'}
         </button>
         {stage === 'failed' && (
           <p role="alert" className="mt-2 text-xs text-red-600" data-testid="sample-album-failed">
-            Couldn't make the sample album. Check your internet, then tap again.
+            Couldn't start the User tutorial. Check your internet, then tap again.
           </p>
         )}
       </div>

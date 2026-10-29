@@ -102,10 +102,11 @@ describe('which albums', () => {
   });
   it("in the owner's words, with the buttons named as they read", () => {
     expect(SAMPLE_WELCOME_NOTE).toEqual({
-      title: 'Welcome to the Megy Prints app test!',
+      title: 'Welcome to the Megy Prints app!',
       body: 'Tap **Next page** until you reach the last page, then tap **Done — Preview my album**.',
     });
-    expect(SAMPLE_DONE_NOTE).toEqual({ title: "You're done with today's test!", body: 'Take a screenshot and send it as proof.' });
+    // 2026-10-29, the daily lesson: "You finished today's lesson!"; the proof sentence stays.
+    expect(SAMPLE_DONE_NOTE).toEqual({ title: "You finished today's lesson!", body: 'Take a screenshot and send it as proof.' });
     // The buttons it names are the real ones.
     const bar = readFileSync(resolve(__dirname, 'PageTurnBar.tsx'), 'utf8');
     expect(bar).toContain('Done — Preview my album');
@@ -117,7 +118,7 @@ describe('the card on a page', () => {
   it('a bold first line, then what to do with the buttons in bold; taps go through it; not in the album', async () => {
     await act(async () => { root.render(createElement(PageView, { page: album()[0], photos: samples, singleW: 340, H: 340, pageIndex: 0, testerNote: SAMPLE_WELCOME_NOTE })); });
     const note = q('tester-page-note')!;
-    expect(text(q('tester-page-note-title'))).toBe('Welcome to the Megy Prints app test!');
+    expect(text(q('tester-page-note-title'))).toBe('Welcome to the Megy Prints app!');
     expect(text(q('tester-page-note-body'))).toBe('Tap Next page until you reach the last page, then tap Done — Preview my album.');
     expect([...q('tester-page-note-body')!.querySelectorAll('strong')].map((s) => s.textContent)).toEqual(['Next page', 'Done — Preview my album']);
     expect(note.style.pointerEvents).toBe('none');
@@ -135,10 +136,10 @@ describe('the card on a page', () => {
 
   // Today's test (2026-10-29) opens the album on "You're done": once it has
   // been previewed, page 1 no longer says to page through to the end.
-  it("once previewed, page 1 only says the way back to \"You're done\"", () => {
+  it("once previewed, page 1 only says the way back to \"You finished today's lesson!\"", () => {
     expect(sampleWelcomeNote(false)).toBe(SAMPLE_WELCOME_NOTE);
     expect(sampleWelcomeNote(true)).toBe(SAMPLE_WELCOME_BACK_NOTE);
-    expect(SAMPLE_WELCOME_BACK_NOTE).toEqual({ title: 'Welcome to the Megy Prints app test!', body: "Tap **Back to preview** to see **You're done** again." });
+    expect(SAMPLE_WELCOME_BACK_NOTE).toEqual({ title: 'Welcome to the Megy Prints app!', body: "Tap **Back to preview** to see **You finished today's lesson!** again." });
     // The button it names is the real one, on every page but the last once previewed.
     expect(readFileSync(resolve(__dirname, 'PageTurnBar.tsx'), 'utf8')).toContain('Back to preview');
   });
@@ -153,9 +154,9 @@ for (const mobile of [true, false]) {
       preview(samples);
       const notes = all('tester-page-note');
       expect(notes).toHaveLength(1);
-      expect(text(notes[0].querySelector('[data-testid="tester-page-note-title"]'))).toBe("You're done with today's test!");
+      expect(text(notes[0].querySelector('[data-testid="tester-page-note-title"]'))).toBe("You finished today's lesson!");
       expect(text(notes[0].querySelector('[data-testid="tester-page-note-body"]'))).toBe('Take a screenshot and send it as proof.');
-      expect(text(notes[0].querySelector('[data-testid="tester-page-note-proof-text"]'))).toBe('Today: title font Caveat · new layout on page 5');
+      expect(text(notes[0].querySelector('[data-testid="tester-page-note-proof-text"]'))).toBe('Today you tried: title font Caveat · new layout on page 5');
       // The stamp's two lines, on the same page.
       expect(all('tester-page-stamp').map((s) => [...s.children].map((c) => c.textContent))).toContainEqual(['For Testing purposes', 'Oct 28, 2026, 2:05 PM']);
       expect(q('end-prompt')).toBeNull();
@@ -178,19 +179,19 @@ for (const mobile of [true, false]) {
       }
     });
 
-    it("a sample album that didn't come from Today's test: \"Today's test isn't done yet\", and how to do it", () => {
+    it("a sample album that didn't come from Today's lesson: \"Today's lesson isn't done yet\", and how to do it", () => {
       preview(samples);
       const notes = all('tester-page-note');
       expect(notes).toHaveLength(1);
-      expect(text(notes[0].querySelector('[data-testid="tester-page-note-title"]'))).toBe("Today's test isn't done yet");
-      expect(text(notes[0].querySelector('[data-testid="tester-page-note-body"]'))).toBe("Go to Home and tap Make today's sample album.");
-      expect(SAMPLE_NOT_DONE_NOTE.body).toBe("Go to Home and tap **Make today's sample album**.");
+      expect(text(notes[0].querySelector('[data-testid="tester-page-note-title"]'))).toBe("Today's lesson isn't done yet");
+      expect(text(notes[0].querySelector('[data-testid="tester-page-note-body"]'))).toBe('Go to Home and tap Start the User tutorial.');
+      expect(SAMPLE_NOT_DONE_NOTE.body).toBe('Go to Home and tap **Start the User tutorial**.');
       // Today's test done on ANOTHER album: still this one's not done.
       localStorage.clear();
       attachRun(TEST, MADE + 1, 'layout', { page: 4, slot: null }, []);
       localStorage.setItem(RUN_KEY, JSON.stringify({ ...readRun(), ...DONE }));
       preview(samples);
-      expect(text(all('tester-page-note')[0]?.querySelector('[data-testid="tester-page-note-title"]') ?? null)).toBe("Today's test isn't done yet");
+      expect(text(all('tester-page-note')[0]?.querySelector('[data-testid="tester-page-note-title"]') ?? null)).toBe("Today's lesson isn't done yet");
     });
 
     it('an album with a photo of their own: no card, and the order card at the end as always', () => {
