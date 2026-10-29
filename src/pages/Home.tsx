@@ -13,14 +13,16 @@ import {
 import BuilderDemoSection from './BuilderDemoSection';
 import { UserProjectsSection } from '../components/UserProjectsSection';
 import { useAuth } from '../lib/authContext';
-import { startFreshAlbum } from '../lib/albumSession';
+import { startFreshAlbum, skipsResumePrompts } from '../lib/albumSession';
 import { readLocalDraftSummary, albumInProgress, type LocalDraftSummary } from '../lib/localDraft';
 import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
 import { requestSampleAlbum } from '../lib/samplePhotos';
 import { HOME_FEATURES, HOW_IT_WORKS, type HomeFeatureKey } from './homeCopy';
 import { AlbumsCard, EventsCard } from './home/HomeCards';
 import TodaysSampleAlbum from './home/TodaysSampleAlbum';
+import KeepAlbumAsk, { asksBeforeNewAlbum } from './home/KeepAlbumAsk';
 import { skipSoftAuthThisVisit } from '../lib/softAuthNudge';
+import { isNativeShell } from '../lib/nativeShell';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -275,8 +277,16 @@ export default function Home() {
 
   // "Start Creating" with an album in progress asks first (StartNewAlbumPrompt).
   const [inProgress, setInProgress] = useState<LocalDraftSummary | null>(null);
+  // The Android app while testing (owner, 2026-10-29: "for now please disable
+  // resume from where you left off or open existing album feature on the
+  // onset"): Start Creating starts a new album straight away. Only a guest's
+  // own album on this phone is asked about first (KeepAlbumAsk): a new album
+  // would delete it. Signed in, it is saved to the account first.
+  const [startsFresh] = useState(() => skipsResumePrompts(isNativeShell()));
+  const [keepAsk, setKeepAsk] = useState(false);
   const startNew = useCallback(() => {
     setInProgress(null);
+    setKeepAsk(false);
     // A new album — which also answers "resume where you left off?".
     startFreshAlbum(user?.id);
     navigate('/builder');
@@ -286,7 +296,10 @@ export default function Home() {
     switch (action) {
       case 'go-builder': {
         const draft = readLocalDraftSummary();
-        if (albumInProgress(draft) && !choseNew) setInProgress(draft);
+        if (startsFresh) {
+          if (asksBeforeNewAlbum(draft, !!user)) setKeepAsk(true);
+          else startNew();
+        } else if (albumInProgress(draft) && !choseNew) setInProgress(draft);
         else startNew();
         break;
       }
@@ -301,14 +314,15 @@ export default function Home() {
       default:
         break;
     }
-  }, [navigate, startNew, choseNew]);
+  }, [navigate, startNew, choseNew, startsFresh, user]);
 
   return (
     <>
       {/* Hero: Megyprints Albums and Megyprints Events. "Start Creating" goes
           into the builder, where Megy (assistant/MegyAssistant) guides them.
-          Testers in the app get today's sample album in one tap, made the way
-          "Welcome back" makes it, with no sign-in nudge over it. */}
+          Testers in the app get Today's test first (type today's date, do
+          today's task), then today's sample album, made the way "Welcome back"
+          makes it, with no sign-in nudge over it. */}
       <HeroSection onStart={() => handleMegyAction('go-builder')}
         top={<TodaysSampleAlbum signedIn={!!user}
           onMake={() => { skipSoftAuthThisVisit(); requestSampleAlbum(); startNew(); }} />} />
@@ -318,6 +332,12 @@ export default function Home() {
           onStartNew={startNew}
           onStartTodaysSample={() => { requestSampleAlbum(); startNew(); }}
           onClose={() => setInProgress(null)} />
+      )}
+      {keepAsk && (
+        <KeepAlbumAsk text="A new album replaces it. Sign in first to keep yours." makeLabel="Start a new album"
+          keepLabel="Open my album" onMake={startNew}
+          onKeep={() => { setKeepAsk(false); navigate('/builder'); }}
+          onClose={() => setKeepAsk(false)} />
       )}
 
       <TrustBarSection />

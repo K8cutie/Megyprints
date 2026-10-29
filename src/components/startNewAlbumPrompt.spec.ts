@@ -67,7 +67,9 @@ describe('wired in (source guards)', () => {
     const home = readFileSync(resolve(__dirname, '../pages/Home.tsx'), 'utf8');
     // Except right after "Start a new album" in Welcome back (they already
     // said new; pages/homeChoseNew.spec.ts walks both ways).
-    expect(home).toMatch(/case 'go-builder': \{\s*const draft = readLocalDraftSummary\(\);\s*if \(albumInProgress\(draft\) && !choseNew\) setInProgress\(draft\);\s*else startNew\(\);/);
+    // In the Android app while testing the start-up prompts are off: a new
+    // album straight away (pages/homeTodaysSample.spec.ts walks it).
+    expect(home).toMatch(/case 'go-builder': \{\s*const draft = readLocalDraftSummary\(\);\s*if \(startsFresh\) \{[^}]*\} else if \(albumInProgress\(draft\) && !choseNew\) setInProgress\(draft\);\s*else startNew\(\);/);
   });
   it('the thank-you screen\'s Create Another starts a new album', () => {
     const order = readFileSync(resolve(__dirname, '../pages/Order.tsx'), 'utf8');

@@ -8,8 +8,23 @@
      per account. Choosing to start a new album IS the answer, so it counts.
    ══════════════════════════════════════════════════════════════════════════ */
 
+import { TESTING_PHASE } from './testingPhase';
+
 export const FRESH_START_KEY = 'megy-fresh-start';
 const RESUME_ASKED_KEY = 'megy-resume-asked';
+
+/** The start-up prompts are off in the Android app while TESTING_PHASE is on
+ *  (owner, 2026-10-29: "for now please disable resume from where you left off
+ *  or open existing album feature on the onset"): no "Welcome back… pick up
+ *  where you left off?" (ResumePrompt) and no "You have an album in progress"
+ *  (StartNewAlbumPrompt). Start Creating and "Make today's sample album"
+ *  start a new album straight away. Signed in, the album in progress is saved
+ *  to the account first (useBuilderState reset()); signed out with their own
+ *  album on the phone, Home still asks first (home/KeepAlbumAsk). The
+ *  website, or the switch off: the prompts as always. */
+export function skipsResumePrompts(inApp: boolean, switchOn: boolean = TESTING_PHASE): boolean {
+  return switchOn && inApp;
+}
 
 /** Open the builder on a NEW album next (the caller navigates to /builder). */
 export function startFreshAlbum(userId?: string | null): void {
