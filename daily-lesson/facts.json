@@ -1,0 +1,779 @@
+{
+  "facts": {
+    "day1-2026-10-29": {
+      "iso": "2026-10-29",
+      "homeButton": "Start the User tutorial",
+      "homeLine": "Testers: do today's User tutorial, then screenshot \"You finished today's lesson!\"",
+      "progressBefore": null,
+      "title": "User tutorial",
+      "subtitle": "Today's lesson",
+      "lessonLine": "Lesson 1 · 15 features to try",
+      "task": "titleColour",
+      "teach": "Your cover title can be any colour.",
+      "tryIt": "TRY IT : pick Pink.",
+      "steps": [
+        "1",
+        "2",
+        "3"
+      ],
+      "filledButtons": [
+        "Make my album"
+      ],
+      "answerLabel": "Pink",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Oct 29.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's title colour first: Pink.",
+      "wrongMsg": "Today's title colour is Pink. Tap Pink.",
+      "picked": "#F48FB1",
+      "albumTask": "layout",
+      "target": {
+        "page": 4,
+        "slot": null
+      },
+      "strip": "TRY IT : pick a new layout.",
+      "coach": {
+        "target": "[data-coach=\"layout-picker\"]",
+        "step": "0",
+        "targetWhat": "div[role=dialog]",
+        "text": "This is where you change a page's layout. Pick any new one.",
+        "mascot": true,
+        "bubble": {
+          "x": 25,
+          "y": 113,
+          "w": 340,
+          "h": 64
+        },
+        "targetBox": {
+          "x": 0,
+          "y": 169,
+          "w": 390,
+          "h": 675
+        },
+        "ring": {
+          "x": 2,
+          "y": 165,
+          "w": 386,
+          "h": 677
+        },
+        "arrowSide": "below",
+        "arrowPointsAtTarget": true,
+        "takesTaps": false
+      },
+      "progressAfterAlbumMade": {
+        "tried": [
+          "titleColour"
+        ],
+        "days": [
+          20755
+        ]
+      },
+      "coachClosed": {
+        "target": "[data-coach=\"lesson-show\"]",
+        "step": "1",
+        "targetWhat": "button#daily-test-show",
+        "text": "Tap Change layout to try it.",
+        "mascot": true,
+        "bubble": {
+          "x": 34,
+          "y": 110,
+          "w": 340,
+          "h": 64
+        },
+        "targetBox": {
+          "x": 258,
+          "y": 58,
+          "w": 116,
+          "h": 38
+        },
+        "ring": {
+          "x": 254,
+          "y": 54,
+          "w": 124,
+          "h": 46
+        },
+        "arrowSide": "above",
+        "arrowPointsAtTarget": true,
+        "takesTaps": false
+      },
+      "coachReopened": {
+        "target": "[data-coach=\"layout-picker\"]",
+        "step": "0",
+        "targetWhat": "div[role=dialog]",
+        "text": "This is where you change a page's layout. Pick any new one.",
+        "mascot": true,
+        "bubble": {
+          "x": 25,
+          "y": 113,
+          "w": 340,
+          "h": 64
+        },
+        "targetBox": {
+          "x": 0,
+          "y": 169,
+          "w": 390,
+          "h": 675
+        },
+        "ring": {
+          "x": 2,
+          "y": 165,
+          "w": 386,
+          "h": 677
+        },
+        "arrowSide": "below",
+        "arrowPointsAtTarget": true,
+        "takesTaps": false
+      },
+      "albumDone": "new layout on page 5",
+      "coachAfterDone": 0,
+      "progressAfterTaskDone": {
+        "tried": [
+          "titleColour",
+          "layout"
+        ],
+        "days": [
+          20755
+        ]
+      },
+      "secondsToTaskDone": 14,
+      "countdown1": "Take a minute to look through your album: 0:41",
+      "countdown2": "Take a minute to look through your album: 0:36",
+      "realWaitSeconds": 41,
+      "fgAtDone": 60004.59999990463,
+      "doneTitle": "You finished today's lesson!",
+      "doneBody": "Take a screenshot and send it as proof.",
+      "doneLine": "Today you tried: title colour Pink · new layout on page 5",
+      "stamp": "For Testing purposes Oct 29, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "cardHeight": {
+        "now": 86.3,
+        "was229": 90.5,
+        "top": 346,
+        "font": 14
+      },
+      "progressAtEnd": {
+        "tried": [
+          "titleColour",
+          "layout"
+        ],
+        "days": [
+          20755
+        ]
+      },
+      "lessonLineAfter": "Lesson 1 · You've tried 2 of 15 features",
+      "runStillDone": true
+    },
+    "day2-2026-10-30": {
+      "iso": "2026-10-30",
+      "homeButton": "Start the User tutorial",
+      "homeLine": "Testers: do today's User tutorial, then screenshot \"You finished today's lesson!\"",
+      "progressBefore": {
+        "tried": [
+          "titleColour",
+          "layout"
+        ],
+        "days": [
+          20755
+        ]
+      },
+      "title": "User tutorial",
+      "subtitle": "Today's lesson",
+      "lessonLine": "Lesson 2 · You've tried 2 of 15 features",
+      "task": "occasion",
+      "teach": "The occasion helps Megy pick words for your pages.",
+      "tryIt": "TRY IT : pick Baby.",
+      "steps": [
+        "1",
+        "2",
+        "3"
+      ],
+      "filledButtons": [
+        "Make my album"
+      ],
+      "answerLabel": "Baby",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Oct 30.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's occasion first: Baby.",
+      "wrongMsg": "Today's occasion is Baby. Tap Baby.",
+      "picked": "Baby",
+      "albumTask": "caption",
+      "target": {
+        "page": 3,
+        "slot": 0
+      },
+      "strip": "TRY IT : type any word.",
+      "coach": {
+        "target": "[data-coach=\"text-box\"]",
+        "step": "0",
+        "targetWhat": "textarea",
+        "text": "This box is for your own words. Type any word, then tap Done.",
+        "mascot": true,
+        "bubble": {
+          "x": 25,
+          "y": 488,
+          "w": 340,
+          "h": 64
+        },
+        "targetBox": {
+          "x": 16,
+          "y": 365,
+          "w": 358,
+          "h": 109
+        },
+        "ring": {
+          "x": 12,
+          "y": 361,
+          "w": 366,
+          "h": 117
+        },
+        "arrowSide": "above",
+        "arrowPointsAtTarget": true,
+        "takesTaps": false
+      },
+      "progressAfterAlbumMade": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion"
+        ],
+        "days": [
+          20755,
+          20756
+        ]
+      },
+      "coachWhileTyping": {
+        "target": "[data-coach=\"text-box\"]",
+        "step": "0",
+        "targetWhat": "textarea",
+        "text": "This box is for your own words. Type any word, then tap Done.",
+        "mascot": true,
+        "bubble": {
+          "x": 25,
+          "y": 488,
+          "w": 340,
+          "h": 64
+        },
+        "targetBox": {
+          "x": 16,
+          "y": 365,
+          "w": 358,
+          "h": 109
+        },
+        "ring": {
+          "x": 12,
+          "y": 361,
+          "w": 366,
+          "h": 117
+        },
+        "arrowSide": "above",
+        "arrowPointsAtTarget": true,
+        "takesTaps": false
+      },
+      "albumDone": "words on page 4",
+      "coachAfterDone": 0,
+      "progressAfterTaskDone": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption"
+        ],
+        "days": [
+          20755,
+          20756
+        ]
+      },
+      "secondsToTaskDone": 10,
+      "countdown1": "Take a minute to look through your album: 0:46",
+      "countdown2": "Take a minute to look through your album: 0:40",
+      "realWaitSeconds": 45,
+      "fgAtDone": 60005.10000002384,
+      "doneTitle": "You finished today's lesson!",
+      "doneBody": "Take a screenshot and send it as proof.",
+      "doneLine": "Today you tried: occasion Baby · words on page 4",
+      "stamp": "For Testing purposes Oct 30, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "cardHeight": {
+        "now": 72.5,
+        "was229": 88.5,
+        "top": 360,
+        "font": 14
+      },
+      "progressAtEnd": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption"
+        ],
+        "days": [
+          20755,
+          20756
+        ]
+      },
+      "lessonLineAfter": "Lesson 2 · You've tried 4 of 15 features",
+      "runStillDone": true
+    },
+    "day3-2026-10-31": {
+      "iso": "2026-10-31",
+      "homeButton": "Start the User tutorial",
+      "homeLine": "Testers: do today's User tutorial, then screenshot \"You finished today's lesson!\"",
+      "progressBefore": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption"
+        ],
+        "days": [
+          20755,
+          20756
+        ]
+      },
+      "title": "User tutorial",
+      "subtitle": "Today's lesson",
+      "lessonLine": "Lesson 3 · You've tried 4 of 15 features",
+      "task": "titleStyle",
+      "teach": "Your cover title can be bold or italic.",
+      "tryIt": "TRY IT : pick Plain.",
+      "steps": [
+        "1",
+        "2",
+        "3"
+      ],
+      "filledButtons": [
+        "Make my album"
+      ],
+      "answerLabel": "Plain",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Oct 31.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's style first: Plain.",
+      "wrongMsg": "Today's style is Plain. Tap Plain.",
+      "picked": "plain",
+      "albumTask": "look",
+      "target": {
+        "page": 2,
+        "slot": 0
+      },
+      "strip": "TRY IT : pick a filter.",
+      "coach": {
+        "target": "[data-coach=\"filter-sheet\"]",
+        "step": "0",
+        "targetWhat": "div",
+        "text": "Filters change how a photo looks. Tap any one.",
+        "mascot": true,
+        "bubble": {
+          "x": 25,
+          "y": 561,
+          "w": 340,
+          "h": 64
+        },
+        "targetBox": {
+          "x": 0,
+          "y": 639,
+          "w": 390,
+          "h": 206
+        },
+        "ring": {
+          "x": 2,
+          "y": 635,
+          "w": 386,
+          "h": 208
+        },
+        "arrowSide": "below",
+        "arrowPointsAtTarget": true,
+        "takesTaps": false
+      },
+      "progressAfterAlbumMade": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757
+        ]
+      },
+      "albumDone": "filter on page 3",
+      "coachAfterDone": 0,
+      "progressAfterTaskDone": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757
+        ]
+      },
+      "secondsToTaskDone": 9,
+      "countdown1": "Take a minute to look through your album: 0:47",
+      "countdown2": "Take a minute to look through your album: 0:41",
+      "realWaitSeconds": 46,
+      "fgAtDone": 60007.799999952316,
+      "doneTitle": "You finished today's lesson!",
+      "doneBody": "Take a screenshot and send it as proof.",
+      "doneLine": "Today you tried: title plain · filter on page 3",
+      "stamp": "For Testing purposes Oct 31, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "cardHeight": {
+        "now": 72.5,
+        "was229": 88.5,
+        "top": 360,
+        "font": 14
+      },
+      "progressAtEnd": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757
+        ]
+      },
+      "lessonLineAfter": "Lesson 3 · You've tried 6 of 15 features",
+      "runStillDone": true
+    },
+    "day4-2026-11-01": {
+      "iso": "2026-11-01",
+      "homeButton": "Start the User tutorial",
+      "homeLine": "Testers: do today's User tutorial, then screenshot \"You finished today's lesson!\"",
+      "progressBefore": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757
+        ]
+      },
+      "title": "User tutorial",
+      "subtitle": "Today's lesson",
+      "lessonLine": "Lesson 4 · You've tried 6 of 15 features",
+      "task": "titleSize",
+      "teach": "Your cover title can be small or large.",
+      "tryIt": "TRY IT : pick Large.",
+      "steps": [
+        "1",
+        "2",
+        "3"
+      ],
+      "filledButtons": [
+        "Make my album"
+      ],
+      "answerLabel": "Large",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Nov 1.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's title size first: Large.",
+      "wrongMsg": "Today's title size is Large. Tap Large.",
+      "picked": "large",
+      "albumTask": "swap",
+      "target": {
+        "page": 3,
+        "slot": 0
+      },
+      "strip": "TRY IT : swap a photo.",
+      "coach": {
+        "target": "[data-coach=\"photo-picker\"]",
+        "step": "0",
+        "targetWhat": "div",
+        "text": "You can swap any photo for another. Tap a photo to put it here.",
+        "mascot": true,
+        "bubble": {
+          "x": 25,
+          "y": 260,
+          "w": 340,
+          "h": 64
+        },
+        "targetBox": {
+          "x": 0,
+          "y": 338,
+          "w": 390,
+          "h": 506
+        },
+        "ring": {
+          "x": 2,
+          "y": 334,
+          "w": 386,
+          "h": 508
+        },
+        "arrowSide": "below",
+        "arrowPointsAtTarget": true,
+        "takesTaps": false
+      },
+      "progressAfterAlbumMade": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look",
+          "titleSize"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757,
+          20758
+        ]
+      },
+      "albumDone": "swapped a photo on page 4",
+      "coachAfterDone": 0,
+      "progressAfterTaskDone": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look",
+          "titleSize",
+          "swap"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757,
+          20758
+        ]
+      },
+      "secondsToTaskDone": 9,
+      "countdown1": "Take a minute to look through your album: 0:46",
+      "countdown2": "Take a minute to look through your album: 0:40",
+      "realWaitSeconds": 45,
+      "fgAtDone": 60007.199999928474,
+      "doneTitle": "You finished today's lesson!",
+      "doneBody": "Take a screenshot and send it as proof.",
+      "doneLine": "Today you tried: title large · swapped a photo on page 4",
+      "stamp": "For Testing purposes Nov 1, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "cardHeight": {
+        "now": 86.3,
+        "was229": 88.5,
+        "top": 346,
+        "font": 14
+      },
+      "progressAtEnd": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look",
+          "titleSize",
+          "swap"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757,
+          20758
+        ]
+      },
+      "lessonLineAfter": "Lesson 4 · You've tried 8 of 15 features",
+      "runStillDone": true
+    },
+    "day5-2026-11-02": {
+      "iso": "2026-11-02",
+      "homeButton": "Start the User tutorial",
+      "homeLine": "Testers: do today's User tutorial, then screenshot \"You finished today's lesson!\"",
+      "progressBefore": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look",
+          "titleSize",
+          "swap"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757,
+          20758
+        ]
+      },
+      "title": "User tutorial",
+      "subtitle": "Today's lesson",
+      "lessonLine": "Lesson 5 · You've tried 8 of 15 features",
+      "task": "titleShadow",
+      "teach": "A shadow helps your cover title stand out. You can take it off.",
+      "tryIt": "TRY IT : pick No shadow.",
+      "steps": [
+        "1",
+        "2",
+        "3"
+      ],
+      "filledButtons": [
+        "Make my album"
+      ],
+      "answerLabel": "No shadow",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Nov 2.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's choice first: No shadow.",
+      "wrongMsg": "Today's choice is No shadow. Tap No shadow.",
+      "picked": "off",
+      "albumTask": "openBook",
+      "target": {
+        "page": 1,
+        "slot": null
+      },
+      "strip": "TRY IT : see the open book.",
+      "coach": {
+        "target": "[data-coach=\"open-book\"]",
+        "step": "0",
+        "targetWhat": "button#preview-open-book",
+        "text": "See two pages side by side, like a real book. Tap See it as an open book.",
+        "mascot": true,
+        "bubble": {
+          "x": 25,
+          "y": 552,
+          "w": 340,
+          "h": 64
+        },
+        "targetBox": {
+          "x": 107,
+          "y": 630,
+          "w": 175,
+          "h": 30
+        },
+        "ring": {
+          "x": 103,
+          "y": 626,
+          "w": 183,
+          "h": 38
+        },
+        "arrowSide": "below",
+        "arrowPointsAtTarget": true,
+        "takesTaps": false
+      },
+      "progressAfterAlbumMade": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look",
+          "titleSize",
+          "swap",
+          "titleShadow"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757,
+          20758,
+          20759
+        ]
+      },
+      "glow": "true",
+      "albumDone": "open book view",
+      "coachAfterDone": 0,
+      "progressAfterTaskDone": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look",
+          "titleSize",
+          "swap",
+          "titleShadow",
+          "openBook"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757,
+          20758,
+          20759
+        ]
+      },
+      "secondsToTaskDone": 9,
+      "countdown1": "Take a minute to look through your album: 0:47",
+      "countdown2": "Take a minute to look through your album: 0:41",
+      "realWaitSeconds": 46,
+      "fgAtDone": 60007.200000047684,
+      "doneTitle": "You finished today's lesson!",
+      "doneBody": "Take a screenshot and send it as proof.",
+      "doneLine": "Today you tried: title with no shadow · open book view",
+      "stamp": "For Testing purposes Nov 2, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "cardHeight": {
+        "now": 96.3,
+        "was229": 112.1,
+        "top": 289,
+        "font": 11
+      },
+      "progressAtEnd": {
+        "tried": [
+          "titleColour",
+          "layout",
+          "occasion",
+          "caption",
+          "titleStyle",
+          "look",
+          "titleSize",
+          "swap",
+          "titleShadow",
+          "openBook"
+        ],
+        "days": [
+          20755,
+          20756,
+          20757,
+          20758,
+          20759
+        ]
+      },
+      "lessonLineAfter": "Lesson 5 · You've tried 10 of 15 features",
+      "runStillDone": true
+    },
+    "x1-step1": {
+      "offer": "Just testing the app? The User tutorial makes a whole album from 40 sample photos and teaches you the app. You can still make one from your own photos after. Start the User tutorial",
+      "opened": "User tutorial",
+      "subtitle": "Today's lesson"
+    },
+    "x2-browser": {
+      "homeBox": 0,
+      "homeSaysTutorial": false,
+      "step1Offer": 0,
+      "lessonScreen": 0,
+      "strip": 0,
+      "coach": 0,
+      "step1SaysTutorial": false
+    }
+  },
+  "errors": []
+}
