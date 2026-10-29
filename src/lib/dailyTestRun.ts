@@ -10,12 +10,23 @@
        when it is done), and what was done.
    "You're done" opens only when the task in the album is done AND the minute
    is up (runComplete).
+
+   Next to it, the lessons and features tried over the test days (owner,
+   2026-10-29: the daily test becomes a daily lesson): "Lesson 4 · You've
+   tried 7 of 15 features" (lib/lessonProgress, under PROGRESS_KEY). Only a
+   task DONE counts: the before-task once the album is made with it
+   (attachRun), the task in the album once the album shows it
+   (markAlbumTaskDone). Opening Today's lesson, or a pick with no album made,
+   counts nothing. Each feature counts once, whatever the day.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useSyncExternalStore } from 'react';
-import type { AlbumTaskId, DailyTestRequest } from './dailyTest';
+import { BEFORE_TASKS, ALBUM_TASKS, type AlbumTaskId, type DailyTestRequest } from './dailyTest';
+import { readProgress, markTried, lessonNumber, triedCount } from './lessonProgress';
 
 export const RUN_KEY = 'megy-daily-test-run';
+/** The lessons and features tried, over all the test days (lib/lessonProgress). */
+export const PROGRESS_KEY = 'megy-daily-test-progress';
 /** The minute while Today's test is open, before an album is made from it.
  *  Apart from the run, so opening Today's test (and closing it) never
  *  touches the album an earlier test made. */
@@ -119,6 +130,8 @@ export function addTestTime(ms: number): void {
 export function attachRun(test: DailyTestRequest, madeAt: number, task: AlbumTaskId, target: { page: number; slot: number | null }, start: PageSnap[]): void {
   const clock = readTestClock();
   try { storage()?.removeItem(TEST_CLOCK_KEY); } catch { /* storage blocked */ }
+  // The before-task is done: the album is made with it.
+  markTried(PROGRESS_KEY, test.before, test.day);
   writeRun({ day: test.day, fgMs: clock?.day === test.day ? clock.fgMs : 0, test, madeAt, task, target, start });
 }
 
@@ -130,7 +143,17 @@ export function addRunTime(ms: number): void {
 
 /** The task in the album is done. */
 export function markAlbumTaskDone(label: string): void {
+  const run = readRun();
+  if (run && !run.albumDone && run.task) markTried(PROGRESS_KEY, run.task, run.day);
   updateRun((r) => (r.albumDone ? r : { ...r, albumDone: label }));
+}
+
+/** Today's lesson, for the tester: its number, and the features tried so far
+ *  out of all 15 (the 10 before-tasks and the 5 in the album). */
+export function dailyLessonProgress(day: number): { lesson: number; tried: number; total: number } {
+  const features: string[] = [...BEFORE_TASKS, ...ALBUM_TASKS];
+  const p = readProgress(PROGRESS_KEY);
+  return { lesson: lessonNumber(p, day), tried: triedCount(p, features), total: features.length };
 }
 
 /** "You're done" has opened by itself. */

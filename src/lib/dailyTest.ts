@@ -31,6 +31,15 @@
    colour for all the album's words (no such setting). An album-wide font isn't a
    setting either: the font task sets the cover title's font, as the cover
    step does.
+
+   THE DAILY LESSON (owner, the same day: "it becomes a tutorial of sorts",
+   "make it look like its a tutorial"). The mechanics above are the same; the
+   tester sees them as a short lesson that teaches the app (the "User
+   tutorial", the owner's name for it): each before-task is a "Try it" card,
+   one line on what the feature does (lib/lessonTips) and then what to do
+   ("Your cover title can use many fonts. Try it: pick Great Vibes."); the
+   in-album task is a coach mark at the tool already open (DailyTestBar); the
+   done card says "You finished today's lesson!" and "Today you tried: ...".
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { MONTHS } from './testingPhase';
@@ -43,6 +52,7 @@ import { TEXT_COLORS, sameColor } from '../pages/builder/textColors';
 import { FONTS } from '../pages/builder/fonts';
 import { offerableAlbumSizes } from '../pages/builder/albumSizeOptions';
 import type { AlbumSizePreset, TextElement } from '../pages/builder/types';
+import { SETUP_TIPS } from './lessonTips';
 
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 
@@ -143,10 +153,10 @@ export type TaskLook = 'photos' | 'swatches' | 'fonts' | 'words';
 
 export interface BeforeTask {
   id: BeforeTaskId;
-  /** The task, with today's answer in **bold**. */
+  /** What the feature does, one line, first on its "Try it" card (lib/lessonTips). */
+  teach: string;
+  /** What to do, after "Try it:", with today's answer in **bold**: "pick **Great Vibes**." */
   line: string;
-  /** A second, smaller line (or none). */
-  hint?: string;
   options: TaskOption[];
   look: TaskLook;
   /** The one answer that counts (a value), or null when any one counts (the cover). */
@@ -207,11 +217,14 @@ const pickFor = (now: Date, values: readonly string[]): string => values[mod(rou
 /** Today's task on Today's test, with its options and the answer that counts. */
 export function beforeTaskFor(now: Date): BeforeTask {
   const id = todaysBeforeTask(now);
-  const prescribed = (look: TaskLook, options: TaskOption[], answers: string[], noun: string, line: (a: string) => string, hint?: string): BeforeTask => {
+  const teach = SETUP_TIPS[id];
+  // "Try it: pick **Red**." (the owner's examples: "Every page can have a
+  // background colour. Try it: pick Red.")
+  const prescribed = (look: TaskLook, options: TaskOption[], answers: string[], noun: string): BeforeTask => {
     const answer = pickFor(now, answers.length ? answers : options.map((o) => o.value));
     const label = options.find((o) => o.value === answer)?.label ?? answer;
     return {
-      id, line: line(label), hint, options, look, answer,
+      id, teach, line: `pick **${label}**.`, options, look, answer,
       wrong: `Today's ${noun} is ${label}. Tap ${label}.`,
       want: `Pick today's ${noun} first: ${label}.`,
     };
@@ -219,41 +232,32 @@ export function beforeTaskFor(now: Date): BeforeTask {
   switch (id) {
     case 'cover':
       return {
-        id, line: 'Choose your cover.', hint: 'Tap the photo you want on the front of your album.',
+        id, teach, line: 'tap the photo you want on the cover.',
         options: coverChoices(now).map((photo, i) => ({ value: photo, label: `Photo ${samplePhotoNumber(photo) ?? i + 1}`, photo })),
         look: 'photos', answer: null, wrong: null, want: 'Choose your cover first.',
       };
     case 'colour':
-      // The owner's words: "For today, select Brown for your album background."
-      return prescribed('swatches', PAGE_COLORS.map((c) => ({ value: c.hex, label: c.name, hex: c.hex })), [], 'colour',
-        (a) => `For today, select **${a}** for your album background.`);
-    case 'titleFont': {
-      const options = fontOptions();
-      return prescribed('fonts', options, [], 'font', (a) => `For today, pick the font **${a}** for your album's title.`,
-        'The title is your album\'s name, on the front cover.');
-    }
+      return prescribed('swatches', PAGE_COLORS.map((c) => ({ value: c.hex, label: c.name, hex: c.hex })), [], 'colour');
+    case 'titleFont':
+      return prescribed('fonts', fontOptions(), [], 'font');
     case 'titleAlign':
-      return prescribed('words', words(['left', 'Left'], ['center', 'Middle'], ['right', 'Right']), ['left', 'right'], 'side',
-        (a) => `Put the cover title on the **${a}**.`, "The title is your album's name, on the front cover.");
+      return prescribed('words', words(['left', 'Left'], ['center', 'Middle'], ['right', 'Right']), ['left', 'right'], 'side');
     case 'size': {
       const options = sizeOptions();
       const answers = options.map((o) => o.value).filter((v) => v !== '8x8');
-      return prescribed('words', options, answers, 'size', (a) => `Make your album **${a}**.`, 'The size is in inches.');
+      return prescribed('words', options, answers, 'size');
     }
     case 'titleColour':
-      return prescribed('swatches', titleColourOptions(), [], 'title colour', (a) => `Make the cover title **${a}**.`,
-        "The title is your album's name, on the front cover.");
+      return prescribed('swatches', titleColourOptions(), [], 'title colour');
     case 'occasion':
-      return prescribed('words', COMMON_THEMES.map((o) => ({ value: o, label: o })), [], 'occasion', (a) => `This album is for: **${a}**.`);
+      return prescribed('words', COMMON_THEMES.map((o) => ({ value: o, label: o })), [], 'occasion');
     case 'titleStyle':
       return prescribed('words', words(['bold', 'Bold'], ['italic', 'Italic'], ['boldItalic', 'Bold + italic'], ['plain', 'Plain']),
-        ['italic', 'boldItalic', 'plain'], 'style', (a) => `Make the cover title **${a}**.`, "The title is your album's name, on the front cover.");
+        ['italic', 'boldItalic', 'plain'], 'style');
     case 'titleSize':
-      return prescribed('words', words(['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']), ['small', 'large'], 'title size',
-        (a) => `Make the cover title **${a}**.`, "The title is your album's name, on the front cover.");
+      return prescribed('words', words(['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']), ['small', 'large'], 'title size');
     case 'titleShadow':
-      return prescribed('words', words(['on', 'With shadow'], ['off', 'No shadow']), ['off'], 'choice',
-        (a) => `Take the shadow off the cover title: tap **${a}**.`);
+      return prescribed('words', words(['on', 'With shadow'], ['off', 'No shadow']), ['off'], 'choice');
   }
 }
 
@@ -363,7 +367,7 @@ export function sizeFrom(request: Pick<DailyTestRequest, 'before' | 'answer'> | 
   return request?.before === 'size' ? (request.answer as AlbumSizePreset) : null;
 }
 
-/* ── The line on "You're done" ── */
+/* ── The line on "You finished today's lesson!" ── */
 
 /** Today's before-task and its answer, for the line: "title font Dancing Script". */
 export function beforeTaskLabel(request: Pick<DailyTestRequest, 'before' | 'answer'>): string {
@@ -384,21 +388,24 @@ export function beforeTaskLabel(request: Pick<DailyTestRequest, 'before' | 'answ
   }
 }
 
-/** "Today: title font Dancing Script · new layout on page 5". */
+/** "Today you tried: title font Dancing Script · new layout on page 5": the
+ *  proof line, the one place the done card names the day's work. */
 export function doneLine(before: string, album: string): string {
-  return `Today: ${before} · ${album}`;
+  return `Today you tried: ${before} · ${album}`;
 }
 
 /* ── The in-album tasks ── */
 
-/** What the album task says, at the top of the album. */
+/** What the album task says, after "Try it:", in the lesson strip at the top
+ *  of the album: short, to fit one line beside the strip's button (the coach
+ *  mark at the tool says what it is for and what to do: lib/lessonTips). */
 export const ALBUM_TASK_HINTS: Record<AlbumTaskId, string> = {
-  layout: 'Pick a new layout for this page.',
-  caption: 'Type any word in this box, then tap Done.',
+  layout: 'pick a new layout.',
+  caption: 'type any word.',
   // The phone calls a photo's look a "Filter" (Studio's sheet): its word.
-  look: 'Give this photo a filter: tap one.',
-  swap: 'Swap this photo: tap another photo.',
-  openBook: 'See your album as an open book: tap See it as an open book.',
+  look: 'pick a filter.',
+  swap: 'swap a photo.',
+  openBook: 'see the open book.',
 };
 
 /** The button beside it that opens the tool again (none for the open book:

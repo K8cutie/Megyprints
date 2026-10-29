@@ -175,12 +175,14 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-describe('Step 1 in the Android app: "Make a sample album"', () => {
+describe('Step 1 in the Android app: "Start the User tutorial" (was "Make a sample album")', () => {
   it('is offered on Step 1, says what it does, and Next stays the way to use your own photos', async () => {
     await open();
     expect(document.querySelector('[data-step="pick_theme"]')).not.toBeNull();
-    expect(offer()?.textContent).toContain('Just testing the app? Megy makes a whole album from 40 sample photos. You can still make one from your own photos after.');
-    expect(make()?.textContent).toBe('Make a sample album');
+    // The owner, 2026-10-29: "Can we call it User tutorial instead of sample album".
+    expect(offer()?.textContent).toContain('Just testing the app? The User tutorial makes a whole album from 40 sample photos and teaches you the app. You can still make one from your own photos after.');
+    expect(make()?.textContent).toBe('Start the User tutorial');
+    expect(offer()!.textContent!.toLowerCase()).not.toContain('sample album');
   });
 
   // Owner, 2026-10-28, of it under the name and occasions: "couldn't be more NOT OBVIOUS".
@@ -253,7 +255,7 @@ describe('Step 1 in the Android app: "Make a sample album"', () => {
     await settle(4);
     expect(calls('add_photos')).toHaveLength(0);
     expect(calls('generate_album')).toHaveLength(0);
-    expect($('sample-album-failed')?.textContent).toBe("Couldn't make the sample album. Check your internet, then tap again.");
+    expect($('sample-album-failed')?.textContent).toBe("Couldn't start the User tutorial. Check your internet, then tap again.");
     fetchFails = false;
     await act(async () => { make()!.click(); });
     await settle();

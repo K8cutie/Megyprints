@@ -1,24 +1,36 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   Today's test — the short screen that Home's "Make today's sample album"
-   and Step 1's "Make a sample album" open, in the Android app while testing
-   (lib/dailyTest):
+   Today's lesson — the "User tutorial" screen that Home's "Start the User
+   tutorial" and Step 1's offer open, in the Android app while testing
+   (lib/dailyTest). The daily test, shown as a short lesson that teaches the
+   app (owner, 2026-10-29: "it becomes a tutorial of sorts", "make it look
+   like its a tutorial"; and "Can we call it User tutorial instead of sample
+   album").
 
-     Today's test                                              ✕
-     1  Type today's date as your album's name
-        [ Oct 29            ]   For example: Oct 29
-     2  Today's task, one of 10 (by the day), e.g.
-        For today, pick the font Dancing Script for your album's title.
-        [the fonts, each in its own face]
+     (Megy) User tutorial                                        ✕
+            Today's lesson
+            Lesson 4 · You've tried 7 of 15 features   ▬▬▬▬▭▭▭▭
+     (1) Your album's name goes on its front cover.
+         Type today's date as your album's name
+         [ Oct 29            ]   For example: Oct 29
+     (2) Your cover title can use many fonts.
+         TRY IT  pick Great Vibes.
+         [the fonts, each in its own face]
+     (3) Next: one more tip inside your album.
      [ Make my album ]
 
-   One tap (or the date, typed) for each step, on a list already shown; a
-   wrong pick says "Today's font is Dancing Script. Tap Dancing Script." ONE
-   filled button, always tappable, kept at the bottom of the screen: with a
-   step missing it says which, in the order of the steps ("Type today's date
-   first." / "Pick today's font first: Dancing Script."), and shows that
-   step; never a greyed dead button. Done, it keeps the test for the builder
-   (requestDailyTest) and the caller opens the builder, which makes the album
-   with it. The minute in the app starts here (lib/dailyTestRun).
+   The mechanics are #229's: one tap (or the date, typed) for each step, on a
+   list already shown; a wrong pick says "Today's font is Great Vibes. Tap
+   Great Vibes." ONE filled button, always tappable, kept at the bottom of the
+   screen: with a step missing it says which, in the order of the steps
+   ("Type today's date first." / "Pick today's font first: Great Vibes."), and
+   shows that step; never a greyed dead button. Done, it keeps the test for
+   the builder (requestDailyTest) and the caller opens the builder, which
+   makes the album with it. The minute in the app starts here
+   (lib/dailyTestRun).
+
+   The lesson's look (step chips, the "Try it" card, the lesson count) is
+   components/lesson; what is the tester's here is the date step, today's
+   answer and the minute.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useRef, useState } from 'react';
@@ -32,18 +44,12 @@ import {
   isTodaysDate, dateExample, dateRefusedMessage, beforeTaskFor, isTodaysAnswer, dailyTestMissing, requestDailyTest, WANT_DATE,
   type TaskOption,
 } from '../../lib/dailyTest';
-import { startRun, addTestTime, useForegroundClock } from '../../lib/dailyTestRun';
+import { startRun, addTestTime, useForegroundClock, dailyLessonProgress } from '../../lib/dailyTestRun';
+import { progressLine } from '../../lib/lessonProgress';
+import { LessonCard, LessonProgressLine, StepChip, TryIt } from '../../components/lesson/LessonParts';
+import MegyMascot from '../../components/MegyMascot';
 
 const RING = '0 0 0 2px #FFFFFF, 0 0 0 5px #B85C38';
-const CARD = 'rounded-2xl bg-white p-4 shadow-[0_4px_16px_rgba(0,0,0,0.06)] scroll-mt-4 transition-shadow';
-// The step "Make my album" is waiting on: a red ring, so it is easy to find.
-const WAITING = ' ring-2 ring-red-600/70';
-
-function StepNumber({ n }: { n: number }) {
-  return (
-    <span aria-hidden="true" className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-peach text-[13px] font-bold text-white">{n}</span>
-  );
-}
 
 /** Bring a step into view (not in jsdom, which has no scrolling). */
 function show(el: HTMLElement | null) {
@@ -97,7 +103,9 @@ export default function TodaysTest({ onMake, onClose }: {
   // One moment for the whole screen: the example, the task and its answer agree.
   const [now] = useState(() => new Date());
   const [task] = useState(() => beforeTaskFor(now));
-  // The minute in the app starts as Today's test opens.
+  // Which lesson this is, and the features tried so far (read as it opens).
+  const [progress] = useState(() => dailyLessonProgress(sampleDayNumber(now)));
+  // The minute in the app starts as Today's lesson opens.
   useEffect(() => { startRun(sampleDayNumber(now)); }, [now]);
   useForegroundClock(true, addTestTime);
   const [name, setName] = useState('');
@@ -133,23 +141,33 @@ export default function TodaysTest({ onMake, onClose }: {
 
   return createPortal(
     <div className="fixed inset-0 z-[140] overflow-y-auto overscroll-contain bg-paper font-body" data-testid="todays-test">
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="todays-test-title" tabIndex={-1}
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="todays-test-title" aria-describedby="todays-test-subtitle" tabIndex={-1}
         className="mx-auto flex min-h-full max-w-[480px] flex-col px-4" style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
-        <div className="flex items-center justify-between py-2">
-          <h2 id="todays-test-title" tabIndex={-1} data-autofocus className="font-display text-[22px] font-semibold text-dark outline-none">
-            Today&apos;s test
-          </h2>
+        <div className="flex items-start gap-3 py-2">
+          <MegyMascot size={40} alt="" className="mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h2 id="todays-test-title" tabIndex={-1} data-autofocus className="font-display text-[22px] font-semibold leading-tight text-dark outline-none">
+              User tutorial
+            </h2>
+            <p id="todays-test-subtitle" data-testid="todays-test-subtitle" className="text-[15px] font-semibold text-blush-pink">Today&apos;s lesson</p>
+            <LessonProgressLine line={progressLine(progress.lesson, progress.tried, progress.total)} tried={progress.tried} total={progress.total} />
+          </div>
           <button type="button" onClick={onClose} aria-label="Close" data-testid="todays-test-close"
             className="-mr-2 rounded-full p-2 text-medium hover:bg-line-soft">
             <X size={22} />
           </button>
         </div>
 
-        {/* 1. Today's date as the album's name. */}
-        <section className={`mt-2 ${CARD}${waitingOn === 'date' ? WAITING : ''}`} data-testid="todays-test-name-step">
-          <label htmlFor="todays-test-name" className="flex gap-2 text-[15px] font-semibold leading-snug text-dark">
-            <StepNumber n={1} /> Type today&apos;s date as your album&apos;s name
-          </label>
+        {/* 1. Today's date as the album's name (the tester's step). */}
+        <LessonCard step={1} className="mt-2" waiting={waitingOn === 'date'} data-testid="todays-test-name-step"
+          head={(
+            <>
+              <p className="text-[14px] leading-snug text-medium" data-testid="todays-test-name-teach">Your album&apos;s name goes on its front cover.</p>
+              <label htmlFor="todays-test-name" className="mt-0.5 block text-[15px] font-semibold leading-snug text-dark">
+                Type today&apos;s date as your album&apos;s name
+              </label>
+            </>
+          )}>
           <input id="todays-test-name" ref={inputRef} data-testid="todays-test-name" value={name}
             onChange={(e) => { setName(e.target.value); setDateChecked(false); }}
             onBlur={() => setDateChecked(true)}
@@ -169,15 +187,20 @@ export default function TodaysTest({ onMake, onClose }: {
               <p className="text-taupe">For example: {example}</p>
             )}
           </div>
-        </section>
+        </LessonCard>
 
-        {/* 2. Today's task: one tap on the list. */}
-        <section ref={taskRef} className={`mt-3 ${CARD}${waitingOn === 'task' ? WAITING : ''}`} data-testid="todays-test-task" data-task={task.id}>
-          <h3 id="todays-test-task-line" className="flex gap-2 font-body text-[15px] font-semibold leading-snug text-dark" data-testid="todays-test-task-line">
-            <StepNumber n={2} />{' '}
-            <span>{splitBold(task.line).map((run, i) => (run.bold ? <b key={i} className="text-peach">{run.text}</b> : <span key={i}>{run.text}</span>))}</span>
-          </h3>
-          {task.hint && <p className="mt-1 pl-8 text-[14px] leading-snug text-medium" data-testid="todays-test-task-hint">{task.hint}</p>}
+        {/* 2. Today's tip: what the feature does, then "Try it", one tap on the list. */}
+        <LessonCard step={2} className="mt-3" waiting={waitingOn === 'task'} cardRef={taskRef}
+          data-testid="todays-test-task" data-task={task.id}
+          head={(
+            <>
+              <p className="text-[15px] font-semibold leading-snug text-dark" data-testid="todays-test-task-teach">{task.teach}</p>
+              <p id="todays-test-task-line" className="mt-1 text-[15px] leading-snug text-dark" data-testid="todays-test-task-line">
+                <TryIt />
+                {splitBold(task.line).map((run, i) => (run.bold ? <b key={i} className="text-blush-pink">{run.text}</b> : <span key={i}>{run.text}</span>))}
+              </p>
+            </>
+          )}>
           <div role="radiogroup" aria-labelledby="todays-test-task-line" className={`mt-3 grid gap-2 ${cols}`}>
             {task.options.map((o) => (
               <Option key={o.value} option={o} look={task.look} on={!!answer && isTodaysAnswer({ ...task, answer: o.value }, answer)} onTap={() => tap(o.value)} />
@@ -186,7 +209,13 @@ export default function TodaysTest({ onMake, onClose }: {
           {wrong && task.wrong && (
             <p role="alert" className="mt-2 text-[13px] font-semibold leading-snug text-red-700" data-testid="todays-test-wrong">{task.wrong}</p>
           )}
-        </section>
+        </LessonCard>
+
+        {/* 3. What comes next: one more tip, inside the album. */}
+        <div className="mt-3 flex items-center gap-3 px-4" data-testid="todays-test-next">
+          <StepChip n={3} state="next" />
+          <p className="text-[14px] leading-snug text-medium">Next: one more tip inside your album.</p>
+        </div>
 
         {/* ONE filled button, always tappable, always in reach at the bottom.
             What is missing shows just above it, so the button never moves. */}

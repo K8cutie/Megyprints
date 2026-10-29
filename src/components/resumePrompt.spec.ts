@@ -368,7 +368,7 @@ describe("the Android app while testing: yesterday's sample album", () => {
   it("yesterday's sample album chosen: the big button makes today's sample album, a new one", async () => {
     await open([sample('s1', at(28, 20)), own('Our trip', at(28, 9))]);
     expect(names()).toEqual(['Sample Album · Oct 28', 'Our trip']);
-    expect($('resume-yes')!.textContent).toBe("Make today's sample album");
+    expect($('resume-yes')!.textContent).toBe('Start the User tutorial');
     await click($('resume-yes')!);
     expect($('resume-prompt')).toBeNull();
     // A new album (the builder starts empty), and the builder makes it at once.
@@ -408,7 +408,7 @@ describe("the Android app while testing: yesterday's sample album", () => {
     AUTH.user = ME; AUTH.loading = false;
     await rerender();
     expect(names()).toEqual(['Sample Album · Oct 28']);
-    expect($('resume-yes')!.textContent).toBe("Make today's sample album");
+    expect($('resume-yes')!.textContent).toBe('Start the User tutorial');
   });
 
   it("the account's list is remembered with each sample album's day (one number, not its photos)", async () => {
@@ -427,7 +427,7 @@ describe("the Android app while testing: yesterday's sample album", () => {
     }));
     await open([own('Our trip', at(28, 9))]);
     expect(names()[0]).toBe('Sample Album · Oct 28');
-    expect($('resume-yes')!.textContent).toBe("Make today's sample album");
+    expect($('resume-yes')!.textContent).toBe('Start the User tutorial');
   });
 });
 

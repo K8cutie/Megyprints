@@ -196,18 +196,19 @@ export interface SampleAlbumNote {
   proof?: DoneProof | null;
 }
 
-/** Page 1, where the sample album opens. */
+/** Page 1, where the sample album opens. No "test" in a heading a tester
+ *  sees (2026-10-29: the daily test reads as a lesson). */
 export const SAMPLE_WELCOME_NOTE: SampleAlbumNote = {
-  title: 'Welcome to the Megy Prints app test!',
+  title: 'Welcome to the Megy Prints app!',
   body: 'Tap **Next page** until you reach the last page, then tap **Done — Preview my album**.',
 };
 
-/** Page 1 once the album has been previewed: Today's test (lib/dailyTest)
- *  opens it on "You're done", so the steps above no longer apply. Every
- *  page but the last then shows "Back to preview" (PageTurnBar). */
+/** Page 1 once the album has been previewed: Today's lesson (lib/dailyTest)
+ *  opens it on "You finished today's lesson!", so the steps above no longer
+ *  apply. Every page but the last then shows "Back to preview" (PageTurnBar). */
 export const SAMPLE_WELCOME_BACK_NOTE: SampleAlbumNote = {
-  title: 'Welcome to the Megy Prints app test!',
-  body: "Tap **Back to preview** to see **You're done** again.",
+  title: 'Welcome to the Megy Prints app!',
+  body: "Tap **Back to preview** to see **You finished today's lesson!** again.",
 };
 
 /** Page 1's card: how to reach "You're done", or (seen already) the way back. */
@@ -215,11 +216,12 @@ export function sampleWelcomeNote(previewSeen: boolean): SampleAlbumNote {
   return previewSeen ? SAMPLE_WELCOME_BACK_NOTE : SAMPLE_WELCOME_NOTE;
 }
 
-/** The last page, in Preview, once today's test is done (lib/dailyTestRun).
+/** The last page, in Preview, once today's lesson is done (lib/dailyTestRun).
  *  With the stamp's date and time beside it, and the line that names both of
- *  today's tasks (doneNote), the screenshot is the proof. */
+ *  today's tasks (doneNote: "Today you tried: ..."), the screenshot is the
+ *  proof. */
 export const SAMPLE_DONE_NOTE: SampleAlbumNote = {
-  title: "You're done with today's test!",
+  title: "You finished today's lesson!",
   body: 'Take a screenshot and send it as proof.',
 };
 
@@ -228,11 +230,13 @@ export function doneNote(proof: DoneProof | null | undefined): SampleAlbumNote {
   return proof ? { ...SAMPLE_DONE_NOTE, proof } : SAMPLE_DONE_NOTE;
 }
 
-/** The last page of a sample album that wasn't made through Today's test
- *  (from sample photos added on the photo step, say): no "You're done". */
+/** The last page of a sample album that wasn't made through Today's lesson
+ *  (from sample photos added on the photo step, say): no "You finished". The
+ *  button it names is Home's (the owner, 2026-10-29: "Can we call it User
+ *  tutorial instead of sample album"). */
 export const SAMPLE_NOT_DONE_NOTE: SampleAlbumNote = {
-  title: "Today's test isn't done yet",
-  body: "Go to Home and tap **Make today's sample album**.",
+  title: "Today's lesson isn't done yet",
+  body: "Go to Home and tap **Start the User tutorial**.",
 };
 
 /** The cards show, and Preview opens on the last page, in a sample album in

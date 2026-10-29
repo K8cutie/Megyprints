@@ -16,10 +16,18 @@
    Done is a change in the album, on any page (not only the one opened): a
    new layout, new words, a new filter, photos in other places. The open book
    is the one that is not in the album: Preview says so (markAlbumTaskDone).
+
+   The coach mark (2026-10-29, the daily lesson): it points at the tool that
+   opened, each one marked data-coach="…" (lib/lessonTips ALBUM_TIPS):
+   the layout picker, the text box, the Filter sheet, the photo picker, and
+   Preview's open-book button. Once that tool is closed, at the strip's
+   button that opens it again.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumTaskId } from '../../lib/dailyTest';
 import type { PageSnap } from '../../lib/dailyTestRun';
+import { ALBUM_TIPS, coachSelector, coachText } from '../../lib/lessonTips';
+import type { CoachStep } from '../../components/lesson/CoachMark';
 import { getTemplateById } from './pageTemplates';
 import type { AlbumPage } from './types';
 
@@ -109,3 +117,16 @@ export const OPEN_BOOK_DONE = 'open book view';
 /** How long the open book must stay on screen to count (Preview's first draw
  *  shows it for an instant on an upright phone). */
 export const OPEN_BOOK_SEEN_MS = 1500;
+
+/** The strip's button that opens the task's tool again (DailyTestBar). */
+export const REOPEN_CONTROL = 'lesson-show';
+
+/** Where the coach mark points for today's task in the album: the tool that
+ *  opened for it, and once that is closed, the strip's button (`reopen`, its
+ *  words; none: nothing to point at then). */
+export function coachStepsFor(task: AlbumTaskId, reopen: string | null): CoachStep[] {
+  const tip = ALBUM_TIPS[task];
+  const steps: CoachStep[] = [{ target: coachSelector(tip.control), text: coachText(tip) }];
+  if (reopen) steps.push({ target: coachSelector(REOPEN_CONTROL), text: `Tap **${reopen}** to try it.` });
+  return steps;
+}

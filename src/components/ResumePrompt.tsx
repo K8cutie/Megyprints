@@ -294,7 +294,7 @@ function ResumePromptScreen() {
               data-autofocus
               className="w-full py-3 rounded-xl bg-peach text-white text-sm font-semibold hover:brightness-105 transition-all"
             >
-              {todaysSample ? "Make today's sample album" : 'Yes, resume'}
+              {todaysSample ? 'Start the User tutorial' : 'Yes, resume'}
             </button>
             <button
               onClick={startNew}

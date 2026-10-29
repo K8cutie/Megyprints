@@ -57,7 +57,7 @@ export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onSta
         <div className="space-y-2">
           <button onClick={todaysSample ? onStartTodaysSample : onContinue} data-testid="start-new-continue" data-today-sample={todaysSample || undefined} data-autofocus
             className="w-full py-3 rounded-xl bg-peach text-white text-sm font-semibold hover:brightness-105 transition-all">
-            {todaysSample ? "Make today's sample album" : 'Continue my album'}
+            {todaysSample ? 'Start the User tutorial' : 'Continue my album'}
           </button>
           <button onClick={onStartNew} data-testid="start-new-confirm"
             className="w-full py-3 rounded-xl border border-peach text-blush-pink text-sm font-semibold hover:bg-blush transition-colors flex items-center justify-center gap-2">
@@ -66,7 +66,7 @@ export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onSta
         </div>
         <p className="text-xs text-taupe mt-3" data-testid="start-new-note">
           {todaysSample
-            ? signedIn ? 'The old sample album stays in Your Projects.' : 'The old sample album is replaced on this device.'
+            ? signedIn ? "The old tutorial album stays in Your Projects." : "The old tutorial album is replaced on this device."
             : signedIn
               ? draft.hasContent ? 'This one stays in Your Projects.' : "This one has no photos yet, so it won't be kept."
               : 'Starting a new one deletes this album from this device. Sign in first to keep it.'}

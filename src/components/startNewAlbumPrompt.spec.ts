@@ -97,13 +97,13 @@ describe("yesterday's sample album in progress (the Android app, testing)", () =
   it("the big button makes today's sample album; the note says what happens to the old one", () => {
     APP.native = true;
     const { h, q } = show(sampleDraft(yesterday()), false);
-    expect(q('start-new-continue').textContent).toBe("Make today's sample album");
+    expect(q('start-new-continue').textContent).toBe('Start the User tutorial');
     expect(q('start-new-continue').className).toContain('bg-peach');
-    expect(q('start-new-note').textContent).toBe('The old sample album is replaced on this device.');
+    expect(q('start-new-note').textContent).toBe('The old tutorial album is replaced on this device.');
     act(() => q('start-new-continue').click());
     expect(h.onStartTodaysSample).toHaveBeenCalledTimes(1);
     expect(h.onContinue).not.toHaveBeenCalled();
-    expect(show(sampleDraft(yesterday()), true).q('start-new-note').textContent).toBe('The old sample album stays in Your Projects.');
+    expect(show(sampleDraft(yesterday()), true).q('start-new-note').textContent).toBe('The old tutorial album stays in Your Projects.');
   });
 
   it("today's sample album, their own album, or the website: Continue my album, as always", () => {

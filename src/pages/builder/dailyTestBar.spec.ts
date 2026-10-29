@@ -12,6 +12,11 @@ import { createRoot, type Root } from 'react-dom/client';
    coming back carries on, never from zero and never skipped. Before that:
    "Look through your album: You're done in 0:23". Android app only, while
    testing.
+
+   THE DAILY LESSON (owner, the same day: "make it look like its a
+   tutorial"): the bar is a lesson strip, step 3, "Try it: pick a new layout
+   for this page.", with a coach mark at the tool; the countdown says "Take a
+   minute to look through your album: 0:48".
    ══════════════════════════════════════════════════════════════════════════ */
 
 const h = vi.hoisted(() => ({ native: true, testing: true, vis: 'visible' as DocumentVisibilityState }));
@@ -123,7 +128,10 @@ describe('the bar at the top of the album', () => {
     made({}, 'caption');
     actions.phase = 'preview';
     await render();
-    expect(text($('daily-test-hint'))).toBe("Today's task: Type any word in this box, then tap Done.");
+    expect(text($('daily-test-hint'))).toBe('Try it: type any word.');
+    expect(text($('lesson-try-it'))).toBe('Try it:');
+    // Step 3 of the lesson (1 the name, 2 the tip before the album).
+    expect($('daily-test-bar')!.querySelector('[data-testid="lesson-step-chip"]')!.textContent).toBe('3');
     expect(text($('daily-test-show'))).toBe('Type here');
     expect($('daily-test-show')!.className).not.toContain('bg-peach'); // not a second filled button
     const asked = vi.fn();
@@ -140,7 +148,7 @@ describe('the bar at the top of the album', () => {
     made({}, 'openBook');
     actions.phase = 'preview';
     await render();
-    expect(text($('daily-test-hint'))).toBe("Today's task: See your album as an open book: tap See it as an open book.");
+    expect(text($('daily-test-hint'))).toBe('Try it: see the open book.');
     expect($('daily-test-show')).toBeNull();
     actions.phase = 'edit';
     await render();
@@ -158,7 +166,7 @@ describe('the bar at the top of the album', () => {
     await render();
     expect(run().albumDone).toBe('new layout on page 5');
     expect($('daily-test-bar')).toBeNull();
-    expect(text($('daily-test-countdown'))).toBe("Look through your album: You're done in 0:48");
+    expect(text($('daily-test-countdown'))).toBe('Take a minute to look through your album: 0:48');
     await seconds(30);
     expect(text($('daily-test-left'))).toBe('0:18');
     expect(previews()).toBe(0);
@@ -227,6 +235,36 @@ describe('the bar at the top of the album', () => {
     await seconds(1);
     expect(actions.goToPage).toHaveBeenCalledWith(39);
     expect(previews()).toBe(0);
+  });
+
+  it('the coach mark: on the tool while it is open; closed, on the strip\'s button; gone once the task is done', async () => {
+    made({ fgMs: 12_000 }, 'layout');
+    const tool = document.createElement('div');
+    tool.setAttribute('data-coach', 'layout-picker'); // the layout picker, open (lessonCoachMark.spec: the real one)
+    document.body.appendChild(tool);
+    await render();
+    expect($('coach-mark')!.dataset.coachTarget).toBe('[data-coach="layout-picker"]');
+    expect(text($('coach-mark-text'))).toBe("This is where you change a page's layout. Pick any new one.");
+    expect([...$('coach-mark-text')!.querySelectorAll('b')].map((b) => b.textContent)).toEqual(['Pick any new one.']);
+    // Closed: not on the button at once (a tool on its way in never flashes the button first)...
+    tool.remove();
+    await act(async () => { vi.advanceTimersByTime(300); });
+    expect($('coach-mark')).toBeNull();
+    // ...then on the strip's button that opens it again.
+    await act(async () => { vi.advanceTimersByTime(600); });
+    expect($('coach-mark')!.dataset.coachTarget).toBe('[data-coach="lesson-show"]');
+    expect(document.querySelector('[data-coach="lesson-show"]')).toBe($('daily-test-show'));
+    expect(text($('coach-mark-text'))).toBe('Tap Change layout to try it.');
+    // Open again: back on the tool, at once.
+    document.body.appendChild(tool);
+    await act(async () => { vi.advanceTimersByTime(10); });
+    expect($('coach-mark')!.dataset.coachTarget).toBe('[data-coach="layout-picker"]');
+    // The new layout: the task is done, the coach mark is gone (the countdown).
+    actions.albumPages = pagesOf((i) => (i === 4 ? { templateId: 't88-other' } : {}));
+    await render();
+    expect($('coach-mark')).toBeNull();
+    expect($('daily-test-countdown')).not.toBeNull();
+    tool.remove();
   });
 
   it('done and shown: no bar', async () => {

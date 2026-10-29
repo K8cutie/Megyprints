@@ -51,9 +51,9 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
   const [colorSheet, setColorSheet] = useState(false); // the page-colour sheet (pageColors.ts)
   const placedOn = placedPhotoPages(pages); // photo → page, for the picker's "Page 3" tag
-  // Today's test (lib/dailyTestRun): the album Today's test made, while its
-  // task in the album isn't done. Its page-1 card gives way to the bar at the
-  // top (DailyTestBar), which says the task.
+  // Today's lesson (lib/dailyTestRun): the album Today's lesson made, while
+  // its task in the album isn't done. Its page-1 card gives way to the strip at
+  // the top and the coach mark at the tool (DailyTestBar).
   const dailyRun = useDailyTestRun();
   const testRun = sampleNotes ? runFor(dailyRun, pages) : null;
   const pendingTask = testRun && !testRun.albumDone ? { task: testRun.task!, page: testRun.target!.page, slot: testRun.target!.slot } : null;
@@ -440,6 +440,8 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
               transition={{ type: 'spring', damping: 30, stiffness: 320 }}
               className="w-full bg-white rounded-t-2xl max-h-[60vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
+              // A lesson's coach mark points here (lib/lessonTips ALBUM_TIPS.swap).
+              data-coach="photo-picker"
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
                 <span className="text-sm font-semibold text-dark">Add a photo</span>
