@@ -1,0 +1,15 @@
+PASS  daily: Home's button: "Start the User tutorial"
+PASS  daily: today's test: "occasion" before the album, "caption" in it
+PASS  daily: task done, the minute is counting
+PASS  daily: Megy opened on the pages during the minute  — open=true h=692 mascot=false card=Step 5: Review Each Page 🔍 preview=false done=false
+FAIL  daily: after the minute the done page ("You finished today's lesson!") opens and Megy's panel is NOT over it  — open=true h=692 mascot=false card=Step 7: Preview & Order 📦 preview=true done=true
+FAIL  daily: ✕ closes the panel fully  — open=true h=692 mascot=false card=- preview=true done=true (blank: "Show the steps again")
+PASS  daily-done: tapping Megy opens her panel  — open=true h=692 mascot=false card=Step 7: Preview & Order 📦 preview=true done=true
+FAIL  daily-done: ✕ closes the whole panel, back to the small Megy button  — open=true h=692 mascot=false card=- preview=true done=true (blank: "Show the steps again")
+PASS  daily-done: the drag handle is there  — {"x":195,"y":680.078125,"w":390,"h":22}
+FAIL  daily-done: dragging the handle UP with a finger closes the panel  — open=true h=692 mascot=false card=Step 7: Preview & Order 📦 preview=true done=true
+FAIL  daily-done: dragging the handle DOWN with a finger closes the panel  — open=true h=692 mascot=false card=Step 7: Preview & Order 📦 preview=true done=true
+FAIL  daily-done: Back closes the panel first and stays on the same screen (preview)  — open=true h=692 mascot=false card=All Pages Reviewed 🎉 preview=false done=false
+FAIL  daily: still on "You're done" after all that  — open=false h=1 mascot=true card=All Pages Reviewed 🎉 preview=false done=false
+PASS  daily: no page errors
+7 FAILED

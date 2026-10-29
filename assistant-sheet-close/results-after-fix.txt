@@ -1,0 +1,30 @@
+PASS  album: 45 photos → cover → Make my album → the pages
+PASS  album-pages: tapping Megy opens her panel  — open=true h=692 mascot=false card=Step 5: Review Each Page 🔍 preview=false done=false
+PASS  album-pages: ✕ closes the whole panel, back to the small Megy button  — open=false h=1 mascot=true card=Step 5: Review Each Page 🔍 preview=false done=false
+PASS  album-pages: the drag handle is there  — {"x":195,"y":676.078125,"w":390,"h":30}
+PASS  album-pages: dragging the handle UP with a finger closes the panel  — open=false h=1 mascot=true card=Step 5: Review Each Page 🔍 preview=false done=false
+PASS  album-pages: dragging the handle DOWN with a finger closes the panel  — open=false h=1 mascot=true card=Step 5: Review Each Page 🔍 preview=false done=false
+PASS  album-pages: Back closes the panel first and stays on the same screen (pages)  — open=false h=1 mascot=true card=Step 5: Review Each Page 🔍 preview=false done=false
+PASS  album: on the last page Megy says "All Pages Reviewed"  — open=true h=692 mascot=false card=All Pages Reviewed 🎉 preview=false done=false
+PASS  album: Megy's "Preview the album →" opens Preview and she folds up (no Step 7 panel left over Preview)  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=false
+PASS  album-preview: tapping Megy opens her panel  — open=true h=692 mascot=false card=Step 7: Preview & Order 📦 preview=true done=false
+PASS  album-preview: ✕ closes the whole panel, back to the small Megy button  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=false
+PASS  album-preview: the drag handle is there  — {"x":195,"y":676.078125,"w":390,"h":30}
+PASS  album-preview: dragging the handle UP with a finger closes the panel  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=false
+PASS  album-preview: dragging the handle DOWN with a finger closes the panel  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=false
+PASS  album-preview: Back closes the panel first and stays on the same screen (preview)  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=false
+PASS  album: no page errors
+PASS  daily: Home's button: "Start the User tutorial"
+PASS  daily: today's test: "occasion" before the album, "caption" in it
+PASS  daily: task done, the minute is counting
+PASS  daily: Megy opened on the pages during the minute  — open=true h=692 mascot=false card=Step 5: Review Each Page 🔍 preview=false done=false
+PASS  daily: after the minute the done page ("You finished today's lesson!") opens and Megy's panel is NOT over it  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=true
+PASS  daily-done: tapping Megy opens her panel  — open=true h=692 mascot=false card=Step 7: Preview & Order 📦 preview=true done=true
+PASS  daily-done: ✕ closes the whole panel, back to the small Megy button  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=true
+PASS  daily-done: the drag handle is there  — {"x":195,"y":676.078125,"w":390,"h":30}
+PASS  daily-done: dragging the handle UP with a finger closes the panel  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=true
+PASS  daily-done: dragging the handle DOWN with a finger closes the panel  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=true
+PASS  daily-done: Back closes the panel first and stays on the same screen (preview)  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=true
+PASS  daily: still on the done page after all that  — open=false h=1 mascot=true card=Step 7: Preview & Order 📦 preview=true done=true
+PASS  daily: no page errors
+ALL PASS
