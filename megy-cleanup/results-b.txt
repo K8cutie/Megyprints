@@ -1,0 +1,10 @@
+PASS  b: Home's button: "Start the User tutorial"
+PASS  b: today's lesson: "occasion" before the album, "caption" in it
+PASS  b: task done, the minute is counting
+PASS  b: Megy on the pages: "All 4 steps done", no Step 5  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=true chatBox=false
+PASS  b: in the app too, the chat is the "Ask Megy" link  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=true chatBox=false
+PASS  b: after the minute the done page ("You finished today's lesson!") opens on Preview and Megy is folded, not over it  — open=false step=finalize label="All 4 steps done" title="Your album is made 🎉" buttons=[] askLink=true chatBox=false
+PASS  b: Megy tapped on the done page: the short card, no Step 7, no buttons  — open=true step=finalize label="All 4 steps done" title="Your album is made 🎉" buttons=[] askLink=true chatBox=false
+PASS  b: still on the done page
+PASS  b: no page errors
+ALL PASS

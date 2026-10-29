@@ -1,0 +1,22 @@
+PASS  a: Step 1 (name + occasion) says "Step 1 of 4"  — Step 1 of 4
+PASS  a: Step 2 (size) says "Step 2 of 4"  — Step 2 of 4
+PASS  a: Step 3 (photos) says "Step 3 of 4"  — Step 3 of 4
+PASS  a: "Next: pick your cover →" opens the cover (Step 4)
+PASS  a: on the cover Megy says "Step 4 of 4" (the last step)  — open=true step=design_cover label="Step 4 of 4" title="Step 4: Pick Your Cover 📔" buttons=[] askLink=true chatBox=false
+PASS  a: the cover's filled button is "Make my album →"  — Make my album →
+PASS  a: Make my album → the pages
+PASS  a: on the pages Megy says "All 4 steps done" (no Step 5)  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=true chatBox=false
+PASS  a: her card is "Your album is made"  — Your album is made 🎉
+PASS  a: her card has no buttons of its own, only ← Previous (back to the steps)  — ["← Previous"]
+PASS  a: no Step 5–7 words anywhere on the page  — []
+PASS  a: the chat is a small "Ask Megy" link; no open text box  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=true chatBox=false
+PASS  a: the header's chat icon is not shown on the phone (the link replaces it)
+PASS  a: tapping "Ask Megy" opens the chat input, ready to type  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=false chatBox=true
+PASS  a: "go to page 5" in the chat works as before  — Page 5 of 40 · tap a photo to style it
+PASS  a: Megy answers in the chat  — Now on page 5 of 40.
+PASS  a: closed and opened again: her card, the chat closed behind its link  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=true chatBox=false
+PASS  a: on the last page Megy still says "All 4 steps done", no "All Pages Reviewed"  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=true chatBox=false
+PASS  a: Done → Preview, Megy folded up (nothing over the album)  — open=false step=finalize label="All 4 steps done" title="Your album is made 🎉" buttons=[] askLink=true chatBox=false
+PASS  a: Megy on Preview: the same short card, no buttons, no Step 7 (Preview has Edit pages and Order)  — open=true step=finalize label="All 4 steps done" title="Your album is made 🎉" buttons=[] askLink=true chatBox=false
+PASS  a: no page errors
+ALL PASS

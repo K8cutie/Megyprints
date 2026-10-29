@@ -1,0 +1,13 @@
+PASS  c: Step 1 (name + occasion) says "Step 1 of 4"  — Step 1 of 4
+PASS  c: Step 2 (size) says "Step 2 of 4"  — Step 2 of 4
+PASS  c: Step 3 (photos) says "Step 3 of 4"  — Step 3 of 4
+PASS  c: "Next: pick your cover →" opens the cover (Step 4)
+PASS  c: the side panel after Make my album: "All 4 steps done", no Step 5  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=false chatBox=false
+PASS  c: the chat button in Megy's header, as before; no "Ask Megy" link on a computer; chat closed  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=false chatBox=false
+PASS  c: the header button opens the chat at the bottom of the panel, ready to type (as before)  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=false chatBox=true
+PASS  c: "go to page 5" in the chat works  — Page 5 of 40
+PASS  c: the chat stays open after an answer (as before)  — open=true step=review_pages label="All 4 steps done" title="Your album is made 🎉" buttons=["← Previous"] askLink=false chatBox=true
+PASS  c: the pages have their own "Change layout" button
+PASS  c: it opens the layout picker
+PASS  c: no page errors
+ALL PASS
