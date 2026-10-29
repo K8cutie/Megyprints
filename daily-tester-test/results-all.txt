@@ -1,0 +1,62 @@
+PASS  today: Home shows "Make today's sample album"
+PASS  today: the line under it
+PASS  today: the button opens Today's test
+PASS  today: still on Home, nothing made yet  — http://127.0.0.1:5293/#/
+PASS  today: today's task is  — colour
+PASS  today: "Oct 28" refused  — That's not today's date. Type today's date, for example Oct 29.
+PASS  today: Make my album with a wrong date says  — Type today's date first.
+PASS  today: the button stays tappable (not greyed)
+PASS  today: today's date accepted  — Oct 29
+PASS  today: the task in the owner's words  — For today, select Red for your album background.
+PASS  today: the page colours, named  — White,Red,Orange,Yellow,Green,Blue,Violet,Brown,Black
+PASS  today: Make my album before the colour says  — Pick today's colour first: Red.
+PASS  today: Orange refused  — Today's colour is Red. Tap Red.
+PASS  today: Red accepted, the message gone
+PASS  today: Red ticked
+PASS  today: Make my album → "You're done with today's test!"  — 4 s
+PASS  today: the typed name in the header  — Oct 29
+PASS  today: the stamp with today's date  — For Testing purposes | Oct 29, 2026, 5:38 PM
+PASS  today: what to do  — Take a screenshot and send it as proof.
+PASS  today: opened on the LAST page  — Page 40 of 40
+PASS  today: the saved album is on its last page too  — 40 of 40
+PASS  today: every page Red  — #EE204D
+PASS  today: the cover keeps its photo  — image
+PASS  today: no page errors
+PASS  tomorrow: Home shows "Make today's sample album"
+PASS  tomorrow: the line under it
+PASS  tomorrow: the button opens Today's test
+PASS  tomorrow: still on Home, nothing made yet  — http://127.0.0.1:5293/#/
+PASS  tomorrow: today's task is  — cover
+PASS  tomorrow: "Oct 29" refused  — That's not today's date. Type today's date, for example Oct 30.
+PASS  tomorrow: Make my album with a wrong date says  — Type today's date first.
+PASS  tomorrow: the button stays tappable (not greyed)
+PASS  tomorrow: today's date accepted  — oct 30
+PASS  tomorrow: the task said plainly  — Choose your cover. Tap the photo you want on the front of your album.
+PASS  tomorrow: 12 of today's photos  — 12
+PASS  tomorrow: Make my album before the cover says  — Choose your cover first.
+PASS  tomorrow: photo megy-sample-29.jpg ticked
+PASS  tomorrow: Make my album → "You're done with today's test!"  — 4 s
+PASS  tomorrow: the typed name in the header  — oct 30
+PASS  tomorrow: the stamp with today's date  — For Testing purposes | Oct 30, 2026, 5:39 PM
+PASS  tomorrow: what to do  — Take a screenshot and send it as proof.
+PASS  tomorrow: opened on the LAST page  — Page 40 of 40
+PASS  tomorrow: the saved album is on its last page too  — 40 of 40
+PASS  tomorrow: the chosen photo is on the cover  — megy-sample-29.jpg
+PASS  tomorrow: no page errors
+PASS  prompts off, signed out + yesterday's sample album: no prompt as the app opens
+PASS  prompts off: Start Creating asks nothing
+PASS  prompts off: a NEW album opens (no photos, no name)  — photos 0, title ""
+PASS  prompts off 3a: no page errors
+PASS  prompts off, signed in with albums: no "Welcome back" as the app opens
+PASS  prompts off 3b: signed in (fake session)
+PASS  prompts off, signed in: Start Creating asks nothing
+PASS  prompts off, signed in: a NEW album opens  — photos 0, title ""
+PASS  prompts off, signed in: "HK Trip" (the album on the phone) was saved to the account first  — [{"method":"POST","title":"HK Trip","id":"acc-hk"}]
+PASS  prompts off 3b: no page errors
+PASS  signed out + own album: Start Creating still asks first
+PASS  the ask says what happens  — A new album replaces it. Sign in first to keep yours.
+PASS  "Open my album" opens HK Trip, nothing lost  — HK Trip
+PASS  browser: no "Make today's sample album" on Home
+PASS  browser, signed in with albums: "Welcome back" as always
+PASS  browser: Start Creating with an album in progress asks as always
+ALL PASS
