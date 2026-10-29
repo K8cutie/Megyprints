@@ -73,7 +73,7 @@ export default function Start() {
         <Button label="Checkout with a test album" kind="plain" onPress={() => router.push('/order')} testID="go-order" />
       </View>
 
-      <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos and see it as a book. You can also try checkout with a test album (nothing is ordered). Editing pages and real orders come in later versions.</Text>
+      <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos, see it as a book and edit its pages. You can also try checkout with a test album (nothing is ordered). Real orders come in a later version.</Text>
     </SafeAreaView>
   );
 }

@@ -26,6 +26,7 @@ import { planPage, type PagePlan } from '../render/pagePlan';
 import { PageDrawer } from '../render/drawPage';
 import { AssetCache } from '../render/assets';
 import type { PageText } from '../render/pageText';
+import { BUNDLED_FONTS, bundledFace } from '../render/fontTable';
 
 /** Longest side of a photo's copy for drawing on screen: enough for a page
  *  the width of a phone screen (1080 px) with a full-page photo. */
@@ -79,11 +80,28 @@ export function photosDrawn(plan: PagePlan): number[] {
   return [...out];
 }
 
+/** The page's fonts that draw in a face the app downloaded after it was
+ *  built (src/editor/text/fonts), with that face. Before the download such a
+ *  font is drawn in the phone's own font; once it arrives this list changes,
+ *  so the page's picture is drawn again. Empty for a page in bundled fonts
+ *  only, so its picture keeps the name it had before downloads existed. */
+export function downloadedFontsOn(page: AlbumPage): string[] {
+  const families = new Set<string>();
+  for (const t of page.textElements ?? []) if (t.fontFamily) families.add(t.fontFamily);
+  for (const s of page.slotTexts ?? []) if (s?.fontFamily) families.add(s.fontFamily);
+  const bundled = new Set(BUNDLED_FONTS.map((f) => f.face.toLowerCase()));
+  return [...families].sort().flatMap((f) => {
+    const face = bundledFace(f);
+    return face && !bundled.has(face.toLowerCase()) ? [`${f}=${face}`] : [];
+  });
+}
+
 /** A name for this page's picture: changes whenever anything drawn changes. */
 export function pageKey(req: PageRequest): string {
   const plan = planFor(req);
   const used = photosDrawn(plan).map((i) => [i, req.photos[i]?.previewUrl ?? '', req.photos[i]?.width ?? 0, req.photos[i]?.height ?? 0]);
-  return hashText(JSON.stringify([PAGE_PICTURE_VERSION, req.albumSize, req.pageIndex, req.width, !!req.coverMode, req.page, used]));
+  const fonts = downloadedFontsOn(req.page);
+  return hashText(JSON.stringify([PAGE_PICTURE_VERSION, req.albumSize, req.pageIndex, req.width, !!req.coverMode, req.page, used, ...(fonts.length ? [fonts] : [])]));
 }
 
 export interface DrawnPage {

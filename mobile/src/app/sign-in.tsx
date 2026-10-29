@@ -1,23 +1,31 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { useAuth } from '../lib/auth';
 import { supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
+import { forgetResume } from '../editor/text/resumeQuote';
 
 /** Sign in with the email and password of a Megy Prints account (the same
- *  account as on the website). Opened from checkout (then=back), it goes
- *  back to that order once signed in, as the website's sign-in box keeps you
- *  on the page; from anywhere else it opens My albums. */
+ *  account as on the website). Opened from checkout or the editor's quotes
+ *  (then=back), it goes back there once signed in, as the website's sign-in
+ *  box keeps you on the page; from anywhere else it opens My albums. */
 export default function SignIn() {
   const { signIn } = useAuth();
+  // Opened from a screen that carries on once signed in (checkout, or the
+  // editor's "Write a line for this photo"): then=back goes back to it.
   const { then } = useLocalSearchParams<{ then?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Left without signing in (back, or another way): the editor's "Write a
+  // line" does not carry on by itself later (resumeQuote.ts). Only the way
+  // straight back from a sign-in made here does.
+  const signedInHere = useRef(false);
+  useEffect(() => () => { if (!signedInHere.current) forgetResume(); }, []);
 
   // A message about what was typed before goes away as soon as it changes.
   const editEmail = (text: string) => { setEmail(text); setError(null); };
@@ -29,6 +37,7 @@ export default function SignIn() {
     const result = await signIn(email, password);
     setBusy(false);
     if (result.ok) {
+      signedInHere.current = true;
       if (then === 'back' && router.canGoBack()) router.back();
       else router.replace('/albums');
     }

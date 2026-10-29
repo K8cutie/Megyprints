@@ -68,10 +68,53 @@ export function familyFaces(family: string | undefined): string[] {
   return familyList(family).filter((f) => !GENERIC.test(f));
 }
 
+/* ── Fonts the app gets after it is built ──
+   The other caption fonts come from Google Fonts the first time they are
+   used and stay on the phone (src/editor/text/fonts). Once their files are
+   in the page renderer (PageText.addFonts), they are drawn, measured and
+   matched exactly like the bundled ones: every function below asks
+   drawnFonts(), never BUNDLED_FONTS alone. Nothing is added in a test or a
+   golden check unless it adds it itself. */
+const added: BundledFont[] = [];
+let addedVersion = 0;
+const addedListeners = new Set<() => void>();
+
+/** The bundled fonts and the ones added since. */
+export function drawnFonts(): readonly BundledFont[] {
+  return added.length ? [...BUNDLED_FONTS, ...added] : BUNDLED_FONTS;
+}
+
+/** Faces whose files the page renderer now has (call with PageText.addFonts). */
+export function addDrawnFonts(fonts: readonly BundledFont[]): void {
+  const have = new Set(drawnFonts().map((f) => f.file));
+  const fresh = fonts.filter((f) => !have.has(f.file));
+  if (!fresh.length) return;
+  added.push(...fresh);
+  addedVersion++;
+  addedListeners.forEach((l) => l());
+}
+
+/** Changes whenever a font is added (a page drawn before it may draw differently now). */
+export function drawnFontsVersion(): number {
+  return addedVersion;
+}
+export function onDrawnFontsChange(fn: () => void): () => void {
+  addedListeners.add(fn);
+  return () => { addedListeners.delete(fn); };
+}
+
+/** Tests only: back to the bundled fonts alone. */
+export function forgetAddedFonts(): void {
+  if (!added.length) return;
+  added.length = 0;
+  addedVersion++;
+  addedListeners.forEach((l) => l());
+}
+
 /** The first face of `family` the app has, the way a browser walks a CSS
  *  font-family list, or null when it has none of them. */
 export function bundledFace(family: string | undefined): string | null {
-  const have = new Set(BUNDLED_FONTS.map((f) => f.face.toLowerCase()));
+  const have = new Set(drawnFonts().map((f) => f.face.toLowerCase()));
   return familyFaces(family).find((f) => have.has(f.toLowerCase())) ?? null;
 }
 
@@ -85,7 +128,7 @@ export interface FontAsk { family?: string; bold?: boolean; italic?: boolean }
 export function fontFileFor(ask: FontAsk): BundledFont | null {
   const face = bundledFace(ask.family);
   if (!face) return null;
-  const same = BUNDLED_FONTS.filter((f) => f.face.toLowerCase() === face.toLowerCase());
+  const same = drawnFonts().filter((f) => f.face.toLowerCase() === face.toLowerCase());
   const want = ask.bold ? 700 : 400;
   const byStyle = same.filter((f) => f.italic === !!ask.italic);
   const pool = byStyle.length ? byStyle : same;
