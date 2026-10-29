@@ -1,0 +1,22 @@
+{
+  "home": {
+    "signedIn": true,
+    "resumePrompt": false
+  },
+  "asked": false,
+  "made": {
+    "title": "Sample Album · Oct 29",
+    "photos": 40,
+    "samples": 40,
+    "step": "review_pages"
+  },
+  "writes": [
+    {
+      "method": "POST",
+      "id": "album-maria-debut",
+      "title": "Maria's Debut",
+      "photos": 42,
+      "at": 1793264037095
+    }
+  ]
+}

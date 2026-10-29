@@ -1,0 +1,113 @@
+{
+  "appHome": {
+    "box": "Make today's sample album Testers: tap it, turn to the last page, and screenshot \"You're done\".",
+    "boxTop": 96,
+    "boxBottom": 220,
+    "onScreen": true,
+    "aboveAlbumsCard": true,
+    "albumsTitle": "Turn your photos into a printed album",
+    "viewport": "390x844"
+  },
+  "making": {
+    "hash": "#/builder",
+    "card": "Making your sample album…"
+  },
+  "made": {
+    "title": "Sample Album · Oct 29",
+    "photos": 40,
+    "samples": 40,
+    "pages": 40,
+    "page": 1,
+    "step": "review_pages",
+    "phase": "edit",
+    "welcome": [
+      "Welcome to the Megy Prints app test! Tap Next page until you reach the last page, then tap Done — Preview my album."
+    ],
+    "stamp": [
+      "For Testing purposes Oct 29, 2026, 4:51 PM"
+    ],
+    "dialogs": [
+      {
+        "t": "Home Let's begin I'm Megy, your personal album designer. I'll guide you through creating a",
+        "ms": 1574
+      },
+      {
+        "t": "Home Step 1 of 7 Just testing the app? Megy makes a whole album from 40 sample photos. You",
+        "ms": 1604
+      }
+    ],
+    "steps": [
+      {
+        "step": "welcome",
+        "ms": 1574
+      },
+      {
+        "step": "pick_theme",
+        "ms": 1715
+      },
+      {
+        "step": "review_pages",
+        "ms": 1824
+      }
+    ],
+    "nudgeSkipped": "1",
+    "seconds": 3
+  },
+  "done": {
+    "note": [
+      "You're done with today's test! Take a screenshot and send it as proof."
+    ],
+    "stamp": [
+      "For Testing purposes Oct 29, 2026, 4:51 PM"
+    ],
+    "phase": "preview",
+    "nextTaps": 39
+  },
+  "webHome": {
+    "box": null,
+    "boxTop": null,
+    "boxBottom": null,
+    "onScreen": false,
+    "aboveAlbumsCard": null,
+    "albumsTitle": "Turn your photos into a printed album",
+    "viewport": "390x844",
+    "anyButtonText": false
+  },
+  "ask": {
+    "text": "You have an album in progress on this phone. A sample album starts a new one. Sign in first to keep yours. Make the sample albumKeep my album",
+    "make": true,
+    "keep": false,
+    "focused": "Make the sample album",
+    "hash": "#/"
+  },
+  "kept": {
+    "dialogGone": true,
+    "hash": "#/",
+    "draftTitle": "Maria's Debut",
+    "draftPhotos": 42,
+    "freshStart": null,
+    "sampleRequest": null,
+    "storageUnchanged": true
+  },
+  "stillThere": "You have an album in progress Maria's Debut 42 photos · on this device Continue my album Start a new album Starting a new one deletes this album from this devic",
+  "guestMade": {
+    "title": "Sample Album · Oct 29",
+    "photos": 40,
+    "samples": 40,
+    "step": "review_pages",
+    "dialogs": [
+      {
+        "t": "You have an album in progress on this phone. A sample album starts a new one. Sign in firs",
+        "ms": 106
+      },
+      {
+        "t": "Home Let's begin I'm Megy, your personal album designer. I'll guide you through creating a",
+        "ms": 1130
+      },
+      {
+        "t": "Home Step 1 of 7 Just testing the app? Megy makes a whole album from 40 sample photos. You",
+        "ms": 1211
+      }
+    ]
+  }
+}
