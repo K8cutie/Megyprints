@@ -1,0 +1,608 @@
+{
+  "facts": {
+    "day1-2026-10-29": {
+      "iso": "2026-10-29",
+      "homeLine": "Testers: type today's date, do today's 2 tasks, then screenshot \"You're done\".",
+      "task": "titleColour",
+      "taskLine": "2 Make the cover title Pink.",
+      "options": [
+        "White",
+        "Cream",
+        "Gold",
+        "Mustard",
+        "Blush",
+        "Pink",
+        "Coral",
+        "Sky",
+        "Lavender"
+      ],
+      "answerLabel": "Pink",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Oct 29.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's title colour first: Pink.",
+      "wrongMsg": "Today's title colour is Pink. Tap Pink.",
+      "picked": "#F48FB1",
+      "albumTask": "layout",
+      "target": {
+        "page": 4,
+        "slot": null
+      },
+      "hint": "Today's task: Pick a new layout for this page.",
+      "phaseAtTask": "edit",
+      "albumDone": "new layout on page 5",
+      "fgAtTaskDone": 12007.899999976158,
+      "secondsToTaskDone": 7,
+      "countdown1": "Look through your album: You're done in 0:48",
+      "doneCardBeforeMinute": null,
+      "countdown2": "Look through your album: You're done in 0:42",
+      "realWaitSeconds": 47,
+      "fgAtDone": 60008.199999928474,
+      "doneTitle": "You're done with today's test!",
+      "doneLine": "Today: title colour Pink · new layout on page 5",
+      "stamp": "For Testing purposes Oct 29, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "album": {
+        "name": "Oct 29",
+        "size": "8x8",
+        "occasion": "Family",
+        "pages": 40,
+        "pageBackgrounds": [
+          "#FFFFFF"
+        ],
+        "coverPhoto": "megy-sample-01.jpg",
+        "title": {
+          "text": "Oct 29",
+          "fontFamily": "\"Cinzel\", Georgia, serif",
+          "color": "#F48FB1",
+          "alignment": "center",
+          "bold": true,
+          "italic": false,
+          "fontSize": 32
+        }
+      }
+    },
+    "day2-2026-11-01": {
+      "iso": "2026-11-01",
+      "homeLine": "Testers: type today's date, do today's 2 tasks, then screenshot \"You're done\".",
+      "task": "titleSize",
+      "taskLine": "2 Make the cover title Large.",
+      "options": [
+        "Small",
+        "Medium",
+        "Large"
+      ],
+      "answerLabel": "Large",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Nov 1.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's title size first: Large.",
+      "wrongMsg": "Today's title size is Large. Tap Large.",
+      "picked": "large",
+      "albumTask": "swap",
+      "target": {
+        "page": 3,
+        "slot": 0
+      },
+      "hint": "Today's task: Swap this photo: tap another photo.",
+      "phaseAtTask": "edit",
+      "afterLeave": {
+        "bar": "Today's task: Swap this photo: tap another photo.",
+        "toolOpen": true,
+        "fgMs": 12248.899999976158
+      },
+      "albumDone": "swapped a photo on page 4",
+      "fgAtTaskDone": 16272.199999928474,
+      "secondsToTaskDone": 14,
+      "countdown1": "Look through your album: You're done in 0:43",
+      "doneCardBeforeMinute": null,
+      "countdown2": "Look through your album: You're done in 0:38",
+      "realWaitSeconds": 43,
+      "fgAtDone": 60143.59999990463,
+      "doneTitle": "You're done with today's test!",
+      "doneLine": "Today: title large · swapped a photo on page 4",
+      "stamp": "For Testing purposes Nov 1, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "album": {
+        "name": "Nov 1",
+        "size": "8x8",
+        "occasion": "Family",
+        "pages": 40,
+        "pageBackgrounds": [
+          "#FFFFFF"
+        ],
+        "coverPhoto": "megy-sample-01.jpg",
+        "title": {
+          "text": "Nov 1",
+          "fontFamily": "\"Cinzel\", Georgia, serif",
+          "color": "#FFFFFF",
+          "alignment": "center",
+          "bold": true,
+          "italic": false,
+          "fontSize": 46
+        }
+      }
+    },
+    "day3-2026-11-04": {
+      "iso": "2026-11-04",
+      "homeLine": "Testers: type today's date, do today's 2 tasks, then screenshot \"You're done\".",
+      "task": "titleFont",
+      "taskLine": "2 For today, pick the font Great Vibes for your album's title.",
+      "options": [
+        "Dancing Script",
+        "Playfair",
+        "Caveat",
+        "Montserrat",
+        "Great Vibes",
+        "Amatic SC",
+        "Pacifico",
+        "Lora"
+      ],
+      "answerLabel": "Great Vibes",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Nov 4.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's font first: Great Vibes.",
+      "wrongMsg": "Today's font is Great Vibes. Tap Great Vibes.",
+      "picked": "\"Great Vibes\", cursive",
+      "albumTask": "caption",
+      "target": {
+        "page": 3,
+        "slot": 0
+      },
+      "hint": "Today's task: Type any word in this box, then tap Done.",
+      "phaseAtTask": "edit",
+      "albumDone": "words on page 4",
+      "fgAtTaskDone": 11918.100000023842,
+      "secondsToTaskDone": 9,
+      "countdown1": "Look through your album: You're done in 0:49",
+      "doneCardBeforeMinute": null,
+      "countdown2": "Look through your album: You're done in 0:43",
+      "realWaitSeconds": 48,
+      "fgAtDone": 60791.5,
+      "doneTitle": "You're done with today's test!",
+      "doneLine": "Today: title font Great Vibes · words on page 4",
+      "stamp": "For Testing purposes Nov 4, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "album": {
+        "name": "Nov 4",
+        "size": "8x8",
+        "occasion": "Family",
+        "pages": 40,
+        "pageBackgrounds": [
+          "#FFFFFF"
+        ],
+        "coverPhoto": "megy-sample-03.jpg",
+        "title": {
+          "text": "Nov 4",
+          "fontFamily": "\"Great Vibes\", cursive",
+          "color": "#FFFFFF",
+          "alignment": "center",
+          "bold": true,
+          "italic": false,
+          "fontSize": 32
+        }
+      }
+    },
+    "day4-2026-11-05": {
+      "iso": "2026-11-05",
+      "homeLine": "Testers: type today's date, do today's 2 tasks, then screenshot \"You're done\".",
+      "task": "colour",
+      "taskLine": "2 For today, select Violet for your album background.",
+      "options": [
+        "White",
+        "Red",
+        "Orange",
+        "Yellow",
+        "Green",
+        "Blue",
+        "Violet",
+        "Brown",
+        "Black"
+      ],
+      "answerLabel": "Violet",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Nov 5.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's colour first: Violet.",
+      "wrongMsg": "Today's colour is Violet. Tap Violet.",
+      "picked": "#926EAE",
+      "albumTask": "look",
+      "target": {
+        "page": 2,
+        "slot": 0
+      },
+      "hint": "Today's task: Give this photo a filter: tap one.",
+      "phaseAtTask": "edit",
+      "albumDone": "filter on page 3",
+      "fgAtTaskDone": 12100.599999904633,
+      "secondsToTaskDone": 9,
+      "countdown1": "Look through your album: You're done in 0:48",
+      "doneCardBeforeMinute": null,
+      "reloadCountdown": {
+        "before": "0:47",
+        "after": "0:47",
+        "doneCard": false
+      },
+      "afterReloadDiag": {
+        "active": "BODY",
+        "modals": []
+      },
+      "countdown2": "Look through your album: You're done in 0:42",
+      "realWaitSeconds": 46,
+      "fgAtDone": 60940.299999952316,
+      "doneTitle": "You're done with today's test!",
+      "doneLine": "Today: background Violet · filter on page 3",
+      "stamp": "For Testing purposes Nov 5, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "album": {
+        "name": "Nov 5",
+        "size": "8x8",
+        "occasion": "Family",
+        "pages": 40,
+        "pageBackgrounds": [
+          "#926EAE"
+        ],
+        "coverPhoto": "megy-sample-03.jpg",
+        "title": {
+          "text": "Nov 5",
+          "fontFamily": "\"Cinzel\", Georgia, serif",
+          "color": "#FFFFFF",
+          "alignment": "center",
+          "bold": true,
+          "italic": false,
+          "fontSize": 32
+        }
+      }
+    },
+    "day5-2026-11-07": {
+      "iso": "2026-11-07",
+      "homeLine": "Testers: type today's date, do today's 2 tasks, then screenshot \"You're done\".",
+      "task": "size",
+      "taskLine": "2 Make your album 6×6.",
+      "options": [
+        "6×6",
+        "8×8",
+        "6×4",
+        "8×6",
+        "6×8",
+        "11.5×8",
+        "8.5×11"
+      ],
+      "answerLabel": "6×6",
+      "missing1": "Type today's date first.",
+      "refused": "That's not today's date. Type today's date, for example Nov 7.",
+      "dateOk": "That's today's date.",
+      "missing2": "Pick today's size first: 6×6.",
+      "wrongMsg": "Today's size is 6×6. Tap 6×6.",
+      "picked": "6x6",
+      "albumTask": "openBook",
+      "target": {
+        "page": 1,
+        "slot": null
+      },
+      "hint": "Today's task: See your album as an open book: tap See it as an open book.",
+      "phaseAtTask": "preview",
+      "glow": "true",
+      "fgAtTaskDone": 10865.100000023842,
+      "secondsToTaskDone": 8,
+      "countdown1": "Look through your album: You're done in 0:50",
+      "doneCardBeforeMinute": null,
+      "countdown2": "Look through your album: You're done in 0:44",
+      "realWaitSeconds": 49,
+      "fgAtDone": 60817,
+      "doneTitle": "You're done with today's test!",
+      "doneLine": "Today: size 6×6 · open book view",
+      "stamp": "For Testing purposes Nov 7, 2026, 10:00 AM",
+      "atPage": "40 of 40 (preview)",
+      "album": {
+        "name": "Nov 7",
+        "size": "6x6",
+        "occasion": "Family",
+        "pages": 40,
+        "pageBackgrounds": [
+          "#FFFFFF"
+        ],
+        "coverPhoto": "megy-sample-01.jpg",
+        "title": {
+          "text": "Nov 7",
+          "fontFamily": "\"Cinzel\", Georgia, serif",
+          "color": "#FFFFFF",
+          "alignment": "center",
+          "bold": true,
+          "italic": false,
+          "fontSize": 32
+        }
+      }
+    },
+    "x1-step1": {
+      "opened": "Today's test",
+      "task": "titleColour",
+      "photosFetchedBefore": 0,
+      "after": {
+        "name": "Oct 29",
+        "hint": "Today's task: Pick a new layout for this page.",
+        "run": {
+          "day": 20755,
+          "fgMs": 2004.6000000238419,
+          "test": {
+            "day": 20755,
+            "name": "Oct 29",
+            "before": "titleColour",
+            "answer": "#F48FB1",
+            "album": "layout"
+          },
+          "madeAt": 1793242812837,
+          "task": "layout",
+          "target": {
+            "page": 4,
+            "slot": null
+          },
+          "start": [
+            {
+              "t": "t88-fb-solo",
+              "f": "3",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "4",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "5",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-twobox-left",
+              "f": "0",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-box-right",
+              "f": "1",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-box-left",
+              "f": "2",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "6",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-ls-box-above",
+              "f": "7",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "8",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-twobox-right",
+              "f": "11",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "9",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-box-right",
+              "f": "16",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "10",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-twobox-left",
+              "f": "17",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "12",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-ls-box-below",
+              "f": "18",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "13",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-box-left",
+              "f": "19",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "14",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-twobox-right",
+              "f": "23",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "15",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-box-right",
+              "f": "26",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "20",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-twobox-left",
+              "f": "27",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "21",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-twobox-right",
+              "f": "28",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "22",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-box-left",
+              "f": "29",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "24",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-ls-twobox-below",
+              "f": "30",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "25",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-box-right",
+              "f": "32",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "31",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-twobox-left",
+              "f": "33",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-box-left",
+              "f": "34",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "35",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-twobox-right",
+              "f": "37",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "36",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo-pt-twobox-left",
+              "f": "38",
+              "l": 0,
+              "w": 0
+            },
+            {
+              "t": "t88-fb-solo",
+              "f": "39",
+              "l": 0,
+              "w": 0
+            }
+          ]
+        }
+      }
+    },
+    "x2-browser": {
+      "homeBox": 0,
+      "step1Offer": 0,
+      "todaysTest": 0,
+      "bar": 0
+    },
+    "x3-auto-reload": {
+      "home": {
+        "reloaded": true,
+        "versionHits": 1,
+        "sameCopyAfter": false,
+        "updateNote": null
+      },
+      "builder": {
+        "reloaded": false,
+        "versionChecks": 0,
+        "sameCopyAfter": true,
+        "url": "http://127.0.0.1:5293/#/builder"
+      }
+    }
+  },
+  "errors": []
+}
