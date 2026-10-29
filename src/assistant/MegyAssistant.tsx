@@ -122,7 +122,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 
 export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollapsed, mobilePulldown, onPlaceOrder }: {
   collapsed?: boolean; onToggleCollapsed?: (v: boolean) => void; mobilePulldown?: boolean;
-  /** Step 7's "Place Order →": the builder orders through the preview's own Order. */
+  /** "Place order" typed in Megy's chat: the builder orders through the preview's own Order. */
   onPlaceOrder?: () => void;
 } = {}) {
   const [activeTab, setActiveTab] = useState<TabId>('design');
@@ -168,7 +168,12 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
      Back all close the whole panel, back to the small Megy button (tester,
      2026-10-30: the ✕ only hid the card, so the panel stayed open, blank and
      white, and the handle did not drag). */
-  const openSheet = () => { setShowWizard(true); setMobileExpanded(true); };
+  /* Phone: the chat sits behind the "Ask Megy" link under her card (owner,
+     2026-10-30: the open text box took space). However the panel folded up
+     (✕, drag, Back, Preview, the cover), it opens without the chat box; the
+     link opens it again. Only the phone opens this way (the small Megy
+     button, the handle), so the desktop side panel's chat is unchanged. */
+  const openSheet = () => { setShowWizard(true); setChatOpen(false); setMobileExpanded(true); };
   const closeSheet = () => setMobileExpanded(false);
   /* The handle: a tap opens or closes; a drag of DRAG_CLOSE_PX or more, up
      or down, closes the open panel, which follows the finger toward the edge
@@ -259,9 +264,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   }, [wizardStep]);
   /* Phone: the panel never stays open into Preview. Preview is the album
      itself, with its own Edit pages and Order; the panel left open on the
-     pages turned into "Step 7: Preview & Order" over the last page ("You're
-     done" in the app's daily test, tester 2026-10-30). Megy's "Preview the
-     album →" opens Preview, and she folds up the same way. */
+     pages turned into the old "Step 7: Preview & Order" over the last page
+     ("You're done" in the app's daily test, tester 2026-10-30). Whatever
+     opens Preview (the last page's Done, the daily test's done page, "place
+     order" in the chat), she folds up. */
   const lastPhaseRef = useRef(builder.phase);
   useEffect(() => {
     if (builder.phase === 'preview' && lastPhaseRef.current !== 'preview') setMobileExpanded(false);
@@ -440,6 +446,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const rebuildAskedRef = useRef<AssistantIntent | null>(null);
   const builderRef = useRef(builder);
   useEffect(() => { builderRef.current = builder; });
+  // The chat's "place order" reads these when it is typed, not as the panel
+  // first drew (an album made since then counted as not made).
+  const onPlaceOrderRef = useRef(onPlaceOrder);
+  useEffect(() => { onPlaceOrderRef.current = onPlaceOrder; });
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim()) return;
     const userMsg: AssistantMessage = { id: `u-${Date.now()}`, role: 'user', content: text, timestamp: new Date() };
@@ -473,11 +483,14 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     // preview's Order button (the album's checks, its save, then checkout).
     // It answered "I'm not sure what you mean" (round 3, the Returning Customer).
     if (intent.type === 'place_order') {
-      const made = albumIsMade(builder.albumPages) && !!onPlaceOrder;
+      const placeOrder = onPlaceOrderRef.current;
+      const made = albumIsMade(builderRef.current.albumPages) && !!placeOrder;
       setIsThinking(false);
       setMessages((p) => [...p, { id: `a-${Date.now()}`, role: 'assistant', intent, timestamp: new Date(),
         content: made ? 'Opening your order: the album, then checkout.' : 'Make your album first: add your photos, pick a cover and tap Make my album. Then you can order it.' }]);
-      if (made) onPlaceOrder?.();
+      // On a phone she folds up, so the answer underneath (saving, or why
+      // not yet) shows, even when Preview was open already.
+      if (made) { setMobileExpanded(false); placeOrder?.(); }
       return;
     }
     const result = await builder.dispatch(intent);
@@ -558,68 +571,19 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           fileInputRef.current?.click();
         }
         break;
-      case 'review_pages': {
-        if (/layout/i.test(action)) {
-          builder.setLayoutPickerOpen(true);
-        } else if (action.includes('Quote')) {
-          const q = builder.addThemedQuote?.();
-          showToast(q ? `Added: "${q}"` : 'This page is full — no room for a quote here.');
-        } else if (/preview/i.test(action)) {
-          void builder.dispatch({ type: 'preview_album', rawMessage: 'preview album' });
-        } else if (/start/i.test(action)) {
-          builder.goToPage(0);
-        } else if (action.includes('Next')) {
-          // Stop at the last page with content, not the 40-page minimum, so the
-          // review walks the real album and lands on the "let's order" nudge.
-          const pages = builder.albumPages;
-          let lastUsed = pages.length - 1;
-          for (let i = pages.length - 1; i >= 0; i--) {
-            const p = pages[i];
-            if ((p.slotFills?.some((f) => f != null) ?? false) || p.photos.length > 0 || p.textElements.length > 0) { lastUsed = i; break; }
-          }
-          builder.goToPage(Math.min(builder.currentPageIndex + 1, lastUsed));
-        }
-        break;
-      }
-      case 'add_text':
-        if (action.includes('Text')) {
-          void builder.dispatch({ type: 'add_text', rawMessage: 'add text' });
-        } else if (action.includes('Skip') || action.includes('Finalize')) {
-          wizardRef.current.advance();
-          setWizardStep(wizardRef.current.state.step);
-        }
-        break;
-      case 'finalize':
-        // On a phone the two screen buttons fold Megy up, so the screen shows.
-        if (action.includes('Preview')) {
-          setMobileExpanded(false);
-          void builder.dispatch({ type: 'preview_album', rawMessage: 'preview album' });
-        } else if (action.includes('Edit pages')) {
-          // Back to Step 6 — the store write flows into the engine (backward
-          // jumps are honoured) and the centre follows the step.
-          setMobileExpanded(false);
-          builder.setWizardStep('review_pages');
-          builder.setPhase('edit');
-        } else if (action.includes('Save')) {
-          builder.manualSave?.();
-        } else if (action.includes('Order')) {
-          // "Place Order →" is the filled button, the way on, so it must
-          // order: through the preview's own Order (the 40-photo check, then
-          // the print job checkout reads), never straight to /order. On the
-          // phone Megy folds up so the answer underneath (saving, or why not
-          // yet) shows.
-          setMobileExpanded(false);
-          onPlaceOrder?.();
-        }
-        break;
+      // After the guide (the pages, Preview) the card has no buttons: the
+      // screen's own Change layout, Done, Edit pages and Order do it.
     }
-  }, [builder, showToast, onPlaceOrder, sizeSet]);
+  }, [builder, showToast, sizeSet]);
+  /* "Start a new album": the album on screen is put away and the guide starts
+     again at its hello. Still useful with 4 steps: it is the builder's own way
+     to a new album. */
   const doRestartWizard = () => {
     // Signed in, the album is saved to the account and keeps its photos (see
     // reset); signed out, it really is gone.
     if (!window.confirm(builder.user
       ? 'Start a new album from the beginning? This one stays saved in Your Projects.'
-      : 'Restart from the beginning? Your current album and photos will be cleared.')) return;
+      : 'Start a new album? This album and its photos will be cleared.')) return;
     builder.reset();                              // wipe album + photos
     wizardRef.current.restart();                  // engine → welcome, clear flags
     setStepOneNudge(0);                           // a new album starts unflagged
@@ -627,7 +591,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     setWizardStep(wizardRef.current.state.step);  // syncs store + phase via effects
     try { localStorage.removeItem(WIZARD_STORAGE_KEY); } catch { /* ignore */ }
     forgetWizardForAlbum(builder.getAlbumId());
-    showToast('Wizard restarted — back to the beginning');
+    showToast('A new album: back to the start');
   };
   const doGenerate = () => { void builder.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then((r) => showToast(r.success ? 'Album generated!' : r.message)); };
   const doShuffle = () => { void builder.dispatch({ type: 'shuffle_layout', rawMessage: 'shuffle layout' }); showToast('Layout shuffled'); };
@@ -1032,7 +996,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <button onClick={() => setCollapsed(true)} className="hidden lg:inline-flex p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Minimize panel" aria-label="Minimize panel">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <button onClick={() => setChatOpen(!chatOpen)} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat" aria-label="Quick chat" aria-expanded={chatOpen}>
+          {/* Desktop: the chat's button, as before. A phone has the "Ask Megy" link under the card instead. */}
+          <button onClick={() => setChatOpen(!chatOpen)} className="hidden lg:inline-flex p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Quick chat" aria-label="Quick chat" aria-expanded={chatOpen}>
             <Send className="w-4 h-4" />
           </button>
           {/* Legacy sidebar button hidden — Megy is the sole orchestrator (Ctrl+Shift+S still works) */}
@@ -1044,11 +1009,11 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         </div>
       </div>
 
-      {/* ═══ RESTART — just under the title bar ═══ */}
+      {/* ═══ A NEW ALBUM — just under the title bar ═══ */}
       <div className="px-4 py-2 bg-cream border-b border-peach/10 shrink-0">
-        <button onClick={doRestartWizard} className="w-full flex items-center justify-center gap-2 py-2 text-light hover:text-blush-pink hover:bg-blush/50 rounded-lg text-xs font-medium transition-all">
+        <button onClick={doRestartWizard} data-testid="megy-new-album" className="w-full flex items-center justify-center gap-2 py-2 text-light hover:text-blush-pink hover:bg-blush/50 rounded-lg text-xs font-medium transition-all">
           <RotateCcw className="w-3.5 h-3.5" />
-          <span>Restart Wizard — start over</span>
+          <span>Start a new album</span>
         </button>
         {/* The steps come back after ✕. Closing them used to take Change
             layout, the cover editor and the Preview / Order shortcuts away for
@@ -1093,8 +1058,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             />
           </div>
 
-          {/* Wizard Message Card */}
-          <div className="mt-2 p-3 bg-white rounded-xl border border-peach/20" key={wizardKey}>
+          {/* Wizard Message Card: Steps 1–4, then (album made) one short card with no buttons */}
+          <div className="mt-2 p-3 bg-white rounded-xl border border-peach/20" key={wizardKey} data-testid="megy-card" data-step={wizardStep}>
             <h3 className="text-sm font-semibold text-dark mb-1">
               <TypeText text={wizardRef.current.getMessage().title} />
             </h3>
@@ -1118,9 +1083,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             </div>
             {/* Navigation: Previous / Next — the same one-way-on rule as the
                 center card (WizardEngine.showsNext / showsPrevious): none on
-                the cover (it has its own bar), no Next on Review (Next page
-                under the page) or on Preview & Order (the last step). Never a
-                greyed button: Next shows only where a tap moves on. */}
+                the cover (it has its own bar); after the guide no Next (the
+                pages have Next page and Done) and on Preview no ← Previous
+                (it has Edit pages). Never a greyed button: Next shows only
+                where a tap moves on. */}
             {(showPrevious || showNext) && (
             <div className="flex items-center justify-between mt-3 pt-2 border-t border-line-soft">
               {showPrevious && (
@@ -1151,6 +1117,19 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Phone: the chat behind a small "Ask Megy" link, right under her card.
+          A quiet link, not a filled button: the way on is on the screen. The
+          open chat (below) has its own close arrow. Desktop: the header's
+          chat button, as before. */}
+      {!chatOpen && (
+        <div className="lg:hidden px-4 py-1.5 bg-cream border-b border-peach/10 shrink-0 flex justify-center">
+          <button type="button" onClick={() => setChatOpen(true)} data-testid="ask-megy-link" aria-expanded={false}
+            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-semibold text-blush-pink underline underline-offset-2 rounded-lg hover:bg-blush/50">
+            <Send className="w-3.5 h-3.5" aria-hidden="true" /> Ask Megy
+          </button>
         </div>
       )}
 

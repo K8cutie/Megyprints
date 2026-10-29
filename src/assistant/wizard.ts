@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Megy Assistant Wizard — Step-by-step album creation flow
-   Guides first-time users from open → finished album
+   Guides first-time users from open to "Make my album" in 4 steps
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { readAlbumTheme, isAlbumThemeReady } from '../lib/albumTheme';
@@ -27,6 +27,15 @@ const SIZE_CHOICES: { label: string; preset: string }[] = [
   { label: '8.5×11" Portrait', preset: '8.5x11' },
 ];
 
+/* Megy's guide is 4 steps: name + occasion, size, photos, cover ("Make my
+   album →"). Welcome is an unnumbered hello before them. 'review_pages' (the
+   made album's pages on screen) and 'finalize' (Preview open) are where the
+   journey stands AFTER the guide: they drive the screen (phaseForStep) and are
+   saved with the journey, but they are not steps. No number, and no card that
+   walks through the pages, Text or Preview & Order (owner, 2026-10-30: those
+   cards repeated the screen's own buttons, Step 6 never showed, and Step 7
+   caused a tester bug). The old 'add_text' step is gone: a journey saved on it
+   restores like any retired step. */
 export type WizardStep =
   | 'welcome'
   | 'pick_theme'
@@ -34,7 +43,6 @@ export type WizardStep =
   | 'design_cover'
   | 'upload_photos'
   | 'review_pages'
-  | 'add_text'
   | 'finalize';
 
 export interface WizardState {
@@ -59,10 +67,24 @@ export const WIZARD_ORDER: WizardStep[] = [
      step ("Make my album →"). */
   'upload_photos',
   'design_cover',
+  // After the guide (not steps): the made album's pages, then Preview.
   'review_pages',
-  'add_text',
   'finalize',
 ];
+
+/** The guide's numbered steps, "Step 1 of 4" … "Step 4 of 4". It ends on the
+ *  cover, where "Make my album →" makes the album. */
+export const GUIDE_STEPS: WizardStep[] = ['pick_theme', 'pick_size', 'upload_photos', 'design_cover'];
+
+/** The album is made and the guide is done: its pages or Preview are on screen. */
+export function isAfterGuide(step: WizardStep): boolean {
+  return step === 'review_pages' || step === 'finalize';
+}
+
+/** The progress line once the guide is done (and on "Show the steps again"). */
+export const GUIDE_DONE_LABEL = `All ${GUIDE_STEPS.length} steps done`;
+/** Megy's card once the guide is done: on the made album's pages and on Preview. */
+export const ALBUM_MADE_TITLE = 'Your album is made 🎉';
 
 /** Option A: the center screen (builder phase) follows the wizard step.
     One source of truth — the step — so the center and panel can't disagree. */
@@ -79,9 +101,9 @@ export const STEP_META: Record<WizardStep, { title: string; description: string;
   pick_size: { title: 'Album Size', description: 'Choose your album dimensions', emoji: '📐' },
   design_cover: { title: 'Cover', description: 'Pick a photo and a title for the front cover', emoji: '📔' },
   upload_photos: { title: 'Photos', description: 'Add your photos', emoji: '📸' },
-  review_pages: { title: 'Review', description: 'Fine-tune each page', emoji: '🔍' },
-  add_text: { title: 'Text', description: 'Add captions and quotes', emoji: '✍️' },
-  finalize: { title: 'Finalize', description: 'Preview and order', emoji: '📦' },
+  // After the guide: the screens, not steps.
+  review_pages: { title: 'Pages', description: 'The made album’s pages', emoji: '🔍' },
+  finalize: { title: 'Preview', description: 'The whole album, then Order', emoji: '📦' },
 };
 
 /**
@@ -159,9 +181,9 @@ export class WizardEngine {
     this.albumWasBuilt = this.hasBuiltAlbum();
   }
 
-  /** Restart Wizard — wipe the journey back to the very first step (welcome).
-      Marks first-time so detectStep() holds at welcome instead of jumping to
-      pick_size. */
+  /** "Start a new album" — wipe the journey back to the very first step
+      (welcome). Marks first-time so detectStep() holds at welcome instead of
+      jumping to pick_size. */
   restart() {
     this.state.step = 'welcome';
     this.state.completed = [];
@@ -177,10 +199,10 @@ export class WizardEngine {
   detectStep(): WizardStep {
     const { builder } = this;
 
-    // Album finalized → finalize
+    // Preview open → after the guide, on Preview.
     if (builder.phase === 'preview') return 'finalize';
 
-    // A REAL album exists → review.
+    // A REAL album exists → after the guide, on its pages.
     if (this.hasBuiltAlbum()) return 'review_pages';
 
     // Photos in (or skipped) → the cover, where the album is made.
@@ -311,10 +333,14 @@ export class WizardEngine {
      has nothing to go back to, so no ← Previous at all rather than a greyed
      one. After that: the cover editor has its own "← Back" and "Make my
      album →" (coverStepNext), so Megy shows neither. Review moves on by "Next page" under
-     the page; Megy's Next there skipped every page to Step 6. Preview & Order
-     is the last step, and a greyed Next there was the same dead tap. */
+     the page; Megy's Next there skipped every page to the old Step 6. After
+     the guide nothing comes next, and a greyed Next there was the same dead
+     tap. On the made album's pages ← Previous stays: it is the way back to the
+     steps (the cover, then its ← Back to the photos, the size, the name).
+     Preview has its own "Edit pages", so Megy shows no ← Previous there. */
   showsPrevious(): boolean {
-    return this.state.step !== 'welcome' && this.state.step !== 'design_cover';
+    const s = this.state.step;
+    return s !== 'welcome' && s !== 'design_cover' && s !== 'finalize';
   }
 
   showsNext(): boolean {
@@ -351,7 +377,6 @@ export class WizardEngine {
       // The photos are in once 40 are going in (the albumMinimum gate).
       case 'upload_photos': return photosShortBy(photosGoingIn(builder.uploadedPhotos)) === 0;
       case 'review_pages': return this.state.completed.includes('review_pages');
-      case 'add_text': return this.state.completed.includes('add_text');
       case 'finalize': return builder.phase === 'preview';
       default: return false;
     }
@@ -359,14 +384,15 @@ export class WizardEngine {
 
   /* ── Get progress ── */
   getProgress(): { current: number; total: number; percent: number; label: string } {
-    // The "Step N" step titles start counting at pick_size (welcome is an
-    // unnumbered intro), so welcome is index 0 and pick_size is "Step 1". Using
-    // the raw index keeps the label in sync with the titles (was "6 of 8" above
-    // a "Step 5" heading).
-    const stepIdx = WIZARD_ORDER.indexOf(this.state.step); // welcome → 0
-    const total = WIZARD_ORDER.length - 1; // numbered steps (welcome excluded)
-    const current = stepIdx; // pick_size → 1 … review_pages → 5, matches titles
-    const percent = Math.round((Math.max(current, 0) / total) * 100);
+    // Only the guide's steps are counted: "Step 1 of 4" (name + occasion) …
+    // "Step 4 of 4" (the cover), the same numbers as the step titles. Welcome
+    // is an unnumbered hello before them. After the guide the count says it
+    // is done: it never runs on into a "Step 5" the screen doesn't have (it
+    // jumped from "5 of 7" to "7 of 7": Step 6 never showed).
+    const total = GUIDE_STEPS.length;
+    if (isAfterGuide(this.state.step)) return { current: total, total, percent: 100, label: GUIDE_DONE_LABEL };
+    const current = GUIDE_STEPS.indexOf(this.state.step) + 1; // welcome → 0
+    const percent = Math.round((current / total) * 100);
     const label = current <= 0 ? "Let's begin" : `Step ${current} of ${total}`;
     return { current, total, percent, label };
   }
@@ -471,49 +497,24 @@ export class WizardEngine {
         };
       }
 
-      case 'review_pages': {
-        const pages = builder.albumPages;
-        // ONE page count everywhere: the album's pages, as the editor ("Page 3
-        // of 40"), the page turn and the print count them. Counting only pages
-        // with photos or text said "page 3 of 38" beside it (1-star testers,
-        // 2026-10-04) and called the album reviewed two pages early.
-        const pageCount = pages.length;
-        const lastPage = Math.max(0, pageCount - 1);
-        const cur = builder.currentPageIndex;
-        const filled = (builder.currentPage?.slotFills?.filter((f: any) => f !== null)?.length) ?? 0;
-        const total = (builder.currentPage?.slotFills?.length) ?? 0;
-
-        // Reached the last page with content → proactive "let's order" nudge.
-        if (cur >= lastPage) {
-          return {
-            title: "All Pages Reviewed 🎉",
-            body: `You've been through all **${pageCount}** pages — this album looks wonderful. Let's take a look at the finished album! (Or keep tweaking — your call.)`,
-            actions: ["Change layout", "Preview the album →", "Review from the start"],
-            tips: ["You can keep editing any page before ordering", "Photos stay on your device; a line from Megy sends a small copy"],
-          };
-        }
+      /* After the guide (the album is made): one short card, no step number
+         and no buttons. The pages and Preview have their own (Change layout,
+         Next page, Done, Edit pages, Order); Megy's copies of them were the
+         old Steps 5–7. */
+      case 'review_pages':
         return {
-          title: "Step 5: Review Each Page 🔍",
-          body: `Your album's ready! Let's look through it before you order — you're on **page ${Math.min(cur, lastPage) + 1} of ${pageCount}** (${filled}/${total} photos here). Reshuffle this page if you'd like, then tap **Next page** under the page to move through your album.`,
-          actions: ["Change layout"],
-          tips: ["Go page by page — each can have its own layout", "🎬 Any full-photo page can carry a video: tap Add a video memory and it plays when the printed QR is scanned — 7 are included", "When every page looks right, you'll order from the last page"],
-        };
-      }
-
-      case 'add_text':
-        return {
-          title: "Step 6: Add Text & Captions ✍️",
-          body: "Personalize your album with captions, dates, quotes, or titles. Click any page to add text elements, then style them with fonts, colors, and effects.",
-          actions: ["Add Text to This Page", "Add Date Stamp", "Skip to Finalize →"],
-          tips: ["Script fonts look great for quotes", "Bold + large size = perfect titles"],
+          title: ALBUM_MADE_TITLE,
+          body: `You finished all ${GUIDE_STEPS.length} steps. Look through your pages and change anything you like. Then tap **Done** on the last page to see your whole album and order it.`,
+          actions: [],
+          tips: ["To change the cover, photos, size or name, tap ← Previous", "🎬 Any full-photo page can carry a video: tap Add a video memory and it plays when the printed QR is scanned — 7 are included"],
         };
 
       case 'finalize':
         return {
-          title: "Step 7: Preview & Order 📦",
-          body: "Your album looks amazing! Preview the full album, make any final tweaks, then place your order. I'll save everything to the cloud so you can come back anytime.",
-          actions: ["Preview Full Album", "← Edit pages", "Save to Cloud", "Place Order →"],
-          tips: ["Albums are saved automatically", "You can reorder or reprint anytime"],
+          title: ALBUM_MADE_TITLE,
+          body: `You finished all ${GUIDE_STEPS.length} steps. This is your whole album: turn the pages to check it, then tap **Order**. To change something, tap **Edit pages**.`,
+          actions: [],
+          tips: [],
         };
     }
   }
@@ -529,9 +530,11 @@ export class WizardEngine {
      The saved step, completed and skipped come back as they were. A step
      that can't be read (junk, a retired step) falls back to where the
      completed steps point — a returning customer's start when there are
-     none. Two rules hold on the way in:
-       • review, text and finalize are about a BUILT album. Without one the
-         journey resumes where its completed steps point (upload, usually).
+     none (the old 'add_text' step is one of those). Two rules hold on the
+     way in:
+       • the pages and Preview (after the guide) are about a BUILT album.
+         Without one the journey resumes where its completed steps point
+         (upload, usually).
        • the first step is unskippable. A restore is a jump from the start of
          the journey, so while the name + occasion are unanswered it lands on
          them, and nothing after them counts as done — or the next reconcile
@@ -548,7 +551,7 @@ export class WizardEngine {
     };
     const { state } = engine;
     state.step = isWizardStep(saved.step) ? saved.step : engine.detectStep();
-    // Review and after need a BUILT album; the cover step is where it is made.
+    // The pages and Preview need a BUILT album; the cover step is where it is made.
     if (WIZARD_ORDER.indexOf(state.step) > WIZARD_ORDER.indexOf('design_cover') && !engine.hasBuiltAlbum()) {
       state.step = engine.detectStep();
     }

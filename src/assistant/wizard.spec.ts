@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, WIZARD_STORAGE_KEY, type WizardStep } from './wizard';
+import { WizardEngine, WIZARD_ORDER, GUIDE_STEPS, GUIDE_DONE_LABEL, ALBUM_MADE_TITLE, isAfterGuide, STEP_META, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, WIZARD_STORAGE_KEY, type WizardStep } from './wizard';
 import { isAlbumNameReady, albumNameToSave, cleanAlbumName, UNNAMED_ALBUM } from '../lib/albumName';
 import { ALBUM_THEME_KEY, isAlbumThemeReady, cleanAlbumTheme } from '../lib/albumTheme';
 import { FRESH_START_KEY } from '../lib/albumSession';
@@ -44,9 +44,7 @@ describe('step order and numbering', () => {
     expect(STEP_META.pick_theme.title).toBe('Name & occasion');
     expect(phaseForStep('pick_theme')).toBe('setup');
   });
-  it('every numbered step title matches the progress label (Step N of 7)', () => {
-    // Three filled pages, cursor on the first: review_pages shows its numbered
-    // title rather than the "All Pages Reviewed" nudge it gives on the last page.
+  it('every numbered step title matches the progress label (Step N of 4); after the guide, no number', () => {
     const page = { slotFills: [0], photos: [], textElements: [] };
     const w = new WizardEngine(builderStub({ albumPages: [page, page, page], currentPage: page } as unknown as Partial<BuilderActions>), false);
     for (const step of WIZARD_ORDER) {
@@ -54,8 +52,13 @@ describe('step order and numbering', () => {
       const { current, total, label } = w.getProgress();
       const title = w.getMessage().title;
       if (step === 'welcome') { expect(label).toBe("Let's begin"); continue; }
-      expect(total).toBe(7);
-      expect(label).toBe(`Step ${current} of 7`);
+      expect(total).toBe(4);
+      if (isAfterGuide(step)) {
+        expect(label, step).toBe(GUIDE_DONE_LABEL);
+        expect(title, step).toBe(ALBUM_MADE_TITLE);
+        continue;
+      }
+      expect(label).toBe(`Step ${current} of 4`);
       expect(title.startsWith(`Step ${current}:`), `${step}: "${title}" vs "${label}"`).toBe(true);
     }
   });
@@ -315,7 +318,7 @@ describe('a reload restores the saved journey (2026-10-02)', () => {
     expect(engine.state.completed).toEqual(['welcome']);
   });
 
-  it('review, text and finalize need a BUILT album — without one the journey resumes at the cover, where it is made', () => {
+  it('the pages and Preview (and the retired Text step) need a BUILT album — without one the journey resumes at the cover, where it is made', () => {
     for (const step of ['review_pages', 'add_text', 'finalize']) {
       const { engine } = bootWizard(notGenerated(), saved({ step, completed: ['welcome', 'pick_theme', 'pick_size', 'upload_photos', 'design_cover'] }));
       expect(engine.state.step, step).toBe('design_cover');
@@ -327,14 +330,18 @@ describe('a reload restores the saved journey (2026-10-02)', () => {
       if (answered) store[ALBUM_THEME_KEY] = 'Wedding'; else delete store[ALBUM_THEME_KEY];
       for (const step of WIZARD_ORDER) {
         const { engine } = bootWizard(generated(), saved({ step, completed: WIZARD_ORDER.slice(0, WIZARD_ORDER.indexOf(step)) }));
-        // Text and finalize are ahead of Review and come back as they were;
-        // everything earlier is carried forward to Review. Unanswered step 1
-        // does not pull a built album back to setup (the quotes are dealt).
-        const expected: WizardStep = answered && (step === 'add_text' || step === 'finalize') ? step : 'review_pages';
+        // Preview is ahead of the pages and comes back as it was; everything
+        // earlier is carried forward to the pages. Unanswered step 1 does not
+        // pull a built album back to setup (the quotes are dealt).
+        const expected: WizardStep = answered && step === 'finalize' ? step : 'review_pages';
         const label = `${step}, step 1 ${answered ? 'answered' : 'unanswered'}`;
         expect(engine.state.step, label).toBe(expected);
         expect(phaseForStep(engine.state.step), label).not.toBe('setup');
       }
+      // A journey saved on the retired Text step (Step 6) opens on the pages.
+      const text = bootWizard(generated(), saved({ step: 'add_text', completed: ['welcome', 'pick_theme', 'pick_size', 'upload_photos', 'design_cover', 'review_pages', 'add_text'] })).engine;
+      expect(text.state.step).toBe('review_pages');
+      expect(text.state.completed).not.toContain('add_text');
     }
   });
 
@@ -569,9 +576,9 @@ describe('← Previous stays where the customer went (2026-10-02)', () => {
 });
 
 describe('the Style step is gone (owner, 2026-09-14)', () => {
-  it('seven steps; the photos hand straight to the cover (tester, 2026-10-27)', () => {
-    expect(WIZARD_ORDER).toEqual(['welcome', 'pick_theme', 'pick_size', 'upload_photos', 'design_cover', 'review_pages', 'add_text', 'finalize']);
-    expect(WIZARD_ORDER.length - 1).toBe(7);
+  it('four steps, ending on the cover; the photos hand straight to the cover (tester, 2026-10-27)', () => {
+    expect(GUIDE_STEPS).toEqual(['pick_theme', 'pick_size', 'upload_photos', 'design_cover']);
+    expect(WIZARD_ORDER).toEqual(['welcome', ...GUIDE_STEPS, 'review_pages', 'finalize']);
     const w = new WizardEngine(builderStub(), false);
     w.state.completed = ['welcome', 'pick_theme', 'pick_size', 'upload_photos'];
     store[ALBUM_THEME_KEY] = 'Wedding';
@@ -726,22 +733,22 @@ describe('one way forward after the album too: cover, Review, Preview (owner, 20
     expect(w.getMessage().body).not.toContain('Make my album');
   });
 
-  it('Review: no Next → (it skipped every page to Step 6); ← Previous stays', () => {
+  it("the made album's pages: no Next → (it skipped every page to the old Step 6); ← Previous stays, the way back to the steps", () => {
     const w = at('review_pages');
     expect(w.showsNext()).toBe(false);
     expect(w.showsPrevious()).toBe(true);
   });
 
-  it('Review: Megy points at "Next page", not at ‹ › arrows (they are words since #50)', () => {
+  it("the made album's pages: Megy points at the screen's own Done, not at ‹ › arrows (they are words since #50)", () => {
     const body = at('review_pages').getMessage().body;
-    expect(body).toContain('**Next page**');
+    expect(body).toContain('**Done**');
     expect(body).not.toMatch(/‹|›|arrows/);
   });
 
-  it('Preview & Order: no greyed Next → — there is nothing after it', () => {
+  it('Preview: no greyed Next → (there is nothing after it), and no ← Previous (Preview has its own Edit pages)', () => {
     const w = at('finalize', generated('preview'));
     expect(w.showsNext()).toBe(false);
-    expect(w.showsPrevious()).toBe(true);
+    expect(w.showsPrevious()).toBe(false);
   });
 
   it('no step shows a Next that does nothing: wherever it shows, a tap moves the journey on', () => {

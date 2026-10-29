@@ -7,16 +7,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /* ══════════════════════════════════════════════════════════════════════════
-   STEP 7's "PLACE ORDER →" ORDERS. On Preview & Order Megy's card shows
-   "Preview Full Album", "← Edit pages", "Save to Cloud" and "Place Order →".
-   "Place Order →" is drawn as THE filled button (isPrimaryAction: →), but the
-   panel only handled the other three, so the tap did nothing. A forward
-   button must never be a dead tap: testers get stuck (PR #54).
-   It must order through the ONE order entry, BuilderPreview.handleOrder
-   (the 40-photo check, the print job checkout reads, then Builder.handleOrder's save
-   and /order), never straight to /order. So these walk the REAL Builder,
-   Megy's panel and the preview, and hold the tap to the Order button's own
-   outcome on the same album.
+   "PLACE ORDER" IN MEGY'S CHAT ORDERS, THROUGH THE ONE ORDER DOOR.
+   This was Step 7's "Place Order →" (PR #54: a filled button that did
+   nothing). Megy's guide now ends at Make my album (owner, 2026-10-30), so
+   Step 7 and its button are gone, and the chat's "place order" is the one
+   way Megy orders. It must order through the ONE order entry,
+   BuilderPreview.handleOrder (the 40-photo check, the print job checkout
+   reads, then Builder.handleOrder's save and /order), never straight to
+   /order. So these walk the REAL Builder, Megy's panel and the preview, and
+   hold what she does to the Order button's own outcome on the same album.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const h = vi.hoisted(() => ({ ctx: null as unknown }));
@@ -89,7 +88,7 @@ const app = () => createElement(MemoryRouter, { initialEntries: ['/builder'] },
 
 async function openPreview(ctx: ReturnType<typeof builderOn>) {
   h.ctx = ctx;
-  // The journey as Step 7 leaves it: every step before it done.
+  // The journey on Preview: the 4 steps and the pages done.
   localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify({
     step: 'finalize', completed: WIZARD_ORDER.slice(0, -1), skipped: [], isFirstTime: false, dismissed: false,
   }));
@@ -102,6 +101,22 @@ async function tap(button: Element | null) {
   expect(button).not.toBeNull();
   await act(async () => { (button as HTMLButtonElement).click(); });
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+}
+/** Types into Megy's open chat and sends it with Enter. */
+async function say(text: string) {
+  const input = document.querySelector('input[placeholder="Ask Megy..."]') as HTMLInputElement | null;
+  expect(input).not.toBeNull();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => { input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+}
+/** "place order" in Megy's chat, on a computer (her chat button in the header). */
+async function placeOrder() {
+  await tap(document.querySelector('button[aria-label="Quick chat"]'));
+  await say('place order');
 }
 /** What a tap led to: where the app went, the print job checkout will read,
  *  and what the preview said. */
@@ -133,34 +148,34 @@ afterEach(async () => {
   host.remove();
 });
 
-describe('Step 7 (Preview & Order): "Place Order →" orders', () => {
-  it('is on Megy\'s card as the filled button', async () => {
+describe('"place order" in Megy\'s chat orders', () => {
+  it('her card on Preview has no "Place Order →" of its own: Preview\'s Order is the one button', async () => {
     await openPreview(builderOn(40));
-    const b = megyButton('Place Order →');
-    expect(b).not.toBeNull();
-    expect(b!.className).toContain('bg-peach');
+    expect(megyButton('Place Order →')).toBeNull();
+    expect(document.querySelector('[data-testid="megy-card"]')?.querySelectorAll('button')).toHaveLength(0);
+    expect(document.querySelector('[data-testid="preview-order"]')).not.toBeNull();
   });
 
-  it('a 40-photo album: the tap goes to checkout with THIS album\'s print job', async () => {
+  it('a 40-photo album: it goes to checkout with THIS album\'s print job', async () => {
     await openPreview(builderOn(40));
-    await tap(megyButton('Place Order →'));
+    await placeOrder();
     expect(outcome()).toEqual({ path: '/order', job: { pages: 40, photos: 40, albumId: 'album-1' }, alert: null });
     // A guest: checkout is told this album never reached the account.
     expect(readOrderHandoff()).toEqual({ albumId: 'album-1', saved: false, fresh: true });
   });
 
-  it('signed in: the album is saved first, then checkout — once per tap', async () => {
+  it('signed in: the album is saved first, then checkout — once', async () => {
     const ctx = builderOn(40, { id: 'u1' });
     await openPreview(ctx);
-    await tap(megyButton('Place Order →'));
+    await placeOrder();
     expect(ctx.manualSave).toHaveBeenCalledTimes(1);
     expect(where).toBe('/order');
     expect(readOrderHandoff()).toEqual({ albumId: 'album-1', saved: true, fresh: true });
   });
 
-  it('a 12-photo album (an old draft): the tap answers why not yet, and checkout stays shut', async () => {
+  it('a 12-photo album (an old draft): Preview answers why not yet, and checkout stays shut', async () => {
     await openPreview(builderOn(12));
-    await tap(megyButton('Place Order →'));
+    await placeOrder();
     expect(outcome()).toEqual({
       path: '/builder', job: null,
       alert: expect.stringContaining('Your album has 12 photos. Albums need at least 40 to print, so add 28 more before you order.'),
@@ -178,7 +193,7 @@ describe('Step 7 (Preview & Order): "Place Order →" orders', () => {
       setPendingPrintJob(null as unknown as PrintJob);
       where = '';
       await openPreview(builderOn(photos));
-      await tap(megyButton('Place Order →'));
+      await placeOrder();
       expect(outcome()).toEqual(byOrderButton);
     });
   }
@@ -187,7 +202,7 @@ describe('Step 7 (Preview & Order): "Place Order →" orders', () => {
     // A save that fails keeps the customer on the preview, with the reason.
     const ctx = builderOn(40, { id: 'u1' }, false);
     await openPreview(ctx);
-    await tap(megyButton('Place Order →'));
+    await placeOrder();
     expect(ctx.manualSave).toHaveBeenCalledTimes(1);
     expect(where).toBe('/builder');
     expect(document.querySelector('[data-testid="order-save-error"]')?.textContent).toContain("couldn't save your album");
@@ -208,28 +223,18 @@ describe('Step 7 (Preview & Order): "Place Order →" orders', () => {
     expect(where).toBe('/builder');
   });
 
-  it('on the phone Megy folds up after the tap, so the answer underneath shows', async () => {
+  it('on the phone (the chat behind "Ask Megy") she folds up after "place order", so the answer underneath shows', async () => {
     Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true, writable: true });
     Object.defineProperty(window, 'innerHeight', { value: 844, configurable: true, writable: true });
     const ctx = builderOn(40, { id: 'u1' }, false);
     await openPreview(ctx);
     await tap(document.querySelector('[aria-label="Open Megy"]'));
     expect(document.querySelector('[aria-label="Open Megy"]')).toBeNull();
-    await tap(megyButton('Place Order →'));
+    await tap(document.querySelector('[data-testid="ask-megy-link"]'));
+    await say('place order');
     expect(ctx.manualSave).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[aria-label="Open Megy"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="order-save-error"]')).not.toBeNull();
-  });
-
-  it('every Step 7 button does something', async () => {
-    const ctx = builderOn(40);
-    await openPreview(ctx);
-    await tap(megyButton('Preview Full Album'));
-    expect(ctx.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'preview_album' }));
-    await tap(megyButton('← Edit pages'));
-    expect(ctx.setWizardStep).toHaveBeenLastCalledWith('review_pages');
-    await tap(megyButton('Save to Cloud'));
-    expect(ctx.manualSave).toHaveBeenCalled();
   });
 
   it('Megy never sends the customer to /order itself: the preview\'s Order is the one door', () => {

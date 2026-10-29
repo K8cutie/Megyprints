@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles,
-  Wand2, Upload, Home, PanelLeftOpen,
+  Wand2, Upload, Home, PanelLeftOpen, LayoutGrid,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -1090,6 +1090,15 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               <span className="text-xs text-light">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
+              {/* Change layout, on the screen (the same picker as the phone's).
+                  Megy's old Step 5 card was its only door on a computer; the
+                  card is gone (owner, 2026-10-30), so the page has its own. */}
+              {!isPageEmpty && (
+                <button type="button" onClick={() => actions.setLayoutPickerOpen(true)} data-testid="desk-change-layout"
+                  className="px-3 py-1.5 bg-white border border-line text-medium text-xs font-semibold rounded-lg hover:bg-blush flex items-center gap-1.5 transition-colors">
+                  <LayoutGrid size={12} /> Change layout
+                </button>
+              )}
 
               {/* Generate / Regenerate / Generate All — hidden in orchestrator mode (use Megy) */}
               {ORCHESTRATOR_MODE ? null : isPageEmpty ? (
