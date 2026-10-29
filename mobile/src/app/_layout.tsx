@@ -48,6 +48,11 @@ export default function RootLayout() {
             <Stack.Screen name="golden-pages" options={{ title: 'Golden pages' }} />
             <Stack.Screen name="photo-check-lab" options={{ title: 'Photo check test' }} />
             <Stack.Screen name="order" options={{ title: 'Your order' }} />
+            <Stack.Screen name="orders" options={{ title: 'Your orders' }} />
+            <Stack.Screen name="order-details" options={{ title: 'Order' }} />
+            <Stack.Screen name="profile" options={{ title: 'My Profile' }} />
+            <Stack.Screen name="change-password" options={{ title: 'Change password' }} />
+            <Stack.Screen name="delete-account" options={{ title: 'Delete my account' }} />
           </Stack>
         </BuilderProvider>
       </DraftProvider>

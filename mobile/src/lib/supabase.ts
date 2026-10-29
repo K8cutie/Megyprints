@@ -16,6 +16,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
+/** The server address this build talks to ('' when none). */
+export const supabaseUrl = url;
+
 /** False when this build was made without the server address: the app then
  *  says so on the sign-in screen instead of failing with a network error. */
 export const supabaseConfigured = Boolean(url && anonKey);

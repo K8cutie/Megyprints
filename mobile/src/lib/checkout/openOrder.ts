@@ -3,12 +3,12 @@
    payment, said at the top of checkout, and a second order asked, never
    placed silently (1-star testers round 2, Q1).
 
-   Read only: the same query as the website's openOrderForAlbum
-   (src/lib/myOrders.ts), this account's orders only, by id, plus the
+   Read only: the website's own query (openOrderForAlbumWith, shared
+   src/lib/myOrdersCloud.ts), this account's orders only, by id, plus the
    order's quoted_amount (the total its customer was asked to pay, for its
    payment step). The words are the website's (src/pages/Order.tsx).
    ══════════════════════════════════════════════════════════════════════════ */
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { MY_ORDER_COLUMNS, openOrderForAlbumWith, type OrdersReader } from '@web/lib/myOrdersCloud';
 import { UNPAID_ORDER_DAYS } from '@web/lib/orderExpiry';
 
 export interface OpenOrder {
@@ -26,20 +26,11 @@ export interface OpenOrder {
   tester_code?: string | null;
 }
 
-export const OPEN_ORDER_COLUMNS = 'id, order_number, status, amount, quoted_amount, created_at, payment_submitted_at, album_size, page_count, tracking, album_title:album_snapshot->>title, album_id, tester_code';
+/** The website's Your orders columns, plus the total the customer was asked to pay. */
+export const OPEN_ORDER_COLUMNS = `${MY_ORDER_COLUMNS}, quoted_amount`;
 
-export async function openOrderForAlbum(client: Pick<SupabaseClient, 'from'>, userId: string, albumId: string): Promise<OpenOrder | null> {
-  const { data, error } = await client
-    .from('orders')
-    .select(OPEN_ORDER_COLUMNS)
-    .eq('user_id', userId)
-    .eq('album_id', albumId)
-    .eq('status', 'pending_payment')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data as OpenOrder | null) ?? null;
+export async function openOrderForAlbum(client: OrdersReader, userId: string, albumId: string): Promise<OpenOrder | null> {
+  return openOrderForAlbumWith(client, userId, albumId, OPEN_ORDER_COLUMNS);
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -96,10 +87,11 @@ export function askedToPay(o: Pick<OpenOrder, 'amount' | 'quoted_amount'>): numb
 }
 
 /** Where "Open order MP-…" goes, in the app. The website's button opens its
- *  Orders page (/orders?order=<id>); the app has no Orders screen until
- *  Phase 6, and the phone's browser is not signed in (the website sends a
- *  signed-out visitor from /orders to its home page, so the order would be
- *  lost). So the app opens that order itself: its payment step while nobody
+ *  Orders page (/orders?order=<id>); the phone's browser is not signed in
+ *  (the website sends a signed-out visitor from /orders to its home page, so
+ *  the order would be lost). So the app opens that order itself, inside
+ *  checkout ("Back to your order" returns to the form; the app's Your
+ *  orders screen, Phase 6, shows every order): its payment step while nobody
  *  has paid it (the QR, its number, its last day, and its total when the
  *  order has one), else where it is (payment sent, or a tester-code order). */
 export function openOrderView(o: OpenOrder): 'pay' | 'status' {

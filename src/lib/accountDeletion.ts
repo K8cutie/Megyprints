@@ -31,60 +31,26 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { supabase, supabaseConfigured } from './supabase';
+import {
+  blockingSentence,
+  preflightAccountDeletionWith,
+  requestAccountDeletion,
+  type DeletionPreflight,
+  type DeletionResult,
+} from './accountDeletionRules';
 
-/** What a deletion would touch. `blocking` is non-empty when the account has an
- *  order that is paid but not yet delivered, or an event booking whose deposit
- *  or balance is confirmed and not finished (0043, kind 'booking'): the cases
- *  we refuse. A booking's number rides in `order_number`. */
-export interface DeletionPreflight {
-  albums: number;
-  memories: number;
-  orders: number;
-  /** Memory videos in the public bucket that go with the account (0035). */
-  videos: number;
-  /** Latest hosting end date still ahead among those videos, ISO; null if none. */
-  videos_hosted_until: string | null;
-  blocking: { order_number: string; status: string; kind?: 'order' | 'booking' }[];
-}
-
-/** The dialog's sentence for what blocks deletion, naming orders and event
- *  bookings for what they are. */
-export function blockingSentence(blocking: DeletionPreflight['blocking']): { lead: string; numbers: string } {
-  const orders = blocking.filter((b) => b.kind !== 'booking');
-  const bookings = blocking.filter((b) => b.kind === 'booking');
-  const lead = orders.length && bookings.length
-    ? 'You have an order and an event booking that are paid and not finished yet'
-    : bookings.length
-      ? 'You have an event booking that’s paid and not finished yet'
-      : 'You have an order that’s paid and not delivered yet';
-  return { lead, numbers: blocking.map((b) => b.order_number).join(', ') };
-}
-
-export interface DeletionResult {
-  deleted_albums: number;
-  deleted_memories: number;
-  anonymized_orders: number;
-  deleted_videos: number;
-}
+/* What a deletion touches, what blocks it, and the call to the endpoint are
+   in accountDeletionRules.ts (shared with the 2.0 app); this file adds the
+   website's client, its own endpoint, and wiping the browser. */
+export { blockingSentence };
+export type { DeletionPreflight, DeletionResult };
 
 /** IndexedDB database holding the in-progress album's photos (useIndexedDBPhotos). */
 const PHOTO_DB = 'megy-photos';
 
 export async function preflightAccountDeletion(): Promise<DeletionPreflight> {
   if (!supabaseConfigured) throw new Error('Account deletion is unavailable right now.');
-
-  const { data, error } = await supabase.rpc('account_deletion_preflight');
-  if (error) throw new Error(error.message);
-
-  const raw = (data ?? {}) as Partial<DeletionPreflight>;
-  return {
-    albums: raw.albums ?? 0,
-    memories: raw.memories ?? 0,
-    orders: raw.orders ?? 0,
-    videos: raw.videos ?? 0,
-    videos_hosted_until: raw.videos_hosted_until ?? null,
-    blocking: Array.isArray(raw.blocking) ? raw.blocking : [],
-  };
+  return preflightAccountDeletionWith(supabase);
 }
 
 /** Everything this browser remembers about the account and the album in
@@ -125,30 +91,10 @@ export async function deleteMyAccount(): Promise<DeletionResult> {
   const token = sessionData.session?.access_token;
   if (!token) throw new Error('You are not signed in.');
 
-  const res = await fetch('/api/delete-account', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: '{}',
-  });
-
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    // The server's messages are written for a customer to read (they name the
-    // order that is still in production), so show them as-is.
-    throw new Error(payload?.error || 'Deletion failed. Please try again.');
-  }
+  const result = await requestAccountDeletion('/api/delete-account', token, (url, init) => fetch(url, init));
 
   await wipeLocalData();
   await supabase.auth.signOut();
 
-  const raw = payload as Partial<DeletionResult>;
-  return {
-    deleted_albums: raw.deleted_albums ?? 0,
-    deleted_memories: raw.deleted_memories ?? 0,
-    anonymized_orders: raw.anonymized_orders ?? 0,
-    deleted_videos: raw.deleted_videos ?? 0,
-  };
+  return result;
 }

@@ -2265,6 +2265,122 @@ screenshot; the first walk, before the review fixes, is in
 
 ---
 
+## Phase 6 notes (2026-10-29): Your orders and Profile
+
+Branch `feat/port-orders-profile`, from `native-2.0`.
+
+### What the customer gets
+
+- **Your orders** (`src/app/orders.tsx`), from the start screen ("Your
+  orders", beside "My profile") and from My albums: every order of the
+  account, newest first, each with its album's name (left out for an album
+  never named), "Order MP-…", "Placed October 26, 2026 · 8×8" Square · 40
+  pages", its price, and where it is now in the website's words (the shared
+  `orderTracker`: "Waiting for your payment", "Payment sent — we're
+  confirming it", "Printing your album", "On its way to you", "Delivered",
+  "Cancelled", "Test order: nothing will be printed or sent"). A waiting
+  order shows its last day to pay. A failed read says "We couldn't load
+  your orders: …" with Try again (never "No orders yet"); no orders: "No
+  orders yet." and one filled "Make an album".
+- **One order** (`src/app/order-details.tsx`): the six steps from the real
+  status (ticked, the one now spinning, the rest grey with their number),
+  the courier tracking number once shipped, the website's cancelled note
+  (with "Message us") and tester-code note. **Waiting for payment:** "Send
+  ₱X by bank transfer to finish", "Please pay by …", the filled "Pay ₱X by
+  bank transfer" (opens checkout's payment step, #223, now its own file
+  `components/checkout/PaymentStep.tsx`: the QR, the order number for the
+  note, the receipt; "I've sent" still sends nothing in this version) and
+  "Cancel this order" → "Yes, cancel order MP-…" / "Keep it" (the website's
+  two taps; while the question is open its Yes is the one filled button).
+  Cancel calls the website's `cancel_my_unpaid_order` (0042): the database
+  decides; its refusal is said in the website's words.
+- **My Profile** (`src/app/profile.tsx`): the account's name with the
+  website's "Edit Profile" → "Display Name" → "Save Changes" (updateUser
+  full_name, as the website), the email, **the delivery details from the
+  newest order** (name, phone as "+63 917 123 4567", the address line: the
+  website keeps no phone or address on the account; it keeps them on each
+  order), "See your orders", **Change password**, **Sign out** (to the
+  start screen) and **Delete my account**.
+- **Change password** (`src/app/change-password.tsx`): the website's way,
+  an emailed link (`resetPasswordForEmail`, back to the website's front
+  page, exactly as the 1.x Android app does: `emailLinkReturnUrl`). The
+  website's words ("We will email you a link to make a new one.", "Email me
+  a link", "Check your email", "Not there after a few minutes? Look in
+  Spam…") and its failure words (shared `passwordReset.ts`). The app adds
+  one line: the link opens the website; make the new password there and
+  use it next time on the app.
+- **Delete my account** (`src/app/delete-account.tsx`): the website's
+  dialog as a screen. It reads first (`account_deletion_preflight`): the
+  real counts ("2 saved albums and the photos in them", QR links, memory
+  videos with "hosting runs until …", print files and receipts), what the
+  shop keeps of past orders and why, or the order that blocks it (then only
+  "Close"). "Type DELETE to confirm." "Delete forever" is filled red and
+  never greyed out: a tap before DELETE is typed says "Type DELETE in the
+  box first." Then the website's endpoint, by its full address
+  (`https://megyprints.vercel.app/api/delete-account`), the same POST,
+  headers and body as the website; after it says yes, the phone lets go of
+  the album in progress and the "Choose from Files" photo grants, and drops
+  the sign-in; "Your account is deleted", then the start screen.
+
+### Shared code (website files changed, behaviour the same)
+
+- `src/lib/myOrdersCloud.ts` (new, shared): the reads and the cancel from
+  `myOrders.ts`, each taking the Supabase client (and the columns: the app
+  adds `quoted_amount`), plus `lastShippingWith` (Profile's delivery
+  details). `myOrders.ts` keeps its functions, with the website's client.
+- `src/lib/accountDeletionRules.ts` (new, shared): the preflight, the
+  blocking sentence, and `requestAccountDeletion(endpoint, token, fetch)`.
+  `accountDeletion.ts` keeps `preflightAccountDeletion` and
+  `deleteMyAccount` (its endpoint `/api/delete-account`, wiping the browser,
+  sign out), now through it.
+- Checkout's "this album already has an order" reads through the same
+  shared function (`openOrder.ts`).
+
+### Price on an order waiting for payment
+
+The website's Orders page shows `orders.amount`, which is NULL on every
+order waiting for payment (only the shop sets it), so it shows no price
+there (and its "Send ₱X" line has no number). The app shows the shop's
+amount when set, else `quoted_amount` (the total saved as the order was
+placed, 0055: the number the payment step asks for); a cancelled order
+shows only a confirmed amount. Website gap, for after Nov 9.
+
+### Proven (jest: `mobile/test/orders*`, `profileWalk`, `deleteAccount`)
+
+| What | How |
+|---|---|
+| Same queries as the website | The website's `listMyOrders`, `getMyOrder`, `openOrderForAlbum`, `cancelMyUnpaidOrder` run beside the app's on a recording stand-in: same table, same filters in the same order, this account's orders only; the app's columns are the website's + `quoted_amount` |
+| The words | Every sentence of Your orders, Profile, Change password and Delete account is found in the website's source (MyOrders.tsx, Profile.tsx, LoginModal.tsx, DeleteAccountSection.tsx) |
+| Dates | "Placed …" and "hosting runs until …" equal the website's own `toLocaleDateString('en-PH')` in Manila time on 2,000+ and 1,200+ dates |
+| Where an order is | 24 status mixes (8 statuses × payment sent × tester code): the app's view is the shared `trackOf` |
+| The screens | Walked with testing-library: the list in every state, the order screen, the payment step with the order's own number, total and last day, cancel (asked twice, the RPC, refused, error), Profile (name save, delivery details, failed read, sign out), Change password (the email call, its words, 3 failures), Delete account (counts, typed DELETE, the exact request, the done screen and the start screen after 2.2 s, a blocking order, a server refusal, the abuse guard, a local build with no local endpoint, a failed preflight) |
+| Delete request | The website's own `deleteMyAccount` and the app's send the same `init` (method, headers, body); only the address differs (relative vs full) |
+
+**Never the live endpoint in tests or walks.** jest's `fetch` is a stand-in.
+A build whose Supabase is local refuses the live address
+(`deleteAccountEndpoint`); a walk sets `EXPO_PUBLIC_DELETE_ACCOUNT_URL` to
+`mobile/scripts/local-delete-account.mjs`, which runs the website's own
+`api/delete-account.mjs` against the local Supabase only (it refuses to
+start with any other).
+
+### Not done here, and what each needs
+
+- **"Order this album again"** and **"Send the cover"** (the website's
+  Orders page): need checkout on the real album (it still uses the test
+  album) and the cover drawn and uploaded on the phone (print-files branch).
+- **"I've sent ₱X"** still writes nothing (the payment step's write path:
+  receipt upload + `submit_payment_proof`, against a local Supabase first).
+- **Avatar photo** (the website stores a picked photo as a data URL in the
+  account): left out.
+- **The endpoint's origin guard**: if `ALLOWED_ORIGINS` is ever set on
+  Vercel, `/api/delete-account` refuses the app (it sends no Origin), as it
+  would `/api/photo-quotes`. The app then says to email the shop to delete
+  the account (the public delete-account page's option 2) with an "Email us
+  to delete my account" button. The fix is a server rule for the app, held
+  until Nov 9.
+- **Forgot password on the sign-in screen**: the same emailed link would
+  work there (`passwordLink.ts`); not added in this job.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
