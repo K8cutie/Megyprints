@@ -26,6 +26,7 @@ import { PLAY_LISTING_URL, showPlayFeedback } from '../lib/playFeedback';
 import BuilderPreview from '../pages/builder/BuilderPreview';
 import type { AlbumPage } from '../pages/builder/types';
 import { samplePhotoName } from '../lib/samplePhotos';
+import { attachRun, RUN_KEY } from '../lib/dailyTestRun';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const GIF = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
@@ -49,6 +50,10 @@ beforeEach(() => {
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} disconnect() {} unobserve() {} };
   h.mobile = true; h.native = true; h.testing = true;
   clock = 0;
+  // Today's test done on this album (both tasks and the minute): "You're done" shows (lib/dailyTestRun).
+  localStorage.clear();
+  attachRun({ day: 20754, name: 'Oct 28', before: 'occasion', answer: 'Birthday', album: 'layout' }, MADE, 'layout', { page: 4, slot: null }, []);
+  localStorage.setItem(RUN_KEY, JSON.stringify({ ...JSON.parse(localStorage.getItem(RUN_KEY)!), albumDone: 'new layout on page 5', fgMs: 60_000 }));
   vi.spyOn(performance, 'now').mockImplementation(() => (clock += 10_000));
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
 });

@@ -103,9 +103,10 @@ export type Freshness = 'latest' | 'unknown' | 'reloading';
 /**
  * Is this copy the live one? 'latest' (go), 'unknown' (couldn't tell, or two
  * reloads didn't help: go), or 'reloading' (stop: the page is reloading into
- * the newest version, and `note` will be shown when it comes back).
+ * the newest version, and `note` will be shown when it comes back; null for
+ * no note).
  */
-export async function ensureLatestApp(note: string, env: AppUpdateEnv = browserEnv()): Promise<Freshness> {
+export async function ensureLatestApp(note: string | null, env: AppUpdateEnv = browserEnv()): Promise<Freshness> {
   const live = await liveBuild(env);
   if (!live) return 'unknown';
   if (live === env.build) {
@@ -123,7 +124,9 @@ export async function ensureLatestApp(note: string, env: AppUpdateEnv = browserE
   } catch { /* a bad note counts as none */ }
   if (tries >= 2) return 'unknown';
   env.storage?.setItem(RELOAD_KEY, JSON.stringify({ at: env.now(), tries: tries + 1 }));
-  env.storage?.setItem(NOTE_KEY, JSON.stringify({ note, at: env.now() }));
+  // No note when nothing needs doing again after the reload (Home: autoUpdate).
+  if (note) env.storage?.setItem(NOTE_KEY, JSON.stringify({ note, at: env.now() }));
+  else env.storage?.removeItem(NOTE_KEY);
   if (tries === 0) await freshServiceWorker(env.serviceWorker);
   else await dropServiceWorker(env);
   env.reload();

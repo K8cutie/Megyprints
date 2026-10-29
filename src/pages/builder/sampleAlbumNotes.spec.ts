@@ -14,6 +14,11 @@ import { resolve } from 'node:path';
    my album opens Preview on the LAST page (not the cover, 40 taps away),
    which says "You're done with today's test!" beside the stamp's time, with
    no order card popping over it. Only a sample album, only in the app.
+
+   Since Today's test (2026-10-29: the pool, and "Also let them spend a
+   minute on the app"): "You're done" only once both of today's tasks are
+   done AND a minute in the app has passed, with a line that names both. A
+   sample album that didn't come from Today's test says how to do it.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const h = vi.hoisted(() => ({ ctx: null as unknown, mobile: true, native: true }));
@@ -26,7 +31,9 @@ import BuilderPreview, { PageView } from './BuilderPreview';
 import { ActionEngine } from '../../assistant/actionEngine';
 import type { BuilderActions } from './useBuilderState';
 import type { AlbumPage } from './types';
-import { samplePhotoName, SAMPLE_WELCOME_NOTE, SAMPLE_WELCOME_BACK_NOTE, sampleWelcomeNote, SAMPLE_DONE_NOTE, isSampleAlbum, showSampleAlbumNotes } from '../../lib/samplePhotos';
+import { samplePhotoName, SAMPLE_WELCOME_NOTE, SAMPLE_WELCOME_BACK_NOTE, sampleWelcomeNote, SAMPLE_DONE_NOTE, SAMPLE_NOT_DONE_NOTE, isSampleAlbum, showSampleAlbumNotes } from '../../lib/samplePhotos';
+import { attachRun, readRun, RUN_KEY, type DailyTestRun } from '../../lib/dailyTestRun';
+import type { DailyTestRequest } from '../../lib/dailyTest';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const GIF = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
@@ -46,7 +53,17 @@ const coverFront = {
 let host: HTMLDivElement;
 let root: Root;
 let clock = 0;
+// Today's test, done on this album (its pages carry MADE): the task in the
+// album and the minute, or not yet.
+const TEST: DailyTestRequest = { day: 20755, name: 'Oct 28', before: 'titleFont', answer: '"Caveat", cursive', album: 'layout' };
+const testRun = (over: Partial<DailyTestRun> = {}, task: DailyTestRun['task'] = 'layout') => {
+  attachRun({ ...TEST, album: task! }, MADE, task!, { page: task === 'openBook' ? 1 : 4, slot: null }, []);
+  localStorage.setItem(RUN_KEY, JSON.stringify({ ...JSON.parse(localStorage.getItem(RUN_KEY)!), ...over }));
+};
+const DONE = { albumDone: 'new layout on page 5', fgMs: 60_000 };
+
 beforeEach(() => {
+  localStorage.clear();
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} disconnect() {} unobserve() {} };
   h.mobile = true; h.native = true;
   clock = 0;
@@ -111,8 +128,9 @@ describe('the card on a page', () => {
 
   it('page 1 in the pages (phone and computer) asks for the welcome card, only on page 1', () => {
     const src = (f: string) => readFileSync(resolve(__dirname, f), 'utf8');
-    expect(src('MobileReview.tsx')).toMatch(/<PageView [^>]*testerNote=\{sampleNotes && idx === 0 \? sampleWelcomeNote\(actions\.previewSeen\) : null\}/);
-    expect(src('BuilderEdit.tsx')).toMatch(/\{sampleNotes && actions\.currentPageIndex === 0 && <TesterPageNote note=\{sampleWelcomeNote\(actions\.previewSeen\)\}/);
+    // Not on the album Today's test made: the bar at the top says what to do there (DailyTestBar).
+    expect(src('MobileReview.tsx')).toMatch(/<PageView [^>]*testerNote=\{sampleNotes && idx === 0 && !testRun \? sampleWelcomeNote\(actions\.previewSeen\) : null\}/);
+    expect(src('BuilderEdit.tsx')).toMatch(/\{sampleNotes && !testRun && actions\.currentPageIndex === 0 && <TesterPageNote note=\{sampleWelcomeNote\(actions\.previewSeen\)\}/);
   });
 
   // Today's test (2026-10-29) opens the album on "You're done": once it has
@@ -130,12 +148,14 @@ for (const mobile of [true, false]) {
   describe(`Preview of a sample album ${mobile ? 'on a phone' : 'on a computer (open book)'}`, () => {
     beforeEach(() => { h.mobile = mobile; });
 
-    it("the last page says you're done, beside the stamp's time, and no order card pops over it", () => {
+    it("today's test done (both tasks and the minute): the last page says you're done, names both tasks, beside the stamp's time, and no order card pops over it", () => {
+      testRun(DONE);
       preview(samples);
       const notes = all('tester-page-note');
       expect(notes).toHaveLength(1);
       expect(text(notes[0].querySelector('[data-testid="tester-page-note-title"]'))).toBe("You're done with today's test!");
       expect(text(notes[0].querySelector('[data-testid="tester-page-note-body"]'))).toBe('Take a screenshot and send it as proof.');
+      expect(text(notes[0].querySelector('[data-testid="tester-page-note-proof-text"]'))).toBe('Today: title font Caveat · new layout on page 5');
       // The stamp's two lines, on the same page.
       expect(all('tester-page-stamp').map((s) => [...s.children].map((c) => c.textContent))).toContainEqual(['For Testing purposes', 'Oct 28, 2026, 2:05 PM']);
       expect(q('end-prompt')).toBeNull();
@@ -144,8 +164,33 @@ for (const mobile of [true, false]) {
     });
 
     it('no card on the other pages', () => {
+      testRun(DONE);
       preview(samples, 10);
       expect(all('tester-page-note')).toHaveLength(0);
+    });
+
+    it("not yet: the task in the album not done, or the minute not up: no \"You're done\" (the bar at the top says what's left)", () => {
+      for (const over of [{ fgMs: 90_000 }, { albumDone: 'new layout on page 5', fgMs: 59_999 }]) {
+        testRun(over);
+        preview(samples);
+        expect(all('tester-page-note'), JSON.stringify(over)).toHaveLength(0);
+        expect(q('end-prompt')).toBeNull();
+      }
+    });
+
+    it("a sample album that didn't come from Today's test: \"Today's test isn't done yet\", and how to do it", () => {
+      preview(samples);
+      const notes = all('tester-page-note');
+      expect(notes).toHaveLength(1);
+      expect(text(notes[0].querySelector('[data-testid="tester-page-note-title"]'))).toBe("Today's test isn't done yet");
+      expect(text(notes[0].querySelector('[data-testid="tester-page-note-body"]'))).toBe("Go to Home and tap Make today's sample album.");
+      expect(SAMPLE_NOT_DONE_NOTE.body).toBe("Go to Home and tap **Make today's sample album**.");
+      // Today's test done on ANOTHER album: still this one's not done.
+      localStorage.clear();
+      attachRun(TEST, MADE + 1, 'layout', { page: 4, slot: null }, []);
+      localStorage.setItem(RUN_KEY, JSON.stringify({ ...readRun(), ...DONE }));
+      preview(samples);
+      expect(text(all('tester-page-note')[0]?.querySelector('[data-testid="tester-page-note-title"]') ?? null)).toBe("Today's test isn't done yet");
     });
 
     it('an album with a photo of their own: no card, and the order card at the end as always', () => {
@@ -184,5 +229,52 @@ describe('Done — Preview my album (preview_album)', () => {
     const w = engine(samples);
     await w.run();
     expect(w.goToPage).toHaveBeenCalledWith(0);
+  });
+});
+
+/* Today's task in the album may be the open book (Preview's own button). */
+describe('the open book as today\'s task (phone, upright)', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('its button glows; seeing the album as an open book for a moment does the task', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    testRun({}, 'openBook');
+    preview(samples, 10);
+    const toggle = q('preview-open-book')!;
+    expect(toggle.dataset.glow).toBe('true');
+    expect(toggle.className).toContain('ring-peach');
+    await act(async () => { vi.advanceTimersByTime(5000); });
+    expect(readRun()!.albumDone).toBeUndefined(); // one page at a time: not yet
+    await act(async () => { toggle.click(); });
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    expect(readRun()!.albumDone).toBeUndefined();
+    await act(async () => { vi.advanceTimersByTime(600); });
+    expect(readRun()!.albumDone).toBe('open book view');
+    expect(q('preview-open-book')!.dataset.glow).toBeUndefined();
+  });
+
+  // Found on the walk: Preview's first draw, before it knows it is on an
+  // upright phone, showed the open book for an instant and did the task.
+  it('the open book for an instant (Preview\'s first draw) doesn\'t count; a tablet that shows it does', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    testRun({}, 'openBook');
+    h.mobile = false; // the first draw: not known yet to be a phone → the open book
+    preview(samples, 10);
+    h.mobile = true; // then upright: one page at a time
+    preview(samples, 10);
+    await act(async () => { vi.advanceTimersByTime(5000); });
+    expect(readRun()!.albumDone).toBeUndefined();
+    // A tablet (or a phone turned sideways) that keeps showing the open book.
+    h.mobile = false;
+    preview(samples, 10);
+    await act(async () => { vi.advanceTimersByTime(1600); });
+    expect(readRun()!.albumDone).toBe('open book view');
+  });
+
+  it('another task, or none: the button as always', () => {
+    testRun({}, 'layout');
+    preview(samples, 10);
+    expect(q('preview-open-book')!.dataset.glow).toBeUndefined();
+    expect(q('preview-open-book')!.className).not.toContain('ring-peach');
   });
 });

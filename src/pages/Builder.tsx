@@ -11,6 +11,7 @@ import { albumIsMade, placedMemories } from '../assistant/rebuildQuestion';
 import CoverEditor from './builder/CoverEditor';
 import MobileReview from './builder/MobileReview';
 import MissingPhotosBar from './builder/MissingPhotosBar';
+import DailyTestBar from './builder/DailyTestBar';
 import AlbumConflictBar from './builder/AlbumConflictBar';
 import OrderedAlbumNote from './builder/OrderedAlbumNote';
 import LayoutPicker from './builder/LayoutPicker';
@@ -339,6 +340,9 @@ export default function Builder() {
         {(actions.phase === 'edit' || actions.phase === 'preview') && <OrderedAlbumNote actions={actions} />}
         {/* An album opened without its photos says so, with the way on. */}
         {(actions.phase === 'edit' || actions.phase === 'preview') && <MissingPhotosBar actions={actions} />}
+        {/* Today's test (Android app, testing): today's task in the album, then
+            the minute's countdown, then "You're done" (DailyTestBar). */}
+        {(actions.phase === 'edit' || actions.phase === 'preview') && <DailyTestBar actions={actions} />}
 
         {/* Phase Content */}
         <div className="flex-1 overflow-auto min-h-0 relative">

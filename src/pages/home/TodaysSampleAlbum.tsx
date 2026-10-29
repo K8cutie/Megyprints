@@ -8,11 +8,14 @@
 
    Owner, the same day: testers screenshot the home page or just flip pages;
    the daily test should prove real use. So the button opens Today's test
-   (home/TodaysTest, lib/dailyTest): type today's date as the album's name,
-   do today's task (choose the cover, or tap today's colour), then "Make my
-   album" makes a new album (startFreshAlbum) that the builder makes as it
-   opens (requestSampleAlbum), opening on its last page, "You're done". The
-   line under the button says what to do.
+   (home/TodaysTest, lib/dailyTest): type today's date as the album's name
+   and do today's task (one of 10), then "Make my album" makes a new album
+   (startFreshAlbum) that the builder makes as it opens (requestSampleAlbum),
+   with today's second task in the album; "You're done" comes once both are
+   done and a minute has passed. The line under the button says what to do.
+
+   Also here: when the app comes back to the front on Home, it checks for a
+   newer version and reloads into it (lib/autoUpdate).
 
    No album in progress is lost without asking:
      • a sample album in progress, any day: nothing of theirs, so today's is
@@ -26,16 +29,15 @@
    The website never shows any of it.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { isNativeShell } from '../../lib/nativeShell';
 import { showSamplePhotos } from '../../lib/samplePhotos';
 import { readLocalDraftSummary } from '../../lib/localDraft';
 import KeepAlbumAsk, { asksBeforeNewAlbum } from './KeepAlbumAsk';
-
-// Its own chunk: the website never downloads it.
-const loadTodaysTest = () => import('./TodaysTest');
-const TodaysTest = lazy(loadTodaysTest);
+import TodaysTestScreen from './TodaysTestScreen';
+import { loadTodaysTest } from './loadTodaysTest';
+import { autoUpdatesOnHome, useAutoUpdateOnHome } from '../../lib/autoUpdate';
 
 export default function TodaysSampleAlbum({ signedIn, onMake }: {
   signedIn: boolean;
@@ -48,6 +50,10 @@ export default function TodaysSampleAlbum({ signedIn, onMake }: {
   const [testing, setTesting] = useState(false);
   // Ready before the tap, so Today's test opens at once.
   useEffect(() => { if (show) void loadTodaysTest(); }, [show]);
+  // Back to the front on Home: the newest app, unless Today's test or the
+  // question is open (lib/autoUpdate). This box is only on Home.
+  const [updates] = useState(() => autoUpdatesOnHome(isNativeShell()));
+  useAutoUpdateOnHome(updates && !testing && !asking);
   if (!show) return null;
   // The phone's album is read at the tap, not on load: Home can sit open
   // while another tab changes it.
@@ -63,18 +69,14 @@ export default function TodaysSampleAlbum({ signedIn, onMake }: {
         <Sparkles size={18} /> Make today&apos;s sample album
       </button>
       <p data-testid="home-todays-sample-how" className="mt-2 text-[13px] leading-snug text-medium">
-        Testers: type today&apos;s date, do today&apos;s task, then screenshot &quot;You&apos;re done&quot;.
+        Testers: type today&apos;s date, do today&apos;s 2 tasks, then screenshot &quot;You&apos;re done&quot;.
       </p>
       {asking && (
         <KeepAlbumAsk text="A sample album starts a new one. Sign in first to keep yours." makeLabel="Make the sample album"
           onMake={() => { setAsking(false); setTesting(true); }}
           onKeep={() => setAsking(false)} />
       )}
-      {testing && (
-        <Suspense fallback={<div className="fixed inset-0 z-[140] bg-paper" aria-busy="true" />}>
-          <TodaysTest onMake={() => { setTesting(false); onMake(); }} onClose={() => setTesting(false)} />
-        </Suspense>
-      )}
+      {testing && <TodaysTestScreen onMake={() => { setTesting(false); onMake(); }} onClose={() => setTesting(false)} />}
     </section>
   );
 }

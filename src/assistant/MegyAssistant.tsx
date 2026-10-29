@@ -29,6 +29,7 @@ import PhotoCheckCard from './PhotoCheckCard';
 import PickManyHint from './PickManyHint';
 import SamplePhotosOffer from './SamplePhotosOffer';
 import SampleAlbumOffer from './SampleAlbumOffer';
+import TodaysTestScreen from '../pages/home/TodaysTestScreen';
 import { useSampleAlbum } from './useSampleAlbum';
 import { takeSampleAlbumRequest } from '../lib/samplePhotos';
 import { takeDailyTest } from '../lib/dailyTest';
@@ -329,10 +330,28 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const showToast = (msg: string, ms = 2000) => { setToast(msg); setTimeout(() => setToast(null), ms); };
   // Testing phase: Step 1's "Make a sample album" (lib/samplePhotos).
   const sampleAlbum = useSampleAlbum(builder, albumTheme, setAlbumTheme, (m) => showToast(m, 6000));
+  // Step 1's "Make a sample album" opens Today's test first, the same screen
+  // as Home's button (owner, 2026-10-29: no way to a sample album skips the
+  // test). After a failure, a tap makes it again with the test already done.
+  const [todaysTest, setTodaysTest] = useState(false);
+  const makeSampleAlbum = () => {
+    if (sampleAlbum.stage === 'adding' || sampleAlbum.stage === 'making') return; // already making it
+    if (!sampleAlbum.retry()) setTodaysTest(true);
+  };
+  const todaysTestEl = todaysTest && (
+    <TodaysTestScreen onClose={() => setTodaysTest(false)}
+      onMake={() => {
+        setTodaysTest(false);
+        // Only with the finished test: never a sample album without it.
+        const test = takeDailyTest();
+        if (test) void sampleAlbum.start(test);
+      }} />
+  );
   // "Welcome back" → "Make today's sample album" (lib/samplePhotos): this new
   // album is made at once, from Step 1, whose card says "Making your sample
   // album…" while it works. From Home's Today's test (lib/dailyTest), it is
-  // made with the tester's name and cover or colour, and opens on "You're done".
+  // made with the tester's name and today's answer, then today's task in the
+  // album starts (useSampleAlbum).
   useEffect(() => {
     if (builder.uploadedPhotos.length > 0 || albumIsMade(builder.albumPages)) return;
     if (!takeSampleAlbumRequest()) return;
@@ -661,6 +680,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         className="fixed inset-0 z-[95] bg-warm-white flex flex-col items-center [justify-content:safe_center] p-6 overflow-auto outline-none">
         {remakeAskEl}
         {resizeAskEl}
+        {todaysTestEl}
         {/* Hidden file input so the Upload step works on the center stage too */}
         <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleFileUpload} className="hidden" />
         {/* Megy's answer on the center stage too: the toast lived only in the
@@ -697,9 +717,10 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
           <div className="p-6 bg-white rounded-2xl border border-peach/20 shadow-xl" key={wizardKey}
             onClickCapture={(e) => { if (cardTooSoon()) { e.stopPropagation(); e.preventDefault(); } }}>
             {/* Testing phase: a whole album from sample photos, before any of
-                their own — first on Step 1, above its name and occasions. */}
+                their own — first on Step 1, above its name and occasions.
+                Today's test first, as from Home. */}
             {wizardStep === 'pick_theme' && (sampleAlbum.stage !== 'idle' || (builder.uploadedPhotos.length === 0 && !albumIsMade(builder.albumPages))) && (
-              <SampleAlbumOffer stage={sampleAlbum.stage} onMake={() => { void sampleAlbum.start(); }} />
+              <SampleAlbumOffer stage={sampleAlbum.stage} onMake={makeSampleAlbum} />
             )}
             <h3 className="font-display text-xl font-semibold text-dark mb-2"><TypeText text={msg.title} /></h3>
             {wizardRef.current.state.step === 'pick_theme' ? (

@@ -1,17 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isNativeShell } from '../lib/nativeShell';
 import { showSamplePhotos } from '../lib/samplePhotos';
+import { loadTodaysTest } from '../pages/home/loadTodaysTest';
 import type { SampleAlbumStage } from './useSampleAlbum';
 
 /* Step 1 in the Android app while testing (lib/samplePhotos): "Make a sample
-   album" makes a whole album from Megy's sample photos in one tap
-   (useSampleAlbum). The first thing on the card, its button filled (owner,
-   2026-10-28, of it under the name and occasions: "couldn't be more NOT
-   OBVIOUS"); "or make your own album" leads down to the step itself, whose
-   Next stays the way to use your own photos. Gone on the website and when
-   TESTING_PHASE is off. */
+   album" makes a whole album from Megy's sample photos (useSampleAlbum). The
+   first thing on the card, its button filled (owner, 2026-10-28, of it under
+   the name and occasions: "couldn't be more NOT OBVIOUS"); "or make your own
+   album" leads down to the step itself, whose Next stays the way to use your
+   own photos. Gone on the website and when TESTING_PHASE is off.
+
+   The button opens Today's test first (lib/dailyTest), the same screen as
+   Home's "Make today's sample album" (owner, 2026-10-29: Step 1 still
+   skipped the test). After a failure it makes the album again with the test
+   already done. */
 export default function SampleAlbumOffer({ stage, onMake }: { stage: SampleAlbumStage; onMake: () => void }) {
   const [show] = useState(() => showSamplePhotos(isNativeShell()));
+  // Ready before the tap, so Today's test opens at once.
+  useEffect(() => { if (show) void loadTodaysTest(); }, [show]);
   if (!show) return null;
   const busy = stage === 'adding' || stage === 'making';
   return (
