@@ -26,7 +26,8 @@ whose notes list it.
 | 2026-10-27 | Tester | (same report) | The photo picker opens in the Camera folder, so ⋮ → Select all takes the whole roll. Before, it opened on Recent, where Select all took only the newest 64 pictures, screenshots too | with 1.3.0 | 1.3.0 |
 | 2026-10-28 | For testers | — | Album pages in the app show "For Testing purposes" and when the album was made (#206) | 2026-10-28 | 1.4.0 |
 | 2026-10-28 | For testers | — | "Make a sample album" on Step 1, and sample photos to make up the 40-photo minimum, a different sample album each test day (#207) | 2026-10-28 | 1.4.0 |
-| 2026-10-28 | For testers | — | The app asks to download each new version, then says when it is ready: "Restart to update" | with 1.4.0 (first shows when 1.5.0 is out) | 1.4.0 |
+| 2026-10-28 | For testers | — | The app asks to download each new version, then says when it is ready: "Restart to update" | with 1.4.0 (first shows when 1.4.1 is out) | 1.4.0 |
+| 2026-10-29 | Tester | "The sample photos are helpful to test. I like the concept. maybe a little less text in the steps [too many things to read hah]" (owner: he meant a faster way to the sample album) | "Make today's sample album" on the app's home screen, one tap (#227). The next day, "Welcome back" makes today's sample album (#208) | on merge | 1.4.1 |
 
 ## App versions on the Alpha track
 

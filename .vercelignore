@@ -7,3 +7,5 @@ nginx
 # the Hobby plan allows 12 (PR #178's deploy failed at 14). CI runs them from
 # the repo. api/deployLimit.spec.mjs keeps the count in check.
 api/*.spec.mjs
+# The 2.0 native app (Expo/React Native): built on its own, never part of the website
+mobile

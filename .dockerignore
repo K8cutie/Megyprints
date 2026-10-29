@@ -10,3 +10,4 @@ docker-compose.yml
 .dockerignore
 README.md
 *.md
+mobile

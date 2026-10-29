@@ -8,12 +8,14 @@ import { readLocalDraftSummary } from '../lib/localDraft';
 import { chooseResumeOffers, type ResumeOffer, type SavedAlbumSummary } from '../lib/resumeOffer';
 import { readResumeCache, writeResumeCache, hasStoredSession, rememberedNoAlbums } from '../lib/resumeCache';
 import {
-  wasResumeAsked, wasResumeAskedThisVisit, markResumeAsked, clearResumeAsked,
+  wasResumeAsked, wasResumeAskedThisVisit, markResumeAsked, clearResumeAsked, startFreshAlbum,
 } from '../lib/albumSession';
 import { formatRelativeTime } from './UserProjectsSection';
 import { useModalDialog } from '../lib/useModalDialog';
 import { useRecoveryState } from '../lib/recoveryState';
 import MegyMascot from './MegyMascot';
+import { isNativeShell } from '../lib/nativeShell';
+import { showSamplePhotos, sampleAlbumMadeAt, sampleAlbumIsFromAnEarlierDay, requestSampleAlbum } from '../lib/samplePhotos';
 
 /* ══════════════════════════════════════════════════════════════════════════
    ResumePrompt — "Pick up where you left off?"
@@ -142,6 +144,9 @@ export function ResumePrompt() {
     void listAccountAlbums(userId).then((saved) => {
       const summaries: SavedAlbumSummary[] = saved.filter((a) => a.id).map((a) => ({
         id: a.id as string, title: a.title, updatedAt: a.updatedAt, photoCount: a.photos?.length, coverPhoto: a.coverPhoto,
+        // A sample album's day: the list has its photos' names and when it was
+        // first saved, not its pages (and a sample album is new each day).
+        sampleMadeAt: sampleAlbumMadeAt(a.photos?.map((p) => p.name).filter((n): n is string => typeof n === 'string'), a.createdAt ? Date.parse(a.createdAt) : null),
       }));
       writeResumeCache(userId, summaries);
       if (cancelled) return;
@@ -178,6 +183,8 @@ export function ResumePrompt() {
   // Keyboard (KB-2): focus on "Yes, resume", Tab kept inside, Escape = not now.
   const showing = recovery === 'none' && !!offers && offers.length > 0 && !!user;
   const panelRef = useModalDialog<HTMLDivElement>(showing, () => setOffers(null));
+  // Testing phase, in the app: yesterday's sample album isn't today's test.
+  const [inApp] = useState(isNativeShell);
 
   if (!showing) {
     if (!holding || recovery !== 'none') return null;
@@ -201,6 +208,15 @@ export function ResumePrompt() {
   const startNew = () => {
     close();
     navigate('/', { state: { choseNew: true } });
+  };
+  // A sample album made on an earlier day (lib/samplePhotos): the big button
+  // makes today's, a new album, the way Step 1's "Make a sample album" does.
+  const todaysSample = showSamplePhotos(inApp) && sampleAlbumIsFromAnEarlierDay(choice.sampleMadeAt, new Date());
+  const makeTodaysSample = () => {
+    close();
+    startFreshAlbum(user!.id);
+    requestSampleAlbum();
+    navigate('/builder');
   };
   const firstName = firstNameOf(user);
 
@@ -259,12 +275,13 @@ export function ResumePrompt() {
 
           <div className="space-y-2">
             <button
-              onClick={resume}
+              onClick={todaysSample ? makeTodaysSample : resume}
               data-testid="resume-yes"
+              data-today-sample={todaysSample || undefined}
               data-autofocus
               className="w-full py-3 rounded-xl bg-peach text-white text-sm font-semibold hover:brightness-105 transition-all"
             >
-              Yes, resume
+              {todaysSample ? "Make today's sample album" : 'Yes, resume'}
             </button>
             <button
               onClick={startNew}

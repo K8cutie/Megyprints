@@ -89,6 +89,13 @@ export default function Footer() {
           <p className="font-body text-sm text-light text-center">
             &copy; {new Date().getFullYear()} Megy Prints. All rights reserved.
           </p>
+          {/* Google Play wants the privacy policy reachable inside the app too;
+              the app shows this footer (owner, 2026-10-28). */}
+          <p className="mt-2 text-center">
+            <Link to="/privacy" className="font-body text-sm text-white underline underline-offset-2 hover:text-peach transition-colors duration-200" data-testid="footer-privacy">
+              Privacy Policy
+            </Link>
+          </p>
         </div>
       </div>
     </footer>
