@@ -22,7 +22,7 @@ import { getCanvasDimensions } from './layouts';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType, MaterialType } from './types';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 import { coverWrapGeometry, insetRect } from './coverGeometry';
-import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedText } from './coverLayout';
+import { coverLayout, coverTextLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedText } from './coverLayout';
 import { withBleed, bleedPx, drawMirroredEdges } from './printBleed';
 import { loadFontFaces } from './fonts';
 import { rgbaToPng } from '../../lib/rgbaPng';
@@ -1321,21 +1321,6 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<P
   return { image, words: words.map((p) => ({ png: p.png, x: p.x / W, y: p.y / H, w: p.w / W, h: p.h / H })) };
 }
 
-/** Simple greedy word-wrap to a pixel width (ctx.font must be preset). */
-function wrapCoverText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = (text || '').split(/\s+/).filter(Boolean);
-  if (!words.length) return [];
-  const lines: string[] = [];
-  let cur = words[0];
-  for (let i = 1; i < words.length; i++) {
-    const test = `${cur} ${words[i]}`;
-    if (ctx.measureText(test).width <= maxWidth) cur = test;
-    else { lines.push(cur); cur = words[i]; }
-  }
-  lines.push(cur);
-  return lines;
-}
-
 /** Draw one positioned cover text. fontSize/outlineWidth are already in wrap-px,
  *  so WordArt scale = 1 (mirrors the DOM preview, which uses displayScale). */
 function drawCoverText(ctx: CanvasRenderingContext2D, t: PositionedText): void {
@@ -1357,19 +1342,11 @@ function drawCoverText(ctx: CanvasRenderingContext2D, t: PositionedText): void {
     return;
   }
 
-  const align = (st.alignment ?? 'center') as CanvasTextAlign;
-  ctx.textAlign = align;
-  const pad = t.rect.width * 0.02;
-  const anchorX = align === 'left' ? t.rect.x + pad : align === 'right' ? t.rect.x + t.rect.width - pad : t.rect.x + t.rect.width / 2;
-
-  const lines = wrapCoverText(ctx, st.text, t.rect.width - pad * 2);
-  const lineH = fontSize * 1.25;
-  const blockH = lines.length * lineH;
-  const startY =
-    t.valign === 'top' ? t.rect.y + lineH / 2
-    : t.valign === 'bottom' ? t.rect.y + t.rect.height - blockH + lineH / 2
-    : t.rect.y + t.rect.height / 2 - blockH / 2 + lineH / 2;
-
-  lines.forEach((line, i) => drawWordArtText(ctx, line, anchorX, startY + i * lineH, st, 1));
+  // Wrapped in its box (2% margin each side, lines 1.25 x the size apart),
+  // placed by the ONE cover-text layout the 2.0 app draws with too
+  // (coverLayout.coverTextLayout), measured in this font.
+  const layout = coverTextLayout(t, (s) => ctx.measureText(s).width);
+  ctx.textAlign = layout.align;
+  layout.lines.forEach((l) => drawWordArtText(ctx, l.text, l.x, l.y, st, 1));
   ctx.restore();
 }

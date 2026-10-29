@@ -11,7 +11,7 @@
 
    The title's "too long" check is shown only when the title's font is one
    the app has: measured in the phone's own font instead, its answer would be
-   a guess (the website's cover default, Cinzel, is not in the app yet).
+   a guess. (The website's cover default, Cinzel, is in the app: 400 and 700.)
    ══════════════════════════════════════════════════════════════════════════ */
 import { router, useFocusEffect, useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';

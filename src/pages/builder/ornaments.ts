@@ -92,13 +92,9 @@ export const ORNAMENT_PACKS: OrnamentPack[] = [
 export const ornamentDataUri = (svg: string): string =>
   `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
-/** Centered square fit for an ornament inside a slot cell, with breathing-room
- *  padding. Shared by ALL THREE renderers (PageView, Fabric, print) so an
- *  ornament can never desync between them — the ornament analog of qrRect(). */
-export function ornamentFit(sx: number, sy: number, sw: number, sh: number, pad = 0.82) {
-  const side = Math.min(sw, sh) * pad;
-  return { dx: sx + (sw - side) / 2, dy: sy + (sh - side) / 2, side };
-}
+// Where an ornament sits in its slot (ornamentFit) lives in ornamentFit.ts,
+// which the 2.0 app shares; re-exported here as before.
+export { ornamentFit } from './ornamentFit';
 
 /** Rasterize an ornament SVG to a crisp square PNG data-URL at pick-time.
  *  Baking width/height=px into the <svg> makes its intrinsic size px, so the

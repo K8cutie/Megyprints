@@ -22,6 +22,8 @@
 import type { AlbumPage } from '@web/pages/builder/types';
 import { getPrintDimensions } from '@web/pages/builder/printSize';
 import { PAGE_COLORS } from '@web/pages/builder/pageColors';
+import { DEFAULT_TITLE_FONT, fontNamed } from '@web/pages/builder/fontCatalog';
+import { fontSource } from '../src/editor/text/fonts/fontSources';
 import { SCENARIOS } from '../../tools/parity/scenarios';
 import { nameAlbum } from '../src/builder/albumFlow';
 import { pageTargets } from '../src/editor/hitTest';
@@ -41,6 +43,8 @@ useEditorBench();
 
 const sc = SCENARIOS[0];
 const PLAYFAIR = '"Playfair Display", Georgia, serif';
+/** A caption font the app fetches from Google Fonts (not built in). */
+const LORA = fontNamed('Lora').family;
 
 /** A builder that only writes down what it is asked to do. */
 function recording(cover: AlbumPage, scope: 'coverFront' | 'interior' = 'coverFront') {
@@ -274,7 +278,13 @@ describe('the warnings', () => {
     const long = 'Our Big Beautiful Family Reunion At Lola And Lolo House In Batangas Summer Two Thousand Twenty Six';
     await act(async () => { typeTitle(builder(), long); });
     await act(async () => { setTitleSize(builder(), 96); });
-    // The default title font (Cinzel) is not in the app: no guess.
+    // The default title font (Cinzel) is built into the app: measured as printed.
+    expect(coverTitleOf(builder().coverFront).fontFamily).toBe(DEFAULT_TITLE_FONT);
+    expect(titleFontInApp(builder().coverFront)).toBe(true);
+    expect(titleTooLong(builder().coverFront, builder().albumSize, measurer)?.fitsAt).toBeGreaterThanOrEqual(8);
+    // A font the app gets from the internet (Lora), not on this phone yet: no guess.
+    expect(fontSource('Lora')).toBe('google');
+    await act(async () => { setTitleFont(builder(), LORA); });
     expect(titleFontInApp(builder().coverFront)).toBe(false);
     expect(titleTooLong(builder().coverFront, builder().albumSize, measurer)).toBeNull();
     await act(async () => { setTitleFont(builder(), PLAYFAIR); });

@@ -8,6 +8,13 @@
    pixels; the canvas is scaled down to the screen's). What the renderer
    cannot draw yet is not drawn and is listed (plan.notDrawn), never faked.
 
+   The pictures a page keeps inside the album (a memory QR code, a graphic,
+   a sticker: PNG data: URLs) are opened and drawn (render/assets.ts). Files
+   the website serves (a textured edge's /masks pictures, a theme's corner
+   art, a background stored by address) are not in the app yet: such a page
+   is drawn without them, as print draws a picture that fails to load, and
+   each one is added to the page's notDrawn list.
+
    Photos are drawn from small copies (at most PHOTO_MAX_SIDE px), made by
    the phone (modules/photo-files drawableCopy: upright, sRGB, HEIC opened)
    into the app's cache, which the phone may clear: they are made again. The
@@ -17,14 +24,16 @@ import type { SkImage, Skia } from '@shopify/react-native-skia/lib/commonjs/skia
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '@web/pages/builder/types';
 import { planPage, type PagePlan } from '../render/pagePlan';
 import { PageDrawer } from '../render/drawPage';
+import { AssetCache } from '../render/assets';
 import type { PageText } from '../render/pageText';
 import { BUNDLED_FONTS, bundledFace } from '../render/fontTable';
 
 /** Longest side of a photo's copy for drawing on screen: enough for a page
  *  the width of a phone screen (1080 px) with a full-page photo. */
 export const PHOTO_MAX_SIDE = 1280;
-/** Changes when what the app draws changes, so old page pictures are dropped. */
-export const PAGE_PICTURE_VERSION = 1;
+/** Changes when what the app draws changes, so old page pictures are dropped.
+ *  2: textures, QR codes, graphics, stickers, colour looks and soft edges drawn. */
+export const PAGE_PICTURE_VERSION = 2;
 
 /** Where a photo's picture comes from (by its address on the phone). */
 export interface PhotoImages {
@@ -97,6 +106,8 @@ export function pageKey(req: PageRequest): string {
 
 export interface DrawnPage {
   image: SkImage;
+  /** The page's plan; its notDrawn also names each picture file the app
+   *  does not have yet (see the top of this file). */
   plan: PagePlan;
   /** Photos the page has that could not be opened. */
   missing: number;
@@ -119,11 +130,26 @@ export async function drawPageImage(Sk: Skia, text: PageText, req: PageRequest, 
   if (!surface) throw new Error(`could not make a ${req.width}×${height} drawing surface`);
   const canvas = surface.getCanvas();
   canvas.scale(scale, scale);
-  new PageDrawer(Sk, text).draw(canvas, plan, (i) => loaded.get(i) ?? null);
+  // The album's own pictures (data: URLs) only: no files from the website yet.
+  const assets = new AssetCache(Sk);
+  const unavailable = new Set<string>();
+  const drawer = new PageDrawer(Sk, text);
+  try {
+    drawer.draw(canvas, plan, (i) => loaded.get(i) ?? null, { assets: assets.get, onMissing: (src) => { unavailable.add(src); } });
+  } finally {
+    drawer.dispose();
+    assets.dispose();
+  }
   surface.flush();
   const image = surface.makeImageSnapshot();
   surface.dispose();
-  return { image, plan, missing };
+  const notDrawn = [...plan.notDrawn, ...[...unavailable].map(pictureNotDrawn)];
+  return { image, plan: notDrawn.length === plan.notDrawn.length ? plan : { ...plan, notDrawn }, missing };
+}
+
+/** A picture the page names that the app could not open, for notDrawn. */
+function pictureNotDrawn(src: string): string {
+  return src.startsWith('data:') ? 'a picture kept in the album that could not be opened' : `picture file ${src.length > 80 ? `${src.slice(0, 77)}...` : src}`;
 }
 
 /** Keeps the last few photo pictures decoded (a 1280 px copy is about 5 MB).

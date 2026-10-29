@@ -2,7 +2,8 @@
    offers the same looks and colours a photo with the same numbers
    (src/shared/sharedModules.ts). looks.ts re-exports all of it and adds
    applyLookPixels (on a browser canvas); the website imports looks.ts
-   exactly as before. Moved here unchanged. */
+   exactly as before. Moved here unchanged, plus applyLookToPixels (the same
+   maths over a whole photo, for the app's page renderer). */
 
 /* ══════════════════════════════════════════════════════════════════════════
    LOOKS (owner, 2026-09-13, Studio): a colour treatment on ONE photo —
@@ -80,4 +81,37 @@ export function applyLookToPixel(r: number, g: number, b: number, ops: LookOp[])
   }
   const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
   return [c(R), c(G), c(B)];
+}
+
+/** The same look over a whole photo's RGBA pixels (not premultiplied), in
+ *  place: applyLookToPixel's arithmetic exactly (the same operations in the
+ *  same order, the same rounding), with the matrices built once instead of
+ *  once per pixel and no array per pixel, for the 2.0 app, whose JavaScript
+ *  runs it over a few million pixels per print page. See-through pixels
+ *  (alpha 0) are left alone, as applyLookPixels leaves them. looks.spec.ts
+ *  holds it to applyLookToPixel, number for number. */
+export function applyLookToPixels(px: Uint8Array, ops: readonly LookOp[]): void {
+  const steps = ops.map((o) => (o.fn === 'grayscale' ? { m: grayscaleM(o.v), fn: o.fn, v: o.v }
+    : o.fn === 'sepia' ? { m: sepiaM(o.v), fn: o.fn, v: o.v }
+      : o.fn === 'saturate' ? { m: saturateM(o.v), fn: o.fn, v: o.v } : { m: null, fn: o.fn, v: o.v }));
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] === 0) continue;
+    let R = px[i] / 255, G = px[i + 1] / 255, B = px[i + 2] / 255;
+    for (let k = 0; k < steps.length; k++) {
+      const s = steps[k];
+      if (s.m) {
+        const m = s.m;
+        const nr = m[0] * R + m[1] * G + m[2] * B;
+        const ng = m[3] * R + m[4] * G + m[5] * B;
+        const nb = m[6] * R + m[7] * G + m[8] * B;
+        R = nr; G = ng; B = nb;
+      } else if (s.fn === 'brightness') {
+        R *= s.v; G *= s.v; B *= s.v;
+      } else if (s.fn === 'contrast') {
+        R = (R - 0.5) * s.v + 0.5; G = (G - 0.5) * s.v + 0.5; B = (B - 0.5) * s.v + 0.5;
+      }
+    }
+    px[i] = c(R); px[i + 1] = c(G); px[i + 2] = c(B);
+  }
 }

@@ -162,3 +162,52 @@ export const P3_PHOTO_IMAGE = PHOTO_SIZES.length;
 export function p3SyntheticPhoto(): SyntheticPhoto {
   return syntheticPhoto(P3_PHOTO_IMAGE, P3_PHOTO);
 }
+
+/** A theme's corner art, made up (no theme file is used): one see-through
+ *  PNG per corner, `size` square, a soft quarter ring hugging that corner
+ *  with a dotted edge, smoothed (4 × 4 samples), its alpha fading out.
+ *  Served to the website as /golden/corner_<pos>.png (renderWeb.mjs) and read
+ *  from that file by the app's check, so print's corner drawing (its place,
+ *  its size, its see-through) is compared, not this picture. */
+export const CORNER_BASE = '/golden/corner';
+export function syntheticCorner(pos: 'tl' | 'tr' | 'bl' | 'br', size = 600): SyntheticPhoto {
+  const rgba = new Uint8Array(size * size * 4);
+  const left = pos === 'tl' || pos === 'bl', top = pos === 'tl' || pos === 'tr';
+  const ring: RGB = [184, 92, 56]; // Megy terracotta
+  const dot: RGB = [45, 90, 120];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let a = 0, r = 0, g = 0, b = 0;
+      for (let sy = 0; sy < 4; sy++) {
+        for (let sx = 0; sx < 4; sx++) {
+          const px = x + (sx + 0.5) / 4, py = y + (sy + 0.5) / 4;
+          // Distance from the page corner this art sits in.
+          const dx = left ? px : size - px, dy = top ? py : size - py;
+          const d = Math.hypot(dx, dy) / size;
+          let alpha = 0, c: RGB = ring;
+          if (d > 0.45 && d < 0.62) alpha = 0.85 * (1 - Math.abs(d - 0.535) / 0.085);
+          const ang = Math.atan2(dy, dx);
+          const k = Math.round(ang / (Math.PI / 24));
+          const cx = Math.cos(k * (Math.PI / 24)) * 0.75 * size, cy = Math.sin(k * (Math.PI / 24)) * 0.75 * size;
+          if (Math.hypot(dx - cx, dy - cy) < size * 0.025) { alpha = 1; c = dot; }
+          a += alpha; r += c[0] * alpha; g += c[1] * alpha; b += c[2] * alpha;
+        }
+      }
+      const i = (y * size + x) * 4;
+      if (a > 0) { rgba[i] = Math.round(r / a); rgba[i + 1] = Math.round(g / a); rgba[i + 2] = Math.round(b / a); }
+      rgba[i + 3] = Math.round((a / 16) * 255);
+    }
+  }
+  return { width: size, height: size, rgba };
+}
+
+/** One big test photo, 3200 × 2400 (a phone camera's size class), for pages
+ *  that draw a photo at under half its size: there Chrome draws from a
+ *  halved copy (mobile/src/render/sampling.ts), which the smaller test
+ *  photos never trigger. Image PHOTO_SIZES.length + 1 (after the P3 one),
+ *  used by hand-made pages only. */
+export const BIG_PHOTO = { width: 3200, height: 2400 } as const;
+export const BIG_PHOTO_IMAGE = PHOTO_SIZES.length + 1;
+export function bigSyntheticPhoto(): SyntheticPhoto {
+  return syntheticPhoto(BIG_PHOTO_IMAGE, BIG_PHOTO);
+}

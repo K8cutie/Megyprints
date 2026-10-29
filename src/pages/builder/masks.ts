@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { maskTextureUrl, maskOverlayUrl, type TextureMask, type FeatherSide } from './maskShapes';
+import { maskTextureUrl, maskOverlayUrl, featherGradients, type TextureMask, type FeatherSide } from './maskShapes';
 
 /* ══════════════════════════════════════════════════════════════════════════
    MASKS (owner, 2026-09-13, Studio): a shape or an edge treatment on ONE
@@ -90,23 +90,13 @@ export function featherEdgeCss(feather: number, w: number, h: number, side: Feat
 /** Canvas (Fabric offscreen + print): multiply the drawn pixels' alpha by the
  *  same gradients (destination-in keeps only what both keep). */
 export function featherAlpha(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, feather: number, side: FeatherSide = 'all'): void {
-  const f = Math.max(1, feather * Math.min(w, h));
   ctx.save();
   ctx.globalCompositeOperation = 'destination-in';
-  if (side === 'bottom') {
-    const g = ctx.createLinearGradient(0, y, 0, y + h);
-    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(Math.max(0, 1 - f / h), 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
-    ctx.restore();
-    return;
+  // The gradients themselves: maskShapes.featherGradients (the 2.0 app draws them too).
+  for (const g of featherGradients(x, y, w, h, feather, side)) {
+    const lg = ctx.createLinearGradient(g.x0, g.y0, g.x1, g.y1);
+    for (const s of g.stops) lg.addColorStop(s.offset, `rgba(0,0,0,${s.alpha})`);
+    ctx.fillStyle = lg; ctx.fillRect(x, y, w, h);
   }
-  const gx = ctx.createLinearGradient(x, 0, x + w, 0);
-  gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(Math.min(0.5, f / w), 'rgba(0,0,0,1)');
-  gx.addColorStop(Math.max(0.5, 1 - f / w), 'rgba(0,0,0,1)'); gx.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = gx; ctx.fillRect(x, y, w, h);
-  const gy = ctx.createLinearGradient(0, y, 0, y + h);
-  gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(Math.min(0.5, f / h), 'rgba(0,0,0,1)');
-  gy.addColorStop(Math.max(0.5, 1 - f / h), 'rgba(0,0,0,1)'); gy.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = gy; ctx.fillRect(x, y, w, h);
   ctx.restore();
 }

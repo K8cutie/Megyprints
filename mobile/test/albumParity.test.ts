@@ -201,11 +201,11 @@ describe("the app's builder path makes the website's album", () => {
     }
     expect([...notDrawn]).toEqual([]);
     const c = await drawPageImage(Sk, text, { page: cover, pageIndex: 0, albumSize: sc.size, photos, width: 400, coverMode: true }, images);
-    // The cover photo is drawn; its title's font (Cinzel, the website's cover
-    // default) is not in the app yet, and the plan says so.
+    // The cover photo is drawn, and its title in Cinzel (the website's cover
+    // default, bundled in the app since the renderer draws the cover file).
     expect(c.plan.backgroundPhoto?.photoIndex).toBe(photos.findIndex((p) => p.name === sc.cover));
     expect(c.missing).toBe(0);
-    expect(c.plan.notDrawn).toEqual([expect.stringMatching(/Cinzel/)]);
+    expect(c.plan.notDrawn).toEqual([]);
     c.image.dispose();
   }, 120_000);
 });

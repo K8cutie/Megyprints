@@ -62,10 +62,14 @@ describe('the front cover, planned the way print draws it', () => {
     expect(plan.notDrawn.filter((n) => !/font/i.test(n))).toEqual([]);
   });
 
-  it("a picture that is not one of the album's photos is listed, never faked", () => {
+  it("a picture that is not one of the album's photos is asked for by its address, never faked", () => {
+    // print's resolveBgImageSrc: the stored address. The drawer gets it from
+    // its caller (PagePlan.assets); the app's screens don't have such files
+    // yet, so they list it as not drawn (test/pageImagesAssets.test.ts).
     const plan = planPage({ page: cover({ photoId: 'elsewhere' }), albumSize: '8x8', pageIndex: 0, photoCount: 4, coverMode: true, photoIds: ids });
     expect(plan.backgroundPhoto).toBeNull();
-    expect(plan.notDrawn).toContain('picture background');
+    expect(plan.background).toEqual({ kind: 'image', image: { src: 'content://media/external/images/media/9' }, cover: { zoom: undefined, focusX: undefined, focusY: undefined } });
+    expect(plan.assets).toEqual(['content://media/external/images/media/9']);
   });
 
   it('the cover switch matters: inside the book the same page keeps the binding keep-out and no float shadow', () => {

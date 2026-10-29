@@ -78,10 +78,10 @@ describe('where the 74 fonts come from', () => {
     const by = fontsBySource();
     expect(by.bundled.length + by.google.length + by.phone.length).toBe(74);
     expect(by.phone).toEqual(['Georgia']);
-    // Whatever the renderer bundles is bundled here too (Cinzel joins it with the renderer job).
+    // Whatever the renderer bundles is bundled here too (Cinzel, the cover title's face, included).
     const bundledFaces = [...new Set(BUNDLED_FONTS.map((b) => b.face))];
     expect(by.bundled.map((n) => fontFace(FONTS.find((f) => f.name === n)!.family)).sort()).toEqual(bundledFaces.sort());
-    for (const face of ['Playfair Display', 'DM Sans', 'Dancing Script']) expect(fontSource(face)).toBe('bundled');
+    for (const face of ['Playfair Display', 'DM Sans', 'Dancing Script', 'Cinzel']) expect(fontSource(face)).toBe('bundled');
     for (const face of ['Lora', 'Great Vibes', 'Montserrat', 'Cutive Mono']) expect(fontSource(face)).toBe('google');
     // Megy's own text uses only bundled fonts (the themes: Playfair Display, DM Sans).
     expect(catalogFace('"Playfair Display", serif')).toBe('Playfair Display');

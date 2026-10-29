@@ -46,19 +46,38 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   made again from the photo's address.
 - **Server values** come from `.env.local` (not in git; `.env.example` has the
   names). Never commit them, never put real account passwords anywhere.
-- **Page renderer** (`src/render`, react-native-skia): album pages drawn the
-  way the website's print renderer draws them. `test/goldenPages.test.ts`
-  compares it pixel by pixel with the website's own pictures (made by
-  `../tools/golden/renderWeb.mjs` in headless Chromium; run `npm ci` in
-  `../tools/golden` once). Never loosen its bars to pass: the numbers and
-  why are in `test/golden/compare.ts` and the plan's "Page renderer notes".
+- **Page renderer** (`src/render`, react-native-skia): album pages and the
+  cover file drawn the way the website's print renderer draws them, pictures
+  sampled the way Chrome's canvas samples them (`src/render/sampling.ts`).
+  `test/goldenPages.test.ts`, `goldenCovers.test.ts` and
+  `goldenMistakes.test.ts` (run side by side; shared parts in
+  `test/golden/harness.ts`) compare it pixel by pixel with the website's own
+  pictures (made by `../tools/golden/renderWeb.mjs` in headless Chromium,
+  before the tests, by jest's globalSetup `test/golden/webPictures.cjs`; run
+  `npm ci` in `../tools/golden` once). They are made on Windows, where the
+  bars were measured (CI's mobile job runs on Windows too): Chromium on
+  Linux draws letters with another weight, and the covers fail there.
+  Never loosen its bars to pass: the
+  numbers and why are in `test/golden/compare.ts` and the plan's "Page
+  renderer notes". A change that moves website print code into shared files
+  must print byte for byte the same: `node ../tools/golden/websiteSame.mjs`
+  (compares with where the branch left main; a ref from before the change
+  can be given, never HEAD after committing it).
   **On a phone:** `scripts\build-android.ps1 -Variant release -GoldenPages`
   (a test build with the golden pages; never for customers), then
   `node scripts/golden-phone-run.cjs --device <serial>` and
-  `npm run golden:phone` (same bars; the plan's "Page renderer on the
+  `npm run golden:phone` (same bars, pages, covers and texture tiles, plus
+  a timing pass with a 12 MP photo and the light-letter trials; the plan's
+  "Page renderer on the phone" and "Everything print draws: On the
   phone"). Run it again after changing `src/render`: CanvasKit in Node is
   not the phone's Skia (the native paragraph builder has no `dispose()`,
-  for one).
+  for one; light letters come out thinner, which `pageText.ts` makes up
+  for on the phone only). Do new pixel work in Skia (a runtime shader on a CPU surface,
+  as `sampling.ts` halves pictures), held byte for byte to a plain
+  JavaScript reference in the tests, not in a JavaScript loop over a
+  photo's pixels (Hermes runs such loops slowly). The one loop left is the
+  colour look (`lookRules.applyLookToPixels`, the website's own maths);
+  its phone timing is in the plan.
 - **The album builder** (`src/builder`, Phase 3): the website's own
   `useBuilderState` (shared code) runs the album, once for the whole app
   (`BuilderProvider.tsx`), on the app's platform (`appPlatform.ts`: a

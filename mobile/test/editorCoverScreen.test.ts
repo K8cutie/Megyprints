@@ -20,7 +20,8 @@
      • the colours and the font list are the words part's own: a font from
        the internet is fetched before the title uses it (offline, the title
        keeps its font and the list says so), and a cover font this phone
-       doesn't have is fetched when the screen opens. The font store runs on
+       doesn't have is fetched when the screen opens (the cover's own font,
+       Cinzel, is built into the app: never fetched). The font store runs on
        fakes; the real network fails the test if touched.
    ══════════════════════════════════════════════════════════════════════════ */
 import { createElement, type ComponentType } from 'react';
@@ -77,10 +78,15 @@ jest.mock('../src/builder/usePagePicture', () => ({
 import CoverScreen from '../src/editor/cover/CoverScreen';
 import { CoverStage } from '../src/editor/cover/CoverStage';
 import { Slider } from '../src/editor/cover/Slider';
-import { coverCrop, coverTitleOf, titleBoxOf } from '../src/editor/cover/coverEdits';
+import { coverCrop, coverTitleOf, setTitleFont, titleBoxOf } from '../src/editor/cover/coverEdits';
+import { fontSource } from '../src/editor/text/fonts/fontSources';
+import { DEFAULT_TITLE_FONT, fontNamed } from '@web/pages/builder/fontCatalog';
 import * as W from '../src/editor/cover/words';
 import { NOT_DRAWN_LINE } from '../src/builder/screenWords';
 import { BLANK_COVER_MESSAGE } from '../src/editor/cover/coverChecks';
+
+/** A caption font the app fetches from Google Fonts (not built in). */
+const LORA = fontNamed('Lora').family;
 
 useEditorBench();
 
@@ -103,8 +109,17 @@ afterEach(async () => {
   jest.clearAllMocks();
 });
 
-async function openCover(): Promise<void> {
+async function openCover(titleFont?: string): Promise<void> {
   mockBench.platform = await madeAlbum(SCENARIOS[0]);
+  if (titleFont) {
+    // A cover title made elsewhere (on the website, on another phone) in
+    // `titleFont`, before the screen opens: the builder's own call, in the
+    // cover's scope, then back to the pages as the app leaves it.
+    await act(async () => { builder().setEditScope('coverFront'); });
+    await act(async () => { setTitleFont(builder(), titleFont); });
+    await act(async () => { builder().setEditScope('interior'); });
+    expect(coverTitleOf(builder().coverFront).fontFamily).toBe(titleFont);
+  }
   screen = createRoot();
   await refresh();
   await refresh(); // the scope set on open is seen
@@ -240,7 +255,7 @@ describe('the cover screen', () => {
   });
 
   it('warns about a title colour that wouldn\'t show, and a blank cover; says what is drawn more simply; Done goes back', async () => {
-    mockBench.notDrawn = ['font Cinzel'];
+    mockBench.notDrawn = ['font "Lora", serif (drawn in the phone\'s own font)'];
     try {
       await openCover();
       expect(textOf(byId('cover-not-drawn')!)).toBe(NOT_DRAWN_LINE);
@@ -265,27 +280,37 @@ describe('the cover screen', () => {
       expect(mockNav.back).toHaveBeenCalledTimes(1);
     } finally { mockBench.notDrawn = []; }
   });
-  it('a cover font from the internet: fetched on open, fetched before the title uses it, kept as it was offline', async () => {
+  it("the cover's own font (Cinzel) is built into the app: nothing is fetched on open", async () => {
     await openCover();
-    // The website's cover font (Cinzel) isn't in the app: asked for when the screen opens.
-    expect(coverTitleOf(builder().coverFront).fontFamily).toContain('Cinzel');
-    expect(mockFontNet.asked.some((u) => /family=Cinzel/.test(u))).toBe(true);
+    expect(coverTitleOf(builder().coverFront).fontFamily).toBe(DEFAULT_TITLE_FONT);
+    expect(fontSource('Cinzel')).toBe('bundled');
+    expect(mockFontNet.asked).toEqual([]);
+  });
+
+  it('a cover font from the internet: fetched on open, fetched before the title uses it, kept as it was offline', async () => {
+    // Lora is one of the fonts the app gets from Google Fonts, not built in.
+    expect(fontSource('Lora')).toBe('google');
+    await openCover(LORA);
+    // A cover font this phone doesn't have yet: asked for when the screen opens.
+    expect(mockFontNet.asked.some((u) => /family=Lora/.test(u))).toBe(true);
 
     await press('cover-tab-text');
     const before = coverTitleOf(builder().coverFront).fontFamily;
+    expect(before).toBe(LORA);
     // Offline: the title keeps its font, and the list says so.
     await press('cover-font');
-    await press('font-Lora');
+    await press('font-Merriweather');
     expect(coverTitleOf(builder().coverFront).fontFamily).toBe(before);
     expect(has('cover-font-list')).toBe(true);
-    expect(textOf(byId('cover-font-list-offline')!)).toMatch(/^No internet: Lora can't be downloaded now\. Your words stay in Cinzel\./);
+    expect(textOf(byId('cover-font-list-offline')!)).toMatch(/^No internet: Merriweather can't be downloaded now\. Your words stay in Lora\./);
 
     // Online: fetched first, then the title is in it and the list closes.
     mockFontNet.online = true;
-    await press('font-Lora');
+    await press('font-Merriweather');
     await settle();
     await refresh();
-    expect(coverTitleOf(builder().coverFront).fontFamily).toContain('Lora');
+    expect(mockFontNet.asked.some((u) => /family=Merriweather/.test(u))).toBe(true);
+    expect(coverTitleOf(builder().coverFront).fontFamily).toContain('Merriweather');
     expect(has('cover-font-list')).toBe(false);
     expect(builder().editScope).toBe('coverFront');
   });

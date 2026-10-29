@@ -21,6 +21,8 @@ export const FONT_ASSETS: Record<string, number> = {
   '@expo-google-fonts/dm-sans/700Bold_Italic/DMSans_700Bold_Italic.ttf': require('@expo-google-fonts/dm-sans/700Bold_Italic/DMSans_700Bold_Italic.ttf'),
   '@expo-google-fonts/dancing-script/400Regular/DancingScript_400Regular.ttf': require('@expo-google-fonts/dancing-script/400Regular/DancingScript_400Regular.ttf'),
   '@expo-google-fonts/dancing-script/700Bold/DancingScript_700Bold.ttf': require('@expo-google-fonts/dancing-script/700Bold/DancingScript_700Bold.ttf'),
+  '@expo-google-fonts/cinzel/400Regular/Cinzel_400Regular.ttf': require('@expo-google-fonts/cinzel/400Regular/Cinzel_400Regular.ttf'),
+  '@expo-google-fonts/cinzel/700Bold/Cinzel_700Bold.ttf': require('@expo-google-fonts/cinzel/700Bold/Cinzel_700Bold.ttf'),
 };
 /* eslint-enable @typescript-eslint/no-require-imports */
 

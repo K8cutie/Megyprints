@@ -1286,10 +1286,18 @@ pushed to `DCIM/Camera` and media-scanned.
   website's golden hook (`renderPageCanvasForPrint`) has no cover switch; adding one
   is a one-line website change (it would inherit the HOLD). The cover title's default
   font, **Cinzel**, is not in the app (drawn in the phone's serif; the preview says
-  so). Spine and back are not drawn.
+  so). Spine and back are not drawn. (Since "Everything print draws": Cinzel 400
+  and 700 are in the app, and the whole cover file, spine and back included, is
+  held to the website's by 6 golden covers, in Node and on the emulator; the
+  Preview still shows the front only.)
 - Not drawn yet (listed under the book when a page has one): textures, stickers,
   QR codes, graphics/ornaments, corner art, soft and textured edges, colour looks,
   71 of the website's 74 fonts (Georgia, the default caption font, included).
+  **Since "Everything print draws" (below):** the Preview draws textures,
+  stickers, QR codes, graphics, colour looks and soft edges, and Cinzel is in
+  the app; a textured edge, corner art or a background stored by address
+  needs a file the app does not have yet, and each one is listed
+  (`builder/pageImages.ts`, `test/pageImagesAssets.test.ts`).
 - No face finding and no photo check in the app; no AI quote lines (curated only).
 - Not on a real phone; one emulator (Android 14, x86_64). No editing, no ordering.
 
@@ -1917,11 +1925,12 @@ loosened to pass.
 
 ### Not drawn yet (listed in `plan.notDrawn`)
 
-Texture backgrounds, photo/picture backgrounds, QR codes (slot and caption
-box), graphics/ornaments (slot, caption box, free-placed), stickers, theme
-corner art, soft-edge and textured-edge masks, colour looks, the cover
-(front, spine, back), every font but the three above, and Dancing Script
-italic.
+(2026-10-28.) Texture backgrounds, photo/picture backgrounds, QR codes (slot
+and caption box), graphics/ornaments (slot, caption box, free-placed),
+stickers, theme corner art, soft-edge and textured-edge masks, colour looks,
+the cover (front, spine, back), every font but the three above, and Dancing
+Script italic. **All but the fonts are drawn since 2026-10-29: see
+"Everything print draws" below.**
 
 ### Found on the way (website, not changed here)
 
@@ -2053,6 +2062,252 @@ same pixelmatch code. **All 45 pages pass.**
 - No golden photo has an EXIF rotation, and none is a JPEG or HEIC: the
   phone's decode of those is not compared yet.
 - A low-memory phone (the emulator has 2 GB).
+
+## Everything print draws (2026-10-29, `feat/port-renderer-everything`)
+
+The app's renderer now draws everything the website's print code draws on a
+page, and the cover file. It goes into `native-2.0` (the 2.0 branch; main is
+not touched until after Nov 9). It moves a few browser-free pieces of
+website print code into shared files (what the website prints is byte for
+byte the same: below).
+
+### What the app draws now (`mobile/src/render`)
+
+- **Page textures** (`textureTile.ts`): the 16 materials in any tint. The app
+  asks `textures.ts` for the very SVG print loads and draws it with Skia at
+  the print tile size (80 design px × print px per design px: 256 px on an
+  8x8, 192 px on a 6x4), then repeats it from the page's top-left at the
+  background's opacity over white paper, as `renderBackground` does. The
+  grain is Skia's own Perlin noise (what Chromium's `feTurbulence` is made
+  with), in the tile's 80-unit space, stitched; the colour matrix and alpha
+  curve act in linearRGB, as SVG filters do. A recipe part the app does not
+  understand stops with an error naming it.
+- **Washes** (linear, radial, three colours), **photo backgrounds**
+  (stretched on a page; fitted at focus and zoom on a cover) and faded
+  backgrounds.
+- **Memory QR codes**: the PNG the album keeps (made by the website's
+  `qrcode` step when the memory was added), on a white square, where
+  `qrRect` puts it (in a photo frame or a caption box); a QR the customer
+  moved or turned: the white square at its moved size and turn, the code
+  contained in it. The corner chip prints 270 px (0.9") on a 6x4, 1.10 to
+  1.15" on an 8x8 (tested from the shared templates).
+- **Graphics** (ornaments): in a photo frame or a caption box at
+  `ornamentFit` (0.82 of the box), or moved and turned; **stickers** at their
+  centre-based page fractions and turn. **Theme corner art**: a quarter of
+  the short side in each corner.
+- **Colour looks** (`lookRules.applyLookToPixels`: the website's own pixel
+  maths, number for number), **soft edges** (`maskShapes.featherGradients`,
+  the gradients print draws) and **textured edges** (torn, deckle,
+  watercolor, brushed, frost, paint: the `/masks` overlay and texture
+  cutting the alpha), each baked into the photo's own box as print bakes it.
+- **Pictures sampled the way Chrome's canvas samples them**
+  (`sampling.ts`): drawn level, Skia's older 1/16-pixel bilinear (a runtime
+  shader, so the phone and CanvasKit agree); a picture file drawn at under
+  half its size, from Chrome's halved copy; see-through pictures
+  premultiplied. Without these a QR code, a graphic or a 3200 px photo drew
+  up to 151 levels off on some pixels.
+- **The cover file** (`coverPlan.ts`, `drawCover.ts`): the flat wrap at 300
+  DPI as `renderCoverWrapForPrint` draws it before its JPEG. Cover page: the
+  back's colour and the Megy Prints lockup, the front page drawn as print's
+  coverMode page (no spine keep-out, caption nudges kept, the floating
+  shadow on its words) into its panel and carried round the turn-in or bleed
+  mirrored (from the page under its words, as print does), the spine's
+  colour and its line (fitted to the spine, ink that reads on it) turned up
+  the spine. The old cover form too (panel photos, title, subtitle, blurb,
+  the opt-in mark). Cinzel 400 and 700 added to the bundled fonts (the
+  lockup's face and a new cover title's).
+
+### Website files split (no change to what prints)
+
+`src/lib/qrGeometry.ts` (`qrRect`), `src/pages/builder/ornamentFit.ts`,
+`lookRules.ts` (the looks and their pixel maths), `coverLayoutRules.ts` (the
+cover layout, the spine and the reserved back derived from the front page,
+where a cover text's lines go: `coverTextLayout`, now what
+`printPipeline.drawCoverText` places lines with) and
+`maskShapes.featherGradients` (what `masks.featherAlpha` draws). The old
+files re-export them, so the website imports what it always did;
+`coverLayout.ts` keeps the browser's text measure as the default.
+**Proof:** `node tools/golden/websiteSame.mjs [<ref>]` makes every golden
+page's print file (sharp words, and words baked in) and every golden cover
+file with the website's print code at `<ref>` and in the working copy, in
+the same Chromium, and compares them byte for byte (JPEG and every word
+patch). With no ref it compares with where the branch left main (`git
+merge-base HEAD origin/main`); it stops with exit code 2 if the two print
+codes are the same text (a ref after the change, such as HEAD once it is
+committed, would prove nothing), and always deletes its temp copy. After
+merging native-2.0 (2026-10-29): **156 of 156 byte-identical** against main
+as the branch left it (5ef26a9) and against `origin/native-2.0` (c8f2a38).
+The check catches a real change: the soft edge made 1% wider showed exactly
+the 4 soft-edge files as different.
+
+### The golden check now
+
+- **75 pages** (30 new: 5 textures, 2 washes, 4 QR, 4 graphics, 3 stickers,
+  2 colour looks, 2 soft edges, 2 textured edges, 2 big photos, 2 corner
+  art, 2 photo backgrounds; each feature on 8x8 and 6x4), **6 covers** (8x8
+  and 6x4, softcover and hardcover, matte and glossy, a photo cover, a
+  texture cover, a title-only cover, a long title shortened on the spine,
+  words at the very edges of a hardcover, the old cover form), **32 texture
+  tiles** (all 16 in their own colour at 256 px, tinted at 192 px).
+  QR codes and graphics in the golden pages are made by the website's own
+  code in Chromium (`generateQrPngDataUrl`, `rasterizeOrnamentPng`); corner
+  art and photos are made up (never real photos).
+- **New bars**, set by measuring: any 64 px tile's mean colour within 2
+  levels (worst real page 1.18; a texture a shade off its tint scores 8.01);
+  a texture tile within 4 levels on every pixel and 1 on average (worst 3
+  and 0.72). The others are unchanged.
+- **Mistake tests: 40**, all caught. New: a texture in the wrong tint, a
+  shade off its tint, its opacity ignored, its tile 1 px too big; a QR code
+  1 px off (3 pages), a moved QR turned 1 degree too far; a sticker missing,
+  turned the wrong way; a graphic 2 px smaller; a colour look missing; torn
+  paper's rim missing; corner art 1% too big; a big photo not drawn from
+  Chrome's halved copy; a cover title's floating shadow missing; the spine
+  line missing, in the title's own colour; the front not carried round the
+  turn-in; the front mirrored with its words; the back lockup 1 px off.
+
+### Results (2026-10-29, Node CanvasKit vs Chromium 1228 on Windows)
+
+All 75 pages pass. Outside the words: 0.000 to 0.038% of pixels differ
+(looks-four the most), no tile has a pixel off by more than 32 levels, tile
+means within 1.18 levels. Words: ink within 4.86% (graphic-and-quote-64),
+blocks within 26.5 levels, positions within 0.36 px. Every texture tile
+within 3 levels (mean 0.72).
+
+The covers (the whole wrap; bars as for a page):
+
+| Cover | Size | Not-ink pixels | Worst tile | Tile mean | Ink | Blocks | Sits |
+|---|---|---|---|---|---|---|---|
+| cover-88-hard-photo | 8x8 hardcover | 0.000% | 0.00% | 0.28 | 4.87% | 26.2 | 0.20 px |
+| cover-64-soft-plain | 6x4 softcover | 0.000% | 0.00% | 0.00 | 4.73% | 28.2 | **0.52 px** (below) |
+| cover-88-soft-texture | 8x8 softcover | 0.000% | 0.00% | 0.52 | 5.27% | 23.1 | 0.19 px |
+| cover-64-hard-long-title | 6x4 hardcover | 0.000% | 0.00% | 0.00 | 5.03% | 19.7 | 0.17 px |
+| cover-88-hard-edge-words | 8x8 hardcover | 0.000% | 0.00% | 0.01 | 4.87% | 28.5 | 0.19 px |
+| cover-86-old-form | 8x6 hardcover | 0.044% | 0.00% | 1.09 | 5.87% | 19.5 | 0.17 px |
+
+Cover words come closer to the 6% ink bar than page words (big titles in
+Cinzel and Playfair Display: letter edges, DirectWrite vs FreeType). A new
+cover over it must be measured, never the bar loosened.
+
+### Found on the way
+
+- **A cover's front words are never mirrored into the turn-in.** Print
+  mirrors the front page drawn under its words (the words go on as patches
+  over the panel only). The first app version mirrored the page with its
+  words; the golden cover with words at the edge caught it, now fixed.
+- **The same holds for a page's bleed** in the real print file: print's
+  page JPEG has the page under its words mirrored into the bleed, the words
+  on top at 300 DPI (`renderPageManually`). The golden reference
+  (`renderPageCanvasForPrint`) and the app's `renderPrintPage(words: true)`
+  mirror the words too, like the smaller "words baked in" file. Making the
+  print file in the app (Phase 5) must layer it as print does (the page
+  under its words + word patches), not ship `renderPrintPage(words: true)`.
+- **cover-64-soft-plain** is the one golden picture outside a bar: its
+  72 px Playfair Display Bold title's ink sits 0.52 px lower in the app than
+  in Chromium (bar 0.5). The line is print's own to 0.01 px and lands on the
+  same pixel rows; the letters' weight inside them differs (DirectWrite on
+  Windows, FreeType in the app). The test requires exactly that failure and
+  no other (`KNOWN_PLATFORM_DIFFERENCES` in `goldenCovers.test.ts`), so it
+  is never hidden; the bar is not changed.
+
+### Still not drawn, or not proven
+
+- **Fonts:** 4 of the website's 74 families (Playfair Display, DM Sans,
+  Dancing Script, Cinzel), no italic of Dancing Script or Cinzel. Anything
+  else is listed in `notDrawn`.
+- **Files the website serves** (`/masks/*.png` edges, a theme's corner art,
+  a picture background stored by address): the drawer takes them from its
+  caller (`AssetCache` files). The golden check reads the website's
+  `public/masks` and made-up corner art; the app must bundle the real files
+  (or fetch them) before Phase 5.
+- **On the phone: one cover fails** (`cover-86-old-form`, the old cover
+  form's back blurb with its automatic light outline over a photo): see "On
+  the phone" below. Only one golden text has a light outline, too few to
+  set a weight for light outlines from.
+- **Colour looks still run in JavaScript** (the website's own maths, number
+  for number) over the photo's box: on the emulator a page with four looked
+  photos takes 2.7 s, 3.0 s with a 12 MP photo in each frame ("On the
+  phone" below). A real phone is slower than the PC's emulator.
+- **Light letters on the phone** are given a hairline of weight (0.2 px)
+  measured on 19 white and cream texts; colours between dark and light
+  (luminance 128 to 223) are not in the golden set and are drawn as before,
+  not measured.
+- **Not on a real phone** (ARM64) or another Android version: the emulator
+  only (Android 14, x86_64).
+- **Making a new memory QR in the app** (the `qrcode` step) is not ported:
+  the app draws the PNG the album already keeps.
+- Oval and rounded masks still print as rectangles (website, unchanged).
+
+### On the phone (emulator, 2026-10-29, after merging native-2.0)
+
+Review fixes first: pictures drawn at half size or less are halved by Skia
+itself (a runtime shader on a CPU surface: byte for byte the JavaScript
+loop's result on every golden picture file), the halved copies live only
+while one page or cover is drawn, and drawing surfaces are kept for reuse
+(`render/surfaces.ts`: on the phone a disposed surface keeps its pixels
+until the collector runs). The phone's golden run now draws the 6 covers,
+the 32 texture tiles, a timing pass with a 12 MP photo and the light-weight
+trials. **The phone proof from #219 no longer applies to this code** (every
+photo is drawn through the new sampling): this run replaces it.
+
+Run: `-GoldenPages` release build (x86_64), `pwa_test` emulator (Android 14),
+`node scripts/golden-phone-run.cjs`, `npm run golden:phone`. Same bars, same
+pixelmatch code as the Node check.
+
+| | Node (CanvasKit) | Phone (native Skia) | Bar |
+|---|---|---|---|
+| Pages passing | 75 of 75 | 74 of 74, the Display P3 page fails as it must and passes after the colour step | |
+| Pixels differing outside the words, worst page | 0.038% | 0.014% (frame-round-double) | 0.15% |
+| Worst 64 px tile / tile mean | 0.00% / 1.18 | 0.00% / 1.29 (faded-gradient) | 1% / 2 |
+| Words' ink, worst page | 4.86% | 2.78% (64-caption-yellow) | 6% |
+| 8 px blocks / where text sits | 26.5 / 0.36 px | 24.8 / 0.35 px | 40 / 0.5 px |
+| Covers passing | 5 of 6 + the known 0.52 px | 5 of 6 (cover-64-soft-plain passes: 0.47 px) | |
+| Texture tiles: worst pixel / mean | 3 / 0.72 | 2 / 0.45 | 4 / 1 |
+
+Covers on the phone:
+
+| Cover | Ink | Blocks | Sits | Result |
+|---|---|---|---|---|
+| cover-88-hard-photo | 2.16% | 25.1 | 0.20 px | pass |
+| cover-64-soft-plain | 5.64% | 27.0 | 0.47 px | pass |
+| cover-88-soft-texture | 2.12% | 22.3 | 0.19 px | pass |
+| cover-64-hard-long-title | 3.65% | 23.3 | 0.17 px | pass |
+| cover-88-hard-edge-words | 2.16% | 28.4 | 0.20 px | pass |
+| cover-86-old-form | **17.85%** | 17.4 | 0.18 px | **fails** (text 1) |
+
+- **Found and fixed: light letters were thinner on the phone.** The first
+  phone run failed four covers on the ink bar (11 to 26%). Each text's ink
+  against the website's: dark text 0.97 to 1.01, white and cream 0.82 (27
+  px) to 0.95 (72 px), 0.99 at 700 px: a fixed fraction of a pixel short on
+  every edge. Drawing the light letters in a grey and colouring them after
+  (so Skia's glyph step treats them as darker) made them thinner still. A
+  hairline of weight in their own colour (`pageText.ts`, phone only, light
+  colours only) was tried at 0, 0.15, 0.2, 0.25, 0.35 and 0.5 px; at 0.2 px
+  all 19 light texts sit at 0.96 to 1.06 of the website's ink (worst 5.6%,
+  the 6x4 spine). Node (CanvasKit) is unchanged: it draws no weight.
+- **Still failing: `cover-86-old-form` text 1**, the back blurb (DM Sans 55
+  px, dark) with the 3 px light outline the old cover form adds over a
+  photo: the light outline's ink is 7.4% short and the dark letters 2.9%
+  heavy, and the bar counts the two together, so 17.8%. The outline gets
+  the 0.2 px too; by the trials about 0.4 px would be needed, but one golden
+  text is too few to set that from: add light-outlined texts at several
+  sizes to the golden set, then pick the outline's own weight from the same
+  trials. The old cover form is for drafts made before cover pages.
+- **QR codes scan from the phone's pictures**: OpenCV's QR reader decodes
+  all four app-drawn QR pages (`qr-chip-88`, `qr-chip-64`,
+  `qr-in-caption-box`, `qr-moved-turned-64`) to their megyprints.app/m/
+  links, and still reads them shrunk to 0.25, 0.35, 0.12 and 0.18 of the
+  page.
+- **Time on the emulator** (print size with bleed, words included): pages
+  11 to 2731 ms, median 121 ms; covers 19 to 467 ms. Colour looks:
+  looks-four 2731 ms (3.0 s with a 12 MP photo in each frame), looks-64 959
+  ms (1.2 s). Halved photos: big-photo-small-frames 184 ms (239 ms with 12
+  MP photos), textured edges 643 ms (739 ms). The whole run, 82 pictures
+  plus tiles, trials and timing pass: 64 s.
+- **Memory** (total PSS, sampled every 2 s): highest 1,045 MB, while the
+  trials drew cover files back to back (it fell to about 400 MB right
+  after: the phone's collector frees surfaces late); two earlier runs of
+  the same build kind peaked at 771 and 796 MB. On a 2 GB phone, making a
+  whole album's print files must be measured (Phase 5).
 
 ---
 

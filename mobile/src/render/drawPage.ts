@@ -5,11 +5,14 @@
    (printPipeline renderBackground / renderSlotPhoto / applySlotClip /
    renderTextElement / renderSlotText, wordArt.ts, printBleed.ts), with the
    same canvas rules where Skia's defaults differ:
-     • a photo is drawn with bilinear sampling and no mipmaps (canvas
-       imageSmoothingQuality 'low'), and its own edges are smoothed only
-       when the drawing is turned off the page's axes (Chromium's rule:
-       a picture's edges are smoothed when the transform does not keep
-       them level, as in the template's turned slot);
+     • a picture is sampled the way Chrome's canvas samples it
+       (sampling.ts): drawn level, with Skia's older 1/16-pixel bilinear;
+       drawn turned, with float bilinear; a picture file drawn at under
+       half size, from Chrome's halved copy; one with see-through pixels,
+       premultiplied. Its own edges are smoothed only when the drawing is
+       turned off the page's axes (Chromium's rule: a picture's edges are
+       smoothed when the transform does not keep them level, as in the
+       template's turned slot);
      • clips are smoothed; a stroke keeps the canvas miter limit (10);
      • a shadow is the shape blurred with sigma = shadowBlur / 2, offset,
        under the shape (HTML canvas shadows);
@@ -34,27 +37,91 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { SkCanvas, SkImage, SkPaint, SkPath, Skia } from '@shopify/react-native-skia/lib/commonjs/skia/types';
-import { ClipOp, FilterMode, MipmapMode, PaintStyle, StrokeCap, TileMode, BlurStyle } from '@shopify/react-native-skia/lib/commonjs/skia/types';
+import { AlphaType, BlendMode, ClipOp, ColorType, FilterMode, MipmapMode, PaintStyle, StrokeCap, TileMode, BlurStyle } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { slotPhotoRect } from '@web/pages/builder/slotPhotoFit';
-import { archRy, heartCurves, isPathShape, maskPathD, starPoints } from '@web/pages/builder/maskShapes';
+import { archRy, featherGradients, heartCurves, isPathShape, maskOverlayUrl, maskPathD, maskTextureUrl, starPoints } from '@web/pages/builder/maskShapes';
 import { PRINT_FRAME, type PrintFrameShadow } from '@web/pages/builder/printFrameSpec';
-import { mirrorOps } from '@web/pages/builder/bleedGeometry';
+import { mirrorOps, type Margins } from '@web/pages/builder/bleedGeometry';
 import { wrapTextLines, firstLineCenter, TEXT_LINE_HEIGHT } from '@web/pages/builder/wordArtRules';
-import { backgroundPhotoRect, FRAME_PX, type BoxPhotoItem, type BoxTextItem, type Fill, type FreeTextItem, type PagePlan, type PhotoItem, type Rect } from './pagePlan';
+import { applyLookToPixels, lookOps, type LookId } from '@web/pages/builder/lookRules';
+import { bgCoverFit } from '@web/pages/builder/types';
+import { FRAME_PX, type BoxPhotoItem, type BoxTextItem, type CornerItem, type Fill, type FreeGraphicItem, type FreeQrItem, type FreeTextItem, type GraphicItem, type PagePlan, type PhotoItem, type QrItem, type Rect } from './pagePlan';
 import type { PageText, TextLook } from './pageText';
+import { makeTextureTile } from './textureTile';
+import { ChromeSampling, mipLevelFor } from './sampling';
+import { SurfacePool } from './surfaces';
 
 /** The page's photos, by album photo index (null = not loaded: drawn empty). */
 export type PhotoSource = (photoIndex: number) => SkImage | null;
+
+/** The pictures a page names by address (PagePlan.assets), opened by the
+ *  caller: a QR code's or a graphic's PNG data: URL, a mask edge, a corner
+ *  file, a picture background. null = not available (drawn as print draws a
+ *  picture that fails to load). */
+export type AssetSource = (src: string) => SkImage | null;
 
 interface Shadow { color: string; blur: number; dx: number; dy: number }
 
 export interface DrawOptions {
   /** Draw the page's words (default). false: the page under them. */
   words?: boolean;
+  /** The page's named pictures (PagePlan.assets). Default: none. */
+  assets?: AssetSource;
+  /** Told about each named picture `assets` did not have. */
+  onMissing?: (src: string) => void;
 }
 
+const PAPER = '#FFFBF7';
+
 export class PageDrawer {
-  constructor(private readonly Skia: Skia, private readonly text: PageText) {}
+  /** Texture tiles already drawn, by material, tint and size. */
+  private readonly tiles = new Map<string, SkImage>();
+  /** Pictures prepared the way Chrome samples them (premultiplied, halved). */
+  private readonly sampling: ChromeSampling;
+  /** The surfaces every drawing is made on, kept for reuse (surfaces.ts
+   *  says why). The cover drawer draws on them too. */
+  readonly surfaces: SurfacePool;
+  /** How many drawings are under way (see drawing()). */
+  private depth = 0;
+
+  constructor(private readonly Skia: Skia, private readonly text: PageText) {
+    this.surfaces = new SurfacePool(Skia);
+    this.sampling = new ChromeSampling(Skia, this.surfaces);
+  }
+
+  /** One drawing: a page, a cover, a picture put on a cover. The pictures
+   *  prepared for it (a photo's halved copies: 12 MB for a 12 MP photo's
+   *  first halving) are let go when the outermost drawing ends, so they
+   *  never pile up across an album's pages. A drawing started inside it
+   *  shares them (renderPrintPage's page, a cover's front page drawn with
+   *  and without its words). Every public drawing method runs in one. */
+  drawing<T>(fn: () => T): T {
+    this.depth++;
+    try {
+      return fn();
+    } finally {
+      this.depth--;
+      if (this.depth === 0) this.sampling.dispose();
+    }
+  }
+
+  /** Let go of the texture tiles, prepared pictures and surfaces kept between pages. */
+  dispose(): void {
+    this.tiles.forEach((t) => t.dispose());
+    this.tiles.clear();
+    this.sampling.dispose();
+    this.surfaces.dispose();
+  }
+
+  private textureTile(name: string, color: string | undefined, tilePx: number): SkImage {
+    const key = `${name}|${color ?? ''}|${tilePx}`;
+    let tile = this.tiles.get(key);
+    if (!tile) {
+      tile = makeTextureTile(this.Skia, name, color, tilePx);
+      this.tiles.set(key, tile);
+    }
+    return tile;
+  }
 
   private paint(color: string): SkPaint {
     const p = this.Skia.Paint();
@@ -67,14 +134,52 @@ export class PageDrawer {
     return this.Skia.XYWHRect(r.x, r.y, r.w, r.h);
   }
 
-  /** ctx.drawImage(img, x, y, w, h): bilinear, no mipmaps; the picture's
-   *  edges smoothed only when the canvas is turned off the page's axes. */
-  private image(canvas: SkCanvas, img: SkImage, src: Rect, dst: Rect): void {
-    const p = this.Skia.Paint();
+  /** ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h), sampled as Chrome's
+   *  canvas samples it (sampling.ts). `decoded`: a picture file the browser
+   *  decoded (a photo, a QR code, a graphic, a mask edge), which Chrome
+   *  draws from a halved copy when it is drawn at under half its size; a
+   *  canvas drawn onto another (`decoded` false) never is. The picture's
+   *  edges are smoothed only when the canvas is turned off the page's axes. */
+  private image(canvas: SkCanvas, img: SkImage, src: Rect, dst: Rect, { paint, decoded = false }: { paint?: SkPaint; decoded?: boolean } = {}): void {
+    const p = paint ?? this.Skia.Paint();
     const m = canvas.getTotalMatrix().get();
     const level = (m[1] === 0 && m[3] === 0) || (m[0] === 0 && m[4] === 0);
-    p.setAntiAlias(!level);
-    canvas.drawImageRectOptions(img, this.rect(src), this.rect(dst), FilterMode.Linear, MipmapMode.None, p);
+    let pic = img;
+    let from = src;
+    if (decoded) {
+      // The draw's scale on the page (cc ExtractScale): a level draw's own
+      // scales; a turned one's, taken apart from its turn.
+      const kx = dst.w / src.w, ky = dst.h / src.h;
+      const a = m[0] * kx, b = m[3] * kx, c = m[1] * ky, d = m[4] * ky;
+      let sx: number, sy: number;
+      if (b === 0 && c === 0) { sx = Math.abs(a); sy = Math.abs(d); }
+      else { sx = Math.hypot(a, b); sy = sx ? Math.abs(a * d - b * c) / sx : 0; }
+      const L = mipLevelFor(Math.round(src.w), Math.round(src.h), Math.round(src.w * sx), Math.round(src.h * sy));
+      pic = this.sampling.decoded(img, L);
+      if (L) {
+        const fx = pic.width() / img.width(), fy = pic.height() / img.height();
+        from = { x: src.x * fx, y: src.y * fy, w: src.w * fx, h: src.h * fy };
+      }
+    }
+    if (level && from.w === dst.w && from.h === dst.h && Math.abs(m[0]) === 1 && Math.abs(m[4]) === 1
+      && Number.isInteger(m[0] * dst.x + m[2]) && Number.isInteger(m[4] * dst.y + m[5])) {
+      // Pixel for pixel onto whole pixels (the page into its bleed, a mirrored
+      // strip, the cover's front panel): a plain copy, whatever the sampling.
+      p.setAntiAlias(false);
+      canvas.drawImageRectOptions(pic, this.rect(from), this.rect(dst), FilterMode.Nearest, MipmapMode.None, p);
+    } else if (level) {
+      p.setAntiAlias(false);
+      // The shader holds the picture: let go of it as soon as it has drawn
+      // (sampling.ts says why).
+      const shader = this.sampling.levelShader(pic, from, dst);
+      p.setShader(shader);
+      canvas.drawRect(this.rect(dst), p);
+      p.setShader(null);
+      shader.dispose();
+    } else {
+      p.setAntiAlias(true);
+      canvas.drawImageRectOptions(pic, this.rect(from), this.rect(dst), FilterMode.Linear, MipmapMode.None, p);
+    }
   }
 
   private fillShape(canvas: SkCanvas, path: SkPath, color: string, shadow?: Shadow): void {
@@ -89,7 +194,7 @@ export class PageDrawer {
     canvas.drawPath(path, this.paint(color));
   }
 
-  private fill(f: Fill): SkPaint {
+  private fill(f: Extract<Fill, { kind: 'solid' | 'linear' | 'radial' }>): SkPaint {
     if (f.kind === 'solid') return this.paint(f.color);
     const p = this.Skia.Paint();
     p.setAntiAlias(true);
@@ -165,7 +270,76 @@ export class PageDrawer {
     return b.build();
   }
 
-  private photo(canvas: SkCanvas, item: PhotoItem, photos: PhotoSource): void {
+  /** A photo with a colour look, a soft edge or a textured edge, baked the
+   *  way print bakes it (renderSlotPhoto): drawn into its own box (the slot
+   *  rounded up to whole pixels), the look applied to those pixels
+   *  (lookRules.applyLookToPixel on each, as applyLookPixels does), then the
+   *  soft edge's gradients (featherGradients) or the edge's overlay and its
+   *  texture cutting the alpha. The caller draws it at the slot's corner. */
+  private bakedPhoto(img: SkImage, fit: { x: number; y: number; w: number; h: number }, sw: number, sh: number, item: PhotoItem, assets: AssetSource, onMissing?: (src: string) => void): SkImage {
+    const Sk = this.Skia;
+    const tw = Math.max(1, Math.ceil(sw)), th = Math.max(1, Math.ceil(sh));
+    const d = this.surfaces.take(tw, th); // transparent
+    const tc = d.canvas;
+    this.image(tc, img, { x: 0, y: 0, w: img.width(), h: img.height() }, fit, { decoded: true });
+    if (item.look) {
+      d.surface.flush();
+      const drawn = d.surface.makeImageSnapshot();
+      const looked = this.withLook(drawn, item.look);
+      drawn.dispose();
+      const p = Sk.Paint();
+      p.setBlendMode(BlendMode.Src);
+      tc.drawImage(looked, 0, 0, p);
+      looked.dispose();
+    }
+    const { slot } = item;
+    if (slot.feather) {
+      for (const g of featherGradients(0, 0, tw, th, slot.feather, slot.featherSide)) {
+        const p = Sk.Paint();
+        p.setBlendMode(BlendMode.DstIn);
+        p.setShader(Sk.Shader.MakeLinearGradient(
+          Sk.Point(g.x0, g.y0), Sk.Point(g.x1, g.y1),
+          g.stops.map((s) => Sk.Color(`rgba(0,0,0,${s.alpha})`)), g.stops.map((s) => s.offset), TileMode.Clamp,
+        ));
+        tc.drawRect(Sk.XYWHRect(0, 0, tw, th), p);
+      }
+    }
+    if (slot.texture) {
+      const texSrc = maskTextureUrl(slot.texture);
+      const overlaySrc = maskOverlayUrl(slot.texture);
+      const tex = assets(texSrc);
+      const overlay = overlaySrc ? assets(overlaySrc) : null;
+      if (!tex) onMissing?.(texSrc);
+      if (overlaySrc && !overlay) onMissing?.(overlaySrc);
+      // Print draws the plain photo when an edge's files don't load.
+      if (tex && (!overlaySrc || overlay)) {
+        const box = { x: 0, y: 0, w: tw, h: th };
+        if (overlay) this.image(tc, overlay, { x: 0, y: 0, w: overlay.width(), h: overlay.height() }, box, { decoded: true });
+        const p = Sk.Paint();
+        p.setBlendMode(BlendMode.DstIn);
+        this.image(tc, tex, { x: 0, y: 0, w: tex.width(), h: tex.height() }, box, { paint: p, decoded: true });
+      }
+    }
+    return this.surfaces.snapshot(d);
+  }
+
+  /** applyLookPixels: each pixel's colour (not premultiplied) through the
+   *  look, see-through pixels left alone. */
+  private withLook(img: SkImage, look: LookId): SkImage {
+    const ops = lookOps(look);
+    const w = img.width(), h = img.height();
+    const info = { width: w, height: h, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Unpremul };
+    const px = img.readPixels(0, 0, info);
+    if (!(px instanceof Uint8Array)) throw new Error('could not read the photo back for its look');
+    applyLookToPixels(px, ops); // lookRules.applyLookToPixel on each pixel, matrices built once
+    const data = this.Skia.Data.fromBytes(px);
+    const out = this.Skia.Image.MakeImage(info, data, w * 4);
+    data.dispose(); // the picture keeps its own hold on the bytes
+    if (!out) throw new Error('could not make the photo with its look');
+    return out;
+  }
+
+  private photo(canvas: SkCanvas, item: PhotoItem, photos: PhotoSource, assets: AssetSource, onMissing?: (src: string) => void): void {
     const img = photos(item.photoIndex);
     if (!img) return;
     const { x: sx, y: sy, w: sw, h: sh } = item.box;
@@ -201,7 +375,13 @@ export class PageDrawer {
     canvas.save();
     if (slot.rotation) canvas.rotate(slot.rotation, sx + sw / 2, sy + sh / 2);
     const fit = slotPhotoRect({ w: img.width(), h: img.height() }, { w: sw, h: sh }, item.zoom, item.pan);
-    this.image(canvas, img, { x: 0, y: 0, w: img.width(), h: img.height() }, { x: sx + fit.x, y: sy + fit.y, w: fit.w, h: fit.h });
+    if (slot.feather || slot.texture || item.look) {
+      const baked = this.bakedPhoto(img, fit, sw, sh, item, assets, onMissing);
+      this.image(canvas, baked, { x: 0, y: 0, w: baked.width(), h: baked.height() }, { x: sx, y: sy, w: baked.width(), h: baked.height() });
+      baked.dispose();
+    } else {
+      this.image(canvas, img, { x: 0, y: 0, w: img.width(), h: img.height() }, { x: sx + fit.x, y: sy + fit.y, w: fit.w, h: fit.h }, { decoded: true });
+    }
     canvas.restore();
 
     // The border line: drawn 2× wide on the clip path, so its inner half shows.
@@ -239,7 +419,7 @@ export class PageDrawer {
     const dw = img.width() * k, dh = img.height() * k;
     canvas.save();
     canvas.clipRect(this.rect(item.box), ClipOp.Intersect, true);
-    this.image(canvas, img, { x: 0, y: 0, w: img.width(), h: img.height() }, { x: bx + (bw - dw) / 2, y: by + (bh - dh) / 2, w: dw, h: dh });
+    this.image(canvas, img, { x: 0, y: 0, w: img.width(), h: img.height() }, { x: bx + (bw - dw) / 2, y: by + (bh - dh) / 2, w: dw, h: dh }, { decoded: true });
     canvas.restore();
   }
 
@@ -247,19 +427,19 @@ export class PageDrawer {
     return { family: s.fontFamily, size, bold: s.bold, italic: s.italic };
   }
 
-  private boxText(canvas: SkCanvas, item: BoxTextItem): void {
+  private boxText(canvas: SkCanvas, item: BoxTextItem, onCover: boolean): void {
     const look = this.look(item.style, item.fontSize);
     canvas.save();
     canvas.clipRect(this.rect(item.box), ClipOp.Intersect, true);
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.maxWidth);
     const top = firstLineCenter(lines.length, item.centerY, item.fontSize);
     const step = item.fontSize * TEXT_LINE_HEIGHT;
-    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, top + i * step, look, item.align, item.style, item.scale, 1, item.onCover));
+    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, top + i * step, look, item.align, item.style, item.scale, 1, onCover));
     if (item.style.underline) this.text.underline(canvas, lines, item.anchorX, top, look, item.align, item.style.color || '#2D2D2D');
     canvas.restore();
   }
 
-  private freeText(canvas: SkCanvas, item: FreeTextItem): void {
+  private freeText(canvas: SkCanvas, item: FreeTextItem, onCover: boolean): void {
     const look = this.look(item.style, item.fontSize);
     const alpha = item.opacity / 100;
     canvas.save();
@@ -268,7 +448,7 @@ export class PageDrawer {
     canvas.scale(item.scaleX, item.scaleY);
     const step = item.fontSize * TEXT_LINE_HEIGHT;
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.boxWidth);
-    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, step / 2 + i * step, look, item.align, item.style, item.scale, alpha, item.onCover));
+    lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, step / 2 + i * step, look, item.align, item.style, item.scale, alpha, onCover));
     if (item.style.underline) {
       const blockCenter = step / 2 + ((lines.length - 1) * step) / 2;
       this.text.underline(canvas, lines, item.anchorX, firstLineCenter(lines.length, blockCenter, item.fontSize), look, item.align, item.style.color || '#2D2D2D', alpha);
@@ -276,59 +456,147 @@ export class PageDrawer {
     canvas.restore();
   }
 
-  /** The page at print size, no bleed, onto `canvas` (W × H). `words: false`
-   *  leaves out every word (a caption, a text in a photo frame, a free text)
-   *  and draws the rest the same, like the website's drawPrintPage. */
-  draw(canvas: SkCanvas, plan: PagePlan, photos: PhotoSource, { words = true }: DrawOptions = {}): void {
+  /** A picture the page names, or null (told to onMissing). */
+  private named(src: string, assets: AssetSource, onMissing?: (src: string) => void): SkImage | null {
+    const img = assets(src);
+    if (!img) onMissing?.(src);
+    return img;
+  }
+
+  private whole(img: SkImage): Rect {
+    return { x: 0, y: 0, w: img.width(), h: img.height() };
+  }
+
+  /** renderBackground: white paper, then the colour, wash, texture or picture. */
+  private background(canvas: SkCanvas, plan: PagePlan, photos: PhotoSource, assets: AssetSource, onMissing?: (src: string) => void): void {
     const W = plan.width, H = plan.height;
     const all = this.Skia.XYWHRect(0, 0, W, H);
     canvas.drawRect(all, this.paint('#ffffff'));
-    const bp = plan.backgroundPhoto;
-    const bgImg = bp ? photos(bp.photoIndex) : null;
-    if (bp && bgImg) {
-      // printPipeline renderBackground 'image': the photo over white paper.
-      this.image(canvas, bgImg, { x: 0, y: 0, w: bgImg.width(), h: bgImg.height() }, backgroundPhotoRect(bp, bgImg.width(), bgImg.height()));
-    } else {
-      // A photo that can't be opened: print's paper colour, as when it fails to load.
-      canvas.drawRect(all, this.fill(bp ? { kind: 'solid', color: '#FFFBF7' } : plan.background));
+    const f = plan.background;
+    if (f.kind === 'texture') {
+      // The tile at its print size, repeated from the page's top-left at the
+      // background's opacity over the white paper (createPattern + globalAlpha).
+      const tile = this.textureTile(f.name, f.color, f.tilePx);
+      const p = this.Skia.Paint();
+      p.setShader(tile.makeShaderOptions(TileMode.Repeat, TileMode.Repeat, FilterMode.Nearest, MipmapMode.None));
+      p.setAlphaf(f.alpha);
+      canvas.drawRect(all, p);
+      return; // the opacity is the texture's alpha: no wash
     }
+    if (f.kind === 'image') {
+      const img = 'photo' in f.image ? photos(f.image.photo) : this.named(f.image.src, assets, onMissing);
+      if (!img) canvas.drawRect(all, this.paint(PAPER));
+      else if (f.cover) {
+        const r = bgCoverFit(img.width(), img.height(), W, H, f.cover.zoom, f.cover.focusX, f.cover.focusY);
+        this.image(canvas, img, this.whole(img), { x: r.x, y: r.y, w: r.width, h: r.height }, { decoded: true });
+      } else this.image(canvas, img, this.whole(img), { x: 0, y: 0, w: W, h: H }, { decoded: true });
+    } else canvas.drawRect(all, this.fill(f));
     if (plan.wash) canvas.drawRect(all, this.paint(plan.wash));
-    for (const item of plan.items) {
-      if (item.kind === 'photo') this.photo(canvas, item, photos);
-      else if (item.kind === 'boxText') { if (words) this.boxText(canvas, item); }
-      else if (item.kind === 'freeText') { if (words) this.freeText(canvas, item); }
-      else this.boxPhoto(canvas, item, photos);
-    }
+  }
+
+  /** renderSlotQr: a white square, the code's PNG over it. */
+  private qr(canvas: SkCanvas, it: QrItem, assets: AssetSource, onMissing?: (src: string) => void): void {
+    const box = { x: it.x, y: it.y, w: it.side, h: it.side };
+    canvas.drawRect(this.rect(box), this.paint('#ffffff'));
+    const img = this.named(it.src, assets, onMissing);
+    if (img) this.image(canvas, img, this.whole(img), box, { decoded: true });
+  }
+
+  /** A moved caption-box QR: the white square at its size and turn, the code contained in it. */
+  private freeQr(canvas: SkCanvas, it: FreeQrItem, assets: AssetSource, onMissing?: (src: string) => void): void {
+    const side = Math.min(it.w, it.h);
+    canvas.save();
+    canvas.translate(it.cx, it.cy);
+    if (it.rot) canvas.rotate(it.rot, 0, 0);
+    canvas.drawRect(this.Skia.XYWHRect(-it.w / 2, -it.h / 2, it.w, it.h), this.paint('#ffffff'));
+    const img = this.named(it.src, assets, onMissing);
+    if (img) this.image(canvas, img, this.whole(img), { x: -side / 2, y: -side / 2, w: side, h: side }, { decoded: true });
+    canvas.restore();
+  }
+
+  /** renderSlotOrnament (and a corner of corner art): the PNG in its square, no backing. */
+  private graphic(canvas: SkCanvas, it: GraphicItem | CornerItem, assets: AssetSource, onMissing?: (src: string) => void): void {
+    const img = this.named(it.src, assets, onMissing);
+    const side = it.kind === 'corner' ? it.size : it.side;
+    if (img) this.image(canvas, img, this.whole(img), { x: it.x, y: it.y, w: side, h: side }, { decoded: true });
+  }
+
+  /** A sticker, or a moved caption-box graphic: at its centre, size and turn. */
+  private freeGraphic(canvas: SkCanvas, it: FreeGraphicItem, assets: AssetSource, onMissing?: (src: string) => void): void {
+    const img = this.named(it.src, assets, onMissing);
+    if (!img) return;
+    canvas.save();
+    canvas.translate(it.cx, it.cy);
+    if (it.rot) canvas.rotate(it.rot, 0, 0);
+    this.image(canvas, img, this.whole(img), { x: -it.w / 2, y: -it.h / 2, w: it.w, h: it.h }, { decoded: true });
+    canvas.restore();
+  }
+
+  /** The page at print size, no bleed, onto `canvas` (W × H). `words: false`
+   *  leaves out every word (a caption, a text in a photo frame, a free text)
+   *  and draws the rest the same, like the website's drawPrintPage. */
+  draw(canvas: SkCanvas, plan: PagePlan, photos: PhotoSource, { words = true, assets = () => null, onMissing }: DrawOptions = {}): void {
+    this.drawing(() => {
+      this.background(canvas, plan, photos, assets, onMissing);
+      for (const item of plan.items) {
+        switch (item.kind) {
+          case 'photo': this.photo(canvas, item, photos, assets, onMissing); break;
+          case 'boxText': if (words) this.boxText(canvas, item, plan.onCover); break;
+          case 'freeText': if (words) this.freeText(canvas, item, plan.onCover); break;
+          case 'boxPhoto': this.boxPhoto(canvas, item, photos); break;
+          case 'qr': this.qr(canvas, item, assets, onMissing); break;
+          case 'freeQr': this.freeQr(canvas, item, assets, onMissing); break;
+          case 'graphic':
+          case 'corner': this.graphic(canvas, item, assets, onMissing); break;
+          case 'freeGraphic': this.freeGraphic(canvas, item, assets, onMissing); break;
+        }
+      }
+    });
+  }
+
+  /** The page at print size (no bleed) as a picture. The caller disposes it. */
+  renderTrim(plan: PagePlan, photos: PhotoSource, options: DrawOptions = {}): SkImage {
+    const d = this.surfaces.take(plan.width, plan.height);
+    this.draw(d.canvas, plan, photos, options);
+    return this.surfaces.snapshot(d);
+  }
+
+  /** printBleed drawMirroredEdges: `img`, already drawn at `box`, carries on
+   *  outward by `m` on each side as its own mirror image. */
+  mirrorEdges(canvas: SkCanvas, img: SkImage, box: Rect, m: Margins): void {
+    this.drawing(() => {
+      for (const op of mirrorOps(img.width(), img.height(), box, m)) {
+        canvas.save();
+        canvas.translate(op.flipX ? op.dx + op.dw : op.dx, op.flipY ? op.dy + op.dh : op.dy);
+        canvas.scale(op.flipX ? -1 : 1, op.flipY ? -1 : 1);
+        this.image(canvas, img, { x: op.sx, y: op.sy, w: op.sw, h: op.sh }, { x: 0, y: 0, w: op.dw, h: op.dh });
+        canvas.restore();
+      }
+    });
+  }
+
+  /** ctx.drawImage(img, x, y, w, h), for a drawing outside the page (the
+   *  cover): `decoded` for a picture file (a photo), not for a canvas. */
+  drawPicture(canvas: SkCanvas, img: SkImage, dst: Rect, decoded = false): void {
+    this.drawing(() => this.image(canvas, img, this.whole(img), dst, { decoded }));
   }
 
   /** The page as the print file's picture: drawn at print size, then its
    *  bleed mirrored round every edge (printBleed withBleed). The caller
    *  disposes the image. */
   renderPrintPage(plan: PagePlan, photos: PhotoSource, options: DrawOptions = {}): SkImage {
-    const W = plan.width, H = plan.height, b = plan.bleed;
-    const trimSurface = this.Skia.Surface.Make(W, H);
-    if (!trimSurface) throw new Error(`could not make a ${W}×${H} drawing surface`);
-    this.draw(trimSurface.getCanvas(), plan, photos, options);
-    trimSurface.flush();
-    const trim = trimSurface.makeImageSnapshot();
+    return this.drawing(() => this.printPage(plan, photos, options));
+  }
 
-    const outSurface = this.Skia.Surface.Make(W + 2 * b, H + 2 * b);
-    if (!outSurface) throw new Error(`could not make a ${W + 2 * b}×${H + 2 * b} drawing surface`);
-    const out = outSurface.getCanvas();
+  private printPage(plan: PagePlan, photos: PhotoSource, options: DrawOptions): SkImage {
+    const W = plan.width, H = plan.height, b = plan.bleed;
+    const trim = this.renderTrim(plan, photos, options);
+    const d = this.surfaces.take(W + 2 * b, H + 2 * b);
+    const out = d.canvas;
     out.drawRect(this.Skia.XYWHRect(0, 0, W + 2 * b, H + 2 * b), this.paint('#ffffff'));
     this.image(out, trim, { x: 0, y: 0, w: W, h: H }, { x: b, y: b, w: W, h: H });
-    for (const op of mirrorOps(W, H, { x: b, y: b, w: W, h: H }, { top: b, right: b, bottom: b, left: b })) {
-      out.save();
-      out.translate(op.flipX ? op.dx + op.dw : op.dx, op.flipY ? op.dy + op.dh : op.dy);
-      out.scale(op.flipX ? -1 : 1, op.flipY ? -1 : 1);
-      this.image(out, trim, { x: op.sx, y: op.sy, w: op.sw, h: op.sh }, { x: 0, y: 0, w: op.dw, h: op.dh });
-      out.restore();
-    }
-    outSurface.flush();
-    const image = outSurface.makeImageSnapshot();
+    this.mirrorEdges(out, trim, { x: b, y: b, w: W, h: H }, { top: b, right: b, bottom: b, left: b });
     trim.dispose();
-    trimSurface.dispose();
-    outSurface.dispose();
-    return image;
+    return this.surfaces.snapshot(d);
   }
 }

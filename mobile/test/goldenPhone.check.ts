@@ -2,7 +2,8 @@
  * @jest-environment node
  */
 /* ══════════════════════════════════════════════════════════════════════════
-   THE GOLDEN PAGES DRAWN ON A PHONE, held to the website's print files.
+   THE GOLDEN PAGES AND COVERS DRAWN ON A PHONE, held to the website's
+   print files.
 
      npm run golden:phone          (from mobile/, after a phone run)
 
@@ -28,6 +29,14 @@
    on Android draws the profile's numbers as sRGB: the check has to see
    that); after the colour step it must pass like every other page.
 
+   The cover files go through checkCover's comparison (the whole wrap, the
+   same bars, the lines on the wrap), with the same known platform
+   difference as the Node check (test/golden/known.ts: a difference of
+   Windows Chromium's letters, so on the phone that picture may pass, or
+   fail in exactly that way); each texture tile through tileFailures. The
+   run's timing pass (pages drawn with a 12 MP photo) and its light-weight
+   trials are reported, not compared.
+
    Writes tools/golden/phone-out/: report.json, table.md, a diff per page
    (pixelmatch's own picture) and side/NAME.png (website | phone | diff, and
    the same three at full size where they differ most).
@@ -36,18 +45,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { SkCanvas, SkFont, SkImage, Skia } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { AlphaType, ColorType, FilterMode, MipmapMode, PaintStyle } from '@shopify/react-native-skia/lib/commonjs/skia/types';
-import type { AlbumPage, AlbumSizePreset } from '@web/pages/builder/types';
+import type { AlbumPage, AlbumSizePreset, CoverDesign, CoverType, MaterialType } from '@web/pages/builder/types';
 import type { PhonePage, PhoneReport } from '../src/dev/goldenRun';
 import { planPage, type PagePlan } from '../src/render/pagePlan';
-import { headlessSkia, fontPath, readPng, writeImage, writeRgba, REPO_ROOT } from './golden/headless';
-import { comparePage, pageFailures, PIXELMATCH, type Area, type PageComparison } from './golden/compare';
-import { lineFailures, type WebLine } from './golden/words';
+import { planCover, type CoverPlan } from '../src/render/coverPlan';
+import { PageText } from '../src/render/pageText';
+import { headlessSkia, fontFiles, fontPath, readPng, writeImage, writeRgba, REPO_ROOT } from './golden/headless';
+import { comparePage, pageFailures, tileFailures, PIXELMATCH, type Area, type PageComparison } from './golden/compare';
+import { coverWebLines, lineFailures, type WebLineOn } from './golden/words';
+import { KNOWN_PLATFORM_DIFFERENCES } from './golden/known';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { appRendererHash } = require('../scripts/golden-phone-assets.cjs') as { appRendererHash: () => string };
 
-interface WebCase { name: string; file: string; bare: string | null; width: number; height: number; lines: WebLine[] }
-interface Manifest { chromium: string; fingerprint: { renderer: { hash: string }; tools: { hash: string }; fonts: string }; cases: WebCase[] }
+interface WebCase { name: string; file: string; bare: string | null; width: number; height: number; lines: WebLineOn[] }
+interface WebTile { name: string; color: string | null; px: number; file: string }
+interface Manifest { chromium: string; fingerprint: { renderer: { hash: string }; tools: { hash: string }; fonts: string }; cases: WebCase[]; covers: WebCase[]; tiles: WebTile[] }
 
 const WEB = path.join(REPO_ROOT, 'tools', 'golden', 'web');
 const PHONE = process.env.GOLDEN_PHONE_DIR ? path.resolve(process.env.GOLDEN_PHONE_DIR) : path.join(REPO_ROOT, 'tools', 'golden', 'phone');
@@ -62,24 +75,42 @@ const report = readJson<PhoneReport>(path.join(PHONE, 'report.json'));
 const manifest = readJson<Manifest>(path.join(WEB, 'manifest.json'));
 /** Photo files the phone's colour step had to convert. */
 const convertedFiles = new Set(report.photos.filter((p) => p.converted).map((p) => p.file));
-const pagesJson = readJson<{ photos: { image: number }[]; cases: { name: string; albumSize: AlbumSizePreset; pageIndex: number; page: AlbumPage }[] }>(path.join(WEB, 'pages.json'));
+const pagesJson = readJson<{
+  photos: { id: string; image: number }[];
+  cases: { name: string; albumSize: AlbumSizePreset; pageIndex: number; page: AlbumPage }[];
+  covers: { name: string; albumSize: AlbumSizePreset; pageCount: number; cover: CoverType; material: MaterialType; coverFront?: AlbumPage; coverDesign?: CoverDesign }[];
+}>(path.join(WEB, 'pages.json'));
 
 /** The page plan (shared code, no measuring): its bleed and its photos. */
 function planOf(name: string): PagePlan {
   const c = pagesJson.cases.find((x) => x.name === name);
   if (!c) throw new Error(`${name} is not in pages.json`);
-  return planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: pagesJson.photos.length });
+  return planPage({ page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photoCount: pagesJson.photos.length, photoIds: pagesJson.photos.map((p) => p.id) });
+}
+
+/** The cover's plan, worked out on the computer (its front panel is where print's front-page lines go). */
+function coverPlanOf(name: string): CoverPlan {
+  const c = pagesJson.covers.find((x) => x.name === name);
+  if (!c) throw new Error(`${name} is not in pages.json covers`);
+  return planCover({
+    albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material, coverFront: c.coverFront, coverDesign: c.coverDesign,
+    photoCount: pagesJson.photos.length, photoIds: pagesJson.photos.map((p) => p.id),
+  }, (s, style, fontSize) => text.measure(s, { family: style.fontFamily, size: fontSize, bold: style.bold, italic: style.italic }));
 }
 
 interface Row {
-  page: string; variant: string; size: string; drawMs: number;
-  outsideWordsPct: number; worstTilePct: number; differingPct: number; over8LevelsPct: number; maxChannelDiff: number;
+  page: string; kind: 'page' | 'cover'; variant: string; size: string; drawMs: number;
+  outsideWordsPct: number; worstTilePct: number; worstTileMean: number; differingPct: number; over8LevelsPct: number; maxChannelDiff: number;
   inkOff: number | null; worstBlock: number | null; textShift: number | null;
   lines: number; lineFailures: string[]; failures: string[]; expectFail: boolean; passed: boolean;
 }
 const rows: Row[] = [];
+const tileRows: { file: string; maxLevels: number; meanLevels: number; ms: number; failures: string[] }[] = [];
+/** The light-weight trials: each light text's ink against the website's, per trial weight. */
+const inkRows: { ink: string; page: string; texts: { color: string; inkOff: number }[]; failures: string[] }[] = [];
 
 let Sk: Skia;
+let text: PageText;
 let labelFont: SkFont;
 let smallFont: SkFont;
 
@@ -89,6 +120,7 @@ beforeAll(async () => {
   if (!face) throw new Error('could not load the label font');
   labelFont = Sk.Font(face, 30);
   smallFont = Sk.Font(face, 22);
+  text = new PageText(Sk, fontFiles());
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(path.join(OUT, 'diff'), { recursive: true });
   fs.mkdirSync(path.join(OUT, 'side'), { recursive: true });
@@ -97,15 +129,35 @@ beforeAll(async () => {
 afterAll(() => {
   if (!rows.length) return;
   const pct = (v: number | null, d = 3) => (v == null ? '-' : `${v.toFixed(d)}%`);
-  const head = '| Page | Size | Outside the words (bar 0.15%) | Worst 64 px tile (bar 1%) | Ink off (bar 6%) | Worst 8 px block (bar 40) | Text off, px (bar 0.5) | Lines as print drew them | Draw on phone | Result |\n|---|---|---|---|---|---|---|---|---|---|';
+  const head = '| Page | Size | Outside the words (bar 0.15%) | Worst 64 px tile (bar 1%) | Tile mean (bar 2) | Ink off (bar 6%) | Worst 8 px block (bar 40) | Text off, px (bar 0.5) | Lines as print drew them | Draw on phone | Result |\n|---|---|---|---|---|---|---|---|---|---|---|';
   const lines = rows.map((r) => {
     const name = r.variant ? `${r.page} (after the colour step)` : r.page;
-    const result = r.expectFail ? (r.passed ? 'FAILS, as it must (raw P3 numbers)' : 'passes (?)') : (r.passed ? 'pass' : `FAIL: ${[...r.lineFailures, ...r.failures].join('; ')}`);
-    return `| ${name} | ${r.size} | ${pct(r.outsideWordsPct)} | ${pct(r.worstTilePct, 2)} | ${r.inkOff == null ? '-' : `${(r.inkOff * 100).toFixed(2)}%`} | ${r.worstBlock == null ? '-' : r.worstBlock.toFixed(1)} | ${r.textShift == null ? '-' : r.textShift.toFixed(2)} | ${r.lines ? (r.lineFailures.length ? 'NO' : `${r.lines} of ${r.lines}`) : '-'} | ${r.drawMs} ms | ${result} |`;
+    const known = KNOWN_PLATFORM_DIFFERENCES[r.page];
+    const result = r.expectFail ? (r.passed ? 'FAILS, as it must (raw P3 numbers)' : 'passes (?)')
+      : known && r.failures.length === 1 && known.test(r.failures[0]) && !r.lineFailures.length ? `known platform difference only: ${r.failures[0]}`
+        : (r.passed ? 'pass' : `FAIL: ${[...r.lineFailures, ...r.failures].join('; ')}`);
+    return `| ${name} | ${r.size} | ${pct(r.outsideWordsPct)} | ${pct(r.worstTilePct, 2)} | ${r.worstTileMean.toFixed(2)} | ${r.inkOff == null ? '-' : `${(r.inkOff * 100).toFixed(2)}%`} | ${r.worstBlock == null ? '-' : r.worstBlock.toFixed(1)} | ${r.textShift == null ? '-' : r.textShift.toFixed(2)} | ${r.lines ? (r.lineFailures.length ? 'NO' : `${r.lines} of ${r.lines}`) : '-'} | ${r.drawMs} ms | ${result} |`;
   });
-  fs.writeFileSync(path.join(OUT, 'table.md'), `${head}\n${lines.join('\n')}\n`);
-  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ pixelmatch: PIXELMATCH, chromium: manifest.chromium, device: report.device, phoneTotalMs: report.totalMs, photos: report.photos, rows }, null, 1));
-  console.log(`Golden pages, PHONE vs website (pixelmatch ${PIXELMATCH.threshold}, edges counted):\n${head}\n${lines.join('\n')}`);
+  const tiles = tileRows.length
+    ? `\n\nTexture tiles drawn alone on the phone: ${tileRows.filter((t) => !t.failures.length).length} of ${tileRows.length} within the bars; worst pixel ${Math.max(...tileRows.map((t) => t.maxLevels))} levels (bar 4), worst mean ${Math.max(...tileRows.map((t) => t.meanLevels)).toFixed(2)} (bar 1).\n`
+    : '';
+  const inks = [...new Set(inkRows.map((r) => r.ink))];
+  const inkPages = [...new Set(inkRows.map((r) => r.page))];
+  const cell = (ink: string, page: string) => {
+    const r = inkRows.find((x) => x.ink === ink && x.page === page);
+    if (!r) return '-';
+    const worst = Math.max(...r.texts.map((x) => x.inkOff));
+    return `${(worst * 100).toFixed(1)}%${r.failures.length ? ' FAIL' : ''}`;
+  };
+  const trialsTable = inkRows.length
+    ? `\n\nLight-weight trials (pageText.ts "Light letters on the phone"): each page with light words drawn again, its light letters given each weight (device px); the worst light text's ink against the website's (bar 6%); FAIL = some bar fails on that page:\n\n| Page | ${inks.join(' | ')} |\n|---|${inks.map(() => '---').join('|')}|\n${inkPages.map((pg) => `| ${pg} | ${inks.map((ink) => cell(ink, pg)).join(' | ')} |`).join('\n')}\n`
+    : '';
+  const timing = report.timing
+    ? `\n\nTiming pass: each page drawn with a ${report.timing.photo} photo in every photo slot (made in ${report.timing.makeMs} ms), words included, print size with bleed:\n\n| Page | Draw on phone |\n|---|---|\n${report.timing.pages.map((t) => `| ${t.name} | ${t.error ? `stopped: ${t.error}` : `${t.drawMs} ms`} |`).join('\n')}\n`
+    : '';
+  fs.writeFileSync(path.join(OUT, 'table.md'), `${head}\n${lines.join('\n')}\n${tiles}${timing}${trialsTable}`);
+  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ pixelmatch: PIXELMATCH, chromium: manifest.chromium, device: report.device, phoneTotalMs: report.totalMs, photos: report.photos, rows, tiles: tileRows, timing: report.timing ?? null, lightWeight: inkRows }, null, 1));
+  console.log(`Golden pages and covers, PHONE vs website (pixelmatch ${PIXELMATCH.threshold}, edges counted):\n${head}\n${lines.join('\n')}${tiles}${timing}${trialsTable}`);
 });
 
 describe('the phone drew the pages the computer compares it with', () => {
@@ -117,15 +169,22 @@ describe('the phone drew the pages the computer compares it with', () => {
   it("with today's renderer code (else: build again with -GoldenPages and run again)", () => {
     expect(report.appRenderer).toBe(appRendererHash());
   });
-  it('every golden page, none stopped', () => {
+  it('every golden page and cover, none stopped', () => {
     const drawn = new Set(report.pages.filter((p) => !p.variant).map((p) => p.name));
     expect(manifest.cases.map((c) => c.name).filter((n) => !drawn.has(n))).toEqual([]);
+    expect(manifest.covers.map((c) => c.name).filter((n) => !drawn.has(n))).toEqual([]);
     expect(report.pages.filter((p) => p.error).map((p) => `${p.file}: ${p.error}`)).toEqual([]);
+  });
+  it('every texture tile, and the timing pass', () => {
+    expect((report.tiles ?? []).map((t) => t.file).sort()).toEqual(manifest.tiles.map((t) => t.file).sort());
+    expect((report.tiles ?? []).filter((t) => t.error).map((t) => `${t.file}: ${t.error}`)).toEqual([]);
+    expect(report.timing?.pages.filter((t) => t.error).map((t) => `${t.name}: ${t.error}`) ?? ['no timing pass']).toEqual([]);
   });
 });
 
 /** Does this golden page draw a photo file the phone's colour step converted? */
 function usesConverted(name: string): boolean {
+  if (!pagesJson.cases.some((c) => c.name === name)) return false; // a cover: no Display P3 photo
   return planOf(name).items.some((it) => (it.kind === 'photo' || it.kind === 'boxPhoto')
     && convertedFiles.has(`photos/photo-${pagesJson.photos[it.photoIndex]?.image}.png`));
 }
@@ -172,9 +231,10 @@ function sideBySide(file: string, title: string, ref: Uint8Array, app: Uint8Arra
 
 const phonePages = report.pages.filter((p) => !p.error);
 
-describe('every page the phone drew, against the website (the same bars as the Node check)', () => {
+describe('every page and cover the phone drew, against the website (the same bars as the Node check)', () => {
   it.each(phonePages.map((p) => [p.variant ? `${p.name}.${p.variant}` : p.name, p] as [string, PhonePage]))('%s', (tag, p) => {
-    const web = manifest.cases.find((c) => c.name === p.name) as WebCase;
+    const isCover = p.kind === 'cover';
+    const web = (isCover ? manifest.covers : manifest.cases).find((c) => c.name === p.name) as WebCase;
     expect(web).toBeDefined();
     const ref = readPng(Sk, path.join(WEB, web.file));
     const refBare = web.bare ? readPng(Sk, path.join(WEB, web.bare)).data : ref.data;
@@ -182,8 +242,11 @@ describe('every page the phone drew, against the website (the same bars as the N
     expect([app.width, app.height]).toEqual([ref.width, ref.height]);
     const appBare = p.bareFile ? readPng(Sk, path.join(PHONE, p.bareFile)).data : app.data;
     const zones = p.words.map((w) => w.zone);
-    const cmp: PageComparison = comparePage({ ref: ref.data, refBare, app: app.data, appBare, W: ref.width, H: ref.height }, zones, planOf(p.name).bleed);
-    const lf = lineFailures(p.words.flatMap((w) => w.lines), web.lines);
+    const cmp: PageComparison = comparePage({ ref: ref.data, refBare, app: app.data, appBare, W: ref.width, H: ref.height }, zones, isCover ? 0 : planOf(p.name).bleed);
+    const webLines = isCover
+      ? (() => { const front = coverPlanOf(p.name).steps.find((st) => st.kind === 'front'); return coverWebLines(web.lines, ref.width, ref.height, front && front.kind === 'front' ? front.rect : null); })()
+      : web.lines;
+    const lf = lineFailures(p.words.flatMap((w) => w.lines), webLines);
     const failures = pageFailures(cmp);
     writeRgba(Sk, path.join(OUT, 'diff', `${tag}.png`), ref.width, ref.height, cmp.diff);
     const focus: Area = cmp.worstTileAt ? { x: cmp.worstTileAt.x, y: cmp.worstTileAt.y, w: 64, h: 64 } : zones[0] ?? { x: ref.width / 2, y: ref.height / 2, w: 0, h: 0 };
@@ -192,8 +255,8 @@ describe('every page the phone drew, against the website (the same bars as the N
     sideBySide(path.join(OUT, 'side', `${tag}.png`), `${tag}: ${passed ? 'passes every bar' : `fails: ${[...lf, ...failures].join('; ')}`}`.slice(0, 150), ref.data, app.data, cmp.diff, ref.width, ref.height, focus);
     const w = cmp.words;
     rows.push({
-      page: p.name, variant: p.variant, size: `${ref.width}x${ref.height}`, drawMs: p.drawMs,
-      outsideWordsPct: cmp.outsideWordsPct, worstTilePct: cmp.worstTilePct, differingPct: cmp.differingPct, over8LevelsPct: cmp.over8LevelsPct, maxChannelDiff: cmp.maxChannelDiff,
+      page: p.name, kind: isCover ? 'cover' : 'page', variant: p.variant, size: `${ref.width}x${ref.height}`, drawMs: p.drawMs,
+      outsideWordsPct: cmp.outsideWordsPct, worstTilePct: cmp.worstTilePct, worstTileMean: cmp.worstTileMean, differingPct: cmp.differingPct, over8LevelsPct: cmp.over8LevelsPct, maxChannelDiff: cmp.maxChannelDiff,
       inkOff: w.length ? Math.max(...w.map((x) => x.inkDiff)) : null,
       worstBlock: w.length ? Math.max(...w.map((x) => x.worstBlock)) : null,
       textShift: w.length ? Math.max(...w.map((x) => Math.max(Math.abs(x.shift.x), Math.abs(x.shift.y)))) : null,
@@ -201,13 +264,58 @@ describe('every page the phone drew, against the website (the same bars as the N
     });
 
     expect(p.notDrawn).toEqual([]);
+    expect(p.missing ?? []).toEqual([]);
+    const known = KNOWN_PLATFORM_DIFFERENCES[p.name];
     if (expectFail) {
       // Raw Display P3 numbers drawn as sRGB: the bars must catch it.
       expect(failures.length).toBeGreaterThan(0);
+    } else if (known) {
+      // A Windows-Chromium difference (known.ts): the phone draws its own
+      // letters, so the page may pass here, or fail in exactly that way.
+      expect(lf).toEqual([]);
+      expect(failures.length).toBeLessThanOrEqual(1);
+      failures.forEach((f) => expect(f).toMatch(known));
     } else {
       expect(lf).toEqual([]);
       expect(failures).toEqual([]);
     }
-  }, 180_000);
+  }, 300_000);
 });
 
+describe('every texture tile the phone drew alone, against the tile print prepares', () => {
+  it.each((report.tiles ?? []).filter((t) => !t.error).map((t) => [t.file, t] as [string, NonNullable<PhoneReport['tiles']>[number]]))('%s', (file, t) => {
+    const w = manifest.tiles.find((x) => x.file === file) as WebTile;
+    const ref = readPng(Sk, path.join(WEB, w.file));
+    const app = readPng(Sk, path.join(PHONE, t.phoneFile));
+    expect([app.width, app.height]).toEqual([ref.width, ref.height]);
+    const r = tileFailures(ref.data, app.data);
+    tileRows.push({ file, maxLevels: r.maxLevels, meanLevels: r.meanLevels, ms: t.ms, failures: r.failures });
+    expect(r.failures).toEqual([]);
+  }, 60_000);
+});
+
+/* The light-weight trials (reported, not barred: they are what
+   PHONE_LIGHT_WEIGHT_PX was picked from). Each trial picture is held to the
+   website's like its page, with the page's own bare picture from the run. */
+describe('the light-weight trials, against the website (reported)', () => {
+  const trials = (report.lightWeight ?? []).filter((t) => !t.error);
+  it.each(trials.map((t) => [`${t.px} px ${t.name}`, t] as [string, NonNullable<PhoneReport['lightWeight']>[number]]))('%s', (_tag, t) => {
+    const p = report.pages.find((x) => x.name === t.name && !x.variant) as PhonePage;
+    const isCover = t.kind === 'cover';
+    const web = (isCover ? manifest.covers : manifest.cases).find((c) => c.name === t.name) as WebCase;
+    const ref = readPng(Sk, path.join(WEB, web.file));
+    const refBare = web.bare ? readPng(Sk, path.join(WEB, web.bare)).data : ref.data;
+    const app = readPng(Sk, path.join(PHONE, t.file));
+    const appBare = p.bareFile ? readPng(Sk, path.join(PHONE, p.bareFile)).data : app.data;
+    const cmp = comparePage({ ref: ref.data, refBare, app: app.data, appBare, W: ref.width, H: ref.height }, p.words.map((w) => w.zone), isCover ? 0 : planOf(t.name).bleed);
+    const texts = cmp.words.map((w, i) => ({ color: p.words[i]?.lines[0]?.color ?? '', inkOff: w.inkDiff })).filter((x) => x.color && isLight(x.color));
+    inkRows.push({ ink: `${t.px} px`, page: t.name, texts, failures: pageFailures(cmp) });
+    expect(texts.length).toBeGreaterThan(0);
+  }, 300_000);
+});
+
+/** pageText.isLightColor: Skia's luminance of the colour, 224 and up. */
+function isLight(color: string): boolean {
+  const c = Sk.Color(color);
+  return ((Math.round(c[0] * 255) * 54 + Math.round(c[1] * 255) * 183 + Math.round(c[2] * 255) * 19) >> 8) >= 224;
+}

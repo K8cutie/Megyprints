@@ -1,4 +1,4 @@
-/* DEBUG SCREEN, TEST BUILDS ONLY: draws the 45 golden pages with this phone's
+/* DEBUG SCREEN, TEST BUILDS ONLY: draws the golden pages and covers with this phone's
    own Skia and saves the pictures in the app's files folder, for the computer
    to compare with the website's (src/dev/goldenRun.ts, test/goldenPhone.check.ts).
    A build has the pages only when made with `build-android.ps1 -GoldenPages`;
@@ -68,7 +68,7 @@ export default function GoldenPages() {
           dev: __DEV__,
         },
         onPage: (done, total, name) => {
-          if (name) console.log(`[golden] ${done + 1}/${total} ${name}`);
+          if (name) console.log(`[golden] ${Math.min(done + 1, total)}/${total} ${name}`);
           setState({ step: 'running', done, total, name });
         },
       });
@@ -101,7 +101,7 @@ export default function GoldenPages() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.lead}>
-        Draws the {goldenBundle.cases.length} golden pages with this phone&apos;s own Skia, at print size, and saves them in the app&apos;s files folder. The computer compares them with the website&apos;s print files.
+        Draws the {goldenBundle.cases.length} golden pages and {goldenBundle.covers?.length ?? 0} covers with this phone&apos;s own Skia, at print size, and saves them in the app&apos;s files folder. The computer compares them with the website&apos;s print files.
       </Text>
       <Text style={styles.small}>Website pictures made {goldenBundle.madeFrom.madeAt} (Chromium {goldenBundle.madeFrom.chromium}).</Text>
 

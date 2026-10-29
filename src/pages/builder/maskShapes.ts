@@ -105,6 +105,23 @@ export const ROUNDED_MASK_RADIUS = 28;
 export type FeatherSide = 'all' | 'bottom';
 export type AppliedSlot<T extends TemplateSlot> = T & { feather?: number; featherSide?: FeatherSide; texture?: TextureMask; masked?: boolean };
 
+/** One gradient of the soft edge: a line from (x0, y0) to (x1, y1) and the
+ *  alpha at each stop. The photo keeps its alpha × every gradient. */
+export interface FeatherGradient { x0: number; y0: number; x1: number; y1: number; stops: { offset: number; alpha: number }[] }
+
+/** The soft edge's gradients over a box (masks.ts featherAlpha and the 2.0
+ *  app draw these): all four edges (two gradients) or the bottom edge only. */
+export function featherGradients(x: number, y: number, w: number, h: number, feather: number, side: FeatherSide = 'all'): FeatherGradient[] {
+  const f = Math.max(1, feather * Math.min(w, h));
+  if (side === 'bottom') {
+    return [{ x0: 0, y0: y, x1: 0, y1: y + h, stops: [{ offset: 0, alpha: 1 }, { offset: Math.max(0, 1 - f / h), alpha: 1 }, { offset: 1, alpha: 0 }] }];
+  }
+  return [
+    { x0: x, y0: 0, x1: x + w, y1: 0, stops: [{ offset: 0, alpha: 0 }, { offset: Math.min(0.5, f / w), alpha: 1 }, { offset: Math.max(0.5, 1 - f / w), alpha: 1 }, { offset: 1, alpha: 0 }] },
+    { x0: 0, y0: y, x1: 0, y1: y + h, stops: [{ offset: 0, alpha: 0 }, { offset: Math.min(0.5, f / h), alpha: 1 }, { offset: Math.max(0.5, 1 - f / h), alpha: 1 }, { offset: 1, alpha: 0 }] },
+  ];
+}
+
 /** The slot the renderers should draw: the mask overrides the template shape.
  *  Absent / 'none' returns the slot untouched. */
 export function applyMask<T extends TemplateSlot>(slot: T, mask?: MaskId | null): AppliedSlot<T> {

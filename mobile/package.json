@@ -12,6 +12,7 @@
     "golden:phone": "jest --testMatch \"**/test/goldenPhone.check.ts\""
   },
   "dependencies": {
+    "@expo-google-fonts/cinzel": "0.4.2",
     "@expo-google-fonts/dancing-script": "0.4.2",
     "@expo-google-fonts/dm-sans": "0.4.2",
     "@expo-google-fonts/playfair-display": "0.4.2",
