@@ -8,6 +8,8 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { liveAlbumSize, liftRetiredPages } from '../pages/builder/retiredSizes';
+import { albumMadeAt } from './testingPhase';
+import { sampleAlbumMadeAt } from './samplePhotos';
 
 export const DRAFT_STORAGE_KEY = 'megy-album-v5';
 
@@ -41,6 +43,8 @@ export interface LocalDraftSummary {
   /** When the album was last changed on this device (ms), 0 if unknown. */
   editedAt: number;
   hasContent: boolean;
+  /** When it was made, when it is a sample album (lib/samplePhotos); else null. */
+  sampleMadeAt?: number | null;
 }
 
 /** The draft on this device, or null when there is none worth resuming. */
@@ -61,6 +65,10 @@ export function readLocalDraftSummary(): LocalDraftSummary | null {
       photoCount: d.uploadedPhotos?.length ?? 0,
       editedAt: typeof d.editedAt === 'number' ? d.editedAt : 0,
       hasContent,
+      sampleMadeAt: sampleAlbumMadeAt(
+        (d.uploadedPhotos ?? []).map((p) => (p as { name?: unknown } | null)?.name).filter((n): n is string => typeof n === 'string'),
+        albumMadeAt(d.albumPages ?? []),
+      ),
     };
   } catch {
     return null;

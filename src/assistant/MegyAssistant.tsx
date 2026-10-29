@@ -30,6 +30,7 @@ import PickManyHint from './PickManyHint';
 import SamplePhotosOffer from './SamplePhotosOffer';
 import SampleAlbumOffer from './SampleAlbumOffer';
 import { useSampleAlbum } from './useSampleAlbum';
+import { takeSampleAlbumRequest } from '../lib/samplePhotos';
 import { useSettleGuard, noteScreenTap, tooSoonAfterScreenTap } from '../lib/settleGuard';
 import { useModalDialog } from '../lib/useModalDialog';
 import { splitBold } from './boldText';
@@ -327,6 +328,25 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   const showToast = (msg: string, ms = 2000) => { setToast(msg); setTimeout(() => setToast(null), ms); };
   // Testing phase: Step 1's "Make a sample album" (lib/samplePhotos).
   const sampleAlbum = useSampleAlbum(builder, albumTheme, setAlbumTheme, (m) => showToast(m, 6000));
+  // "Welcome back" → "Make today's sample album" (lib/samplePhotos): this new
+  // album is made at once, from Step 1, whose card says "Making your sample
+  // album…" while it works.
+  useEffect(() => {
+    if (builder.uploadedPhotos.length > 0 || albumIsMade(builder.albumPages)) return;
+    if (!takeSampleAlbumRequest()) return;
+    void Promise.resolve().then(() => {
+      const eng = wizardRef.current;
+      if (eng.state.step === 'welcome') {
+        if (!eng.state.completed.includes('welcome')) eng.state.completed.push('welcome');
+        eng.state.step = 'pick_theme';
+      }
+      setShowWizard(true);
+      setWizardStep(eng.state.step);
+      void sampleAlbum.start();
+    });
+    // Once, as the builder opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // A new occasion on a made album: Megy's quotes switch to it, and she says so.
   useEffect(() => {
     if (!requoteFor) return;

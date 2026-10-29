@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchSamplePhotos, sampleAlbumPhotos, sampleDayNumber, sampleCoverPhoto, SAMPLE_ALBUM_NAME, SAMPLE_ALBUM_OCCASION, SAMPLE_END_OF_DAY_NAMES } from '../lib/samplePhotos';
+import { fetchSamplePhotos, sampleAlbumPhotos, sampleDayNumber, sampleCoverPhoto, sampleAlbumName, SAMPLE_ALBUM_OCCASION, SAMPLE_END_OF_DAY_NAMES } from '../lib/samplePhotos';
 import { MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy } from '../pages/builder/albumMinimum';
 import { isAlbumNameReady } from '../lib/albumName';
 import { isAlbumThemeReady } from '../lib/albumTheme';
@@ -23,7 +23,7 @@ export function useSampleAlbum(builder: Builder, occasion: string, setOccasion: 
 
   const start = async () => {
     if (stage === 'adding' || stage === 'making') return;
-    if (!isAlbumNameReady(builder.albumTitle)) builder.setAlbumTitle(SAMPLE_ALBUM_NAME);
+    if (!isAlbumNameReady(builder.albumTitle)) builder.setAlbumTitle(sampleAlbumName(new Date()));
     if (!isAlbumThemeReady(occasion)) setOccasion(SAMPLE_ALBUM_OCCASION);
     setStage('adding');
     try {

@@ -29,7 +29,7 @@ vi.mock('../lib/storeSettings', async (importOriginal) => ({
 import Builder from '../pages/Builder';
 import { WIZARD_STORAGE_KEY } from './wizard';
 import { readAlbumTheme } from '../lib/albumTheme';
-import { sampleAlbumPhotos, sampleDayNumber, sampleCoverPhoto, SAMPLE_END_OF_DAY_NAMES } from '../lib/samplePhotos';
+import { sampleAlbumPhotos, sampleDayNumber, sampleCoverPhoto, sampleAlbumName, requestSampleAlbum, SAMPLE_END_OF_DAY_NAMES } from '../lib/samplePhotos';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const GIF = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
@@ -85,15 +85,16 @@ const render = async () => {
   });
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 };
-async function open(title = '', photos: Photo[] = [], occasion = '') {
+async function open(title = '', photos: Photo[] = [], occasion = '', wizard: { step: string; completed: string[] } = { step: 'pick_theme', completed: ['welcome'] }, request = false) {
   vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
   localStorage.clear(); sessionStorage.clear();
+  if (request) requestSampleAlbum();
   if (occasion) localStorage.setItem('megy-album-theme', occasion);
   Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true, writable: true });
   Object.defineProperty(window, 'innerHeight', { value: 844, configurable: true, writable: true });
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} disconnect() {} unobserve() {} };
-  localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify({ step: 'pick_theme', completed: ['welcome'], skipped: [], isFirstTime: false, dismissed: false }));
+  localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify({ ...wizard, skipped: [], isFirstTime: false, dismissed: false }));
   ctx = stepOne(title, photos);
   h.ctx = ctx;
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
@@ -159,7 +160,8 @@ describe('Step 1 in the Android app: "Make a sample album"', () => {
   it("one tap: named \"Sample Album\", occasion Family, today's 40 samples in, a sample on the cover, the album made, today's end-of-day photo on its last page, its pages open", async () => {
     await open();
     await tapMake();
-    expect(ctx.setAlbumTitle).toHaveBeenCalledWith('Sample Album');
+    // Named with its day: a tester makes one each day of the test.
+    expect(ctx.setAlbumTitle).toHaveBeenCalledWith(sampleAlbumName(new Date()));
     expect(readAlbumTheme()).toBe('Family');
     const added = calls('add_photos');
     expect(added).toHaveLength(1);
@@ -185,7 +187,7 @@ describe('Step 1 in the Android app: "Make a sample album"', () => {
   it('keeps the name and occasion the tester already gave', async () => {
     await open("Lola's 80th", [], 'Birthday');
     await tapMake();
-    expect(ctx.setAlbumTitle).not.toHaveBeenCalledWith('Sample Album');
+    expect(ctx.setAlbumTitle).not.toHaveBeenCalledWith(sampleAlbumName(new Date()));
     expect(ctx.albumTitle).toBe("Lola's 80th");
     expect(readAlbumTheme()).toBe('Birthday');
     expect(calls('generate_album')).toHaveLength(1);
@@ -218,5 +220,37 @@ describe('where "Make a sample album" does not show', () => {
     await open('Our trip', [{ id: 'p0', previewUrl: GIF, name: 'IMG_1.jpg', type: 'image/jpeg', size: 1, width: 1600, height: 1200 }], 'Vacation');
     expect(document.querySelector('[data-step="pick_theme"]')).not.toBeNull();
     expect(offer()).toBeNull();
+  });
+});
+
+/* "Welcome back" the next day → "Make today's sample album" (ResumePrompt):
+   a new, empty album opens with the request, and the builder makes today's
+   sample album at once, no tap, starting on Step 1 with its card busy. */
+describe("Welcome back's \"Make today's sample album\"", () => {
+  it("a new album opens and is made at once: named for today, today's 40, the end-of-day photo last, its pages open", async () => {
+    await open('', [], '', { step: 'welcome', completed: [] }, true);
+    for (let i = 0; i < 6; i++) await render();
+    expect(ctx.setAlbumTitle).toHaveBeenCalledWith(sampleAlbumName(new Date()));
+    expect(calls('add_photos')).toHaveLength(1);
+    expect(calls('add_photos')[0][0].payload!.files!.map((f) => f.name)).toEqual(sampleAlbumPhotos(sampleDayNumber(new Date())));
+    expect(calls('generate_album')).toHaveLength(1);
+    expect(ctx.putPhotoOnLastPage).toHaveBeenCalledTimes(1);
+    expect(ctx.wizardStep).toBe('review_pages');
+    // Asked once: the request is used up.
+    expect(sessionStorage.getItem('megy-make-sample-album')).toBeNull();
+  });
+
+  it('without the request, a new album waits on its first step as always', async () => {
+    await open('', [], '', { step: 'welcome', completed: [] });
+    expect(calls('add_photos')).toHaveLength(0);
+    expect(calls('generate_album')).toHaveLength(0);
+  });
+
+  it('the request never touches an album that has photos: nothing added, nothing made', async () => {
+    await open('Our trip', [{ id: 'p0', previewUrl: GIF, name: 'IMG_1.jpg', type: 'image/jpeg', size: 1, width: 1600, height: 1200 }], 'Vacation', undefined, true);
+    for (let i = 0; i < 4; i++) await render();
+    expect(calls('add_photos')).toHaveLength(0);
+    expect(calls('generate_album')).toHaveLength(0);
+    expect(ctx.setAlbumTitle).not.toHaveBeenCalled();
   });
 });

@@ -19,6 +19,8 @@ const AUTH: { user: { id: string; user_metadata: Record<string, string>; email: 
 vi.mock('../lib/authContext', () => ({ useAuth: () => AUTH }));
 vi.mock('../lib/supabase', () => ({ supabase: { from: () => ({}) }, supabaseConfigured: true }));
 const listAccountAlbums = vi.fn();
+const APP = vi.hoisted(() => ({ native: false }));
+vi.mock('../lib/nativeShell', () => ({ isNativeShell: () => APP.native }));
 vi.mock('../lib/useAlbumSync', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   listAccountAlbums: (id: string) => listAccountAlbums(id),
@@ -60,6 +62,7 @@ beforeEach(() => {
   vi.useFakeTimers({ now: new Date('2026-10-11T00:00:00Z') });
   localStorage.clear(); sessionStorage.clear();
   AUTH.user = null; AUTH.loading = true;
+  APP.native = false;
   listAccountAlbums.mockReset();
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
 });
@@ -320,5 +323,97 @@ describe('another person on the same device', () => {
     const forget = src.slice(src.indexOf('function forgetAccountInTab'), src.indexOf('}', src.indexOf('function forgetAccountInTab')));
     expect(forget).toContain('forgetResumeCache()');
     expect(src).toMatch(/event === 'SIGNED_OUT'\) forgetAccountInTab\(\)/);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE NEXT DAY OF THE TEST (owner, 2026-10-28, with a phone screenshot: "The
+   resume will confuse testers"). "Yes, resume" opened yesterday's sample
+   album, with yesterday's date and "You're done" photo. In the Android app,
+   when the chosen album is a sample album made on an earlier day, the big
+   button is "Make today's sample album": a new album, made at once.
+   ══════════════════════════════════════════════════════════════════════════ */
+describe("the Android app while testing: yesterday's sample album", () => {
+  // Local times, so the day is the same in every time zone (CI runs in UTC).
+  const NOW = new Date(2026, 9, 29, 9, 0);
+  const at = (d: number, h: number) => new Date(2026, 9, d, h, 0);
+  const SAMPLES = Array.from({ length: 40 }, (_, i) => ({ id: `s${i}`, name: `megy-sample-${String(i + 1).padStart(2, '0')}.jpg` }));
+  const sample = (id: string, made: Date, title = 'Sample Album · Oct 28') =>
+    ({ id, title, sizePreset: '8x8', pages: [], photos: SAMPLES, createdAt: made.toISOString(), updatedAt: made.toISOString() });
+  const own = (id: string, saved: Date) => ({ ...album(id, 1), title: id, updatedAt: saved.toISOString() });
+  const open = async (list: unknown[]) => {
+    vi.setSystemTime(NOW);
+    keepSession();
+    listAccountAlbums.mockResolvedValue(list);
+    await mount();
+    AUTH.user = ME; AUTH.loading = false;
+    await rerender();
+    await flush();
+  };
+  beforeEach(() => { APP.native = true; });
+
+  it("yesterday's sample album chosen: the big button makes today's sample album, a new one", async () => {
+    await open([sample('s1', at(28, 20)), own('Our trip', at(28, 9))]);
+    expect(names()).toEqual(['Sample Album · Oct 28', 'Our trip']);
+    expect($('resume-yes')!.textContent).toBe("Make today's sample album");
+    await click($('resume-yes')!);
+    expect($('resume-prompt')).toBeNull();
+    // A new album (the builder starts empty), and the builder makes it at once.
+    expect($('where')!.textContent).toBe('/builder');
+    expect(sessionStorage.getItem('megy-fresh-start')).toBe('1');
+    expect(sessionStorage.getItem('megy-make-sample-album')).toBe('1');
+  });
+
+  it("today's sample album (made after midnight): Yes, resume opens it", async () => {
+    await open([sample('s2', at(29, 0), 'Sample Album · Oct 29'), sample('s1', at(28, 20))]);
+    expect($('resume-yes')!.textContent).toBe('Yes, resume');
+    await click($('resume-yes')!);
+    expect($('where')!.textContent).toBe('/builder?album=s2');
+    expect(sessionStorage.getItem('megy-make-sample-album')).toBeNull();
+  });
+
+  it("another album chosen (their own): Yes, resume, as always", async () => {
+    await open([sample('s1', at(28, 20)), own('Our trip', at(28, 9))]);
+    await click(rows()[1]);
+    expect($('resume-yes')!.textContent).toBe('Yes, resume');
+    await click($('resume-yes')!);
+    expect($('where')!.textContent).toBe('/builder?album=Our trip');
+  });
+
+  it("on the website: Yes, resume, even for yesterday's sample album", async () => {
+    APP.native = false;
+    await open([sample('s1', at(28, 20))]);
+    expect($('resume-yes')!.textContent).toBe('Yes, resume');
+  });
+
+  it("remembered on this phone: the right button at once, before the account answers", async () => {
+    vi.setSystemTime(NOW);
+    keepSession();
+    writeResumeCache('u1', [{ id: 's1', title: 'Sample Album · Oct 28', updatedAt: at(28, 20).toISOString(), photoCount: 40, sampleMadeAt: at(28, 20).getTime() }]);
+    listAccountAlbums.mockReturnValue(new Promise(() => {})); // the account is slow
+    await mount();
+    AUTH.user = ME; AUTH.loading = false;
+    await rerender();
+    expect(names()).toEqual(['Sample Album · Oct 28']);
+    expect($('resume-yes')!.textContent).toBe("Make today's sample album");
+  });
+
+  it("the account's list is remembered with each sample album's day (one number, not its photos)", async () => {
+    await open([sample('s1', at(28, 20)), own('Our trip', at(28, 9))]);
+    const cached = readResumeCache('u1')!;
+    expect(cached.find((a) => a.id === 's1')!.sampleMadeAt).toBe(at(28, 20).getTime());
+    expect(cached.find((a) => a.id === 'Our trip')!.sampleMadeAt).toBeUndefined();
+    expect(JSON.stringify(cached)).not.toContain('megy-sample-');
+  });
+
+  it("yesterday's sample album only on this phone (not saved yet): Make today's sample album", async () => {
+    vi.setSystemTime(NOW);
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+      title: 'Sample Album · Oct 28', albumId: 'x', accountId: 'u1', editedAt: at(28, 21).getTime(),
+      uploadedPhotos: SAMPLES, albumPages: [{ id: 'p0', slotFills: [0], madeAt: at(28, 20).getTime() }],
+    }));
+    await open([own('Our trip', at(28, 9))]);
+    expect(names()[0]).toBe('Sample Album · Oct 28');
+    expect($('resume-yes')!.textContent).toBe("Make today's sample album");
   });
 });
