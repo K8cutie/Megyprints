@@ -1,0 +1,21 @@
+page                       text colour                    zoneH           0.00           0.15           0.20           0.25
+free-title-outline         t1   #FFFFFF                     403   0.968   3.2%   0.991   0.9%   0.997   0.3%   1.012   1.6%
+title-shadow-alone         t1   #FFFFFF                     895   1.028   2.8%   1.006   0.6%   1.001   0.1%   0.996   0.4%
+title-see-through          t1   #FFFFFF                     734   0.987   1.3%   0.996   0.5%   0.998   0.3%   1.000   0.1%
+texture-walnut-clay        t1   #FFFBF7                    1200   0.946   5.4%   1.001   0.1%   1.015   1.5%   1.027   2.7%
+cover-88-hard-photo        t3   #FFFFFF                     528   0.974   2.6%   0.996   0.5%   1.004   0.4%   1.015   1.5%
+cover-64-soft-plain        t1   rgba(255,251,247,0.92)      127   0.889  11.1%   0.947   5.3%   0.963   3.7%   0.993   0.7%
+cover-64-soft-plain        t2   rgba(255,251,247,0.72)       59   0.821  17.9%   0.947   5.3%   0.973   2.7%   1.033   3.3%
+cover-64-soft-plain        t3   #FFFBF7                     240   0.946   5.4%   0.978   2.2%   0.988   1.2%   1.005   0.5%
+cover-64-soft-plain        t4   #FFFBF7                     120   0.892  10.8%   0.951   4.9%   0.970   3.0%   1.000   0.8%
+cover-64-soft-plain        t5   #FFFBF7                     132   0.889  11.1%   1.020   2.0%   1.056   5.6%   1.101  10.1%
+cover-64-hard-long-title   t1   rgba(255,251,247,0.92)      127   0.889  11.1%   0.948   5.2%   0.964   3.6%   0.994   0.6%
+cover-64-hard-long-title   t2   rgba(255,251,247,0.72)       59   0.821  17.9%   0.945   5.5%   0.970   3.0%   1.031   3.1%
+cover-64-hard-long-title   t3   #FFFFFF                     264   0.933   6.7%   0.978   2.2%   0.989   1.1%   1.004   0.4%
+cover-64-hard-long-title   t4   #FFFFFF                    1033   0.858  14.2%   0.990   1.0%   1.016   1.6%   1.043   4.3%
+cover-88-hard-edge-words   t3   #FFFFFF                     480   0.978   2.2%   0.993   0.7%   0.997   0.3%   1.007   0.7%
+cover-88-hard-edge-words   t4   #FFFFFF                     158   0.942   5.8%   0.972   2.8%   0.981   1.9%   1.002   0.5%
+cover-88-hard-edge-words   t5   #FFFFFF                     144   0.930   7.0%   0.972   2.8%   0.988   1.2%   1.005   0.5%
+cover-86-old-form          t4   #FFFFFF                     510   0.948   5.2%   0.986   1.4%   0.995   0.5%   1.015   1.8%
+cover-86-old-form          t5   #FFFFFF                     250   0.856  14.4%   0.968   3.2%   0.996   0.6%   1.030   3.9%
+worst ink diff per trial: 0.00 17.9%, 0.15 5.5%, 0.20 5.6%, 0.25 10.1%

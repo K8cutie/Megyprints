@@ -1,0 +1,106 @@
+[
+ {
+  "page": "qr-chip-88",
+  "picture": "2476x2476",
+  "decoded": "https://megyprints.app/m/GOLD88BR",
+  "expected": "https://megyprints.app/m/GOLD88BR",
+  "matches": true,
+  "corners_px": [
+   [
+    1919.0,
+    2019.0
+   ],
+   [
+    2188.0,
+    2019.0
+   ],
+   [
+    2188.0,
+    2290.0
+   ],
+   [
+    1919.0,
+    2287.0
+   ]
+  ],
+  "still_reads_at_scale": 0.25
+ },
+ {
+  "page": "qr-chip-64",
+  "picture": "1876x1276",
+  "decoded": "https://megyprints.app/m/GOLD64TL",
+  "expected": "https://megyprints.app/m/GOLD64TL",
+  "matches": true,
+  "corners_px": [
+   [
+    285.0,
+    172.0
+   ],
+   [
+    496.0,
+    172.0
+   ],
+   [
+    496.0,
+    383.0
+   ],
+   [
+    285.0,
+    383.0
+   ]
+  ],
+  "still_reads_at_scale": 0.35
+ },
+ {
+  "page": "qr-in-caption-box",
+  "picture": "2476x2476",
+  "decoded": "https://megyprints.app/m/GOLDBOX1",
+  "expected": "https://megyprints.app/m/GOLDBOX1",
+  "matches": true,
+  "corners_px": [
+   [
+    409.0,
+    125.0
+   ],
+   [
+    1035.0,
+    125.0
+   ],
+   [
+    1035.0,
+    751.0
+   ],
+   [
+    409.0,
+    751.0
+   ]
+  ],
+  "still_reads_at_scale": 0.12
+ },
+ {
+  "page": "qr-moved-turned-64",
+  "picture": "1876x1276",
+  "decoded": "https://megyprints.app/m/GOLD64MV",
+  "expected": "https://megyprints.app/m/GOLD64MV",
+  "matches": true,
+  "corners_px": [
+   [
+    1189.2,
+    738.5
+   ],
+   [
+    1485.2,
+    817.4
+   ],
+   [
+    1405.9,
+    1114.2
+   ],
+   [
+    1110.4,
+    1034.0
+   ]
+  ],
+  "still_reads_at_scale": 0.18
+ }
+]
