@@ -19,6 +19,8 @@ import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
 import { requestSampleAlbum } from '../lib/samplePhotos';
 import { HOME_FEATURES, HOW_IT_WORKS, type HomeFeatureKey } from './homeCopy';
 import { AlbumsCard, EventsCard } from './home/HomeCards';
+import TodaysSampleAlbum from './home/TodaysSampleAlbum';
+import { skipSoftAuthThisVisit } from '../lib/softAuthNudge';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -29,8 +31,10 @@ const gentle = 'cubic-bezier(0.16, 1, 0.3, 1)';
    Two cards built the same way, Megyprints Albums and Megyprints Events
    (the owner's canvas board, HomeCards.tsx): stacked on a phone, side by side
    from a tablet up. The photo shows through a light veil, as on the board.
+   In the Android app while testing, "Make today's sample album" comes first
+   (`top`, home/TodaysSampleAlbum).
    ═══════════════════════════════════════════════════════════════════════ */
-function HeroSection({ onStart }: { onStart: () => void }) {
+function HeroSection({ onStart, top }: { onStart: () => void; top?: React.ReactNode }) {
   return (
     <section className="relative min-h-[max(100dvh,640px)] flex items-center justify-center overflow-hidden">
       {/* Background Image with Ken Burns */}
@@ -45,6 +49,7 @@ function HeroSection({ onStart }: { onStart: () => void }) {
 
       {/* pt-24: the cards must not slide under the fixed header. */}
       <div className="relative z-10 w-full max-w-[1040px] lg:max-w-[1280px] mx-auto px-4 sm:px-6 pt-24 pb-10">
+        {top}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -301,8 +306,12 @@ export default function Home() {
   return (
     <>
       {/* Hero: Megyprints Albums and Megyprints Events. "Start Creating" goes
-          into the builder, where Megy (assistant/MegyAssistant) guides them. */}
-      <HeroSection onStart={() => handleMegyAction('go-builder')} />
+          into the builder, where Megy (assistant/MegyAssistant) guides them.
+          Testers in the app get today's sample album in one tap, made the way
+          "Welcome back" makes it, with no sign-in nudge over it. */}
+      <HeroSection onStart={() => handleMegyAction('go-builder')}
+        top={<TodaysSampleAlbum signedIn={!!user}
+          onMake={() => { skipSoftAuthThisVisit(); requestSampleAlbum(); startNew(); }} />} />
       {inProgress && (
         <StartNewAlbumPrompt draft={inProgress} signedIn={!!user}
           onContinue={() => { setInProgress(null); navigate('/builder'); }}

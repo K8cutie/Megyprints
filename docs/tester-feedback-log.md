@@ -24,6 +24,7 @@ whose notes list it.
 | 2026-10-27 | Tester | "I can't send more than 1 photo" | Photos come before the cover, so the first picker takes all your photos (#201) | 2026-10-27 | 1.2.0 |
 | 2026-10-27 | Tester | (same report) | A box on the photo step: press and hold, or ⋮ → Select all (#202) | 2026-10-27 | 1.2.0 |
 | 2026-10-27 | Tester | (same report) | The photo picker opens in the Camera folder, so ⋮ → Select all takes the whole roll. Before, it opened on Recent, where Select all took only the newest 64 pictures, screenshots too | with 1.3.0 | 1.3.0 |
+| 2026-10-29 | Tester | "The sample photos are helpful to test. I like the concept. maybe a little less text in the steps [too many things to read hah]" (owner: he meant a faster way to the sample album) | "Make today's sample album" on the app's home screen, one tap (this PR). The next day, "Welcome back" makes today's sample album (#208) | on merge | 1.4.1 |
 
 ## App versions on the Alpha track
 
