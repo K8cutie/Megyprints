@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useModalDialog } from '../../lib/useModalDialog';
+import { closeTopOnBack } from '../../lib/backClose';
 
 /* ══════════════════════════════════════════════════════════════════════════
  *  BuilderBackGuard — stop the mobile Back button from nuking a draft
@@ -71,6 +72,10 @@ export default function BuilderBackGuard({ flush, phase, onStepBack }: BuilderBa
       // Re-arm right away: the Back press consumed our sentinel, so push a fresh
       // one to capture the NEXT press too. A rapid double-Back can never escape.
       arm();
+
+      // A panel open over the screen (Megy's, on a phone) closes first; the
+      // screen stays as it is (lib/backClose).
+      if (closeTopOnBack()) return;
 
       if (phaseRef.current === 'preview') {
         // Preview → Edit: hardware Back mirrors the on-screen Back, no prompt.
