@@ -90,10 +90,14 @@ export default function Footer() {
             &copy; {new Date().getFullYear()} Megy Prints. All rights reserved.
           </p>
           {/* Google Play wants the privacy policy reachable inside the app too;
-              the app shows this footer (owner, 2026-10-28). */}
-          <p className="mt-2 text-center">
+              the app shows this footer (owner, 2026-10-28). The terms sit
+              beside it (a tester, 2026-10-31). */}
+          <p className="mt-2 flex flex-wrap justify-center gap-x-5 gap-y-1">
             <Link to="/privacy" className="font-body text-sm text-white underline underline-offset-2 hover:text-peach transition-colors duration-200" data-testid="footer-privacy">
               Privacy Policy
+            </Link>
+            <Link to="/terms" className="font-body text-sm text-white underline underline-offset-2 hover:text-peach transition-colors duration-200" data-testid="footer-terms">
+              Terms of Service
             </Link>
           </p>
         </div>
