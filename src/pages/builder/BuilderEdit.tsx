@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ZoomIn, ZoomOut, Grid3X3, RotateCcw, Magnet, ChevronLeft, Sparkles,
-  Wand2, Upload, Home, PanelLeftOpen,
+  Wand2, Upload, Home, PanelLeftOpen, LayoutGrid,
 } from 'lucide-react';
 import { useCanvasEngine } from './useCanvasEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -48,7 +48,8 @@ import TesterPageStamp from './TesterPageStamp';
 import { useTesterStamp } from './useTesterStamp';
 import TesterPageNote from './TesterPageNote';
 import { useSampleAlbumNotes } from './useSampleAlbumNotes';
-import { SAMPLE_WELCOME_NOTE } from '../../lib/samplePhotos';
+import { sampleWelcomeNote } from '../../lib/samplePhotos';
+import { useDailyTestRun, runFor } from '../../lib/dailyTestRun';
 import { bindingEdge } from './binding';
 
 /* ── Local helper types for in-place filter effects ─────────────────────── */
@@ -90,6 +91,9 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
   const { user } = useAuth();
   const testerStamp = useTesterStamp(actions.albumPages);
   const sampleNotes = useSampleAlbumNotes(actions.uploadedPhotos);
+  // The album Today's test made: the bar at the top says what to do, not page 1's card.
+  const dailyRun = useDailyTestRun();
+  const testRun = sampleNotes ? runFor(dailyRun, actions.albumPages) : null;
 
   /* ── Local UI state ── */
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
@@ -1086,6 +1090,15 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               <span className="text-xs text-light">
                 Page {actions.currentPageIndex + 1} of {actions.albumPages.length}
               </span>
+              {/* Change layout, on the screen (the same picker as the phone's).
+                  Megy's old Step 5 card was its only door on a computer; the
+                  card is gone (owner, 2026-10-30), so the page has its own. */}
+              {!isPageEmpty && (
+                <button type="button" onClick={() => actions.setLayoutPickerOpen(true)} data-testid="desk-change-layout"
+                  className="px-3 py-1.5 bg-white border border-line text-medium text-xs font-semibold rounded-lg hover:bg-blush flex items-center gap-1.5 transition-colors">
+                  <LayoutGrid size={12} /> Change layout
+                </button>
+              )}
 
               {/* Generate / Regenerate / Generate All — hidden in orchestrator mode (use Megy) */}
               {ORCHESTRATOR_MODE ? null : isPageEmpty ? (
@@ -1177,7 +1190,7 @@ export default function BuilderEdit({ actions, onRegenerate, onGenerate, onGener
               {testerStamp && <TesterPageStamp lines={testerStamp} pageW={400}
                 side={bindingEdge(actions.currentPageIndex) === 'left' ? 'right' : 'left'} />}
               {/* A sample album's page 1: what to do (lib/samplePhotos), over the canvas like the stamp. */}
-              {sampleNotes && actions.currentPageIndex === 0 && <TesterPageNote note={SAMPLE_WELCOME_NOTE} pageW={400} />}
+              {sampleNotes && !testRun && actions.currentPageIndex === 0 && <TesterPageNote note={sampleWelcomeNote(actions.previewSeen)} pageW={400} />}
 
               {/* Empty State Overlay */}
               <AnimatePresence>

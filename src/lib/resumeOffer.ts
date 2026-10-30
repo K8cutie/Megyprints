@@ -26,6 +26,8 @@ export interface SavedAlbumSummary {
   photoCount?: number;
   /** The album's small first-page picture, when the account has one. */
   coverPhoto?: string | null;
+  /** When it was made (first saved), when it is a sample album (lib/samplePhotos). */
+  sampleMadeAt?: number | null;
 }
 
 /** An album nobody put anything into — opening the builder and leaving used to
@@ -35,8 +37,8 @@ function isEmptyLeftover(a: SavedAlbumSummary): boolean {
 }
 
 export type ResumeOffer =
-  | { kind: 'device'; id: 'device'; title: string; photoCount: number; coverPhoto?: string | null }
-  | { kind: 'saved'; id: string; albumId: string; title: string; updatedAt?: string; coverPhoto?: string | null };
+  | { kind: 'device'; id: 'device'; title: string; photoCount: number; coverPhoto?: string | null; sampleMadeAt?: number | null }
+  | { kind: 'saved'; id: string; albumId: string; title: string; updatedAt?: string; coverPhoto?: string | null; sampleMadeAt?: number | null };
 
 /** How many albums the prompt lists (owner: "the last 3 albums"). */
 export const RESUME_LIST_MAX = 3;
@@ -62,7 +64,7 @@ export function chooseResumeOffers(
     .map((a) => ({
       at: time(a.updatedAt),
       device: false,
-      offer: { kind: 'saved', id: a.id, albumId: a.id, title: cleanAlbumName(a.title), updatedAt: a.updatedAt, coverPhoto: a.coverPhoto },
+      offer: { kind: 'saved', id: a.id, albumId: a.id, title: cleanAlbumName(a.title), updatedAt: a.updatedAt, coverPhoto: a.coverPhoto, ...(a.sampleMadeAt != null ? { sampleMadeAt: a.sampleMadeAt } : {}) },
     }));
   if (mine && deviceWins) {
     listed.push({
@@ -74,6 +76,7 @@ export function chooseResumeOffers(
         title: cleanAlbumName(mine.title) || cleanAlbumName(twin?.title),
         photoCount: mine.photoCount,
         coverPhoto: twin?.coverPhoto,
+        ...(mine.sampleMadeAt != null ? { sampleMadeAt: mine.sampleMadeAt } : {}),
       },
     });
   }

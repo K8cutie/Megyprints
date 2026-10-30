@@ -62,6 +62,20 @@ describe('ensureLatestApp', () => {
     expect(readUpdateNote(storage, 1_000_000)).toBeNull(); // … then it is gone
   });
 
+  // Home's check when the app comes back to the front (lib/autoUpdate): nothing to do again after it.
+  it('no note (Home): reloads the same way, and leaves no "was just updated" for checkout', async () => {
+    const { e, calls, storage } = env({ build: 'build-B' });
+    storage.setItem('megy-update-note', JSON.stringify({ note: UPDATED_PLACE_ORDER, at: 999_000 }));
+    expect(await ensureLatestApp(null, e)).toBe('reloading');
+    expect(calls).toEqual(['fetch ./version.json no-store', 'sw.update', 'reload']);
+    expect(readUpdateNote(storage, 1_000_000)).toBeNull();
+    // Its loop guard still holds: two reloads in a row that didn't help → carry on.
+    const again = env({ build: 'build-B' }, { storage });
+    expect(await ensureLatestApp(null, again.e)).toBe('reloading');
+    const third = env({ build: 'build-B' }, { storage });
+    expect(await ensureLatestApp(null, third.e)).toBe('unknown');
+  });
+
   it('the note goes once the customer taps again on the newest copy', async () => {
     const { e, storage } = env({ build: 'build-B' });
     await ensureLatestApp(UPDATED_PLACE_ORDER, e);

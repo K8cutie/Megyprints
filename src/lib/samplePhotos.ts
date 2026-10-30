@@ -21,7 +21,7 @@
    test!". Over any 14 days in a row, no two days look the same.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { TESTING_PHASE } from './testingPhase';
+import { TESTING_PHASE, MONTHS } from './testingPhase';
 import { createLimiter } from './limit';
 
 /** How many sample photos there are: the everyday ones, then the 14 end-of-day ones. */
@@ -106,6 +106,49 @@ export function sampleAlbumPhotos(day: number, count = 40): string[] {
  *  album's header, so a screenshot says it is the sample album. */
 export const SAMPLE_ALBUM_NAME = 'Sample Album';
 
+/** The name with the day it was made, "Sample Album · Oct 29": a tester makes
+ *  one each day of the test, and "Welcome back" lists the last three. */
+export function sampleAlbumName(now: Date): string {
+  return `${SAMPLE_ALBUM_NAME} · ${MONTHS[now.getMonth()]} ${now.getDate()}`;
+}
+
+/* "Welcome back" on the next day (owner, 2026-10-28: "The resume will confuse
+   testers"). Its big button resumed yesterday's sample album, with
+   yesterday's date and end-of-day photo. When the chosen album is a sample
+   album made on an earlier day, the button is "Make today's sample album": a
+   new album, made the way Step 1's "Make a sample album" makes it. The
+   builder picks the request up when it opens (useSampleAlbum). */
+
+const SAMPLE_REQUEST_KEY = 'megy-make-sample-album';
+
+/** Ask the builder to make today's sample album as it opens. */
+export function requestSampleAlbum(): void {
+  try { sessionStorage.setItem(SAMPLE_REQUEST_KEY, '1'); } catch { /* private mode */ }
+}
+
+/** The builder: was today's sample album asked for? Answers once. */
+export function takeSampleAlbumRequest(): boolean {
+  try {
+    if (sessionStorage.getItem(SAMPLE_REQUEST_KEY) !== '1') return false;
+    sessionStorage.removeItem(SAMPLE_REQUEST_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** When a sample album was made (ms), from its photos' names and when it was
+ *  made or first saved; null for any other album, or when that isn't known. */
+export function sampleAlbumMadeAt(photoNames: readonly string[] | undefined, made: number | null | undefined): number | null {
+  if (!photoNames || !isSampleAlbum(photoNames.map((name) => ({ name })))) return null;
+  return made != null && Number.isFinite(made) && made > 0 ? made : null;
+}
+
+/** A sample album made on an earlier day than `now`: "Welcome back" offers today's. */
+export function sampleAlbumIsFromAnEarlierDay(sampleMadeAt: number | null | undefined, now: Date): boolean {
+  return sampleMadeAt != null && sampleDayNumber(new Date(sampleMadeAt)) < sampleDayNumber(now);
+}
+
 /** The sample album's occasion when none is picked: the samples are a family day. */
 export const SAMPLE_ALBUM_OCCASION = 'Family';
 
@@ -134,19 +177,66 @@ export function isSampleAlbum(photos: readonly { name: string }[]): boolean {
   return photos.length > 0 && photos.every((p) => SAMPLE_PHOTO_NAMES.includes(p.name));
 }
 
-/** A card over a page: a bold first line, then what to do (**bold** words). */
-export interface SampleAlbumNote { title: string; body: string }
+/** "You're done": the line that names both of today's tasks, with a small
+ *  picture of the answer when it is a colour or a photo. */
+export interface DoneProof {
+  /** "Today: title font Dancing Script · new layout on page 5". */
+  text: string;
+  /** A colour swatch (today's colour or title colour). */
+  hex?: string;
+  /** The cover photo they chose. */
+  photo?: string;
+}
 
-/** Page 1, where the sample album opens. */
+/** A card over a page: a bold first line, then what to do (**bold** words). */
+export interface SampleAlbumNote {
+  title: string;
+  body: string;
+  /** "You're done" only: both of today's tasks (lib/dailyTest doneLine). */
+  proof?: DoneProof | null;
+}
+
+/** Page 1, where the sample album opens. No "test" in a heading a tester
+ *  sees (2026-10-29: the daily test reads as a lesson). */
 export const SAMPLE_WELCOME_NOTE: SampleAlbumNote = {
-  title: 'Welcome to the Megy Prints app test!',
+  title: 'Welcome to the Megy Prints app!',
   body: 'Tap **Next page** until you reach the last page, then tap **Done — Preview my album**.',
 };
 
-/** The last page, in Preview. With the stamp's date and time beside it, the screenshot is the proof. */
+/** Page 1 once the album has been previewed: Today's lesson (lib/dailyTest)
+ *  opens it on "You finished today's lesson!", so the steps above no longer
+ *  apply. Every page but the last then shows "Back to preview" (PageTurnBar). */
+export const SAMPLE_WELCOME_BACK_NOTE: SampleAlbumNote = {
+  title: 'Welcome to the Megy Prints app!',
+  body: "Tap **Back to preview** to see **You finished today's lesson!** again.",
+};
+
+/** Page 1's card: how to reach "You're done", or (seen already) the way back. */
+export function sampleWelcomeNote(previewSeen: boolean): SampleAlbumNote {
+  return previewSeen ? SAMPLE_WELCOME_BACK_NOTE : SAMPLE_WELCOME_NOTE;
+}
+
+/** The last page, in Preview, once today's lesson is done (lib/dailyTestRun).
+ *  With the stamp's date and time beside it, and the line that names both of
+ *  today's tasks (doneNote: "Today you tried: ..."), the screenshot is the
+ *  proof. */
 export const SAMPLE_DONE_NOTE: SampleAlbumNote = {
-  title: "You're done with today's test!",
+  title: "You finished today's lesson!",
   body: 'Take a screenshot and send it as proof.',
+};
+
+/** "You're done", with the line that names both of today's tasks. */
+export function doneNote(proof: DoneProof | null | undefined): SampleAlbumNote {
+  return proof ? { ...SAMPLE_DONE_NOTE, proof } : SAMPLE_DONE_NOTE;
+}
+
+/** The last page of a sample album that wasn't made through Today's lesson
+ *  (from sample photos added on the photo step, say): no "You finished". The
+ *  button it names is Home's (the owner, 2026-10-29: "Can we call it User
+ *  tutorial instead of sample album"). */
+export const SAMPLE_NOT_DONE_NOTE: SampleAlbumNote = {
+  title: "Today's lesson isn't done yet",
+  body: "Go to Home and tap **Start the User tutorial**.",
 };
 
 /** The cards show, and Preview opens on the last page, in a sample album in

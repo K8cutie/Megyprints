@@ -75,6 +75,15 @@
   .home-scan { top: 46%; }
 }
 
+/* A coach mark's ring (components/lesson/CoachMark.tsx): a soft terracotta
+   glow that breathes around the control it points at. Still under
+   prefers-reduced-motion. */
+.coach-ring { animation: coachRing 1.8s ease-in-out infinite; }
+@keyframes coachRing { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) {
+  .coach-ring { animation: none; }
+}
+
 /* Rotate-your-phone hint: tilt the phone glyph to landscape and back, to show
    the gesture. Used on the mobile Preview page (portrait). */
 @keyframes megyRotateHint {
