@@ -11,12 +11,15 @@ import { albumIsMade, placedMemories } from '../assistant/rebuildQuestion';
 import CoverEditor from './builder/CoverEditor';
 import MobileReview from './builder/MobileReview';
 import MissingPhotosBar from './builder/MissingPhotosBar';
+import DailyTestBar from './builder/DailyTestBar';
 import AlbumConflictBar from './builder/AlbumConflictBar';
 import OrderedAlbumNote from './builder/OrderedAlbumNote';
 import LayoutPicker from './builder/LayoutPicker';
 import BuilderBackGuard from './builder/BuilderBackGuard';
 import BuilderErrorBoundary from './builder/BuilderErrorBoundary';
 import MegyAssistant from '../assistant/MegyAssistant';
+import { albumIsBuilt, coverStepNext } from '../assistant/wizard';
+import { photosGoingIn } from './builder/albumMinimum';
 import HeicProgress from './builder/HeicProgress';
 import SoftAuthGate from '../components/SoftAuthGate';
 import { useIsMobile } from '../hooks/use-mobile';
@@ -38,8 +41,9 @@ const SetupPhase = memo(function SetupPhase({ actions }: { actions: BuilderConte
       selectedSize={actions.albumSize}
       onSizeChange={(size, reason) => { void actions.dispatch({ type: 'change_size', payload: { size, reason }, rawMessage: `change size to ${size}` }); }}
       /* Option A: "Start Creating" advances Megy's wizard past the size step to
-         the cover step; the center screen (phase) follows the wizard. */
-      onNext={() => { actions.setWizardStep('design_cover'); actions.setPhase('cover'); }}
+         the photos (the cover comes after them, 2026-10-27); the center screen
+         (phase) follows the wizard. */
+      onNext={() => { actions.setWizardStep('upload_photos'); actions.setPhase('edit'); }}
       albumTitle={actions.albumTitle}
       onAlbumTitleChange={actions.setAlbumTitle}
       onlySize={eventLinkForAlbum(actions.getAlbumId())?.size ?? null}
@@ -178,6 +182,11 @@ export default function Builder() {
     if (albumIsMade(actions.albumPages)) { setRemakeAsk(true); return; }
     generateAll();
   }, [actions.albumPages, generateAll]);
+  // The cover step's filled button: make the album, or (made already) back to
+  // its pages, or (short of 40) to the photos.
+  const coverNext = coverStepNext(albumIsBuilt(actions.albumPages), photosGoingIn(actions.uploadedPhotos));
+  // Why "Make my album" didn't make it, shown on the cover it went back to.
+  const [coverError, setCoverError] = useState<string | null>(null);
 
   const handleReset = useCallback(() => {
     actions.reset();
@@ -222,8 +231,8 @@ export default function Builder() {
   }, [actions, navigate]);
   const dismissOrderError = useCallback(() => setOrderError(null), []);
 
-  // Megy's "Place Order →" (Step 7) orders through the SAME door as the
-  // preview's own Order button: it asks the preview to run its handleOrder
+  // "Place order" typed in Megy's chat (and "Order this album again") orders
+  // through the SAME door as the preview's own Order button: it asks the preview to run its handleOrder
   // (the 40-photo check, the album's print job, then the save + checkout
   // above). Going to /order straight from Megy would skip the check and let
   // checkout read a stale or missing print job.
@@ -331,6 +340,9 @@ export default function Builder() {
         {(actions.phase === 'edit' || actions.phase === 'preview') && <OrderedAlbumNote actions={actions} />}
         {/* An album opened without its photos says so, with the way on. */}
         {(actions.phase === 'edit' || actions.phase === 'preview') && <MissingPhotosBar actions={actions} />}
+        {/* Today's test (Android app, testing): today's task in the album, then
+            the minute's countdown, then "You're done" (DailyTestBar). */}
+        {(actions.phase === 'edit' || actions.phase === 'preview') && <DailyTestBar actions={actions} />}
 
         {/* Phase Content */}
         <div className="flex-1 overflow-auto min-h-0 relative">
@@ -374,12 +386,28 @@ export default function Builder() {
               child failed to complete its exit animation, deadlocking mode="wait"
               for every subsequent phase change; a plain absolute-fill conditional
               mounts/unmounts cleanly and can't stall the other transitions. */}
+          {/* The cover step comes after the photos: its filled button makes
+              the album (coverStepNext), then the pages show. */}
           {actions.phase === 'cover' && (
             <div className="absolute inset-0 bg-cream">
               <CoverEditor
                 mode="step"
-                onNext={() => { actions.setWizardStep('upload_photos'); actions.setPhase('edit'); }}
-                onBack={() => { actions.setWizardStep('pick_size'); actions.setPhase('setup'); }}
+                nextLabel={coverNext.label}
+                error={coverError}
+                onNext={() => {
+                  setCoverError(null);
+                  if (coverNext.go === 'photos') { actions.setWizardStep('upload_photos'); actions.setPhase('edit'); return; }
+                  // Album not made (it failed): back on the cover, saying why.
+                  if (coverNext.go === 'make') {
+                    void actions.dispatch({ type: 'generate_album', rawMessage: 'generate album' }).then((r) => {
+                      if (r.success) return;
+                      setCoverError(r.message);
+                      actions.setWizardStep('design_cover'); actions.setPhase('cover');
+                    });
+                  }
+                  actions.setWizardStep('review_pages'); actions.setPhase('edit');
+                }}
+                onBack={() => { setCoverError(null); actions.setWizardStep('upload_photos'); actions.setPhase('edit'); }}
               />
             </div>
           )}

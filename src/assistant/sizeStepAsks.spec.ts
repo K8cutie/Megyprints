@@ -9,7 +9,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
    A size whose pages can't hold some memories asks first (ResizeAlbumAsk,
    from the change_size the tap dispatches). The card used to move on and
    say "Size set" the moment a size was tapped, so with the question open the
-   customer was already on the cover step, told the size was set when it
+   customer was already on the next step, told the size was set when it
    wasn't. Now the card stays on the size until it is set; a size Megy can't
    make says why instead. These render the real Builder + MegyAssistant over
    a stub builder whose dispatch answers like the action engine.
@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({ ctx: null as unknown }));
 vi.mock('../pages/builder/BuilderContext', () => ({ useBuilderContext: () => h.ctx }));
 vi.mock('../pages/builder/BuilderEdit', () => ({ default: () => null }));
 vi.mock('../pages/builder/MobileReview', () => ({ default: () => null }));
-// The cover step, as far as this walk needs it: its ← Back (to the size).
+// The cover step, as far as this walk needs it: its ← Back (to the photos).
 vi.mock('../pages/builder/CoverEditor', async () => {
   const { createElement: el } = await import('react');
   return { default: ({ onBack }: { onBack?: () => void }) => el('button', { onClick: onBack }, '← Back') };
@@ -100,15 +100,15 @@ async function open(answer: ExecutedAction) {
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} disconnect() {} unobserve() {} };
   // A made album opens on Review.
   localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify({
-    step: 'review_pages', completed: ['welcome', 'pick_theme', 'pick_size', 'design_cover', 'upload_photos'], skipped: [], isFirstTime: false, dismissed: false,
+    step: 'review_pages', completed: ['welcome', 'pick_theme', 'pick_size', 'upload_photos', 'design_cover'], skipped: [], isFirstTime: false, dismissed: false,
   }));
   ctx = madeAlbumAtSizeStep(answer);
   h.ctx = ctx;
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
   await render();
-  // Back to the size the customer's way: ← Previous (Photos), ← Previous
-  // (Cover), the cover's ← Back.
-  for (const label of ['← Previous', '← Previous', '← Back']) {
+  // Back to the size the customer's way: ← Previous (to the cover), the
+  // cover's ← Back (to the photos), ← Previous (to the size).
+  for (const label of ['← Previous', '← Back', '← Previous']) {
     await tap([...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === label) ?? null);
     await render();
   }
@@ -118,7 +118,7 @@ afterEach(async () => { await act(async () => { root.unmount(); }); host.remove(
 
 const guide = () => document.querySelector('[aria-label="Megy\'s guide"]');
 // (The heading types itself out; the step count is there at once.)
-const onSizeStep = () => !!guide()?.textContent?.includes('Step 2 of 7');
+const onSizeStep = () => !!guide()?.textContent?.includes('Step 2 of 4');
 const sizeOnCard = (label: string) => [...(guide()?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.startsWith(label)) ?? null;
 const tap = async (el: Element | null) => {
   expect(el).not.toBeNull();
@@ -129,7 +129,7 @@ const toast = () => document.querySelector('[data-testid="megy-toast"]')?.textCo
 const sizeCalls = () => (ctx.dispatch.mock.calls as unknown as Array<[{ type: string; payload?: Record<string, unknown> }]>).filter(([i]) => i.type === 'change_size').map(([i]) => i.payload);
 
 describe('Megy\'s size step, a made album whose memories can\'t all come to the new size', () => {
-  it('tapping 6×8 asks, and the card stays on the size: no "Size set", no cover step', async () => {
+  it('tapping 6×8 asks, and the card stays on the size: no "Size set", no next step', async () => {
     await open(ASKED);
     expect(onSizeStep()).toBe(true);
     await tap(sizeOnCard('6×8'));
@@ -161,17 +161,17 @@ describe('Megy\'s size step, a made album whose memories can\'t all come to the 
     expect(ctx.setResizeAsk).toHaveBeenCalledWith(null);
     // The first cut changed the size from Builder and left the card on Step 2.
     expect(onSizeStep()).toBe(false);
-    expect(ctx.setWizardStep).toHaveBeenLastCalledWith('design_cover');
+    expect(ctx.setWizardStep).toHaveBeenLastCalledWith('upload_photos');
   });
 });
 
 describe('Megy\'s size step otherwise', () => {
-  it('a size that is set moves the card on, to the cover', async () => {
+  it('a size that is set moves the card on, to the photos', async () => {
     await open({ intentType: 'change_size', success: true, message: 'Album size changed to 6×6.' });
     await tap(sizeOnCard('6×6'));
     expect(sizeCalls()).toEqual([{ size: '6x6' }]);
     expect(onSizeStep()).toBe(false);
-    expect(ctx.setWizardStep).toHaveBeenLastCalledWith('design_cover');
+    expect(ctx.setWizardStep).toHaveBeenLastCalledWith('upload_photos');
   });
   it('a size Megy can\'t make says why and stays (it said "Size set" and moved on)', async () => {
     const no = { intentType: 'change_size' as const, success: false, message: 'Albums need at least 40 photos. Add 3 more to make your album.' };

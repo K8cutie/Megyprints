@@ -30,6 +30,11 @@ import PageTurnBar from './PageTurnBar';
 import { PageColorSheet } from './PageColorPicker';
 import { pageColorOf } from './pageColors';
 import VideoMemoryButton from './VideoMemoryButton';
+import { useTesterStamp } from './useTesterStamp';
+import { useSampleAlbumNotes } from './useSampleAlbumNotes';
+import { sampleWelcomeNote } from '../../lib/samplePhotos';
+import { useDailyTestRun, runFor } from '../../lib/dailyTestRun';
+import { TASK_TOOL_EVENT } from './DailyTestBar';
 
 /** A tool in the review bar: secondary on purpose — "Next page" is the primary. */
 const TOOL = 'h-14 rounded-xl bg-cream text-medium text-[12px] font-semibold flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform';
@@ -39,10 +44,19 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
   const idx = actions.currentPageIndex;
   const total = pages.length;
   const page = pages[idx];
+  const testerStamp = useTesterStamp(pages);
+  // A sample album opens on page 1 with what to do (lib/samplePhotos).
+  const sampleNotes = useSampleAlbumNotes(actions.uploadedPhotos);
   const [finishing, setFinishing] = useState(false);
   const [chooserSlot, setChooserSlot] = useState<number | null>(null); // empty-slot content chooser
   const [colorSheet, setColorSheet] = useState(false); // the page-colour sheet (pageColors.ts)
   const placedOn = placedPhotoPages(pages); // photo → page, for the picker's "Page 3" tag
+  // Today's lesson (lib/dailyTestRun): the album Today's lesson made, while
+  // its task in the album isn't done. Its page-1 card gives way to the strip at
+  // the top and the coach mark at the tool (DailyTestBar).
+  const dailyRun = useDailyTestRun();
+  const testRun = sampleNotes ? runFor(dailyRun, pages) : null;
+  const pendingTask = testRun && !testRun.albumDone ? { task: testRun.task!, page: testRun.target!.page, slot: testRun.target!.slot } : null;
 
   /* ── STUDIO on the phone (album-wide on the phone) ── */
   const studio = true; // owner, 2026-09-30: no Simple/Studio switch — every Studio tool is always on
@@ -114,6 +128,29 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
     setMemoryCorner(null); // fresh badge starts on Auto
     setMemoryOpen(true);
   };
+
+  /* Today's task in the album: its tool opens by itself on its page, when the
+     pages open (and so again whenever they come back to the album), and when
+     the bar's button asks (TASK_TOOL_EVENT). */
+  const [wantTool, setWantTool] = useState(true);
+  useEffect(() => {
+    const ask = () => setWantTool(true);
+    window.addEventListener(TASK_TOOL_EVENT, ask);
+    return () => window.removeEventListener(TASK_TOOL_EVENT, ask);
+  }, []);
+  useEffect(() => {
+    if (!wantTool || !pendingTask || idx !== pendingTask.page) return;
+    const { task, slot } = pendingTask;
+    // Run as a callback, not in the effect's body: it opens sheets.
+    void Promise.resolve().then(() => {
+      setWantTool(false);
+      if (task === 'layout') actions.setLayoutPickerOpen(true);
+      else if (task === 'caption' && slot != null) setEditSlot(slot);
+      else if (task === 'look' && slot != null) setStudioSel({ pageIdx: idx, slot, sticker: null, sheet: 'look' });
+      else if (task === 'swap' && slot != null) setReplaceSlot(slot);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantTool, pendingTask?.task, pendingTask?.page, pendingTask?.slot, idx]);
 
   // Seed the editor from a FREE text element (e.g. the theme title) by id.
   const buildTextInitial = (textId: string): BoxTextContent => {
@@ -241,7 +278,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
             className="bg-white shadow-xl shrink-0 relative overflow-hidden"
             style={{ width: dims.w, height: dims.h, touchAction: 'pan-y' }}
           >
-            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx}
+            {page && <PageView page={page} photos={actions.uploadedPhotos} singleW={dims.w} H={dims.h} pageIndex={idx} testerStamp={testerStamp} testerNote={sampleNotes && idx === 0 && !testRun ? sampleWelcomeNote(actions.previewSeen) : null}
               editable
               onSlotTap={studio ? (slotIndex) => { setStudioSticker(null); setStudioSlot(slotIndex); } : undefined}
               onChooseSlot={(slotIndex) => setChooserSlot(slotIndex)}
@@ -403,6 +440,8 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
               transition={{ type: 'spring', damping: 30, stiffness: 320 }}
               className="w-full bg-white rounded-t-2xl max-h-[60vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
+              // A lesson's coach mark points here (lib/lessonTips ALBUM_TIPS.swap).
+              data-coach="photo-picker"
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
                 <span className="text-sm font-semibold text-dark">Add a photo</span>

@@ -4,10 +4,10 @@ import { AuthProvider } from './lib/authContext';
 import { AuthModalProvider } from './components/AuthModalProvider';
 import Layout from './components/Layout';
 import Home from './pages/Home';
-import Templates from './pages/Templates';
 import About from './pages/About';
 import Contact from './pages/Contact';
 import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
 import Order from './pages/Order';
 import Profile from './pages/Profile';
 import MyMemories from './pages/MyMemories';
@@ -77,12 +77,12 @@ export default function App() {
             never came back: a blank page under the menu. */}
         <Route element={<Layout><Suspense fallback={<div className="min-h-[60vh]" aria-busy="true" />}><Outlet /></Suspense></Layout>}>
           <Route path="/" element={<Home />} />
-          <Route path="/templates" element={<Templates />} />
           {/* About page + Navbar/Footer both linked to /about, but the route was
               never registered — the link blank-screened. Wired here. */}
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
           <Route path="/order" element={<Order />} />
           <Route path="/events" element={<Events />} />
           <Route path="/events/book" element={<EventBook />} />

@@ -87,22 +87,27 @@ describe('every wizard message shows its bold words, never asterisks', () => {
     ['welcome', ['Megy']],
     ['pick_theme', ["Maria's Debut", 'Wedding']],
     ['pick_size', ['8x8']],
-    ['design_cover', ['Continue to photos']],
+    // The cover comes after the photos: 3 is short of 40, so the way on is the photos.
+    ['design_cover', ['Next: add your photos']],
     // 3 photos is short of the 40-photo minimum (albumMinimum): the body says how many more.
     ['upload_photos', ['3', '40', '37 more']],
-    ['review_pages', ['page 1 of 3', 'Next page']],
-    ['add_text', []],
-    ['finalize', []],
+    // After the guide: one short card, pointing at the screen's own buttons.
+    ['review_pages', ['Done']],
+    ['finalize', ['Order', 'Edit pages']],
   ])('%s', (step, bolds) => {
     const out = shown(engine(), step);
     expect(out.bolds).toEqual(bolds);
     expect(out.text).not.toContain('*');
   });
 
-  it('the last-page nudge and the empty upload step too', () => {
-    const last = shown(engine({ currentPageIndex: 2 }), 'review_pages');
-    expect(last.bolds).toEqual(['3']);
-    expect(last.text).toMatch(/^You've been through all 3 pages/);
+  it('the cover with the photos in (not made yet): 1 photo, Text, Make my album', () => {
+    const forty = Array.from({ length: 40 }, () => ({}));
+    const cover = shown(engine({ uploadedPhotos: forty }), 'design_cover');
+    expect(cover.bolds).toEqual(['1 photo', 'Text', 'Make my album']);
+    expect(cover.text).not.toContain('*');
+  });
+
+  it('the empty upload step too', () => {
     const empty = shown(engine({ uploadedPhotos: [] }), 'upload_photos');
     expect(empty.bolds).toEqual(['40 photos']);
     expect(empty.text).not.toContain('*');

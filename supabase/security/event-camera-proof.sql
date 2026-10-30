@@ -134,6 +134,10 @@ begin
   end if;
   H := pg_temp.mk_user('h'); O := pg_temp.mk_user('o'); OWN := pg_temp.mk_user('own'); X := pg_temp.mk_user('x');
   insert into public.operator_roles (email, role) values ('zz-probe-ecown@probe.invalid', 'owner');
+  -- 0058: a Team role needs a Google sign-in with that email.
+  insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at)
+  select 'zz-probe-' || u.id, u.id, jsonb_build_object('sub', u.id, 'email', u.email, 'email_verified', true), 'google', now(), now()
+    from auth.users u where u.email = 'zz-probe-ecown@probe.invalid';
 
   -- ── K. Opening ──────────────────────────────────────────────────────────────
   begin

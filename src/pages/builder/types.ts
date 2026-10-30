@@ -557,6 +557,9 @@ export interface AlbumPage {
   id: string;
   layout: LayoutStyle;
   templateId?: string;
+  /** When Megy made the album this page came from (ms). Read only for the
+   *  "For Testing purposes" stamp on screen (testingPhase); never printed. */
+  madeAt?: number;
   slotFills?: (number | null)[];
   slotScales?: number[];
   slotOffsetsX?: number[];

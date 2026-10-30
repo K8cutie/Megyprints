@@ -32,6 +32,15 @@ import { slotPhotoDomBox } from './slotPhotoFit';
 import { applyMask, isMaskId, textureOverlayCss } from './masks';
 import { lookCss, isLookId } from './looks';
 import CoverEditor from './CoverEditor';
+import TesterPageStamp from './TesterPageStamp';
+import TesterPageNote from './TesterPageNote';
+import PlayFeedbackCard from '../../components/PlayFeedbackCard';
+import { useSampleAlbumNotes } from './useSampleAlbumNotes';
+import { doneNote, SAMPLE_NOT_DONE_NOTE, type SampleAlbumNote } from '../../lib/samplePhotos';
+import { beforeTaskLabel, doneLine } from '../../lib/dailyTest';
+import { useDailyTestRun, runFor, runComplete, markAlbumTaskDone } from '../../lib/dailyTestRun';
+import { OPEN_BOOK_DONE, OPEN_BOOK_SEEN_MS } from './dailyAlbumTask';
+import { useTesterStamp } from './useTesterStamp';
 import type { QrFill } from './types';
 import { qrRect } from '../../lib/qrMemory';
 import { chooserListSizes, CHOOSER_TITLE } from './chooserFit';
@@ -60,7 +69,8 @@ interface BuilderPreviewProps {
   /** Why the album could not go to checkout (the save failed). */
   orderError?: string | null;
   onDismissOrderError?: () => void;
-  /** Megy's "Place Order →" asked to order (Builder.requestOrder). */
+  /** Asked to order from outside the preview (Builder.requestOrder): "place
+   *  order" in Megy's chat, or "Order this album again" from Your orders. */
   orderRequested?: boolean;
   /** The preview took the request: it runs once, through handleOrder. */
   onOrderRequestTaken?: () => void;
@@ -311,7 +321,7 @@ function OrnamentSquare({ rectKey, cellLeft, cellTop, cellW, cellH, dataUrl, onT
  *  pages the user had visited, saved via a delayed callback that could attach
  *  to the wrong page during navigation, and kept stale across regeneration —
  *  which made two different pages show the same image.) */
-export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode, asPrinted }: {
+export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTextSlotTap, onTextTap, onQrSlotTap, onOrnamentSlotTap, onSlotTextTap, onChooseSlot, editable, onAddToSlot, onRemoveFromSlot, onChooseTextSlot, onChooseTextSlotMenu, onTextSlotPhotoTap, onTextSlotQrTap, onTextSlotOrnamentTap, coverMode, asPrinted, testerStamp, testerNote }: {
   page: AlbumPage; photos: UploadedPhoto[]; singleW: number; H: number; pageIndex: number;
   onSlotTap?: (slotIndex: number) => void;
   onTextSlotTap?: (slotIndex: number) => void;
@@ -351,6 +361,11 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
    *  "Tap to add text" showing only on hover or keyboard focus. It showed a
    *  pink "Tap to add" panel on 18 of 20 spreads (1-star testers round 2, PPR2-1). */
   asPrinted?: boolean;
+  /** The testers' "For Testing purposes" stamp over the page (testingPhase):
+   *  screen only, so only the views a tester looks at pass it. */
+  testerStamp?: readonly [string, string] | null;
+  /** A sample album's card over the page (lib/samplePhotos): screen only, like the stamp. */
+  testerNote?: SampleAlbumNote | null;
 }) {
   const sx = singleW / (getCanvasDimensions(page.size as any).width || singleW);
   const sy = H / (getCanvasDimensions(page.size as any).height || H);
@@ -749,6 +764,10 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           }} />
         );
       })()}
+      {/* The cover's spine is on its left; a page's binding is on its inner edge. */}
+      {testerStamp && <TesterPageStamp lines={testerStamp} pageW={singleW}
+        side={coverMode || bindingEdge(pageIndex) === 'left' ? 'right' : 'left'} />}
+      {testerNote && <TesterPageNote note={testerNote} pageW={singleW} />}
     </>
   );
 }
@@ -756,6 +775,29 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
 export default function BuilderPreview({ pages, currentIndex, photos, albumSize, onGoToPage, onBack, onOrder, orderSaving = false, orderError = null, onDismissOrderError, orderRequested = false, onOrderRequestTaken, turnAnimation = import.meta.env.MODE !== 'test' }: BuilderPreviewProps) {
   const total = pages.length;
   const { setBoxText, updateTextElement, setQrFill, coverDesign, coverFront, finishBoxesWithQuotes, getAlbumId, deletePages } = useBuilderContext();
+  const testerStamp = useTesterStamp(pages);
+  // A sample album: its last page says the day's test is done (and Preview
+  // opens there, actionEngine preview_album), with no order card over it.
+  const sampleNotes = useSampleAlbumNotes(photos);
+  // Today's test (lib/dailyTestRun): "You're done" only once both of today's
+  // tasks are done AND the minute in the app is up, with the line that names
+  // both. Before that, no card: the bar at the top says what is left. A
+  // sample album that didn't come from Today's test says how to do it.
+  const run = useDailyTestRun();
+  const mine = sampleNotes ? runFor(run, pages) : null;
+  const complete = runComplete(mine);
+  const lastNote = useMemo((): SampleAlbumNote | null => {
+    if (!sampleNotes) return null;
+    if (!mine?.test) return SAMPLE_NOT_DONE_NOTE;
+    if (!complete || !mine.albumDone) return null;
+    const t = mine.test;
+    return doneNote({
+      text: doneLine(beforeTaskLabel(t), mine.albumDone),
+      hex: t.before === 'colour' || t.before === 'titleColour' ? t.answer : undefined,
+      photo: t.before === 'cover' ? photos.find((p) => p.name === t.answer)?.previewUrl : undefined,
+    });
+  }, [sampleNotes, mine, complete, photos]);
+  const doneNoteAt = (i: number) => (i === total - 1 ? lastNote : null);
 
   // "Megy finishes it" — count the caption boxes still sitting empty (unfilled
   // invitations, deleted quotes, legacy empties). The chooser CTA in the
@@ -805,6 +847,17 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   const upright = isMobile && isPortrait;
   const [openBook, setOpenBook] = useState(false);
   const view: PreviewView = upright && !openBook ? 'page' : 'spread';
+  // Today's task in the album may be the open book: its button glows, and
+  // seeing the album as an open book (the button, the phone sideways, or a
+  // tablet that shows it anyway) does it, once it has been on screen for a
+  // moment. Preview's first draw, before it knows it is on an upright phone,
+  // shows the open book for an instant: that doesn't count.
+  const openBookTask = !!mine && !mine.albumDone && mine.task === 'openBook';
+  useEffect(() => {
+    if (!openBookTask || view !== 'spread') return;
+    const seen = window.setTimeout(() => markAlbumTaskDone(OPEN_BOOK_DONE), OPEN_BOOK_SEEN_MS);
+    return () => window.clearTimeout(seen);
+  }, [openBookTask, view]);
 
   // Tap a textbox in the preview → open the formatting editor for THAT page.
   // `slot` = a template caption box; `textId` = a free element (e.g. the theme title).
@@ -1012,7 +1065,8 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // browsing) and it offers a real way back to the pages (owner, 2026-09-13:
   // "there doesn't seem to be a way to go back").
   // It waits for the last page turn to land.
-  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim);
+  // Not over a sample album's "You're done" page: the tester screenshots it (Order is in the top bar).
+  const endPrompt = useEndOfAlbumPrompt(atAlbumEnd(pos) && !turnAnim && !sampleNotes);
   // A warning about blank pages from an earlier Order: the card's reminder says it now.
   useEffect(() => {
     if (endPrompt.open && notReadyBlank && blankPlan.blank.length > 0) setNotReady(null);
@@ -1075,10 +1129,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
 
   const currentPage = pages[currentIndex];
 
-  // Megy's "Place Order →" (Step 7) lands here and orders exactly like the
-  // Order button above: through handleOrder, the one way to order. It was a
-  // filled button that did nothing. Taken first, so a re-render or a later
-  // visit to the preview never orders again.
+  // An order asked from outside the preview ("place order" in Megy's chat,
+  // "Order this album again") lands here and orders exactly like the Order
+  // button above: through handleOrder, the one way to order. Taken first, so
+  // a re-render or a later visit to the preview never orders again.
   useEffect(() => {
     if (!orderRequested) return;
     onOrderRequestTaken?.();
@@ -1102,8 +1156,11 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
   // thing one page can't show, how facing pages look together.
   const openBookToggle = upright && !onCover && (
     <div className="flex flex-col items-center gap-1">
-      <button type="button" onClick={() => setOpenBook((v) => !v)} data-testid="preview-open-book"
-        className="px-3 py-1.5 rounded-lg border border-line bg-white text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors">
+      <button type="button" onClick={() => setOpenBook((v) => !v)} data-testid="preview-open-book" data-glow={openBookTask || undefined}
+        // A lesson's coach mark points here (lib/lessonTips ALBUM_TIPS.openBook).
+        data-coach="open-book"
+        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold text-cocoa hover:bg-blush flex items-center gap-1.5 transition-colors ${
+          openBookTask ? 'border-peach bg-blush ring-4 ring-peach/40' : 'border-line bg-white'}`}>
         {openBook ? <><FileText size={13} /> One page at a time</> : <><BookOpen size={13} /> See it as an open book</>}
       </button>
       {!openBook && <span className="text-[11px] text-taupe">or turn your phone sideways</span>}
@@ -1124,14 +1181,14 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
     if (f.kind === 'page' && pages[f.index]) {
       return (
         <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-          <PageView page={pages[f.index]} photos={photos} singleW={singleW} H={H} pageIndex={f.index} asPrinted />
+          <PageView page={pages[f.index]} photos={photos} singleW={singleW} H={H} pageIndex={f.index} asPrinted testerStamp={testerStamp} testerNote={doneNoteAt(f.index)} />
         </div>
       );
     }
     if (f.kind === 'cover' && coverFront) {
       return (
         <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-          <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
+          <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode testerStamp={testerStamp} />
           <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
           <div aria-hidden="true" style={BOOK.hinge} />
         </div>
@@ -1210,7 +1267,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           <div className="flex flex-col items-center gap-3">
             <div className="relative" style={bookSlide}>
               <div style={BOOK.closed(singleW, H, fitScale)} data-testid="preview-cover">
-                <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode />
+                <PageView page={coverFront} photos={photos} singleW={singleW} H={H} pageIndex={0} coverMode testerStamp={testerStamp} />
                 <div aria-hidden="true" style={BOOK.vignette(fitScale)} />
                 <div aria-hidden="true" style={BOOK.hinge} />
               </div>
@@ -1233,7 +1290,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               <div aria-hidden="true" style={BOOK.edges(singleW, H, fitScale)} />
               <div className="relative bg-white" style={{ width: singleW, height: H, isolation: 'isolate' }} data-testid="preview-single-page">
                 <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
-                  <PageView key={currentPage.id} page={currentPage} photos={photos} singleW={singleW} H={H} pageIndex={currentIndex} asPrinted
+                  <PageView key={currentPage.id} page={currentPage} photos={photos} singleW={singleW} H={H} pageIndex={currentIndex} asPrinted testerStamp={testerStamp} testerNote={doneNoteAt(currentIndex)}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: currentIndex, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: currentIndex, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: currentIndex, slot })} />
@@ -1274,7 +1331,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
               {/* Left Page — the inside of the front cover across from page 1 */}
               <div className="absolute overflow-hidden" style={{ left: 0, top: 0, width: singleW, height: H }}>
                 {spreadLeftPage ? (
-                  <PageView key={spreadLeftPage.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted
+                  <PageView key={spreadLeftPage.id} page={spreadLeftPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex} asPrinted testerStamp={testerStamp} testerNote={doneNoteAt(spreadLeftIndex)}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex, slot })} />
@@ -1286,7 +1343,7 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
                   inside of the back cover across from a last left-hand page. */}
               <div className="absolute overflow-hidden" style={{ left: singleW, top: 0, width: singleW, height: H }}>
                 {spreadRightPage ? (
-                  <PageView key={spreadRightPage.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted
+                  <PageView key={spreadRightPage.id} page={spreadRightPage} photos={photos} singleW={singleW} H={H} pageIndex={spreadLeftIndex + 1} asPrinted testerStamp={testerStamp} testerNote={doneNoteAt(spreadLeftIndex + 1)}
                     onTextSlotTap={(slot) => setEdit({ pageIndex: spreadLeftIndex + 1, slot })}
                     onTextTap={(textId) => setEdit({ pageIndex: spreadLeftIndex + 1, textId })}
                     onQrSlotTap={(slot) => setQrEdit({ pageIndex: spreadLeftIndex + 1, slot })} />
@@ -1319,6 +1376,15 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
           )}
         </div>
       </div>
+
+      {/* The day's test is done (a sample album's last page): where to leave
+          feedback, under the book so the "You're done" screenshot stays clean.
+          The stage shrinks to make room (its ResizeObserver refits the page). */}
+      {sampleNotes && atAlbumEnd(pos) && (
+        <div className={`${upright ? 'px-4' : 'px-6'} pt-3 bg-paper`} data-testid="preview-play-feedback">
+          <div className="mx-auto max-w-md"><PlayFeedbackCard /></div>
+        </div>
+      )}
 
       {/* Upright phone: the turn under the book, in the thumb zone. */}
       {upright && (

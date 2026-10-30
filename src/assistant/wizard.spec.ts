@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { WizardEngine, WIZARD_ORDER, STEP_META, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, WIZARD_STORAGE_KEY, type WizardStep } from './wizard';
+import { WizardEngine, WIZARD_ORDER, GUIDE_STEPS, GUIDE_DONE_LABEL, ALBUM_MADE_TITLE, isAfterGuide, STEP_META, phaseForStep, forwardJumpTarget, isStepOneReady, isPrimaryAction, bootWizard, readSavedWizard, WIZARD_STORAGE_KEY, type WizardStep } from './wizard';
 import { isAlbumNameReady, albumNameToSave, cleanAlbumName, UNNAMED_ALBUM } from '../lib/albumName';
 import { ALBUM_THEME_KEY, isAlbumThemeReady, cleanAlbumTheme } from '../lib/albumTheme';
 import { FRESH_START_KEY } from '../lib/albumSession';
@@ -44,9 +44,7 @@ describe('step order and numbering', () => {
     expect(STEP_META.pick_theme.title).toBe('Name & occasion');
     expect(phaseForStep('pick_theme')).toBe('setup');
   });
-  it('every numbered step title matches the progress label (Step N of 7)', () => {
-    // Three filled pages, cursor on the first: review_pages shows its numbered
-    // title rather than the "All Pages Reviewed" nudge it gives on the last page.
+  it('every numbered step title matches the progress label (Step N of 4); after the guide, no number', () => {
     const page = { slotFills: [0], photos: [], textElements: [] };
     const w = new WizardEngine(builderStub({ albumPages: [page, page, page], currentPage: page } as unknown as Partial<BuilderActions>), false);
     for (const step of WIZARD_ORDER) {
@@ -54,8 +52,13 @@ describe('step order and numbering', () => {
       const { current, total, label } = w.getProgress();
       const title = w.getMessage().title;
       if (step === 'welcome') { expect(label).toBe("Let's begin"); continue; }
-      expect(total).toBe(7);
-      expect(label).toBe(`Step ${current} of 7`);
+      expect(total).toBe(4);
+      if (isAfterGuide(step)) {
+        expect(label, step).toBe(GUIDE_DONE_LABEL);
+        expect(title, step).toBe(ALBUM_MADE_TITLE);
+        continue;
+      }
+      expect(label).toBe(`Step ${current} of 4`);
       expect(title.startsWith(`Step ${current}:`), `${step}: "${title}" vs "${label}"`).toBe(true);
     }
   });
@@ -74,17 +77,17 @@ describe('pick_theme is unskippable', () => {
     w.skip();
     expect(w.state.step).toBe('pick_theme');
     expect(w.state.skipped).toEqual([]);
-    // With no occasion stored, even skipping the cover step pulls back to the occasion.
-    w.state.step = 'design_cover';
+    // With no occasion stored, even skipping the photos step pulls back to the occasion.
+    w.state.step = 'upload_photos';
     w.skip();
     expect(w.state.step).toBe('pick_theme');
     expect(w.state.skipped).toEqual([]);
-    // With one stored, skip works as before.
+    // With one stored, skip works as before (the cover comes after the photos).
     store[ALBUM_THEME_KEY] = 'Wedding';
-    w.state.step = 'design_cover';
+    w.state.step = 'upload_photos';
     w.skip();
-    expect(w.state.step).toBe('upload_photos');
-    expect(w.state.skipped).toEqual(['design_cover']);
+    expect(w.state.step).toBe('design_cover');
+    expect(w.state.skipped).toEqual(['upload_photos']);
   });
   it('a returning visitor with no occasion lands on the occasion step; with one, on size', () => {
     const w = new WizardEngine(builderStub(), false);
@@ -116,8 +119,8 @@ describe('external forward jumps cannot hop over the occasion step', () => {
     expect(forwardJumpTarget('pick_size', 'design_cover', true)).toBe('design_cover');
   });
   it('even a later forward move is pulled back to the occasion step while none is stored', () => {
-    expect(forwardJumpTarget('design_cover', 'upload_photos', false)).toBe('pick_theme');
-    expect(forwardJumpTarget('design_cover', 'upload_photos', true)).toBe('upload_photos');
+    expect(forwardJumpTarget('upload_photos', 'design_cover', false)).toBe('pick_theme');
+    expect(forwardJumpTarget('upload_photos', 'design_cover', true)).toBe('design_cover');
   });
   it('backward moves and a move onto the occasion step itself are untouched', () => {
     expect(forwardJumpTarget('upload_photos', 'pick_size', false)).toBe('pick_size');
@@ -126,7 +129,7 @@ describe('external forward jumps cannot hop over the occasion step', () => {
 });
 
 describe('advance() itself enforces the occasion', () => {
-  it('from a seeded size step with no occasion, advancing lands on the occasion step, not the cover', () => {
+  it('from a seeded size step with no occasion, advancing lands on the occasion step, not the photos', () => {
     const w = new WizardEngine(builderStub(), false);
     w.state.step = 'pick_size';
     w.advance();
@@ -135,7 +138,7 @@ describe('advance() itself enforces the occasion', () => {
     store[ALBUM_THEME_KEY] = 'Graduation';
     w.state.step = 'pick_size';
     w.advance();
-    expect(w.state.step).toBe('design_cover');
+    expect(w.state.step).toBe('upload_photos');
     expect(w.state.completed).toEqual(['pick_size']);
   });
 });
@@ -227,7 +230,7 @@ describe('a returning customer reloads straight onto Review (2026-09-30)', () =>
     expect(w.reconcileForward()).toBe(true);
     expect(w.state.step).toBe('review_pages');
     expect(phaseForStep(w.state.step)).toBe('edit');
-    expect(w.state.completed).toEqual(['pick_size', 'design_cover', 'upload_photos']);
+    expect(w.state.completed).toEqual(['pick_size', 'upload_photos', 'design_cover']);
   });
 
   it('never moves backward, and leaves a first visit on welcome', () => {
@@ -254,8 +257,8 @@ describe('a reload restores the saved journey (2026-10-02)', () => {
   const photos = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
   const saved = (state: { step: string; completed?: string[]; skipped?: string[]; isFirstTime?: boolean }) =>
     JSON.stringify({ completed: [], skipped: [], isFirstTime: false, ...state });
-  /** The state from the report: the cover is done, the customer is on the upload step. */
-  const UPLOAD = saved({ step: 'upload_photos', completed: ['welcome', 'pick_theme', 'pick_size', 'design_cover'] });
+  /** The state from the report: the size is done, the customer is on the upload step. */
+  const UPLOAD = saved({ step: 'upload_photos', completed: ['welcome', 'pick_theme', 'pick_size'] });
   /** Photos in, album not generated yet — the builder opens on 'setup'. */
   const notGenerated = (over: Partial<BuilderActions> = {}) =>
     builderStub({ phase: 'setup', albumPages: unbuilt, uploadedPhotos: photos, ...over } as unknown as Partial<BuilderActions>);
@@ -267,21 +270,25 @@ describe('a reload restores the saved journey (2026-10-02)', () => {
     const { engine } = bootWizard(notGenerated(), UPLOAD);
     expect(engine.state.step).toBe('upload_photos');
     expect(phaseForStep(engine.state.step)).toBe('edit');
-    expect(engine.state.completed).toEqual(['welcome', 'pick_theme', 'pick_size', 'design_cover']);
-    expect(engine.getMessage().title).toBe('Step 4: Photos Uploaded (3) 📸');
+    expect(engine.state.completed).toEqual(['welcome', 'pick_theme', 'pick_size']);
+    expect(engine.getMessage().title).toBe('Step 3: Photos Uploaded (3) 📸');
   });
 
-  it('skipped comes back too — a skipped cover still leads to the upload step', () => {
+  it('skipped comes back too — an old save (cover skipped when it came first) still opens the upload step', () => {
     const { engine } = bootWizard(notGenerated(), saved({ step: 'upload_photos', completed: ['welcome', 'pick_theme', 'pick_size'], skipped: ['design_cover'] }));
     expect(engine.state.step).toBe('upload_photos');
     expect(engine.state.skipped).toEqual(['design_cover']);
     expect(engine.detectStep()).toBe('upload_photos'); // the flags agree, so a later reconcile holds the step
   });
 
-  it('a reload on the cover step opens the cover', () => {
-    const { engine } = bootWizard(notGenerated({ uploadedPhotos: [] }), saved({ step: 'design_cover', completed: ['welcome', 'pick_theme', 'pick_size'] }));
+  it('a reload on the cover step opens the cover — the album isn\'t made yet, the cover is where it is made', () => {
+    const { engine } = bootWizard(notGenerated(), saved({ step: 'design_cover', completed: ['welcome', 'pick_theme', 'pick_size', 'upload_photos'] }));
     expect(engine.state.step).toBe('design_cover');
     expect(phaseForStep(engine.state.step)).toBe('cover');
+    // An old save made on the cover before the photos came first: still the
+    // cover, whose button then goes to the photos (coverStepNext).
+    const old = bootWizard(notGenerated({ uploadedPhotos: [] }), saved({ step: 'design_cover', completed: ['welcome', 'pick_theme', 'pick_size'] })).engine;
+    expect(old.state.step).toBe('design_cover');
   });
 
   it('step 1 still guards a restore: no occasion, or no name, lands on it — and nothing after it counts as done', () => {
@@ -311,10 +318,10 @@ describe('a reload restores the saved journey (2026-10-02)', () => {
     expect(engine.state.completed).toEqual(['welcome']);
   });
 
-  it('review, text and finalize need a BUILT album — without one the journey resumes at upload', () => {
+  it('the pages and Preview (and the retired Text step) need a BUILT album — without one the journey resumes at the cover, where it is made', () => {
     for (const step of ['review_pages', 'add_text', 'finalize']) {
-      const { engine } = bootWizard(notGenerated(), saved({ step, completed: ['welcome', 'pick_theme', 'pick_size', 'design_cover', 'upload_photos'] }));
-      expect(engine.state.step, step).toBe('upload_photos');
+      const { engine } = bootWizard(notGenerated(), saved({ step, completed: ['welcome', 'pick_theme', 'pick_size', 'upload_photos', 'design_cover'] }));
+      expect(engine.state.step, step).toBe('design_cover');
     }
   });
 
@@ -323,14 +330,18 @@ describe('a reload restores the saved journey (2026-10-02)', () => {
       if (answered) store[ALBUM_THEME_KEY] = 'Wedding'; else delete store[ALBUM_THEME_KEY];
       for (const step of WIZARD_ORDER) {
         const { engine } = bootWizard(generated(), saved({ step, completed: WIZARD_ORDER.slice(0, WIZARD_ORDER.indexOf(step)) }));
-        // Text and finalize are ahead of Review and come back as they were;
-        // everything earlier is carried forward to Review. Unanswered step 1
-        // does not pull a built album back to setup (the quotes are dealt).
-        const expected: WizardStep = answered && (step === 'add_text' || step === 'finalize') ? step : 'review_pages';
+        // Preview is ahead of the pages and comes back as it was; everything
+        // earlier is carried forward to the pages. Unanswered step 1 does not
+        // pull a built album back to setup (the quotes are dealt).
+        const expected: WizardStep = answered && step === 'finalize' ? step : 'review_pages';
         const label = `${step}, step 1 ${answered ? 'answered' : 'unanswered'}`;
         expect(engine.state.step, label).toBe(expected);
         expect(phaseForStep(engine.state.step), label).not.toBe('setup');
       }
+      // A journey saved on the retired Text step (Step 6) opens on the pages.
+      const text = bootWizard(generated(), saved({ step: 'add_text', completed: ['welcome', 'pick_theme', 'pick_size', 'upload_photos', 'design_cover', 'review_pages', 'add_text'] })).engine;
+      expect(text.state.step).toBe('review_pages');
+      expect(text.state.completed).not.toContain('add_text');
     }
   });
 
@@ -367,9 +378,9 @@ describe('a reload restores the saved journey (2026-10-02)', () => {
     const before = new WizardEngine(notGenerated(), true);
     before.advance(); // welcome → pick_theme
     before.advance(); // → pick_size
-    before.advance(); // → design_cover
-    before.skip();    // cover skipped → upload_photos
-    expect(before.state.step).toBe('upload_photos');
+    before.advance(); // → upload_photos
+    before.skip();    // photos skipped → design_cover
+    expect(before.state.step).toBe('design_cover');
     const after = bootWizard(notGenerated(), before.serialize()).engine;
     expect(after.state).toEqual(before.state);
   });
@@ -429,47 +440,47 @@ describe('← Previous stays where the customer went (2026-10-02)', () => {
     return w;
   };
 
-  it('the report: ← Previous on the upload step lands on the cover and STAYS through the reconcile', () => {
+  it('the report, in today\'s order: ← Previous on the upload step lands on the size and STAYS through the reconcile', () => {
     const w = walkTo('upload_photos');
-    expect(w.state.completed).toEqual(['welcome', 'pick_theme', 'pick_size', 'design_cover']);
+    expect(w.state.completed).toEqual(['welcome', 'pick_theme', 'pick_size']);
     w.back();
-    expect(w.state.step).toBe('design_cover');
-    expect(screenFollows(w)).toBe(false); // phase 'cover' → was: upload_photos again
-    expect(w.state.step).toBe('design_cover');
-    expect(w.reconcileForward()).toBe(false); // the completed flags alone never move it
-    expect(w.state.step).toBe('design_cover');
-    expect(w.builder.phase).toBe('cover');
-  });
-
-  it('the same with photos in (Step 4: Photos Uploaded)', () => {
-    const w = walkTo('upload_photos', builderStub({ albumPages: unbuilt, uploadedPhotos: photos } as unknown as Partial<BuilderActions>));
-    w.back();
-    expect(screenFollows(w)).toBe(false);
-    expect(w.state.step).toBe('design_cover');
-  });
-
-  it("the cover editor's ← Back lands on the size step and STAYS", () => {
-    const w = walkTo('design_cover');
-    // Builder.tsx writes the store (step pick_size, phase setup); the panel's
-    // sync moves the engine back to it, then the phase change reconciles.
-    w.state.step = 'pick_size';
-    expect(screenFollows(w)).toBe(false); // was: design_cover again (completed has pick_size)
     expect(w.state.step).toBe('pick_size');
-    expect(w.reconcileForward()).toBe(false);
+    expect(screenFollows(w)).toBe(false); // phase 'setup'
+    expect(w.state.step).toBe('pick_size');
+    expect(w.reconcileForward()).toBe(false); // the completed flags alone never move it
     expect(w.state.step).toBe('pick_size');
     expect(w.builder.phase).toBe('setup');
   });
 
-  it("Megy's own ← Previous on the cover lands on the size step and stays", () => {
-    const w = walkTo('design_cover');
+  it('the same with photos in (Step 3: Photos Uploaded)', () => {
+    const w = walkTo('upload_photos', builderStub({ albumPages: unbuilt, uploadedPhotos: photos } as unknown as Partial<BuilderActions>));
     w.back();
     expect(screenFollows(w)).toBe(false);
     expect(w.state.step).toBe('pick_size');
   });
 
+  it("the cover editor's ← Back lands on the photos step and STAYS", () => {
+    const w = walkTo('design_cover');
+    // Builder.tsx writes the store (step upload_photos, phase edit); the
+    // panel's sync moves the engine back to it, then the phase change reconciles.
+    w.state.step = 'upload_photos';
+    expect(screenFollows(w)).toBe(false); // was: design_cover again (completed has upload_photos)
+    expect(w.state.step).toBe('upload_photos');
+    expect(w.reconcileForward()).toBe(false);
+    expect(w.state.step).toBe('upload_photos');
+    expect(w.builder.phase).toBe('edit');
+  });
+
+  it('back() on the cover lands on the photos step and stays', () => {
+    const w = walkTo('design_cover');
+    w.back();
+    expect(screenFollows(w)).toBe(false);
+    expect(w.state.step).toBe('upload_photos');
+  });
+
   it('← Previous walks back one step at a time, all the way to welcome, and each one stays', () => {
-    const w = walkTo('upload_photos');
-    for (let i = WIZARD_ORDER.indexOf('upload_photos') - 1; i >= 0; i--) {
+    const w = walkTo('design_cover');
+    for (let i = WIZARD_ORDER.indexOf('design_cover') - 1; i >= 0; i--) {
       w.back();
       expect(screenFollows(w), WIZARD_ORDER[i]).toBe(false);
       expect(w.state.step).toBe(WIZARD_ORDER[i]);
@@ -477,25 +488,25 @@ describe('← Previous stays where the customer went (2026-10-02)', () => {
   });
 
   it('after going back, the forward buttons walk forward again', () => {
-    const w = walkTo('upload_photos');
+    const w = walkTo('design_cover');
     w.back();
     screenFollows(w);
-    w.advance(); // the cover's "Continue to photos →"
+    w.advance(); // the photos step's "Next: pick your cover →"
     expect(screenFollows(w)).toBe(false);
-    expect(w.state.step).toBe('upload_photos');
+    expect(w.state.step).toBe('design_cover');
     // Back and forth leaves each step complete ONCE in the saved journey.
-    expect(w.state.completed).toEqual(['welcome', 'pick_theme', 'pick_size', 'design_cover']);
+    expect(w.state.completed).toEqual(['welcome', 'pick_theme', 'pick_size', 'upload_photos']);
   });
 
   it('a reload after going back opens the step the customer went back to', () => {
-    const toCover = walkTo('upload_photos');
-    toCover.back();
-    screenFollows(toCover);
-    // The completed flags still say the cover is done — the saved STEP wins.
-    expect(toCover.state.completed).toContain('design_cover');
-    expect(bootWizard(fresh(), toCover.serialize()).engine.state.step).toBe('design_cover');
+    const toPhotos = walkTo('design_cover');
+    toPhotos.back();
+    screenFollows(toPhotos);
+    // The completed flags still say the photos are done — the saved STEP wins.
+    expect(toPhotos.state.completed).toContain('upload_photos');
+    expect(bootWizard(fresh(), toPhotos.serialize()).engine.state.step).toBe('upload_photos');
 
-    const toSize = walkTo('design_cover');
+    const toSize = walkTo('upload_photos');
     toSize.back();
     screenFollows(toSize);
     expect(bootWizard(fresh(), toSize.serialize()).engine.state.step).toBe('pick_size');
@@ -514,23 +525,21 @@ describe('← Previous stays where the customer went (2026-10-02)', () => {
     expect(w.state.step).toBe('pick_theme');
   });
 
-  it('a BUILT album: Review → ← Previous → upload → ← Previous opens the cover and stays; Next returns to Review', () => {
+  it('a BUILT album: Review → ← Previous opens the cover and stays → its ← Back opens the photos and stays; Keep my pages returns to Review, past the cover', () => {
     const w = new WizardEngine(generated(), false);
     expect(w.reconcileForward()).toBe(true); // the boot (#39)
     expect(w.state.step).toBe('review_pages');
     w.back();
-    expect(screenFollows(w)).toBe(false);
-    expect(w.state.step).toBe('upload_photos');
-    w.back();
     expect(screenFollows(w)).toBe(false); // was: review_pages (the album "is" reality)
     expect(w.state.step).toBe('design_cover');
-    w.advance(); // Continue to photos →
+    w.state.step = 'upload_photos'; // the cover's ← Back (Builder.tsx writes the store)
     expect(screenFollows(w)).toBe(false);
     expect(w.state.step).toBe('upload_photos');
-    expect(w.hasBuiltAlbum()).toBe(true); // → the upload card shows Next
-    w.advance(); // Next → (no rebuild)
+    expect(w.hasBuiltAlbum()).toBe(true); // → the upload card shows "Keep my pages →"
+    w.advance(); // Keep my pages → (no rebuild): a made album skips the cover step
     expect(screenFollows(w)).toBe(false);
     expect(w.state.step).toBe('review_pages');
+    expect(w.state.completed).toContain('design_cover');
   });
 
   it('reality still moves the journey on: the preview opened, an album built, a saved album loaded', () => {
@@ -567,16 +576,16 @@ describe('← Previous stays where the customer went (2026-10-02)', () => {
 });
 
 describe('the Style step is gone (owner, 2026-09-14)', () => {
-  it('seven steps; the cover hands straight to photos', () => {
-    expect(WIZARD_ORDER).toEqual(['welcome', 'pick_theme', 'pick_size', 'design_cover', 'upload_photos', 'review_pages', 'add_text', 'finalize']);
-    expect(WIZARD_ORDER.length - 1).toBe(7);
+  it('four steps, ending on the cover; the photos hand straight to the cover (tester, 2026-10-27)', () => {
+    expect(GUIDE_STEPS).toEqual(['pick_theme', 'pick_size', 'upload_photos', 'design_cover']);
+    expect(WIZARD_ORDER).toEqual(['welcome', ...GUIDE_STEPS, 'review_pages', 'finalize']);
     const w = new WizardEngine(builderStub(), false);
-    w.state.completed = ['welcome', 'pick_theme', 'pick_size', 'design_cover'];
+    w.state.completed = ['welcome', 'pick_theme', 'pick_size', 'upload_photos'];
     store[ALBUM_THEME_KEY] = 'Wedding';
-    expect(w.detectStep()).toBe('upload_photos');
-    w.state.step = 'design_cover';
+    expect(w.detectStep()).toBe('design_cover');
+    w.state.step = 'upload_photos';
     w.advance();
-    expect(w.state.step).toBe('upload_photos');
+    expect(w.state.step).toBe('design_cover');
     expect(w.getMessage().title).toMatch(/^Step 4/);
   });
 });
@@ -628,28 +637,31 @@ describe('one way forward on every guided screen (tester, 2026-10-04)', () => {
     expect(w.getMessage().actions.every((a) => / photos per page$/.test(a))).toBe(true);
     // The pick advances (handleWizardAction: change_size, then advance()).
     w.advance();
-    expect(w.state.step).toBe('design_cover');
-    // Back from the cover, the size is chosen: Next keeps it.
+    expect(w.state.step).toBe('upload_photos');
+    // Back from the photos, the size is chosen: Next keeps it.
     w.back();
     expect(w.state.step).toBe('pick_size');
     expect(w.showsNext()).toBe(true);
   });
 
-  it('Step 4 with no photos: "Upload Photos" is the way on, filled — and no Next', () => {
+  it('Step 3 with no photos: "Upload Photos" is the way on, filled — and no Next', () => {
     const w = on('upload_photos');
     expect(w.showsNext()).toBe(false);
     expect(primaries(w)).toEqual(['Upload Photos']);
   });
 
-  it('Step 4 with 40 photos in: "Generate Album →" is the one filled button', () => {
+  it('Step 3 with 40 photos in: "Next: pick your cover →" is the one filled button (the cover makes the album)', () => {
     const forty = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}` }));
     const w = on('upload_photos', fresh({ uploadedPhotos: forty } as unknown as Partial<BuilderActions>));
     expect(w.showsNext()).toBe(false);
-    expect(primaries(w)).toEqual(['Generate Album →']);
+    expect(primaries(w)).toEqual(['Next: pick your cover →']);
+    expect(w.getMessage().actions).not.toContain('Generate Album →');
     expect(isPrimaryAction('Upload More Photos')).toBe(false);
+    w.advance(); // the filled button
+    expect(w.state.step).toBe('design_cover');
   });
 
-  it('Step 4 short of 40 (hard gate, owner 2026-10-04): no Generate — "Add 37 more photos" is the one filled button', () => {
+  it('Step 3 short of 40 (hard gate, owner 2026-10-04): no way to the cover — "Add 37 more photos" is the one filled button', () => {
     const w = on('upload_photos', fresh({ uploadedPhotos: photos } as unknown as Partial<BuilderActions>));
     expect(w.getMessage().actions).toEqual(['Add 37 more photos']);
     expect(primaries(w)).toEqual(['Add 37 more photos']);
@@ -661,7 +673,7 @@ describe('one way forward on every guided screen (tester, 2026-10-04)', () => {
     expect(isPrimaryAction('Add 1 more photo')).toBe(true);
   });
 
-  it('Step 4 with a built album and its photos: "Keep my pages →" is the one way on; making it again is a plain choice (round 3)', () => {
+  it('Step 3 with a built album and its photos: "Keep my pages →" is the one way on; making it again is a plain choice (round 3)', () => {
     const forty = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}` }));
     const w = new WizardEngine(builderStub({ phase: 'edit', albumPages: built, uploadedPhotos: forty } as unknown as Partial<BuilderActions>), false);
     w.state.step = 'upload_photos';
@@ -670,10 +682,12 @@ describe('one way forward on every guided screen (tester, 2026-10-04)', () => {
     expect(w.showsNext()).toBe(false);
   });
 
-  it('Step 4 with a built album short of photos (some left out since): Next returns to it', () => {
+  it('Step 3 with a built album short of photos (some left out since): Next returns to it, past the cover', () => {
     const w = new WizardEngine(builderStub({ phase: 'edit', albumPages: built, uploadedPhotos: photos } as unknown as Partial<BuilderActions>), false);
     w.state.step = 'upload_photos';
     expect(w.showsNext()).toBe(true);
+    w.advance();
+    expect(w.state.step).toBe('review_pages');
   });
 
   it('before the album is built, every screen offers exactly one way on', () => {
@@ -690,7 +704,8 @@ describe('one way forward on every guided screen (tester, 2026-10-04)', () => {
 
 describe('one way forward after the album too: cover, Review, Preview (owner, 2026-10-04)', () => {
   /* The same eager tapper further on. On the cover, Megy's ← Previous / Next →
-     repeated the cover's own "← Back" / "Continue to photos →". On Review,
+     repeated the cover's own "← Back" / "Continue to photos →" (now "Make my
+     album →", the cover comes after the photos). On Review,
      Megy's Next → sat beside "Next page ›" under the page and jumped past
      every page to Step 6. On Preview & Order Megy showed a greyed Next → —
      the same dead tap that left the first tester stuck. */
@@ -708,29 +723,32 @@ describe('one way forward after the album too: cover, Review, Preview (owner, 20
     return w;
   };
 
-  it('the cover: Megy shows neither ← Previous nor Next → — the cover has its own ← Back and Continue', () => {
+  it('the cover: Megy shows neither ← Previous nor Next → — the cover has its own ← Back and filled button', () => {
     const w = at('design_cover');
     expect(w.showsNext()).toBe(false);
     expect(w.showsPrevious()).toBe(false);
-    expect(w.getMessage().body).toContain('**Continue to photos**');
+    expect(w.getMessage().body).toContain('**1 photo**');
+    // A made album: the cover's button goes back to the pages, so Megy
+    // doesn't say "Make my album" (that would make it again).
+    expect(w.getMessage().body).not.toContain('Make my album');
   });
 
-  it('Review: no Next → (it skipped every page to Step 6); ← Previous stays', () => {
+  it("the made album's pages: no Next → (it skipped every page to the old Step 6); ← Previous stays, the way back to the steps", () => {
     const w = at('review_pages');
     expect(w.showsNext()).toBe(false);
     expect(w.showsPrevious()).toBe(true);
   });
 
-  it('Review: Megy points at "Next page", not at ‹ › arrows (they are words since #50)', () => {
+  it("the made album's pages: Megy points at the screen's own Done, not at ‹ › arrows (they are words since #50)", () => {
     const body = at('review_pages').getMessage().body;
-    expect(body).toContain('**Next page**');
+    expect(body).toContain('**Done**');
     expect(body).not.toMatch(/‹|›|arrows/);
   });
 
-  it('Preview & Order: no greyed Next → — there is nothing after it', () => {
+  it('Preview: no greyed Next → (there is nothing after it), and no ← Previous (Preview has its own Edit pages)', () => {
     const w = at('finalize', generated('preview'));
     expect(w.showsNext()).toBe(false);
-    expect(w.showsPrevious()).toBe(true);
+    expect(w.showsPrevious()).toBe(false);
   });
 
   it('no step shows a Next that does nothing: wherever it shows, a tap moves the journey on', () => {
@@ -748,7 +766,7 @@ describe("Megy's photo check: left-out photos don't count (2026-10-04)", () => {
     const photos = [{ id: 'a' }, { id: 'b', leftOut: true }, { id: 'c' }, { id: 'd', leftOut: true }];
     const w = new WizardEngine(builderStub({ uploadedPhotos: photos } as unknown as Partial<BuilderActions>), false);
     w.state.step = 'upload_photos';
-    expect(w.getMessage().title).toBe('Step 4: Photos Uploaded (2) 📸');
+    expect(w.getMessage().title).toBe('Step 3: Photos Uploaded (2) 📸');
     expect(w.getMessage().body).toContain('You have **2** photos');
     expect(w.getMessage().body).toContain('add **38 more**');
   });

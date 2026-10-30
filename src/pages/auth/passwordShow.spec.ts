@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, createElement, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 
@@ -96,6 +97,8 @@ describe('PasswordInput', () => {
 });
 
 describe('every password box in the app has the eye', () => {
+  // The dialogs link to pages (the Terms line in Sign up), as in the app.
+  const inRouter = (el: ReturnType<typeof createElement>) => createElement(MemoryRouter, null, el);
   const checkEye = (id: string) => {
     const input = box(id);
     expect(input, id).not.toBeNull();
@@ -107,13 +110,13 @@ describe('every password box in the app has the eye', () => {
   };
 
   it('Sign in', () => {
-    act(() => { root.render(createElement(LoginModal, { isOpen: true, onClose: vi.fn(), onSwitchToSignup: vi.fn() })); });
+    act(() => { root.render(inRouter(createElement(LoginModal, { isOpen: true, onClose: vi.fn(), onSwitchToSignup: vi.fn() }))); });
     checkEye('login-password');
     expect(box('login-password').autocomplete).toBe('current-password');
   });
 
   it('Sign up: Password and Confirm Password, each with its own eye', () => {
-    act(() => { root.render(createElement(SignupModal, { isOpen: true, onClose: vi.fn(), onSwitchToLogin: vi.fn() })); });
+    act(() => { root.render(inRouter(createElement(SignupModal, { isOpen: true, onClose: vi.fn(), onSwitchToLogin: vi.fn() }))); });
     checkEye('signup-password');
     checkEye('signup-confirm');
     tap(eyeFor('signup-password'));
@@ -122,7 +125,7 @@ describe('every password box in the app has the eye', () => {
   });
 
   it('"Make a new password" (from the emailed link) keeps its eye, and focus still starts in the box', () => {
-    act(() => { setRecoveryState('ready'); root.render(createElement(NewPasswordModal, { onAskForNewLink: vi.fn() })); });
+    act(() => { setRecoveryState('ready'); root.render(inRouter(createElement(NewPasswordModal, { onAskForNewLink: vi.fn() }))); });
     checkEye('new-password');
     expect(box('new-password').hasAttribute('data-autofocus')).toBe(true);
     expect(box('new-password').autocomplete).toBe('new-password');

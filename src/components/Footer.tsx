@@ -12,26 +12,16 @@ const SOCIAL_LINKS: { label: string; href: string; icon: LucideIcon }[] = [
 
 const quickLinks = [
   { label: 'Home', path: '/' },
-  { label: 'Templates', path: '/templates' },
   { label: 'Events', path: '/events' },
   { label: 'About', path: '/about' },
   { label: 'Contact', path: '/contact' },
-];
-
-const templateLinks = [
-  { label: 'Graduation', path: '/templates' },
-  { label: 'Elegant', path: '/templates' },
-  { label: 'Minimalist', path: '/templates' },
-  { label: 'Kids Theme', path: '/templates' },
-  { label: 'Modern', path: '/templates' },
-  { label: 'Family Album', path: '/templates' },
 ];
 
 export default function Footer() {
   return (
     <footer className="bg-charcoal text-white">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 lg:px-16 pt-16 pb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 lg:gap-8">
           {/* Column 1: Brand */}
           <div>
             <Link to="/" className="flex items-center gap-0.5 select-none mb-4">
@@ -77,26 +67,7 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Column 3: Templates */}
-          <div>
-            <h4 className="font-body text-sm font-semibold uppercase tracking-wider mb-4">
-              Templates
-            </h4>
-            <ul className="space-y-2.5">
-              {templateLinks.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    to={link.path}
-                    className="font-body text-sm text-light hover:text-white transition-colors duration-200"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Column 4: Contact */}
+          {/* Column 3: Contact */}
           <div>
             <h4 className="font-body text-sm font-semibold uppercase tracking-wider mb-4">
               Contact
@@ -117,6 +88,17 @@ export default function Footer() {
         <div className="border-t border-medium mt-12 pt-6">
           <p className="font-body text-sm text-light text-center">
             &copy; {new Date().getFullYear()} Megy Prints. All rights reserved.
+          </p>
+          {/* Google Play wants the privacy policy reachable inside the app too;
+              the app shows this footer (owner, 2026-10-28). The terms sit
+              beside it (a tester, 2026-10-31). */}
+          <p className="mt-2 flex flex-wrap justify-center gap-x-5 gap-y-1">
+            <Link to="/privacy" className="font-body text-sm text-white underline underline-offset-2 hover:text-peach transition-colors duration-200" data-testid="footer-privacy">
+              Privacy Policy
+            </Link>
+            <Link to="/terms" className="font-body text-sm text-white underline underline-offset-2 hover:text-peach transition-colors duration-200" data-testid="footer-terms">
+              Terms of Service
+            </Link>
           </p>
         </div>
       </div>

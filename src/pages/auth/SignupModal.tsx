@@ -5,6 +5,7 @@ import { useAuth } from '../../lib/authContext';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { hasAccountProblem } from '../../lib/accountErrors';
 import type { HasAccount } from '../../lib/accountErrors';
+import TermsAgreeLine from '../../components/TermsAgreeLine';
 import { PasswordInput } from './PasswordInput';
 
 // =============================================================================
@@ -349,6 +350,7 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                     </button>
                   </>
                 ) : !linkSent && (
+                <>
                 <button
                   type="submit"
                   disabled={loading || !!successMessage}
@@ -361,6 +363,9 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                   )}
                   {loading ? 'Creating account...' : 'Create Account'}
                 </button>
+                {/* The Terms open on their own page: the form closes first. */}
+                <TermsAgreeLine by="creating an account" onOpen={onClose} />
+                </>
                 )}
 
                 {/* "Check your email": a mistyped address is fixed here. */}

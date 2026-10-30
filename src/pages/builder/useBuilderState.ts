@@ -32,6 +32,7 @@ import { isLookId, type LookId } from './looks';
 import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
 import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
+import { withPhotoOnLastPage } from './lastPagePhoto';
 import { ensureThemeQuotes, currentAlbumTheme } from '../../lib/quotes';
 // ── Phase 1: Cloud imports ──
 import { useAuth } from '../../lib/authContext';
@@ -892,6 +893,15 @@ export interface BuilderActions {
    *  the device's photo store, so the cover still has it after the app is
    *  closed (coverPhoto). Resolves once it is on the cover. */
   setCoverPhoto: (file: File) => Promise<void>;
+  /** COVER: one of the album's photos on the cover, as a tap on it in the
+   *  cover step puts it (testing phase: the sample album's cover), and the
+   *  title in a colour, as the cover editor's colours set it. `title`: the
+   *  title's font, side, style, size or shadow, as the cover editor sets them
+   *  (testing phase: Today's test, lib/dailyTest). */
+  setCoverToPhoto: (photoId: string, opts?: { titleColor?: string; title?: Partial<TextElement> }) => void;
+  /** One of the album's photos onto its last page, trading places with the
+   *  photo there (testing phase: the sample album's "end of the day" photo). */
+  putPhotoOnLastPage: (photoId: string) => void;
   /** COVER-only: reposition/zoom an image background (focal point + zoom). */
   setBackgroundCrop: (crop: { focusX?: number; focusY?: number; zoom?: number }) => void;
   /** COVER-only: move a bound caption off its template slot (panel fractions). */
@@ -2258,6 +2268,10 @@ export function useBuilderState(): BuilderActions {
       setAlbumSizeState(size);
       setCoverFrontPage((c) => ({ ...c, size }));
     }
+    // When this album was made, saved on its pages so a reload or another
+    // phone shows the same time: the testers' stamp (testingPhase).
+    const madeAt = Date.now();
+    newPages = newPages.map((p) => ({ ...p, madeAt }));
     setAlbumPages(newPages);
     setCurrentPageIndex(0);
     return { made: true, ...(memories ? { memories } : {}) };
@@ -3348,6 +3362,24 @@ export function useBuilderState(): BuilderActions {
     setCoverFrontPage((p) => recolorPage(p, hex));
   }, []);
 
+  const setCoverToPhoto = useCallback((photoId: string, opts?: { titleColor?: string; title?: Partial<TextElement> }) => {
+    const photo = uploadedPhotosRef.current.find((p) => p.id === photoId);
+    if (!photo) return;
+    const titleColor = opts?.titleColor;
+    const look: Partial<TextElement> = { ...(opts?.title ?? {}), ...(titleColor ? { color: titleColor } : {}) };
+    setCoverFrontPage((p) => ({
+      ...p,
+      background: { type: 'image', image: photo.previewUrl, photoId: photo.id, opacity: 100 },
+      ...(Object.keys(look).length ? { textElements: (p.textElements ?? []).map((t) => (t.boxIndex === 0 ? { ...t, ...look } : t)) } : {}),
+    }));
+  }, []);
+
+  const putPhotoOnLastPage = useCallback((photoId: string) => {
+    const index = uploadedPhotosRef.current.findIndex((p) => p.id === photoId);
+    if (index < 0) return;
+    setAlbumPages((prev) => withPhotoOnLastPage(prev, index));
+  }, []);
+
   const setCoverPhoto = useCallback(async (picked: File) => {
     // An iPhone photo (HEIC) becomes a JPEG first (Chrome can't show a HEIC);
     // one that can't be opened leaves the cover as it is.
@@ -3964,6 +3996,8 @@ export function useBuilderState(): BuilderActions {
     setPageColor,
     applyPageColorToAllPages,
     setCoverPhoto,
+    setCoverToPhoto,
+    putPhotoOnLastPage,
     setBackgroundCrop,
     setBoxTextOffset,
     updateBackgroundTransform,

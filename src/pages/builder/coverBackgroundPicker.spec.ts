@@ -57,7 +57,10 @@ describe('CoverEditor: tapping Background opens the file browser', () => {
   it('owns a hidden image file input', () => {
     expect(src).toMatch(/type="file"[^>]*accept="image\/\*"|accept="image\/\*"[^>]*type="file"/);
   });
-  it('the Background tab opens it', () => {
-    expect(src).toMatch(/t\.key === 'background'[\s\S]{0,120}bgFileRef\.current\?\.click\(\)/);
+  // With the album's photos listed (the cover comes after the photos), the
+  // tab shows them instead and "Or choose a photo from your phone" opens it
+  // (coverStep.spec).
+  it('the Background tab opens it when the album has no photos yet', () => {
+    expect(src).toMatch(/t\.key === 'background' && coverPhotos\.length === 0\) bgFileRef\.current\?\.click\(\)/);
   });
 });

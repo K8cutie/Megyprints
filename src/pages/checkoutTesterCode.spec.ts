@@ -21,7 +21,9 @@ const h = vi.hoisted(() => ({
   check: { ok: true, tester: { code: 'MEGYTEST' } } as unknown,
   codeGone: false,
   placed: null as Record<string, unknown> | null,
+  native: false,
 }));
+vi.mock('../lib/nativeShell', () => ({ isNativeShell: () => h.native }));
 vi.mock('../lib/authContext', () => ({ useAuth: () => h.auth }));
 vi.mock('../components/AuthModalProvider', () => ({ useAuthModal: () => ({ openLogin: vi.fn() }) }));
 vi.mock('../lib/printJobRebuild', () => ({ rebuildPrintJobFromAlbum: async () => h.job }));
@@ -77,7 +79,7 @@ beforeEach(() => {
   clearPendingPrintJob();
   window.scrollTo = (() => {}) as typeof window.scrollTo;
   Element.prototype.scrollIntoView = () => {};
-  h.steps = []; h.orders = []; h.checks = []; h.codeGone = false; h.placed = null;
+  h.steps = []; h.orders = []; h.checks = []; h.codeGone = false; h.placed = null; h.native = false;
   h.check = { ok: true, tester: { code: 'MEGYTEST' } };
   h.job = { albumId: 'album-1', albumSize: '6x6', pages: Array.from({ length: 41 }, (_, i) => page(i)), photos, coverFront: { ...page(99), id: 'cover', slotFills: [null] } };
   noteOrderHandoff({ albumId: 'album-1', saved: true });
@@ -138,6 +140,26 @@ describe('a tester code that makes the album free', () => {
     expect($('order-tracker')).toBeNull();
     expect(host.textContent).not.toMatch(/printing soon|Printing your album|Sent to print|paid for this album/);
     expect(host.textContent).toContain('Your orders');
+  });
+
+  /* Owner, 2026-10-28: a tester who went through the whole app is asked where
+     to leave feedback on Google Play (PlayFeedbackCard), in the app only. */
+  it('in the app, the test order thank-you says where to leave feedback on Google Play', async () => {
+    h.native = true;
+    await open();
+    await useCode('MEGYTEST');
+    await click('order-place');
+    expect($('order-test-note')).not.toBeNull();
+    expect($('play-feedback-open')?.getAttribute('href')).toBe('https://play.google.com/store/apps/details?id=com.megyprints.app');
+    expect($('play-feedback-steps')?.textContent).toContain('Private feedback to developer');
+  });
+
+  it('on the website, the test order thank-you has no Google Play box', async () => {
+    await open();
+    await useCode('MEGYTEST');
+    await click('order-place');
+    expect($('order-test-note')).not.toBeNull();
+    expect($('play-feedback')).toBeNull();
   });
 
   it('the order row decides too: a test order stays a test order when this tab forgot the code', async () => {

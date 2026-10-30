@@ -103,12 +103,13 @@ export const HOW_IT_WORKS: { title: string; desc: string }[] = [
     desc: 'Pick your album size. Bigger albums fit more photos on a page.',
   },
   {
-    title: 'Cover',
-    desc: 'Put a title on the front cover. You can skip it and come back later.',
-  },
-  {
     title: 'Photos',
     desc: `Add ${MIN_ALBUM_PHOTOS} or more and Megy lays them out into pages. Your photos stay on your device until you order. If you ask Megy to write a line for a photo, a small copy is sent to do it.`,
+  },
+  {
+    // After the photos, like the builder (wizard WIZARD_ORDER).
+    title: 'Cover',
+    desc: 'Tap 1 of your photos for the front cover. Your album’s name is the title, and you can change it.',
   },
   {
     title: 'Review',

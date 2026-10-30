@@ -6,7 +6,6 @@ import AuthNav from './AuthNav';
 
 const navLinks = [
   { label: 'Home', path: '/' },
-  { label: 'Templates', path: '/templates' },
   { label: 'Events', path: '/events' },
   { label: 'About', path: '/about' },
   { label: 'Contact', path: '/contact' },
@@ -159,6 +158,22 @@ export default function Navbar() {
               >
                 Get Started
               </Link>
+            </motion.div>
+            {/* The privacy policy and the terms, one tap from the app's menu (Google Play). */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ delay: 0.48, duration: 0.3 }}
+            >
+              <span className="flex flex-wrap justify-center gap-x-5 gap-y-1">
+                <Link to="/privacy" className="font-body text-sm text-medium underline underline-offset-2" data-testid="menu-privacy">
+                  Privacy Policy
+                </Link>
+                <Link to="/terms" className="font-body text-sm text-medium underline underline-offset-2" data-testid="menu-terms">
+                  Terms of Service
+                </Link>
+              </span>
             </motion.div>
           </motion.div>
         )}

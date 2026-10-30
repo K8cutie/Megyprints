@@ -63,9 +63,8 @@ npm run build
 
 | Page | Route | Description |
 |------|-------|-------------|
-| Home | `/` | Landing page with hero, features, how-it-works, templates preview, testimonials |
-| Templates | `/#/templates` | Browse all 6 album templates with category filters |
-| Builder | `/#/builder` | Core app — upload photos, pick template, edit album, preview |
+| Home | `/` | Landing page with hero, features, how-it-works |
+| Builder | `/#/builder` | Core app — name & occasion, size, cover, photos, edit album, preview |
 | Order | `/#/order` | Select materials/size, see live price, submit order |
 | About | `/#/about` | Business story, values, process timeline |
 | Contact | `/#/contact` | Contact form, FAQ |

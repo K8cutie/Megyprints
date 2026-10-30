@@ -4,6 +4,12 @@
 // is unreachable (local dev has no /api), we fall back to the curated corpus in
 // builder/themeQuotes.ts — so the feature always produces something for $0.
 //
+// /api/theme-quotes WAS DELETED 2026-10-27 (security audit: no sign-in, no
+// daily cap, and nothing called it while DEAL_BANK_QUOTES is off). With the
+// bank switched back on, every call here gets a 404 and the curated corpus is
+// used. To bring the AI lines back, rebuild the endpoint signed-in only with a
+// database cap, like api/photo-quotes.mjs.
+//
 // Caching contract: the SAME theme text always yields the SAME quotes, cached
 // per device, so a paid call happens at most once per theme rather than once
 // per page. (The sunset clipart pipeline used the same contract.)
