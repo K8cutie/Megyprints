@@ -20,6 +20,8 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
    it folds up when the screen turns to Preview; and in the app's daily test
    "You're done" never opens under it. The desktop side panel's ✕ still
    hides the steps. These walk the REAL Builder and Megy's panel.
+   (2026-10-30, later: Megy's guide now ends at Make my album, so on Preview
+   her card is the short "Your album is made" one; Step 7 is gone.)
    ══════════════════════════════════════════════════════════════════════════ */
 
 const h = vi.hoisted(() => ({ ctx: null as unknown, native: false }));
@@ -100,6 +102,8 @@ const isOpen = () => !megyButton() && !!document.querySelector('button[aria-labe
 /** The panel's grab handle (full width; not the desktop rail's own "Expand Megy" arrow). */
 const handleEl = () => document.querySelector('button.w-full[aria-label="Collapse Megy"], button.w-full[aria-label="Expand Megy"]') as HTMLElement | null;
 const button = (label: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === label) ?? null;
+/** Megy's card in the open panel (after the guide: "Your album is made"). */
+const card = () => document.querySelector('[data-testid="megy-card"]');
 async function tap(el: Element | null) {
   expect(el).not.toBeNull();
   await act(async () => { (el as HTMLElement).click(); });
@@ -157,7 +161,7 @@ describe("Megy's panel on a phone: the ✕", () => {
     await tap(megyButton());
     expect(isOpen()).toBe(true);
     expect(megyButton()).toBeNull();
-    expect(button('Place Order →')).not.toBeNull(); // Step 7's card
+    expect(card()?.textContent).toContain('You finished all 4 steps'); // her card (the heading types itself out), not a blank panel
     await tap(document.querySelector('button[aria-label="Close Megy"]'));
     expect(isOpen()).toBe(false);
     expect(megyButton()).not.toBeNull();
@@ -165,14 +169,14 @@ describe("Megy's panel on a phone: the ✕", () => {
     expect(document.querySelector('[data-testid="megy-show-steps"]')).toBeNull();
     await tap(megyButton());
     expect(isOpen()).toBe(true);
-    expect(button('Place Order →')).not.toBeNull();
+    expect(card()?.textContent).toContain('You finished all 4 steps');
   });
 
   it('a journey saved with the steps hidden (the old ✕) still opens on her card, never a blank panel', async () => {
     await open(builderOn('preview'), { dismissed: true });
     await tap(megyButton());
     expect(isOpen()).toBe(true);
-    expect(button('Place Order →')).not.toBeNull();
+    expect(card()?.textContent).toContain('You finished all 4 steps');
     expect(document.querySelector('[data-testid="megy-show-steps"]')).toBeNull();
   });
 
@@ -259,15 +263,13 @@ describe('Megy never stays open over Preview', () => {
     expect(megyButton()).not.toBeNull();
   });
 
-  it('Step 7\'s "Preview Full Album" and "← Edit pages" fold her up, so the screen they open shows', async () => {
+  it('on Preview her card has no screen buttons of its own: the old Step 7 "Preview Full Album", "← Edit pages" and "Place Order →" are gone (Preview has Edit pages and Order)', async () => {
     const ctx = builderOn('preview');
     await open(ctx);
-    for (const label of ['Preview Full Album', '← Edit pages']) {
-      await tap(megyButton());
-      expect(isOpen()).toBe(true);
-      await tap(button(label));
-      expect(isOpen()).toBe(false);
-    }
+    await tap(megyButton());
+    expect(isOpen()).toBe(true);
+    for (const label of ['Preview Full Album', '← Edit pages', 'Save to Cloud', 'Place Order →', '← Previous', 'Next →']) expect(button(label), label).toBeNull();
+    expect(card()!.querySelectorAll('button')).toHaveLength(0);
   });
 });
 

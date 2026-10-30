@@ -34,6 +34,7 @@ whose notes list it.
 | 2026-10-29 | Owner test | the daily test should read like a tutorial | The daily test reads as a daily lesson: Try it cards, a coach mark in the album, lessons and features tried so far (#230) | on merge | 1.4.2 |
 | 2026-10-29 | Owner test | "Can we call it User tutorial instead of sample album" | Testers see "User tutorial" where it said "sample album": "Start the User tutorial" on Home and Step 1, and the lesson screen is "User tutorial", "Today's lesson" (#230) | on merge | 1.4.2 |
 | 2026-10-30 | Tester | "Hi this overlay is not closing even tho clicking on close cross make it blank but not completely closes and i can't drag it up to close it even" | On a phone, Megy's panel closes: the ✕ closes the whole panel (before, it hid only the card and left the panel open and blank), dragging its handle up or down closes it, and Back closes it first. It no longer stays open into Preview, so it never covers "You finished today's lesson!" (#231) | on merge | 1.4.2 |
+| 2026-10-30 | Owner test | Megy's old steps 5–7 repeat on-screen buttons and caused a tester bug; the chat box takes space on phones | The guide ends at Make my album (4 steps); on phones the chat is behind an Ask Megy link (#232) | on merge | 1.4.2 |
 
 ## App versions on the Alpha track
 

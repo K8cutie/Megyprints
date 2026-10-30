@@ -231,8 +231,8 @@ export default function Builder() {
   }, [actions, navigate]);
   const dismissOrderError = useCallback(() => setOrderError(null), []);
 
-  // Megy's "Place Order →" (Step 7) orders through the SAME door as the
-  // preview's own Order button: it asks the preview to run its handleOrder
+  // "Place order" typed in Megy's chat (and "Order this album again") orders
+  // through the SAME door as the preview's own Order button: it asks the preview to run its handleOrder
   // (the 40-photo check, the album's print job, then the save + checkout
   // above). Going to /order straight from Megy would skip the check and let
   // checkout read a stale or missing print job.

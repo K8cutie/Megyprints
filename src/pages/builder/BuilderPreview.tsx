@@ -69,7 +69,8 @@ interface BuilderPreviewProps {
   /** Why the album could not go to checkout (the save failed). */
   orderError?: string | null;
   onDismissOrderError?: () => void;
-  /** Megy's "Place Order →" asked to order (Builder.requestOrder). */
+  /** Asked to order from outside the preview (Builder.requestOrder): "place
+   *  order" in Megy's chat, or "Order this album again" from Your orders. */
   orderRequested?: boolean;
   /** The preview took the request: it runs once, through handleOrder. */
   onOrderRequestTaken?: () => void;
@@ -1128,10 +1129,10 @@ export default function BuilderPreview({ pages, currentIndex, photos, albumSize,
 
   const currentPage = pages[currentIndex];
 
-  // Megy's "Place Order →" (Step 7) lands here and orders exactly like the
-  // Order button above: through handleOrder, the one way to order. It was a
-  // filled button that did nothing. Taken first, so a re-render or a later
-  // visit to the preview never orders again.
+  // An order asked from outside the preview ("place order" in Megy's chat,
+  // "Order this album again") lands here and orders exactly like the Order
+  // button above: through handleOrder, the one way to order. Taken first, so
+  // a re-render or a later visit to the preview never orders again.
   useEffect(() => {
     if (!orderRequested) return;
     onOrderRequestTaken?.();
