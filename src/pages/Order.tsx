@@ -39,6 +39,7 @@ import { amountToPay, claimTesterOrder, testerLine, TesterCodeGoneError, type Te
 import TesterCodeBox from '../components/TesterCodeBox';
 import PlayFeedbackCard from '../components/PlayFeedbackCard';
 import PlaceOrderProgress from '../components/PlaceOrderProgress';
+import TermsAgreeLine from '../components/TermsAgreeLine';
 import { PLACE_AT, forward, pagesAt, pagesLabel, videosAt, type PlaceProgress } from '../lib/placeProgress';
 import { keepScreenOn } from '../lib/keepScreenOn';
 
@@ -1368,6 +1369,7 @@ export default function Order() {
                   {tooFewToOrderMessage(jobPhotos!)}
                 </div>
               ) : (
+              <>
               <button onClick={priceReady ? handleProceedToPayment : (settingsReady && albumInfo !== 'loading' ? retryPrices : undefined)}
                 disabled={submitting || (!priceReady && (!settingsReady || albumInfo === 'loading' || retryingPrices))}
                 data-testid="order-place"
@@ -1381,6 +1383,9 @@ export default function Order() {
                       : retryingPrices ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
                         : <>Prices didn't load — tap to try again</>}
               </button>
+              {/* Back from the Terms brings the form back as typed (saveCheckoutForm). */}
+              <TermsAgreeLine by="placing an order" className="mt-2" />
+              </>
               )}
               {submitting && placing && <PlaceOrderProgress progress={placing} />}
               {askSecond && openOrder && (
