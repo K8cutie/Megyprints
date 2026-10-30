@@ -1,4 +1,5 @@
 import type { WizardStep } from '../../assistant/wizard';
+import { DATE_STAMP_ID, keepStampsOffQr, type StampStyle } from '../../assistant/dateStamp';
 import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import type {
   AlbumSizePreset,
@@ -860,8 +861,10 @@ export interface BuilderActions {
 
   // Text
   /** New text centred on (x, y) (default: the page's centre), made smaller
-   *  to fit; nothing is added when it can't fit at all. */
-  addTextElement: (x?: number, y?: number, text?: string) => AddedText;
+   *  to fit; nothing is added when it can't fit at all. `placed` puts it
+   *  exactly there, as free text in that style (Megy's date stamp in a photo
+   *  corner, assistant/dateStamp.ts), never in an empty caption box. */
+  addTextElement: (x?: number, y?: number, text?: string, placed?: StampStyle | null) => AddedText;
   /** Place a themed quote in the current page's free space; returns the quote, or null if no room. */
   addThemedQuote: () => string | null;
   updateTextElement: (id: string, updates: Partial<TextElement>) => void;
@@ -2673,8 +2676,8 @@ export function useBuilderState(): BuilderActions {
 
   // Live snapshot for the async memory-QR action (face detection awaits, so the
   // callback must read the CURRENT page/photos/size, not a stale closure).
-  const stateRefForQr = useRef<{ page: AlbumPage | null; photos: UploadedPhoto[]; size: AlbumSizePreset }>({ page: null, photos: [], size: albumSize });
-  stateRefForQr.current = { page: currentPage ?? null, photos: uploadedPhotos, size: albumSize };
+  const stateRefForQr = useRef<{ page: AlbumPage | null; photos: UploadedPhoto[]; size: AlbumSizePreset; pageIndex: number }>({ page: null, photos: [], size: albumSize, pageIndex: 0 });
+  stateRefForQr.current = { page: currentPage ?? null, photos: uploadedPhotos, size: albumSize, pageIndex: currentPageIndex };
 
   /** Is the current page a plain single-photo page that a living-memory QR
    *  badge can be applied to? The SAME rule the generator uses to guarantee
@@ -2691,6 +2694,7 @@ export function useBuilderState(): BuilderActions {
     const page = stateRefForQr.current.page;
     const photos = stateRefForQr.current.photos;
     const size = stateRefForQr.current.size;
+    const pageIndex = stateRefForQr.current.pageIndex;
     if (!page) return false;
     const photoIdx = (page.slotFills ?? []).find((f): f is number => f != null);
     if (photoIdx == null) return false;
@@ -2717,7 +2721,7 @@ export function useBuilderState(): BuilderActions {
       slotFills[0] = photoIdx;
       const qrFills = new Array(template.slots.length).fill(null);
       qrFills[qrIdx] = fill;
-      return {
+      const next = {
         ...p,
         templateId: template.id,
         slotFills,
@@ -2736,6 +2740,8 @@ export function useBuilderState(): BuilderActions {
         // would overlay (and in print obscure) the QR chip.
         cornerBase: undefined,
       };
+      // A date stamp now under the QR moves to a free corner (dateStamp.ts).
+      return { ...next, textElements: [...keepStampsOffQr(next, pageIndex, size)] };
     });
     return true;
   }, [updateCurrentPage, pushSnapshot]);
@@ -2747,6 +2753,7 @@ export function useBuilderState(): BuilderActions {
   const setMemoryQrCorner = useCallback((corner: QrCorner) => {
     const page = stateRefForQr.current.page;
     const size = stateRefForQr.current.size;
+    const pageIndex = stateRefForQr.current.pageIndex;
     if (!page || !qrBadgeCornerOf(page.templateId)) return;
     const template = qrBadgeTemplate(size, corner);
     if (!template) return;
@@ -2759,7 +2766,7 @@ export function useBuilderState(): BuilderActions {
       slotFills[0] = photoIdx;
       const qrFills = new Array(template.slots.length).fill(null);
       qrFills[qrIdx] = existingQr;
-      return {
+      const next = {
         ...p,
         templateId: template.id,
         slotFills,
@@ -2772,6 +2779,8 @@ export function useBuilderState(): BuilderActions {
         ...fullBleedPhoto(p, true),
         cornerBase: undefined,
       };
+      // A date stamp now under the QR moves to a free corner (dateStamp.ts).
+      return { ...next, textElements: [...keepStampsOffQr(next, pageIndex, size)] };
     });
   }, [updateCurrentPage, pushSnapshot]);
 
@@ -3140,7 +3149,7 @@ export function useBuilderState(): BuilderActions {
    *  the bottom (1-star testers round 3, the Rule-Breaker; its canvas centre
    *  was 1200 × 800 on a 750 × 750 page). Too long even at the smallest size:
    *  nothing is added, and the caller says so. */
-  const addTextElement = useCallback((x?: number, y?: number, text?: string): AddedText => {
+  const addTextElement = useCallback((x?: number, y?: number, text?: string, placed?: StampStyle | null): AddedText => {
     const { width: cw, height: ch } = getCanvasDimensions(albumSize);
     const cx = x ?? cw / 2;
     const cy = y ?? ch / 2;
@@ -3148,6 +3157,22 @@ export function useBuilderState(): BuilderActions {
     // occasion. The user can still restyle any text element afterward.
     const theme = THEMES[selectedTemplate];
     const trimmed = text && text.trim() ? text.trim() : '';
+    // Placed text (the date stamp): exactly where and how it was asked for.
+    if (placed && trimmed) {
+      pushSnapshot();
+      updateCurrentPage((page) => ({
+        ...page,
+        textElements: [...page.textElements, {
+          // Marked as a stamp, so a video memory added later moves it off its QR.
+          id: `${DATE_STAMP_ID}${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          text: trimmed,
+          fontFamily: theme.fontFamily,
+          bold: false, italic: false, underline: false, rotation: 0, opacity: 100,
+          ...placed,
+        }],
+      }));
+      return { added: true, fontSize: placed.fontSize, shrunk: false, tooLong: false };
+    }
     // A page's TEXTBOX owns its caption. If the page has a textbox region with no
     // caption yet, the new text belongs INSIDE it (bound → fixed + centered),
     // never as a free-floating element that strands at the top-left. Only fall

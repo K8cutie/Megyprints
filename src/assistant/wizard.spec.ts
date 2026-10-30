@@ -738,6 +738,14 @@ describe('one way forward after the album too: cover, Review, Preview (owner, 20
     expect(body).not.toMatch(/‹|›|arrows/);
   });
 
+  it('Text (Step 6): one way on — "Skip to Finalize →" is the filled button, no second Next → beside it (2026-10-19)', () => {
+    // Both moved to Preview & Order: two filled forward buttons on one card.
+    const w = at('add_text');
+    expect(w.showsNext()).toBe(false);
+    expect(w.showsPrevious()).toBe(true);
+    expect(w.getMessage().actions.filter(isPrimaryAction)).toEqual(['Skip to Finalize →']);
+  });
+
   it('Preview & Order: no greyed Next → — there is nothing after it', () => {
     const w = at('finalize', generated('preview'));
     expect(w.showsNext()).toBe(false);

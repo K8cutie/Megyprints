@@ -327,6 +327,9 @@ export class WizardEngine {
       // out since): Next is the way back to the pages.
       case 'upload_photos': return this.hasBuiltAlbum() && photosShortBy(photosGoingIn(this.builder.uploadedPhotos)) > 0;
       case 'review_pages': return false;
+      // The card's "Skip to Finalize →" is the way on; a Next → beside it went
+      // to the same place: two filled forward buttons on one card.
+      case 'add_text': return false;
       case 'finalize': return false;
       default: return true;
     }

@@ -26,6 +26,7 @@ import { suggestThemeFromPhotos } from '../pages/builder/themeDetector';
 import AlbumThemeStep from './AlbumThemeStep';
 import MegyMascot from '../components/MegyMascot';
 import PhotoCheckCard from './PhotoCheckCard';
+import { dateStampFor, NO_PHOTO_DATE } from './dateStamp';
 import PickManyHint from './PickManyHint';
 import SamplePhotosOffer from './SamplePhotosOffer';
 import SampleAlbumOffer from './SampleAlbumOffer';
@@ -582,7 +583,28 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         break;
       }
       case 'add_text':
-        if (action.includes('Text')) {
+        if (action.includes('Date')) {
+          // "Add Date Stamp": the day this page's photos were taken (EXIF).
+          // It did nothing before (a dead tap). No date on the photos: say
+          // so, never guess one. On the phone Megy folds up after a stamp so
+          // the page with its date shows; with no date it stays open, since
+          // what it says is the answer.
+          // It goes in a corner of the page's biggest photo (dateStamp.ts).
+          const stamp = dateStampFor(builder.currentPage, builder.currentPageIndex, builder.albumSize, builder.uploadedPhotos);
+          if (!stamp) {
+            showToast(NO_PHOTO_DATE, 6000);
+          } else if (builder.currentPage?.textElements?.some((t) => t.text === stamp.text)) {
+            // A second tap would stack the same date on top of the first.
+            showToast(`This page already has its date: ${stamp.text}`, 4000);
+          } else {
+            const date = stamp.text;
+            void builder.dispatch({ type: 'add_text', payload: { text: date, placed: stamp.style }, rawMessage: 'add date stamp' })
+              .then((r) => {
+                if (r.success) setMobileExpanded(false);
+                showToast(r.success ? `Added the date: ${date}` : r.message, r.success ? 2500 : 6000);
+              });
+          }
+        } else if (action.includes('Text')) {
           void builder.dispatch({ type: 'add_text', rawMessage: 'add text' });
         } else if (action.includes('Skip') || action.includes('Finalize')) {
           wizardRef.current.advance();
