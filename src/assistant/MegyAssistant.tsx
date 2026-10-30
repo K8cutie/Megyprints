@@ -35,6 +35,7 @@ import { takeSampleAlbumRequest } from '../lib/samplePhotos';
 import { takeDailyTest } from '../lib/dailyTest';
 import { useSettleGuard, noteScreenTap, tooSoonAfterScreenTap } from '../lib/settleGuard';
 import { useModalDialog } from '../lib/useModalDialog';
+import { useCloseOnBack } from '../lib/backClose';
 import { splitBold } from './boldText';
 import { readAlbumTheme, writeAlbumTheme, ALBUM_THEME_EVENT, isAlbumThemeReady } from '../lib/albumTheme';
 import { fetchThemeQuotes } from '../lib/quotes';
@@ -106,6 +107,8 @@ type TabId = 'design' | 'layout' | 'photos' | 'view';
 // the wizard now drives everything (layout picker, page nav, regenerate, etc.).
 // Flip to true to bring the manual tool panels back.
 const SHOW_TOOL_TABS = false;
+/** Phone: how far the panel's handle must be dragged (px, up or down) to close it. */
+const DRAG_CLOSE_PX = 40;
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'design', label: 'Design', icon: <Palette className="w-4 h-4" /> },
   { id: 'layout', label: 'Layout', icon: <LayoutGrid className="w-4 h-4" /> },
@@ -160,6 +163,48 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   // setup, where it IS the screen.
   const [showWizard, setShowWizard] = useState(!dismissed || builder.phase === 'setup');
 
+  /* Phone: Megy's panel hangs from the top of the screen. It opens on her
+     step card, never as a blank panel, and its ✕, a drag of its handle and
+     Back all close the whole panel, back to the small Megy button (tester,
+     2026-10-30: the ✕ only hid the card, so the panel stayed open, blank and
+     white, and the handle did not drag). */
+  const openSheet = () => { setShowWizard(true); setMobileExpanded(true); };
+  const closeSheet = () => setMobileExpanded(false);
+  /* The handle: a tap opens or closes; a drag of DRAG_CLOSE_PX or more, up
+     or down, closes the open panel, which follows the finger toward the edge
+     it hangs from. Pointer events, so a finger works like a mouse; the click
+     a mouse sends after a drag is not a second tap. */
+  const [dragY, setDragY] = useState(0);
+  const dragRef = useRef<{ y: number; id: number } | null>(null);
+  const noClickUntilRef = useRef(0);
+  const onHandleDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    dragRef.current = { y: e.clientY, id: e.pointerId };
+    noClickUntilRef.current = 0;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* no capture here: the moves still reach the handle */ }
+  };
+  const onHandleMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = dragRef.current;
+    if (!d || d.id !== e.pointerId || !mobileExpanded) return;
+    const dy = e.clientY - d.y;
+    setDragY(mobilePulldown ? Math.min(0, dy) : Math.max(0, dy));
+  };
+  const onHandleUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = dragRef.current;
+    if (!d || d.id !== e.pointerId) return;
+    dragRef.current = null;
+    setDragY(0);
+    const dy = e.clientY - d.y;
+    if (Math.abs(dy) < DRAG_CLOSE_PX) return; // a tap: the click does it
+    noClickUntilRef.current = Date.now() + 400;
+    if (mobileExpanded) closeSheet();
+    else if (!mobilePulldown && dy < 0) openSheet(); // the panel's peek at the bottom, pulled up
+  };
+  const onHandleCancel = () => { dragRef.current = null; setDragY(0); };
+  const onHandleClick = () => {
+    if (Date.now() < noClickUntilRef.current) return;
+    if (mobileExpanded) closeSheet(); else openSheet();
+  };
+
   /* ── Auto-sync wizard when builder PHASE changes ──
      Only sync when user explicitly transitions phases (setup→edit→preview).
      During setup, the wizard stays at whatever step the user is on. */
@@ -212,6 +257,16 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
     if (wizardStep === 'design_cover') setMobileExpanded(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizardStep]);
+  /* Phone: the panel never stays open into Preview. Preview is the album
+     itself, with its own Edit pages and Order; the panel left open on the
+     pages turned into "Step 7: Preview & Order" over the last page ("You're
+     done" in the app's daily test, tester 2026-10-30). Megy's "Preview the
+     album →" opens Preview, and she folds up the same way. */
+  const lastPhaseRef = useRef(builder.phase);
+  useEffect(() => {
+    if (builder.phase === 'preview' && lastPhaseRef.current !== 'preview') setMobileExpanded(false);
+    lastPhaseRef.current = builder.phase;
+  }, [builder.phase]);
 
   /* External writes to the shared step (e.g. the center "Start Creating"
      button) flow back into the wizard engine + panel. Forward jumps mark the
@@ -535,11 +590,14 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         }
         break;
       case 'finalize':
+        // On a phone the two screen buttons fold Megy up, so the screen shows.
         if (action.includes('Preview')) {
+          setMobileExpanded(false);
           void builder.dispatch({ type: 'preview_album', rawMessage: 'preview album' });
         } else if (action.includes('Edit pages')) {
           // Back to Step 6 — the store write flows into the engine (backward
           // jumps are honoured) and the centre follows the step.
+          setMobileExpanded(false);
           builder.setWizardStep('review_pages');
           builder.setPhase('edit');
         } else if (action.includes('Save')) {
@@ -645,6 +703,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
   // chips were 15 invisible Tab stops before "Let's Get Started" (KB-6). No
   // Escape — it is a step to answer, not a box to dismiss.
   const stageRef = useModalDialog<HTMLDivElement>(centerStage);
+  // Phone: Back closes Megy's open panel first, and the screen stays (lib/backClose).
+  useCloseOnBack(mobileExpanded && !centerStage, closeSheet);
 
   // Asked before a made album is laid out again; "Make it again" does what
   // "Generate Album" does, "Keep my pages" carries on.
@@ -913,7 +973,7 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       {mobilePulldown && !mobileExpanded && (
         <button
           type="button"
-          onClick={() => setMobileExpanded(true)}
+          onClick={openSheet}
           className="lg:hidden fixed top-1.5 right-3 z-[95] w-10 h-10 rounded-full bg-peach shadow-lg flex items-center justify-center overflow-hidden active:scale-95 transition-transform"
           aria-label="Open Megy"
         >
@@ -921,7 +981,9 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
         </button>
       )}
 
-    <div className={`fixed z-[90] bg-white shadow-xl flex flex-col overflow-hidden transition-[height] duration-300
+    <div data-testid="megy-panel" data-sheet={mobileExpanded ? 'open' : 'closed'}
+      style={dragY ? { transform: `translateY(${dragY}px)`, transition: 'none' } : undefined}
+      className={`fixed z-[90] bg-white shadow-xl flex flex-col overflow-hidden transition-[height,transform] duration-300
       ${mobilePulldown
         ? `left-0 right-0 top-0 w-full rounded-b-2xl border-b border-peach/20 ${mobileExpanded ? 'h-[82vh]' : 'h-0'}`
         : `left-0 right-0 bottom-0 w-full rounded-t-2xl border-t border-peach/20 ${mobileExpanded ? 'h-[82vh]' : 'h-[66px]'}`}
@@ -939,14 +1001,17 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
       {/* Full panel content — hidden on desktop when collapsed */}
       <div className={`flex flex-col flex-1 min-h-0 ${collapsed ? 'lg:hidden' : ''}`}>
 
-      {/* Mobile grab-handle — tap to expand/collapse the drawer (hidden at md+) */}
+      {/* Mobile grab-handle — tap, or drag up or down, to close (hidden at lg+).
+          touch-none: the handle takes the finger's drag; the page doesn't scroll. */}
       <button
         type="button"
-        onClick={() => setMobileExpanded((v) => !v)}
-        className={`lg:hidden shrink-0 w-full flex items-center justify-center ${mobilePulldown ? 'order-last pb-3 pt-1' : 'pt-2 pb-1'}`}
+        data-testid="megy-sheet-handle"
+        onClick={onHandleClick}
+        onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleCancel}
+        className={`lg:hidden shrink-0 w-full flex items-center justify-center touch-none ${mobilePulldown ? 'order-last pt-2 pb-4' : 'pt-3 pb-2'}`}
         aria-label={mobileExpanded ? 'Collapse Megy' : 'Expand Megy'}
       >
-        <span className="w-10 h-1.5 rounded-full bg-line" />
+        <span className="w-12 h-1.5 rounded-full bg-line" />
       </button>
 
       {/* ═══ HEADER ═══ */}
@@ -1003,10 +1068,20 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
             <span className="text-[10px] font-medium text-taupe">
               {wizardRef.current.getProgress().label}
             </span>
+            {/* Phone: the ✕ closes the whole panel (it hid only the card,
+                leaving the panel open and blank, tester 2026-10-30). */}
+            <button
+              onClick={closeSheet}
+              aria-label="Close Megy" title="Close Megy"
+              className="lg:hidden -my-1.5 -mr-2 px-2 py-1.5 text-sm leading-none text-light hover:text-dark"
+            >
+              ✕
+            </button>
+            {/* Desktop side panel: the ✕ hides the steps; the panel stays. */}
             <button
               onClick={() => setShowWizard(false)}
               aria-label="Hide the steps" title="Hide the steps (bring them back from the button above)"
-              className="text-[10px] text-light hover:text-dark"
+              className="hidden lg:inline-flex text-[10px] text-light hover:text-dark"
             >
               ✕
             </button>
