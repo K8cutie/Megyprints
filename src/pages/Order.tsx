@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import type { MaterialType, CoverType, AlbumSizePreset, AlbumPage, UploadedPhoto } from "./builder/types";
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, QrCode, Wifi, Landmark, Paperclip } from 'lucide-react';
+import { Check, ShoppingCart, BookOpen, Palette, HardDrive, Printer, Loader2, QrCode, Wifi, Paperclip } from 'lucide-react';
 import { MATERIALS, COVERS, ALBUM_SIZES, DEFAULT_COVER_DESIGN } from './builder/types';
 import { useAuth } from '../lib/authContext';
 import { useAuthModal } from '../components/AuthModalProvider';
@@ -17,7 +17,7 @@ import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
-import { PAYEE, checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
+import { checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
 import { updateMemoryDestination } from '../lib/qrMemories';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady, onStoreSettingsChange, retryStoreSettings } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
@@ -39,6 +39,7 @@ import { amountToPay, claimTesterOrder, testerLine, TesterCodeGoneError, type Te
 import TesterCodeBox from '../components/TesterCodeBox';
 import PlayFeedbackCard from '../components/PlayFeedbackCard';
 import PlaceOrderProgress from '../components/PlaceOrderProgress';
+import PayCard from '../components/PayCard';
 import TermsAgreeLine from '../components/TermsAgreeLine';
 import { PLACE_AT, forward, pagesAt, pagesLabel, videosAt, type PlaceProgress } from '../lib/placeProgress';
 import { keepScreenOn } from '../lib/keepScreenOn';
@@ -115,7 +116,6 @@ export default function Order() {
   const [proofError, setProofError] = useState('');
   const [payRef, setPayRef] = useState('');
   const [refError, setRefError] = useState('');
-  const [qrMissing, setQrMissing] = useState(false);
   // The amount the order was placed at — what the payment screen asks for,
   // even after a reload (checkoutSession), never a recomputed one.
   const [placedAmount, setPlacedAmount] = useState<number | null>(null);
@@ -970,30 +970,20 @@ export default function Order() {
     return (
       <div className="min-h-screen bg-cream pt-28 px-6 pb-16 flex items-start justify-center">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+          {/* The order went through: say so first (owner's design, 2026-10-31). */}
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-peach text-white shadow-button" aria-hidden="true" data-testid="pay-placed-badge">
+            <Check size={24} strokeWidth={3} />
+          </div>
           <h1 className="font-display text-3xl font-bold text-dark text-center mb-1">Send {amountLabel}</h1>
-          {placed && <p className="text-center text-sm text-medium mb-5">Order <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> is placed. Pay by bank transfer to finish.</p>}
+          {placed && (
+            <p className="text-center text-sm text-medium mb-5">
+              Order <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> is placed.
+              <span className="block text-taupe">Pay by bank transfer to finish.</span>
+            </p>
+          )}
           <div className="bg-white rounded-2xl p-6 shadow-sm">
-            {/* The QR — scanned from any PH bank or e-wallet app (InstaPay / QR Ph). */}
-            <div className="rounded-xl border border-line-soft bg-[#FFFDFB] p-4 text-center">
-              <div className="flex items-center justify-center gap-2 text-medium mb-2"><Landmark size={16} /> <span className="text-xs font-semibold uppercase tracking-wide">{PAYEE.bank} · {PAYEE.rail}</span></div>
-              {!qrMissing ? (
-                <img src={PAYEE.qrSrc} alt={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} onError={() => setQrMissing(true)}
-                  className="mx-auto w-56 h-56 object-contain rounded-lg bg-white" draggable={false} />
-              ) : (
-                <div className="mx-auto w-56 h-56 rounded-lg bg-[#F7F1EC] flex items-center justify-center text-xs text-taupe px-4">The QR code isn't available right now — message us and we'll send the account details.</div>
-              )}
-              <p className="mt-3 text-base font-semibold text-dark">{PAYEE.name}</p>
-              <p className="text-xs text-taupe">Account ending in <span className="font-mono">{PAYEE.accountLast4}</span></p>
-              <p className="mt-2 font-display text-2xl font-bold text-blush-pink">{amountLabel}</p>
-            </div>
-
-            <ol className="mt-4 space-y-1.5 text-xs text-ink-mid list-decimal pl-4">
-              <li>Open your bank or e-wallet app (GCash, Maya, BPI, BDO, UnionBank…).</li>
-              <li>Choose <b>Scan QR</b> / <b>InstaPay</b> and scan the code above.</li>
-              <li>Send exactly <b className="text-dark">{amountLabel}</b>{placed && <> and put <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> in the note if your app asks</>}.</li>
-              <li>Attach your receipt below — it speeds up confirmation.</li>
-            </ol>
-            <p className="mt-2 text-[11px] text-light">Your app may charge a small InstaPay fee. We don't add any.</p>
+            {/* Who to pay, the QR, Copy for the order number, and the steps (PayCard). */}
+            <PayCard amountLabel={amountLabel} orderNumber={placed?.order_number ?? null} />
 
             {/* Receipt + reference (0033). Optional, but it lets the operator match the deposit at a glance. */}
             <div className="mt-4 rounded-xl border border-line-soft p-3">
