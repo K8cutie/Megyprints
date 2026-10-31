@@ -7,20 +7,19 @@
    the spine auto-follows the front title, and the BACK is reserved for the
    Megy Prints mark (coverLayout.deriveBrandedBack) — no Back face here.
 
-   • Background — the album's own photos, best first, to tap (the cover step
-     comes after the photos, so there are always some), and "Or choose a
-     photo from your phone". With no album photos yet, tapping it opens the
-     phone's picker straight away (owner, 2026-10-04: no separate "Upload
-     Custom Image" box). Setting an image here IS how you put a photo on the
-     cover.
+   • Background — the album's own photos, best first, in ONE row you swipe,
+     ABOVE the cover (owner, 2026-11-01: on a phone they sat under the cover,
+     half hidden behind Back / Make my album), and "From your phone" at the
+     start of the row. With no album photos yet, tapping it opens the phone's
+     picker straight away (owner, 2026-10-04: no separate "Upload Custom
+     Image" box). Setting an image here IS how you put a photo on the cover.
    • Text — the cover title, typed inline (+ font / colour).
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, AlignLeft, AlignCenter, AlignRight, Bold, Italic } from 'lucide-react';
+import { X, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Check, ImagePlus } from 'lucide-react';
 import { useBuilderContext } from './BuilderContext';
 import { PageView } from './BuilderPreview';
-import BackgroundDesigner from './BackgroundDesigner';
 import { getCanvasDimensions } from './layouts';
 import { getTemplateById } from './pageTemplates';
 import { coverWrapGeometry } from './coverGeometry';
@@ -36,9 +35,6 @@ import { useModalDialog } from '../../lib/useModalDialog';
 import { useTesterStamp } from './useTesterStamp';
 
 const SPINE_STRIP_W = 26;
-/** Album photos shown for the cover before "Show all": two rows, so the
- *  colours and the zoom stay on screen with a 200-photo album. */
-export const COVER_PHOTOS_SHOWN = 10;
 type CoverTab = 'background' | 'text';
 
 interface Props {
@@ -79,16 +75,19 @@ export default function CoverEditor({ mode = 'modal', nextLabel = 'Continue →'
   const [tab, setTab] = useState<CoverTab>('background');
   const activeTab: CoverTab = tab;
 
-  // The best few first; "Show all" for the rest. The photo on the cover is
-  // always among those shown, so its tick can be seen.
-  const [showAllPhotos, setShowAllPhotos] = useState(false);
-  const shownPhotos = useMemo(() => {
-    if (showAllPhotos || coverPhotos.length <= COVER_PHOTOS_SHOWN) return coverPhotos;
-    const top = coverPhotos.slice(0, COVER_PHOTOS_SHOWN);
-    const onCover = (coverFront.background as { photoId?: string } | undefined)?.photoId;
-    const picked = onCover && !top.some((p) => p.id === onCover) ? coverPhotos.find((p) => p.id === onCover) : undefined;
-    return picked ? [picked, ...top.slice(0, COVER_PHOTOS_SHOWN - 1)] : top;
-  }, [coverPhotos, showAllPhotos, coverFront.background]);
+  // The photo on the cover: ticked in the row, and scrolled into view when the
+  // step opens, only if it's out of sight, so "From your phone" stays in
+  // view (the row keeps its order, so it doesn't jump under a finger).
+  const onCoverId = (coverFront.background as { type?: string; photoId?: string } | undefined)?.type === 'image'
+    ? (coverFront.background as { photoId?: string }).photoId
+    : undefined;
+  const stripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const picked = stripRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    picked?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' });
+    // Only when the step opens: a tap must not scroll the row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The Background button opens the file picker straight away; the chosen
   // photo becomes the cover background, kept on the device so it is still
@@ -239,7 +238,7 @@ export default function CoverEditor({ mode = 'modal', nextLabel = 'Continue →'
 
   // Live preview of the front cover (display-only; you edit via the tabs).
   const preview = (
-    <div className="shrink-0 flex items-start justify-center gap-2 pt-3">
+    <div className="shrink-0 flex items-start justify-center gap-2 pt-3" data-testid="cover-preview">
       <SpineStrip height={dims.h} spine={spine} />
       <div
         className="bg-white shadow-lg relative overflow-hidden"
@@ -308,29 +307,40 @@ export default function CoverEditor({ mode = 'modal', nextLabel = 'Continue →'
     </div>
   );
 
+  // The album's photos, ABOVE the cover: one row you swipe, best first. The
+  // phone's picker (one photo) is the tile at the start of the row.
+  const photoStrip = activeTab === 'background' && coverPhotos.length > 0 && (
+    <div className="shrink-0 px-4 pt-2.5" data-testid="cover-your-photos">
+      <span className="block text-[11px] font-medium text-stone mb-1">Your photos, best ones first. Tap one.</span>
+      <div ref={stripRef} className="flex gap-1.5 overflow-x-auto pb-1.5" data-testid="cover-photo-row">
+        <button type="button" onClick={() => bgFileRef.current?.click()} data-testid="cover-photo-from-phone"
+          className="flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-peach/60 bg-white text-[10px] font-medium leading-tight text-cocoa hover:bg-peach/10">
+          <ImagePlus size={16} aria-hidden="true" />
+          From your phone
+        </button>
+        {coverPhotos.map((p) => {
+          const active = onCoverId === p.id;
+          return (
+            <button key={p.id} type="button" title={p.name} aria-pressed={active}
+              onClick={() => b.setPageBackground({ type: 'image', image: p.previewUrl, photoId: p.id, opacity: page.background?.opacity ?? 100 })}
+              className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-all ${active ? 'border-rose-400 shadow' : 'border-transparent'}`}>
+              <img src={p.previewUrl} alt={p.name} loading="lazy" decoding="async" draggable={false} className="h-full w-full object-cover" />
+              {active && (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                  <Check size={16} className="text-white" />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   const controls = (
     <div className="flex-1 overflow-auto min-h-0 px-4 pt-3 pb-4">
       {activeTab === 'background' && (
         <div className="space-y-3">
-          {/* The album's own photos first: the cover step comes after the
-              photos, so the cover is a tap on one of them. The phone's picker
-              (one photo) is the second choice, after them. */}
-          {coverPhotos.length > 0 && (
-            <div data-testid="cover-your-photos">
-              <span className="block text-[11px] font-medium text-stone">Your photos, best ones first. Tap one.</span>
-              <BackgroundDesigner hidePreview compact imageOnly hideOpacity hideUpload background={page.background} onChange={(bg) => b.setPageBackground(bg)} photos={shownPhotos} />
-              {coverPhotos.length > COVER_PHOTOS_SHOWN && (
-                <button type="button" onClick={() => setShowAllPhotos((v) => !v)} data-testid="cover-show-all-photos"
-                  className="w-full -mt-1 mb-2 py-1.5 text-[12px] font-medium text-[#C56B4E] hover:underline">
-                  {showAllPhotos ? 'Show fewer' : `Show all ${coverPhotos.length} photos`}
-                </button>
-              )}
-              <button type="button" onClick={() => bgFileRef.current?.click()} data-testid="cover-photo-from-phone"
-                className="w-full py-2 rounded-xl bg-white border border-peach/40 text-[13px] font-medium text-dark hover:border-peach hover:bg-peach/10 transition-colors">
-                Or choose a photo from your phone
-              </button>
-            </div>
-          )}
           {/* Owner, 2026-10-20: a cover isn't only a photo — the page colours
               (pageColors.ts). Picking one replaces a photo; a title that
               wouldn't show on a dark colour switches to an ink that does. */}
@@ -531,9 +541,10 @@ export default function CoverEditor({ mode = 'modal', nextLabel = 'Continue →'
       <div className="h-full bg-cream relative flex justify-center">
         <div className="w-full max-w-[560px] h-full flex flex-col">
           {header}
+          {tabBar}
+          {photoStrip}
           {preview}
           {reservedNote}
-          {tabBar}
           {controls}
           {footer}
         </div>
@@ -546,9 +557,10 @@ export default function CoverEditor({ mode = 'modal', nextLabel = 'Continue →'
       <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Design your cover" tabIndex={-1}
         className="bg-cream w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden relative">
         {header}
+        {tabBar}
+        {photoStrip}
         {preview}
         {reservedNote}
-        {tabBar}
         {controls}
         {footer}
       </div>
