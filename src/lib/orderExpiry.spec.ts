@@ -92,7 +92,9 @@ describe('checkout order of steps (red-team, 2026-10-09)', () => {
     expect(orderPage).toMatch(/step !== 'tracking' && step !== 'payment'/);
     const pay = orderPage.slice(orderPage.indexOf("if (step === 'payment')"), orderPage.indexOf('/* ══════════════ FORM'));
     expect(pay.indexOf("placedOrder?.status === 'cancelled'")).toBeGreaterThan(0);
-    expect(pay.indexOf("placedOrder?.status === 'cancelled'")).toBeLessThan(pay.indexOf('PAYEE.qrSrc'));
+    // The QR is in the pay card (components/PayCard.tsx), drawn only after that check.
+    expect(pay.indexOf('<PayCard ')).toBeGreaterThan(0);
+    expect(pay.indexOf("placedOrder?.status === 'cancelled'")).toBeLessThan(pay.indexOf('<PayCard '));
   });
 });
 
