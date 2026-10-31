@@ -18,7 +18,7 @@ import type {
   FrameStyle,
   TextStyle,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, orientationOfRatio, orientationOfShape, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
 import { recolorPage } from './pageColors';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { placePhoto } from './slotSwap';
@@ -284,25 +284,46 @@ export function nextLayoutInCycle(page: AlbumPage, photos: UploadedPhoto[], size
   return next && next.id !== page.templateId ? next : undefined;
 }
 
-/** New pages for `photos` (photo indices), on layouts that hold exactly them:
- *  ratio-matched first, then any layout of that count, splitting when no
- *  layout holds that many. */
-function pagesForPhotos(photos: number[], size: AlbumSizePreset, assignments: Partial<Record<number, PhotoRatio>>): AlbumPage[] {
+/** A frame of this shape is not the OTHER way up from the photo (a square
+ *  either way loses an edge, not half). */
+const keepsUpright = (frame: number, ratio: PhotoRatio): boolean => {
+  const f = orientationOfShape(frame), p = orientationOfRatio(ratio);
+  return !((f === 'portrait' && p === 'landscape') || (f === 'landscape' && p === 'portrait'));
+};
+
+/** New pages for `photos` (photo indices), on layouts that hold exactly them,
+ *  splitting when no layout holds that many. A layout never puts a photo the
+ *  other way up from its frame; of those that don't, the best holds each photo
+ *  in a frame of its own shape (frameTakesPhoto, the Change layout sheet's
+ *  rule), then one built for the photos' ratio, then any. Only when no layout
+ *  of any count keeps them the right way up does the old choice stand.
+ *  It used to take the first layout whose ratio matched: one portrait put on a
+ *  new page of an 11.5×8 album went over the whole landscape page and lost
+ *  half of itself (2026-10-21; 6×4, 8×6 and 6×8 did it to a tall or wide one). */
+export function pagesForPhotos(photos: number[], size: AlbumSizePreset, assignments: Partial<Record<number, PhotoRatio>>): AlbumPage[] {
   const pages: AlbumPage[] = [];
   let rest = [...photos];
   const all = getTemplatesForAlbum(size);
+  const holds = (t: PageTemplate, chunk: number[], takes: (frame: number, ratio: PhotoRatio) => boolean) =>
+    chunk.every((f, i) => assignments[f] == null || takes(frameShape(t, i, size), assignments[f]!));
   while (rest.length) {
     let placed = false;
-    for (let k = rest.length; k >= 1 && !placed; k--) {
-      const chunk = rest.slice(0, k);
-      const ratio = dominantPageRatio(chunk, assignments);
-      const fits = (t: PageTemplate) => t.slots.filter((sl) => sl.kind !== 'qr').length === k;
-      const t = all.find((x) => fits(x) && (!ratio || x.targetRatio === ratio)) ?? all.find(fits);
-      if (!t) continue;
-      const blank = { ...createEmptyPage(0, size), id: `page-${Date.now()}-${Math.random().toString(36).slice(2)}`, slotFills: chunk };
-      pages.push(relayPageOnTemplate(blank, t));
-      rest = rest.slice(k);
-      placed = true;
+    for (const upright of [true, false]) {
+      for (let k = rest.length; k >= 1 && !placed; k--) {
+        const chunk = rest.slice(0, k);
+        const ratio = dominantPageRatio(chunk, assignments);
+        const fits = (t: PageTemplate) => t.slots.filter((sl) => sl.kind !== 'qr').length === k && (!upright || holds(t, chunk, keepsUpright));
+        const shapeTrue = (t: PageTemplate) => fits(t) && holds(t, chunk, frameTakesPhoto);
+        const matched = (t: PageTemplate) => !ratio || t.targetRatio === ratio;
+        const t = all.find((x) => shapeTrue(x) && matched(x)) ?? all.find(shapeTrue)
+          ?? all.find((x) => fits(x) && matched(x)) ?? all.find(fits);
+        if (!t) continue;
+        const blank = { ...createEmptyPage(0, size), id: `page-${Date.now()}-${Math.random().toString(36).slice(2)}`, slotFills: chunk };
+        pages.push(relayPageOnTemplate(blank, t));
+        rest = rest.slice(k);
+        placed = true;
+      }
+      if (placed) break;
     }
     if (!placed) break; // no layout at all for this size (never in practice)
   }

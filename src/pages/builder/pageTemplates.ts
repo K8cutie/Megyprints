@@ -1185,6 +1185,51 @@ for (const { size, orientation } of SIZE_ORIENTATION) {
   }
 }
 
+/* ── ONE PHOTO OF THE OTHER SHAPE on 11.5×8 / 8.5×11 (2026-10-21) ──────────
+   These two sizes are not per-size authored, so a single-photo page came from
+   the gap fillers' full page, which the full-bleed rule stretches over the
+   WHOLE sheet. A portrait on the landscape 11.5×8 page printed 11" wide and
+   lost about half of itself, the tops of heads and the feet; a landscape on
+   8.5×11 the same, turned round. This is the 8×6 / 6×8 answer (rectTemplates
+   solo-…-box): the photo at its true ratio, the full height (or width) of the
+   page, and the combo box takes the rest. Full bleed on three edges. The
+   fractions are of the page less the 0.5" spine reserve a full-bleed page
+   keeps (see the QR badge above), so the frame prints at exactly the photo's
+   ratio. A square on 11.5×8 gets the same: over the whole sheet it lost 27%
+   off the top and bottom. (A square on 8.5×11 loses its SIDES, the accepted
+   trade, so it keeps its full page.) */
+function offShapeSingle(size: AlbumSizePreset, key: string, name: string, ratio: PhotoRatio, photoFirst: boolean): PageTemplate {
+  const { w, h } = ALBUM_INCHES[size];
+  const across = w - BINDING_INCHES;
+  const landscapePage = w > h;
+  // The photo's share of the page's long side; the box takes what's left.
+  const share = landscapePage ? (h * RATIOS[ratio]) / across : (across / RATIOS[ratio]) / h;
+  const at = photoFirst ? 0 : 1 - share;
+  const boxAt = photoFirst ? share : 0;
+  const box: TextSlot = landscapePage
+    ? { id: 'combo', x: boxAt, y: 0, width: 1 - share, height: 1, align: 'center', placeholder: 'Tap to add' }
+    : { id: 'combo', x: 0, y: boxAt, width: 1, height: 1 - share, align: 'center', placeholder: 'Tap to add' };
+  return {
+    id: `t${size.replace(/\D/g, '')}-solo-${key}`, name, category: 'single', slotCount: 1,
+    margin: ZERO_MARGIN_PT, orientation: orientationOfRatio(ratio), targetRatio: ratio, albumSizes: [size],
+    fullBleed: true,
+    slots: [landscapePage ? fill(at, 0, share, 1, ratio) : fill(0, at, 1, share, ratio)],
+    textSlots: [box],
+  };
+}
+const OFF_SHAPE_SINGLES: PageTemplate[] = [
+  offShapeSingle(S1158, '34-box-r', 'Portrait + Box Right', '3:4', true),
+  offShapeSingle(S1158, '34-box-l', 'Portrait + Box Left', '3:4', false),
+  offShapeSingle(S1158, '23-box-r', 'Tall + Box Right', '2:3', true),
+  offShapeSingle(S1158, '23-box-l', 'Tall + Box Left', '2:3', false),
+  offShapeSingle(S1158, 'sq-box-r', 'Square + Box Right', '1:1', true),
+  offShapeSingle(S1158, 'sq-box-l', 'Square + Box Left', '1:1', false),
+  offShapeSingle(S8511, '43-box-b', 'Landscape + Box Below', '4:3', true),
+  offShapeSingle(S8511, '43-box-a', 'Landscape + Box Above', '4:3', false),
+  offShapeSingle(S8511, '32-box-b', 'Wide + Box Below', '3:2', true),
+  offShapeSingle(S8511, '32-box-a', 'Wide + Box Above', '3:2', false),
+];
+
 /** The full-bleed + QR-badge template for a size and corner (or undefined). */
 export function qrBadgeTemplate(size: AlbumSizePreset, corner: QrCorner): PageTemplate | undefined {
   return QR_BADGE_TEMPLATES.find((t) => t.id === `qr-badge-${size}-${corner}`.replace(/[.]/g, ''));
@@ -1253,7 +1298,7 @@ function withoutOwnedSizes(t: PageTemplate): PageTemplate {
 export const PAGE_TEMPLATES: PageTemplate[] =
   // QR-badge templates are already full-bleed 2-slot layouts, so they pass
   // through applySinglePicFullBleed untouched (it only promotes lone photo slots).
-  [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS, ...QR_BADGE_TEMPLATES]
+  [...TILED_TEMPLATES, ...PAGE_TEMPLATES_BASE, ...GAP_FILLERS, ...OFF_SHAPE_SINGLES, ...QR_BADGE_TEMPLATES]
     .map(withoutOwnedSizes)
     .map(applySinglePicFullBleed)
     // Per-size authored layouts are appended AFTER both the filter and the
