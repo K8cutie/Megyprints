@@ -61,6 +61,28 @@ describe('a long title fits the spine', () => {
     expect(deriveSpine(cover(`${one} ${one}`, '#1F3A5F', solidBg('#F4EDE4')), soft, measure).shortened).toBe(true);
   });
 
+  it('every cover, finish and page count cuts a title the same way the editor shows it; a thin spine only prints it smaller', () => {
+    // 40 pages of C2S 120 gloss is the thinnest spine: 24 px, a 12 px line.
+    const titles = [190, 215, 240, 270].map((n) => 'Ab '.repeat(n).slice(0, n));
+    for (const title of titles) {
+      const page = cover(title, '#1F3A5F', solidBg('#F4EDE4'));
+      const editor = deriveSpine(page, coverWrapGeometry('8x8', 40, 'softcover'), measure);
+      for (const pages of [40, 60, 100]) {
+        for (const type of ['softcover', 'hardboundLinen'] as const) {
+          for (const material of ['matte', 'glossy'] as const) {
+            const geo = coverWrapGeometry('8x8', pages, type, { material });
+            const s = deriveSpine(page, geo, measure);
+            const at = `${title.length} chars, ${pages}p ${type} ${material}`;
+            expect(s.shortened, at).toBe(editor.shortened);
+            expect(s.text.text, at).toBe(editor.text.text);
+            expect(s.text.fontSize, at).toBeLessThanOrEqual(Math.round(geo.panels.spine.width * 0.5));
+            expect(measure(s.text.text, s.text, s.text.fontSize), at).toBeLessThanOrEqual(geo.panels.spine.height - 2 * geo.safeInsetPx);
+          }
+        }
+      }
+    }
+  });
+
   it('a short title prints whole, at full size', () => {
     const s = deriveSpine(cover('Hong Kong 2026', '#1F3A5F', solidBg('#F4EDE4')), g, measure);
     expect(s.text.text).toBe('Hong Kong 2026');

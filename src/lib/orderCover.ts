@@ -92,7 +92,7 @@ export async function sendOrderCover(
     albumSize,
     pageCount: row.page_count,
     cover: (row.cover || 'softcover') as CoverType,
-    // C2S 140 matte or glossy: the spine is that paper stacked, as at checkout
+    // C2S 120 matte or glossy: the spine is that paper stacked, as at checkout
     // (anything but glossy is matte, as in the console's press sheets).
     material: row.material === 'glossy' ? 'glossy' : 'matte',
     coverDesign: DEFAULT_COVER_DESIGN,

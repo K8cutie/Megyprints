@@ -1168,7 +1168,7 @@ export interface CoverPrintInput {
   pageCount: number;
   /** Binding material chosen at checkout (softcover vs hardcover geometry). */
   cover: CoverType;
-  /** Paper finish chosen at checkout: C2S 140 matte or glossy, which sets how
+  /** Paper finish chosen at checkout: C2S 120 matte or glossy, which sets how
    *  thick the spine is. Missing = matte. */
   material?: MaterialType;
   coverDesign: CoverDesign;

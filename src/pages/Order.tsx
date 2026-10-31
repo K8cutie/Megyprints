@@ -694,7 +694,7 @@ export default function Order() {
           albumSize: order.albumSize,
           pageCount: printJob.pages.length,
           cover: order.cover,
-          // C2S 140 matte or glossy: the spine is that paper stacked.
+          // C2S 120 matte or glossy: the spine is that paper stacked.
           material: order.material,
           // Cover-as-pages: when the FRONT cover page is present the wrap
           // composites it + a derived spine + the reserved Megy Prints back
