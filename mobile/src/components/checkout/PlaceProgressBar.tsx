@@ -6,8 +6,10 @@ import { colors, space } from '../../lib/theme';
 
 /** The bar while the order is placed (the website's PlaceOrderProgress):
  *  it fills as the work is done, and while the file is sent (no measure) a
- *  band moves along it instead of a made-up number. */
-export function PlaceProgressBar({ progress }: { progress: PlaceProgress }) {
+ *  band moves along it instead of a made-up number. The note under it is the
+ *  website's "Keep this screen open", unless the order keeper lets the person
+ *  use other apps (lib/checkout/backgroundSend.ts). */
+export function PlaceProgressBar({ progress, note = KEEP_OPEN_NOTE }: { progress: PlaceProgress; note?: string }) {
   const pct = barPercent(progress);
   const [width, setWidth] = useState(0);
   const band = useRef(new Animated.Value(0)).current;
@@ -36,7 +38,7 @@ export function PlaceProgressBar({ progress }: { progress: PlaceProgress }) {
           />
         )}
       </View>
-      <Text style={styles.note} testID="order-progress-note">{KEEP_OPEN_NOTE}</Text>
+      <Text style={styles.note} testID="order-progress-note">{note}</Text>
     </View>
   );
 }

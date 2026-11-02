@@ -2795,6 +2795,47 @@ Stacked on `feat/port-landscape-preview` (#236: both change the Preview).
 - Not proven on a phone yet: the time and memory of making the files, the
   upload of the bytes to Storage, the receipt read from the phone.
 
+## Place order in the background (2026-11-02, `feat/port-background-send`)
+
+Making the print files on the phone takes minutes. The person can now use
+other apps meanwhile (Facebook, Messenger…), and a notification says when
+the order is done.
+
+- **Why it needs native code:** with the app out of sight, React Native
+  stops the app's timers (`JavaTimerManager`: unless a "headless task"
+  runs) and Android may freeze or close the app. Making the print files
+  waits on a timer between pages, so without help the order stops
+  half-way.
+- **`modules/order-keeper`** (the app's own Kotlin module): while an order
+  is made and sent, a **foreground service** (type `dataSync`) with a
+  notification showing the bar ("Placing your order", "Making page 4 of
+  40…"), and a React Native **headless task** that keeps the timers going.
+  When it is done and the person is in another app, a second notification:
+  "Order MP-… is placed. Pay by bank transfer to finish." (the website's
+  words), "Test order placed", or "Placing your order stopped" with the
+  same words the screen shows for why. Tapping it opens the app on the
+  order. With the app in front, no notification: the screen says it.
+- **`src/lib/checkout/backgroundSend.ts`** decides what it says and when;
+  `src/components/checkout/Sending.tsx` (moved out of `order.tsx`) starts
+  it on Place order. Android 13+ first asks "Allow Megy Prints to send you
+  notifications?". Yes: the screen says "You can use other apps while we
+  make and send your order. A notification will tell you when it is done."
+  No: the screen says "Keep this screen open", as before (the keeper still
+  runs, so leaving does not stop the order, but nothing tells them it is
+  done).
+- An APK without the module: nothing changes (`requireOptionalNativeModule`).
+- Proven in jest only (`test/backgroundSend.test.tsx`, the native half a
+  stand-in). **Not built and not tried on a phone**: the Kotlin was written
+  without the Android SDK. A **new APK** is needed.
+- **Owner step before this goes to Play:** Play Console → App content →
+  **Foreground service permissions** → declare `dataSync`: "Sends the
+  customer's album files to our print shop after they tap Place order, so
+  the order finishes while they use other apps." Google asks for a short
+  video of it (record the phone: Place order, switch to another app, the
+  notification, the "Order … is placed" notification). **Don't upload a
+  build with this to Play until that form is filled in**: Play Console
+  refuses the release without it.
+
 ---
 ## Phase 6 notes (2026-10-29): Your orders and Profile
 
