@@ -3026,9 +3026,9 @@ next to 1.x). Download: the PR's Checks → "2.0 test APK" → Summary →
 Artifacts. **Owner step, once:** GitHub → the repository → Settings →
 Secrets and variables → Actions → New repository secret, twice:
 `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, the same two
-lines as in `mobile\.env.local`. Without them the job stops and says so.
-It also compiles the app's own Kotlin modules, the first real check they
-get.
+lines as in `mobile\.env.local`. Without them the app is still built (so a
+mistake in the app's own Kotlin modules shows), but no APK is kept, and the
+run says so. It is the first real compile of those modules.
 
 ## Phase 6: My Memories (2026-11-02, `feat/port-my-memories`)
 

@@ -14,8 +14,9 @@
 # Needs two repository secrets (Settings → Secrets and variables → Actions),
 # the same public values as mobile/.env.local:
 #   EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY
-# Without them the job stops at once and says so (an app that can't sign in
-# is no use to test).
+# Without them the app is still BUILT (so a mistake in the app's own Android
+# code shows here), but no APK is kept: an app that can't sign in is no use
+# to test. The run says so.
 
 name: 2.0 test APK
 
@@ -40,14 +41,17 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - name: The app's server settings are set
+      - name: Are the app's server settings set?
+        id: server
         env:
           URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           if [ -z "$URL" ] || [ -z "$KEY" ]; then
-            echo "::error::Add the repository secrets EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY (Settings → Secrets and variables → Actions), the same values as mobile/.env.local."
-            exit 1
+            echo "::warning::No APK kept: add the repository secrets EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY (Settings → Secrets and variables → Actions), the same values as mobile/.env.local. The app is still built, to check it builds."
+            echo "set=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "set=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout
@@ -71,6 +75,7 @@ jobs:
         run: npm ci
 
       - name: The app's server settings (from the secrets, never in git)
+        if: steps.server.outputs.set == 'true'
         working-directory: mobile
         env:
           URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
@@ -87,12 +92,14 @@ jobs:
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain
 
       - name: Name it
+        if: steps.server.outputs.set == 'true'
         run: |
           mkdir -p out
           cp mobile/android/app/build/outputs/apk/release/app-release.apk "out/megyprints-2.0-dev-${GITHUB_SHA::7}.apk"
           ls -la out
 
       - name: Keep it for download
+        if: steps.server.outputs.set == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: megyprints-2.0-dev-apk
