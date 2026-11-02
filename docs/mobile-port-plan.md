@@ -2614,6 +2614,28 @@ Results (2026-10-28, Chromium 149 with the GPU off, CanvasKit in Node):
 | sizes, website / app (MB) | interior 2.0 / 2.0, cover 0.4 / 0.4, sheets 2.4 / 2.4, zip 17.9 / 17.7 | 1.4 / 1.4, 0.10 / 0.08, 1.5 / 1.4, 7.5 / 7.5 | 3.0 / 3.0, 0.8 / 0.8, 3.4 / 3.4, 24.2 / 23.7 |
 | time, website (Chromium, desktop) / app (CanvasKit in Node, desktop) | 10.5 s / 56 s | 6.7 s / 24 s | 11.8 s / 70 s |
 
+**Re-run 2026-11-02 on today's native-2.0** (`feat/port-print-files-2`; a
+Linux cloud machine, Chromium 153: the pinned 149 could not be downloaded):
+- Numbers: the same pages and sheet sides on all three albums (40/40, 6/6
+  and 20/20, 41/41 and 22/22); page boxes, pictures, cut lines and clips
+  the same to 0.01 pt; the see-through picture counts the same.
+- Pixels outside the words: 8x8 ≤ 0.002%, 6x4 ≤ 0.000%, 11.5x8 ≤ 0.66%
+  (the half-shrink gap, within its ceiling). **11.5x8 passes whole.**
+- Words: over the bars on 8x8 (interior page 7: ink 7.0%; cover text 3:
+  7.9%) and 6x4 (interior page 4: 9.6%; cover texts up to 24.7%). This is
+  the Linux letter weight the golden checks show on this machine too (the
+  golden covers fail by 6.5-51.9% here, the 6x4 ones by about 21% on the
+  same texts, and pass on Windows CI with the same renderer). **To be
+  confirmed on Windows:** `npm run print:compare` in mobile/.
+- Website side unchanged: `websiteSame.mjs` against origin/native-2.0, 156
+  of 156 print files byte-identical.
+- Time, app (CanvasKit in Node) / website (Chromium), this machine: 8x8
+  171 s / 22 s, 6x4 66 s / 11 s, 11.5x8 223 s / 22 s. The website was about
+  twice as slow here as on the Oct 28 PC, the app about three times: part
+  is the machine, part the renderer's Chrome-like photo sampling added
+  since. On a phone, minutes per album: the order step must show progress
+  and must be measured on the phone.
+
 Every interior file is far under the 45 MB budget (the synthetic photos
 pack small: a real 40-page album's file is about 15 MB on the website).
 
