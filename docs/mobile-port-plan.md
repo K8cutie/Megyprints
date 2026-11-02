@@ -3019,7 +3019,18 @@ video steps, My Memories' Replace video and Delete), on the phone:
   (`feat/port-hosting-term`): the website's term buttons ("How long should
   your memories stay live?", the schedule's tiers, the included one first),
   priced and stored on the order (`hosting_years`).
-- Not in the app yet: an event album's guest videos.
+- **An event's album at checkout** (`feat/port-event-album`,
+  `src/lib/events`): the website's "another device" way. Checkout offers
+  the host's bookings still waiting for their album ("Use booking EV-… for
+  this album"); the booking's deal card says whether it pays (the balance
+  in, the deal's size and pages: `eventDealState`, the website's words),
+  the deal fixes the cover, the album shows ₱0, and after the files are
+  sent the booking pays the order (`cover_order_with_booking`). "Not my
+  event album" undoes it. The link is kept on the phone (AsyncStorage, the
+  website's key).
+- An event's guest videos ("Or one your guests shared") come only with an
+  album made from the event on the website (they are handed over in that
+  browser); on any other device, the website doesn't offer them either.
 
 ### Test APK from GitHub (`.github/workflows/android-apk.yml`)
 

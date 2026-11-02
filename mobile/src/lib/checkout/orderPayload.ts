@@ -176,6 +176,8 @@ export interface PlanInput extends OrderInsertInput {
   pages: readonly AlbumPage[];
   /** The included hosting term (stamped on clip memory rows). */
   includedYears: number | null;
+  /** An event album its booking pays for (0045, cover_order_with_booking). */
+  eventBookingId?: string | null;
 }
 
 /** Place order, as the website runs it, as data. Nothing is sent. */
@@ -192,9 +194,11 @@ export function placeOrderPlan(input: PlanInput): PlaceOrderPlan {
     ...clipCodes.map((code): PlanStep => ({ kind: 'upload', what: 'A memory video', bucket: 'memory-clips', path: `${code}.<mp4|webm>`, contentType: 'video/*', mode: 'create-only' })),
     { kind: 'upload', what: 'The album pages, made on the phone page by page', bucket: 'print-pdfs', path: `${ORDER_ID}.pdf`, contentType: 'application/pdf', mode: 'create-only' },
     ...(rows.length ? [{ kind: 'upsert', what: 'The QR memories the album prints', table: 'qr_memories', rows, onConflict: 'code', ignoreDuplicates: true } as PlanStep] : []),
-    input.testerCode
-      ? { kind: 'rpc', what: 'A tester order: the database marks it paid. Nothing is printed or sent.', name: 'claim_tester_order', args: { p_order_id: ORDER_ID } }
-      : { kind: 'next', what: 'The payment step: the QR, the amount, and the receipt' },
+    input.eventBookingId
+      ? { kind: 'rpc', what: 'An event album: its booking pays for it (Order.tsx 5a).', name: 'cover_order_with_booking', args: { p_order_id: ORDER_ID, p_booking_id: input.eventBookingId } }
+      : input.testerCode
+        ? { kind: 'rpc', what: 'A tester order: the database marks it paid. Nothing is printed or sent.', name: 'claim_tester_order', args: { p_order_id: ORDER_ID } }
+        : { kind: 'next', what: 'The payment step: the QR, the amount, and the receipt' },
   ];
   const files = steps.flatMap((s) => (s.kind === 'upload' ? [{ bucket: s.bucket, path: s.path, contentType: s.contentType }] : []));
   return { steps, orderRow, files };

@@ -62,6 +62,13 @@ jest.mock('../src/lib/checkout/phoneSend', () => ({
   sendPaymentFromPhone: async (plan: never, receipt: unknown) => { mockSend.payments.push({ plan, receipt }); return { receiptError: null }; },
 }));
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
+// The phone's event links (AsyncStorage on the phone): in memory.
+const mockLinks: Record<string, unknown> = {};
+jest.mock('../src/lib/events/albumEventLink', () => ({
+  readEventLink: async (id: string) => mockLinks[id] ?? null,
+  saveEventLink: async (id: string, l: unknown) => { mockLinks[id] = l; },
+  dropEventLink: async (id: string) => { delete mockLinks[id]; },
+}));
 // The quality the album's memory videos were made for (read from the phone's store).
 const mockTier = { value: 'standard' as 'standard' | 'hd', asked: [] as string[][] };
 jest.mock('../src/lib/memories/albumTier', () => ({ albumClipTier: async (codes: string[]) => { mockTier.asked.push(codes); return mockTier.value; } }));
@@ -107,6 +114,7 @@ beforeEach(() => {
   mockSend.run = placesAndSends;
   mockTier.value = 'standard';
   mockTier.asked = [];
+  for (const k of Object.keys(mockLinks)) delete mockLinks[k];
   global.fetch = jest.fn((url: string) => fetchFromDisk(String(url).replace('https://megyprints.vercel.app/psgc/', BASE))) as unknown as typeof fetch;
 });
 afterEach(() => { jest.useRealTimers(); });
@@ -295,6 +303,75 @@ describe('an album with a video memory', () => {
     await fireEvent.press(screen.getByTestId('order-place'));
     expect(await screen.findByText('The memory video on page 10 is no longer saved. Open your album and choose the video again for the QR on page 10, then order.')).toBeOnTheScreen();
     expect(screen.getByTestId('order-place')).toBeOnTheScreen();
+  });
+});
+
+
+describe('an event\'s album: its booking pays (the website\'s Order.tsx)', () => {
+  const booking = (over: Record<string, unknown> = {}) => ({
+    id: 'bk-1', user_id: 'user-1', booking_number: 'EV-2026-0007', status: 'paid', deal_total: 25000, deal_deposit: 10000,
+    deal_album_size: '8x8', deal_cover: 'hard', deal_pages: 80, album_order_id: null, created_at: '2026-10-01T00:00:00Z', ...over,
+  });
+
+  it('made on another device: "Use booking … for this album"; covered: ₱0, the deal\'s cover; the booking pays after the files', async () => {
+    fake.bookings = [booking(), booking({ id: 'bk-2', booking_number: 'EV-2026-0008', album_order_id: 'o-9' })];
+    mockSend.run = async (c) => {
+      c.onStep({ step: 'order' });
+      c.onOrder({ id: 'order-1', order_number: 'MP-2026-EV0001', status: 'pending_payment' });
+      return { order: { id: 'order-1', order_number: 'MP-2026-EV0001', status: 'paid' }, paidByTester: false, paidByBooking: true };
+    };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(await screen.findByText('Is this your event album?')).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-event-use-EV-2026-0008')).toBeNull(); // already has its album order
+    await fireEvent.press(screen.getByTestId('order-event-use-EV-2026-0007'));
+    expect(await screen.findByText('Your booking pays for this album. There’s nothing more to pay.')).toBeOnTheScreen();
+    expect(screen.getByText('Your event album · booking EV-2026-0007')).toBeOnTheScreen();
+    expect(screen.getByTestId('order-event-line')).toHaveTextContent('Album — part of booking EV-2026-0007₱0');
+    expect(screen.getByTestId('order-total')).toHaveTextContent('₱0');
+    expect(screen.getByTestId('order-covered')).toHaveTextContent('Covered by your event booking');
+    expect(screen.queryByText('Have a tester code?')).toBeNull();
+    expect(mockLinks['album-7']).toEqual(expect.objectContaining({ bookingId: 'bk-1', atCheckout: true }));
+    await fillDetails();
+    expect(screen.getByTestId('order-place')).toHaveTextContent('Place my event album order');
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByTestId('order-paid-by-booking')).toHaveTextContent('Your event booking EV-2026-0007 paid for this album. We print it and ship it to your door.');
+    const plan = mockSend.calls[0].plan as unknown as { orderRow: Record<string, unknown>; steps: { kind: string; name?: string; args?: unknown }[] };
+    expect(plan.orderRow).toMatchObject({ cover: 'hardboundLeather', hd_memories: false });
+    expect(plan.orderRow).not.toHaveProperty('tester_code');
+    expect(plan.steps.at(-1)).toEqual(expect.objectContaining({ kind: 'rpc', name: 'cover_order_with_booking', args: { p_order_id: '<order id>', p_booking_id: 'bk-1' } }));
+  });
+
+  it('a booking that can\'t pay yet: the website\'s words; Place order sends nothing; "Not my event album" makes it a normal album again', async () => {
+    fake.bookings = [booking({ status: 'booked' })];
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fireEvent.press(await screen.findByTestId('order-event-use-EV-2026-0007'));
+    const blocked = 'Pay the ₱15,000 balance for booking EV-2026-0007 first (Events → your booking). Your album prints once it’s in.';
+    expect(await screen.findByText(blocked)).toBeOnTheScreen();
+    expect(screen.getByTestId('order-covered-later')).toHaveTextContent('Your booking pays for it. See the note at the top.');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(screen.getAllByText(blocked).length).toBe(2);
+    expect(mockSend.calls).toHaveLength(0);
+    await fireEvent.press(screen.getByTestId('order-event-unlink'));
+    expect(screen.queryByTestId('order-event-deal')).toBeNull();
+    expect(mockLinks['album-7']).toBeUndefined();
+    expect(screen.getByTestId('order-place')).toHaveTextContent(/Place order · pay ₱/);
+  });
+
+  it('an album of another size than the deal: the website\'s words', async () => {
+    fake.bookings = [booking({ deal_album_size: '11.5x8' })];
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fireEvent.press(await screen.findByTestId('order-event-use-EV-2026-0007'));
+    expect(await screen.findByText(/^Your deal’s album is 11\.5×8, hardbound, up to 80 pages\. This one is 8×8 with \d+ pages\. Change it in your album to match, or ask us to update your deal\.$/)).toBeOnTheScreen();
+  });
+
+  it('no bookings waiting: no offer', async () => {
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.queryByTestId('order-event-offer')).toBeNull();
   });
 });
 

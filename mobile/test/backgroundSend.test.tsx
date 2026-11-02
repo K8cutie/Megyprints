@@ -65,6 +65,8 @@ describe('the words', () => {
     expect(placedNotice({ order_number: 'MP-2026-ABC1234' }, false)).toEqual({ title: 'Order MP-2026-ABC1234 is placed', text: 'Pay by bank transfer to finish.' });
     expect(read('src/pages/Order.tsx')).toContain("'Test order placed'");
     expect(placedNotice({ order_number: 'MP-2026-ABC1234' }, true)).toEqual({ title: 'Test order placed', text: 'Order MP-2026-ABC1234' });
+    // An event album its booking paid for: Order.tsx's line after it.
+    expect(placedNotice({ order_number: 'MP-2026-ABC1234' }, false, 'EV-2026-0007')).toEqual({ title: 'Order MP-2026-ABC1234 is placed', text: 'Your event booking EV-2026-0007 paid for this album. We print it and ship it to your door.' });
     expect(BACKGROUND_NOTE).toBe('You can use other apps while we make and send your order. A notification will tell you when it is done.');
   });
 });

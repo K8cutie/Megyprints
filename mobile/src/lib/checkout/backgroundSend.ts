@@ -15,6 +15,7 @@
    an APK made before it) it does nothing, and the screen says "Keep this
    screen open", as before.
    ══════════════════════════════════════════════════════════════════════════ */
+import { paidByBooking } from '../events/eventDeal';
 import { AppState, PermissionsAndroid, Platform } from 'react-native';
 import type { PlaceProgress } from '@web/lib/placeProgress';
 import { orderKeeper, type OrderKeeperNative } from '../../../modules/order-keeper';
@@ -35,7 +36,9 @@ export const BACKGROUND_NOTE = 'You can use other apps while we make and send yo
 /** The "done" notification for an order sent: the website's words after
  *  Place order ("Order MP-… is placed. Pay by bank transfer to finish."), or
  *  its tracking headline for a tester order. */
-export function placedNotice(order: Pick<PlacedOrder, 'order_number'>, tester: boolean): { title: string; text: string } {
+export function placedNotice(order: Pick<PlacedOrder, 'order_number'>, tester: boolean, bookingNumber: string | null = null): { title: string; text: string } {
+  // An event album its booking paid for (Order.tsx's line after it).
+  if (bookingNumber) return { title: `Order ${order.order_number} is placed`, text: paidByBooking(bookingNumber) };
   return tester
     ? { title: 'Test order placed', text: `Order ${order.order_number}` }
     : { title: `Order ${order.order_number} is placed`, text: 'Pay by bank transfer to finish.' };
@@ -74,7 +77,7 @@ export interface Keeper {
   /** A step of the bar (placeRun.ts sendFrame). */
   step(frame: { progress: PlaceProgress; message: string }): void;
   /** Sent: stops; says so if the person is in another app. */
-  sent(order: Pick<PlacedOrder, 'order_number'>, tester: boolean): Promise<void>;
+  sent(order: Pick<PlacedOrder, 'order_number'>, tester: boolean, bookingNumber?: string | null): Promise<void>;
   /** Stopped with an error: stops; says why if the person is in another app. */
   failed(message: string): Promise<void>;
   /** The screen went away first: stops, says nothing. */
@@ -121,7 +124,7 @@ export async function startKeeper(firstMessage: string, deps: KeeperDeps = realD
         // The notification is only a mirror of the screen.
       }
     },
-    sent: (order, tester) => stop(placedNotice(order, tester)),
+    sent: (order, tester, bookingNumber) => stop(placedNotice(order, tester, bookingNumber ?? null)),
     failed: (message) => stop({ title: FAILED_TITLE, text: message }),
     end: () => stop(null),
   };

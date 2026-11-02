@@ -251,6 +251,27 @@ function clipSender(over: Partial<ClipSender> & { missing?: string[]; ext?: stri
   return { sender, calls };
 }
 
+describe('an event album: its booking pays (Order.tsx 5a)', () => {
+  it('the files sent, then the website\'s cover_order_with_booking; no payment step', async () => {
+    /* eslint-disable-next-line @typescript-eslint/no-require-imports */
+    const webEvent = require('@web/lib/eventAlbum') as { coverOrderWithBooking: AnyFn };
+    await webEvent.coverOrderWithBooking('order-1', 'booking-9');
+    const website = rec.rpcs.splice(0);
+    const d = deps();
+    const r = await sendOrder(placeOrderPlan(input({ eventBookingId: 'booking-9' })), d);
+    expect(r.paidByBooking).toBe(true);
+    expect(r.paidByTester).toBe(false);
+    expect(rec.rpcs).toEqual(website);
+    expect(rec.uploads.map((u) => u.path)).toEqual(['order-1-cover.pdf', 'order-1.pdf']);
+    expect(d.steps.map((s) => s.step).slice(-2)).toEqual(['memories', 'booking']);
+  });
+
+  it('a booking that can\'t pay: the database\'s own sentence', async () => {
+    fake.rpc.cover_order_with_booking = { data: null, error: { message: 'Booking EV-2026-0001 already paid for an album order.', code: 'EV007' } };
+    await expect(sendOrder(placeOrderPlan(input({ eventBookingId: 'booking-9' })), deps())).rejects.toThrow('Booking EV-2026-0001 already paid for an album order.');
+  });
+});
+
 describe('memory videos: the website\'s steps 0, 2b and 3c', () => {
   it('a video that is gone stops it before any order row, naming the video', async () => {
     const c = clipSender({ missing: ['MEMCLIP1'] });

@@ -51,7 +51,7 @@ export async function sendFromPhone(o: {
   placed: PlacedOrder | null;
   onStep: (s: SendStep) => void;
   onOrder: (order: PlacedOrder) => void;
-}): Promise<{ order: PlacedOrder; paidByTester: boolean }> {
+}): Promise<{ order: PlacedOrder; paidByTester: boolean; paidByBooking?: boolean }> {
   const drawer = new PageDrawer(Skia, o.text);
   // Checked here, before any order row: a page the app can't draw stops it now.
   const files = checkoutFiles(
