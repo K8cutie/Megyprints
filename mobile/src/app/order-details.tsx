@@ -5,9 +5,9 @@
 
    Waiting for payment: the website's "Send ₱X by bank transfer to finish"
    box, its last day to pay, the payment step (checkout's, #223: the QR, the
-   order number for the note, the receipt; "I've sent" sends nothing in this
-   test version) and "Cancel this order", asked twice in words, as the
-   website does (cancel_my_unpaid_order, 0042: the database decides).
+   order number for the note, the receipt; "I've sent" records the payment)
+   and "Cancel this order", asked twice in words, as the website does
+   (cancel_my_unpaid_order, 0042: the database decides).
    ══════════════════════════════════════════════════════════════════════════ */
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -17,7 +17,7 @@ import { PaymentStep } from '../components/checkout/PaymentStep';
 import { OrderTracker } from '../components/orders/OrderTracker';
 import { useAuth } from '../lib/auth';
 import { askedToPay } from '../lib/checkout/openOrder';
-import { siteFile } from '../lib/checkout/site';
+import { sitePage } from '../lib/checkout/site';
 import { cancelUnpaidOrder, type AppOrder } from '../lib/orders/myOrders';
 import {
   CANCEL_ASK,
@@ -86,7 +86,7 @@ function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () =
   const [askCancel, setAskCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelErr, setCancelErr] = useState('');
-  const messageUs = () => { void Linking.openURL(siteFile('contact')); };
+  const messageUs = () => { void Linking.openURL(sitePage('contact')); };
 
   const cancel = async () => {
     setCancelling(true);

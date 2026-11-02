@@ -17,7 +17,7 @@ import { ActivityIndicator, Linking, ScrollView, Share, StyleSheet, Text, View }
 import { Button } from '../components/Button';
 import { Field } from '../components/checkout/Field';
 import { useAuth } from '../lib/auth';
-import { siteFile } from '../lib/checkout/site';
+import { sitePage } from '../lib/checkout/site';
 import {
   fmtMonth, isHostedClip, listMyMemories, memoryUrl, pendingTermsByCode, pendingUntil, relinkMemory, validateDestination,
   type PendingTerm, type QrMemoryRow,
@@ -27,7 +27,7 @@ import { colors, space } from '../lib/theme';
 
 const db = supabase as unknown as Parameters<typeof listMyMemories>[0];
 /** The website's My Memories (its hash route). */
-const WEBSITE_MEMORIES = siteFile('#/memories');
+const WEBSITE_MEMORIES = sitePage('memories');
 
 export default function Memories() {
   const { session } = useAuth();

@@ -357,7 +357,7 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByText('3. Send the total we tell you and put MP-2026-ABC1234 in the note if your app asks.')).toBeOnTheScreen();
     expect(screen.getByTestId('pay-within')).toHaveTextContent('Please pay by November 2, 2026. After that this order closes by itself, and your album stays saved.');
     await fireEvent.press(screen.getByTestId('pay-message-us'));
-    expect(opened).toEqual(['https://megyprints.vercel.app/contact']);
+    expect(opened).toEqual(['https://megyprints.vercel.app/#/contact']); // the website's Contact page (a #/ page)
     await fireEvent.press(screen.getByText("I've sent the payment"));
     await fireEvent.press(screen.getByTestId('test-panel-toggle'));
     const sent = JSON.parse(String(screen.getByText(/"rpc": \{/).props.children));

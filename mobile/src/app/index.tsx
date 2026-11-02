@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { releasePickedFiles } from '../../modules/photo-files';
 import { Button } from '../components/Button';
@@ -7,6 +7,7 @@ import { useBuilder } from '../builder/BuilderProvider';
 import { albumInProgress, resumeRoute, startNewNote } from '../builder/albumFlow';
 import { useAuth } from '../lib/auth';
 import { buildKind } from '../lib/buildKind';
+import { EVENTS_LABEL, EVENTS_PAGE } from '../lib/events';
 import { useDraft } from '../lib/draftStore';
 import { colors, space } from '../lib/theme';
 
@@ -77,6 +78,7 @@ export default function Start() {
             <Button label="Sign in" kind="plain" onPress={() => router.push('/sign-in')} testID="go-sign-in" />
           </>
         )}
+        <Button label={EVENTS_LABEL} kind="plain" onPress={() => { void Linking.openURL(EVENTS_PAGE); }} testID="go-events" />
         {testBuild && (
           <>
             <Button label="Shared code check" kind="plain" onPress={() => router.push('/shared-check')} testID="go-check" />

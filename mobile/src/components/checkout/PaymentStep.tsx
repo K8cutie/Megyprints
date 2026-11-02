@@ -22,7 +22,7 @@ import { ORDER_ID } from '../../lib/checkout/orderPayload';
 import { PAYEE, PAYEE_QR_URL, paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../../lib/checkout/payment';
 import { peso } from '../../lib/checkout/price';
 import { pickReceipt, receiptLabel, type PickedReceipt } from '../../lib/checkout/receipt';
-import { siteFile } from '../../lib/checkout/site';
+import { sitePage } from '../../lib/checkout/site';
 import { colors, space } from '../../lib/theme';
 
 export interface PaySummary { albumLine: string; breakdown: { label: string; amount: number }[]; total: number; wasTotal: number | null }
@@ -123,7 +123,7 @@ export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back 
           ) : (
             <View style={styles.noTotal} testID="pay-no-total">
               <Text style={[styles.small, styles.center]}>This order is older, so its total is not saved here. Message us and we will tell you how much to send.</Text>
-              <Button label="Message us" kind="plain" onPress={() => { void Linking.openURL(siteFile('contact')); }} testID="pay-message-us" />
+              <Button label="Message us" kind="plain" onPress={() => { void Linking.openURL(sitePage('contact')); }} testID="pay-message-us" />
             </View>
           )}
         </View>

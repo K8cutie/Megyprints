@@ -2906,8 +2906,8 @@ start with any other).
 - **"Order this album again"** and **"Send the cover"** (the website's
   Orders page): need checkout on the real album (it still uses the test
   album) and the cover drawn and uploaded on the phone (print-files branch).
-- **"I've sent ₱X"** still writes nothing (the payment step's write path:
-  receipt upload + `submit_payment_proof`, against a local Supabase first).
+- **"I've sent ₱X"**: done (2026-11-02, `feat/port-orders-profile-2`): it
+  uploads the receipt and records the payment, as on the website.
 - **Avatar photo** (the website stores a picked photo as a data URL in the
   account): left out.
 - **The endpoint's origin guard**: if `ALLOWED_ORIGINS` is ever set on
@@ -2922,6 +2922,18 @@ start with any other).
   website's checks), "Email me a link" sends the same emailed link as Change
   password (it opens the website to make the new password), then "Check your
   email" and "Back to sign in". `test/forgotPassword.test.tsx`.
+
+## Phase 6: Megyprints Events, and the website's pages (2026-11-02, `feat/port-events-link`)
+
+- Events are booked and run on the website (guests take part by scanning
+  the event's QR; nothing to download). The start screen has the website's
+  "Megyprints Events", which opens the website's Events page
+  (`src/lib/events.ts`, `test/eventsLink.test.tsx`).
+- **Fixed: "Message us" opened the website's front page**, not Contact: the
+  website is a `#/` app and `/contact` is served the front page. Every
+  website page the app opens now goes through `sitePage()`
+  (`src/lib/checkout/site.ts`), and `test/websitePages.test.ts` fails if a
+  screen opens a page by a plain path again.
 
 ## Phase 6: My Memories (2026-11-02, `feat/port-my-memories`)
 

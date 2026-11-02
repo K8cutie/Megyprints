@@ -22,3 +22,11 @@ export const WEBSITE_URL = (process.env.EXPO_PUBLIC_WEBSITE_URL || DEFAULT_WEBSI
 export function siteFile(path: string, base: string = WEBSITE_URL): string {
   return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
 }
+
+/** A page of the website (it is a #/ app: src/main.tsx HashRouter), as the
+ *  app opens it in the browser: sitePage('contact') is
+ *  https://megyprints.vercel.app/#/contact. A plain /contact is served the
+ *  front page (vercel.json), so pages always go through here. */
+export function sitePage(route: string, base: string = WEBSITE_URL): string {
+  return `${base.replace(/\/+$/, '')}/#/${route.replace(/^[#/]+/, '')}`;
+}
