@@ -3206,6 +3206,21 @@ sheet) still does. **Still open:** why the album was lost; asked the owner
 which screen they were on, whether the app closed, and whether "Continue my
 album" or "See my albums" still has it.
 
+## "Choose from Files" opens in the camera folder (2026-11-02, `feat/port-files-camera-folder`)
+
+Owner: "when selecting pictures please make the phone's photo folder the
+default directory". Android's Files picker opened wherever it liked (often
+Downloads), and expo-document-picker can't say where to start. The app's
+photo module now opens it (`modules/photo-files` `pickPhotos`:
+ACTION_OPEN_DOCUMENT, photos, many at once, `EXTRA_INITIAL_URI` =
+`primary:DCIM/Camera`, the phone's camera folder). It reads only the
+picker's answer (name, type, bytes, last change), nothing is copied, and
+the photos go in exactly as before (`filesToPhotos`). A phone without that
+folder: the picker opens where it would anyway. An APK without the new
+function: the older picker. The app's own grid (all the phone's photos,
+newest first) is unchanged. New Kotlin: a **new APK** is needed.
+`test/filesCameraFolder.test.ts`.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
