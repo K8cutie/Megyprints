@@ -5,6 +5,7 @@ import { BuilderProvider } from '../builder/BuilderProvider';
 import { AuthProvider } from '../lib/auth';
 import { DraftProvider } from '../lib/draftStore';
 import { guardSharedRouter, rootMounted, rootUnmounted } from '../lib/routerBinding';
+import { keepTheScreenUpright } from '../lib/screenTurning';
 import { colors } from '../lib/theme';
 
 /** Keeps the shared router bound after Android rebuilds the screen (routerBinding.ts). */
@@ -19,6 +20,11 @@ function KeepRouterBound() {
 }
 
 export default function RootLayout() {
+  // Every screen is upright; only the Preview turns with the phone, while it
+  // is on top (src/lib/screenTurning.ts). Upright from the start, too, after
+  // a reload that happened on the Preview. A layout effect: it runs before
+  // any screen's own effect, so a Preview opened first still turns.
+  useLayoutEffect(() => { void keepTheScreenUpright(); }, []);
   return (
     <AuthProvider>
       <DraftProvider>

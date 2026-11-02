@@ -27,6 +27,12 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   Worklets, Gesture Handler) are not in the APK. Importing one crashes the
   app on the phone; `test/nativeLibraries.test.ts` fails first. Delete the
   line there to turn one back on.
+- **Only the Preview turns with the phone** (`src/lib/screenTurning.ts`,
+  `expo-screen-orientation`); every other screen is upright (`app.json`
+  `"orientation": "portrait"`). A new screen that should turn goes in
+  `SCREENS_THAT_TURN` and calls `useTurnsWithThePhone`;
+  `test/screenTurning.test.ts` fails otherwise. The book's sizes both ways
+  up are `src/builder/previewLayout.ts`.
 - **The app's own native code** lives in `modules/`: `modules/photo-files`
   keeps access to photos picked with "Choose from Files" and reads their size
   and EXIF time, and its `srgbCopy` turns a Display P3 / Adobe RGB photo into

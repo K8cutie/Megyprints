@@ -2520,6 +2520,52 @@ screenshot; the first walk, before the review fixes, is in
 
 ---
 
+## The Preview on its side (2026-11-02, `feat/port-landscape-preview`)
+
+Owner: turning the phone shows the open book (two facing pages) full screen,
+and the upright book gets bigger.
+
+- **Only the Preview turns** (`mobile/src/lib/screenTurning.ts`). `app.json`
+  stays `"orientation": "portrait"`, so every screen is upright. While the
+  Preview is the screen on top it calls `expo-screen-orientation`
+  `lockAsync(DEFAULT)`: the phone may turn it, and the phone's own
+  auto-rotate setting decides (with auto-rotate off, Android shows its small
+  turn button instead). When it is left (the editor over it, or closed):
+  `lockAsync(PORTRAIT_UP)`. The root layout makes the app upright on start.
+  `expo-screen-orientation` is a **new native library: a new APK is needed**
+  (`scripts\build-android.ps1`); an older APK just stays upright (the module
+  is loaded only when asked, and the Preview then does not say "or turn your
+  phone sideways").
+- **On its side** (`mobile/src/builder/previewLayout.ts` `sidewaysBook`): no
+  header, no status bar; the open book fills the safe area (clear of the
+  notch and the navigation bar, 4 pt in). Two round turn buttons (‹ and ›,
+  Done at the end, TalkBack reads "Previous pages" / "Next pages") go at the
+  sides when that makes the book bigger (square and tall albums: the height
+  limits them) and in the bottom corners otherwise (wide albums), the count
+  ("2-3 / 40") with them. The closed cover is one page of the same book, in
+  the middle; opening and closing slide the book as on the website
+  (`planTurn` shift and hideLeft). A swipe turns pages too. Messages (missing
+  photos, saved, changed elsewhere) and "Edit pages" wait until the phone is
+  upright again.
+- **Upright** (`uprightBook`): the page is the screen's width less 4 pt each
+  side (was 16), as tall as fits with the line under it on screen (the area
+  is measured, not guessed); the count over the book is gone (the line under
+  it says the same). On a 412 pt phone an 8×8 page goes from 380 to 404 pt.
+  On a phone the width limits the upright page, so turning the phone is the
+  way to see it much bigger. The website's "or turn your phone sideways" is
+  under the open-book button.
+- **Pictures**: one width both ways up (`pagePictureWidth`: the widest the
+  page is shown either way, in the phone's pixels, at most 1400), so turning
+  the phone draws no page again. A little wider than before for wide albums
+  (an 8×6 page: about 1,190 px instead of 1,000 on a 412 pt, 2.625× phone).
+- Proven in jest: `test/previewLayout.test.ts` (the sums, on six phone
+  sizes, four safe areas, every album size), `test/screenTurning.test.ts`
+  (which screens turn, and an older APK) and `test/previewScreen.test.tsx`
+  (the screen rendered upright and turned, Next / Previous / a swipe / Done,
+  the header and status bar, the opening slide). **Not seen on a phone yet.**
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

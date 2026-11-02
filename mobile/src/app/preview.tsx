@@ -9,6 +9,12 @@
    inside of the front cover, then 2 | 3, 4 | 5… A swipe turns the page too.
    Each turn plays the website's page turn (the leaf hinged at the spine).
 
+   The Preview is the one screen that turns with the phone (owner, 2026-11;
+   src/lib/screenTurning.ts), as the website's open book shows when the phone
+   is really turned: on its side, the open book fills the screen (no header,
+   no status bar), with round turn buttons beside it or under it; upright,
+   the book is as wide as the screen. The sizes are src/builder/previewLayout.ts.
+
    "Edit pages" (the website's way into its editor) opens the editor
    (src/editor) on the page shown; its "Back to preview" comes back here, on
    the page it was on. On the closed book, "Edit cover" opens the cover
@@ -25,11 +31,12 @@
    another device too, or deleted there: the website's question, its words.
    Photos this phone no longer has are named, with the way to put them back.
    ══════════════════════════════════════════════════════════════════════════ */
-import { router, useIsFocused } from 'expo-router';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { router, Stack, useIsFocused } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, Easing, PanResponder, PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ALBUM_SIZES } from '@web/pages/builder/types';
 import { conflictMessage, DELETED_ELSEWHERE_MESSAGE } from '@web/lib/albumSyncRecord';
 import { missingPhotos } from '@web/lib/photoPresence';
@@ -41,6 +48,8 @@ import { accountSaveDue, markAccountSaved } from '../builder/accountSave';
 import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { forgetPhotoPictures, preparePagePicture, PRIORITY, usePagePicture } from '../builder/usePagePicture';
 import { useOncePerVisit } from '../lib/useOncePerVisit';
+import { screenCanTurn, useTurnsWithThePhone } from '../lib/screenTurning';
+import { isSideways, pagePictureWidth, sidewaysBook, uprightBook, UPRIGHT_CHROME_GUESS, UPRIGHT_EDGE, type Box } from '../builder/previewLayout';
 import type { PageRequest } from '../builder/pageImages';
 import { EDIT_PAGES } from '../editor/editorWords';
 import { COVER_ROUTE } from '../editor/cover';
@@ -53,8 +62,11 @@ import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '@web/pages/build
 
 interface FaceProps {
   face: TurnFace;
+  /** Its size on screen, points. */
   W: number;
   H: number;
+  /** The width its picture is drawn at, px: the same both ways up (previewLayout pagePictureWidth). */
+  px: number;
   pages: AlbumPage[];
   cover: AlbumPage;
   photos: UploadedPhoto[];
@@ -64,8 +76,7 @@ interface FaceProps {
 }
 
 /** What a face draws: a page or the cover (the inside of a cover is plain). */
-function faceRequest(face: TurnFace, { W, pages, cover, photos, albumSize }: Pick<FaceProps, 'W' | 'pages' | 'cover' | 'photos' | 'albumSize'>): PageRequest | null {
-  const px = Math.min(1400, Math.round(W * PixelRatio.get()));
+function faceRequest(face: TurnFace, { px, pages, cover, photos, albumSize }: Pick<FaceProps, 'px' | 'pages' | 'cover' | 'photos' | 'albumSize'>): PageRequest | null {
   if (face.kind === 'page' && pages[face.index]) return { page: pages[face.index], pageIndex: face.index, albumSize, photos, width: px };
   if (face.kind === 'cover') return { page: cover, pageIndex: 0, albumSize, photos, width: px, coverMode: true };
   return null;
@@ -75,9 +86,9 @@ function faceRequest(face: TurnFace, { W, pages, cover, photos, albumSize }: Pic
  *  Drawn only while the Preview is the screen on top: under "Edit pages" or
  *  the cover editor it keeps its last picture and asks for no new one, so
  *  every edit there draws the page once, for the screen the customer sees. */
-function Face({ face, W, H, pages, cover, photos, albumSize, text, onNotDrawn }: FaceProps) {
+function Face({ face, W, H, px, pages, cover, photos, albumSize, text, onNotDrawn }: FaceProps) {
   const focused = useIsFocused();
-  const req = focused ? faceRequest(face, { W, pages, cover, photos, albumSize }) : null;
+  const req = focused ? faceRequest(face, { px, pages, cover, photos, albumSize }) : null;
   const picture = usePagePicture(text, req, PRIORITY.shown);
   const key = face.kind === 'page' ? `p${face.index}` : face.kind;
   useEffect(() => { if (req) onNotDrawn?.(key, picture.notDrawn); }, [key, picture.notDrawn.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -143,17 +154,44 @@ function TurnLayer({ plan, W, H, spineX, face, onDone }: { plan: TurnPlan; W: nu
   );
 }
 
+/** A round turn button beside (or under) the book on its side: ‹ back, ›
+ *  forward (filled terracotta: the way forward), or Done at the album's end.
+ *  Its words are the portrait bar's ("Next pages"), for TalkBack. */
+function TurnButton({ box, label, mark, main, onPress, testID }: { box: Box; label: string; mark: string; main: boolean; onPress: () => void; testID: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      testID={testID}
+      hitSlop={8}
+      style={({ pressed }) => [styles.round, main ? styles.roundMain : styles.roundPlain, pressed && styles.pressed,
+        { left: box.x, top: box.y, width: box.w, height: box.h, borderRadius: box.w / 2 }]}
+    >
+      <Text style={[mark.length > 1 ? styles.roundWord : styles.roundMark, main ? styles.roundMainText : styles.roundPlainText]}>{mark}</Text>
+    </Pressable>
+  );
+}
+
 export default function Preview() {
   const { builder, platform, text } = useBuilder();
   const { session } = useAuth();
   const { clear: clearDraft } = useDraft();
   const { width: screenW, height: screenH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const focused = useIsFocused();
+  // The one screen that turns with the phone, while it is on top.
+  useTurnsWithThePhone('preview', focused);
+  const sideways = isSideways(screenW, screenH);
   const once = useOncePerVisit();
   const pages = builder.albumPages;
   const total = pages.length;
   const [openBook, setOpenBook] = useState(false);
-  const view: PreviewView = openBook ? 'spread' : 'page';
+  // An app built before screen turning (an older APK) does not offer it.
+  const [canTurn] = useState(screenCanTurn);
+  // On its side the book is open (the website's way: the open book shows
+  // when the phone is really turned); upright, on "See it as an open book".
+  const view: PreviewView = sideways || openBook ? 'spread' : 'page';
   const index = Math.min(builder.currentPageIndex, Math.max(0, total - 1));
   const [coverAt, setCoverAt] = useState<number | null>(() => (index === 0 ? 0 : null));
   const onCover = coverAt === index;
@@ -190,13 +228,17 @@ export default function Preview() {
   };
   const missing = missingPhotos(pages, builder.uploadedPhotos, builder.coverFront);
 
-  // Sizes: one page (upright) or two side by side, fitted to the screen.
+  // Sizes (previewLayout.ts): on its side, the open book filling the safe
+  // area; upright, as wide as the screen and as tall as the scrolling area
+  // allows (measured: viewH; a guess for the first moment).
   const size = ALBUM_SIZES.find((s) => s.preset === builder.albumSize) ?? ALBUM_SIZES[1];
   const aspect = size.width / size.height;
-  const availW = screenW - space.md * 2;
-  const availH = screenH - 300;
-  const singleW = Math.floor(Math.min(view === 'page' || onCover ? availW : availW / 2, availH * aspect));
-  const H = Math.round(singleW / aspect);
+  const layout: TurnPlan['layout'] = onCover ? 'closed' : view === 'page' ? 'page' : 'spread';
+  const [viewH, setViewH] = useState<number | null>(null);
+  const side = sideways ? sidewaysBook({ screenW, screenH, insets, aspect }) : null;
+  const { pageW: singleW, pageH: H } = side ?? uprightBook({ screenW, viewH: viewH ?? screenH - UPRIGHT_CHROME_GUESS, aspect, shows: layout });
+  // The pictures: one size both ways up, so turning the phone draws no page again.
+  const px = pagePictureWidth({ screenW, screenH, aspect, pixelRatio: PixelRatio.get() });
 
   // A turn shows its leaf's pages at once: they are drawn first (usually
   // already, ahead of time below), at most TURN_WAIT_MS, then the book turns.
@@ -231,7 +273,7 @@ export default function Preview() {
     },
   }), []);
 
-  const faceProps = { W: singleW, H, pages, cover: builder.coverFront, photos: builder.uploadedPhotos, albumSize: builder.albumSize, text };
+  const faceProps = { W: singleW, H, px, pages, cover: builder.coverFront, photos: builder.uploadedPhotos, albumSize: builder.albumSize, text };
 
   // The pages a turn either way would show, drawn ahead of time (after the
   // ones on screen: pictures are drawn one at a time, in the order asked).
@@ -249,7 +291,7 @@ export default function Preview() {
     }
     // faceProps changes with the album; the pages' keys cover it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, index, view, onCover, total, singleW, pages, builder.coverFront, focused]);
+  }, [text, index, view, onCover, total, px, pages, builder.coverFront, focused]);
   // A quick double tap opens one editor, not two (useOncePerVisit).
   const editPages = once(() => {
     setCoverAt(null);
@@ -262,9 +304,26 @@ export default function Preview() {
 
   // What shows now.
   const s = spreadStart(index);
-  const layout: TurnPlan['layout'] = onCover ? 'closed' : view === 'page' ? 'page' : 'spread';
   const bookW = layout === 'spread' ? singleW * 2 : singleW;
   const turnNow = turn && turn.plan.layout === layout ? turn : null;
+  // On its side the closed book is one page of the open book, in the middle:
+  // opening or closing slides the book there (the website's bookSlide,
+  // planTurn's shift), and while the cover opens the left side is still
+  // empty until the cover lands on it (hideLeft). Upright, the closed cover
+  // is drawn bigger than the open book's pages, so nothing slides.
+  const slide = useRef(new Animated.Value(0)).current;
+  const slideTurn = side && turnNow ? turnNow : null;
+  const hideLeft = !!slideTurn?.plan.hideLeft;
+  useLayoutEffect(() => {
+    const plan = slideTurn?.plan;
+    if (!plan || (plan.shift[0] === 0 && plan.shift[1] === 0)) { slide.setValue(0); return undefined; }
+    slide.setValue(plan.shift[0] * singleW);
+    const anim = Animated.timing(slide, { toValue: plan.shift[1] * singleW, duration: plan.ms, easing: EASE, useNativeDriver: true });
+    anim.start();
+    return () => anim.stop();
+    // One slide per turn (its number); the page size is the same through it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideTurn?.n]);
   const shownKeys = onCover ? ['cover'] : view === 'page' ? [`p${index}`] : [`p${s}`, `p${s + 1}`];
   const missingHere = [...new Set(shownKeys.flatMap((k) => notDrawn[k] ?? []))];
   const end = atAlbumEnd(pos);
@@ -279,82 +338,127 @@ export default function Preview() {
     );
   }
 
+  const done = () => { if (router.canDismiss()) router.dismissAll(); else router.replace('/'); };
+  // On its side the book fills the screen: no header, no status bar.
+  const chrome = (
+    <>
+      <Stack.Screen options={{ headerShown: !sideways }} />
+      {sideways && focused && <StatusBar hidden />}
+    </>
+  );
+  const book = (
+    <View style={[styles.stage, hideLeft && styles.stageOpening, { width: bookW, height: H }]} {...swipe.panHandlers} testID="preview-book">
+      {layout === 'closed' && <Face face={{ kind: 'cover' }} {...faceProps} onNotDrawn={noteNotDrawn} />}
+      {layout === 'page' && <Face face={{ kind: 'page', index }} {...faceProps} onNotDrawn={noteNotDrawn} />}
+      {layout === 'spread' && (
+        <View style={styles.spread}>
+          <View style={hideLeft ? styles.notYet : null} testID="preview-left-side">
+            <Face face={s >= 0 ? { kind: 'page', index: s } : { kind: 'inside', cover: 'front' }} {...faceProps} onNotDrawn={noteNotDrawn} />
+          </View>
+          <Face face={s + 1 < total ? { kind: 'page', index: s + 1 } : { kind: 'inside', cover: 'back' }} {...faceProps} onNotDrawn={noteNotDrawn} />
+          {!hideLeft && <View pointerEvents="none" style={[styles.gutter, { left: singleW - 6, height: H }]} />}
+        </View>
+      )}
+      {turnNow && (
+        <TurnLayer key={turnNow.n} plan={turnNow.plan} W={singleW} H={H} spineX={layout === 'spread' ? singleW : 0} face={face}
+          onDone={() => setTurn((t) => (t && t.n === turnNow.n ? null : t))} />
+      )}
+    </View>
+  );
+
+  // ON ITS SIDE: the open book (or the closed cover, one page of it) where
+  // previewLayout puts it, the turn buttons beside or under it, the count.
+  // Everything else waits until the phone is upright again.
+  if (side) {
+    const at = layout === 'spread' ? side.spread : side.closed;
+    const c = side.counter;
+    return (
+      <View style={styles.sideways} testID="preview-sideways">
+        {chrome}
+        <Animated.View style={[styles.place, { left: at.x, top: at.y, transform: [{ translateX: slide }] }]} testID="preview-book-place">{book}</Animated.View>
+        {canTurnBack(pos) && <TurnButton box={side.back} label={`Previous ${word}`} mark="‹" main={false} onPress={back} testID="preview-prev" />}
+        {canTurnForward(pos)
+          ? <TurnButton box={side.forward} label={`Next ${word}`} mark="›" main onPress={forward} testID="preview-next" />
+          : <TurnButton box={side.forward} label="Done" mark="Done" main onPress={done} testID="preview-done" />}
+        <Text style={[styles.sideCounter, { left: c.x, top: c.y, width: c.w, height: c.h }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} testID="preview-counter">
+          {previewCounter(pos)}
+        </Text>
+      </View>
+    );
+  }
+
+  // UPRIGHT: the book as wide as the screen, the line under it says what
+  // shows (the count over it is gone: it said the same), then the buttons.
   return (
     <View style={styles.page}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.counter} testID="preview-counter">{previewCounter(pos)}</Text>
-        <View style={[styles.stage, { width: bookW, height: H }]} {...swipe.panHandlers} testID="preview-book">
-          {layout === 'closed' && <Face face={{ kind: 'cover' }} {...faceProps} onNotDrawn={noteNotDrawn} />}
-          {layout === 'page' && <Face face={{ kind: 'page', index }} {...faceProps} onNotDrawn={noteNotDrawn} />}
-          {layout === 'spread' && (
-            <View style={styles.spread}>
-              <Face face={s >= 0 ? { kind: 'page', index: s } : { kind: 'inside', cover: 'front' }} {...faceProps} onNotDrawn={noteNotDrawn} />
-              <Face face={s + 1 < total ? { kind: 'page', index: s + 1 } : { kind: 'inside', cover: 'back' }} {...faceProps} onNotDrawn={noteNotDrawn} />
-              <View pointerEvents="none" style={[styles.gutter, { left: singleW - 6, height: H }]} />
+      {chrome}
+      <ScrollView
+        contentContainerStyle={styles.body}
+        testID="preview-scroll"
+        onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); setViewH((v) => (v === h ? v : h)); }}
+      >
+        {book}
+        <View style={styles.below}>
+          <Text style={styles.caption} testID="preview-caption">{previewCaption(pos)}</Text>
+          <View style={styles.toggleRow}>
+            {!onCover && (
+              <Pressable accessibilityRole="button" onPress={() => setOpenBook((v) => !v)} style={styles.toggle} testID="preview-open-book">
+                <Text style={styles.toggleText}>{openBook ? 'One page at a time' : 'See it as an open book'}</Text>
+              </Pressable>
+            )}
+            {/* The website's "‹ Edit pages": the editor on the page shown (page 1
+                from the cover); "Back to preview" there comes back to it. */}
+            <Pressable accessibilityRole="button" onPress={editPages} style={styles.toggle} testID="preview-edit-pages">
+              <Text style={styles.toggleText}>{EDIT_PAGES}</Text>
+            </Pressable>
+            {/* The website's "Edit cover", beside the closed book. */}
+            {onCover && (
+              <Pressable accessibilityRole="button" onPress={editCover} style={styles.toggle} testID="preview-edit-cover">
+                <Text style={styles.toggleText}>{EDIT_COVER}</Text>
+              </Pressable>
+            )}
+          </View>
+          {/* The website's line under its open-book button: the other way to see it. */}
+          {!onCover && !openBook && canTurn && <Text style={styles.hint} testID="preview-turn-hint">or turn your phone sideways</Text>}
+          {missingHere.length > 0 && (
+            <Text style={styles.notDrawn} testID="preview-not-drawn">{NOT_DRAWN_LINE}</Text>
+          )}
+          {missing.count > 0 && (
+            <View style={styles.ask} testID="preview-missing-photos">
+              <Text style={styles.askText}>{missingOnPhoneMessage(missing)}</Text>
+              <Button label="Add the photos" kind="plain" onPress={() => router.push('/photos')} testID="preview-missing-add" />
             </View>
           )}
-          {turnNow && (
-            <TurnLayer key={turnNow.n} plan={turnNow.plan} W={singleW} H={H} spineX={layout === 'spread' ? singleW : 0} face={face}
-              onDone={() => setTurn((t) => (t && t.n === turnNow.n ? null : t))} />
+          {signedIn && builder.cloudGone ? (
+            <View style={styles.ask} testID="preview-deleted-elsewhere">
+              <Text style={styles.askText}>{DELETED_ELSEWHERE_MESSAGE}</Text>
+              <Button label="Keep it as a new album" busy={asking} onPress={() => { void answer(builder.saveAsNewAlbum); }} testID="preview-keep-new" />
+              <Button label="Let it go" kind="plain" onPress={() => { void answer(builder.letDeletedAlbumGo, () => { clearDraft(); router.dismissAll(); }); }} testID="preview-let-go" />
+            </View>
+          ) : signedIn && builder.cloudConflict ? (
+            <View style={styles.ask} testID="preview-conflict">
+              <Text style={styles.askText}>{conflictMessage(builder.cloudConflict.updatedAt)}</Text>
+              <Button label="Open the other device's version" busy={asking} onPress={() => { void answer(builder.openNewerVersion); }} testID="preview-open-other" />
+              <Button label="Keep this device's version" kind="plain" onPress={() => { void answer(builder.keepThisVersion); }} testID="preview-keep-this" />
+            </View>
+          ) : (
+            <Text style={styles.saved} testID="preview-saved">
+              {!signedIn ? 'Saved on this phone. Sign in to keep it in your account too.'
+                : builder.cloudSaveStatus === 'saving' ? 'Saved on this phone. Saving to your account…'
+                  : builder.cloudSaveStatus === 'error' ? 'Saved on this phone. It could not be saved to your account just now: it will try again.'
+                    : builder.cloudSaveStatus === 'saved' ? 'Saved on this phone and in your account.'
+                      : 'Saved on this phone. Changes go to your account by themselves.'}
+            </Text>
           )}
+          {end && <Text style={styles.endNote}>Ordering from the app comes in a later version. Your album stays saved.</Text>}
         </View>
-        <Text style={styles.caption} testID="preview-caption">{previewCaption(pos)}</Text>
-        <View style={styles.toggleRow}>
-          {!onCover && (
-            <Pressable accessibilityRole="button" onPress={() => setOpenBook((v) => !v)} style={styles.toggle} testID="preview-open-book">
-              <Text style={styles.toggleText}>{openBook ? 'One page at a time' : 'See it as an open book'}</Text>
-            </Pressable>
-          )}
-          {/* The website's "‹ Edit pages": the editor on the page shown (page 1
-              from the cover); "Back to preview" there comes back to it. */}
-          <Pressable accessibilityRole="button" onPress={editPages} style={styles.toggle} testID="preview-edit-pages">
-            <Text style={styles.toggleText}>{EDIT_PAGES}</Text>
-          </Pressable>
-          {/* The website's "Edit cover", beside the closed book. */}
-          {onCover && (
-            <Pressable accessibilityRole="button" onPress={editCover} style={styles.toggle} testID="preview-edit-cover">
-              <Text style={styles.toggleText}>{EDIT_COVER}</Text>
-            </Pressable>
-          )}
-        </View>
-        {missingHere.length > 0 && (
-          <Text style={styles.notDrawn} testID="preview-not-drawn">{NOT_DRAWN_LINE}</Text>
-        )}
-        {missing.count > 0 && (
-          <View style={styles.ask} testID="preview-missing-photos">
-            <Text style={styles.askText}>{missingOnPhoneMessage(missing)}</Text>
-            <Button label="Add the photos" kind="plain" onPress={() => router.push('/photos')} testID="preview-missing-add" />
-          </View>
-        )}
-        {signedIn && builder.cloudGone ? (
-          <View style={styles.ask} testID="preview-deleted-elsewhere">
-            <Text style={styles.askText}>{DELETED_ELSEWHERE_MESSAGE}</Text>
-            <Button label="Keep it as a new album" busy={asking} onPress={() => { void answer(builder.saveAsNewAlbum); }} testID="preview-keep-new" />
-            <Button label="Let it go" kind="plain" onPress={() => { void answer(builder.letDeletedAlbumGo, () => { clearDraft(); router.dismissAll(); }); }} testID="preview-let-go" />
-          </View>
-        ) : signedIn && builder.cloudConflict ? (
-          <View style={styles.ask} testID="preview-conflict">
-            <Text style={styles.askText}>{conflictMessage(builder.cloudConflict.updatedAt)}</Text>
-            <Button label="Open the other device's version" busy={asking} onPress={() => { void answer(builder.openNewerVersion); }} testID="preview-open-other" />
-            <Button label="Keep this device's version" kind="plain" onPress={() => { void answer(builder.keepThisVersion); }} testID="preview-keep-this" />
-          </View>
-        ) : (
-          <Text style={styles.saved} testID="preview-saved">
-            {!signedIn ? 'Saved on this phone. Sign in to keep it in your account too.'
-              : builder.cloudSaveStatus === 'saving' ? 'Saved on this phone. Saving to your account…'
-                : builder.cloudSaveStatus === 'error' ? 'Saved on this phone. It could not be saved to your account just now: it will try again.'
-                  : builder.cloudSaveStatus === 'saved' ? 'Saved on this phone and in your account.'
-                    : 'Saved on this phone. Changes go to your account by themselves.'}
-          </Text>
-        )}
-        {end && <Text style={styles.endNote}>Ordering from the app comes in a later version. Your album stays saved.</Text>}
       </ScrollView>
       <SafeAreaView edges={['bottom']} style={styles.bar}>
         <View style={styles.turnRow}>
           {canTurnBack(pos) && <Button label={`‹ Previous ${word}`} kind="plain" onPress={back} style={styles.turnButton} testID="preview-prev" />}
           {canTurnForward(pos)
             ? <Button label={`Next ${word} ›`} onPress={forward} style={styles.turnButton} testID="preview-next" />
-            : <Button label="Done" onPress={() => { if (router.canDismiss()) router.dismissAll(); else router.replace('/'); }} style={styles.turnButton} testID="preview-done" />}
+            : <Button label="Done" onPress={done} style={styles.turnButton} testID="preview-done" />}
         </View>
       </SafeAreaView>
     </View>
@@ -364,9 +468,26 @@ export default function Preview() {
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#EFE9E1' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.md, padding: space.lg, backgroundColor: colors.background },
-  body: { alignItems: 'center', padding: space.md, gap: space.sm },
-  counter: { fontSize: 14, fontWeight: '600', color: colors.muted, alignSelf: 'flex-end' },
+  // Upright: the book UPRIGHT_EDGE from the screen's sides; the rest in from them as before.
+  body: { alignItems: 'center', paddingTop: space.sm, paddingBottom: space.md, paddingHorizontal: UPRIGHT_EDGE, gap: space.sm },
+  below: { alignSelf: 'stretch', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md - UPRIGHT_EDGE },
+  hint: { fontSize: 12, color: colors.muted, marginTop: -4 },
+  // On its side: everything placed where previewLayout says.
+  sideways: { flex: 1, backgroundColor: '#EFE9E1' },
+  place: { position: 'absolute' },
+  round: { position: 'absolute', alignItems: 'center', justifyContent: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4 },
+  roundMain: { backgroundColor: colors.accent },
+  roundPlain: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.accent },
+  roundMark: { fontSize: 30, lineHeight: 34, fontWeight: '700', marginTop: -3 },
+  roundWord: { fontSize: 14, fontWeight: '700' },
+  roundMainText: { color: colors.accentText },
+  roundPlainText: { color: colors.accent },
+  pressed: { opacity: 0.85 },
+  sideCounter: { position: 'absolute', fontSize: 13, lineHeight: 20, fontWeight: '600', color: colors.muted, textAlign: 'center' },
   stage: { backgroundColor: '#FFFFFF', elevation: 6, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8 },
+  // The cover opening on its side: only the right page is there yet.
+  stageOpening: { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 },
+  notYet: { opacity: 0 },
   spread: { flexDirection: 'row' },
   gutter: { position: 'absolute', top: 0, width: 12, backgroundColor: 'rgba(60,40,20,0.10)' },
   face: { backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
