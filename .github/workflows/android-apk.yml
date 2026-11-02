@@ -82,7 +82,7 @@ jobs:
         working-directory: mobile
         run: npx expo prebuild --platform android --no-install
 
-      - name: Build the APK (phones: 64-bit arm)
+      - name: 'Build the APK (64-bit arm phones)'
         working-directory: mobile/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain
 
