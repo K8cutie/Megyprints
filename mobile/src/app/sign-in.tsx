@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
 import { googleRefusedNotice } from '@web/lib/accountErrors';
 import { useEffect, useRef, useState } from 'react';
@@ -43,15 +43,17 @@ export default function SignIn() {
   };
 
   // "Sign in with Google": Google opens in a Chrome tab; its answer comes back
-  // through the auth-return screen, which sets the session and comes back
-  // here. A session that appears after Google was started goes on, as after
-  // a password (one already there when this screen opened does not).
+  // through the auth-return screen, which sets the session and closes itself.
+  // Only then, with this screen in front again, it goes on as after a
+  // password: never while auth-return is still on top (two screens moving at
+  // once). A session already there when this screen opened does not go on.
+  const focused = useIsFocused();
   const googleStarted = useRef(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   useEffect(() => {
-    if (session && googleStarted.current) { googleStarted.current = false; goOn(); }
+    if (focused && session && googleStarted.current) { googleStarted.current = false; goOn(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [session, focused]);
   const google = async () => {
     setError(null);
     setGoogleBusy(true);
@@ -67,6 +69,8 @@ export default function SignIn() {
   };
 
   const submit = async () => {
+    // A Google tab closed without signing in: this sign-in is the password's.
+    googleStarted.current = false;
     setBusy(true);
     setError(null);
     const result = await signIn(email, password);
