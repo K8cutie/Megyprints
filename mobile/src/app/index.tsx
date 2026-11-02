@@ -63,6 +63,7 @@ export default function Start() {
               <Button label="Your orders" kind="plain" onPress={() => router.push('/orders')} style={styles.half} testID="see-orders" />
               <Button label="My profile" kind="plain" onPress={() => router.push('/profile')} style={styles.half} testID="see-profile" />
             </View>
+            <Button label="My memories" kind="plain" onPress={() => router.push('/memories')} testID="see-memories" />
             <Pressable accessibilityRole="button" onPress={() => { void signOut(); }} style={styles.link}>
               <Text style={styles.linkText}>Sign out</Text>
             </Pressable>
@@ -77,7 +78,7 @@ export default function Start() {
         <Button label="Checkout with a test album" kind="plain" onPress={() => router.push('/order')} testID="go-order" />
       </View>
 
-      <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos, see it as a book and edit its pages, and see your orders and your profile. You can also try checkout with a test album (nothing is ordered). Ordering in the app comes in a later version.</Text>
+      <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos, see it as a book, edit its pages and order it, and see your orders, your QR memories and your profile. Checkout with the test album orders nothing.</Text>
     </SafeAreaView>
   );
 }

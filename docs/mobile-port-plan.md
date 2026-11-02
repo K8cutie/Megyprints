@@ -2914,6 +2914,27 @@ start with any other).
 - **Forgot password on the sign-in screen**: the same emailed link would
   work there (`passwordLink.ts`); not added in this job.
 
+## Phase 6: My Memories (2026-11-02, `feat/port-my-memories`)
+
+- `src/app/memories.tsx` (from the start screen and My albums): every QR
+  memory of the account, newest first, in the website's words: the address
+  its printed QR opens ("Share link"), its scans, "Live until …" /
+  "Hosting ended …", a longer term waiting on payment. A link memory is
+  re-pointed here ("Points to", Save: the same printed QR). A video memory
+  can be watched; replacing a video or deleting a memory stays on the
+  website for now ("Open on the website": it changes the video file, or the
+  saved albums the QR is printed in).
+- `src/lib/memories/memories.ts` keeps the website's rules (its
+  qrMemories.ts reads its own client; qrMemory.ts and memoryClips.ts hold
+  browser-only code): `test/memories.test.ts` runs the website's own list,
+  relink and pending-term functions beside the app's on a stand-in database
+  (`test/helpers/fakeMemories.ts`), and holds the allowed links, their words,
+  the QR address and the video rule to the website's source.
+- Not in the app yet: adding a QR memory to a page (the editor), replacing a
+  video, deleting a memory, the QR picture in the list.
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

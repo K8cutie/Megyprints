@@ -55,12 +55,15 @@ export default function Albums() {
   );
 }
 
-/** Your orders and My profile, from My albums. */
+/** Your orders, My profile and My memories, from My albums. */
 function AccountLinks() {
   return (
-    <View style={styles.links}>
-      <Button label="Your orders" kind="plain" onPress={() => router.push('/orders')} style={styles.half} testID="albums-orders" />
-      <Button label="My profile" kind="plain" onPress={() => router.push('/profile')} style={styles.half} testID="albums-profile" />
+    <View style={styles.linkBlock}>
+      <View style={styles.links}>
+        <Button label="Your orders" kind="plain" onPress={() => router.push('/orders')} style={styles.half} testID="albums-orders" />
+        <Button label="My profile" kind="plain" onPress={() => router.push('/profile')} style={styles.half} testID="albums-profile" />
+      </View>
+      <Button label="My memories" kind="plain" onPress={() => router.push('/memories')} testID="albums-memories" />
     </View>
   );
 }
@@ -87,6 +90,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 18, fontWeight: '700', color: colors.text },
   meta: { fontSize: 15, color: colors.text, marginTop: space.xs },
   when: { fontSize: 14, color: colors.muted, marginTop: 2 },
-  links: { flexDirection: 'row', gap: space.md, marginTop: space.md, alignSelf: 'stretch' },
+  linkBlock: { gap: space.md, marginTop: space.md, alignSelf: 'stretch' },
+  links: { flexDirection: 'row', gap: space.md, alignSelf: 'stretch' },
   half: { flex: 1, paddingHorizontal: space.sm },
 });
