@@ -51,8 +51,11 @@ describe('BackgroundDesigner on the cover (imageOnly + hideUpload)', () => {
 
 describe('CoverEditor: tapping Background opens the file browser', () => {
   const src = readFileSync(resolve(__dirname, 'CoverEditor.tsx'), 'utf8');
-  it('hides the designer\'s upload box', () => {
-    expect(src).toMatch(/<BackgroundDesigner[^>]*\bhideUpload\b/);
+  it('never shows the designer\'s upload box', () => {
+    // It draws its own photo row above the cover (owner, 2026-11-01); any
+    // BackgroundDesigner it uses again must hide the upload box.
+    expect(src).not.toMatch(/Upload Custom Image/);
+    expect(src).not.toMatch(/<BackgroundDesigner(?![^>]*\bhideUpload\b)/);
   });
   it('owns a hidden image file input', () => {
     expect(src).toMatch(/type="file"[^>]*accept="image\/\*"|accept="image\/\*"[^>]*type="file"/);
