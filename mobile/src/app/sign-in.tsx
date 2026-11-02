@@ -1,9 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { openBrowserAsync } from 'expo-web-browser';
+import { googleRefusedNotice } from '@web/lib/accountErrors';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { useAuth } from '../lib/auth';
-import { supabaseConfigured } from '../lib/supabase';
+import { supabase, supabaseConfigured } from '../lib/supabase';
+import { startGoogleSignIn } from '../lib/googleSignIn';
+import { nonceStore, randomHex } from '../lib/googleNonce';
 import { colors, space } from '../lib/theme';
 import { forgetResume } from '../editor/text/resumeQuote';
 
@@ -12,7 +16,7 @@ import { forgetResume } from '../editor/text/resumeQuote';
  *  (then=back), it goes back there once signed in, as the website's sign-in
  *  box keeps you on the page; from anywhere else it opens My albums. */
 export default function SignIn() {
-  const { signIn } = useAuth();
+  const { signIn, session } = useAuth();
   // Opened from a screen that carries on once signed in (checkout, or the
   // editor's "Write a line for this photo"): then=back goes back to it.
   const { then } = useLocalSearchParams<{ then?: string }>();
@@ -31,16 +35,43 @@ export default function SignIn() {
   const editEmail = (text: string) => { setEmail(text); setError(null); };
   const editPassword = (text: string) => { setPassword(text); setError(null); };
 
+  // Signed in: back where sign-in was opened from (then=back), else My albums.
+  const goOn = () => {
+    signedInHere.current = true;
+    if (then === 'back' && router.canGoBack()) router.back();
+    else router.replace('/albums');
+  };
+
+  // "Sign in with Google": Google opens in a Chrome tab; its answer comes back
+  // through the auth-return screen, which sets the session and comes back
+  // here. A session that appears after Google was started goes on, as after
+  // a password (one already there when this screen opened does not).
+  const googleStarted = useRef(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  useEffect(() => {
+    if (session && googleStarted.current) { googleStarted.current = false; goOn(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+  const google = async () => {
+    setError(null);
+    setGoogleBusy(true);
+    try {
+      googleStarted.current = true;
+      await startGoogleSignIn({ client: supabase as never, store: nonceStore, open: (url) => openBrowserAsync(url), randomHex });
+    } catch {
+      googleStarted.current = false;
+      setError(googleRefusedNotice('').text);
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
   const submit = async () => {
     setBusy(true);
     setError(null);
     const result = await signIn(email, password);
     setBusy(false);
-    if (result.ok) {
-      signedInHere.current = true;
-      if (then === 'back' && router.canGoBack()) router.back();
-      else router.replace('/albums');
-    }
+    if (result.ok) goOn();
     else setError(result.error ?? 'Sign-in did not work. Try again.');
   };
 
@@ -95,7 +126,8 @@ export default function SignIn() {
 
         <Button label={busy ? 'Signing in' : 'Sign in'} busy={busy} onPress={submit} style={styles.button} testID="sign-in" />
 
-        <Text style={styles.note}>Made your account with Google? Google sign-in is not in this test version yet.</Text>
+        <Button label="Sign in with Google" kind="plain" busy={googleBusy} onPress={() => { void google(); }} style={styles.button} testID="sign-in-google" />
+        <Text style={styles.note}>Signed up with a Gmail? Sign in with Google using that same Gmail. Your albums will be there.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

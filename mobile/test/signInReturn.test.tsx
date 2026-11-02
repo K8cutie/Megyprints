@@ -15,14 +15,25 @@ jest.mock('expo-router', () => ({
   router: { back: () => mockRouter.back(), replace: (h: unknown) => mockRouter.replace(h), canGoBack: () => mockRouter.canGoBack() },
   useLocalSearchParams: () => mockParams,
 }));
-jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ signIn: mockSignIn }) }));
-jest.mock('../src/lib/supabase', () => ({ supabaseConfigured: true }));
+const mockSession: { value: unknown } = { value: null };
+jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ signIn: mockSignIn, session: mockSession.value }) }));
+const mockGoogle = { oauth: [] as unknown[], opened: [] as string[] };
+jest.mock('../src/lib/supabase', () => ({
+  supabaseConfigured: true,
+  supabase: { auth: { signInWithOAuth: async (a: unknown) => { mockGoogle.oauth.push(a); return { data: { url: 'https://example.supabase.co/auth/v1/authorize?provider=google' }, error: null }; } } },
+}));
+jest.mock('expo-web-browser', () => ({ openBrowserAsync: async (u: string) => { mockGoogle.opened.push(u); return { type: 'opened' }; } }));
+jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => new Uint8Array(n).fill(171) }));
+jest.mock('@react-native-async-storage/async-storage', () => jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock'));
 
 beforeEach(() => {
   mockRouter.back.mockClear();
   mockRouter.replace.mockClear();
   mockRouter.canGoBack.mockImplementation(() => true);
   delete mockParams.then;
+  mockSession.value = null;
+  mockGoogle.oauth = [];
+  mockGoogle.opened = [];
 });
 
 async function signInNow() {
@@ -53,5 +64,33 @@ describe('where sign-in goes after it works', () => {
     await signInNow();
     expect(mockRouter.replace).toHaveBeenCalledWith('/albums');
     expect(mockRouter.back).not.toHaveBeenCalled();
+  });
+});
+
+describe('Sign in with Google (lib/googleSignIn.ts)', () => {
+  it('the website\'s button and words; it opens Google in a tab with a new one-time code', async () => {
+    await render(<SignIn />);
+    expect(screen.getByText('Signed up with a Gmail? Sign in with Google using that same Gmail. Your albums will be there.')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('sign-in-google'));
+    expect(screen.getByTestId('sign-in-google')).toHaveTextContent('Sign in with Google');
+    expect(mockGoogle.opened).toEqual(['https://example.supabase.co/auth/v1/authorize?provider=google']);
+    const nonce = 'ab'.repeat(16);
+    expect(mockGoogle.oauth).toEqual([{ provider: 'google', options: { redirectTo: `https://megyprints.vercel.app/auth-native.html?n=${nonce}`, skipBrowserRedirect: true } }]);
+  });
+
+  it('back from Google signed in: on from the sign-in screen as after a password (then=back: back to the order)', async () => {
+    mockParams.then = 'back';
+    const view = await render(<SignIn />);
+    await fireEvent.press(screen.getByTestId('sign-in-google'));
+    mockSession.value = { user: { id: 'user-1' } };
+    await view.rerender(<SignIn />);
+    expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('a session already there when the screen opens (signed in elsewhere): it does not jump away by itself', async () => {
+    mockSession.value = { user: { id: 'user-1' } };
+    await render(<SignIn />);
+    expect(mockRouter.back).not.toHaveBeenCalled();
+    expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 });

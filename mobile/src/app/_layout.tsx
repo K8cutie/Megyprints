@@ -58,6 +58,7 @@ export default function RootLayout() {
             <Stack.Screen name="order-details" options={{ title: 'Order' }} />
             <Stack.Screen name="profile" options={{ title: 'My Profile' }} />
             <Stack.Screen name="memories" options={{ title: 'My Memories' }} />
+            <Stack.Screen name="auth-return" options={{ title: 'Signing in' }} />
             <Stack.Screen name="change-password" options={{ title: 'Change password' }} />
             <Stack.Screen name="delete-account" options={{ title: 'Delete my account' }} />
           </Stack>

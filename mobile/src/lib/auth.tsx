@@ -1,8 +1,8 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Who is signed in, for every screen.
 
-   Email and password only in Phase 1. Google sign-in needs owner steps in
-   Google Cloud and Supabase first (docs/mobile-port-plan.md, Phase 1 notes).
+   Email and password, and Google (lib/googleSignIn.ts: the 1.x app's way,
+   through the website's auth-native.html; the sign-in screen starts it).
    The words for a failed sign-in are the website's own (signInErrorText in
    src/lib/accountErrors.ts, shared code), so both say the same thing.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -28,11 +28,9 @@ interface AuthValue {
 
 const AuthContext = createContext<AuthValue | null>(null);
 
-/** Google sign-in is not in the app yet (docs/mobile-port-plan.md, Phase 1
- *  notes). Until it is, the website's "Use Sign in with Google" would point
- *  at a button that is not there, so the app leaves that sentence out (the
- *  sign-in screen says Google sign-in is coming). */
-export const GOOGLE_SIGN_IN_IN_APP = false;
+/** Google sign-in is in the app (the sign-in screen's "Sign in with Google"),
+ *  so the website's "Use Sign in with Google" points at a real button. */
+export const GOOGLE_SIGN_IN_IN_APP: boolean = true;
 const GOOGLE_HINT = /\s*Made your account with Google\? Use Sign in with Google\./;
 
 /** What to tell the person, from what Supabase answered (or threw). */

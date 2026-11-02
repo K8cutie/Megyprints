@@ -530,7 +530,7 @@ On the `pwa_test` emulator (Android, x86_64), both APKs, next to the 1.x app
   worktrees under `.claude\worktrees\` (each with its own `node_modules`) and
   `C:\Users\Archie\.gradle\caches` (4.6 GB) are where space can come back from.
 
-### Google sign-in: owner steps (not in Phase 1)
+### Google sign-in: owner steps (not in Phase 1; not needed now, see "Sign in with Google" below)
 
 Phase 1 signs in with email and password only. People who made their account
 with Google cannot sign in to the dev app yet (the sign-in screen says so).
@@ -2932,6 +2932,37 @@ start with any other).
   the QR address and the video rule to the website's source.
 - Not in the app yet: adding a QR memory to a page (the editor), replacing a
   video, deleting a memory, the QR picture in the list.
+
+## Sign in with Google (2026-11-02, `feat/port-google-sign-in`)
+
+People who made their account with Google can now sign in to 2.0, the same
+way the 1.x app does it (`src/lib/nativeAuth.ts`, `public/auth-native.html`):
+
+- "Sign in with Google" on the sign-in screen asks Supabase for Google's
+  page (the website's own call, `redirectTo` =
+  `https://megyprints.vercel.app/auth-native.html?n=<one-time code>`) and
+  opens it in a Chrome tab (`expo-web-browser`).
+- After Google, Supabase sends the tab to the website's
+  `auth-native.html`, which hands the sign-in back to the app
+  (`com.megyprints.app`) as `megyprints://auth?…` or the verified
+  `https://megyprints.vercel.app/auth-native.html#…` link.
+- `src/app/+native-intent.tsx` sends both shapes to the `auth-return`
+  screen; `src/lib/googleSignIn.ts` signs in only when the one-time code is
+  the one this phone started (kept in AsyncStorage, `src/lib/googleNonce.ts`,
+  made with `expo-crypto`), then goes back where the person was. A refused or
+  cancelled sign-in shows the website's words (`googleRefusedNotice`).
+- **Nothing to set up in Google Cloud or Supabase**: the same page, the
+  same app name, the same return address as 1.x. (The Credential Manager
+  steps above are no longer needed for 2.0.)
+- **Works only in the release app `com.megyprints.app`** (Phase 7), because
+  the website's page hands the sign-in to that app name. In a dev build
+  (`com.megyprints.app.dev`) the Google page opens, but the sign-in goes to
+  the 1.x app or stays in Chrome.
+- New native modules (`expo-web-browser`, `expo-crypto`): a **new APK** is
+  needed.
+- Proven: `test/googleSignIn.test.ts` (start, the way back, the one-time
+  code, held to `nativeAuth.ts` and `auth-native.js`), `test/authReturn.test.tsx`,
+  `test/signInReturn.test.tsx`. Not proven on a phone.
 
 ---
 
