@@ -14,7 +14,9 @@ const mockSignIn = jest.fn(async () => ({ ok: true as const }));
 jest.mock('expo-router', () => ({
   router: { back: () => mockRouter.back(), replace: (h: unknown) => mockRouter.replace(h), canGoBack: () => mockRouter.canGoBack() },
   useLocalSearchParams: () => mockParams,
+  useIsFocused: () => mockFocused.value,
 }));
+const mockFocused = { value: true };
 const mockSession: { value: unknown } = { value: null };
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ signIn: mockSignIn, session: mockSession.value }) }));
 const mockGoogle = { oauth: [] as unknown[], opened: [] as string[] };
@@ -32,6 +34,7 @@ beforeEach(() => {
   mockRouter.canGoBack.mockImplementation(() => true);
   delete mockParams.then;
   mockSession.value = null;
+  mockFocused.value = true;
   mockGoogle.oauth = [];
   mockGoogle.opened = [];
 });
@@ -82,6 +85,33 @@ describe('Sign in with Google (lib/googleSignIn.ts)', () => {
     mockParams.then = 'back';
     const view = await render(<SignIn />);
     await fireEvent.press(screen.getByTestId('sign-in-google'));
+    mockSession.value = { user: { id: 'user-1' } };
+    await view.rerender(<SignIn />);
+    expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('signed in while the auth-return screen is still in front: nothing moves until sign-in is in front again, then once', async () => {
+    const view = await render(<SignIn />);
+    await fireEvent.press(screen.getByTestId('sign-in-google'));
+    mockFocused.value = false; // auth-return on top
+    mockSession.value = { user: { id: 'user-1' } };
+    await view.rerender(<SignIn />);
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+    expect(mockRouter.back).not.toHaveBeenCalled();
+    mockFocused.value = true; // auth-return closed itself
+    await view.rerender(<SignIn />);
+    await view.rerender(<SignIn />);
+    expect(mockRouter.replace).toHaveBeenCalledTimes(1);
+    expect(mockRouter.replace).toHaveBeenCalledWith('/albums');
+  });
+
+  it('Google tab closed without signing in, then a password: it goes on once, not twice', async () => {
+    mockParams.then = 'back';
+    const view = await render(<SignIn />);
+    await fireEvent.press(screen.getByTestId('sign-in-google'));
+    await fireEvent.changeText(screen.getByTestId('email'), 'tester@example.com');
+    await fireEvent.changeText(screen.getByTestId('password'), 'not-a-real-password');
+    await fireEvent.press(screen.getByTestId('sign-in'));
     mockSession.value = { user: { id: 'user-1' } };
     await view.rerender(<SignIn />);
     expect(mockRouter.back).toHaveBeenCalledTimes(1);

@@ -25,6 +25,7 @@ const LOGIN_SRC = fs.readFileSync(path.join(REPO, 'src/pages/auth/LoginModal.tsx
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), replace: jest.fn(), canGoBack: () => true },
   useLocalSearchParams: () => ({}),
+  useIsFocused: () => true,
 }));
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ signIn: jest.fn(), session: null }) }));
 const mockReset: { calls: unknown[][]; error: unknown } = { calls: [], error: null };
