@@ -11,6 +11,7 @@
       sign in on the app.
    The words are the website's (LoginModal's "Forgot your password?" and
    "Check your email", and the shared passwordReset.ts for a failure).
+   Used by Change password (Profile) and "Forgot password?" (sign-in).
    ══════════════════════════════════════════════════════════════════════════ */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendLinkErrorText } from '@web/lib/passwordReset';
@@ -34,6 +35,20 @@ export const SENT_HELP = 'Not there after a few minutes? Look in Spam. Check tha
 /** The app's: where the link goes, and what to do after. */
 export const OPENS_WEBSITE = 'The link opens the Megy Prints website. Make your new password there. Next time you sign in on this app, use the new password.';
 export const DONE = 'Done';
+
+/* "Forgot password?" on the sign-in screen (LoginModal's forgot view). */
+export const FORGOT_LINK = 'Forgot password?';
+export const FORGOT_TITLE = 'Forgot your password?';
+export const BACK_TO_SIGN_IN = 'Back to sign in';
+export const EMAIL_REQUIRED = 'Email is required';
+export const EMAIL_INVALID = 'Please enter a valid email';
+
+/** LoginModal's check before "Email me a link": null when it looks like an
+ *  email, else the website's words. */
+export function emailProblem(email: string): string | null {
+  if (/^\S+@\S+\.\S+$/.test(email.trim())) return null;
+  return email.trim() ? EMAIL_INVALID : EMAIL_REQUIRED;
+}
 
 /** Emails the link. Null when it was sent, else the website's words for why not. */
 export async function sendPasswordLink(client: Pick<SupabaseClient, 'auth'>, email: string): Promise<string | null> {

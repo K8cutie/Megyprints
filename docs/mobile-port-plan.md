@@ -2916,8 +2916,12 @@ start with any other).
   the account (the public delete-account page's option 2) with an "Email us
   to delete my account" button. The fix is a server rule for the app, held
   until Nov 9.
-- **Forgot password on the sign-in screen**: the same emailed link would
-  work there (`passwordLink.ts`); not added in this job.
+- **Forgot password on the sign-in screen**: added 2026-11-02
+  (`feat/port-forgot-password`): "Forgot password?" under the password opens
+  the website's "Forgot your password?" (the email already typed, the
+  website's checks), "Email me a link" sends the same emailed link as Change
+  password (it opens the website to make the new password), then "Check your
+  email" and "Back to sign in". `test/forgotPassword.test.tsx`.
 
 ## Phase 6: My Memories (2026-11-02, `feat/port-my-memories`)
 
