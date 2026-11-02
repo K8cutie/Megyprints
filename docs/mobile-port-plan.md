@@ -3105,6 +3105,12 @@ way the 1.x app does it (`src/lib/nativeAuth.ts`, `public/auth-native.html`):
   the website's page hands the sign-in to that app name. In a dev build
   (`com.megyprints.app.dev`) the Google page opens, but the sign-in goes to
   the 1.x app or stays in Chrome.
+  **So the test app shows no Google button** (`feat/port-test-app-google`,
+  `src/lib/account/googleHere.ts`; owner's first APK test, 2026-11-02: the
+  button opened the Play Store for 1.x, which shows the website). It says
+  instead that Google is in the Play app, and to sign in with email and
+  password ("Forgot password?" makes one for a Google-only account).
+  `test/signInTestBuild.test.tsx`.
 - New native modules (`expo-web-browser`, `expo-crypto`): a **new APK** is
   needed.
 - Proven: `test/googleSignIn.test.ts` (start, the way back, the one-time

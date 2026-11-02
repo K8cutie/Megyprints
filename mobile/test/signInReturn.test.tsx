@@ -11,6 +11,8 @@ const mockRouter = { back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() 
 const mockParams: { then?: string } = {};
 const mockSignIn = jest.fn(async () => ({ ok: true as const }));
 
+// Google's answer comes back only to the Play app (lib/account/googleHere.ts).
+jest.mock('../src/lib/buildKind', () => ({ buildKind: () => 'play' }));
 jest.mock('expo-router', () => ({
   router: { back: () => mockRouter.back(), replace: (h: unknown) => mockRouter.replace(h), canGoBack: () => mockRouter.canGoBack() },
   useLocalSearchParams: () => mockParams,

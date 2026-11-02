@@ -7,6 +7,7 @@ import { Button } from '../components/Button';
 import { useAuth } from '../lib/auth';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { startGoogleSignIn } from '../lib/googleSignIn';
+import { GOOGLE_IN_PLAY_APP, GOOGLE_IN_PLAY_APP_SHORT, googleSignInHere } from '../lib/account/googleHere';
 import { nonceStore, randomHex } from '../lib/googleNonce';
 import { colors, space } from '../lib/theme';
 import { forgetResume } from '../editor/text/resumeQuote';
@@ -89,12 +90,16 @@ export default function SignIn() {
     if (err) setForgotError(err); else setView('sent');
   };
 
-  const googleBlock = (
+  // Google's answer comes back only to the Play app (lib/account/googleHere.ts):
+  // the test app says so instead of offering the button.
+  const googleBlock = (short: boolean) => (googleSignInHere() ? (
     <>
       <Button label="Sign in with Google" kind="plain" busy={googleBusy} onPress={() => { void google(); }} style={styles.button} testID="sign-in-google" />
       <Text style={styles.note}>Signed up with a Gmail? Sign in with Google using that same Gmail. Your albums will be there.</Text>
     </>
-  );
+  ) : (
+    <Text style={styles.note} testID="google-play-only">{short ? GOOGLE_IN_PLAY_APP_SHORT : GOOGLE_IN_PLAY_APP}</Text>
+  ));
 
   if (view === 'sent') {
     return (
@@ -133,7 +138,7 @@ export default function SignIn() {
           <Text style={styles.note}>{OPENS_WEBSITE}</Text>
           <Button label={sending ? SENDING : SEND} busy={sending} onPress={() => { void sendLink(); }} style={styles.button} testID="send-link" />
           {error && <Text style={styles.error} accessibilityLiveRegion="polite" testID="sign-in-error">{error}</Text>}
-          {googleBlock}
+          {googleBlock(true)}
           <Button label={BACK_TO_SIGN_IN} kind="plain" onPress={() => showView('signin')} style={styles.button} testID="back-to-sign-in" />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -205,7 +210,7 @@ export default function SignIn() {
 
         <Button label={busy ? 'Signing in' : 'Sign in'} busy={busy} onPress={submit} style={styles.button} testID="sign-in" />
 
-        {googleBlock}
+        {googleBlock(false)}
       </ScrollView>
     </KeyboardAvoidingView>
   );

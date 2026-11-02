@@ -22,6 +22,8 @@ import * as pw from '../src/lib/account/passwordLink';
 const REPO = path.resolve(__dirname, '..', '..');
 const LOGIN_SRC = fs.readFileSync(path.join(REPO, 'src/pages/auth/LoginModal.tsx'), 'utf8');
 
+// Google's answer comes back only to the Play app (lib/account/googleHere.ts).
+jest.mock('../src/lib/buildKind', () => ({ buildKind: () => 'play' }));
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), replace: jest.fn(), canGoBack: () => true },
   useLocalSearchParams: () => ({}),
