@@ -13,6 +13,7 @@ import { renderAlbumForPrint, renderCoverWrapForPrint, type CoverPrintInput, typ
 import { coverWrapGeometry } from './coverGeometry';
 import { pageSizeWithBleedIn } from './printBleed';
 import { PAGE_ONE_RIGHT_MARK } from './binding';
+import { PRINT_FILE_BUDGET_BYTES } from './printFileSpec';
 
 function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -23,9 +24,8 @@ function blobToDataURL(blob: Blob): Promise<string> {
   });
 }
 
-/** The most a print file may weigh: Supabase Storage takes 50 MB a file on
- *  this plan (0015_print_pdfs_size_limit), less room for the upload itself. */
-export const PRINT_FILE_BUDGET_BYTES = 45 * 1024 * 1024;
+/** The most a print file may weigh (printFileSpec.ts, shared with the 2.0 app). */
+export { PRINT_FILE_BUDGET_BYTES };
 
 /** A page's words over its picture: sharp, see-through, at 300 DPI
  *  (printPipeline's WordPatch). The page is `pw` × `ph`. */
