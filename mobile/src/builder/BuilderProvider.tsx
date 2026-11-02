@@ -15,6 +15,7 @@ import { BuilderPlatformContext, type AppLifecycle, type TextMeasurer } from '@w
 import { useBuilderState, type BuilderActions } from '@web/pages/builder/useBuilderState';
 import { inspectPhotos } from '../../modules/photo-files';
 import { useAuth } from '../lib/auth';
+import { withQrOnOuterSide } from '../lib/memories/qrSide';
 import { supabase } from '../lib/supabase';
 import { PageText } from '../render/pageText';
 import { createAppPlatform, type AppPlatform } from './appPlatform';
@@ -96,7 +97,9 @@ interface BuilderValue {
 const BuilderContext = createContext<BuilderValue | null>(null);
 
 function BuilderHost({ platform: p, children }: { platform: AppPlatform; children: ReactNode }) {
-  const builder = useBuilderState();
+  // Every screen reads the pages with each video memory's QR on the page's
+  // outer edge, away from the binding (lib/memories/qrSide.ts).
+  const builder = withQrOnOuterSide(useBuilderState());
   const [text, setText] = useState<PageText | null>(pageText);
   useEffect(() => {
     let live = true;

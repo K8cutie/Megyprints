@@ -33,6 +33,8 @@ export const AUTO = '✨ Auto';
 export const CORNER_LABELS: Record<QrCorner, string> = { tl: 'Top-left', tr: 'Top-right', bl: 'Bottom-left', br: 'Bottom-right' };
 export const cornerNote = (corner: QrCorner | null) =>
   (corner == null ? 'Auto places it away from the face.' : `Placed in the ${CORNER_LABELS[corner].toLowerCase()} corner.`);
+/** The app's own line (the website offers all 4 corners): why only 2. */
+export const OUTER_EDGE_NOTE = 'The QR goes on the outer edge of the page, away from the binding, so it is easy to scan.';
 export const REMOVE = 'Remove';
 export const SAVING = 'Saving…';
 export const saveLabel = (editing: boolean) => (editing ? 'Use this video' : 'Place QR');

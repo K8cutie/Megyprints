@@ -11,7 +11,9 @@
      • the quality: offered with the album's first memory (HD at its price),
        then "set with your first memory";
      • a video too long: the website's words, nothing placed;
-     • change the video (same code), move the corner, Remove.
+     • change the video (same code), move the corner, Remove;
+     • the corner: only the page's two OUTER corners are offered, the
+       binding's side marked, and Auto keeps to them (lib/memories/qrSide.ts).
    The phone's picker, player, file store and prices are stand-ins.
    ══════════════════════════════════════════════════════════════════════════ */
 import fs from 'node:fs';
@@ -19,7 +21,8 @@ import path from 'node:path';
 import { createElement, type ReactElement } from 'react';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
 import { SCENARIOS } from '../../tools/parity/scenarios';
-import { qrBadgeCornerOf } from '@web/pages/builder/pageTemplates';
+import { bindingEdge } from '@web/pages/builder/binding';
+import { QR_CORNERS, qrBadgeCornerOf } from '@web/pages/builder/pageTemplates';
 import type { QrFill } from '@web/pages/builder/types';
 import { editThePages } from '../src/editor/scope';
 import '../src/editor/parts';
@@ -27,6 +30,7 @@ import { editorParts, type EditorContext, type SheetProps } from '../src/editor/
 import * as W from '../src/editor/memories/words';
 import type { PickedVideo } from '../src/editor/memories/memoryFlow';
 import type { AppPlatform } from '../src/builder/appPlatform';
+import { outerCorners } from '../src/lib/memories/qrSide';
 import { act, builder, ctxOn, madeAlbum, settle, useEditorBench } from './editorHarness';
 
 const REPO = path.resolve(__dirname, '..', '..');
@@ -78,10 +82,11 @@ const video = (over: Partial<PickedVideo> = {}): PickedVideo => ({ uri: 'file://
 const part = () => editorParts().find((p) => p.id === 'memories')!;
 const Sheet = () => part().sheets!.sheet as (p: SheetProps<unknown>) => ReactElement | null;
 
-/** A single-photo page the website lets take a memory. */
-async function singlePhotoPage(): Promise<number> {
+/** A single-photo page the website lets take a memory (bound on the side asked). */
+async function singlePhotoPage(bound?: 'left' | 'right'): Promise<number> {
   await act(async () => { editThePages(builder()); });
   for (let i = 0; i < builder().albumPages.length; i++) {
+    if (bound && bindingEdge(i) !== bound) continue;
     await act(async () => { builder().goToPage(i); });
     if (builder().canAddMemoryQr) return i;
   }
@@ -175,12 +180,13 @@ describe('a new memory', () => {
     expect(has('memory-preview')).toBe(true);
     expect(textOf()).toContain(W.pickLabel(true, false));
     expect(textOf()).toContain('Auto places it away from the face.');
-    await press('memory-corner-tr');
-    expect(textOf()).toContain('Placed in the top-right corner.');
+    const [top] = outerCorners(i);
+    await press(`memory-corner-${top}`);
+    expect(textOf()).toContain(`Placed in the ${W.CORNER_LABELS[top].toLowerCase()} corner.`);
     await press('memory-save');
     expect(log.closed).toBe(1);
     const page = builder().albumPages[i];
-    expect(qrBadgeCornerOf(page.templateId)).toBe('tr');
+    expect(qrBadgeCornerOf(page.templateId)).toBe(top);
     const fill = page.qrFills!.find(Boolean) as QrFill;
     expect(fill).toEqual(expect.objectContaining({
       code: 'abcdefgh', kind: 'clip', clipExt: 'mp4', memoryUrl: 'https://megyprints.vercel.app/m/abcdefgh',
@@ -233,6 +239,24 @@ describe('a new memory', () => {
   });
 });
 
+describe('the corner: the page\'s outer edge, never the binding', () => {
+  for (const bound of ['left', 'right'] as const) {
+    it(`a page bound on its ${bound}: only its two outer corners, the binding marked; Auto (no face found) takes the bottom one`, async () => {
+      const platform = await madeAlbum(SCENARIOS[0]);
+      const i = await singlePhotoPage(bound);
+      const [top, bottom] = outerCorners(i);
+      await show(platform, { mode: 'add' });
+      expect(QR_CORNERS.filter((c) => has(`memory-corner-${c}`))).toEqual([top, bottom]);
+      expect(has(`memory-spine-${bound}`)).toBe(true);
+      expect(textOf()).toContain(W.OUTER_EDGE_NOTE);
+      mockPicks.push(video());
+      await press('memory-pick');
+      await press('memory-save');
+      expect(qrBadgeCornerOf(builder().albumPages[i].templateId)).toBe(bottom);
+    });
+  }
+});
+
 describe('a memory already on the page', () => {
   async function withMemory() {
     const platform = await madeAlbum(SCENARIOS[0]);
@@ -240,7 +264,7 @@ describe('a memory already on the page', () => {
     await show(platform, { mode: 'add' });
     mockPicks.push(video());
     await press('memory-pick');
-    await press('memory-corner-bl');
+    await press(`memory-corner-${outerCorners(i)[1]}`);
     await press('memory-save');
     await act(async () => { sheetRoot?.unmount(); });
     const slot = builder().albumPages[i].qrFills!.findIndex(Boolean);
@@ -268,11 +292,13 @@ describe('a memory already on the page', () => {
 
   it('the corner moves at once; "Remove" takes the QR and its kept video off', async () => {
     const { platform, i, slot } = await withMemory();
-    expect(qrBadgeCornerOf(builder().albumPages[i].templateId)).toBe('bl');
+    const [top, bottom] = outerCorners(i);
+    expect(qrBadgeCornerOf(builder().albumPages[i].templateId)).toBe(bottom);
     await show(platform, { mode: 'slot', slot });
     expect(has('memory-corner-auto')).toBe(false);
-    await press('memory-corner-tl');
-    expect(qrBadgeCornerOf(builder().albumPages[i].templateId)).toBe('tl');
+    expect(QR_CORNERS.filter((c) => has(`memory-corner-${c}`))).toEqual([top, bottom]);
+    await press(`memory-corner-${top}`);
+    expect(qrBadgeCornerOf(builder().albumPages[i].templateId)).toBe(top);
     await act(async () => { sheetRoot?.unmount(); });
     const log = await show(platform, { mode: 'slot', slot: builder().albumPages[i].qrFills!.findIndex(Boolean) });
     await press('memory-remove');

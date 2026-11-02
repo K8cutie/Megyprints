@@ -3031,13 +3031,30 @@ video steps, My Memories' Replace video and Delete), on the phone:
 - An event's guest videos ("Or one your guests shared") come only with an
   album made from the event on the website (they are handed over in that
   browser); on any other device, the website doesn't offer them either.
+- **The QR goes on the page's outer edge, never by the binding**
+  (`feat/port-qr-outer-corner`, `src/lib/memories/qrSide.ts`; owner,
+  2026-11-02). Next to the binding the page curves into the spine and the
+  QR is hard to scan. Page 1 is bound on its left, so its outer corners are
+  top-right and bottom-right; page 2 the other way (the website's
+  `bindingEdge`). The corner picker offers only the page's two outer
+  corners and marks the binding's side; Auto takes the outer corner farthest
+  from the face (the phone finds no faces yet, so: the bottom one). The
+  website's album code (frozen) still allows all 4 corners, and a page
+  changes sides when a page is added or taken out before it, so the app
+  reads its pages through `withQrOnOuterSide` (BuilderProvider): the
+  editor, the Preview, the print files and the order's copy of the album
+  all have the QR on the outer edge, whatever corner the saved album names.
+  Before this, Auto always took bottom-right (no faces found), which is by
+  the binding on every left-hand page. **Website, after the Nov 9 freeze:**
+  the same rule in `applyMemoryQr`, the corner picker (AddQrModal) and
+  generateAlbum's carried memories, then the app can drop its own copy.
 
 ### Test APK from GitHub (`.github/workflows/android-apk.yml`)
 
 Every pull request into native-2.0 that touches the app builds a test APK
 on GitHub's machines ("Megy Prints 2.0 (dev)", the debug key: it installs
 next to 1.x). Download: the PR's Checks → "2.0 test APK" → Summary →
-Artifacts. **Owner step, once:** GitHub → the repository → Settings →
+Artifacts. **Owner step, once (done 2026-11-02):** GitHub → the repository → Settings →
 Secrets and variables → Actions → New repository secret, twice:
 `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, the same two
 lines as in `mobile\.env.local`. Without them the app is still built (so a

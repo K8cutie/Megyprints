@@ -8,6 +8,9 @@
        corner Auto (away from the face) or chosen;
      • 'slot' — a tap on a page's QR: change its video, move its corner
        (setMemoryQrCorner), or remove it (setQrFill null);
+   The QR's corner is one of the page's two OUTER corners, never next to the
+   binding (lib/memories/qrSide.ts): only those are offered, and Auto keeps
+   to them.
      • 'box'  — a tap on a QR in a caption box (older albums): change or
        remove it (setTextSlotQr).
    Every change goes through the website's own album state (ctx.builder).
@@ -18,13 +21,15 @@ import { getRandomBytes } from 'expo-crypto';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { QrFill } from '@web/pages/builder/types';
-import { QR_CORNERS, qrBadgeCornerOf, type QrCorner } from '@web/pages/builder/pageTemplates';
+import { bindingEdge } from '@web/pages/builder/binding';
+import { qrBadgeCornerOf, type QrCorner } from '@web/pages/builder/pageTemplates';
 import { EXTRA_QR_RATE, FREE_QR_MEMORIES, hdMemoriesPriceOf, includedHostingYears } from '@web/lib/pricing';
 import { Button } from '../../components/Button';
 import { loadPriceSchedule, usePriceSchedule } from '../../lib/checkout/priceSchedule';
 import { clipStore, currentClipQuality, setClipQuality } from '../../lib/memories/clipStore';
 import type { ClipExt, ClipQuality } from '../../lib/memories/clips';
 import { qrPngDataUrlOnPhone } from '../../lib/memories/qrPicture';
+import { autoOuterCorner, outerCornerOf, outerCorners } from '../../lib/memories/qrSide';
 import { supabase, supabaseConfigured, supabaseUrl } from '../../lib/supabase';
 import { colors, space } from '../../lib/theme';
 import { EditorSheet } from '../core/EditorSheet';
@@ -45,15 +50,19 @@ const flowDeps: FlowDeps = {
 };
 
 export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams>) {
-  const { builder, page } = ctx;
+  const { builder, page, pageIndex, platform } = ctx;
   const initial: QrFill | null = params.mode === 'slot' ? page.qrFills?.[params.slot] ?? null
     : params.mode === 'box' ? page.textSlotQr?.[params.box] ?? null
       : null;
   const editing = !!initial;
 
   // The corner: a new badge starts on Auto (null); a badge page's QR moves
-  // at once (the website's onCorner → setMemoryQrCorner).
-  const badgeCorner = params.mode === 'slot' ? qrBadgeCornerOf(page.templateId) : null;
+  // at once (the website's onCorner → setMemoryQrCorner). Only the page's
+  // two outer corners (top, bottom) are offered.
+  const offered = outerCorners(pageIndex);
+  const spineLeft = bindingEdge(pageIndex) === 'left';
+  const savedCorner = params.mode === 'slot' ? qrBadgeCornerOf(page.templateId) : null;
+  const badgeCorner = savedCorner && outerCornerOf(savedCorner, pageIndex);
   const [newCorner, setNewCorner] = useState<QrCorner | null>(null);
   const corner = params.mode === 'add' ? newCorner : badgeCorner;
   const showCorners = params.mode === 'add' || !!badgeCorner;
@@ -133,13 +142,21 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
       }
       if (offerTier) await setClipQuality(quality);
       const fill = await newMemory(picked.video, picked, offerTier ? quality : (albumTier ?? await currentClipQuality()), flowDeps);
-      await builder.applyMemoryQr(fill, newCorner ?? undefined);
+      await builder.applyMemoryQr(fill, newCorner ?? await autoCorner());
       close();
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : W.SAVE_FAILED);
     } finally {
       setBusy(false);
     }
+  };
+
+  /** Auto: the outer corner farthest from the face on the page's photo. */
+  const autoCorner = async (): Promise<QrCorner> => {
+    const photo = (page.slotFills ?? []).find((f): f is number => f != null);
+    const url = photo != null ? builder.uploadedPhotos[photo]?.previewUrl : undefined;
+    const face = url ? await platform.faces.detectFaceCenter(url).catch(() => null) : null;
+    return autoOuterCorner(face, pageIndex);
   };
 
   const remove = async () => {
@@ -207,13 +224,15 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
               </Pressable>
             )}
             <View style={styles.cornerBox}>
-              {QR_CORNERS.map((c) => (
+              <View style={[styles.spine, spineLeft ? { left: -2 } : { right: -2 }]} testID={`memory-spine-${spineLeft ? 'left' : 'right'}`} />
+              {offered.map((c) => (
                 <Pressable key={c} accessibilityRole="button" accessibilityLabel={W.CORNER_LABELS[c]} onPress={() => pickCorner(c)}
                   style={[styles.corner, CORNER_POS[c], corner === c && styles.cornerOn]} testID={`memory-corner-${c}`} />
               ))}
             </View>
             <Text style={[styles.tiny, styles.flex]}>{W.cornerNote(corner)}</Text>
           </View>
+          <Text style={[styles.tiny, styles.spineNote]}>{W.OUTER_EDGE_NOTE}</Text>
         </View>
       )}
 
@@ -258,6 +277,8 @@ const styles = StyleSheet.create({
   cornerBox: { width: 92, height: 68, borderRadius: 8, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.border },
   corner: { position: 'absolute', width: 24, height: 24, borderRadius: 5, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
   cornerOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  spine: { position: 'absolute', top: -2, bottom: -2, width: 6, borderRadius: 2, backgroundColor: colors.muted },
+  spineNote: { marginTop: space.xs },
   flex: { flex: 1 },
   qrRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.background, borderRadius: 8, padding: space.sm },
   qr: { width: 48, height: 48 },

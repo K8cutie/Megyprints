@@ -30,6 +30,7 @@ import {
   type AddressValue,
 } from '@web/lib/contact';
 import type { AlbumPage, AlbumSizePreset, QrFill } from '@web/pages/builder/types';
+import { qrPagesOnOuterSide } from '../memories/qrSide';
 
 /** An albums row as select('*') returns it (the columns an order freezes,
  *  and whatever else the row has). */
@@ -72,12 +73,15 @@ export interface ShippingDetails { name: string; phone: string; address: Address
 /** createOrderFromAlbum's own message for details that don't pass. */
 export const SHIPPING_INVALID = 'Please provide a valid name, PH mobile number, and complete delivery address.';
 
-/** The frozen copy of the album the order keeps (album_snapshot). */
+/** The frozen copy of the album the order keeps (album_snapshot). Its
+ *  pages carry each video memory's QR on the outer edge, as the print files
+ *  do (lib/memories/qrSide.ts); nothing else differs from the saved row. */
 export function albumSnapshot(row: OrderAlbumRow) {
   return {
     id: row.id, title: row.title, album_type: row.album_type, album_size: row.album_size,
     selected_template: row.selected_template, photos_per_page: row.photos_per_page,
-    pages: row.pages, photos: row.photos, cover_photo: row.cover_photo,
+    pages: Array.isArray(row.pages) ? qrPagesOnOuterSide(row.pages as AlbumPage[]) : row.pages,
+    photos: row.photos, cover_photo: row.cover_photo,
     cover_front: row.cover_front ?? null,
   };
 }
