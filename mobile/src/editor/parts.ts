@@ -5,3 +5,4 @@ import './core';
 import './photos';
 import './text';
 import './cover';
+import './memories';

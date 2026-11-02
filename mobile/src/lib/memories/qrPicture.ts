@@ -50,3 +50,11 @@ export function qrPngDataUrl(Sk: Skia, memUrl: string, targetPx = QR_OPTIONS.wid
   if (!img) throw new Error('Could not make the QR code picture.');
   return `data:image/png;base64,${img.encodeToBase64(4 as never, 100)}`;
 }
+
+/** qrPngDataUrl with the phone's own Skia (set up by BuilderProvider),
+ *  loaded only when a QR is made. */
+export function qrPngDataUrlOnPhone(memUrl: string): string {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Skia } = require('@shopify/react-native-skia/lib/commonjs/skia/Skia') as { Skia: Skia };
+  return qrPngDataUrl(Skia, memUrl);
+}

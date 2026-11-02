@@ -30,9 +30,8 @@
        picked here, back in their places), a swap waiting, "✎ This page is
        yours · Megy, fix this page" (resetStudioPage), and the blank pages
        reminder ("5 pages are blank", Delete / Edit: deletePages).
-   Not this part: video memories and QR codes are Phase 6 (a tap on one
-   selects it and nothing more); words, quotes and page colours are part 2;
-   the cover is part 3.
+   Not this part: video memories and QR codes (editor/memories); words,
+   quotes and page colours are part 2; the cover is part 3.
    ══════════════════════════════════════════════════════════════════════════ */
 import { createElement } from 'react';
 import { REMOVE_PHOTO, CHOICE_WORDS } from '../editorWords';

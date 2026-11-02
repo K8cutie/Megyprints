@@ -74,6 +74,15 @@ export function sendFrame(prev: PlaceProgress | null, s: SendStep): { progress: 
     case 'sending': return { progress: forward(prev, PLACE_AT.sending, true), message: 'Sending your print file…' };
     case 'memories': return { progress: forward(prev, PLACE_AT.saving), message: 'Saving your memories…' };
     case 'finishing': return { progress: forward(prev, PLACE_AT.finishing), message: 'Finishing your test order…' };
+    case 'videosCheck': return s.before
+      ? { progress: forward(prev, PLACE_AT.start), message: 'Checking your memory videos…' }
+      : { progress: forward(prev, PLACE_AT.checking), message: 'Checking your memory videos…' };
+    case 'videos': {
+      // Order.tsx 2b: advance(videosAt(d, t)); the line names the next video.
+      const progress = forward(prev, s.total > 0 ? videosAt(s.done, s.total) : PLACE_AT.videos);
+      if (s.total <= 0 || s.done >= s.total) return { progress, message: 'Uploading your memory videos…' };
+      return { progress, message: s.phase === 'compress' ? `Preparing memory video ${s.done + 1} of ${s.total}…` : `Uploading memory video ${s.done + 1} of ${s.total}…` };
+    }
   }
 }
 

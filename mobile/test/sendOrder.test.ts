@@ -13,8 +13,10 @@
      • the cover is tried 3 times, waiting 1.5 s then 4 s, then the website's
        words (sending or making); the pages, the tester claim, the unpaid
        limit and a tester code that stopped: the website's words;
-     • memory videos (the app can't send them yet) stop it before any order
-       row exists;
+     • memory videos (the website's steps 0, 2b and 3c): a video that's gone
+       stops it before any order row exists; the kept videos are uploaded
+       after the cover and checked again after the pages; their rows are
+       required and point at the file actually sent;
      • "I've sent ₱X": the receipt, then submit_payment_proof; a receipt that
        didn't go up still records the payment, as on the website.
    Nothing leaves the computer: the database and the uploads are stand-ins.
@@ -27,10 +29,11 @@ import { placeOrderPlan, type OrderAlbumRow, type PlanInput } from '../src/lib/c
 import { paymentSubmitPlan } from '../src/lib/checkout/payment';
 import { TesterCodeGoneError } from '../src/lib/checkout/testerCode';
 import {
-  COVER_MAKE_FAILED, COVER_SEND_FAILED, MemoryVideosNotInAppError, sendOrder, sendPayment, TESTER_CLAIM_FAILED,
-  type PlacedOrder, type SendDeps, type SendStep,
+  COVER_MAKE_FAILED, COVER_SEND_FAILED, MEMORY_ROWS_FAILED, MemoryVideosNotInAppError, sendOrder, sendPayment, TESTER_CLAIM_FAILED,
+  type ClipSender, type PlacedOrder, type SendDeps, type SendStep,
 } from '../src/lib/checkout/sendOrder';
 import { createOnlyUpload, isAlreadyExists } from '../src/lib/checkout/storage';
+import { MissingClipError } from '../src/lib/memories/clips';
 import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
 
 jest.mock('@web/lib/supabase', () => jest.requireActual('./helpers/fakeSupabase').supabaseModule);
@@ -222,10 +225,95 @@ describe('when something fails: the website\'s words', () => {
     expect(TESTER_CLAIM_FAILED).toBe("We couldn't finish your free tester order. Your order is saved: tap Place order again.");
   });
 
-  it('memory videos (not in the app yet): stopped before any order row', async () => {
+  it('memory videos with no way to send them (an older caller): stopped before any order row', async () => {
     await expect(sendOrder(placeOrderPlan(input({}, true)), deps())).rejects.toBeInstanceOf(MemoryVideosNotInAppError);
     expect(rec.inserts).toHaveLength(0);
     expect(rec.uploads).toHaveLength(0);
+  });
+});
+
+/** The memory videos' stand-in: what was asked, in order. */
+function clipSender(over: Partial<ClipSender> & { missing?: string[]; ext?: string | null; replaced?: string[] } = {}) {
+  const calls: unknown[] = [];
+  const sender: ClipSender = {
+    findMissing: async (codes) => { calls.push(['findMissing', codes]); return over.missing ?? []; },
+    upload: async (codes, onProgress) => {
+      calls.push(['upload', codes]);
+      onProgress?.(0, codes.length, 'compress');
+      onProgress?.(1, codes.length, 'upload');
+      return { uploaded: codes, replaced: over.replaced ?? [] };
+    },
+    extOf: async (code) => { calls.push(['extOf', code]); return (over.ext === undefined ? 'mp4' : over.ext) as never; },
+    repoint: async (code, destination) => { calls.push(['repoint', code, destination]); return true; },
+    supabaseUrl: 'https://example.supabase.co',
+    ...over,
+  };
+  return { sender, calls };
+}
+
+describe('memory videos: the website\'s steps 0, 2b and 3c', () => {
+  it('a video that is gone stops it before any order row, naming the video', async () => {
+    const c = clipSender({ missing: ['MEMCLIP1'] });
+    const err = await sendOrder(placeOrderPlan(input({}, true)), deps({ clips: c.sender })).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(MissingClipError);
+    expect((err as MissingClipError).codes).toEqual(['MEMCLIP1']);
+    expect(rec.inserts).toHaveLength(0);
+    expect(rec.uploads).toHaveLength(0);
+  });
+
+  it('checked, ordered, cover, videos, pages, checked again, then the rows pointing at the file sent', async () => {
+    const c = clipSender();
+    const d = deps({ clips: c.sender });
+    await sendOrder(placeOrderPlan(input({}, true)), d);
+    expect(c.calls).toEqual([
+      ['findMissing', ['MEMCLIP1']],
+      ['upload', ['MEMCLIP1']],
+      ['upload', ['MEMCLIP1']],
+      ['extOf', 'MEMCLIP1'],
+      // The album said https://example.test/MEMCLIP1; the video went up as .mp4.
+      ['repoint', 'MEMCLIP1', 'https://example.supabase.co/storage/v1/object/public/memory-clips/MEMCLIP1.mp4'],
+    ]);
+    expect(d.steps.map((s) => s.step)).toEqual([
+      'videosCheck', 'order', 'cover', 'videos', 'videos', 'videos', 'pages', 'pages', 'pages', 'sending', 'videosCheck', 'memories',
+    ]);
+    expect(d.steps.filter((s) => s.step === 'videos')).toEqual([
+      { step: 'videos', done: 0, total: 1, phase: 'upload' }, { step: 'videos', done: 0, total: 1, phase: 'compress' }, { step: 'videos', done: 1, total: 1, phase: 'upload' },
+    ]);
+    expect(rec.uploads.map((u) => u.path)).toEqual(['order-1-cover.pdf', 'order-1.pdf']);
+    const rows = rec.upserts[0].rows as { code: string; destination: string; kind: string }[];
+    expect(rows.find((r) => r.code === 'MEMCLIP1')).toEqual(expect.objectContaining({ kind: 'clip', destination: 'https://example.supabase.co/storage/v1/object/public/memory-clips/MEMCLIP1.mp4' }));
+    expect(rows.find((r) => r.code === 'MEMLINK1')?.destination).toBe('https://example.test/MEMLINK1');
+  });
+
+  it('a video sent as the file the album names: no re-point, unless it replaced an older one', async () => {
+    const plain = clipSender({ ext: null });
+    await sendOrder(placeOrderPlan(input({}, true)), deps({ clips: plain.sender }));
+    expect(plain.calls.filter((x) => (x as string[])[0] === 'repoint')).toEqual([]);
+    resetFake();
+    const replaced = clipSender({ replaced: ['MEMCLIP1'] });
+    await sendOrder(placeOrderPlan(input({}, true)), deps({ clips: replaced.sender }));
+    expect(replaced.calls.filter((x) => (x as string[])[0] === 'repoint')).toHaveLength(1);
+  });
+
+  it('Place order again after a step failed: the same order, the videos not checked before it again', async () => {
+    const c = clipSender();
+    const placed: PlacedOrder = { id: 'order-1', order_number: 'MP-2026-ABC1234', status: 'pending_payment' };
+    await sendOrder(placeOrderPlan(input({}, true)), deps({ clips: c.sender }), placed);
+    expect(c.calls[0]).toEqual(['upload', ['MEMCLIP1']]);
+    expect(rec.inserts).toHaveLength(0);
+  });
+
+  it('the rows for videos are required: the website\'s words when they can\'t be made', async () => {
+    const c = clipSender();
+    const failing = {
+      ...fakeClient,
+      from: (table: string) => (table === 'qr_memories'
+        ? { upsert: async () => ({ error: { message: 'denied' } }) }
+        : (fakeClient as unknown as { from: (t: string) => unknown }).from(table)),
+    };
+    await expect(sendOrder(placeOrderPlan(input({}, true)), deps({ clips: c.sender, db: failing as never }))).rejects.toThrow(MEMORY_ROWS_FAILED);
+    expect(MEMORY_ROWS_FAILED).toBe('Could not save your memory videos to your account. Please try again.');
+    expect(c.calls.filter((x) => (x as string[])[0] === 'repoint')).toEqual([]);
   });
 });
 

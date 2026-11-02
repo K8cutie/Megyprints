@@ -64,6 +64,8 @@ import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedu
 import { checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/checkout/testerCode';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
+import { albumClipTier } from '../lib/memories/albumTier';
+import { MissingClipError, missingClipMessage, type ClipQuality } from '../lib/memories/clips';
 
 type Step = 'form' | 'placing' | 'placed' | 'payment' | 'existing' | 'done';
 
@@ -160,8 +162,21 @@ export default function OrderScreen() {
     setCover(firstChoice);
   }, [coverFits, firstChoice, step]);
 
-  // No memory videos in the app yet (Phase 4+): standard quality, the included term.
-  const price = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: null, hdMemories: false, tester });
+  // HD memories: the quality the album's videos were made for (the website's
+  // albumTier), read before the price is shown.
+  const clipKey = albumQrFills(album.pages).filter((f) => f?.kind === 'clip').map((f) => f!.code).join(',');
+  const [clipTier, setClipTier] = useState<{ key: string; tier: ClipQuality } | null>(null);
+  useEffect(() => {
+    if (!clipKey) return;
+    let alive = true;
+    void albumClipTier(clipKey.split(',')).then((tier) => { if (alive) setClipTier({ key: clipKey, tier }); });
+    return () => { alive = false; };
+  }, [clipKey]);
+  const clipTierReady = !clipKey || clipTier?.key === clipKey;
+  const hdMemories = qrCount > 0 && !!clipKey && clipTier?.key === clipKey && clipTier.tier === 'hd';
+  // The included hosting term (a longer one is chosen on the website for now).
+  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: null, hdMemories, tester });
+  const price = clipTierReady ? priced : { ...priced, ready: false };
 
   // The bar's steps for this album (made once: a re-render must not restart the bar).
   const frames = useMemo(() => {
@@ -201,7 +216,7 @@ export default function OrderScreen() {
         specs: { material, cover, size: albumSize },
         shipping: { name: cleanName, phone: cleanPhone, address },
         hostingYears: price.effectiveYears,
-        hdMemories: false,
+        hdMemories,
         testerCode: tester?.code ?? null,
         includedYears: price.includedYears,
       });
@@ -263,6 +278,8 @@ export default function OrderScreen() {
         }}
         onFailed={(e) => {
           if (e instanceof TesterCodeGoneError) setTester(null);
+          // A memory video that's gone: the website's words, naming its pages.
+          if (e instanceof MissingClipError) { setMessage(missingClipMessage(album.pages, e.codes)); setStep('form'); return; }
           setMessage(e instanceof Error ? e.message : 'Something went wrong placing your order.');
           setStep('form');
         }}

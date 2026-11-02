@@ -62,6 +62,9 @@ jest.mock('../src/lib/checkout/phoneSend', () => ({
   sendPaymentFromPhone: async (plan: never, receipt: unknown) => { mockSend.payments.push({ plan, receipt }); return { receiptError: null }; },
 }));
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
+// The quality the album's memory videos were made for (read from the phone's store).
+const mockTier = { value: 'standard' as 'standard' | 'hd', asked: [] as string[][] };
+jest.mock('../src/lib/memories/albumTier', () => ({ albumClipTier: async (codes: string[]) => { mockTier.asked.push(codes); return mockTier.value; } }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: async () => ({ canceled: true, assets: null }) }));
 
 /** Like the live list (as in checkoutWalk.test.tsx). */
@@ -102,6 +105,8 @@ beforeEach(() => {
   mockSend.calls = [];
   mockSend.payments = [];
   mockSend.run = placesAndSends;
+  mockTier.value = 'standard';
+  mockTier.asked = [];
   global.fetch = jest.fn((url: string) => fetchFromDisk(String(url).replace('https://megyprints.vercel.app/psgc/', BASE))) as unknown as typeof fetch;
 });
 afterEach(() => { jest.useRealTimers(); });
@@ -226,3 +231,44 @@ describe('checkout on the album "Order this album" opened it with', () => {
     expect(screen.queryByTestId('order-own-album')).toBeNull();
   });
 });
+
+describe('an album with a video memory', () => {
+  const clip = { code: 'k3m9p2qz', destination: 'https://example.supabase.co/storage/v1/object/public/memory-clips/k3m9p2qz.mp4', qrPngDataUrl: 'data:image/png;base64,AAAA', memoryUrl: 'https://megyprints.vercel.app/m/k3m9p2qz', createdAt: 1, kind: 'clip' as const, clipExt: 'mp4' as const };
+  const withClip = pages.map((p, i) => (i === 9 ? { ...p, qrFills: [clip, null] } : p));
+  beforeEach(() => {
+    mockAlbum.builder = { ...ownAlbum, albumPages: withClip };
+    fake.albumRow = { ...ROW, pages: withClip };
+  });
+
+  it('made in HD: the order says HD (the website: hdMemories from the album\'s videos)', async () => {
+    mockTier.value = 'hd';
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    await screen.findByTestId('pay-order-placed').catch(() => null);
+    expect(mockTier.asked).toContainEqual(['k3m9p2qz']);
+    expect(mockSend.calls[0].plan.orderRow).toMatchObject({ hd_memories: true });
+  });
+
+  it('made in Standard: no HD', async () => {
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    await screen.findByTestId('pay-order-placed').catch(() => null);
+    expect(mockSend.calls[0].plan.orderRow).toMatchObject({ hd_memories: false });
+  });
+
+  it('a video that is gone: the website\'s words naming its page, back on the form', async () => {
+    const { MissingClipError } = jest.requireActual('../src/lib/memories/clips') as typeof import('../src/lib/memories/clips');
+    mockSend.run = async () => { throw new MissingClipError(['k3m9p2qz']); };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText('The memory video on page 10 is no longer saved. Open your album and choose the video again for the QR on page 10, then order.')).toBeOnTheScreen();
+    expect(screen.getByTestId('order-place')).toBeOnTheScreen();
+  });
+});
+
