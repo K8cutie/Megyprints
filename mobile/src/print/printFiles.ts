@@ -172,6 +172,99 @@ async function withPhotos<T>(list: readonly number[], open: OpenPhoto, page: str
 /** Lets the phone breathe (and a progress bar move) between pages. */
 const breathe = () => new Promise((r) => setTimeout(r, 0));
 
+/** What making the files shares: the page pictures, the pictures pages name,
+ *  and the rule that a page with a part that can't be drawn stops it. */
+/** What drawing the files needs (the sheets' label fonts are not). */
+export type DrawTools = Omit<PrintTools, 'labelFonts'>;
+
+interface FileContext {
+  album: PrintAlbum;
+  order: Pick<PrintOrderSpecs, 'cover' | 'material'>;
+  open: OpenPhoto;
+  tools: DrawTools;
+  pictures: PagePictures;
+  assets: AssetCache;
+}
+
+function fileContext(album: PrintAlbum, order: Pick<PrintOrderSpecs, 'cover' | 'material'>, open: OpenPhoto, tools: DrawTools): FileContext {
+  if (!album.pages.length) throw new Error('Album has no pages to export.');
+  const missing = notDrawnPages(album, order.cover, tools, order.material);
+  if (missing.length) throw new NotDrawnError(missing);
+  return { album, order, open, tools, pictures: new PagePictures(tools.Skia, tools.drawer), assets: new AssetCache(tools.Skia, tools.files ?? (() => null)) };
+}
+
+/** Run `draw`; a picture it couldn't open stops it, the page named. */
+function drawnOn<T>(page: string, draw: (onMissing: (src: string) => void) => T): T {
+  const unavailable = new Set<string>();
+  const out = draw((src) => { unavailable.add(src); });
+  if (unavailable.size) throw new NotDrawnError([{ page, notDrawn: [...unavailable].map(pictureNotDrawn) }]);
+  return out;
+}
+
+/** "<order>-cover.pdf", or null with no front cover page. */
+async function coverFile(c: FileContext): Promise<Uint8Array | null> {
+  const { album, order, tools } = c;
+  if (!album.coverFront) return null;
+  const input: CoverInput = {
+    albumSize: album.albumSize, pageCount: album.pages.length, cover: order.cover, material: order.material,
+    coverFront: album.coverFront, photoCount: album.photoCount, photoIds: album.photoIds,
+  };
+  const plan = coverPlanFor(input, tools.text);
+  return withPhotos(coverPhotos(plan), c.open, 'the cover', async (photos) => {
+    const unavailable = new Set<string>();
+    const bytes = await makeCoverPdf(plan, photos, tools, c.pictures, { assets: c.assets.get, onMissing: (src) => { unavailable.add(src); } });
+    if (unavailable.size) throw new NotDrawnError([{ page: 'the cover', notDrawn: [...unavailable].map(pictureNotDrawn) }]);
+    return bytes;
+  });
+}
+
+/** "<order>.pdf", page by page; past the budget with sharp words, again with
+ *  the words in the pictures (generateAlbumPdf's rule). */
+async function interiorFile(
+  c: FileContext, onPage: (done: number, total: number, smaller: boolean) => void, budgetBytes = PRINT_FILE_BUDGET_BYTES,
+): Promise<{ bytes: Uint8Array; bakedWords: boolean }> {
+  const { album } = c;
+  const bindingIn = bindingInchesFor(c.order.cover);
+  const { wIn, hIn } = interiorPageInches(album.albumSize);
+  const build = async (bake: boolean): Promise<{ bytes: Uint8Array; anyWords: boolean }> => {
+    const pdf = await PrintPdf.create({ pageOneRight: true });
+    let anyWords = false;
+    for (let i = 0; i < album.pages.length; i++) {
+      const plan = printPlan(album, i, bindingIn);
+      const page = `page ${i + 1}`;
+      const pic = await withPhotos(photosOf(plan), c.open, page, (photos) => drawnOn(page, (onMissing) => c.pictures.interiorPage(plan, photos, { bakeWords: bake, assets: c.assets.get, onMissing })));
+      anyWords = anyWords || pic.words.length > 0;
+      await pdf.addPage(pic, wIn, hIn);
+      onPage(i + 1, album.pages.length, bake);
+      await breathe();
+    }
+    return { bytes: await pdf.save(), anyWords };
+  };
+  const first = await build(false);
+  if (first.bytes.length > budgetBytes && first.anyWords) return { bytes: (await build(true)).bytes, bakedWords: true };
+  return { bytes: first.bytes, bakedWords: false };
+}
+
+/** The two files checkout sends (the cover, then the pages), made only when
+ *  asked (lib/checkout/sendOrder.ts makeCover / makePages): the press sheets
+ *  and the zip are made later by the console from these. Checked first: a
+ *  page the app can't draw throws before anything is made. `dispose` lets
+ *  the pictures pages name go. */
+export function checkoutFiles(
+  album: PrintAlbum, order: Pick<PrintOrderSpecs, 'cover' | 'material'>, open: OpenPhoto, tools: DrawTools,
+): { makeCover: () => Promise<Uint8Array>; makePages: (onPage: (done: number, total: number, smaller: boolean) => void) => Promise<Uint8Array>; dispose: () => void } {
+  const c = fileContext(album, order, open, tools);
+  return {
+    makeCover: async () => {
+      const bytes = await coverFile(c);
+      if (!bytes) throw new Error('This album has no front cover page.');
+      return bytes;
+    },
+    makePages: async (onPage) => (await interiorFile(c, onPage)).bytes,
+    dispose: () => c.assets.dispose(),
+  };
+}
+
 export async function makePrintFiles(
   album: PrintAlbum,
   order: PrintOrderSpecs,
@@ -182,70 +275,19 @@ export async function makePrintFiles(
 ): Promise<PrintFiles> {
   const t0 = Date.now();
   const { Skia } = tools;
-  if (!album.pages.length) throw new Error('Album has no pages to export.');
-  const missing = notDrawnPages(album, order.cover, tools, order.material);
-  if (missing.length) throw new NotDrawnError(missing);
-  const pictures = new PagePictures(Skia, tools.drawer);
-  const bindingIn = bindingInchesFor(order.cover);
-  // The pictures pages name (a QR code, a sticker): kept for the whole album
-  // (they are small), let go at the end. One that can't be opened after all
-  // stops the files, the page named, as above.
-  const assets = new AssetCache(Skia, tools.files ?? (() => null));
-  const drawn = <T>(page: string, draw: (onMissing: (src: string) => void) => T): T => {
-    const unavailable = new Set<string>();
-    const out = draw((src) => { unavailable.add(src); });
-    if (unavailable.size) throw new NotDrawnError([{ page, notDrawn: [...unavailable].map(pictureNotDrawn) }]);
-    return out;
-  };
+  const c = fileContext(album, order, open, tools);
   try {
 
     // 1. The cover first, as at checkout: while the phone has the most memory free.
     onStep({ step: 'cover' });
-    let coverPdf: Uint8Array | null = null;
-    let coverMissing: string | null = null;
-    if (album.coverFront) {
-      const input: CoverInput = {
-        albumSize: album.albumSize, pageCount: album.pages.length, cover: order.cover, material: order.material,
-        coverFront: album.coverFront, photoCount: album.photoCount, photoIds: album.photoIds,
-      };
-      const plan = coverPlanFor(input, tools.text);
-      coverPdf = await withPhotos(coverPhotos(plan), open, 'the cover', (photos) => {
-        const unavailable = new Set<string>();
-        const made = makeCoverPdf(plan, photos, tools, pictures, { assets: assets.get, onMissing: (src) => { unavailable.add(src); } });
-        return made.then((bytes) => {
-          if (unavailable.size) throw new NotDrawnError([{ page: 'the cover', notDrawn: [...unavailable].map(pictureNotDrawn) }]);
-          return bytes;
-        });
-      });
-    } else {
-      coverMissing = 'This album has no front cover page.';
-    }
+    const coverPdf = await coverFile(c);
+    const coverMissing: string | null = coverPdf ? null : 'This album has no front cover page.';
     const tCover = Date.now();
 
-    // 2. The interior, page by page; past the budget with sharp words, again
-    //    with the words in the pictures (generateAlbumPdf's rule).
-    const { wIn, hIn } = interiorPageInches(album.albumSize);
-    const build = async (bake: boolean): Promise<{ bytes: Uint8Array; anyWords: boolean }> => {
-      const pdf = await PrintPdf.create({ pageOneRight: true });
-      let anyWords = false;
-      for (let i = 0; i < album.pages.length; i++) {
-        const plan = printPlan(album, i, bindingIn);
-        const page = `page ${i + 1}`;
-        const pic = await withPhotos(photosOf(plan), open, page, (photos) => drawn(page, (onMissing) => pictures.interiorPage(plan, photos, { bakeWords: bake, assets: assets.get, onMissing })));
-        anyWords = anyWords || pic.words.length > 0;
-        await pdf.addPage(pic, wIn, hIn);
-        onStep({ step: 'pages', done: i + 1, total: album.pages.length, smaller: bake });
-        await breathe();
-      }
-      return { bytes: await pdf.save(), anyWords };
-    };
-    const budget = opts.budgetBytes ?? PRINT_FILE_BUDGET_BYTES;
-    let interior = await build(false);
-    let bakedWords = false;
-    if (interior.bytes.length > budget && interior.anyWords) {
-      interior = await build(true);
-      bakedWords = true;
-    }
+    // 2. The interior, page by page (interiorFile: the budget rule).
+    const interiorMade = await interiorFile(c, (done, total, smaller) => onStep({ step: 'pages', done, total, smaller }), opts.budgetBytes);
+    const interior = { bytes: interiorMade.bytes };
+    const bakedWords = interiorMade.bakedWords;
     const tInterior = Date.now();
 
     // 3. The press sheets, as the console lays them out (no fonts).
@@ -294,6 +336,6 @@ export async function makePrintFiles(
       ms: { cover: tCover - t0, interior: tInterior - tCover, sheets: tSheets - tInterior, jpeg: tJpeg - tSheets, total: tJpeg - t0 },
     };
   } finally {
-    assets.dispose();
+    c.assets.dispose();
   }
 }

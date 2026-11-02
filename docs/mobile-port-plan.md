@@ -2771,6 +2771,27 @@ Stacked on `feat/port-landscape-preview` (#236: both change the Preview).
 
 ---
 
+## Phase 5, step 3: ordering for real (2026-11-02, `feat/port-checkout-sends`)
+
+- Checkout on your own album (opened by "Order this album") now **places
+  the order for real**: `lib/checkout/phoneSend.ts` makes the two print
+  files on the phone (`print/printFiles.ts checkoutFiles`: the cover, then
+  the pages; no sheets or zip, the console makes those) and sends them with
+  the order sender (`lib/checkout/sendOrder.ts`, #239), on the app's
+  Supabase client with create-only uploads (`lib/checkout/storage.ts`, the
+  website's `isAlreadyExists` held beside it). The bar follows the real
+  steps in the website's words (`placeRun.ts sendFrame`).
+- A tester-code order ends "Test order placed" with its number; a paid one
+  opens its payment step for real ("Order MP-… is placed"), and "I've
+  sent" sends the receipt and records the payment, then "Thank you — we're
+  confirming your payment". A step that fails says why on the form and
+  keeps the order: Place order again reuses it.
+- The home screen's "Checkout with a test album" still sends nothing.
+- Not proven on a phone yet: the time and memory of making the files, the
+  upload of the bytes to Storage, the receipt read from the phone.
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

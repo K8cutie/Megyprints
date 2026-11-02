@@ -55,6 +55,8 @@ export interface CheckoutAlbum {
   pages: AlbumPage[];
   /** Where each photo is (index = slotFills value). */
   photoUris: string[];
+  /** Each photo's id, in the same order (a picture background names its photo by id). */
+  photoIds?: string[];
   coverFront: AlbumPage | null;
   /** The cover's photo, for the summary's small cover. */
   coverPhotoUri: string | null;

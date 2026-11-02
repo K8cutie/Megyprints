@@ -98,6 +98,7 @@ export function checkoutAlbumFrom(
     albumSize: b.albumSize,
     pages: b.albumPages,
     photoUris: b.uploadedPhotos.map((p) => p.previewUrl),
+    photoIds: b.uploadedPhotos.map((p) => p.id),
     coverFront: b.coverFront,
     coverPhotoUri: coverIndex != null ? b.uploadedPhotos[coverIndex]?.previewUrl ?? null : null,
     row,

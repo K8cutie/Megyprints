@@ -30,6 +30,7 @@ import {
   COVER_MAKE_FAILED, COVER_SEND_FAILED, MemoryVideosNotInAppError, sendOrder, sendPayment, TESTER_CLAIM_FAILED,
   type PlacedOrder, type SendDeps, type SendStep,
 } from '../src/lib/checkout/sendOrder';
+import { createOnlyUpload, isAlreadyExists } from '../src/lib/checkout/storage';
 import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
 
 jest.mock('@web/lib/supabase', () => jest.requireActual('./helpers/fakeSupabase').supabaseModule);
@@ -138,6 +139,32 @@ describe('Place order sends what the website sends, in its order', () => {
 });
 
 describe('a retry, and files already sent', () => {
+  it('the order is handed over as soon as it exists, before any file (so a retry can reuse it)', async () => {
+    const seen: string[] = [];
+    const d = deps({ onOrder: (o) => { seen.push(`order ${o.id}`); }, makeCover: async () => { seen.push('cover'); return COVER; } });
+    await sendOrder(placeOrderPlan(input()), d);
+    expect(seen).toEqual(['order order-1', 'cover']);
+  });
+
+  it('a file already there is "done" by the website\'s own rule (storageUpload isAlreadyExists)', async () => {
+    /* eslint-disable-next-line @typescript-eslint/no-require-imports */
+    const webStorage = jest.requireActual('@web/lib/storageUpload') as { isAlreadyExists: (e: unknown) => boolean };
+    const cases = [null, { status: 409 }, { statusCode: '409' }, { statusCode: 409 }, { message: 'The resource already exists' }, { message: 'Duplicate' },
+      { message: 'new row violates row-level security policy', status: 403 }, { message: 'network' }, {}];
+    for (const e of cases) expect(isAlreadyExists(e as never)).toBe(webStorage.isAlreadyExists(e));
+    // The app's upload on a Supabase client: create-only, an ArrayBuffer, and a 409 counts as sent.
+    const asked: unknown[] = [];
+    const client = { storage: { from: (bucket: string) => ({ upload: async (path: string, body: ArrayBuffer, opts: unknown) => {
+      asked.push({ bucket, path, bytes: body.byteLength, opts });
+      return { error: path.endsWith('cover.pdf') ? { status: 409, message: 'Duplicate' } : path.endsWith('x.pdf') ? { message: 'denied' } : null };
+    } }) } };
+    const up = createOnlyUpload(client);
+    expect(await up('print-pdfs', 'o-cover.pdf', COVER, { contentType: 'application/pdf' })).toBeNull();
+    expect(await up('print-pdfs', 'o.pdf', PAGES, { contentType: 'application/pdf' })).toBeNull();
+    expect(await up('print-pdfs', 'x.pdf', PAGES, { contentType: 'application/pdf' })).toEqual({ message: 'denied' });
+    expect(asked[0]).toEqual({ bucket: 'print-pdfs', path: 'o-cover.pdf', bytes: 3, opts: { contentType: 'application/pdf', upsert: false } });
+  });
+
   it('Place order again reuses the order: no second order row', async () => {
     const plan = placeOrderPlan(input());
     const placed: PlacedOrder = { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' };

@@ -10,12 +10,16 @@
    rules, 40 photos, the cover that fits the press, the bar) or a mirror
    that a test runs beside the website's own function (see lib/checkout/).
 
-   THIS TEST VERSION WRITES NOTHING. Opened from the Preview's "Order this
-   album" (with the album's id), it orders that album: its pages from the
-   app's album, its copy in the account read back by its id
-   (lib/checkout/orderStart.ts, the website's selectOrderAlbum). Opened from
-   the home screen's test button (no id), the test album (fixtureAlbum.ts).
-   Place order runs the website's checks,
+   Opened from the Preview's "Order this album" (with the album's id), it
+   orders that album FOR REAL: its pages from the app's album, its copy in
+   the account read back by its id (lib/checkout/orderStart.ts, the
+   website's selectOrderAlbum); Place order makes the print files on the
+   phone and sends the order (lib/checkout/phoneSend.ts, sendOrder.ts), the
+   bar following the real steps; a tester order ends "Test order placed", a
+   paid one opens its payment step, where "I've sent" records the payment.
+
+   Opened from the home screen's test button (no id): the test album
+   (fixtureAlbum.ts), and THAT WRITES NOTHING: Place order runs the website's checks,
    builds exactly what the website would send (the order row, the memory
    rows, the files), shows it in a test panel, and stops: no order, no
    upload, no tester-code check (that call counts tries in the database).
@@ -45,7 +49,12 @@ import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
 import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart';
 import { useOptionalBuilder } from '../builder/BuilderProvider';
-import type { OrderAlbumRow } from '../lib/checkout/orderPayload';
+import type { CheckoutAlbum, OrderAlbumRow } from '../lib/checkout/orderPayload';
+import { sendFrame } from '../lib/checkout/placeRun';
+import { TesterCodeGoneError } from '../lib/checkout/testerCode';
+import type { PlacedOrder, SendStep } from '../lib/checkout/sendOrder';
+import type { PageText } from '../render/pageText';
+import type { PlaceProgress } from '@web/lib/placeProgress';
 import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, payByLine, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, ORDER_ID, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { PAYEE, PAYEE_QR_URL, paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../lib/checkout/payment';
@@ -58,7 +67,7 @@ import { checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/chec
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 
-type Step = 'form' | 'placing' | 'placed' | 'payment' | 'existing';
+type Step = 'form' | 'placing' | 'placed' | 'payment' | 'existing' | 'done';
 
 const DEFAULT_MATERIAL: MaterialType = 'matte';
 const DEFAULT_COVER: CoverType = 'softcover';
@@ -85,6 +94,14 @@ export default function OrderScreen() {
     return () => { live = false; };
   }, [ordersOwn, userId, ownId]);
   const fixture = useMemo(() => (ordersOwn ? null : fixtureCheckoutAlbum()), [ordersOwn]);
+  // Ordering your own album sends it for real (the test album never does).
+  const live = ordersOwn;
+  const ownText = own?.text ?? null;
+  // The order a try made: Place order again reuses it (never a second order).
+  const placedRef = useRef<PlacedOrder | null>(null);
+  const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
+  // The end: a tester order placed, or a payment sent.
+  const [done, setDone] = useState<{ number: string; test: boolean; receiptError: string | null } | null>(null);
   const b = own?.builder;
   const album = useMemo(() => (ordersOwn && b
     // Until the account's copy is read, a stand-in row with the album's id:
@@ -173,6 +190,11 @@ export default function OrderScreen() {
       setMessage(ownRowError || 'Getting your album from your account… Tap Place order again in a moment.');
       return;
     }
+    // The print files are drawn with the album's fonts: not until they are ready.
+    if (live && !ownText) {
+      setMessage('Getting your album ready… Tap Place order again in a moment.');
+      return;
+    }
     try {
       const p = placeOrderPlan({
         userId,
@@ -230,8 +252,32 @@ export default function OrderScreen() {
     setStep('existing');
   };
 
+  if (step === 'placing' && plan && live && ownText) {
+    return (
+      <Sending
+        plan={plan} album={album} cover={cover} material={material} text={ownText} placed={placedRef.current}
+        onOrder={(o) => { placedRef.current = o; }}
+        onSent={(r) => {
+          placedRef.current = r.order;
+          setPlacedOrder(r.order);
+          if (r.paidByTester) { setDone({ number: r.order.order_number, test: true, receiptError: null }); setStep('done'); return; }
+          setStep('payment');
+        }}
+        onFailed={(e) => {
+          if (e instanceof TesterCodeGoneError) setTester(null);
+          setMessage(e instanceof Error ? e.message : 'Something went wrong placing your order.');
+          setStep('form');
+        }}
+      />
+    );
+  }
+
   if (step === 'placing' && plan) {
     return <Placing frames={frames} onDone={() => setStep('placed')} />;
+  }
+
+  if (step === 'done' && done) {
+    return <Done number={done.number} test={done.test} receiptError={done.receiptError} />;
   }
 
   if (step === 'placed' && plan) {
@@ -260,14 +306,21 @@ export default function OrderScreen() {
 
   if (step === 'existing' && shownOrder) {
     if (openOrderView(shownOrder) === 'pay') {
-      return <Payment amount={askedToPay(shownOrder)} order={shownOrder} onBack={() => setStep('form')} />;
+      return <Payment amount={askedToPay(shownOrder)} order={shownOrder} live={live} onBack={() => setStep('form')}
+        onPaid={(receiptError) => { setDone({ number: shownOrder.order_number, test: false, receiptError }); setStep('done'); }} />;
     }
     return <ExistingOrder order={shownOrder} onBack={() => setStep('form')} />;
   }
 
   if (step === 'payment') {
     const albumLine = [ALBUM_SIZES.find((s) => s.preset === albumSize)?.name, MATERIALS.find((m) => m.type === material)?.name, COVERS.find((c) => c.type === cover)?.name].join(' · ');
-    return <Payment amount={placedAmount} order={null} summary={{ albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal }} onBack={() => setStep('form')} />;
+    const summary = { albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal };
+    if (live && placedOrder) {
+      return <Payment amount={placedAmount} order={{ id: placedOrder.id, order_number: placedOrder.order_number, created_at: new Date().toISOString() }} summary={summary} live
+        onBack={() => setStep('form')}
+        onPaid={(receiptError) => { setDone({ number: placedOrder.order_number, test: false, receiptError }); setStep('done'); }} />;
+    }
+    return <Payment amount={placedAmount} order={null} summary={summary} onBack={() => setStep('form')} />;
   }
 
   /* ══════════════ FORM ══════════════ */
@@ -278,11 +331,7 @@ export default function OrderScreen() {
 
   return (
     <ScrollView ref={scrollRef} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      {ordersOwn && (
-        <View style={styles.testNote} testID="order-own-album">
-          <Text style={styles.testNoteText}>Test version: Place order shows what it would send for your album, and sends nothing.</Text>
-        </View>
-      )}
+      {ordersOwn && <View testID="order-own-album" />}
       {!!ownRowError && (
         <View style={styles.notice} testID="order-not-saved">
           <Text style={styles.noticeBody}>{ownRowError}</Text>
@@ -442,6 +491,64 @@ function Placing({ frames, onDone }: { frames: PlaceFrame[]; onDone: () => void 
   );
 }
 
+/* ══════════════ SENDING: your own album, for real ══════════════ */
+/** Place order for real (lib/checkout/phoneSend.ts): the print files made on
+ *  this phone and the order sent, the bar following each real step in the
+ *  website's words. The screen is kept on, as on the website. */
+function Sending({ plan, album, cover, material, text, placed, onOrder, onSent, onFailed }: {
+  plan: PlaceOrderPlan; album: CheckoutAlbum; cover: CoverType; material: MaterialType; text: PageText; placed: PlacedOrder | null;
+  onOrder: (o: PlacedOrder) => void;
+  onSent: (r: { order: PlacedOrder; paidByTester: boolean }) => void;
+  onFailed: (e: unknown) => void;
+}) {
+  useKeepAwake('megy-place-order');
+  const [frame, setFrame] = useState<{ progress: PlaceProgress; message: string }>(() => sendFrame(null, { step: 'order' }));
+  const handlers = useRef({ onOrder, onSent, onFailed });
+  handlers.current = { onOrder, onSent, onFailed };
+  useEffect(() => {
+    let live = true;
+    let prev: PlaceProgress | null = null;
+    const onStep = (s: SendStep) => {
+      const f = sendFrame(prev, s);
+      prev = f.progress;
+      if (live) setFrame(f);
+    };
+    // Loaded only here: it needs the phone's Skia and the live database.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { sendFromPhone } = require('../lib/checkout/phoneSend') as typeof import('../lib/checkout/phoneSend');
+    sendFromPhone({ plan, album, cover, material, text, placed, onStep, onOrder: (o) => handlers.current.onOrder(o) })
+      .then((r) => { if (live) handlers.current.onSent(r); })
+      .catch((e: unknown) => { if (live) handlers.current.onFailed(e); });
+    return () => { live = false; };
+    // One send per visit of this step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <View style={styles.placing} testID="order-placing">
+      <Text style={styles.h1}>Placing your order</Text>
+      <Text style={styles.placingStep} accessibilityLiveRegion="polite">{frame.message}</Text>
+      <PlaceProgressBar progress={frame.progress} />
+    </View>
+  );
+}
+
+/** The end of checkout, in the website's words (its tracking step's
+ *  headline): a tester order placed, or a payment sent for the shop to
+ *  confirm. */
+function Done({ number, test, receiptError }: { number: string; test: boolean; receiptError: string | null }) {
+  return (
+    <ScrollView contentContainerStyle={styles.page} testID="order-done">
+      <Text style={[styles.h1, styles.center]}>{test ? 'Test order placed' : "Thank you — we're confirming your payment"}</Text>
+      <Text style={[styles.strong, styles.center]} testID="order-done-number">Order {number}</Text>
+      {test
+        ? <Text style={[styles.small, styles.center]}>Thank you for testing Megy Prints!</Text>
+        : <Text style={[styles.small, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>}
+      {!!receiptError && <Text style={styles.error}>{receiptError}</Text>}
+      <Button label="Done" onPress={() => { if (router.canDismiss?.()) router.dismissAll(); else router.replace('/'); }} testID="order-done-close" />
+    </ScrollView>
+  );
+}
+
 /* ══════════════ PAYMENT: QR, amount, reference, receipt ══════════════ */
 interface PaySummary { albumLine: string; breakdown: { label: string; amount: number }[]; total: number; wasTotal: number | null }
 
@@ -451,8 +558,11 @@ interface PaySummary { albumLine: string; breakdown: { label: string; amount: nu
  *  are left out, as the website does. `amount` is null only for an order
  *  that has no saved total (placed before the database saved it, 0055): the
  *  step says so, and how to learn it, instead of making a total up. */
-function Payment({ amount, order, summary, onBack }: {
+function Payment({ amount, order, summary, onBack, live = false, onPaid }: {
   amount: number | null; order: Pick<OpenOrder, 'id' | 'order_number' | 'created_at'> | null; summary?: PaySummary; onBack: () => void;
+  /** A real order: "I've sent" records the payment (else it shows what it would send). */
+  live?: boolean;
+  onPaid?: (receiptError: string | null) => void;
 }) {
   const [qrMissing, setQrMissing] = useState(false);
   const [receipt, setReceipt] = useState<PickedReceipt | null>(null);
@@ -474,19 +584,34 @@ function Payment({ amount, order, summary, onBack }: {
       setReceiptError("We couldn't open your photos. Try again.");
     }
   };
-  const sentIt = () => {
+  const [sending, setSending] = useState(false);
+  const [payError, setPayError] = useState('');
+  const sentIt = async () => {
     const bad = referenceProblem(payRef);
     if (bad) { setRefError(bad); return; }
-    setSent(paymentSubmitPlan(order?.id ?? ORDER_ID, payRef, receipt));
+    const submit = paymentSubmitPlan(order?.id ?? ORDER_ID, payRef, receipt);
+    if (!live || !order) { setSent(submit); return; }
+    setSending(true);
+    setPayError('');
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { sendPaymentFromPhone } = require('../lib/checkout/phoneSend') as typeof import('../lib/checkout/phoneSend');
+      const r = await sendPaymentFromPhone(submit, receipt);
+      onPaid?.(r.receiptError);
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : 'Could not record your payment. Please try again.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      <View style={styles.testNote}>
+      {!live && <View style={styles.testNote}>
         <Text style={styles.testNoteText} testID="pay-test-note">{order
           ? `Test version: this is how paying order ${order.order_number} looks. The "I've sent" button only shows what it would send. It sends nothing.`
           : 'Test version: no order was placed. This is how the payment step looks for this album. Do not send money: there is no order.'}</Text>
-      </View>
+      </View>}
       <Text style={[styles.h1, styles.center]}>{amount !== null ? `Send ${amountLabel}` : `Pay order ${order?.order_number ?? ''}`}</Text>
       {order && <Text style={[styles.small, styles.center]} testID="pay-order-placed">Order {order.order_number} is placed. Pay by bank transfer to finish.</Text>}
 
@@ -537,7 +662,8 @@ function Payment({ amount, order, summary, onBack }: {
             autoComplete="off" autoCorrect={false} placeholder="e.g. 2026091012345678" maxLength={64} error={refError} testID="pay-reference" />
         </View>
 
-        <Button label={amount !== null ? `I've sent ${amountLabel}` : "I've sent the payment"} onPress={sentIt} testID="pay-sent" />
+        <Button label={amount !== null ? `I've sent ${amountLabel}` : "I've sent the payment"} busy={sending} onPress={() => { void sentIt(); }} testID="pay-sent" />
+        {!!payError && <Text style={styles.error} accessibilityRole="alert">{payError}</Text>}
         <Text style={[styles.tiny, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>
         {/* An order already placed: its own last day, as the website's Orders page says it. */}
         <Text style={[styles.tiny, styles.center]} testID="pay-within">{order?.created_at ? payByLine(order.created_at) : PAY_WITHIN_MESSAGE}</Text>

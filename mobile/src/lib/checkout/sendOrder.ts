@@ -62,6 +62,9 @@ export interface SendDeps {
   /** "<order>.pdf", made page by page. */
   makePages: (onPage: (done: number, total: number, smaller: boolean) => void) => Promise<Uint8Array>;
   onStep?: (s: SendStep) => void;
+  /** The order row, as soon as it exists: the checkout keeps it, so Place
+   *  order again (after a step failed) reuses it (`placed`). */
+  onOrder?: (o: PlacedOrder) => void;
   /** Waits between cover tries (default: real time). */
   wait?: (ms: number) => Promise<void>;
 }
@@ -106,6 +109,7 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
     if (isTesterCodeGoneError(error)) throw new TesterCodeGoneError(String(plan.orderRow.tester_code ?? ''));
     if (error) throw new Error(`Could not place your order: ${error.message}`);
     order = data as PlacedOrder;
+    deps.onOrder?.(order);
   }
   const id = order.id;
   const named = (s: string) => s.split(ORDER_ID).join(id);

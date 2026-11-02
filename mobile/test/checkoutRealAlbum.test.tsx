@@ -1,13 +1,18 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   CHECKOUT ON THE CUSTOMER'S OWN ALBUM (Phase 5, step 2).
+   CHECKOUT ON THE CUSTOMER'S OWN ALBUM (Phase 5, steps 2 and 3).
 
    The Preview's "Order this album" opens checkout with the album's id
    (lib/checkout/orderStart.ts). Checkout then orders THAT album: its pages
    from the app's album, and the copy in the account, read back by its id
-   (the website's selectOrderAlbum: never another album). Still the test
-   version: Place order builds what it would send, shows it, and sends
-   nothing (step 3 sends it). Opened from the home screen's test button,
-   with no album id, checkout keeps its test album (checkoutWalk.test.tsx).
+   (the website's selectOrderAlbum: never another album). Place order SENDS
+   it (lib/checkout/phoneSend.ts: the print files made on the phone, the
+   order sender; a stand-in here, the sender itself is sendOrder.test.ts):
+   the bar follows the real steps in the website's words; a tester order
+   ends "Test order placed", a paid one opens its payment step, and "I've
+   sent" records the payment. A step that fails says why and keeps the
+   order: Place order again reuses it. Opened from the home screen's test
+   button, with no album id, checkout keeps its test album and sends
+   nothing (checkoutWalk.test.tsx).
 
    Only the outside is a stand-in, as in checkoutWalk.test.tsx: the
    database (helpers/fakeSupabase.ts), who is signed in, the navigator.
@@ -24,6 +29,25 @@ const mockAuth: { session: { user: { id: string } } | null } = { session: { user
 const mockNav = { push: jest.fn(), back: jest.fn() };
 const mockParams: { albumId?: string } = { albumId: 'album-7' };
 const mockAlbum = { builder: null as unknown };
+type SendCall = { plan: { orderRow: Record<string, unknown> }; placed: unknown; cover: string; material: string; onStep: (s: unknown) => void; onOrder: (o: unknown) => void };
+const placesAndSends = async (c: SendCall): Promise<unknown> => {
+  c.onStep({ step: 'order' });
+  c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+  c.onStep({ step: 'cover' });
+  c.onStep({ step: 'pages', done: 1, total: 2, smaller: false });
+  return { order: { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' }, paidByTester: !!c.plan.orderRow.tester_code };
+};
+const mockSend = {
+  calls: [] as SendCall[],
+  run: async (c: SendCall): Promise<unknown> => {
+    c.onStep({ step: 'order' });
+    c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+    c.onStep({ step: 'cover' });
+    c.onStep({ step: 'pages', done: 1, total: 2, smaller: false });
+    return { order: { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' }, paidByTester: !!c.plan.orderRow.tester_code };
+  },
+  payments: [] as { plan: { rpc: { args: Record<string, unknown> } }; receipt: unknown }[],
+};
 
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: mockAuth.session, loading: false }) }));
 jest.mock('../src/lib/supabase', () => ({ supabase: jest.requireActual('./helpers/fakeSupabase').fakeClient, supabaseConfigured: true }));
@@ -31,7 +55,12 @@ jest.mock('expo-router', () => ({
   router: { push: (...a: unknown[]) => mockNav.push(...a), back: () => mockNav.back() },
   useLocalSearchParams: () => mockParams,
 }));
-jest.mock('../src/builder/BuilderProvider', () => ({ useOptionalBuilder: () => (mockAlbum.builder ? { builder: mockAlbum.builder } : null) }));
+jest.mock('../src/builder/BuilderProvider', () => ({ useOptionalBuilder: () => (mockAlbum.builder ? { builder: mockAlbum.builder, text: {} } : null) }));
+// The phone's part of sending (Skia, the files, the live database): a stand-in.
+jest.mock('../src/lib/checkout/phoneSend', () => ({
+  sendFromPhone: (c: SendCall) => { mockSend.calls.push(c); return mockSend.run(c); },
+  sendPaymentFromPhone: async (plan: never, receipt: unknown) => { mockSend.payments.push({ plan, receipt }); return { receiptError: null }; },
+}));
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: async () => ({ canceled: true, assets: null }) }));
 
@@ -70,6 +99,9 @@ beforeEach(() => {
   mockAlbum.builder = ownAlbum;
   mockNav.push.mockClear();
   mockNav.back.mockClear();
+  mockSend.calls = [];
+  mockSend.payments = [];
+  mockSend.run = placesAndSends;
   global.fetch = jest.fn((url: string) => fetchFromDisk(String(url).replace('https://megyprints.vercel.app/psgc/', BASE))) as unknown as typeof fetch;
 });
 afterEach(() => { jest.useRealTimers(); });
@@ -98,24 +130,75 @@ describe('checkout on the album "Order this album" opened it with', () => {
     expect(rec.reads).toContainEqual({ table: 'albums', columns: '*', filters: { user_id: 'user-1', id: 'album-7' } });
   });
 
-  it('Place order builds the order for THAT album from the account\'s copy, and sends nothing', async () => {
+  /** Place order, the tester code applied or not. */
+  async function place(tester: boolean) {
     await render(<OrderScreen />);
     await screen.findByTestId('order-own-album');
     await fillDetails();
-    await fireEvent.press(screen.getByText('Have a tester code?'));
-    await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
-    await fireEvent.press(screen.getByTestId('tester-code-apply'));
-    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
-    await fireEvent.press(screen.getByText('Place order · free with tester code'));
-    for (let i = 0; i < 400 && screen.queryByTestId('order-placing'); i++) await act(async () => { jest.advanceTimersByTime(1000); });
-    jest.useRealTimers();
-    expect(await screen.findByText('Stopped before sending')).toBeOnTheScreen();
-    await fireEvent.press(screen.getByTestId('test-panel-toggle'));
-    const shown = JSON.parse(String(screen.getByText(/"orders": \{/).props.children)) as { orders: { album_id: string; album_snapshot: { title: string; id: string } } };
-    expect(shown.orders.album_id).toBe('album-7');
-    expect(shown.orders.album_snapshot).toMatchObject({ id: 'album-7', title: "Maria's Wedding" });
-    expect(rec.inserts).toHaveLength(0);
-    expect(rec.uploads).toHaveLength(0);
+    if (tester) {
+      await fireEvent.press(screen.getByText('Have a tester code?'));
+      await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
+      await fireEvent.press(screen.getByTestId('tester-code-apply'));
+    }
+    await fireEvent.press(screen.getByTestId('order-place'));
+  }
+
+  it('a tester order: sent for THAT album from the account\'s copy; "Test order placed", its number', async () => {
+    await place(true);
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    expect(screen.getByTestId('order-done-number')).toHaveTextContent('Order MP-2026-TEST01');
+    expect(mockSend.calls).toHaveLength(1);
+    const c = mockSend.calls[0];
+    expect(c.plan.orderRow).toMatchObject({ album_id: 'album-7', tester_code: 'MEGYTEST', album_snapshot: { id: 'album-7', title: "Maria's Wedding" } });
+    expect([c.cover, c.material, c.placed]).toEqual(['softcover', 'matte', null]);
+    // Nothing of the test version: no "Stopped before sending", no test notes.
+    expect(screen.queryByText('Stopped before sending')).toBeNull();
+    expect(screen.queryByTestId('order-own-album')).toBeNull();
+  });
+
+  it('the bar follows the real steps, in the website\'s words', async () => {
+    let finish: () => void = () => {};
+    mockSend.run = async (c) => {
+      c.onStep({ step: 'order' });
+      c.onStep({ step: 'cover' });
+      c.onStep({ step: 'pages', done: 3, total: 40, smaller: false });
+      await new Promise<void>((r) => { finish = r; });
+      return { order: { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'paid' }, paidByTester: true };
+    };
+    await place(true);
+    // 3 pages done: the 4th is being made (placeProgress pagesLabel).
+    expect(await screen.findByText('Making page 4 of 40…')).toBeOnTheScreen();
+    expect(screen.getByText('Placing your order')).toBeOnTheScreen();
+    expect(screen.getByText('Keep this screen open. This can take a few minutes.')).toBeOnTheScreen();
+    expect(screen.queryByText(/Test version/)).toBeNull();
+    await act(async () => { finish(); });
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+  });
+
+  it('a paid order: its payment step for real; "I\'ve sent" records the payment for THAT order', async () => {
+    await place(false);
+    expect(await screen.findByTestId('pay-order-placed')).toHaveTextContent('Order MP-2026-TEST01 is placed. Pay by bank transfer to finish.');
+    expect(screen.queryByTestId('pay-test-note')).toBeNull();
+    expect(screen.queryByTestId('pay-qr-test-band')).toBeNull();
+    await fireEvent.changeText(screen.getByTestId('pay-reference'), '2026091012345678');
+    await fireEvent.press(screen.getByTestId('pay-sent'));
+    expect(await screen.findByText("Thank you — we're confirming your payment")).toBeOnTheScreen();
+    expect(mockSend.payments).toHaveLength(1);
+    expect(mockSend.payments[0].plan.rpc.args).toEqual({ p_order_id: 'order-1', p_reference: '2026091012345678', p_proof_path: null });
+  });
+
+  it('a step that fails: the website\'s words on the form; Place order again reuses the order', async () => {
+    mockSend.run = async (c) => {
+      c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+      throw new Error('Print file upload failed: timeout');
+    };
+    await place(false);
+    expect(await screen.findByText('Print file upload failed: timeout')).toBeOnTheScreen();
+    mockSend.run = async () => ({ order: { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' }, paidByTester: false });
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByTestId('pay-order-placed')).toBeOnTheScreen();
+    expect(mockSend.calls).toHaveLength(2);
+    expect(mockSend.calls[1].placed).toEqual({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
   });
 
   it('not in the account: the website\'s words, and the way back to the album', async () => {
