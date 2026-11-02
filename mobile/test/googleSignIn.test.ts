@@ -43,6 +43,11 @@ describe('the way back is the website\'s (nativeAuth.ts, auth-native.js)', () =>
     expect(read('public/auth-native.js')).toContain("'#Intent;scheme=megyprints;package=com.megyprints.app;end'");
   });
 
+  it('the page passes on the sign-in itself (tokens), so the app keeps Supabase\'s plain flow, not "pkce" (a code)', () => {
+    expect(read('public/auth-native.js')).toContain("['access_token', 'refresh_token', 'expires_in', 'token_type', 'error', 'error_description']");
+    expect(read('mobile/src/lib/supabase.ts')).not.toMatch(/flowType|pkce/);
+  });
+
   it('reads both shapes of the way back, and nothing else', () => {
     const a = parseAuthReturn('megyprints://auth?access_token=A&refresh_token=R&n=abc');
     expect(a && Object.fromEntries(a)).toEqual({ access_token: 'A', refresh_token: 'R', n: 'abc' });
