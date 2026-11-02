@@ -43,6 +43,7 @@ import { CoverThumb } from '../components/checkout/CoverThumb';
 import { Field } from '../components/checkout/Field';
 import { PaymentStep } from '../components/checkout/PaymentStep';
 import { PlaceProgressBar } from '../components/checkout/PlaceProgressBar';
+import { Sending } from '../components/checkout/Sending';
 import { TestPanel } from '../components/checkout/TestPanel';
 import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
 import { useAuth } from '../lib/auth';
@@ -50,12 +51,9 @@ import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
 import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart';
 import { useOptionalBuilder } from '../builder/BuilderProvider';
-import type { CheckoutAlbum, OrderAlbumRow } from '../lib/checkout/orderPayload';
-import { sendFrame } from '../lib/checkout/placeRun';
+import type { OrderAlbumRow } from '../lib/checkout/orderPayload';
 import { TesterCodeGoneError } from '../lib/checkout/testerCode';
-import type { PlacedOrder, SendStep } from '../lib/checkout/sendOrder';
-import type { PageText } from '../render/pageText';
-import type { PlaceProgress } from '@web/lib/placeProgress';
+import type { PlacedOrder } from '../lib/checkout/sendOrder';
 import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
@@ -502,47 +500,6 @@ function Placing({ frames, onDone }: { frames: PlaceFrame[]; onDone: () => void 
       <Text style={styles.placingStep} accessibilityLiveRegion="polite">{frame.message}</Text>
       <PlaceProgressBar progress={frame.progress} />
       <Text style={styles.testNoteText}>Test version: nothing is made or sent. The bar shows how it moves for this album's {frames.filter((f) => f.message.startsWith('Making page')).length} pages.</Text>
-    </View>
-  );
-}
-
-/* ══════════════ SENDING: your own album, for real ══════════════ */
-/** Place order for real (lib/checkout/phoneSend.ts): the print files made on
- *  this phone and the order sent, the bar following each real step in the
- *  website's words. The screen is kept on, as on the website. */
-function Sending({ plan, album, cover, material, text, placed, onOrder, onSent, onFailed }: {
-  plan: PlaceOrderPlan; album: CheckoutAlbum; cover: CoverType; material: MaterialType; text: PageText; placed: PlacedOrder | null;
-  onOrder: (o: PlacedOrder) => void;
-  onSent: (r: { order: PlacedOrder; paidByTester: boolean }) => void;
-  onFailed: (e: unknown) => void;
-}) {
-  useKeepAwake('megy-place-order');
-  const [frame, setFrame] = useState<{ progress: PlaceProgress; message: string }>(() => sendFrame(null, { step: 'order' }));
-  const handlers = useRef({ onOrder, onSent, onFailed });
-  handlers.current = { onOrder, onSent, onFailed };
-  useEffect(() => {
-    let live = true;
-    let prev: PlaceProgress | null = null;
-    const onStep = (s: SendStep) => {
-      const f = sendFrame(prev, s);
-      prev = f.progress;
-      if (live) setFrame(f);
-    };
-    // Loaded only here: it needs the phone's Skia and the live database.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { sendFromPhone } = require('../lib/checkout/phoneSend') as typeof import('../lib/checkout/phoneSend');
-    sendFromPhone({ plan, album, cover, material, text, placed, onStep, onOrder: (o) => handlers.current.onOrder(o) })
-      .then((r) => { if (live) handlers.current.onSent(r); })
-      .catch((e: unknown) => { if (live) handlers.current.onFailed(e); });
-    return () => { live = false; };
-    // One send per visit of this step.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return (
-    <View style={styles.placing} testID="order-placing">
-      <Text style={styles.h1}>Placing your order</Text>
-      <Text style={styles.placingStep} accessibilityLiveRegion="polite">{frame.message}</Text>
-      <PlaceProgressBar progress={frame.progress} />
     </View>
   );
 }

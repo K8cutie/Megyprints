@@ -41,7 +41,10 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   on a copy up to twice that size (`src/lib/phonePhotoCheck.ts`; compared with
   the website by `../tools/photo-check`). ML Kit sends Google anonymous usage
   numbers (never the photos) and adds about 13 MB to the app: see
-  `src/lib/faceModel.ts` before shipping it. Expo autolinking builds every
+  `src/lib/faceModel.ts` before shipping it. `modules/order-keeper` keeps
+  Place order going while the person uses other apps (a foreground service
+  with a notification, and a headless task so React Native's timers keep
+  running; `src/lib/checkout/backgroundSend.ts`). Expo autolinking builds every
   folder there; after changing its Kotlin, run prebuild and Gradle again.
   Jest has no native modules: its JS side (`index.ts`) works without the
   native half.
