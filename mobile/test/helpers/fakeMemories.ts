@@ -12,7 +12,13 @@ export const mem = {
   calls: [] as Call[],
   memories: [] as Row[],
   orders: [] as Row[],
+  /** The account's albums (id, user_id, title, pages, updated_at, …). */
+  albums: [] as Row[],
   userId: 'user-1' as string | null,
+  /** An error the next delete answers with. */
+  deleteError: null as { message: string } | null,
+  /** Albums another device saves just before an update lands (by id). */
+  movedOn: new Set<string>(),
   /** An error the next update / insert / list answers with. */
   updateError: null as { message: string } | null,
   insertError: null as { message: string } | null,
@@ -20,9 +26,13 @@ export const mem = {
 };
 
 export function resetMemories(): void {
-  mem.calls = []; mem.memories = []; mem.orders = []; mem.userId = 'user-1';
+  mem.calls = []; mem.memories = []; mem.orders = []; mem.albums = []; mem.userId = 'user-1'; mem.deleteError = null; mem.movedOn = new Set();
+  version = 0;
   mem.updateError = null; mem.insertError = null; mem.listError = null;
 }
+
+let version = 0;
+const nextVersion = () => `2026-11-02T10:00:${String(++version).padStart(2, '0')}.000Z`;
 
 function filtered(rows: Row[], chain: Call['chain']): Row[] {
   let out = [...rows];
@@ -40,9 +50,22 @@ function filtered(rows: Row[], chain: Call['chain']): Row[] {
 
 function from(table: string) {
   const call: Call = { table, op: 'select', args: [], chain: [] };
-  const rows = () => (table === 'qr_memories' ? mem.memories : table === 'orders' ? mem.orders : []);
+  const rows = () => (table === 'qr_memories' ? mem.memories : table === 'orders' ? mem.orders : table === 'albums' ? mem.albums : []);
   const answer = () => {
     mem.calls.push(call);
+    if (call.op === 'delete') {
+      if (mem.deleteError) return { data: null, error: mem.deleteError };
+      const hit = filtered(rows(), call.chain);
+      if (table === 'qr_memories') mem.memories = mem.memories.filter((r) => !hit.includes(r));
+      return { data: null, error: null };
+    }
+    if (call.op === 'update' && table === 'albums') {
+      // Another device saved first: its version moved on.
+      for (const r of mem.albums) if (mem.movedOn.delete(String(r.id))) r.updated_at = nextVersion();
+      const hit = filtered(mem.albums, call.chain);
+      hit.forEach((r) => Object.assign(r, call.args[0] as Row, { updated_at: nextVersion() }));
+      return { data: hit.map((r) => ({ id: r.id, updated_at: r.updated_at })), error: null };
+    }
     if (call.op === 'update') {
       if (mem.updateError) return { data: null, error: mem.updateError };
       const hit = filtered(mem.memories, call.chain);
@@ -55,6 +78,11 @@ function from(table: string) {
   const b = {
     select(columns: string) { if (call.op === 'select') call.args = [columns]; else call.chain.push(['select', columns]); return b; },
     update(values: Row) { call.op = 'update'; call.args = [values]; return b; },
+    delete() { call.op = 'delete'; return b; },
+    async maybeSingle() {
+      const r = answer() as { data: Row[] | null; error: unknown };
+      return { data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data, error: r.error };
+    },
     eq(...a: unknown[]) { call.chain.push(['eq', ...a]); return b; },
     not(...a: unknown[]) { call.chain.push(['not', ...a]); return b; },
     order(...a: unknown[]) { call.chain.push(['order', ...a]); return b; },

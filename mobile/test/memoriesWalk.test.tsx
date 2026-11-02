@@ -6,7 +6,11 @@
        a longer term waiting on payment, in the website's words;
      • a link memory: "Points to", changed and saved (the same printed QR,
        a new place to go), the website's words when the link isn't allowed;
-     • a video memory: watch it; changing the video is on the website;
+     • a video memory: it plays here; "Replace video" puts a new video
+       behind the same QR (a new address, so phones that played the old one
+       don't keep showing it); the website's words when it can't;
+     • "Delete" asks first, saying where the QR is, then takes it off the
+       account's albums; "Keep it" keeps it;
      • "Share link" shares the QR's address;
      • not signed in: the way to sign in.
    The database is a stand-in (helpers/fakeMemories.ts).
@@ -21,6 +25,14 @@ const mockRouter = { push: jest.fn() };
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: mockAuth.session, loading: false }) }));
 jest.mock('../src/lib/supabase', () => ({ supabase: jest.requireActual('./helpers/fakeMemories').memoriesClient, supabaseConfigured: true, supabaseUrl: 'https://example.supabase.co' }));
 jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockRouter.push(...a) } }));
+const mockPicks: unknown[] = [];
+jest.mock('../src/editor/memories/pickVideo', () => ({ pickVideoFromPhone: async () => mockPicks.shift() ?? null }));
+jest.mock('../src/editor/memories/VideoPreview', () => ({ VideoPreview: ({ uri, testID }: { uri: string; testID?: string }) => jest.requireActual('react').createElement('VideoPreview', { uri, testID }) }));
+const mockUploads: unknown[] = [];
+const mockUploadError = { value: null as string | null };
+jest.mock('../src/lib/memories/clipStore', () => ({
+  clipStore: { uploadClip: async (c: unknown) => { if (mockUploadError.value) throw new Error(mockUploadError.value); mockUploads.push(c); } },
+}));
 
 const CLIP = 'https://example.supabase.co/storage/v1/object/public/memory-clips/wxyz6789.mp4';
 const ROWS = [
@@ -36,6 +48,9 @@ beforeEach(() => {
   mem.memories = ROWS.map((r) => ({ ...r }));
   mockAuth.session = { user: { id: 'user-1' } };
   mockRouter.push.mockClear();
+  mockPicks.length = 0;
+  mockUploads.length = 0;
+  mockUploadError.value = null;
   share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never);
   openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
 });
@@ -82,13 +97,74 @@ describe('My Memories', () => {
     expect(mem.calls.some((c) => c.op === 'update')).toBe(false);
   });
 
-  it('a video memory: watch it; changing the video is on the website', async () => {
+  it('a video memory plays here; "Replace video": the same QR, the new video at a new address', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_762_000_000_000);
+    try {
+      await open();
+      expect(screen.queryByTestId('memory-dest-wxyz6789')).toBeNull();
+      expect(screen.getByTestId('memory-video-wxyz6789').props.uri).toBe(CLIP);
+      mockPicks.push({ uri: 'file:///cache/new.mp4', name: 'new.mp4', size: 5_000_000, type: 'video/mp4', durationSec: 30 });
+      await fireEvent.press(screen.getByTestId('memory-replace-wxyz6789'));
+      expect(await screen.findByText('Video replaced ✓ — same QR, new memory')).toBeOnTheScreen();
+      expect(mockUploads).toEqual([expect.objectContaining({ code: 'wxyz6789', ext: 'mp4', uri: 'file:///cache/new.mp4', replace: true })]);
+      const next = `${CLIP}?v=1762000000000`;
+      expect(mem.memories.find((r) => r.code === 'wxyz6789')?.destination).toBe(next);
+      expect(screen.getByTestId('memory-video-wxyz6789').props.uri).toBe(next);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('"Replace video" that can\'t: the website\'s words, the memory as it was', async () => {
     await open();
-    expect(screen.queryByTestId('memory-dest-wxyz6789')).toBeNull();
-    await fireEvent.press(screen.getByTestId('memory-watch-wxyz6789'));
-    expect(openUrl).toHaveBeenCalledWith(CLIP);
-    await fireEvent.press(screen.getByTestId('memory-website-wxyz6789'));
-    expect(openUrl).toHaveBeenCalledWith('https://megyprints.vercel.app/#/memories');
+    mockPicks.push({ uri: 'file:///cache/long.mp4', name: 'long.mp4', size: 5_000_000, type: 'video/mp4', durationSec: 300 });
+    await fireEvent.press(screen.getByTestId('memory-replace-wxyz6789'));
+    expect(await screen.findByText('That video is 300 seconds — memories are up to 2 minutes. Trim it to the best moment.')).toBeOnTheScreen();
+    mockUploadError.value = 'Could not upload your memory video (offline).';
+    mockPicks.push({ uri: 'file:///cache/ok.mp4', name: 'ok.mp4', size: 5_000_000, type: 'video/mp4', durationSec: 30 });
+    await fireEvent.press(screen.getByTestId('memory-replace-wxyz6789'));
+    expect(await screen.findByText('Could not upload your memory video (offline).')).toBeOnTheScreen();
+    expect(mem.memories.find((r) => r.code === 'wxyz6789')?.destination).toBe(CLIP);
+  });
+
+  it('"Delete" asks first, saying where the QR is; "Keep it" keeps it; "Delete the video" takes it off the albums', async () => {
+    mem.albums = [{
+      id: 'a1', user_id: 'user-1', title: 'HK Trip', album_type: 'standard', album_size: '8x8', selected_template: 'classic', photos_per_page: null,
+      pages: [{ id: 'p1', qrFills: [null] }, { id: 'p2', qrFills: [{ code: 'abcd2345' }] }], photos: [], cover_photo: null, cover_front: null, occasion: 'Trip', updated_at: '2026-11-01T00:00:00.000Z',
+    }];
+    await open();
+    await fireEvent.press(screen.getByTestId('memory-delete-abcd2345'));
+    expect(await screen.findByText('It comes off page 2 of “HK Trip” too, so the next order doesn\'t print or charge it. Delete it?')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('memory-delete-keep-abcd2345'));
+    expect(screen.queryByTestId('memory-delete-ask-abcd2345')).toBeNull();
+    expect(mem.memories.some((r) => r.code === 'abcd2345')).toBe(true);
+    await fireEvent.press(screen.getByTestId('memory-delete-abcd2345'));
+    await screen.findByTestId('memory-delete-warning-abcd2345');
+    await fireEvent.press(await screen.findByText('Delete the video'));
+    expect(await screen.findByTestId('memory-deleted')).toHaveTextContent('Deleted. Its QR came off page 2 of “HK Trip”.');
+    expect(screen.queryByTestId('memory-abcd2345')).toBeNull();
+    expect(mem.memories.some((r) => r.code === 'abcd2345')).toBe(false);
+    expect((mem.albums[0].pages as { qrFills: unknown[] }[])[1].qrFills).toEqual([null]);
+  });
+
+  it('a delete that can\'t: the website\'s words, the memory kept', async () => {
+    await open();
+    mem.deleteError = { message: 'denied' };
+    await fireEvent.press(screen.getByTestId('memory-delete-abcd2345'));
+    await screen.findByText('This QR isn’t in any of your albums or orders. Delete it?');
+    await fireEvent.press(screen.getByText('Delete the video'));
+    expect(await screen.findByText('Could not delete. Try again.')).toBeOnTheScreen();
+    expect(screen.getByTestId('memory-abcd2345')).toBeOnTheScreen();
+  });
+
+  it('the words are the website\'s (MyMemories.tsx)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/pages/MyMemories.tsx'), 'utf8') as string;
+    for (const w of ['Video replaced ✓ — same QR, new memory', 'Uploaded, but could not re-point the QR. Try again.', 'Could not replace the video.', 'Could not delete. Try again.']) expect(src).toContain(`'${w}'`);
+    for (const w of ['Replace video', 'Delete the video', 'Keep it', 'Delete']) expect(src).toContain(` ${w}\n`);
+    expect(src).toContain("{confirmDel || 'Checking where this QR is\\u2026'}");
+    expect(src).toContain('const next = versionedClipUrl(row.code, v.ext, Date.now());');
+    expect(src).toContain('await uploadClip(row.code, v.ext, f, { replace: true });');
   });
 
   it('"Share link" shares the address its printed QR opens', async () => {

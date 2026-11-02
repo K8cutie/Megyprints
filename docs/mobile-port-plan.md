@@ -2976,6 +2976,60 @@ start with any other).
   (`src/lib/checkout/site.ts`), and `test/websitePages.test.ts` fails if a
   screen opens a page by a plain path again.
 
+## Phase 6: QR video memories in the app (2026-11-02, `feat/port-qr-videos`)
+
+The website's video memories (AddQrModal, memoryClips.ts, the checkout's
+video steps, My Memories' Replace video and Delete), on the phone:
+
+- **Editor** (`src/editor/memories`): "Add a video memory" under a
+  single-photo page (the website's `canAddMemoryQr`) and a tap on a page's
+  QR open the website's window as a sheet, in its words: Android's own video
+  picker (no permission), the video's line and a preview, the corner (Auto
+  or chosen), the quality with the album's first memory (HD at its price,
+  then locked), "Place QR" (`applyMemoryQr`), change the video (same code
+  and QR), move the corner, Remove.
+- **The QR picture** (`src/lib/memories/qrPicture.ts`): the website's
+  library and options; every pixel equal to the website's
+  (`test/qrPicture.test.ts`).
+- **Kept on the phone and shrunk** (`src/lib/memories/clips.ts`,
+  `clipStore.ts`, `modules/video-shrink`): the picked video is copied into
+  the app's own folder under its code and shrunk in the background by the
+  app's own native module (Google's Media3 Transformer 1.9.1, the version
+  expo-video uses): one H.264 MP4, short side 720 (Standard) or 1080 (HD),
+  30 fps, the tier's bitrate. Kept as picked when shrinking fails or doesn't
+  help. Freed once its order is paid.
+- **Checkout** (`sendOrder.ts`): the website's steps 0, 2b and 3c. A video
+  that's gone stops Place order before any order row and names its pages;
+  kept videos are uploaded after the cover and checked again after the
+  pages; their memory rows are required. HD comes from the album's videos.
+- **My Memories**: a video plays there; "Replace video" (checked, uploaded
+  over the old one, a new address so phones that played the old one fetch
+  the new; shrunk to HD first only when over the bucket's 100 MB);
+  "Delete" asks first, saying where the QR is, then takes it off the
+  account's albums (`src/lib/memories/removal.ts`).
+- **Found on the website (not fixed, `src/` is frozen until Nov 9):** a
+  picked `.mov`/`.webm`/`.m4v` that the browser shrinks goes up as
+  `<code>.mp4`, but the album and the memory row keep pointing at
+  `<code>.mov`, and the scan page plays exactly that address: the printed QR
+  would play nothing. The app points each row at the file it actually sent.
+- **New native code, a NEW APK:** `modules/video-shrink` (Kotlin),
+  `expo-image-picker`, `expo-video`. No camera, microphone or video-library
+  permission (`test/photoSetup.test.ts`).
+- Not in the app yet: choosing a longer hosting term at checkout (the
+  included term is used), an event album's guest videos.
+
+### Test APK from GitHub (`.github/workflows/android-apk.yml`)
+
+Every pull request into native-2.0 that touches the app builds a test APK
+on GitHub's machines ("Megy Prints 2.0 (dev)", the debug key: it installs
+next to 1.x). Download: the PR's Checks → "2.0 test APK" → Summary →
+Artifacts. **Owner step, once:** GitHub → the repository → Settings →
+Secrets and variables → Actions → New repository secret, twice:
+`EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, the same two
+lines as in `mobile\.env.local`. Without them the job stops and says so.
+It also compiles the app's own Kotlin modules, the first real check they
+get.
+
 ## Phase 6: My Memories (2026-11-02, `feat/port-my-memories`)
 
 - `src/app/memories.tsx` (from the start screen and My albums): every QR
