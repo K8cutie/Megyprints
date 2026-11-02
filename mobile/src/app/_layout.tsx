@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useLayoutEffect } from 'react';
 import { BuilderProvider } from '../builder/BuilderProvider';
 import { AuthProvider } from '../lib/auth';
+import { useAskBeforeClosing } from '../lib/closeAsk';
 import { DraftProvider } from '../lib/draftStore';
 import { guardSharedRouter, rootMounted, rootUnmounted } from '../lib/routerBinding';
 import { keepTheScreenUpright } from '../lib/screenTurning';
@@ -19,6 +20,13 @@ function KeepRouterBound() {
   return null;
 }
 
+/** Back on the last screen asks "Close Megy Prints?" first (closeAsk.ts). */
+const canGoBack = () => router.canGoBack();
+function AskBeforeClosing() {
+  useAskBeforeClosing(canGoBack);
+  return null;
+}
+
 export default function RootLayout() {
   // Every screen is upright; only the Preview turns with the phone, while it
   // is on top (src/lib/screenTurning.ts). Upright from the start, too, after
@@ -31,6 +39,7 @@ export default function RootLayout() {
         <BuilderProvider>
           <StatusBar style="dark" />
           <KeepRouterBound />
+          <AskBeforeClosing />
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },

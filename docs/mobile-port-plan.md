@@ -3187,6 +3187,19 @@ One command on the owner's PC makes the real app for Google Play:
 
 ---
 
+## Back asks before closing the app (2026-11-02, `feat/port-ask-before-closing`)
+
+Owner, testing the first APK: "i pressed back by accident and totally lost
+all the album. Is there an 'are you sure you want to exit app' message?"
+There wasn't: Back on the start screen closed the app at once. Now Back
+with no screen left to go back to asks **"Close Megy Prints?"**, Stay (the
+default; tapping outside the question too) or Close (`src/lib/closeAsk.ts`,
+mounted once in `src/app/_layout.tsx`). Every other Back still goes back a
+screen, and a screen that takes Back for itself (Making your album, an open
+sheet) still does. **Still open:** why the album was lost; asked the owner
+which screen they were on, whether the app closed, and whether "Continue my
+album" or "See my albums" still has it.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
