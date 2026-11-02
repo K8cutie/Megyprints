@@ -133,6 +133,8 @@ describe('checkout on the album "Order this album" opened it with', () => {
     expect(await screen.findByTestId('order-own-album')).toBeOnTheScreen();
     expect(screen.queryByTestId('order-test-album')).toBeNull();
     expect(rec.reads).toContainEqual({ table: 'albums', columns: '*', filters: { user_id: 'user-1', id: 'album-7' } });
+    // No memories on this album: no hosting term to choose (the website's rule).
+    expect(screen.queryByTestId('order-terms')).toBeNull();
   });
 
   /** Place order, the tester code applied or not. */
@@ -260,6 +262,30 @@ describe('an album with a video memory', () => {
     expect(mockSend.calls[0].plan.orderRow).toMatchObject({ hd_memories: false });
   });
 
+  it('how long the memories stay live: the website\'s choice; a longer term is priced and ordered', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ORDER_SRC = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/pages/Order.tsx'), 'utf8') as string;
+    for (const w of ['How long should your memories stay live?', 'Your videos play from the printed QR for the whole term. Renew anytime after.']) expect(ORDER_SRC).toContain(w);
+    expect(ORDER_SRC).toContain("{t.price > 0 ? `+₱${t.price}` : 'Included'}");
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByText('How long should your memories stay live?')).toBeOnTheScreen();
+    expect(screen.getByTestId('order-term-5')).toHaveTextContent('5 yearsIncluded');
+    expect(screen.getByTestId('order-term-10')).toHaveTextContent('10 years+₱99');
+    expect(screen.getByTestId('order-term-20')).toHaveTextContent('20 years+₱199');
+    expect(screen.getByTestId('order-term-5').props.accessibilityState).toEqual(expect.objectContaining({ checked: true }));
+    const pesos = () => Number(String(screen.getByTestId('order-total').props.children ?? '').replace(/[^0-9]/g, '') || textOf(screen.getByTestId('order-total')).replace(/[^0-9]/g, ''));
+    const before = pesos();
+    await fireEvent.press(screen.getByTestId('order-term-10'));
+    expect(pesos() - before).toBe(99);
+    expect(screen.getByTestId('order-term-10').props.accessibilityState).toEqual(expect.objectContaining({ checked: true }));
+    expect(screen.getByTestId('order-term-5').props.accessibilityState).toEqual(expect.objectContaining({ checked: false }));
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    await screen.findByTestId('pay-order-placed').catch(() => null);
+    expect(mockSend.calls[0].plan.orderRow).toMatchObject({ hosting_years: 10 });
+  });
+
   it('a video that is gone: the website\'s words naming its page, back on the form', async () => {
     const { MissingClipError } = jest.requireActual('../src/lib/memories/clips') as typeof import('../src/lib/memories/clips');
     mockSend.run = async () => { throw new MissingClipError(['k3m9p2qz']); };
@@ -272,3 +298,7 @@ describe('an album with a video memory', () => {
   });
 });
 
+function textOf(node: { children?: unknown[]; props?: { children?: unknown } }): string {
+  const kids = (node as { children?: unknown[] }).children ?? [];
+  return kids.map((c) => (typeof c === 'string' ? c : textOf(c as never))).join('');
+}

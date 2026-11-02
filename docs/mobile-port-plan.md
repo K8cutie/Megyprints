@@ -3015,8 +3015,11 @@ video steps, My Memories' Replace video and Delete), on the phone:
 - **New native code, a NEW APK:** `modules/video-shrink` (Kotlin),
   `expo-image-picker`, `expo-video`. No camera, microphone or video-library
   permission (`test/photoSetup.test.ts`).
-- Not in the app yet: choosing a longer hosting term at checkout (the
-  included term is used), an event album's guest videos.
+- Choosing how long the memories stay live at checkout: added
+  (`feat/port-hosting-term`): the website's term buttons ("How long should
+  your memories stay live?", the schedule's tiers, the included one first),
+  priced and stored on the order (`hosting_years`).
+- Not in the app yet: an event album's guest videos.
 
 ### Test APK from GitHub (`.github/workflows/android-apk.yml`)
 

@@ -118,6 +118,8 @@ export default function OrderScreen() {
   const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
   const [addressErrors, setAddressErrors] = useState<AddressErrors>({});
   const [tester, setTester] = useState<TesterCode | null>(null);
+  // How long the memories stay live (the website's hostingYears): null = the included term.
+  const [hostingYears, setHostingYears] = useState<number | null>(null);
   const [message, setMessage] = useState('');
   const [signInAsk, setSignInAsk] = useState(false);
   const [openAlbumAsk, setOpenAlbumAsk] = useState(false);
@@ -172,8 +174,7 @@ export default function OrderScreen() {
   }, [clipKey]);
   const clipTierReady = !clipKey || clipTier?.key === clipKey;
   const hdMemories = qrCount > 0 && !!clipKey && clipTier?.key === clipKey && clipTier.tier === 'hd';
-  // The included hosting term (a longer one is chosen on the website for now).
-  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: null, hdMemories, tester });
+  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears, hdMemories, tester });
   const price = clipTierReady ? priced : { ...priced, ready: false };
 
   // The bar's steps for this album (made once: a re-render must not restart the bar).
@@ -445,6 +446,25 @@ export default function OrderScreen() {
           <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs ({peso(FREE_QR_MEMORIES * EXTRA_QR_RATE)} value)</Text>
           {price.includedYears !== null && <Text style={styles.small}>✓ {price.includedYears} years of memory hosting</Text>}
         </View>
+        {qrCount > 0 && price.tiers.length > 0 && (
+          // Order.tsx: "How long should your memories stay live?"
+          <View style={styles.terms} testID="order-terms">
+            <Text style={styles.strongSmall}>How long should your memories stay live?</Text>
+            <Text style={styles.small}>Your videos play from the printed QR for the whole term. Renew anytime after.</Text>
+            <View style={styles.termRow} accessibilityRole="radiogroup" accessibilityLabel="Memory hosting term">
+              {price.tiers.map((t) => {
+                const active = (hostingYears ?? price.includedYears) === t.years;
+                return (
+                  <Pressable key={t.years} accessibilityRole="radio" accessibilityState={{ checked: active }} onPress={() => setHostingYears(t.years)}
+                    style={[styles.term, active && styles.termOn]} testID={`order-term-${t.years}`}>
+                    <Text style={styles.termYears}>{t.years} years</Text>
+                    <Text style={styles.small}>{t.price > 0 ? `+₱${t.price}` : 'Included'}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
         <View style={styles.qrNote} testID="order-qr-note">
           <Text style={styles.qrNoteText}>
             <Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
@@ -596,6 +616,11 @@ const styles = StyleSheet.create({
   savings: { fontSize: 13, fontWeight: '700', color: colors.good, textAlign: 'right' },
   included: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 2 },
   qrNote: { borderWidth: 1, borderColor: '#E9B8A0', backgroundColor: '#FBF0EA', borderRadius: 12, padding: 12 },
+  terms: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 4 },
+  termRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  term: { width: '48%', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  termOn: { borderColor: colors.accent, backgroundColor: '#FBF0EA' },
+  termYears: { fontSize: 14, fontWeight: '700', color: colors.text },
   qrNoteText: { fontSize: 14, lineHeight: 20, color: '#6B4A3A' },
   notice: { borderWidth: 1, borderColor: '#E9B8A0', backgroundColor: '#FBF0EA', borderRadius: 14, padding: space.md, gap: space.sm },
   noticeHead: { fontSize: 15, fontWeight: '700', color: colors.text },
