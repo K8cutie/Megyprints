@@ -332,7 +332,10 @@ every open PR on 2026-10-29). Whichever lands second follows the recipe.
      feedback goes in `docs/tester-feedback-log.md` as always.
   3. Production as a **staged rollout** (a small share of phones first, then
      more), so a problem reaches few people and can be stopped.
-  A phone with 1.x updates to 2.0 in place: still signed in, albums there.
+  A phone with 1.x updates to 2.0 in place, with the albums saved to the
+  account there. **People sign in once more** (1.x kept the sign-in inside
+  its web view; 2.0 keeps its own), and an album made in 1.x without signing
+  in, never saved to an account, stays behind. See "Phase 7: the Play build".
 
 ## 7. Cost
 
@@ -572,6 +575,8 @@ Native Google sign-in needs these steps first, all in the owner's accounts:
   `jsonb_array_length(pages)`, in a migration) and read that instead.
 - **Debug builds use the public React Native debug key.** Before Phase 7,
   make our own dev key, or keep dev builds off real accounts' Google sign-in.
+  (Done by Phase 7's design: Google sign-in comes back only to the Play
+  build, which is signed with the upload key.)
 - Phones: the default ABIs are `arm64-v8a` (phones) and `x86_64` (emulator);
   old 32-bit phones need `armeabi-v7a` added (`-Abis`).
 
@@ -2963,6 +2968,76 @@ way the 1.x app does it (`src/lib/nativeAuth.ts`, `public/auth-native.html`):
 - Proven: `test/googleSignIn.test.ts` (start, the way back, the one-time
   code, held to `nativeAuth.ts` and `auth-native.js`), `test/authReturn.test.tsx`,
   `test/signInReturn.test.tsx`. Not proven on a phone.
+
+## Phase 7: the Play build (2026-11-02, `feat/port-play-release`)
+
+One command on the owner's PC makes the real app for Google Play:
+
+    mobile\scripts\build-android.ps1 -Play
+
+- **What it makes** (`app.config.js`, on top of `app.json`): "Megy Prints",
+  `com.megyprints.app` (1.x's name and app name), version 2.0.0, version
+  code 100 (1.x is 4), Google sign-in's two ways back
+  (`https://megyprints.vercel.app/auth-native.html`, verified, and
+  `megyprints://`), every screen, permission and plugin the same as the dev
+  build. Phones: arm64, old 32-bit arm and x86_64 (Chromebooks).
+- **Signed with the upload key 1.x is signed with**
+  (`plugins/withPlaySigning.js`): Gradle reads the key's settings from the
+  1.x app's `android-native\keystore.properties` (git-ignored; storeFile,
+  storePassword, keyAlias, keyPassword) or the file `-KeystoreProperties`
+  names. Without it the script stops before building. After building, it
+  checks the key with `apksigner` against the website's `assetlinks.json`.
+- **Out:** `mobile\dist\android\megyprints-2.0-play.aab` (for Play Console)
+  and `megyprints-2.0-play.apk` (the same app, signed with the upload key).
+- The dev build is unchanged (`com.megyprints.app.dev`, debug key). The two
+  use the one short folder `C:\megy2` in turn: switching starts its
+  `android\` afresh (about 10 more minutes).
+- Proven: `test/playRelease.test.ts` reads the Android manifest Expo makes
+  for each build (Expo's own introspect run: no Android SDK needed) and holds
+  it to 1.x's manifest, `capacitor.config.ts`, `assetlinks.json` and
+  `auth-native.js`. Also: `npx expo prebuild` of the Play build (cloud,
+  2026-11-02) made `com.megyprints.app`, "Megy Prints", version code 100, both
+  ways back and the signing lines; the signing lines run in Gradle 8.14 with a
+  stand-in Android block signed release with the upload key from a relative,
+  `../` and full key path, and stopped with a clear message for a missing
+  settings file, key file or line, and for a release build without the
+  settings. **Not proven: a real Gradle build of the Play app** (no Android SDK
+  in the cloud) and the app on a phone.
+
+### Owner steps, in order
+
+1. On the PC: `git pull`, `npm ci` in `mobile\`, then
+   `mobile\scripts\build-android.ps1 -Play`. It needs `mobile\.env.local`
+   and `android-native\keystore.properties` (the same file the 1.x builds
+   use).
+2. Play Console → Test and release → **Internal testing** → Create new
+   release → upload `megyprints-2.0-play.aab`. Release notes: below. Only the
+   owner on the Internal testing list.
+3. On the owner's phone (with 1.x from Play): update through the Internal
+   testing link. Walk: sign in with Google, make an album, Preview on its
+   side, order and pay with a test code, Your orders, My memories.
+4. Play Console may ask for the **photo permission declaration**
+   (`READ_MEDIA_IMAGES`, see Phase 2 notes): making photo albums is the app's
+   main job.
+5. Then **Alpha** (closed testing) with the same `.aab`, then production as a
+   staged rollout (section 6).
+
+### For people updating from 1.x
+
+- They sign in once more (Google or email, as before). Albums saved to the
+  account are all there; orders and QR memories too.
+- An album started in 1.x **without signing in** lived only inside 1.x and
+  does not come across.
+
+### Release notes (Play Console "What's new", under 500 characters)
+
+    Megy Prints 2.0: the app is now made for your phone.
+    • Make your album on your phone, page by page
+    • See it as a real book; turn your phone sideways for the open book
+    • Order and pay in the app
+    • Your orders, your QR memories and your profile, all in the app
+    After updating, please sign in again. The albums saved to your account
+    are all there.
 
 ---
 
