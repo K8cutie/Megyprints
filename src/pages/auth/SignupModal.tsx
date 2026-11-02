@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Lock, UserPlus, User, LogIn } from 'lucide-react';
+import { X, Mail, UserPlus, User, LogIn } from 'lucide-react';
 import { useAuth } from '../../lib/authContext';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { hasAccountProblem } from '../../lib/accountErrors';
 import type { HasAccount } from '../../lib/accountErrors';
 import TermsAgreeLine from '../../components/TermsAgreeLine';
+import { PasswordInput } from './PasswordInput';
 
 // =============================================================================
 // Types
@@ -281,25 +282,17 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                   >
                     Password
                   </label>
-                  <div className="relative">
-                    <Lock
-                      size={16}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-taupe"
-                    />
-                    <input
-                      id="signup-password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (fieldErrors.password)
-                          setFieldErrors((p) => ({ ...p, password: undefined }));
-                      }}
-                      placeholder="At least 8 characters"
-                      className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-4 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
-                      autoComplete="new-password"
-                    />
-                  </div>
+                  <PasswordInput
+                    id="signup-password"
+                    value={password}
+                    onChange={(v) => {
+                      setPassword(v);
+                      if (fieldErrors.password)
+                        setFieldErrors((p) => ({ ...p, password: undefined }));
+                    }}
+                    placeholder="At least 8 characters"
+                    autoComplete="new-password"
+                  />
                   {fieldErrors.password && (
                     <p className="mt-1 text-xs text-red-500">{fieldErrors.password}</p>
                   )}
@@ -313,25 +306,17 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin }: SignupModalPro
                   >
                     Confirm Password
                   </label>
-                  <div className="relative">
-                    <Lock
-                      size={16}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-taupe"
-                    />
-                    <input
-                      id="signup-confirm"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => {
-                        setConfirmPassword(e.target.value);
-                        if (fieldErrors.confirmPassword)
-                          setFieldErrors((p) => ({ ...p, confirmPassword: undefined }));
-                      }}
-                      placeholder="Re-enter your password"
-                      className="w-full rounded-xl border-2 border-blush-deep bg-white py-2.5 pl-10 pr-4 text-sm text-ink-warm placeholder-taupe/50 focus:border-blush-pink focus:outline-none focus:ring-2 focus:ring-blush-pink/20 transition-all"
-                      autoComplete="new-password"
-                    />
-                  </div>
+                  <PasswordInput
+                    id="signup-confirm"
+                    value={confirmPassword}
+                    onChange={(v) => {
+                      setConfirmPassword(v);
+                      if (fieldErrors.confirmPassword)
+                        setFieldErrors((p) => ({ ...p, confirmPassword: undefined }));
+                    }}
+                    placeholder="Re-enter your password"
+                    autoComplete="new-password"
+                  />
                   {fieldErrors.confirmPassword && (
                     <p className="mt-1 text-xs text-red-500">{fieldErrors.confirmPassword}</p>
                   )}
