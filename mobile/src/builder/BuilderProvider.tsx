@@ -116,6 +116,13 @@ export function BuilderProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** The album, or null on a screen drawn outside the provider (a test). The
+ *  checkout uses it: opened from the album it orders that album, else its
+ *  test album. */
+export function useOptionalBuilder(): BuilderValue | null {
+  return useContext(BuilderContext);
+}
+
 export function useBuilder(): BuilderValue {
   const v = useContext(BuilderContext);
   if (!v) throw new Error('useBuilder must be used inside <BuilderProvider>');

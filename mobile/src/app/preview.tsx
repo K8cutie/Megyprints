@@ -15,6 +15,11 @@
    no status bar), with round turn buttons beside it or under it; upright,
    the book is as wide as the screen. The sizes are src/builder/previewLayout.ts.
 
+   At the album's end, "Order this album" (the website's turn bar) runs the
+   website's checks (lib/checkout/orderStart.ts: 40 photos, photos on this
+   phone, a blank cover and the rest, said once with "Order anyway"), saves
+   the album to the account when signed in, and opens checkout on it.
+
    "Edit pages" (the website's way into its editor) opens the editor
    (src/editor) on the page shown; its "Back to preview" comes back here, on
    the page it was on. On the closed book, "Edit cover" opens the cover
@@ -40,7 +45,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ALBUM_SIZES } from '@web/pages/builder/types';
 import { conflictMessage, DELETED_ELSEWHERE_MESSAGE } from '@web/lib/albumSyncRecord';
 import { missingPhotos } from '@web/lib/photoPresence';
-import { atAlbumEnd, canTurnBack, canTurnForward, previewCaption, previewCounter, swipeTurn, turnBack, turnForward, spreadStart, type PreviewPosition, type PreviewView, type Turn } from '@web/pages/builder/previewPaging';
+import { canTurnBack, canTurnForward, previewCaption, previewCounter, swipeTurn, turnBack, turnForward, spreadStart, type PreviewPosition, type PreviewView, type Turn } from '@web/pages/builder/previewPaging';
 import { planTurn, type TurnFace, type TurnPlan } from '@web/pages/builder/pageTurn';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
@@ -48,6 +53,7 @@ import { accountSaveDue, markAccountSaved } from '../builder/accountSave';
 import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { forgetPhotoPictures, preparePagePicture, PRIORITY, usePagePicture } from '../builder/usePagePicture';
 import { useOncePerVisit } from '../lib/useOncePerVisit';
+import { orderCheck, orderSaveError, type OrderCheck } from '../lib/checkout/orderStart';
 import { screenCanTurn, useTurnsWithThePhone } from '../lib/screenTurning';
 import { isSideways, pagePictureWidth, sidewaysBook, uprightBook, UPRIGHT_CHROME_GUESS, UPRIGHT_EDGE, type Box } from '../builder/previewLayout';
 import type { PageRequest } from '../builder/pageImages';
@@ -299,6 +305,57 @@ export default function Preview() {
     router.push('/edit-pages');
   });
   const editCover = once(() => router.push(COVER_ROUTE));
+
+  // "Order this album" (orderStart.ts): the website's checks, then the save
+  // to the account (signed in), then checkout on this album.
+  const [orderAsk, setOrderAsk] = useState<Exclude<OrderCheck, { kind: 'go' }> | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [ordering, setOrdering] = useState(false);
+  const orderingRef = useRef(false);
+  const order = async (anyway = false) => {
+    if (orderingRef.current) return;
+    const r = orderCheck({ pages, photos: builder.uploadedPhotos, coverFront: builder.coverFront, albumSize: builder.albumSize, measurer: platform.textMeasurer() }, { anyway });
+    setOrderError(null);
+    if (r.kind !== 'go') { setOrderAsk(r); return; }
+    setOrderAsk(null);
+    const albumId = builder.getAlbumId();
+    if (signedIn) {
+      // Checkout orders the account's copy: it must be this one, saved now.
+      orderingRef.current = true;
+      setOrdering(true);
+      const saved = await builder.manualSave().catch(() => false);
+      orderingRef.current = false;
+      setOrdering(false);
+      if (!saved) { setOrderError(orderSaveError(!!builder.getCloudConflict())); return; }
+      markAccountSaved(platform.deviceStore, albumId, madeAt);
+    }
+    router.push({ pathname: '/order', params: albumId ? { albumId } : {} });
+  };
+  // "Show me" / "Back to my pages": the cover editor, or the pages at the first one to fix.
+  const showOrderFix = () => {
+    const ask = orderAsk;
+    setOrderAsk(null);
+    if (ask?.kind === 'warn' && ask.coverFirst) { router.push(COVER_ROUTE); return; }
+    setCoverAt(null);
+    if (ask?.kind === 'warn' && ask.firstPage != null) builder.goToPage(ask.firstPage);
+    else builder.goToPage(index);
+    router.push('/edit-pages');
+  };
+  const orderAskBox = (orderAsk || orderError) && (
+    <View style={styles.ask} testID="preview-order-ask-box">
+      <Text style={styles.askText} testID={orderError ? 'preview-order-error' : 'preview-order-ask'}>{orderError ?? orderAsk?.message}</Text>
+      {orderAsk?.kind === 'warn' && (
+        <>
+          <Button label="Order anyway" onPress={() => { void order(true); }} testID="preview-order-anyway" />
+          <Button label="Show me" kind="plain" onPress={showOrderFix} testID="preview-order-show" />
+        </>
+      )}
+      {orderAsk?.kind === 'tooFew' && <Button label="Back to my pages" kind="plain" onPress={showOrderFix} testID="preview-order-back-to-pages" />}
+      {orderAsk?.kind === 'missing' && <Button label="Add the photos" kind="plain" onPress={() => { setOrderAsk(null); router.push('/photos'); }} testID="preview-order-add-photos" />}
+      {orderError && <Button label="Close" kind="plain" onPress={() => setOrderError(null)} testID="preview-order-error-close" />}
+    </View>
+  );
+  const orderLabel = ordering ? 'Saving your album…' : 'Order this album';
   const noteNotDrawn = (key: string, list: string[]) => setNotDrawn((m) => (m[key]?.join('|') === list.join('|') ? m : { ...m, [key]: list }));
   const face = (f: TurnFace) => <Face face={f} {...faceProps} />;
 
@@ -326,7 +383,6 @@ export default function Preview() {
   }, [slideTurn?.n]);
   const shownKeys = onCover ? ['cover'] : view === 'page' ? [`p${index}`] : [`p${s}`, `p${s + 1}`];
   const missingHere = [...new Set(shownKeys.flatMap((k) => notDrawn[k] ?? []))];
-  const end = atAlbumEnd(pos);
   const word = view === 'page' ? 'page' : 'pages';
 
   if (total === 0) {
@@ -338,7 +394,6 @@ export default function Preview() {
     );
   }
 
-  const done = () => { if (router.canDismiss()) router.dismissAll(); else router.replace('/'); };
   // On its side the book fills the screen: no header, no status bar.
   const chrome = (
     <>
@@ -379,7 +434,9 @@ export default function Preview() {
         {canTurnBack(pos) && <TurnButton box={side.back} label={`Previous ${word}`} mark="‹" main={false} onPress={back} testID="preview-prev" />}
         {canTurnForward(pos)
           ? <TurnButton box={side.forward} label={`Next ${word}`} mark="›" main onPress={forward} testID="preview-next" />
-          : <TurnButton box={side.forward} label="Done" mark="Done" main onPress={done} testID="preview-done" />}
+          : <TurnButton box={side.forward} label="Order this album" mark={ordering ? '…' : 'Order'} main onPress={() => { void order(); }} testID="preview-order" />}
+        {/* "Order this album"'s question or a failed save, over the book. */}
+        {orderAskBox && <View style={[styles.sideAsk, { left: side.room.x, top: side.room.y, width: side.room.w, height: side.room.h }]}>{orderAskBox}</View>}
         <Text style={[styles.sideCounter, { left: c.x, top: c.y, width: c.w, height: c.h }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} testID="preview-counter">
           {previewCounter(pos)}
         </Text>
@@ -450,7 +507,7 @@ export default function Preview() {
                       : 'Saved on this phone. Changes go to your account by themselves.'}
             </Text>
           )}
-          {end && <Text style={styles.endNote}>Ordering from the app comes in a later version. Your album stays saved.</Text>}
+          {orderAskBox}
         </View>
       </ScrollView>
       <SafeAreaView edges={['bottom']} style={styles.bar}>
@@ -458,7 +515,7 @@ export default function Preview() {
           {canTurnBack(pos) && <Button label={`‹ Previous ${word}`} kind="plain" onPress={back} style={styles.turnButton} testID="preview-prev" />}
           {canTurnForward(pos)
             ? <Button label={`Next ${word} ›`} onPress={forward} style={styles.turnButton} testID="preview-next" />
-            : <Button label="Done" onPress={done} style={styles.turnButton} testID="preview-done" />}
+            : <Button label={orderLabel} busy={ordering} onPress={() => { void order(); }} style={styles.turnButton} testID="preview-order" />}
         </View>
       </SafeAreaView>
     </View>
@@ -483,6 +540,7 @@ const styles = StyleSheet.create({
   roundMainText: { color: colors.accentText },
   roundPlainText: { color: colors.accent },
   pressed: { opacity: 0.85 },
+  sideAsk: { position: 'absolute', alignItems: 'center', justifyContent: 'center', padding: space.md },
   sideCounter: { position: 'absolute', fontSize: 13, lineHeight: 20, fontWeight: '600', color: colors.muted, textAlign: 'center' },
   stage: { backgroundColor: '#FFFFFF', elevation: 6, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8 },
   // The cover opening on its side: only the right page is there yet.
@@ -502,7 +560,6 @@ const styles = StyleSheet.create({
   saved: { fontSize: 13, color: colors.muted, textAlign: 'center' },
   ask: { alignSelf: 'stretch', gap: space.sm, backgroundColor: '#FFF1EA', borderWidth: 1, borderColor: '#EBC3AE', borderRadius: 12, padding: space.md },
   askText: { fontSize: 15, lineHeight: 21, color: '#7A3A1E' },
-  endNote: { fontSize: 14, color: colors.text, textAlign: 'center', paddingHorizontal: space.md },
   bar: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card, padding: space.md },
   turnRow: { flexDirection: 'row', gap: space.sm },
   turnButton: { flex: 1 },

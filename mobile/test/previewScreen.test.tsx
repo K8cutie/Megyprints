@@ -31,6 +31,11 @@ const mockSeen = {
   statusBars: new Set<{ hidden?: boolean }>(),
   orientation: [] as number[],
   pictureWidths: [] as number[],
+  /** Signed in or not. */
+  session: null as { user: { id: string } } | null,
+  /** What saving the album to the account answers (Order this album). */
+  save: jest.fn(async () => true),
+  conflict: null as { updatedAt: string } | null,
 };
 
 jest.mock('expo-router', () => ({
@@ -61,9 +66,16 @@ jest.mock('expo-screen-orientation', () => ({
 }));
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 jest.mock('../src/builder/BuilderProvider', () => ({
-  useBuilder: () => ({ builder: jest.requireActual('./editorHarness').builder(), platform: { deviceStore: { getItem: () => null, setItem: () => {} } }, text: null }),
+  useBuilder: () => {
+    const b = jest.requireActual('./editorHarness').builder();
+    // The real builder, but saving to the account answers what the test says.
+    const builder = new Proxy(b, {
+      get: (t, k) => (k === 'manualSave' ? mockSeen.save : k === 'getCloudConflict' ? () => mockSeen.conflict : t[k]),
+    });
+    return { builder, platform: { deviceStore: { getItem: () => null, setItem: () => {} }, textMeasurer: () => null }, text: null };
+  },
 }));
-jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: null }) }));
+jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: mockSeen.session }) }));
 jest.mock('../src/lib/draftStore', () => ({ useDraft: () => ({ clear: () => {} }) }));
 jest.mock('../src/builder/usePagePicture', () => ({
   usePagePicture: (_text: unknown, req: { width: number; pageIndex: number; coverMode?: boolean } | null) => {
@@ -151,6 +163,9 @@ beforeEach(() => {
   mockSeen.statusBars.clear();
   mockSeen.orientation = [];
   mockSeen.pictureWidths = [];
+  mockSeen.session = null;
+  mockSeen.save = jest.fn(async () => true);
+  mockSeen.conflict = null;
   setScreen(UPRIGHT, UPRIGHT_INSETS);
 });
 afterEach(async () => {
@@ -323,21 +338,101 @@ describe('on its side: the open book fills the screen', () => {
     expect(book.width).toBe(want.spread.w);
   });
 
-  it('the album\'s last pages: "Done" in the forward button\'s place', async () => {
+});
+
+describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/orderStart.ts)', () => {
+  /** To the last page, upright. */
+  async function toTheEnd() {
+    await press('preview-next');
+    await act(async () => { builder().goToPage(builder().albumPages.length - 1); });
+    await refresh();
+    // Signed in, the Preview saves a newly made album once on opening
+    // (accountSave.ts): only the saves "Order this album" makes count here.
+    mockSeen.save.mockClear();
+  }
+  /** Taps Order; a warning (an empty caption box in a made album) is answered "Order anyway". */
+  async function order() {
+    await press('preview-order');
+    if (all('preview-order-anyway').length) await press('preview-order-anyway');
+  }
+
+  it('the last page: "Order this album" (the website\'s turn bar), filled, where Next was', async () => {
     await madeAlbum(SCENARIOS[0]);
-    const total = builder().albumPages.length;
+    await open();
+    await toTheEnd();
+    expect(all('preview-next')).toHaveLength(0);
+    expect(textOf('preview-order')).toBe('Order this album');
+    // The old "comes in a later version" line is gone.
+    expect(textOnScreen('Ordering from the app comes in a later version')).toBe(false);
+  });
+
+  it('signed in: the album is saved to the account, then checkout opens on it', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    await open();
+    await toTheEnd();
+    await order();
+    expect(mockSeen.save).toHaveBeenCalledTimes(1);
+    expect(mockNav.push).toHaveBeenCalledWith({ pathname: '/order', params: { albumId: builder().getAlbumId() } });
+  });
+
+  it('the save fails: the website\'s words, and checkout does not open', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    mockSeen.save = jest.fn(async () => false);
+    await open();
+    await toTheEnd();
+    await order();
+    expect(textOf('preview-order-error')).toBe("We couldn't save your album to your account, so it can't be ordered yet. Check your connection and tap Order again.");
+    expect(mockNav.push).not.toHaveBeenCalledWith(expect.objectContaining({ pathname: '/order' }));
+    // Changed on another device too: which to keep is asked first.
+    mockSeen.conflict = { updatedAt: '2026-11-02T00:00:00Z' };
+    await order();
+    expect(textOf('preview-order-error')).toMatch(/^This album was also changed on another device\./);
+  });
+
+  it('not signed in: checkout opens on the album and asks to sign in there (nothing to save to)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    await toTheEnd();
+    await order();
+    expect(mockSeen.save).not.toHaveBeenCalled();
+    expect(mockNav.push).toHaveBeenCalledWith({ pathname: '/order', params: { albumId: builder().getAlbumId() } });
+  });
+
+  it('fewer than 40 photos: said, with the way back to the pages; checkout does not open', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    // One photo taken off a page: 39 left.
+    const i = builder().albumPages.findIndex((p) => (p.slotFills ?? []).some((f) => typeof f === 'number'));
+    const slot = (builder().albumPages[i].slotFills ?? []).findIndex((f) => typeof f === 'number');
+    await act(async () => { builder().goToPage(i); });
+    await act(async () => { builder().clearSlot(slot); });
+    await act(async () => { builder().goToPage(0); });
+    await open();
+    await toTheEnd();
+    await press('preview-order');
+    expect(textOf('preview-order-ask')).toMatch(/^Your album has 39 photos/);
+    expect(mockSeen.save).not.toHaveBeenCalled();
+    await press('preview-order-back-to-pages');
+    expect(mockNav.push).toHaveBeenCalledWith('/edit-pages');
+  });
+
+  it('on its side, the last pages: a round "Order" button where › was', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
     await open();
     await turn(TURNED, TURNED_INSETS);
     await press('preview-next');
-    await act(async () => { builder().goToPage(total - 1); });
+    await act(async () => { builder().goToPage(builder().albumPages.length - 1); });
     await refresh();
-    expect(all('preview-next')).toHaveLength(0);
     const want = sidewaysBook({ screenW: 915, screenH: 412, insets: TURNED_INSETS, aspect: aspect() });
-    const done = flat(one('preview-done').props.style);
-    expect([done.left, done.top]).toEqual([want.forward.x, want.forward.y]);
-    expect(one('preview-done').props.accessibilityLabel).toBe('Done');
-    await press('preview-done');
-    expect(mockNav.dismissAll).toHaveBeenCalled();
+    const fwd = flat(one('preview-order').props.style);
+    expect([fwd.left, fwd.top]).toEqual([want.forward.x, want.forward.y]);
+    expect(one('preview-order').props.accessibilityLabel).toBe('Order this album');
+    expect(all('preview-next')).toHaveLength(0);
+    await order();
+    expect(mockNav.push).toHaveBeenCalledWith({ pathname: '/order', params: { albumId: builder().getAlbumId() } });
   });
 });
 

@@ -2566,6 +2566,36 @@ and the upright book gets bigger.
 
 ---
 
+## Phase 5, step 2: from the album to checkout (2026-11-02, `feat/port-album-to-checkout`)
+
+Stacked on `feat/port-landscape-preview` (#236: both change the Preview).
+
+- **"Order this album"** takes Next's place on the Preview's last page (the
+  website's turn bar; on its side, a round "Order" button). It runs the
+  website's checks first, in its order (`lib/checkout/orderStart.ts`, all
+  shared code): fewer than 40 photos stops it ("Back to my pages"); a photo
+  this phone doesn't have stops it ("Add the photos"; no "anyway"); a blank
+  cover, a title cut off, empty frames or boxes, placeholder words, blank
+  pages, words too long, photos put back from copies are said once with
+  "Order anyway" and "Show me". The Preview's "Done" at the end and the
+  "Ordering from the app comes in a later version" line are gone.
+- Signed in, the album is **saved to the account first** and checkout
+  waits for it (Builder handleOrder); a failed save says why in the
+  website's words (its conflict note says "the note below": the app's is
+  under the book).
+- **Checkout orders that album**: its pages from the app's album, and the
+  account's copy read back by its id (`loadOrderAlbumRow`, the website's
+  `selectOrderAlbum` run beside it in `test/orderStart.test.ts`: the same
+  read, the same row, the same "isn't saved to your account" words). Not
+  signed in, Place order asks to sign in as before. The home screen's
+  "Checkout with a test album" still opens the test album.
+- Still the test version: Place order shows what it would send and sends
+  nothing (step 3).
+- Not done: the website's "Delete N blank pages" in the warning (the app
+  says "Show me" instead), and Megy's "Place Order →" (no Megy in the app).
+
+---
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

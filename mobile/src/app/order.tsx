@@ -10,14 +10,18 @@
    rules, 40 photos, the cover that fits the press, the bar) or a mirror
    that a test runs beside the website's own function (see lib/checkout/).
 
-   THIS TEST VERSION WRITES NOTHING. The album is the test album
-   (fixtureAlbum.ts) until Phase 3; Place order runs the website's checks,
+   THIS TEST VERSION WRITES NOTHING. Opened from the Preview's "Order this
+   album" (with the album's id), it orders that album: its pages from the
+   app's album, its copy in the account read back by its id
+   (lib/checkout/orderStart.ts, the website's selectOrderAlbum). Opened from
+   the home screen's test button (no id), the test album (fixtureAlbum.ts).
+   Place order runs the website's checks,
    builds exactly what the website would send (the order row, the memory
    rows, the files), shows it in a test panel, and stops: no order, no
    upload, no tester-code check (that call counts tries in the database).
    The price is real: the live price list, read only.
    ══════════════════════════════════════════════════════════════════════════ */
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -39,6 +43,9 @@ import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
+import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart';
+import { useOptionalBuilder } from '../builder/BuilderProvider';
+import type { OrderAlbumRow } from '../lib/checkout/orderPayload';
 import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, payByLine, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, ORDER_ID, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { PAYEE, PAYEE_QR_URL, paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../lib/checkout/payment';
@@ -59,8 +66,31 @@ const DEFAULT_COVER: CoverType = 'softcover';
 export default function OrderScreen() {
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
-  // Until Phase 3: the test album (48 sample photos, made by the shared album maker).
-  const album = useMemo(() => fixtureCheckoutAlbum(), []);
+  // The album "Order this album" opened checkout with (its id), or the test
+  // album (48 sample photos, made by the shared album maker) from the home
+  // screen's test button.
+  const { albumId: ownId } = useLocalSearchParams<{ albumId?: string }>();
+  const own = useOptionalBuilder();
+  const ordersOwn = !!ownId && !!own;
+  // The account's copy of it, read by its id once signed in (never another album).
+  const [ownRow, setOwnRow] = useState<OrderAlbumRow | null>(null);
+  const [ownRowError, setOwnRowError] = useState('');
+  useEffect(() => {
+    if (!ordersOwn || !userId || !ownId) return;
+    let live = true;
+    setOwnRowError('');
+    loadOrderAlbumRow(supabase, userId, ownId)
+      .then((row) => { if (live) setOwnRow(row); })
+      .catch((e: unknown) => { if (live) setOwnRowError(e instanceof Error ? e.message : String(e)); });
+    return () => { live = false; };
+  }, [ordersOwn, userId, ownId]);
+  const fixture = useMemo(() => (ordersOwn ? null : fixtureCheckoutAlbum()), [ordersOwn]);
+  const b = own?.builder;
+  const album = useMemo(() => (ordersOwn && b
+    // Until the account's copy is read, a stand-in row with the album's id:
+    // Place order waits for the real one (startPlacing).
+    ? checkoutAlbumFrom(b, ownRow ?? { id: ownId!, title: b.albumTitle, album_type: null, album_size: b.albumSize, selected_template: null, photos_per_page: null, pages: b.albumPages, photos: [], cover_photo: null })
+    : fixture!), [ordersOwn, b, b?.albumPages, b?.coverFront, b?.albumTitle, ownRow, ownId, fixture]);
   const loadSchedule = useCallback(() => loadPriceSchedule(supabase, supabaseConfigured), []);
   const prices = usePriceSchedule(loadSchedule);
 
@@ -138,6 +168,11 @@ export default function OrderScreen() {
 
   const startPlacing = (cleanName: string, cleanPhone: string) => {
     if (!userId) return;
+    // The order freezes the account's copy: not until it is read.
+    if (ordersOwn && !ownRow) {
+      setMessage(ownRowError || 'Getting your album from your account… Tap Place order again in a moment.');
+      return;
+    }
     try {
       const p = placeOrderPlan({
         userId,
@@ -243,6 +278,17 @@ export default function OrderScreen() {
 
   return (
     <ScrollView ref={scrollRef} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      {ordersOwn && (
+        <View style={styles.testNote} testID="order-own-album">
+          <Text style={styles.testNoteText}>Test version: Place order shows what it would send for your album, and sends nothing.</Text>
+        </View>
+      )}
+      {!!ownRowError && (
+        <View style={styles.notice} testID="order-not-saved">
+          <Text style={styles.noticeBody}>{ownRowError}</Text>
+          <Button label="Back to my album" kind="plain" onPress={() => router.back()} testID="order-back-to-album" />
+        </View>
+      )}
       {album.fixture && (
         <View style={styles.testNote} testID="order-test-album">
           <Text style={styles.testNoteText}>Test version: this is a test album of {photosIn} sample photos. Place order shows what it would send, and sends nothing.</Text>
