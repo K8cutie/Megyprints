@@ -1,0 +1,229 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   SENDING THE ORDER (Phase 5, step 3: src/lib/checkout/sendOrder.ts).
+
+   checkoutPayload.test.ts proves the app's Place-order PLAN (placeOrderPlan:
+   the order row, the files, the memory rows, the calls) is the website's,
+   piece by piece. This proves the app SENDS that plan, the website's way:
+     • the whole sequence of writes equals the website's own functions run
+       in Order.tsx placeOrder's order (createOrderFromAlbum, the cover with
+       its retries, the pages, ensureMemoriesForFills, claimTesterOrder), on
+       the same stand-in database;
+     • a retry reuses the order (no second order row), and a file already in
+       the bucket counts as sent (create-only, storageUpload uploadOnce);
+     • the cover is tried 3 times, waiting 1.5 s then 4 s, then the website's
+       words (sending or making); the pages, the tester claim, the unpaid
+       limit and a tester code that stopped: the website's words;
+     • memory videos (the app can't send them yet) stop it before any order
+       row exists;
+     • "I've sent ₱X": the receipt, then submit_payment_proof; a receipt that
+       didn't go up still records the payment, as on the website.
+   Nothing leaves the computer: the database and the uploads are stand-ins.
+   ══════════════════════════════════════════════════════════════════════════ */
+import type { AddressValue } from '@web/lib/contact';
+import type { AlbumPage, QrFill } from '@web/pages/builder/types';
+import { UnpaidLimitError } from '@web/lib/orderExpiry';
+import { fixtureCheckoutAlbum } from '../src/lib/checkout/fixtureAlbum';
+import { placeOrderPlan, type OrderAlbumRow, type PlanInput } from '../src/lib/checkout/orderPayload';
+import { paymentSubmitPlan } from '../src/lib/checkout/payment';
+import { TesterCodeGoneError } from '../src/lib/checkout/testerCode';
+import {
+  COVER_MAKE_FAILED, COVER_SEND_FAILED, MemoryVideosNotInAppError, sendOrder, sendPayment, TESTER_CLAIM_FAILED,
+  type PlacedOrder, type SendDeps, type SendStep,
+} from '../src/lib/checkout/sendOrder';
+import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
+
+jest.mock('@web/lib/supabase', () => jest.requireActual('./helpers/fakeSupabase').supabaseModule);
+jest.mock('@web/lib/storageUpload', () => jest.requireActual('./helpers/fakeSupabase').storageUploadModule);
+jest.mock('@web/pages/builder/generateAlbumPdf', () => ({
+  generateAlbumPdf: async () => ({ size: 1 }),
+  generateCoverWrapPdf: async () => ({ size: 1 }),
+}));
+
+type AnyFn = (...args: any[]) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+/* eslint-disable @typescript-eslint/no-require-imports */
+const web = {
+  orders: require('@web/lib/orders') as { createOrderFromAlbum: AnyFn; uploadOrderCoverPdfWithRetry: AnyFn; uploadOrderPrintPdf: AnyFn },
+  qr: require('@web/lib/qrMemories') as { ensureMemoriesForFills: AnyFn },
+  tester: require('@web/lib/testerCode') as { claimTesterOrder: AnyFn },
+  payment: require('@web/lib/payment') as { uploadPaymentProof: AnyFn; submitPaymentProof: AnyFn; cleanReference: (s: string) => string },
+};
+/* eslint-enable @typescript-eslint/no-require-imports */
+
+const NOW = new Date('2026-11-02T03:04:05.678Z');
+const fixture = fixtureCheckoutAlbum();
+const COVER = new Uint8Array([1, 2, 3]);
+const PAGES = new Uint8Array([4, 5, 6, 7]);
+
+function address(): AddressValue {
+  return { regionCode: '13', regionName: 'NCR', provinceCode: 'NCR', provinceName: 'Metro Manila', cityCode: '1374000000', cityName: 'Quezon City', barangayCode: '1374000001', barangayName: 'Alicia', street: '12 Mabini St', zip: '1105' };
+}
+function qrFill(code: string, kind: 'link' | 'clip'): QrFill {
+  return { code, destination: `https://example.test/${code}`, qrPngDataUrl: 'data:image/png;base64,AAAA', memoryUrl: `https://megyprints.vercel.app/m/${code}`, createdAt: 1, kind };
+}
+/** The test album with a link memory on page 4 (and, with `clip`, a video on page 10). */
+function album(clip = false): { row: OrderAlbumRow; pages: AlbumPage[] } {
+  const pages = fixture.pages.map((p, i) => (i === 3 ? { ...p, qrFills: [qrFill('MEMLINK1', 'link'), null] }
+    : clip && i === 9 ? { ...p, textSlotQr: [qrFill('MEMCLIP1', 'clip')] } : p));
+  return { row: { ...fixture.row, pages }, pages };
+}
+function input(over: Partial<PlanInput> = {}, clip = false): PlanInput {
+  const a = album(clip);
+  return {
+    userId: 'user-1', album: a.row, pages: a.pages, specs: { material: 'matte', cover: 'softcover', size: '8x8' },
+    shipping: { name: 'Jose Rizal', phone: '09171234567', address: address() }, hostingYears: null, hdMemories: false,
+    testerCode: null, includedYears: 5, now: NOW, ...over,
+  };
+}
+
+/** The app's stand-ins: the database, the uploads (writing down what is sent,
+ *  as the website's stand-in does), the file makers, and the waits. */
+function deps(over: Partial<SendDeps> = {}): SendDeps & { waits: number[]; steps: SendStep[]; made: string[] } {
+  const waits: number[] = [];
+  const steps: SendStep[] = [];
+  const made: string[] = [];
+  return {
+    db: fakeClient as unknown as SendDeps['db'],
+    upload: async (bucket, path, body, opts) => {
+      rec.uploads.push({ bucket, path, contentType: opts.contentType, opts: { ...opts } });
+      expect(body).toBeInstanceOf(Uint8Array);
+      return null;
+    },
+    makeCover: async () => { made.push('cover'); return COVER; },
+    makePages: async (onPage) => { made.push('pages'); onPage(1, 2, false); onPage(2, 2, false); return PAGES; },
+    wait: async (ms) => { waits.push(ms); },
+    onStep: (s) => { steps.push(s); },
+    waits, steps, made,
+    ...over,
+  };
+}
+
+beforeEach(resetFake);
+
+describe('Place order sends what the website sends, in its order', () => {
+  for (const tester of [false, true]) {
+    it(`${tester ? 'a tester order' : 'a paid order'}: the same writes as the website's own functions`, async () => {
+      const i = input({ testerCode: tester ? 'MEGYTEST' : null });
+      // The website, in Order.tsx placeOrder's order.
+      fake.albumRow = i.album as unknown as Record<string, unknown>;
+      const created = await web.orders.createOrderFromAlbum({
+        userId: 'user-1', albumId: i.album.id, specs: i.specs, shipping: i.shipping, amount: 0,
+        hostingYears: null, hdMemories: false, testerCode: i.testerCode,
+      });
+      await web.orders.uploadOrderCoverPdfWithRetry(created.id, {} as never, undefined, []);
+      await web.orders.uploadOrderPrintPdf(created.id, { pages: [], photos: [], albumSize: '8x8' } as never, 'softcover');
+      const fills = i.pages.flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
+      await web.qr.ensureMemoriesForFills(fills, { hostingYears: 5 });
+      if (tester) await web.tester.claimTesterOrder(created.id);
+      const website = { inserts: rec.inserts.splice(0), uploads: rec.uploads.splice(0), upserts: rec.upserts.splice(0), rpcs: rec.rpcs.splice(0) };
+
+      const d = deps();
+      const r = await sendOrder(placeOrderPlan(i), d);
+      expect(r.order.id).toBe('order-1');
+      expect(r.paidByTester).toBe(tester);
+      const stamp = (rows: { row: Record<string, unknown> }[]) => rows.map((x) => ({ ...x.row, status_history: null }));
+      expect(stamp(rec.inserts)).toEqual(stamp(website.inserts));
+      expect(rec.uploads).toEqual(website.uploads);
+      expect(rec.upserts.map((u) => ({ ...u, rows: (u.rows as { created_at?: string }[]).map((x) => ({ ...x, created_at: null })) })))
+        .toEqual(website.upserts.map((u) => ({ ...u, rows: (u.rows as { created_at?: string }[]).map((x) => ({ ...x, created_at: null })) })));
+      expect(rec.rpcs).toEqual(website.rpcs);
+      // The cover is made before the pages, as at checkout (the most memory free).
+      expect(d.made).toEqual(['cover', 'pages']);
+      // "Making your print file" shows before the first page is done, then each page.
+      expect(d.steps.map((s) => s.step)).toEqual(['order', 'cover', 'pages', 'pages', 'pages', 'sending', 'memories', ...(tester ? ['finishing'] : [])]);
+      expect(d.steps.filter((s) => s.step === 'pages')).toEqual([
+        { step: 'pages', done: 0, total: 0, smaller: false }, { step: 'pages', done: 1, total: 2, smaller: false }, { step: 'pages', done: 2, total: 2, smaller: false },
+      ]);
+    });
+  }
+});
+
+describe('a retry, and files already sent', () => {
+  it('Place order again reuses the order: no second order row', async () => {
+    const plan = placeOrderPlan(input());
+    const placed: PlacedOrder = { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' };
+    const r = await sendOrder(plan, deps(), placed);
+    expect(r.order).toBe(placed);
+    expect(rec.inserts).toHaveLength(0);
+    expect(rec.uploads.map((u) => u.path)).toEqual(['order-1-cover.pdf', 'order-1.pdf']);
+  });
+
+  it('a file already in the bucket (an earlier try) counts as sent', async () => {
+    const d = deps({ upload: async () => null });
+    await expect(sendOrder(placeOrderPlan(input()), d, { id: 'order-1', order_number: 'X', status: 'pending_payment' })).resolves.toBeTruthy();
+  });
+});
+
+describe('when something fails: the website\'s words', () => {
+  it('the cover is tried 3 times, waiting 1.5 s then 4 s; then "couldn\'t send", the order kept', async () => {
+    let tries = 0;
+    const d = deps({ upload: async (_b, path) => { if (path.endsWith('-cover.pdf')) { tries++; return { message: 'network' }; } return null; } });
+    await expect(sendOrder(placeOrderPlan(input()), d)).rejects.toThrow(COVER_SEND_FAILED);
+    expect(tries).toBe(3);
+    expect(d.waits).toEqual([1500, 4000]);
+    expect(rec.inserts).toHaveLength(1);
+    expect(COVER_SEND_FAILED).toBe("We couldn't send your album's cover. Your order is saved: check your internet, then tap Place order again.");
+  });
+
+  it('the cover can\'t be made on this phone: "couldn\'t make", after 3 tries', async () => {
+    let tries = 0;
+    const d = deps({ makeCover: async () => { tries++; throw new Error('out of memory'); } });
+    await expect(sendOrder(placeOrderPlan(input()), d)).rejects.toThrow(COVER_MAKE_FAILED);
+    expect(tries).toBe(3);
+    expect(COVER_MAKE_FAILED).toBe("We couldn't make your album's cover on this phone. Your order is saved: close your other apps, then tap Place order again. If it keeps happening, message us.");
+  });
+
+  it('the pages file that didn\'t go up: the website\'s words, nothing after it', async () => {
+    const d = deps({ upload: async (_b, path) => (path === 'order-1.pdf' ? { message: 'timeout' } : null) });
+    await expect(sendOrder(placeOrderPlan(input({ testerCode: 'MEGYTEST' })), d)).rejects.toThrow('Print file upload failed: timeout');
+    expect(rec.upserts).toHaveLength(0);
+    expect(rec.rpcs).toHaveLength(0);
+  });
+
+  it('three unpaid orders already, and a tester code that stopped: the website\'s errors, nothing sent', async () => {
+    fake.insertError = { message: 'too many', code: 'MP001' };
+    await expect(sendOrder(placeOrderPlan(input()), deps())).rejects.toBeInstanceOf(UnpaidLimitError);
+    fake.insertError = { message: 'gone', code: 'MP007' };
+    await expect(sendOrder(placeOrderPlan(input({ testerCode: 'MEGYTEST' })), deps())).rejects.toBeInstanceOf(TesterCodeGoneError);
+    fake.insertError = { message: 'boom' };
+    await expect(sendOrder(placeOrderPlan(input()), deps())).rejects.toThrow('Could not place your order: boom');
+    expect(rec.uploads).toHaveLength(0);
+  });
+
+  it('the free tester order that couldn\'t be finished: the website\'s words', async () => {
+    fake.rpc.claim_tester_order = { data: null, error: { message: 'nope' } };
+    await expect(sendOrder(placeOrderPlan(input({ testerCode: 'MEGYTEST' })), deps())).rejects.toThrow(TESTER_CLAIM_FAILED);
+    expect(TESTER_CLAIM_FAILED).toBe("We couldn't finish your free tester order. Your order is saved: tap Place order again.");
+  });
+
+  it('memory videos (not in the app yet): stopped before any order row', async () => {
+    await expect(sendOrder(placeOrderPlan(input({}, true)), deps())).rejects.toBeInstanceOf(MemoryVideosNotInAppError);
+    expect(rec.inserts).toHaveLength(0);
+    expect(rec.uploads).toHaveLength(0);
+  });
+});
+
+describe('"I\'ve sent ₱X" sends what the website sends', () => {
+  const png = { type: 'image/png', name: 'Screenshot.png', size: 200_000 };
+  it('the receipt, then the payment recorded: the website\'s writes', async () => {
+    const path = await web.payment.uploadPaymentProof('order-1', png as unknown as File);
+    await web.payment.submitPaymentProof('order-1', { reference: web.payment.cleanReference(' 2026091012345678 '), proofPath: path });
+    const website = { uploads: rec.uploads.splice(0), rpcs: rec.rpcs.splice(0) };
+    const d = deps();
+    const r = await sendPayment(paymentSubmitPlan('order-1', ' 2026091012345678 ', png), new Uint8Array([9]), d);
+    expect(r.receiptError).toBeNull();
+    expect(rec.uploads).toEqual(website.uploads);
+    expect(rec.rpcs).toEqual(website.rpcs);
+  });
+
+  it('a receipt that didn\'t go up: said, and the payment is still recorded without it (the website\'s way)', async () => {
+    const d = deps({ upload: async () => ({ message: 'offline' }) });
+    const r = await sendPayment(paymentSubmitPlan('order-1', 'FT2410ABCD1234', png), new Uint8Array([9]), d);
+    expect(r.receiptError).toBe('Could not upload your receipt (offline). You can still tap "I\'ve sent the payment" — we\'ll confirm from our bank app.');
+    expect(rec.rpcs).toEqual([{ name: 'submit_payment_proof', args: { p_order_id: 'order-1', p_reference: 'FT2410ABCD1234', p_proof_path: null } }]);
+  });
+
+  it('the payment that couldn\'t be recorded: the website\'s words', async () => {
+    fake.rpc.submit_payment_proof = { data: null, error: { message: 'denied' } };
+    await expect(sendPayment(paymentSubmitPlan('order-1', '', null), null, deps())).rejects.toThrow('Could not record your payment (denied).');
+  });
+});
