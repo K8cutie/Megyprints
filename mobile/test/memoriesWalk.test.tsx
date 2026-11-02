@@ -159,7 +159,8 @@ describe('My Memories', () => {
 
   it('the words are the website\'s (MyMemories.tsx)', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/pages/MyMemories.tsx'), 'utf8') as string;
+    // Windows checkouts have \r\n line ends (CI's mobile job runs there).
+    const src = (require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/pages/MyMemories.tsx'), 'utf8') as string).replace(/\r\n/g, '\n');
     for (const w of ['Video replaced ✓ — same QR, new memory', 'Uploaded, but could not re-point the QR. Try again.', 'Could not replace the video.', 'Could not delete. Try again.']) expect(src).toContain(`'${w}'`);
     for (const w of ['Replace video', 'Delete the video', 'Keep it', 'Delete']) expect(src).toContain(` ${w}\n`);
     expect(src).toContain("{confirmDel || 'Checking where this QR is\\u2026'}");
