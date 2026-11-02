@@ -16,8 +16,14 @@
    A page in a font that is not here draws in the phone's own font for that
    family list (its generic serif / sans-serif included, as Chrome on
    Android does) and the page plan says so (PagePlan.notDrawn). The rest of
-   the 74, and a stand-in for Georgia (a Microsoft font that Android phones
-   don't have: Gelasio has the same letter widths), are still to do.
+   the 74 come from Google Fonts when first used (src/editor/text/fonts).
+
+   GEORGIA, the website's default text font, is a Microsoft font: no phone
+   has it, and it can't be bundled. The app draws it with Gelasio (SIL Open
+   Font License), made as Georgia's stand-in with the same letter widths, so
+   words wrap and fit as they do on the website. Without it every page with
+   words added on the phone was "drawn in the phone's own font", and the
+   print file refused it (owner's phone test, 2026-11-02).
    ══════════════════════════════════════════════════════════════════════════ */
 
 export interface BundledFont {
@@ -33,6 +39,7 @@ const PF = '@expo-google-fonts/playfair-display';
 const DM = '@expo-google-fonts/dm-sans';
 const DS = '@expo-google-fonts/dancing-script';
 const CZ = '@expo-google-fonts/cinzel';
+const GE = '@expo-google-fonts/gelasio';
 
 export const BUNDLED_FONTS: readonly BundledFont[] = [
   { face: 'Playfair Display', weight: 400, italic: false, file: `${PF}/400Regular/PlayfairDisplay_400Regular.ttf` },
@@ -49,6 +56,11 @@ export const BUNDLED_FONTS: readonly BundledFont[] = [
   // title in Cinzel (the website loads 400 and 700; Cinzel has no italic).
   { face: 'Cinzel', weight: 400, italic: false, file: `${CZ}/400Regular/Cinzel_400Regular.ttf` },
   { face: 'Cinzel', weight: 700, italic: false, file: `${CZ}/700Bold/Cinzel_700Bold.ttf` },
+  // Georgia, drawn with Gelasio (same letter widths; see above).
+  { face: 'Georgia', weight: 400, italic: false, file: `${GE}/400Regular/Gelasio_400Regular.ttf` },
+  { face: 'Georgia', weight: 700, italic: false, file: `${GE}/700Bold/Gelasio_700Bold.ttf` },
+  { face: 'Georgia', weight: 400, italic: true, file: `${GE}/400Regular_Italic/Gelasio_400Regular_Italic.ttf` },
+  { face: 'Georgia', weight: 700, italic: true, file: `${GE}/700Bold_Italic/Gelasio_700Bold_Italic.ttf` },
 ];
 
 const GENERIC = /^(serif|sans-serif|cursive|monospace|fantasy|system-ui)$/i;
@@ -135,10 +147,20 @@ export function fontFileFor(ask: FontAsk): BundledFont | null {
   return pool.slice().sort((a, b) => Math.abs(a.weight - want) - Math.abs(b.weight - want))[0] ?? null;
 }
 
-/** Whether the app has the exact file a text asks for (same face, weight and
- *  style). When not, the words are drawn, but not the way the website draws
- *  them: the page plan lists it. */
+/** Whether the text's own font (the FIRST face it names) is in the app. A
+ *  later face in its list is only what is drawn while the first one is not
+ *  here yet ('"Lora", Georgia, serif' before Lora is downloaded): drawn, but
+ *  not the font the customer picked. */
+function ownFaceDrawn(family: string | undefined): boolean {
+  const first = familyFaces(family)[0];
+  return !!first && bundledFace(family)?.toLowerCase() === first.toLowerCase();
+}
+
+/** Whether the app has the exact file a text asks for (its own face, same
+ *  weight and style). When not, the words are drawn, but not the way the
+ *  website draws them: the page plan lists it. */
 export function hasExactFont(ask: FontAsk): boolean {
+  if (!ownFaceDrawn(ask.family)) return false;
   const f = fontFileFor(ask);
   return !!f && f.weight === (ask.bold ? 700 : 400) && f.italic === !!ask.italic;
 }
@@ -160,7 +182,7 @@ export function paragraphFamilies(family: string | undefined): string[] {
 export function fontNotDrawn(ask: FontAsk): string | null {
   if (hasExactFont(ask)) return null;
   const family = String(ask.family ?? 'serif');
-  if (!bundledFace(ask.family)) return `font ${family} (drawn in the phone's own font)`;
+  if (!ownFaceDrawn(ask.family)) return `font ${family} (drawn in the phone's own font)`;
   const style = [ask.bold ? 'bold' : '', ask.italic ? 'italic' : ''].filter(Boolean).join(' ');
   return `font ${family} ${style} (no ${style} file: faked by the app)`;
 }

@@ -74,10 +74,11 @@ describe('where the 74 fonts come from', () => {
     expect(Object.keys(WEBSITE_STYLES).sort()).toEqual(FONTS.map((f) => fontFace(f.family)).filter((f) => f !== 'Georgia').sort());
   });
 
-  it('bundles the theme fonts, fetches the rest, and leaves Georgia to the phone', () => {
+  it('bundles the theme fonts and Georgia (as Gelasio), fetches the rest, leaves none to the phone', () => {
     const by = fontsBySource();
     expect(by.bundled.length + by.google.length + by.phone.length).toBe(74);
-    expect(by.phone).toEqual(['Georgia']);
+    expect(by.phone).toEqual([]);
+    expect(fontSource('Georgia')).toBe('bundled');
     // Whatever the renderer bundles is bundled here too (Cinzel, the cover title's face, included).
     const bundledFaces = [...new Set(BUNDLED_FONTS.map((b) => b.face))];
     expect(by.bundled.map((n) => fontFace(FONTS.find((f) => f.name === n)!.family)).sort()).toEqual(bundledFaces.sort());
@@ -264,7 +265,7 @@ describe('the font store', () => {
     expect(await store.ensure('Comic Sans MS, cursive')).toEqual({ ok: true }); // not one of the 74
     expect(log.css).toHaveLength(0);
     expect(store.status('Playfair Display')).toBe('bundled');
-    expect(store.status('Georgia')).toBe('phone');
+    expect(store.status('Georgia')).toBe('bundled');
     // A bundled file the text views know (appFonts registers them).
     store.markUi('Playfair Display', '400i');
     expect(store.uiFont('"Playfair Display", serif', false, true).fontFamily).toBe('megy-playfair-display-400i');

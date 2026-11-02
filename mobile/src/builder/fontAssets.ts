@@ -23,6 +23,10 @@ export const FONT_ASSETS: Record<string, number> = {
   '@expo-google-fonts/dancing-script/700Bold/DancingScript_700Bold.ttf': require('@expo-google-fonts/dancing-script/700Bold/DancingScript_700Bold.ttf'),
   '@expo-google-fonts/cinzel/400Regular/Cinzel_400Regular.ttf': require('@expo-google-fonts/cinzel/400Regular/Cinzel_400Regular.ttf'),
   '@expo-google-fonts/cinzel/700Bold/Cinzel_700Bold.ttf': require('@expo-google-fonts/cinzel/700Bold/Cinzel_700Bold.ttf'),
+  '@expo-google-fonts/gelasio/400Regular/Gelasio_400Regular.ttf': require('@expo-google-fonts/gelasio/400Regular/Gelasio_400Regular.ttf'),
+  '@expo-google-fonts/gelasio/700Bold/Gelasio_700Bold.ttf': require('@expo-google-fonts/gelasio/700Bold/Gelasio_700Bold.ttf'),
+  '@expo-google-fonts/gelasio/400Regular_Italic/Gelasio_400Regular_Italic.ttf': require('@expo-google-fonts/gelasio/400Regular_Italic/Gelasio_400Regular_Italic.ttf'),
+  '@expo-google-fonts/gelasio/700Bold_Italic/Gelasio_700Bold_Italic.ttf': require('@expo-google-fonts/gelasio/700Bold_Italic/Gelasio_700Bold_Italic.ttf'),
 };
 /* eslint-enable @typescript-eslint/no-require-imports */
 
