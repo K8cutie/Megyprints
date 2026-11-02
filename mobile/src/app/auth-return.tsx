@@ -28,6 +28,9 @@ export default function AuthReturn() {
       if (!alive) return;
       if (!r) { router.replace('/'); return; }
       if (!r.ok) { setError(r.error); return; }
+      // Back to the sign-in screen, which goes on from there once it is in
+      // front again (only it moves on: never two screens at once). Opened
+      // from a cold start (no sign-in screen behind): My albums.
       if (router.canGoBack()) router.back();
       else router.replace('/albums');
     });
