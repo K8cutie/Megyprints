@@ -245,6 +245,27 @@ describe('on its side: the open book fills the screen', () => {
     expect([fwd.left, fwd.top, fwd.width, fwd.height]).toEqual([want.forward.x, want.forward.y, want.forward.w, want.forward.h]);
     expect(one('preview-next').props.accessibilityLabel).toBe('Next pages');
     expect(textOf('preview-counter')).toBe('Cover');
+    // On the cover: "Edit cover", in its place.
+    const edit = flat(one('preview-edit-cover').props.style);
+    expect([edit.left, edit.top, edit.width, edit.height]).toEqual([want.edit.x, want.edit.y, want.edit.w, want.edit.h]);
+    expect(textOf('preview-edit-cover')).toBe('Edit\ncover');
+  });
+
+  it('"Edit pages" on its side too: it opens the editor on the pages shown (owner\'s phone test)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    await turn(TURNED, TURNED_INSETS);
+    const want = sidewaysBook({ screenW: 915, screenH: 412, insets: TURNED_INSETS, aspect: aspect() });
+    await press('preview-next');
+    await press('preview-next');
+    expect(all('preview-edit-cover')).toHaveLength(0);
+    const edit = flat(one('preview-edit-pages').props.style);
+    expect([edit.left, edit.top, edit.width, edit.height]).toEqual([want.edit.x, want.edit.y, want.edit.w, want.edit.h]);
+    expect(one('preview-edit-pages').props.accessibilityLabel).toBe('Edit pages');
+    mockNav.push.mockClear();
+    await press('preview-edit-pages');
+    expect(mockNav.push).toHaveBeenCalledWith('/edit-pages');
+    expect([1, 2]).toContain(builder().currentPageIndex);
   });
 
   it('Next opens the book: two facing pages, filling the room; Next and Previous turn them', async () => {

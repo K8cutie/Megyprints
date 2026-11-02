@@ -98,13 +98,16 @@ describe('on its side: the open book fills the screen', () => {
           expect(b.spread.h).toBe(b.pageH);
           expect(Math.abs(b.pageW / b.pageH - aspect)).toBeLessThan(0.02);
           // Clear of the notch and the bars.
-          for (const box of [b.spread, b.closed, b.back, b.forward, b.counter]) expect(inside(box, safe)).toBe(true);
-          // The turn buttons and the count are never over the pages.
-          for (const box of [b.back, b.forward, b.counter]) {
+          for (const box of [b.spread, b.closed, b.back, b.forward, b.counter, b.edit]) expect(inside(box, safe)).toBe(true);
+          // The turn buttons, the count and "Edit pages" are never over the pages.
+          for (const box of [b.back, b.forward, b.counter, b.edit]) {
             expect(overlaps(box, b.spread)).toBe(false);
             expect(overlaps(box, b.closed)).toBe(false);
           }
           expect(overlaps(b.back, b.forward)).toBe(false);
+          // "Edit pages" is a finger tall and clear of the other buttons and the count.
+          expect(b.edit.h).toBe(TURN_BUTTON);
+          for (const box of [b.back, b.forward, b.counter]) expect(overlaps(b.edit, box)).toBe(false);
           // Fills the screen: it reaches the room's edges one way or the other.
           const fillsWidth = b.room.w - b.spread.w < 2;
           const fillsHeight = b.room.h - b.spread.h < 2;

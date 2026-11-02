@@ -179,6 +179,23 @@ function TurnButton({ box, label, mark, main, onPress, testID }: { box: Box; lab
   );
 }
 
+/** "Edit pages" on its side: a plain button in its place (previewLayout
+ *  edit), the words on two lines in the narrow strip beside the book. */
+function EditButton({ box, label, twoLines, onPress, testID }: { box: Box; label: string; twoLines: boolean; onPress: () => void; testID: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      testID={testID}
+      hitSlop={6}
+      style={({ pressed }) => [styles.sideEdit, pressed && styles.pressed, { left: box.x, top: box.y, width: box.w, height: box.h }]}
+    >
+      <Text style={styles.sideEditText} numberOfLines={2}>{twoLines ? label.replace(' ', '\n') : label}</Text>
+    </Pressable>
+  );
+}
+
 export default function Preview() {
   const { builder, platform, text } = useBuilder();
   const { session } = useAuth();
@@ -431,6 +448,9 @@ export default function Preview() {
       <View style={styles.sideways} testID="preview-sideways">
         {chrome}
         <Animated.View style={[styles.place, { left: at.x, top: at.y, transform: [{ translateX: slide }] }]} testID="preview-book-place">{book}</Animated.View>
+        {/* The way into the editor, on its side too: "Edit cover" on the cover. */}
+        <EditButton box={side.edit} label={onCover ? EDIT_COVER : EDIT_PAGES} twoLines={side.controls === 'sides'}
+          onPress={onCover ? editCover : editPages} testID={onCover ? 'preview-edit-cover' : 'preview-edit-pages'} />
         {canTurnBack(pos) && <TurnButton box={side.back} label={`Previous ${word}`} mark="‹" main={false} onPress={back} testID="preview-prev" />}
         {canTurnForward(pos)
           ? <TurnButton box={side.forward} label={`Next ${word}`} mark="›" main onPress={forward} testID="preview-next" />
@@ -531,6 +551,8 @@ const styles = StyleSheet.create({
   hint: { fontSize: 12, color: colors.muted, marginTop: -4 },
   // On its side: everything placed where previewLayout says.
   sideways: { flex: 1, backgroundColor: '#EFE9E1' },
+  sideEdit: { position: 'absolute', alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border },
+  sideEditText: { fontSize: 13, lineHeight: 16, fontWeight: '700', color: colors.text, textAlign: 'center' },
   place: { position: 'absolute' },
   round: { position: 'absolute', alignItems: 'center', justifyContent: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4 },
   roundMain: { backgroundColor: colors.accent },

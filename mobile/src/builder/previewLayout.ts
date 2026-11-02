@@ -70,6 +70,8 @@ export const TURN_BUTTON = 52;
 export const CONTROL_STRIP = 64;
 /** The line with the count ("2-3 / 40"). */
 export const COUNTER_H = 20;
+/** "Edit pages" under the book (turn buttons below): wide enough for its words. */
+export const EDIT_BELOW_W = 104;
 
 export interface SidewaysBook extends PageSize {
   /** Where the turn buttons are: beside the book, or under it. */
@@ -86,6 +88,9 @@ export interface SidewaysBook extends PageSize {
   back: Box;
   forward: Box;
   counter: Box;
+  /** "Edit pages" ("Edit cover" on the cover): the way into the editor,
+   *  on its side too (owner's phone test, 2026-11-02). */
+  edit: Box;
 }
 
 /** The book on its side. `screenW` × `screenH` is the whole screen (the app
@@ -123,16 +128,21 @@ export function sidewaysBook(o: { screenW: number; screenH: number; insets: Inse
       forward: btn(safe.x + safe.w - TURN_BUTTON, y),
       // Top of the right-hand strip.
       counter: { x: safe.x + safe.w - CONTROL_STRIP, y: safe.y, w: CONTROL_STRIP, h: COUNTER_H },
+      // Top of the left-hand strip, across from the count.
+      edit: { x: safe.x, y: safe.y, w: CONTROL_STRIP - SIDEWAYS_EDGE, h: TURN_BUTTON },
     };
   }
-  // In the bottom corners, the count between them.
+  // In the bottom corners; between them "Edit pages", then the count.
   const y = safe.y + safe.h - TURN_BUTTON;
   const gap = SIDEWAYS_EDGE * 2;
+  const editX = safe.x + TURN_BUTTON + gap;
+  const counterX = editX + EDIT_BELOW_W + gap;
   return {
     pageW, pageH, controls, safe, room, spread, closed,
     back: btn(safe.x, y),
     forward: btn(safe.x + safe.w - TURN_BUTTON, y),
-    counter: { x: safe.x + TURN_BUTTON + gap, y: y + Math.floor((TURN_BUTTON - COUNTER_H) / 2), w: Math.max(0, safe.w - 2 * (TURN_BUTTON + gap)), h: COUNTER_H },
+    counter: { x: counterX, y: y + Math.floor((TURN_BUTTON - COUNTER_H) / 2), w: Math.max(0, safe.x + safe.w - TURN_BUTTON - gap - counterX), h: COUNTER_H },
+    edit: { x: editX, y, w: EDIT_BELOW_W, h: TURN_BUTTON },
   };
 }
 
