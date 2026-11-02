@@ -15,7 +15,9 @@
        which the website's auth-native.html hands the sign-in to;
      • signed with the owner's Play upload key, the one 1.x is signed with
        (plugins/withPlaySigning.js; the key and its passwords never in git).
-   Everything else (screens, permissions, plugins) is the same in both.
+   Everything else (screens, permissions, plugins) is the same in both,
+   except that the Play build hides the start screen's test buttons and
+   "Test version" note (extra.build, src/lib/buildKind.ts).
    Held by test/playRelease.test.ts.
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -40,6 +42,8 @@ function playConfig(config) {
       ],
     },
     plugins: [...(config.plugins ?? []), './plugins/withPlaySigning'],
+    // The app reads it (src/lib/buildKind.ts) to hide what is only for testing.
+    extra: { ...(config.extra ?? {}), build: 'play' },
   };
 }
 
