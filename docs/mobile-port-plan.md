@@ -2981,6 +2981,10 @@ One command on the owner's PC makes the real app for Google Play:
   (`https://megyprints.vercel.app/auth-native.html`, verified, and
   `megyprints://`), every screen, permission and plugin the same as the dev
   build. Phones: arm64, old 32-bit arm and x86_64 (Chromebooks).
+- **What customers see is not a test build:** the start screen's "Shared
+  code check" and "Checkout with a test album" buttons and the "Test version
+  2.0 (dev)" note are only in the dev build (`extra.build`,
+  `src/lib/buildKind.ts`, `test/startScreenBuild.test.tsx`).
 - **Signed with the upload key 1.x is signed with**
   (`plugins/withPlaySigning.js`): Gradle reads the key's settings from the
   1.x app's `android-native\keystore.properties` (git-ignored; storeFile,

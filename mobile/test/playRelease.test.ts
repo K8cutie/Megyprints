@@ -104,9 +104,10 @@ describe('the Play build is the 1.x app, a newer version', () => {
     expect(play.version).toBe('2.0.0');
   });
 
-  it('everything else is the dev build\'s: screens, permissions, plugins (and the signing)', () => {
-    const { name, scheme, android, plugins, ...rest } = play;
-    const { name: n2, scheme: s2, android: a2, plugins: p2, ...devRest } = appJson.expo;
+  it('everything else is the dev build\'s: screens, permissions, plugins (and the signing, and saying it is the Play build)', () => {
+    const { name, scheme, android, plugins, extra, ...rest } = play;
+    const { name: n2, scheme: s2, android: a2, plugins: p2, extra: e2, ...devRest } = appJson.expo;
+    expect(extra).toEqual({ ...(e2 ?? {}), build: 'play' });
     expect([name, scheme, n2, s2]).toEqual(['Megy Prints', 'megyprints', 'Megy Prints 2.0 (dev)', 'megyprints-dev']);
     expect(rest).toEqual(devRest);
     const { package: pkg, intentFilters, ...androidRest } = android;

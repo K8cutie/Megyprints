@@ -6,11 +6,14 @@ import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { albumInProgress, resumeRoute, startNewNote } from '../builder/albumFlow';
 import { useAuth } from '../lib/auth';
+import { buildKind } from '../lib/buildKind';
 import { useDraft } from '../lib/draftStore';
 import { colors, space } from '../lib/theme';
 
-/** The start screen. */
+/** The start screen. The test buttons and the "Test version" note are only
+ *  in the dev build, never in the Play build customers get. */
 export default function Start() {
+  const testBuild = buildKind() === 'dev';
   const { loading, session, signOut } = useAuth();
   const email = session?.user.email;
   const { builder, platform } = useBuilder();
@@ -74,11 +77,17 @@ export default function Start() {
             <Button label="Sign in" kind="plain" onPress={() => router.push('/sign-in')} testID="go-sign-in" />
           </>
         )}
-        <Button label="Shared code check" kind="plain" onPress={() => router.push('/shared-check')} testID="go-check" />
-        <Button label="Checkout with a test album" kind="plain" onPress={() => router.push('/order')} testID="go-order" />
+        {testBuild && (
+          <>
+            <Button label="Shared code check" kind="plain" onPress={() => router.push('/shared-check')} testID="go-check" />
+            <Button label="Checkout with a test album" kind="plain" onPress={() => router.push('/order')} testID="go-order" />
+          </>
+        )}
       </View>
 
-      <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos, see it as a book, edit its pages and order it, and see your orders, your QR memories and your profile. Checkout with the test album orders nothing.</Text>
+      {testBuild ? (
+        <Text style={styles.note}>Test version 2.0 (dev). You can make an album from your photos, see it as a book, edit its pages and order it, and see your orders, your QR memories and your profile. Checkout with the test album orders nothing.</Text>
+      ) : <View />}
     </SafeAreaView>
   );
 }
