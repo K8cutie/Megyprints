@@ -40,6 +40,7 @@ import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { PRIORITY, usePagePicture } from '../builder/usePagePicture';
 import { colors, space } from '../lib/theme';
 import { A11Y, BACK_TO_PREVIEW, DONE_PREVIEW, EDIT_PAGES, NEXT_PAGE, pageLine, PREVIOUS_PAGE, REDO, ROLL_LABELS, UNDO } from './editorWords';
+import { pageHint, pickedHint } from './editorHint';
 import { EMPTY_KINDS, hitTest, pageTargets, type Target } from './hitTest';
 import { PageStage, type EmptyHintInfo, type ReachInfo } from './PageStage';
 import { addChoicesFor, bannersFor, onRegistryChange, overlayComponents, registryVersion, runTap, selectedActionsFor, sheetById, stripTiles, toolsFor, type EditorContext } from './registry';
@@ -287,20 +288,29 @@ export default function EditPagesScreen() {
             onActivate={(t) => runTap(t, ctx)}
           />
         )}
-        <Text style={styles.notDrawn} numberOfLines={2} testID="edit-not-drawn">{picture.notDrawn.length > 0 ? NOT_DRAWN_LINE : ''}</Text>
+        {picture.notDrawn.length > 0
+          ? <Text style={styles.notDrawn} numberOfLines={2} testID="edit-not-drawn">{NOT_DRAWN_LINE}</Text>
+          : <Text style={styles.notDrawn} numberOfLines={2} testID="edit-picked-hint">{pickedHint(selected)}</Text>}
       </View>
 
       <SafeAreaView edges={['bottom']} style={styles.bar}>
         {/* The selected element's buttons, from the parts (the row keeps its
-            place, so the page never jumps when something is picked). */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} overScrollMode="never" style={styles.actionsRow} contentContainerStyle={styles.actions} testID="edit-selected-actions">
-          {actions.map((a) => (
-            <Pressable key={a.id} accessibilityRole="button" accessibilityLabel={a.label} onPress={() => a.onPress(selected!, ctx)} testID={`edit-action-${a.id}`}
-              style={({ pressed }) => [styles.action, a.danger && styles.actionDanger, pressed && styles.pressed]}>
-              <Text style={[styles.actionText, a.danger && styles.actionDangerText]}>{a.label}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+            place, so the page never jumps when something is picked). Nothing
+            picked: what the page can do, in its place (editorHint.ts). */}
+        {actions.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} overScrollMode="never" style={styles.actionsRow} contentContainerStyle={styles.actions} testID="edit-selected-actions">
+            {actions.map((a) => (
+              <Pressable key={a.id} accessibilityRole="button" accessibilityLabel={a.label} onPress={() => a.onPress(selected!, ctx)} testID={`edit-action-${a.id}`}
+                style={({ pressed }) => [styles.action, a.danger && styles.actionDanger, pressed && styles.pressed]}>
+                <Text style={[styles.actionText, a.danger && styles.actionDangerText]}>{a.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={[styles.actionsRow, styles.hintRow]} testID="edit-selected-actions">
+            <Text style={styles.hint} numberOfLines={2} testID="edit-hint">{pageHint(targets)}</Text>
+          </View>
+        )}
 
         <ScrollView ref={strip} horizontal showsHorizontalScrollIndicator={false} overScrollMode="never" contentContainerStyle={styles.strip} testID="edit-strip">
           {before.map((t) => (
@@ -365,6 +375,8 @@ const styles = StyleSheet.create({
   notDrawn: { height: NOTE_LINE, fontSize: 12, color: colors.muted, textAlign: 'center', paddingHorizontal: space.md, paddingTop: 4 },
   bar: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.sm, gap: space.sm },
   actionsRow: { flexGrow: 0, minHeight: 48 },
+  hintRow: { justifyContent: 'center' },
+  hint: { fontSize: 13, lineHeight: 18, color: colors.muted, textAlign: 'center' },
   actions: { gap: space.sm, alignItems: 'center' },
   action: { minHeight: 48, paddingHorizontal: space.md, borderRadius: 12, borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   actionDanger: { borderColor: colors.bad },

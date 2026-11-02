@@ -1949,6 +1949,7 @@ Script italic. **All but the fonts are drawn since 2026-10-29: see
 - **Georgia** (the default text font) is a Microsoft font; Android phones
   don't have it, so a print file made on an Android phone already uses the
   phone's serif. For the app: bundle Gelasio (same letter widths, OFL).
+  Done 2026-11-02 (`feat/port-phone-test-fixes`).
 - The website's real fonts come from Google Fonts as variable woff2 files;
   the check uses the static TTF files on both sides. Same designs; widths
   could differ slightly between the two file kinds.
@@ -3220,6 +3221,29 @@ folder: the picker opens where it would anyway. An APK without the new
 function: the older picker. The app's own grid (all the phone's photos,
 newest first) is unchanged. New Kotlin: a **new APK** is needed.
 `test/filesCameraFolder.test.ts`.
+
+## Fixes from the owner's second phone test (2026-11-02, `feat/port-phone-test-fixes`)
+
+- **Checkout refused an album with words on it**: "page 7 has font Georgia,
+  "Times New Roman", serif (drawn in the phone's own font)". Georgia is the
+  website's default text font and a Microsoft font (no phone has it, it
+  can't be bundled). The app now carries **Gelasio** (OFL), Georgia's
+  stand-in with the same letter widths, in all four styles
+  (`render/fontTable.ts`, `builder/fontAssets.ts`), and draws, measures and
+  prints Georgia with it. A text counts as drawn exactly only in its own
+  font (the first it names): `"Lora", Georgia, serif` before Lora is
+  downloaded is drawn in Georgia meanwhile, and still listed.
+- **The Preview on its side had no "Edit pages"**: now at the top of the
+  left-hand strip, across from the count ("Edit cover" on the cover);
+  between the back button and the count when the buttons are under the
+  book (`builder/previewLayout.ts` `edit`).
+- **Hints in the empty space under the page** in Edit pages
+  (`editor/editorHint.ts`): nothing picked, the button row says what the
+  page can do (an empty box, a QR, a photo, words) and "Swipe the page to
+  turn it."; a photo picked, the line under the page says "Drag the photo
+  to move it in its frame. Pinch to zoom."
+
+A **new APK** is needed (a new font file).
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
