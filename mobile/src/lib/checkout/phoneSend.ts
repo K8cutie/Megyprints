@@ -18,6 +18,7 @@ import type { CoverType, MaterialType } from '@web/pages/builder/types';
 import { PageDrawer } from '../../render/drawPage';
 import type { PageText } from '../../render/pageText';
 import { checkoutFiles } from '../../print/printFiles';
+import { siteFile } from '../../builder/siteFiles';
 import { phoneOpenPhoto } from '../../print/phonePhotos';
 import { supabase, supabaseUrl } from '../supabase';
 import { clipStore } from '../memories/clipStore';
@@ -58,7 +59,7 @@ export async function sendFromPhone(o: {
     { albumSize: o.album.albumSize, pages: o.album.pages, photoCount: o.album.photoUris.length, photoIds: o.album.photoIds, coverFront: o.album.coverFront },
     { cover: o.cover, material: o.material },
     phoneOpenPhoto(Skia, o.album.photoUris),
-    { Skia, drawer, text: o.text },
+    { Skia, drawer, text: o.text, files: siteFile },
   );
   try {
     return await sendOrder(o.plan, { db, upload, makeCover: files.makeCover, makePages: files.makePages, onStep: o.onStep, onOrder: o.onOrder, clips }, o.placed);

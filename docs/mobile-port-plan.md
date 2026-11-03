@@ -3345,6 +3345,25 @@ and `Animated` (native driver): no new library. Checked in a browser copy
 "Start the User tutorial" card is a website tester task and is not in the
 app. A **new APK** is needed.
 
+## Textured photo edges print from the app (2026-11-03, `feat/port-mask-files`)
+
+Owner's phone test: Place order stopped with "The app can't make this
+album's print file yet: page 1 has picture file /masks/deckle.png." A photo
+with a textured edge (Mask: deckle, torn, brushed, frost, paint, watercolor)
+names a picture the website serves from `public/masks`; the app had none of
+them, so any album with one could not be ordered (and the Preview drew the
+photo without its edge). Now `src/builder/siteFiles.ts` gives the page
+drawer those 7 pictures, for print (Place order, `phoneSend.ts`) and on
+screen (`pageImages.ts`). They are in the app's code as base64
+(`src/builder/maskFiles.ts`, made by `scripts/mask-files.cjs`, 681 KB),
+not as image files: an Android build may re-encode a bundled PNG and hands
+it to the screen without a file the print step could read (the golden phone
+build carries its pictures the same way). `test/maskFiles.test.ts` holds
+them to the website's files byte for byte and fails when `public/masks`
+changes until the script is run again. A theme's corner art (old albums
+only; albums made today have none) is still not in the app. A **new APK**
+is needed.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
