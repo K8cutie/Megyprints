@@ -226,6 +226,34 @@ describe('Back from checkout keeps what was typed (beta testers 2026-11-04: one 
     expect(screen.getByTestId('order-name').props.value).toBe('');
   });
 
+  it('signed out with Your order open (sign-in ran out, or Sign out on another device): the details go, and the next account never sees them (Mother, round 2)', async () => {
+    const screenNow = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await fireEvent.press(screen.getByText('Glossy'));
+    // What auth.tsx does on SIGNED_OUT, with the screen still open.
+    forgetCheckoutOnPhone();
+    mockAuth.session = null;
+    await screenNow.rerender(<OrderScreen />);
+    expect(shown()).toEqual({ name: '', phone: '', street: '', zip: '' });
+    expect(screen.getByRole('radio', { name: /Matte/ })).toHaveProp('accessibilityState', { checked: true });
+    await screenNow.unmount();
+    mockAuth.session = { user: { id: 'user-2' } };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(shown()).toEqual({ name: '', phone: '', street: '', zip: '' });
+  });
+
+  it('a guest who signs in with Your order open keeps what they typed', async () => {
+    mockAuth.session = null;
+    const screenNow = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fireEvent.changeText(screen.getByTestId('order-name'), 'Juan Dela Cruz');
+    mockAuth.session = { user: { id: 'user-1' } };
+    await screenNow.rerender(<OrderScreen />);
+    expect(screen.getByTestId('order-name').props.value).toBe('Juan Dela Cruz');
+  });
+
   it('signing out (or being signed out) forgets it, as the website\'s forgetCheckoutOnDevice', () => {
     const AUTH = fs.readFileSync(path.join(__dirname, '../src/lib/auth.tsx'), 'utf8');
     expect(AUTH).toContain("if (event === 'SIGNED_OUT') forgetCheckoutOnPhone();");

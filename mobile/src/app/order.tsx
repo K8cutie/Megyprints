@@ -49,7 +49,7 @@ import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
 import { TermsAgreeLine } from '../components/LegalLinks';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
-import { keepCheckoutForm, keptCheckoutForm } from '../lib/checkout/formKeep';
+import { forgetCheckoutOnPhone, keepCheckoutForm, keptCheckoutForm } from '../lib/checkout/formKeep';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
 import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart';
 import { useOptionalBuilder } from '../builder/BuilderProvider';
@@ -128,7 +128,20 @@ export default function OrderScreen() {
   // How long the memories stay live (the website's hostingYears): null = the included term.
   const [hostingYears, setHostingYears] = useState<number | null>(kept?.hostingYears ?? null);
   // Kept as typed while the form is open (the website's saveCheckoutForm).
+  // Signed out with the form open (the sign-in ran out, or Sign out on
+  // another device): the details go with the account, as on Sign out, and are
+  // not kept again as a guest's for the next person (Mother, round 2). A guest
+  // who signs in keeps what they typed.
+  const typedUnder = useRef(userId);
   useEffect(() => {
+    if (typedUnder.current && userId !== typedUnder.current) {
+      typedUnder.current = userId;
+      forgetCheckoutOnPhone();
+      setName(''); setPhone(''); setAddress(EMPTY_ADDRESS);
+      setMaterial(DEFAULT_MATERIAL); setCover(DEFAULT_COVER); setHostingYears(null);
+      return;
+    }
+    typedUnder.current = userId;
     if (step !== 'form') return;
     keepCheckoutForm({ albumId: album.albumId, name, phone, address, material, cover, hostingYears, userId });
   }, [album.albumId, step, name, phone, address, material, cover, hostingYears, userId]);
