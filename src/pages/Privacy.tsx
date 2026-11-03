@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { LegalPage, LegalSection as Section } from '../components/LegalPage';
 import { LEGAL_CONTACT as CONTACT, MIN_AGE } from '../lib/legal';
 
-const UPDATED = 'October 2026';
+const UPDATED = 'November 2026';
 
 export default function Privacy() {
   return (
@@ -22,8 +22,8 @@ export default function Privacy() {
       <Section title="Where your photos go">
         <p>
           While you design an album, <b>your photos are stored only on your own device</b> (in your
-          browser's local storage). They are <b>not</b> uploaded to our servers during design, with one
-          exception that happens only when you ask for it:
+          browser, or inside the Megy Prints app on your phone). They are <b>not</b> uploaded to our
+          servers during design, with one exception that happens only when you ask for it:
         </p>
         <p>
           When you tap <b>Write a line for this photo</b>, small copies of the photos on that page (at
@@ -32,6 +32,13 @@ export default function Privacy() {
           to train its AI; it keeps them for a limited time for safety checks, then deletes them. You need
           to be signed in to use it, and to stop misuse we count how many times it is used each day
           (those counts are deleted after 30 days).
+        </p>
+        <p data-testid="privacy-ml-kit">
+          In the Megy Prints Android app (version 2.0 and later), <b>Google ML Kit finds the faces in
+          your photos on your phone</b>, to check your photos (for example, for closed eyes). Your
+          photos are never sent anywhere for this. ML Kit does send Google basic diagnostics: your
+          phone's make, model and Android version, the app's version, a random ID for this install of
+          the app (not your name or number), and how long and how well it worked.
         </p>
         <p>
           When you place an order, a print-ready file of your finished album — which includes the
@@ -66,6 +73,7 @@ export default function Privacy() {
           <li><b>Supabase</b> — secure database, private file storage, and sign-in.</li>
           <li><b>Vercel</b> — hosting for the app and website.</li>
           <li><b>Google</b> — optional "Sign in with Google."</li>
+          <li><b>Google ML Kit</b> — finds faces in your photos on your phone, in the Android app (2.0 and later). Your photos are never sent.</li>
           <li><b>Anthropic</b> — Claude AI, which writes quote lines for your album's theme, and for a page's photos when you tap Write a line for this photo.</li>
         </ul>
         <p>These providers process data only to provide their service to us.</p>
